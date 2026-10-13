@@ -119,14 +119,6 @@ type ChatMessage =
       enhanceTargetId?: string;
     }
   | {
-      role: 'approval';
-      id: string;
-      summary: string;
-      plan: string;
-      cost: string;
-      responded?: boolean;
-    }
-  | {
       role: 'system';
       id: string;
       text: string;
@@ -185,13 +177,13 @@ function newId(): string {
 }
 
 // Walk the messages list, marking any not-yet-completed thinking bubble as
-// completed. Called whenever a non-thinking event arrives (text / approval /
+// completed. Called whenever a non-thinking event arrives (text /
 // done / error) so the next batch of thinking events starts a fresh bubble
 // on the next turn instead of appending to this turn's finished stream.
 // Does NOT collapse — collapse happens once at turn end via the done handler,
 // because collapsing mid-turn caused bubbles to flash-and-fold in interleaved
 // thinking/text streams. A past turn's worth of craft notes should stay
-// readable while Daedalus is still working.
+// readable while the agent is still working.
 function markThinkingCompleted(msgs: ChatMessage[]): ChatMessage[] {
   let changed = false;
   const next = msgs.map((m) => {
@@ -923,30 +915,6 @@ export function ChatPanel() {
             }
             return;
           }
-          if (type === 'approval_request') {
-            setMessages((prev) => [
-              ...markThinkingCompleted(prev),
-              {
-                id: newId(),
-                role: 'approval',
-                summary: String(event.summary ?? ''),
-                plan: String(event.plan ?? ''),
-                cost: String(event.cost ?? ''),
-              },
-            ]);
-            return;
-          }
-          if (type === 'learning_saved') {
-            setMessages((prev) => [
-              ...markThinkingCompleted(prev),
-              {
-                id: newId(),
-                role: 'system',
-                text: `→ Saved learning: ${String(event.topic ?? '')}`,
-              },
-            ]);
-            return;
-          }
           if (type === 'text') {
             const text = String(event.text ?? '');
             setMessages((prev) => markThinkingCompleted(prev));
@@ -1146,8 +1114,9 @@ export function ChatPanel() {
     return () => window.removeEventListener('nebula:chat-send', onChatSend);
   }, []);
 
-  // DEV-only window bridge for the Puppeteer driver. Lets scripted-build runs
-  // inject pre-recorded user + assistant messages directly into the chat panel
+  // DEV-only window bridge for scripted UI capture (the nebula-nodes-visuals
+  // skill's capture template). Lets capture runs inject pre-recorded user +
+  // assistant messages directly into the chat panel
   // for deterministic narration, bypassing the real LLM. The bridge mirrors
   // the message shapes the WS event stream produces, so rendering is identical
   // to a real conversation. Functional setMessages keeps closures correct
@@ -1336,7 +1305,6 @@ export function ChatPanel() {
         model,
         effort,
         agent,
-        autonomy: 'auto',
       }),
     );
   }, [
@@ -1360,62 +1328,6 @@ export function ChatPanel() {
   useEffect(() => {
     sendRef.current = send;
   }, [send]);
-
-  // Sends a new turn whose text starts with 'APPROVED:' or 'REJECTED:'.
-  // Continue an existing approval with the same selected runner settings.
-  // Mirrors the WS-send flow
-  // in `send()` — appends user + assistant placeholder, flips busy, posts
-  // the JSON envelope with agent/autonomy/sessionId/model.
-  const handleApprovalResponse = useCallback(
-    async (response: string) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN || authorityPendingRef.current || busyRef.current) return;
-      if (catalogLoading || selectionIssue) { setNotice(selectionIssue || 'Models are loading.'); return; }
-      let authority: Awaited<ReturnType<typeof chatAuthority>> = {};
-      authorityPendingRef.current = true;
-      if (commonsEnabled) setAuthorizing(true);
-      try { authority = await chatAuthority(ws.url, commonsEnabled, brand); }
-      catch (error) { setNotice((error as Error).message); reportPersonRequired(); return; }
-      finally { authorityPendingRef.current = false; if (commonsEnabled) setAuthorizing(false); }
-      if (ws.readyState !== WebSocket.OPEN || useUIStore.getState().commonsEnabled !== commonsEnabled) return;
-      setMessages((prev) => {
-        // Mark the most recent approval message as responded so its
-        // Approve/Reject buttons disable + dim during streaming.
-        let markedLatest = false;
-        const updated = [...prev];
-        for (let i = updated.length - 1; i >= 0; i -= 1) {
-          const msg = updated[i];
-          if (msg.role === 'approval' && !msg.responded && !markedLatest) {
-            updated[i] = { ...msg, responded: true };
-            markedLatest = true;
-            break;
-          }
-        }
-        return [
-          ...updated,
-          { role: 'user', text: response, id: newId() },
-          { role: 'assistant', id: newId(), streaming: true, parts: [] },
-        ];
-      });
-      applyCancellationEvent({ type: 'send' });
-      ws.send(
-        JSON.stringify({
-          type: 'send',
-          message: response,
-          selectedNodeIds: useGraphStore.getState().nodes
-            .filter((node) => node.selected)
-            .map((node) => node.id),
-          sessionId,
-          ...authority,
-          model,
-          effort,
-          agent,
-          autonomy: 'auto',
-        }),
-      );
-    },
-    [sessionId, model, effort, agent, catalogLoading, selectionIssue, commonsEnabled, brand, applyCancellationEvent],
-  );
 
   const cancel = useCallback(() => {
     const ws = wsRef.current;
@@ -1544,7 +1456,6 @@ export function ChatPanel() {
           '.chat-panel__resize-handle',
           '.chat-panel__input',
           '.chat-panel__agent-selector',
-          '.chat-panel__autonomy-toggle',
           '.chat-panel__tone-toggle',
           '.chat-panel__meta',
           '.chat-panel__model-picker',
@@ -1753,43 +1664,6 @@ export function ChatPanel() {
           }
           // Thinking events are routed to the Agent Log, not rendered in chat.
           if (m.role === 'thinking') return null;
-          if (m.role === 'approval') {
-            return (
-              <div key={m.id} className="chat-panel__approval" data-chat-message-role="approval">
-                <div className="chat-panel__approval-summary">
-                  <strong>Approval required:</strong> {m.summary}
-                </div>
-                {m.plan && (
-                  <div className="chat-panel__approval-plan">
-                    <strong>Plan:</strong> {m.plan}
-                  </div>
-                )}
-                {m.cost && (
-                  <div className="chat-panel__approval-cost">
-                    <strong>Cost:</strong> {m.cost}
-                  </div>
-                )}
-                <div className="chat-panel__approval-actions">
-                  <button
-                    type="button"
-                    className="chat-panel__approval-btn chat-panel__approval-btn--approve"
-                    onClick={() => handleApprovalResponse('APPROVED: continue')}
-                    disabled={m.responded}
-                  >
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    className="chat-panel__approval-btn chat-panel__approval-btn--reject"
-                    onClick={() => handleApprovalResponse('REJECTED: please revise')}
-                    disabled={m.responded}
-                  >
-                    Reject
-                  </button>
-                </div>
-              </div>
-            );
-          }
           return <AssistantBubble key={m.id} message={m} />;
         })}
       </div>

@@ -143,7 +143,7 @@ describe('Commons chat integration', () => {
     fireEvent.change(brand, { target: { value: 'Example brand' } });
     await sendText('Look at these references');
     await waitFor(() => expect(socket.sent).toHaveLength(1));
-    expect(socket.sent[0]).toMatchObject({ type: 'send', agent: 'claude', autonomy: 'auto', personToken: token, brand: 'Example brand', sessionId: null });
+    expect(socket.sent[0]).toMatchObject({ type: 'send', agent: 'claude', personToken: token, brand: 'Example brand', sessionId: null });
     expect(brand).toBeDisabled();
     await act(async () => { socket.receive({ type: 'session', sessionId: 'opaque-conversation' }); socket.receive({ type: 'done' }); });
     await sendText('Continue the same review');
@@ -167,16 +167,5 @@ describe('Commons chat integration', () => {
     expect(socket.sent).toHaveLength(0);
     expect(apiMocks.apiFetch).not.toHaveBeenCalled();
     expect(screen.getByRole('textbox', { name: 'Chat brand' })).toBeEnabled();
-  });
-  it('sends human scope on an explicit approval continuation', async () => {
-    useUIStore.getState().setCommonsEnabled(true);
-    const token = crypto.randomUUID(); connectAsPerson(token);
-    const socket = await connected();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Chat brand' }), { target: { value: 'Example' } });
-    await act(async () => { socket.receive({ type: 'session', sessionId: 'opaque-id' }); socket.receive({ type: 'approval_request', summary: 'Review this plan' }); socket.receive({ type: 'done' }); });
-    expect(socket.sent).toHaveLength(0);
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-    await waitFor(() => expect(socket.sent).toHaveLength(1));
-    expect(socket.sent[0]).toMatchObject({ message: 'APPROVED: continue', sessionId: 'opaque-id', brand: 'Example', personToken: token, model: 'sonnet', effort: null });
   });
 });

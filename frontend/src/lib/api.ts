@@ -339,7 +339,7 @@ export async function fetchNousModels(): Promise<{ models: NousModel[]; count: n
   const response = await apiFetch('/api/nous/models');
   if (!response.ok) {
     // Surface the backend's auth message verbatim — usually instructs the
-    // user to run `hermes auth`.
+    // user to run `hermes model` and pick Nous Portal.
     let detail = '';
     try { detail = (await response.json()).detail ?? ''; } catch {
       /* Non-JSON error responses still fall back to the status message. */

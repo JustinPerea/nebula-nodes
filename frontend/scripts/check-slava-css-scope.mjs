@@ -72,7 +72,6 @@ const SENSITIVE_SELECTOR_PATTERNS = [
 const SCOPED_SELECTOR_PATTERNS = [
   /body\.app-slava-restraint\b/,
   /body:not\(\.app-slava-restraint\)/,
-  /body\.app-hermes\b/,
   /body\.app-slava-wayfinding\b/,
 ];
 

@@ -2147,89 +2147,6 @@ body:not(.app-slava-restraint) .chat-panel__agent-btn--active {
   font-weight: 600;
 }
 
-.chat-panel__autonomy-toggle {
-  display: inline-flex;
-  gap: 2px;
-  margin-right: 8px;
-  padding: 2px;
-}
-
-body:not(.app-slava-restraint) .chat-panel__autonomy-toggle {
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.chat-panel__autonomy-btn,
-.chat-panel__autonomy-btn--active {
-  padding: 4px 10px;
-  border: none;
-  cursor: pointer;
-  background: transparent;
-  color: inherit;
-}
-
-body:not(.app-slava-restraint) .chat-panel__autonomy-btn,
-body:not(.app-slava-restraint) .chat-panel__autonomy-btn--active {
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-body:not(.app-slava-restraint) .chat-panel__autonomy-btn--active {
-  background: var(--chat-accent, rgba(255, 255, 255, 0.15));
-  color: white;
-  font-weight: 600;
-}
-
-.chat-panel__approval {
-  margin: 8px 0;
-  padding: 12px;
-}
-
-body:not(.app-slava-restraint) .chat-panel__approval {
-  border: 1px solid var(--chat-accent-border, rgba(74, 124, 89, 0.4));
-  border-radius: 8px;
-  background: var(--chat-accent-bg, rgba(74, 124, 89, 0.08));
-  font-size: 13px;
-}
-
-.chat-panel__approval-summary,
-.chat-panel__approval-plan,
-.chat-panel__approval-cost {
-  margin-bottom: 6px;
-}
-
-.chat-panel__approval-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.chat-panel__approval-btn {
-  padding: 6px 14px;
-  cursor: pointer;
-}
-
-body:not(.app-slava-restraint) .chat-panel__approval-btn {
-  border-radius: 4px;
-  border: none;
-  font-weight: 600;
-}
-
-body:not(.app-slava-restraint) .chat-panel__approval-btn--approve {
-  background: var(--chat-accent, #4a7c59); /* verdigris */
-  color: white;
-}
-
-body:not(.app-slava-restraint) .chat-panel__approval-btn--reject {
-  background: rgba(255, 255, 255, 0.1);
-  color: inherit;
-}
-
-.chat-panel__approval-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .chat-panel__system-line {
   margin: 4px 0;
   padding: 4px 8px;
@@ -2242,8 +2159,7 @@ body:not(.app-slava-restraint) .chat-panel__system-line {
 }
 
 /* Per-agent accent palette. --chat-accent drives the agent-selector active
- * state, autonomy-toggle active state, approval-bubble border/background,
- * and the Approve button. Swaps based on the chat-panel--agent-* modifier
+ * state and the thinking stream. Swaps based on the chat-panel--agent-* modifier
  * class on the panel root. */
 body:not(.app-slava-restraint) .chat-panel--agent-claude {
   --chat-accent: #7c6bef; /* indigo */
@@ -2257,16 +2173,10 @@ body:not(.app-slava-restraint) .chat-panel--agent-codex {
   --chat-accent-border: rgba(40, 160, 184, 0.4);
 }
 
-body:not(.app-slava-restraint) .chat-panel--agent-daedalus {
-  --chat-accent: #4a7c59; /* verdigris — pale green of patinated bronze */
-  --chat-accent-bg: rgba(74, 124, 89, 0.08);
-  --chat-accent-border: rgba(74, 124, 89, 0.4);
-}
-
-/* Thinking-progress stream (Daedalus log tail + heartbeats).
+/* Thinking-progress stream (the agent's canvas actions and reasoning).
  * One bubble per turn; collapsible; auto-scrolls to newest line.
  * While ACTIVE the border is thicker + more opaque so the user can see
- * Daedalus is working. Completed bubbles shrink back to subtle. */
+ * the agent is working. Completed bubbles shrink back to subtle. */
 .chat-panel__thinking {
   margin: 4px 0 8px;
   padding: 0;

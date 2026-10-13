@@ -70,14 +70,6 @@
   margin: 0 2px !important;
 }
 
-/* The Hermes "DAEDALUS" wordmark fits a roomier text-label pill; in the
- * compact icon-only mode it eats most of the width and forces the pill
- * to collide with the agent log. Hide it here — the chat panel's own
- * Hermes header still carries the wordmark prominently. */
-body.app-hermes .toolbar::before {
-  display: none !important;
-}
-
 /* =============== Panel launchers: off-canvas entry points =============== */
 
 .panel-launcher {

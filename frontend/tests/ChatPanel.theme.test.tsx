@@ -317,6 +317,24 @@ describe('ChatPanel appearance', () => {
     expect(socket.sent[0]).toMatchObject({ agent: 'claude', model: 'sonnet' });
   });
 
+  it.each(['daedalus', 'hermes'])('opens a chat saved with the removed %s agent as Claude', async (agent) => {
+    window.localStorage.setItem('nebula:chat-selection', JSON.stringify({
+      agent, claude: { model: 'sonnet', effort: null }, codex: { model: null, effort: null },
+    }));
+    render(<ChatPanel />);
+    await waitFor(() => expect(ChatTestSocket.instances).toHaveLength(1));
+    const socket = ChatTestSocket.instances[0];
+    await act(async () => socket.open());
+    expect(document.querySelector('.chat-panel')).toHaveAttribute('data-chat-agent', 'claude');
+    await openPicker();
+    await screen.findByRole('radio', { name: 'Sonnet' });
+    expect(screen.queryByRole('button', { name: 'Daedalus' })).not.toBeInTheDocument();
+    closePicker();
+    await sendText('Hello again');
+    expect(socket.sent).toHaveLength(1);
+    expect(socket.sent[0]).toMatchObject({ agent: 'claude', model: 'sonnet' });
+  });
+
   it('retains the draft and does not send when the live model catalog cannot be loaded', async () => {
     apiMocks.fetchChatModels.mockRejectedValue(new Error('Catalog unavailable'));
     render(<ChatPanel />);
