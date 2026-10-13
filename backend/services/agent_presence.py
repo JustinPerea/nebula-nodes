@@ -47,6 +47,7 @@ _KNOWN_AGENTS = {
 _EXTERNAL_COLORS = ("#3FC1A5", "#F2C14E", "#FF6B9A", "#7AD3FF", "#C3E86B", "#FF9F43")
 _NAME_ALLOWED = re.compile(r"[^A-Za-z0-9 ._()\-·]")
 _HANDLE_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
+_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _NODE_ID_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,64}$")
 
 _request_headers: ContextVar[Mapping[str, str] | None] = ContextVar("presence_request_headers", default=None)
@@ -148,10 +149,13 @@ def identify(
             return AgentIdentity(id=runner, name=name, color=color, verified=True)
         app = app_lookup(auth[6:].strip())
         if app is not None:
-            # Named by the person when they made the token, so it is verified.
+            # Named (and optionally colored) by the person when they made the
+            # token, so it is verified.
             name = clean_agent_name(str(app.get("name") or "")) or "App"
-            return AgentIdentity(id=f"app:{app['id']}", name=name, color=_external_color(f"app-{app['id']}"),
-                                 verified=True)
+            color = app.get("color")
+            if not (isinstance(color, str) and _COLOR_RE.fullmatch(color)):
+                color = _external_color(f"app-{app['id']}")
+            return AgentIdentity(id=f"app:{app['id']}", name=name, color=color, verified=True)
     raw = lower.get("x-nebula-agent")
     if raw:
         name = clean_agent_name(raw)

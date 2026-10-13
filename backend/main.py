@@ -82,7 +82,7 @@ from services.settings import (
     update_injected_keys,
 )
 from services.node_registry import NodeRegistry
-from services import agent_spend, app_tokens, model_pricing, node_readiness, output_preview
+from services import agent_connect, agent_spend, app_tokens, model_pricing, node_readiness, output_preview
 from services.cli_graph import CLIGraph
 from services.retired_nodes import migrate_node, retired_message
 from services.project_store import (
@@ -2945,29 +2945,80 @@ def _outside_view() -> dict[str, Any]:
 async def list_agent_apps() -> dict[str, Any]:
     """Settings > Agent spending: what the outside agents spent and the apps with tokens. The person's only."""
     require_person(current_request_headers())
-    return _outside_view()
+    return {**_outside_view(), "connect": _connect_view()}
+
+
+def _connect_view() -> dict[str, Any]:
+    """The clients Settings > Connect your agent offers, and whether this
+    backend can point them at a checkout (a packaged app can't yet)."""
+    try:
+        agent_connect.checkout_paths()
+        reason = None
+    except agent_connect.ConnectError as exc:
+        reason = str(exc)
+    return {"clients": agent_connect.client_list(), "available": reason is None, "reason": reason}
+
+
+def _own_url(request: Request) -> str:
+    """This backend as an MCP server on this machine reaches it: the address
+    the request actually arrived on (not a Host header, which the Vite proxy
+    or the caller writes)."""
+    server = request.scope.get("server") or ("127.0.0.1", 8000)
+    host, port = server[0] or "127.0.0.1", server[1]
+    if host in ("0.0.0.0", "::", "localhost"):
+        host = "127.0.0.1"
+    if ":" in host:
+        host = f"[{host}]"
+    return f"http://{host}:{port}" if port else f"http://{host}"
 
 
 @app.post("/api/agent/spend/apps")
-async def create_agent_app(body: dict[str, Any]) -> dict[str, Any]:
+async def create_agent_app(body: dict[str, Any], request: Request) -> dict[str, Any]:
     """Make a token for an outside app. The token is in this response only;
-    Nebula keeps a hash of it. The person's only."""
+    Nebula keeps a hash of it. The person's only.
+
+    With ``client`` (Settings > Connect your agent), the response also holds
+    ``setup``: the exact config for that client, with the token in it
+    (services/agent_connect.py). It is shown once, like the token."""
     require_person(current_request_headers())
+    client_id = body.get("client")
+    paths = None
+    if client_id is not None:
+        try:
+            agent_connect.client(client_id)
+            paths = agent_connect.checkout_paths()
+        except agent_connect.ConnectError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
-        app_view, token = app_token_store.create(body.get("name"), body.get("dailyUsd"))
+        app_view, token = app_token_store.create(body.get("name"), body.get("dailyUsd"),
+                                                 client=client_id, color=body.get("color"))
     except app_tokens.AppTokenError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"app": {**app_view, "spentUsd": 0.0, "kreaPlanRuns": 0}, "token": token}
+    result: dict[str, Any] = {"app": {**app_view, "spentUsd": 0.0, "kreaPlanRuns": 0}, "token": token}
+    if paths is not None:
+        result["setup"] = agent_connect.render(client_id, paths=paths, url=_own_url(request), token=token,
+                                               app_name=app_view["name"], daily_usd=app_view["dailyUsd"])
+    return result
 
 
 @app.put("/api/agent/spend/apps/{app_id}")
 async def update_agent_app(app_id: str, body: dict[str, Any]) -> dict[str, Any]:
-    """Change an app's daily limit (null: only the shared outside budget). The person's only."""
+    """Change an app's daily limit (null: only the shared outside budget)
+    and/or its cursor color (#RRGGBB, null for the default). The person's only."""
     require_person(current_request_headers())
-    if set(body) != {"dailyUsd"}:
-        raise HTTPException(status_code=400, detail="Send {dailyUsd}: a positive number of USD, or null")
+    if not body or not set(body) <= {"dailyUsd", "color"}:
+        raise HTTPException(status_code=400,
+                            detail="Send {dailyUsd} (a positive number of USD, or null) and/or {color} (#RRGGBB or null)")
     try:
-        app_view = app_token_store.set_limit(app_id, body["dailyUsd"]) if app_tokens.valid_id(app_id) else None
+        app_view = None
+        if app_tokens.valid_id(app_id):
+            # Check both before saving either, so a bad color doesn't half-apply.
+            if "color" in body:
+                app_tokens.clean_color(body["color"])
+            if "dailyUsd" in body:
+                app_view = app_token_store.set_limit(app_id, body["dailyUsd"])
+            if "color" in body and (app_view is not None or "dailyUsd" not in body):
+                app_view = app_token_store.set_color(app_id, body["color"])
     except app_tokens.AppTokenError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if app_view is None:

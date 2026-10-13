@@ -35,6 +35,10 @@ TOKEN_PREFIX = "nebula_app_"
 MAX_APPS = 50
 MAX_NAME = 60
 _ID = re.compile(r"^[a-f0-9]{12}$")
+_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
+# Which app the person connected (services/agent_connect.CLIENTS); kept as a
+# label only, so a store written before this field existed still loads.
+_CLIENT = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 
 
 class AppTokenError(ValueError):
@@ -54,6 +58,23 @@ def clean_name(value: Any) -> str:
     if len(name) > MAX_NAME:
         raise AppTokenError(f"name must be at most {MAX_NAME} characters")
     return name
+
+
+def clean_color(value: Any) -> str | None:
+    """The cursor color the person picked (#RRGGBB), or None for the default."""
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str) or not _COLOR.fullmatch(value):
+        raise AppTokenError("color must be #RRGGBB or null")
+    return value.upper()
+
+
+def clean_client(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not _CLIENT.fullmatch(value):
+        raise AppTokenError("client must be a short id such as hermes")
+    return value
 
 
 class AppTokens:
@@ -91,11 +112,14 @@ class AppTokens:
     @staticmethod
     def public(app: dict[str, Any]) -> dict[str, Any]:
         return {"id": app["id"], "name": app["name"], "dailyUsd": app.get("dailyUsd"),
-                "createdAt": app.get("createdAt")}
+                "createdAt": app.get("createdAt"), "client": app.get("client"), "color": app.get("color")}
 
-    def create(self, name: Any, daily_usd: Any = None) -> tuple[dict[str, Any], str]:
+    def create(self, name: Any, daily_usd: Any = None, *, client: Any = None,
+               color: Any = None) -> tuple[dict[str, Any], str]:
         """A new app and its token. The token is returned once and never stored."""
         name = clean_name(name)
+        client = clean_client(client)
+        color = clean_color(color)
         try:
             limit = agent_spend.validate_threshold(daily_usd)
         except ValueError as exc:
@@ -106,7 +130,7 @@ class AppTokens:
             if len(apps) >= MAX_APPS:
                 raise AppTokenError(f"at most {MAX_APPS} connected apps; revoke one first")
             app = {"id": secrets.token_hex(6), "name": name, "hash": _hash(token), "dailyUsd": limit,
-                   "createdAt": time.time()}
+                   "createdAt": time.time(), "client": client, "color": color}
             apps.append(app)
             self._save()
         return self.public(app), token
@@ -130,6 +154,16 @@ class AppTokens:
             if app is None:
                 return None
             app["dailyUsd"] = limit
+            self._save()
+            return self.public(app)
+
+    def set_color(self, app_id: str, color: Any) -> dict[str, Any] | None:
+        color = clean_color(color)
+        with self._lock:
+            app = next((app for app in self._load() if app["id"] == app_id), None)
+            if app is None:
+                return None
+            app["color"] = color
             self._save()
             return self.public(app)
 
