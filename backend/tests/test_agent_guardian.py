@@ -147,3 +147,46 @@ def test_every_agent_spawn_goes_through_spawn_agent_process() -> None:
         if re.search(r"agent_process_group_options\(\)|start_new_session=True", path.read_text()):
             offenders.append(path.name)
     assert offenders == [], f"spawn agents with spawn_agent_process instead: {offenders}"
+
+
+def test_a_cancelled_wait_keeps_the_agent_registered(monkeypatch) -> None:
+    # At shutdown asyncio.run cancels the watcher task together with the turn
+    # that is still killing the tree. Deregistering then would let a hard
+    # exit leave the agent running; only a real exit may deregister.
+    import asyncio
+
+    from services import agent_guardian
+
+    sent: list[str] = []
+    monkeypatch.setattr(agent_guardian, "_send", sent.append)
+    monkeypatch.setattr(agent_guardian, "_tracked", set())
+
+    async def run() -> None:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-c", "import time; time.sleep(30)", start_new_session=True,
+        )
+        try:
+            agent_guardian.track(proc)
+            await asyncio.sleep(0)
+            for task in list(agent_guardian._waiters):
+                task.cancel()
+            await asyncio.sleep(0.05)
+            assert sent == [f"+{proc.pid}\n"], sent
+            assert proc.pid in agent_guardian._tracked
+
+            # A real exit still deregisters.
+            agent_guardian.track(proc)
+            proc.kill()
+            await proc.wait()
+            for _ in range(50):
+                if f"-{proc.pid}\n" in sent:
+                    break
+                await asyncio.sleep(0.01)
+            assert f"-{proc.pid}\n" in sent
+            assert proc.pid not in agent_guardian._tracked
+        finally:
+            if proc.returncode is None:
+                proc.kill()
+                await proc.wait()
+
+    asyncio.run(run())

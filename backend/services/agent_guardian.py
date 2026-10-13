@@ -110,11 +110,24 @@ def _forget(pid: int) -> None:
 
 
 async def _forget_when_done(proc: Any, pid: int) -> None:
+    """Deregister ``pid`` once the agent has really exited, and only then.
+
+    Not in a ``finally``: at shutdown ``asyncio.run`` cancels this task
+    together with the chat turn that is still killing the agent's tree. If
+    a cancelled wait deregistered the pid and the backend then hard-exited
+    (parent_watch's ``os._exit``, Electron's SIGKILL) before the tree kill
+    finished, the guardian would leave the agent running, which is the case
+    it exists for. Staying registered is safe: the guardian re-checks that
+    the pid still leads its own group under the dead backend before killing.
+    """
     try:
         await proc.wait()
+    except asyncio.CancelledError:
+        if proc.returncode is None:
+            raise
     except Exception:
         pass
-    finally:
+    if proc.returncode is not None:
         _forget(pid)
 
 
