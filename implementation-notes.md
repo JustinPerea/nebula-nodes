@@ -2846,3 +2846,12 @@ Built from the design above. Where it differs, or decides something the design l
 - **Docs.** PERSONAL-AGENTS.md: the sequence diagram, the "Where the token lives" paragraph (it was wrong; the token
   could reach argv through the adapter), the start-race guarantee, and a new "Output caps" bullet with the real
   limits. MCP-SETUP.md's personal-token paragraph now describes the file.
+
+### Third review round (2026-10-13)
+
+Two reviewers checked 5eba86fc. Concurrency said ship, with one older gap; the token-file reviewer found two small issues. All three are fixed, each with a test that fails when only its fix is reverted.
+
+- **The startup sweep followed a symlinked `agent-tokens` folder.** `clear_stale` listed and deleted the entries of whatever `<state>/agent-tokens` pointed to. Any program running as the person (an agent included) could plant that symlink, and the next backend start would empty the target folder. The sweep now opens the folder with `O_DIRECTORY | O_NOFOLLOW` and works through that descriptor (`os.scandir(fd)`, `rmtree(dir_fd=)`, `unlink(dir_fd=)`). A symlink, a non-directory or another user's folder is left alone, and a swap after the check can't redirect it. A symlinked pid folder inside the real one is unlinked, not followed.
+- **Shutdown could miss a teardown already under way.** A session leaves the registry the moment its close begins. So if the idle reaper or a cancelled caller started a close, and something else pruned the session, `close_all` never waited for that kill, and the loop could cancel it halfway and leave grandchildren running. The manager now keeps the unfinished teardown tasks of pruned sessions, and `close_all` waits on them (shielded, so cancelling `close_all` doesn't cancel a kill).
+- **An agent could start after shutdown.** An `open()` waiting on `close_owned()` when shutdown ran went on to start a fresh agent and mint a token after `close_all` returned. The new `shutdown()` sets a flag first, and `open()` refuses (`personal_agent_shutting_down`) after `close_owned` and again after `start()`. The backend's shutdown hook calls `shutdown()`. `close_all()` keeps working for tests and reuse, since only `shutdown()` sets the flag, which never clears.
+- **Doc fix.** PERSONAL-AGENTS.md said a cut drops the rest of the turn's text. Only the 200,000-character turn budget does that. A chunk over 20,000 characters is trimmed and later chunks still show.

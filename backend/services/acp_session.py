@@ -604,6 +604,10 @@ class AcpSessionManager:
     def __init__(self) -> None:
         self._sessions: dict[str, AcpHostSession] = {}
         self._reaper: asyncio.Task | None = None
+        # Teardowns still running for sessions already pruned (a session
+        # leaves _sessions the moment its close begins). Shutdown waits on them.
+        self._teardowns: set[asyncio.Task] = set()
+        self._shutting_down = False
         # Why recently ended sessions ended, by id: (owner, message), so a send
         # that arrives after a prune can still say why. Bounded.
         self._ended: dict[str, tuple[str, str]] = {}
@@ -620,6 +624,8 @@ class AcpSessionManager:
         # One personal chat per panel: a new one replaces the old.
         await self.close_owned(owner)
         self._prune()
+        if self._shutting_down:
+            raise PersonalSessionError("personal_agent_shutting_down", "Nebula is shutting down.")
         # Read what Settings allow only now. From here to registering the
         # session nothing awaits, so a Settings change can't fall between the
         # read and the moment close_stale can see the session.
@@ -642,8 +648,12 @@ class AcpSessionManager:
             if not self.still_allowed(session, state_dir):
                 await session.close("agent_changed")
                 raise PersonalSessionError("personal_session_ended", session.ended_message())
+            # Shutdown began while it started; close_all may already be done.
+            if self._shutting_down:
+                await session.close("shutdown")
+                raise PersonalSessionError("personal_agent_shutting_down", "Nebula is shutting down.")
         except BaseException:
-            self._sessions.pop(session.id, None)
+            self._forget(session.id)
             raise
         self._ensure_reaper()
         return session
@@ -686,18 +696,40 @@ class AcpSessionManager:
         return [s.id for s in stale]
 
     async def close_all(self, reason: str = "shutdown") -> None:
+        """Close every session and wait for every teardown, including ones a
+        reaper or a cancelled caller started for sessions already pruned."""
         sessions = list(self._sessions.values())
         if sessions:
             await asyncio.gather(*(s.close(reason) for s in sessions), return_exceptions=True)
         self._prune()
+        if self._teardowns:
+            # shield: cancelling close_all must not cancel a kill in progress.
+            await asyncio.gather(*(asyncio.shield(t) for t in list(self._teardowns)), return_exceptions=True)
         if self._reaper is not None and not self._reaper.done():
             self._reaper.cancel()
         self._reaper = None
 
+    async def shutdown(self) -> None:
+        """Backend shutdown: refuse new sessions from now on (an open() that
+        was waiting on close_owned would otherwise start an agent after this
+        returns), then close everything."""
+        self._shutting_down = True
+        await self.close_all("shutdown")
+
+    def _forget(self, session_id: str) -> AcpHostSession | None:
+        """Drop a session from the registry, keeping its teardown visible to close_all."""
+        session = self._sessions.pop(session_id, None)
+        task = session._close_task if session is not None else None
+        if task is not None and not task.done():
+            self._teardowns.add(task)
+            task.add_done_callback(self._teardowns.discard)
+        return session
+
     def _prune(self) -> None:
         for session_id in [k for k, s in self._sessions.items() if s.closed]:
-            session = self._sessions.pop(session_id)
-            self._ended[session_id] = (session.owner, session.ended_message())
+            session = self._forget(session_id)
+            if session is not None:
+                self._ended[session_id] = (session.owner, session.ended_message())
         while len(self._ended) > ENDED_MEMORY:
             self._ended.pop(next(iter(self._ended)))
 

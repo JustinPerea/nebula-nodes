@@ -146,23 +146,36 @@ def clear_stale(state_dir: Path) -> int:
     pid, so it goes too; call this before any session starts. Returns the
     number of folders removed."""
     base = root(state_dir)
+    # Open the folder itself without following a symlink, and work through
+    # that descriptor: a symlink planted at <state>/agent-tokens (by any
+    # program running as this user, an agent included) must never turn this
+    # sweep loose on the folder it points to, even if it is swapped in
+    # between a check and the scan.
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | _NOFOLLOW
     try:
-        entries = list(os.scandir(base))
+        fd = os.open(base, flags)
     except OSError:
         return 0
     removed = 0
-    for entry in entries:
-        if entry.name.isdigit():
-            pid = int(entry.name)
-            if pid != os.getpid() and _pid_alive(pid):
-                continue
-        path = Path(entry.path)
-        try:
-            if entry.is_dir(follow_symlinks=False):
-                shutil.rmtree(path)
-            else:
-                os.unlink(path)
-            removed += 1
-        except OSError:
-            pass
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISDIR(info.st_mode) or (hasattr(os, "getuid") and info.st_uid != os.getuid()):
+            return 0
+        if not (os.scandir in os.supports_fd and shutil.rmtree.avoids_symlink_attacks):
+            return 0
+        for entry in list(os.scandir(fd)):
+            if entry.name.isdigit():
+                pid = int(entry.name)
+                if pid != os.getpid() and _pid_alive(pid):
+                    continue
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    shutil.rmtree(entry.name, dir_fd=fd)
+                else:
+                    os.unlink(entry.name, dir_fd=fd)
+                removed += 1
+            except OSError:
+                pass
+    finally:
+        os.close(fd)
     return removed

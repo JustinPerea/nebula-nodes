@@ -2108,7 +2108,7 @@ async def _personal_agents_startup() -> None:
 @app.on_event("shutdown")
 async def _personal_agents_shutdown() -> None:
     """Kill every personal agent's process tree and revoke its token."""
-    await acp_sessions.close_all("shutdown")
+    await acp_sessions.shutdown()
 
 
 @app.on_event("startup")

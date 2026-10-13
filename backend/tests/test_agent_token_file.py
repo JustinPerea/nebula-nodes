@@ -81,6 +81,27 @@ def test_clear_stale_keeps_live_backends(tmp_path):
     assert agent_token_file.clear_stale(tmp_path / "nowhere") == 0
 
 
+def test_clear_stale_never_follows_a_symlinked_folder(tmp_path):
+    """A symlink planted at <state>/agent-tokens must not turn the startup
+    sweep loose on the folder it points to."""
+    victim = tmp_path / "victim"
+    (victim / "keepme").mkdir(parents=True)
+    (victim / "12345678").mkdir()
+    (victim / "file.txt").write_text("hi")
+    state = tmp_path / "state"
+    state.mkdir()
+    agent_token_file.root(state).symlink_to(victim, target_is_directory=True)
+    assert agent_token_file.clear_stale(state) == 0
+    assert sorted(p.name for p in victim.iterdir()) == ["12345678", "file.txt", "keepme"]
+    # A symlinked pid folder inside a real one is unlinked, not followed.
+    agent_token_file.root(state).unlink()
+    base = agent_token_file.root(state)
+    base.mkdir()
+    (base / "999999999").symlink_to(victim, target_is_directory=True)
+    assert agent_token_file.clear_stale(state) == 1
+    assert not (base / "999999999").exists() and (victim / "file.txt").exists()
+
+
 def test_mcp_server_loads_the_token_file(tmp_path):
     path = agent_token_file.write(tmp_path, "s", TOKEN)
     env = {"NEBULA_AGENT_TOKEN_FILE": str(path)}

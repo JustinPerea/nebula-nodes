@@ -463,6 +463,54 @@ async def test_close_finishes_the_kill_when_its_caller_is_cancelled(env, tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_shutdown_waits_for_a_teardown_already_pruned(env, monkeypatch):
+    """The idle reaper (or a cancelled caller) started a close, and another
+    close or open pruned the session before shutdown. Shutdown still waits
+    for that kill instead of leaving it to be cancelled with the loop."""
+    real = acp_session.terminate_agent_process_tree
+
+    async def slow(proc):
+        await asyncio.sleep(0.5)
+        await real(proc)
+
+    monkeypatch.setattr(acp_session, "terminate_agent_process_tree", slow)
+    env.register({"closeCap": False, "turns": [[{"chunk": "x"}]]})
+    host = await env.open()
+    pid = host.proc.pid
+    closing = asyncio.create_task(host.close("idle"))
+    await asyncio.sleep(0)
+    env.manager._prune()
+    assert host.id not in env.manager._sessions
+    await env.manager.shutdown()
+    assert host._close_task.done() and not alive(pid)
+    await closing
+
+
+@pytest.mark.asyncio
+async def test_no_agent_starts_once_shutdown_began(env, monkeypatch):
+    """An open() waiting on close_owned when shutdown runs must not start an
+    agent and mint a token after shutdown returned."""
+    real = acp_session.terminate_agent_process_tree
+
+    async def slow(proc):
+        await asyncio.sleep(0.5)
+        await real(proc)
+
+    monkeypatch.setattr(acp_session, "terminate_agent_process_tree", slow)
+    env.register({"closeCap": False, "turns": [[{"chunk": "x"}]]})
+    old = await env.open()
+    old_pid = old.proc.pid
+    opening = asyncio.create_task(env.open())
+    await asyncio.sleep(0.05)
+    await env.manager.shutdown()
+    with pytest.raises(PersonalSessionError) as refused:
+        await opening
+    assert refused.value.code == "personal_agent_shutting_down"
+    assert env.manager.live() == [] and not alive(old_pid)
+    assert env.methods().count("initialize") == 1  # the refused open never started an agent
+
+
+@pytest.mark.asyncio
 async def test_inherited_provider_keys_never_reach_the_agent(env, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-real")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")

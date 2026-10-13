@@ -97,8 +97,9 @@ Nebula won't start a personal agent until you accept this:
   grandchildren, and finishes the kill even if whatever asked for the close is itself interrupted.
 - **Output caps.** The session token is replaced with `***` anywhere the agent echoes it, and then output is capped:
   each reply or thinking chunk at 20,000 characters, a turn's reply and thinking text together at 200,000, each tool
-  input at 4,000, each tool result at 20,000, and a plan at 50 entries of 500 characters. When reply or thinking text
-  is cut, the chat shows one line saying so (once per turn) and drops the rest of that turn's text. Tool results have
+  input at 4,000, each tool result at 20,000, and a plan at 50 entries of 500 characters. A chunk over 20,000
+  characters is trimmed and later chunks still show; once a turn's text reaches 200,000 characters, the rest of that
+  turn's text is dropped. Either way the chat shows one line saying so, once per turn. Tool results have
   no per-turn total yet.
 
 ## Using it
