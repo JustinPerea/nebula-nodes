@@ -2089,24 +2089,45 @@ async def _person_startup() -> None:
     person_session.initialize()
 
 
+# This launch's backend-url secret, set once the file is written. Clients
+# check the address with it before sending a token (backend_address_proof).
+_backend_address_secret: str | None = None
+
+
 @app.on_event("startup")
 async def _publish_backend_address() -> None:
     """Desktop mode: write this launch's address where outside MCP clients look
     for it (services/backend_address.py). The sidecar's port changes every launch."""
+    global _backend_address_secret
     url = os.environ.get("NEBULA_URL", "")
     if not backend_address.launch_assigned() or not url:
         return
+    secret = backend_address.new_secret()
     try:
-        backend_address.publish(_STATE_DIR, url)
+        backend_address.publish(_STATE_DIR, url, secret)
     except (OSError, ValueError) as exc:
         print(f"[main] couldn't publish the backend address for outside agents: {exc}", flush=True)
+        return
+    _backend_address_secret = secret
 
 
 @app.on_event("shutdown")
 async def _withdraw_backend_address() -> None:
-    url = os.environ.get("NEBULA_URL", "")
-    if backend_address.launch_assigned() and url:
-        backend_address.withdraw(_STATE_DIR, url)
+    if _backend_address_secret:
+        backend_address.withdraw(_STATE_DIR, _backend_address_secret)
+
+
+@app.get(backend_address.PROOF_PATH)
+async def backend_address_proof(challenge: str = "") -> dict[str, str]:
+    """Answer a client that read the backend-url file and wants to know this is
+    the backend that wrote it before sending its token. Only this launch knows
+    the secret, so a program squatting on a dead launch's port can't answer."""
+    if _backend_address_secret is None:
+        raise HTTPException(status_code=404, detail="This Nebula publishes no backend-url file.")
+    try:
+        return {"proof": backend_address.prove(_backend_address_secret, challenge)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.on_event("startup")

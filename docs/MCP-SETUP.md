@@ -545,6 +545,17 @@ starts this checkout's server the same way:
     app is closed. It only accepts an `http` address on 127.0.0.1, localhost
     or ::1 (services/backend_address.py).
 
+    The file also holds a secret made fresh each launch. Before the MCP
+    server or the CLI sends the token, it checks the address: it sends a
+    random challenge to `GET /api/agent/address-proof`, and only the backend
+    that wrote the file can answer it (an HMAC keyed by that secret). So if
+    Nebula crashed and left the file behind, and another program now holds
+    that port, the program gets a challenge and never the token.
+
+Requests from the MCP server and the CLI ignore `HTTP_PROXY` and similar
+variables. Nebula is always on this machine, and httpx would otherwise send
+even a 127.0.0.1 request, token and all, through a configured proxy.
+
 A packaged app with a bundled Python has no checkout to point at yet; Settings
 says so and offers a plain token. That waits for the desktop pass. The desktop
 app running from this checkout is fine: its configs use `NEBULA_URL_FILE`.

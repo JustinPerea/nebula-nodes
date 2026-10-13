@@ -161,7 +161,7 @@ def check_token(url: str, token: str) -> dict[str, Any] | None:
     some other server holds that port, and it must not get a config."""
     try:
         response = httpx.get(f"{url.rstrip('/')}/api/agent/spend",
-                             headers={"Authorization": f"Agent {token}"}, timeout=5.0)
+                             headers={"Authorization": f"Agent {token}"}, timeout=5.0, trust_env=False)
     except (httpx.ConnectError, httpx.TimeoutException):
         return None
     except httpx.HTTPError as exc:

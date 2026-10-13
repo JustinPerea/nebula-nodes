@@ -544,21 +544,169 @@ def test_a_store_written_before_client_and_color_still_loads(tmp_path):
 
 # -- the desktop app's address, which changes every launch ---------------------------
 
+SECRET = "ab" * 32
+
+
 def test_backend_address_file_round_trip(tmp_path):
-    path = backend_address.publish(tmp_path, "http://127.0.0.1:54321/")
+    path = backend_address.publish(tmp_path, "http://127.0.0.1:54321/", SECRET)
     assert path == tmp_path / "backend-url" and mode(path) == 0o600
-    assert backend_address.read(path) == "http://127.0.0.1:54321"
-    backend_address.withdraw(tmp_path, "http://127.0.0.1:11111")  # a newer launch's file stays
+    assert backend_address.read(path) == ("http://127.0.0.1:54321", SECRET)
+    backend_address.withdraw(tmp_path, "cd" * 32)  # a newer launch's file stays
     assert path.exists()
-    backend_address.withdraw(tmp_path, "http://127.0.0.1:54321")
+    backend_address.withdraw(tmp_path, SECRET)
     assert not path.exists()
     with pytest.raises(ValueError, match="isn't running"):
         backend_address.read(path)
     for bad in ("http://evil.example:80", "https://127.0.0.1:1", "http://127.0.0.1", "http://u:p@127.0.0.1:1",
                 "http://127.0.0.1:1/x"):
-        path.write_text(bad)
+        path.write_text(json.dumps({"url": bad, "secret": SECRET}))
         with pytest.raises(ValueError):
             backend_address.read(path)
+    for bad in ("http://127.0.0.1:1", json.dumps({"url": "http://127.0.0.1:1"}),
+                json.dumps({"url": "http://127.0.0.1:1", "secret": "short"})):
+        path.write_text(bad)
+        with pytest.raises(ValueError, match="isn't a Nebula address file"):
+            backend_address.read(path)
+    with pytest.raises(ValueError):
+        backend_address.publish(tmp_path, "http://127.0.0.1:1", "not-hex")
+
+
+def test_only_the_backend_that_wrote_the_file_passes_the_check(tmp_path):
+    path = backend_address.publish(tmp_path, "http://127.0.0.1:50009", SECRET)
+    seen = []
+
+    def honest(url, challenge):
+        seen.append((url, challenge))
+        return backend_address.prove(SECRET, challenge)
+
+    assert backend_address.verified_url(path, probe=honest) == "http://127.0.0.1:50009"
+    assert backend_address.verified_url(path, probe=honest) == "http://127.0.0.1:50009"
+    assert len({challenge for _, challenge in seen}) == 2  # a fresh challenge every time
+    with pytest.raises(ValueError, match="isn't running"):
+        backend_address.verified_url(path, probe=lambda url, challenge: None)
+    for answer in ("", "0" * 64, backend_address.prove("cd" * 32, "ab" * 16)):
+        with pytest.raises(ValueError, match="no token was sent"):
+            backend_address.verified_url(path, probe=lambda url, challenge, a=answer: a)
+    with pytest.raises(ValueError):
+        backend_address.prove(SECRET, "not-hex")
+
+
+def test_the_proof_route_answers_only_with_this_launchs_secret(client, monkeypatch):
+    import main
+
+    monkeypatch.setattr(main, "_backend_address_secret", None)
+    assert client.get("/api/agent/address-proof", params={"challenge": "ab" * 16}).status_code == 404
+    monkeypatch.setattr(main, "_backend_address_secret", SECRET)
+    challenge = "0123456789abcdef" * 2
+    answered = client.get("/api/agent/address-proof", params={"challenge": challenge})
+    assert answered.status_code == 200
+    assert answered.json() == {"proof": backend_address.prove(SECRET, challenge)}
+    for bad in ("", "xyz", "AB" * 16, "a" * 31, "a" * 129):
+        assert client.get("/api/agent/address-proof", params={"challenge": bad}).status_code == 400
+
+
+def test_desktop_startup_publishes_the_file_and_shutdown_withdraws_it(monkeypatch):
+    import asyncio
+
+    import main
+
+    monkeypatch.setattr(main, "_backend_address_secret", None)
+    monkeypatch.setenv("NEBULA_DESKTOP_MODE", "1")
+    monkeypatch.setenv("NEBULA_URL", "http://127.0.0.1:50123")
+    path = backend_address.url_file(main._STATE_DIR)
+    asyncio.run(main._publish_backend_address())
+    try:
+        published = backend_address.read(path)
+        assert published.url == "http://127.0.0.1:50123"
+        assert published.secret == main._backend_address_secret and mode(path) == 0o600
+    finally:
+        asyncio.run(main._withdraw_backend_address())
+    assert not path.exists()
+
+
+class _Recorder:
+    """A real HTTP server on a loopback port: either a program that took a dead
+    Nebula's port (`secret=None`), or a stand-in for the backend that wrote the
+    file. It records every request so a test can see whether a token arrived."""
+
+    def __init__(self, secret=None):
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from urllib.parse import parse_qs, urlsplit
+
+        self.requests = []
+        recorder = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                parts = urlsplit(self.path)
+                recorder.requests.append((parts.path, self.headers.get("Authorization")))
+                if parts.path == backend_address.PROOF_PATH:
+                    challenge = parse_qs(parts.query).get("challenge", [""])[0]
+                    proof = backend_address.prove(secret, challenge) if secret else "0" * 64
+                    body = json.dumps({"proof": proof})
+                else:
+                    body = json.dumps({"nodes": [], "edges": []})
+                data = body.encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, *args):
+                pass
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+def test_a_program_on_a_dead_launchs_port_never_gets_the_token(tmp_path, monkeypatch):
+    """The stale-file case: Nebula crashed, its backend-url file stayed, and
+    another local program now listens on that port."""
+    import mcp_server
+    from cli.__main__ import default_url
+
+    squatter = _Recorder(secret=None)
+    try:
+        backend_address.publish(tmp_path, squatter.url, SECRET)
+        monkeypatch.setattr(mcp_server, "_base_url", None)
+        monkeypatch.setenv("NEBULA_URL_FILE", str(tmp_path / "backend-url"))
+        monkeypatch.setenv("NEBULA_APP_TOKEN", TOKEN)
+        with pytest.raises(mcp_server.NebulaAPIError, match="no token was sent"):
+            mcp_server.look_at_canvas()
+        with pytest.raises(SystemExit):
+            default_url({"NEBULA_URL_FILE": str(tmp_path / "backend-url")})
+        assert squatter.requests and all(path == backend_address.PROOF_PATH for path, _ in squatter.requests)
+        assert all(auth is None for _, auth in squatter.requests)
+    finally:
+        squatter.close()
+
+
+def test_the_backend_that_wrote_the_file_gets_the_call_and_proxies_are_ignored(tmp_path, monkeypatch):
+    import mcp_server
+
+    backend = _Recorder(secret=SECRET)
+    try:
+        backend_address.publish(tmp_path, backend.url, SECRET)
+        monkeypatch.setattr(mcp_server, "_base_url", None)
+        monkeypatch.setenv("NEBULA_URL_FILE", str(tmp_path / "backend-url"))
+        monkeypatch.setenv("NEBULA_APP_TOKEN", TOKEN)
+        # A proxy that answers nothing: httpx would send even 127.0.0.1 through it.
+        for name in ("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
+            monkeypatch.setenv(name, "http://127.0.0.1:9")
+        for name in ("NO_PROXY", "no_proxy"):
+            monkeypatch.delenv(name, raising=False)
+        assert mcp_server.look_at_canvas() == {"nodes": [], "edges": []}
+        assert backend.requests == [(backend_address.PROOF_PATH, None), ("/api/canvas/snapshot", f"Agent {TOKEN}")]
+    finally:
+        backend.close()
 
 
 def test_desktop_configs_carry_the_url_file(client, monkeypatch, tmp_path):
@@ -578,22 +726,28 @@ def test_desktop_configs_carry_the_url_file(client, monkeypatch, tmp_path):
 def test_the_mcp_server_follows_the_url_file_on_every_call(tmp_path, monkeypatch):
     import mcp_server
 
+    honest = lambda url, challenge: backend_address.prove(SECRET, challenge)  # noqa: E731
+    real = backend_address.verified_url
+    monkeypatch.setattr(backend_address, "verified_url", lambda path, **kw: real(path, probe=honest))
     monkeypatch.setattr(mcp_server, "_base_url", None)
     monkeypatch.setenv("NEBULA_URL_FILE", str(tmp_path / "backend-url"))
     with pytest.raises(mcp_server.NebulaAPIError, match="isn't running"):
         mcp_server._current_url()
-    backend_address.publish(tmp_path, "http://127.0.0.1:50001")
+    backend_address.publish(tmp_path, "http://127.0.0.1:50001", SECRET)
     assert mcp_server._current_url() == "http://127.0.0.1:50001"
-    backend_address.publish(tmp_path, "http://127.0.0.1:50002")  # Nebula reopened on a new port
+    backend_address.publish(tmp_path, "http://127.0.0.1:50002", SECRET)  # Nebula reopened on a new port
     assert mcp_server._api().base_url == "http://127.0.0.1:50002"
     monkeypatch.setattr(mcp_server, "_base_url", "http://127.0.0.1:8000")  # NEBULA_URL / --url win
     assert mcp_server._current_url() == "http://127.0.0.1:8000"
 
 
-def test_cli_default_url_reads_the_url_file(tmp_path):
+def test_cli_default_url_reads_the_url_file(tmp_path, monkeypatch):
     from cli.__main__ import default_url
 
-    backend_address.publish(tmp_path, "http://127.0.0.1:50003")
+    honest = lambda url, challenge: backend_address.prove(SECRET, challenge)  # noqa: E731
+    real = backend_address.verified_url
+    monkeypatch.setattr(backend_address, "verified_url", lambda path, **kw: real(path, probe=honest))
+    backend_address.publish(tmp_path, "http://127.0.0.1:50003", SECRET)
     assert default_url({"NEBULA_URL_FILE": str(tmp_path / "backend-url")}) == "http://127.0.0.1:50003"
     assert default_url({"NEBULA_URL": "http://127.0.0.1:9", "NEBULA_URL_FILE": "x"}) == "http://127.0.0.1:9"
     assert default_url({}) == "http://localhost:8000"

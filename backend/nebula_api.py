@@ -56,6 +56,10 @@ class NebulaAPI:
     With `client` (an httpx.Client, or a TestClient in tests) requests reuse
     it; without one each request is a one-shot `httpx.request`, which suits
     the MCP server, whose URL is set after import.
+
+    Nebula is always on this machine, so requests ignore HTTP_PROXY and the
+    like (`trust_env=False`): httpx otherwise routes even 127.0.0.1 through a
+    configured proxy, and the proxy would see the agent token.
     """
 
     def __init__(self, base_url: str = DEFAULT_URL, *, timeout: float = 300.0,
@@ -72,7 +76,8 @@ class NebulaAPI:
             if self._client is not None:
                 response = self._client.request(method, path, headers=headers, **kwargs)
             else:
-                response = httpx.request(method, f"{self.base_url}{path}", headers=headers, **kwargs)
+                response = httpx.request(method, f"{self.base_url}{path}", headers=headers,
+                                         trust_env=False, **kwargs)
         except httpx.ConnectError as exc:
             raise NebulaAPIError(f"Nebula isn't running at {self.base_url}. Start Nebula, then retry.",
                                  kind="connect") from exc

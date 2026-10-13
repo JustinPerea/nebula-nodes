@@ -18,7 +18,8 @@ class NebulaClient:
 
     def __init__(self, base_url: str = DEFAULT_BASE) -> None:
         self.base_url = base_url.rstrip("/")
-        self._client = httpx.Client(base_url=self.base_url, timeout=300.0)
+        # trust_env=False: Nebula is local, and a proxy must never see the token (nebula_api).
+        self._client = httpx.Client(base_url=self.base_url, timeout=300.0, trust_env=False)
 
     @property
     def api(self) -> NebulaAPI:

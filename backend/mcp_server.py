@@ -26,8 +26,9 @@ _MAX_VIDEO_UPLOAD = 500 * 1024 * 1024
 DEFAULT_NEBULA_URL = "http://127.0.0.1:8000"
 # NEBULA_URL (or --url) is a fixed address. Without it, NEBULA_URL_FILE names
 # the file the desktop app rewrites with its address each launch
-# (services/backend_address.py); it is read on every call, so a client started
-# before Nebula was reopened still finds it.
+# (services/backend_address.py); it is read and checked on every call, so a
+# client started before Nebula was reopened still finds it, and a stale file
+# never gets the token sent to whatever took the old port.
 _base_url: str | None = os.environ.get("NEBULA_URL", "").strip().rstrip("/") or None
 
 INSTRUCTIONS = """\
@@ -64,7 +65,7 @@ def _current_url() -> str:
         from services import backend_address
 
         try:
-            return backend_address.read(url_file)
+            return backend_address.verified_url(url_file)
         except ValueError as exc:
             raise NebulaAPIError(str(exc), kind="connect") from exc
     return DEFAULT_NEBULA_URL

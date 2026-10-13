@@ -282,7 +282,8 @@ def parse_kv_list(items: list) -> dict[str, str]:
 
 def default_url(environ: dict[str, str] | None = None) -> str:
     """$NEBULA_URL; else the address the desktop app wrote to $NEBULA_URL_FILE
-    (its port changes every launch; services/backend_address.py); else :8000."""
+    (its port changes every launch; services/backend_address.py), once the
+    backend there proves it wrote the file; else :8000."""
     env = os.environ if environ is None else environ
     url = env.get("NEBULA_URL", "").strip()
     if url:
@@ -292,7 +293,7 @@ def default_url(environ: dict[str, str] | None = None) -> str:
         from services import backend_address
 
         try:
-            return backend_address.read(url_file)
+            return backend_address.verified_url(url_file)
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             sys.exit(1)
