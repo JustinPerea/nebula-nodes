@@ -22,9 +22,13 @@ The server exposes these tools for building and running (see
 - `find_nodes`: node types to build with, best matches first, each with
   `runsWith` (key, free, krea, nous) and a list `price` at default settings.
   `ready_only=false` also lists nodes that can't run here, with what's
-  `missing`.
+  `missing`. "free" is at the node's defaults: a row with `needsKeyFor` (the
+  Video QC nodes) calls a provider in another mode.
 - `describe_node`: one node type's ports, params (options, defaults, ranges)
-  and list prices by the params that set them.
+  and list prices by the params that set them. A local node that still calls
+  a provider also has `runsWithOptions`: readiness per value of the param that
+  picks the provider (Cinema Scene's `scene.base.model`, a QC node's `mode`),
+  and a note when another value would run with the keys set here.
 - `edit_canvas`: adds nodes, wires, param changes, renames and moves in one
   call, all or nothing. Same shape as `propose_change`.
 - `remove_from_canvas`: deletes nodes or single wires, all or nothing.
@@ -413,8 +417,12 @@ The person decides what agents may spend, in **Settings > Preferences**:
   limit (see "Connected apps" below).
 
 Any limit also makes an agent ask before running a node with no list price,
-since Nebula can't check it. Free nodes always pass. The person's own runs
-from the canvas are never limited.
+since Nebula can't check it. That includes a Video QC node in any mode but
+`heuristic` or `opencv` (vision-llm calls a vision model, which has no list
+price) and a node whose priced setting arrives by wire (Krea Kling 3.0's
+`multi_prompt` port), or is set to something the price list doesn't cover
+(multi-shot Kling). Free nodes always pass. The person's own runs from the
+canvas are never limited.
 
 How it works (`backend/services/agent_spend.py`):
 
@@ -442,8 +450,11 @@ How it works (`backend/services/agent_spend.py`):
     started.
 
   A node whose handler was called stays counted, even if it failed. The
-  limit is still checked on the whole estimate first, since which key a
-  handler finds and what the cache skips are only known by running.
+  limit is still checked on the whole estimate first, since what the cache
+  skips is only known by running. The keys are not: each run route reads
+  settings once and hands the same snapshot to the check and to the run, so
+  the route priced (a dual-route node, which vision model QC calls) is the
+  route billed.
 - Whose total a run counts against:
   - `chat:<session>`: the in-app Claude, Codex and Daedalus chats each get
     their own session budget, from the agent token Nebula mints for each chat.
@@ -553,6 +564,13 @@ result at 25,000 tokens.
 `GET /api/agent/nodes` and `GET /api/agent/nodes/{id}` back `find_nodes` and
 `describe_node`. Both use `services/node_readiness.py`, the same rule
 `nebula context` uses, so the CLI and the MCP server agree on what can run.
+`apiProvider: utility` only means "no top-level key". A local node that still
+calls a provider says how in its definition's `providerVia` (`kind: model`
+for Cinema Scene's base model, `kind: param` for the QC nodes' mode), and
+readiness, the canvas badge, the run estimate and proposals all read it.
+`backend/tests/test_node_readiness.py` fails when a utility handler that can
+reach the network isn't declared, and pins `providerVia` to the handler
+constants it describes.
 
 ### In-app agents use this server
 

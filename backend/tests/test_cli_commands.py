@@ -134,3 +134,22 @@ def test_context_counts_free_and_krea_nodes_and_lists_ids():
     assert "--param _kreaAuth=mcp" not in text
     assert "`nebula propose` the _kreaAuth=mcp change" in text
     assert "Krea account: signed in" in text
+
+
+def test_context_says_what_local_provider_nodes_need():
+    import json
+    from pathlib import Path
+
+    nodes = list(json.loads((Path(__file__).resolve().parent.parent / "data" / "node_definitions.json").read_text()).values())
+    nothing = format_context({"apiKeys": {}}, nodes)
+    listed = " ".join(line for line in nothing.splitlines() if line.startswith(("Cinema:", "Analyzer:")))
+    assert "cinema-scene" not in listed  # its base models all need a key
+    assert "qc-frame-review+" in listed
+    assert "+ free at its defaults; mode other than heuristic/opencv calls a vision model with " \
+           "ANTHROPIC_API_KEY or OPENAI_API_KEY or GOOGLE_API_KEY. No list price" in nothing
+    assert "Utility (free)" not in nothing
+
+    google = format_context({"apiKeys": {"GOOGLE_API_KEY": "g"}}, nodes)
+    assert "cinema-scene" in google and "(set here)" in google
+    assert "cinema-scene: default seedream-4-5 needs FAL_KEY; set scene.base.model to nano-banana" in google
+    assert "cinema-scene: default" not in format_context({"apiKeys": {"FAL_KEY": "f"}}, nodes)

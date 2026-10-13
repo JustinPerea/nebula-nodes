@@ -316,8 +316,10 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
     audio-gen, text-gen, utility, universal. Each row has `id` (the
     definitionId for edit_canvas), `name`, `runsWith` (key, free, krea, nous)
     and `price` ("free", {"usd": [low, high]} per run at default settings, or
-    null when Nebula has no list price). With ready_only=false, nodes that
-    can't run here are included with `missing` saying what to set up.
+    null when Nebula has no list price). "free" is at the node's defaults: a
+    row with `needsKeyFor` (the Video QC nodes) calls a provider in another
+    mode, with no list price. With ready_only=false, nodes that can't run here
+    are included with `missing` saying what to set up.
     """
     params = {"query": query, "category": category, "ready_only": str(bool(ready_only)).lower(),
               "limit": max(1, min(int(limit), 100))}
@@ -330,7 +332,10 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     (type, default, options, ranges, `onlyWhen` another param has a value),
     whether it runs here, and list prices by the params that set them.
     Dual-route nodes also list `paramsDirect` / `paramsFal`; `route` says
-    which one this machine uses."""
+    which one this machine uses. A local node that calls a provider (Cinema
+    Scene's base model, a Video QC node's vision-llm mode) has
+    `runsWithOptions`: readiness per value of the param that picks it, and a
+    note when a different value would run with the keys set here."""
     from urllib.parse import quote
 
     return _canvas_call("GET", f"/api/agent/nodes/{quote(definition_id, safe='')}", ctx)

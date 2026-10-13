@@ -900,6 +900,9 @@ function applySceneToNode(set: GraphSet, nodeId: string, scene: CinemaSceneSpec)
           isDynamic: true,
           providerType: data.providerType ?? 'fal',
           params: { ...data.params, scene },
+          // The base model decides which key the scene needs.
+          keyStatus: nodeKeyStatus(NODE_DEFINITIONS[data.definitionId], { ...data.params, scene },
+            useUIStore.getState().settingsCache),
           // Deleted shot results have no live port. Historical runs retain their
           // original snapshot and outputs independently of the current scene.
           outputs: Object.fromEntries(Object.entries(data.outputs ?? {}).filter(
@@ -2847,17 +2850,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       if (param.default !== undefined) defaults[param.key] = param.default;
     }
 
-    // Check API key status from settings cache
-    let keyStatus: 'missing' | undefined;
-    const { settingsCache } = useUIStore.getState();
-    if (settingsCache.loaded && definition.envKeyName) {
-      const keyNames = Array.isArray(definition.envKeyName)
-        ? definition.envKeyName
-        : [definition.envKeyName];
-      if (keyNames.length > 0 && !keyNames.some((k) => Boolean(settingsCache.apiKeys[k]))) {
-        keyStatus = 'missing';
-      }
-    }
+    // Check API key status from settings cache (the same rule as every node).
+    const keyStatus = nodeKeyStatus(definition, defaults, useUIStore.getState().settingsCache);
 
     const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
 

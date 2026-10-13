@@ -14,7 +14,14 @@ under Factory mission `a06170a9-b974-43ea-9dc3-82b2bd937afd`.
   annotated Image output named `frame`, and a JSON Text output named `text`.
 - Heuristic and OpenCV modes execute without provider keys. Vision-LLM mode
   fails clearly when none of `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or
-  `GOOGLE_API_KEY` is configured.
+  `GOOGLE_API_KEY` is configured, as a missing credential
+  (`NoVisionProviderError` is a `MissingCredentialError`), before any request.
+- Vision-LLM mode is a provider call even though the nodes are `utility`.
+  Each definition says so in `providerVia` (`kind: param`, `freeWhen`
+  heuristic/opencv), so the canvas badges a missing vision key, agents see
+  `runsWithOptions`, and the run estimate lists the node as paid with no list
+  price: under any spending limit an agent has to propose it. Any `mode` value
+  other than exactly `heuristic` or `opencv` counts as vision-llm there.
 - Local files and contained `/api/outputs/` references are accepted. Raw
   `http://` and `https://` inputs, missing files, and output traversal attempts
   are rejected before a subprocess, decoder, or provider call.

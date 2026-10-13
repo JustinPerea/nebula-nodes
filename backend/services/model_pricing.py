@@ -29,6 +29,10 @@ node's effective value wins, so list specific rows before general ones. A
 price is a number or a ``[low, high]`` range for settings (like ``auto``) that
 only resolve at run time.
 
+A priced setting that arrives by wire (an input port with the same id as a
+param the entry reads, like Krea Kling 3.0's ``multi_prompt``) is only known
+at run time, so a node with one wired is unpriced (``wired``).
+
 ``frontend/src/lib/pricing.ts`` implements the same estimate; both are tested
 against ``tests/fixtures/pricing_cases.json`` so they cannot drift.
 """
@@ -39,7 +43,7 @@ import math
 import re
 from datetime import date
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 PRICING_PATH = Path(__file__).resolve().parent.parent / "data" / "model_pricing.json"
 CURRENCIES = ("usd", "krea_cu")
@@ -191,19 +195,35 @@ def _matches(values: Mapping[str, Any], match: Mapping[str, Any]) -> bool:
     return all(_as_match_value(values.get(key)) == _as_match_value(want) for key, want in match.items())
 
 
+def priced_keys(entry: Mapping[str, Any]) -> set[str]:
+    """Every setting an entry's price reads: row and extra matches, multiplyBy."""
+    keys = {str(key) for row in entry.get("rows") or [] if isinstance(row, Mapping)
+            for key in (row.get("match") or {})}
+    keys |= {str(key) for extra in entry.get("extras") or [] if isinstance(extra, Mapping)
+             for key in (extra.get("match") or {})}
+    return keys | {str(key) for key in entry.get("multiplyBy") or []}
+
+
 def estimate_node(
     entry: Mapping[str, Any] | None,
     definition: Mapping[str, Any],
     params: Mapping[str, Any] | None,
     route_provider: str | None = None,
+    wired: Iterable[str] = (),
 ) -> dict[str, Any] | None:
     """{currency, low, high} for one run of this node, or None if unpriced.
 
     ``route_provider`` is the provider the run will actually bill; when the
-    entry names a different one, the run is unpriced."""
+    entry names a different one, the run is unpriced. ``wired`` are the
+    node's input ports that have an edge into them: a priced setting among
+    them is only known at run time (the wire's value replaces the param), so
+    the run is unpriced. Not just the rows that name it: a more general row
+    or a skipped extra would price it wrong."""
     if not entry:
         return None
     if entry.get("provider") and route_provider and entry["provider"] != route_provider:
+        return None
+    if priced_keys(entry) & {str(port) for port in wired}:
         return None
     values = effective_params(entry, definition, params)
     for row in entry.get("rows") or []:
@@ -340,7 +360,35 @@ def run_multipliers(
     return runs
 
 
+def wired_ports(
+    nodes: list[Mapping[str, Any]], edges: Iterable[tuple[str, str, str | None]]
+) -> dict[str, set[str]]:
+    """Each run node's input ports with an edge into them, from (source,
+    target, target handle) edges. The source needn't be in the run: its
+    value still arrives (from outputs it already has)."""
+    ids = {str(node["id"]) for node in nodes}
+    wired: dict[str, set[str]] = {}
+    for _source, target, handle in edges:
+        if str(target) in ids and handle:
+            wired.setdefault(str(target), set()).add(str(handle))
+    return wired
+
+
 CINEMA_SCENE = "cinema-scene"
+
+
+def is_local(definition: Mapping[str, Any], params: Mapping[str, Any] | None = None) -> bool:
+    """A node that runs here and bills nobody, with these params (default:
+    its defaults). ``utility`` alone isn't enough: a ``providerVia`` node
+    calls a provider (services/node_readiness.py)."""
+    from services import node_readiness
+
+    if definition.get("apiProvider") != "utility":
+        return False
+    via = node_readiness.provider_via(definition)
+    if via is None:
+        return True
+    return via.get("kind") == "param" and not node_readiness.param_calls_provider(definition, params or {})
 
 
 def cinema_scene_base(params: Mapping[str, Any]) -> tuple[str, dict[str, Any], int] | None:
@@ -373,8 +421,14 @@ def estimate_run(
     definitions: Mapping[str, Mapping[str, Any]],
     api_keys: Mapping[str, Any],
     multipliers: Mapping[str, tuple[int, int]] | None = None,
+    wired: Mapping[str, Iterable[str]] | None = None,
 ) -> dict[str, Any]:
     """USD estimate for a set of nodes, each {id, definitionId, params, name}.
+
+    ``wired`` maps a node id to its input ports that have an edge into them
+    (``wired_ports``); a priced setting that arrives by wire leaves the node
+    unpriced. A utility node whose ``providerVia`` param picks provider work
+    (vision-llm QC) has no list price, so it is unpriced too.
 
     ``priced`` maps node id to {low, high, model}, ``model`` being the
     definition billed (a cinema scene's base model); paid nodes without a list
@@ -401,6 +455,12 @@ def estimate_run(
                 continue
             billed, params, calls = nested
             definition = definitions[billed]
+            ports: Iterable[str] = ()  # the scene's ports aren't its base model's params
+        else:
+            ports = (wired or {}).get(node_id, ())
+        if definition and definition.get("apiProvider") == "utility" and not is_local(definition, params):
+            unpriced.append(node_id)
+            continue
         if not definition or definition.get("apiProvider") == "utility":
             continue
         if uses_krea_account(definition, params):
@@ -410,7 +470,7 @@ def estimate_run(
             continue
         estimate = estimate_node(
             nodes_pricing.get(definition.get("id") or item.get("definitionId")),
-            definition, params, route_provider(definition, api_keys),
+            definition, params, route_provider(definition, api_keys), ports,
         )
         if estimate is None or estimate["currency"] != "usd":
             unpriced.append(node_id)

@@ -45,6 +45,25 @@ os.environ.pop("NEBULA_COMMONS_ENABLED", None)
 import pytest  # noqa: E402
 
 
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item, nextitem):
+    """Fail the test that leaves services.settings pointing anywhere but the
+    sandbox file above, checked after all of its fixtures (and monkeypatch)
+    have been undone. Tests that reload the module (test_settings_path.py,
+    test_credential_injection.py) once restored it by removing the variable,
+    which falls back to the repo's real settings.json: every later test then
+    read the person's keys and wrote their settings."""
+    yield
+    import sys
+
+    module = sys.modules.get("services.settings")
+    if module is not None and Path(module.SETTINGS_PATH) != _TEST_SETTINGS_PATH:
+        raise AssertionError(
+            f"services.settings.SETTINGS_PATH is {module.SETTINGS_PATH} after {item.nodeid}; "
+            f"restore it to {_TEST_SETTINGS_PATH} (reload with NEBULA_SETTINGS_PATH set)"
+        )
+
+
 @pytest.fixture(autouse=True)
 def isolated_commons_opt_in(request, monkeypatch):
     """Only the dedicated synthetic Commons tests opt into store access."""

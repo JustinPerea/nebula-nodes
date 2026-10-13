@@ -246,3 +246,34 @@ def test_shared_frontend_renderer_is_wired() -> None:
     assert "videoQcNode: VideoQcNode" in canvas
     assert "definitionId.startsWith('qc-')" in store
     assert 'else "videoQcNode"' in backend
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("definition_id", sorted(QC_IDS))
+async def test_vision_llm_without_a_key_is_a_missing_credential(qc_clip: Path, definition_id: str) -> None:
+    """No vision key stops the node before any request, so the engine marks it
+    missing_credential and the spending limits give its share of a hold back."""
+    from execution.missing_credential import MissingCredentialError
+    from execution.sync_runner import get_handler_registry
+    from models.events import ErrorEvent
+    from services.vision_llm import NoVisionProviderError, call_vision_llm
+
+    assert issubclass(NoVisionProviderError, MissingCredentialError)
+    with pytest.raises(MissingCredentialError):
+        await call_vision_llm({}, system_prompt="s", images=[qc_clip], user_prompt="u")
+
+    rel = qc_clip.relative_to(output_service.OUTPUT_ROOT)
+    source = GraphNode(id="source", definitionId="video-input", params={"filePath": f"/api/outputs/{rel}"})
+    analyzer = _node(definition_id, mode="vision-llm")
+    edge = GraphEdge(id="edge", source="source", sourceHandle="video", target=analyzer.id, targetHandle="video")
+    events = []
+
+    async def emit(event) -> None:
+        events.append(event)
+
+    await execute_graph(nodes=[source, analyzer], edges=[edge], api_keys={},
+                        handler_registry=get_handler_registry(emit=emit), emit=emit,
+                        run_id=f"keyless-{definition_id}")
+    errors = [event for event in events if isinstance(event, ErrorEvent) and event.node_id == analyzer.id]
+    assert len(errors) == 1 and errors[0].missing_credential is True
+    assert "ANTHROPIC_API_KEY" in errors[0].error

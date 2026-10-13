@@ -4,6 +4,7 @@ import type { NodeData } from '../types';
 import { batchSizeCap, parseBatchItems } from './batch';
 import { usesKreaAccount } from './kreaConnection';
 import { runRouteProvider } from './modelDiscovery';
+import { cinemaSceneBase, isLocalRun } from './nodeKeys';
 import { estimateNode, formatUsd, formatUsdRange, type PricingTable } from './pricing';
 
 /** What a run would cost, from the curated list prices. Only USD is summed. */
@@ -96,42 +97,27 @@ export function runMultipliers(nodes: Node<NodeData>[], edges: Edge[]): Map<stri
 
 // cinema-scene is a local node that calls its base image model's handler once
 // per shot (backend handlers/cinema_scene.py), so it is priced as that model
-// times its shots. Mirrors cinema_scene_base in backend/services/model_pricing.py.
-const CINEMA_SCENE = 'cinema-scene';
-const CINEMA_DEFAULT_BASE = 'seedream-4-5';
-const CINEMA_BASES = new Set(['seedream-4-5', 'nano-banana', 'nano-banana-fal-edit', 'flux-kontext']);
-const CINEMA_NONCOMMERCIAL_BASES = new Set(['flux-1-dev', 'flux.1-dev', 'flux-dev']);
-const CINEMA_SNAKE_ASPECT_BASES = new Set(['nano-banana', 'nano-banana-fal-edit', 'flux-kontext']);
+// times its shots. Its allowlist is the definition's providerVia (nodeKeys.ts).
+export { cinemaSceneBase } from './nodeKeys';
 
-/** The model a cinema scene calls, the params it sends, and its shot count;
- * null when the scene can't be read or its base would be refused. */
-export function cinemaSceneBase(
-  params: Record<string, unknown>,
-): { model: string; params: Record<string, unknown>; shots: number } | null {
-  const scene = params.scene;
-  if (!scene || typeof scene !== 'object' || Array.isArray(scene)) return null;
-  const { base: rawBase, shots, aspectRatio } = scene as Record<string, unknown>;
-  const base = rawBase ?? {};
-  if (typeof base !== 'object' || Array.isArray(base)) return null;
-  const requested = String((base as Record<string, unknown>).model ?? '').trim().toLowerCase();
-  let model = requested;
-  if (!requested || CINEMA_NONCOMMERCIAL_BASES.has(requested)) model = CINEMA_DEFAULT_BASE;
-  else if (!CINEMA_BASES.has(requested)) return null;
-  const extra = { ...((base as Record<string, unknown>).params as Record<string, unknown> | undefined ?? {}) };
-  // The backend also derives Seedream's image_size; no price row matches on it.
-  const sent = model === CINEMA_DEFAULT_BASE
-    ? extra
-    : { [CINEMA_SNAKE_ASPECT_BASES.has(model) ? 'aspect_ratio' : 'aspectRatio']: String(aspectRatio || '16:9'), ...extra };
-  const count = Array.isArray(shots)
-    ? shots.filter((shot) => shot !== null && typeof shot === 'object' && !Array.isArray(shot)).length
-    : 0;
-  return { model, params: sent, shots: count };
+/** Each run node's input ports that have an edge into them. A priced setting
+ * that arrives by wire is only known at run time (pricing.estimateNode).
+ * Mirrors wired_ports in backend services/model_pricing.py. */
+export function wiredPorts(nodes: Node<NodeData>[], edges: Edge[]): Map<string, Set<string>> {
+  const ids = new Set(nodes.map((node) => node.id));
+  const wired = new Map<string, Set<string>>();
+  for (const edge of edges) {
+    if (!ids.has(edge.target) || !edge.targetHandle) continue;
+    wired.set(edge.target, new Set([...(wired.get(edge.target) ?? []), edge.targetHandle]));
+  }
+  return wired;
 }
 
 /**
  * Mirrors the stores' run scopes so Run buttons can say what they will do:
  * the whole graph; one target plus every node feeding it; or an explicit
- * cluster. A node is paid when its provider is anything but local tools.
+ * cluster. A node is paid when it calls a provider: any non-utility node, and
+ * a utility node whose providerVia says it does with these params.
  * With a cost context, it also estimates the run from the price table.
  */
 export function summarizeRunScope(
@@ -167,27 +153,33 @@ export function summarizeRunScope(
   // Fan-out within what actually runs: a node scope already holds every
   // upstream Batch, and a cluster run sends only its own nodes and edges.
   const multipliers = pricing ? runMultipliers(included, edges) : null;
+  const wired = wiredPorts(included, edges);
   for (const node of included) {
     let definition = node.data?.definitionId ? NODE_DEFINITIONS[node.data.definitionId] : undefined;
     let params = (node.data?.params ?? {}) as Record<string, unknown>;
     let calls = 1;
-    let unreadable = false;
+    let noPrice = false;
+    let ports: Iterable<string> = wired.get(node.id) ?? [];
     const name = node.data?.label || definition?.displayName || node.id;
-    if (definition && definition.id === CINEMA_SCENE) {
-      const nested = cinemaSceneBase(params);
+    if (!definition || isLocalRun(definition, params)) continue;
+    if (definition.providerVia?.kind === 'model') {
+      const nested = cinemaSceneBase(params, definition);
       if (nested && NODE_DEFINITIONS[nested.model]) {
         definition = NODE_DEFINITIONS[nested.model];
         params = nested.params;
         calls = nested.shots;
+        ports = []; // the scene's ports aren't its base model's params
       } else {
-        unreadable = true;
+        noPrice = true;
       }
-    } else if (!definition || definition.apiProvider === 'utility') {
-      continue;
+    } else if (definition.apiProvider === 'utility') {
+      // A local node whose providerVia param picks provider work (vision-llm
+      // QC): it calls a vision model, and Nebula has no list price for it.
+      noPrice = true;
     }
     paid.push(name);
-    if (!pricing || !multipliers || !definition) continue;
-    if (unreadable) {
+    if (!pricing || !multipliers) continue;
+    if (noPrice) {
       cost.unpriced.push(name);
       continue;
     }
@@ -197,7 +189,7 @@ export function summarizeRunScope(
     }
     const estimate = estimateNode(
       pricing.nodes[definition.id], definition, params,
-      runRouteProvider(definition, costContext.apiKeys),
+      runRouteProvider(definition, costContext.apiKeys), ports,
     );
     if (!estimate || estimate.currency !== 'usd') {
       cost.unpriced.push(name);

@@ -79,8 +79,11 @@ def test_find_and_describe_follow_the_readiness_rule(nebula):
     keys = node_readiness.configured_keys(main.load_settings())
     for row in found["nodes"]:
         definition = main.node_registry.get(row["id"])
-        assert row["runsWith"] == node_readiness.node_access(definition, keys, False)
-    assert any(row["id"] == "text-input" and row["price"] == "free" for row in found["nodes"])
+        assert row["runsWith"] == node_readiness.node_access(definition, keys, False, main.node_registry.get_all())
+    # Looked up by name: unfiltered, rows are ready-first then by name, so with
+    # keys left in the session's settings "Text Input" can sit past row 100.
+    text_input = mcp_server.find_nodes(query="text input")["nodes"]
+    assert any(row["id"] == "text-input" and row["price"] == "free" for row in text_input)
 
     everything = mcp_server.find_nodes(query="nano banana", ready_only=False)
     assert all("nano" in row["id"] or "nano" in row["name"].lower() for row in everything["nodes"])
@@ -90,6 +93,35 @@ def test_find_and_describe_follow_the_readiness_rule(nebula):
     assert any(param["key"] == "aspect_ratio" and "16:9" in param["options"] for param in described["params"])
     with pytest.raises(NebulaAPIError, match="Close matches: nano-banana"):
         mcp_server.describe_node("nano-bananna")
+
+
+def test_local_nodes_that_call_a_provider_say_what_they_need(nebula, monkeypatch):
+    """`utility` isn't "free": Cinema Scene runs its base model, and a QC node's
+    vision-llm mode calls a vision model with no list price."""
+    import main
+
+    real = main.load_settings
+    keys: dict = {}
+    monkeypatch.setattr(main, "load_settings", lambda: {**real(), "apiKeys": dict(keys)})
+
+    assert "cinema-scene" not in {row["id"] for row in mcp_server.find_nodes(query="cinema scene")["nodes"]}
+    rows = {row["id"]: row for row in mcp_server.find_nodes(query="cinema scene", ready_only=False)["nodes"]}
+    assert rows["cinema-scene"]["runsWith"] is None and rows["cinema-scene"]["price"] is None
+    assert "FAL_KEY" in rows["cinema-scene"]["missing"] and "GOOGLE_API_KEY" in rows["cinema-scene"]["missing"]
+
+    qc_row = next(row for row in mcp_server.find_nodes(query="qc frame")["nodes"] if row["id"] == "qc-frame-review")
+    assert qc_row["runsWith"] == "free" and qc_row["price"] == "free"
+    assert "mode=vision-llm" in qc_row["needsKeyFor"] and "no list price" in qc_row["needsKeyFor"]
+    qc = mcp_server.describe_node("qc-frame-review")
+    assert qc["runsWith"] == "free" and qc["price"] == "free" and "no list price" in qc["priceNote"]
+    assert qc["runsWithOptions"]["options"] == {"heuristic": "free", "vision-llm": None, "opencv": "free"}
+
+    keys.update({"GOOGLE_API_KEY": "g"})
+    cinema = mcp_server.describe_node("cinema-scene")
+    assert cinema["runsWith"] == "key" and "missing" not in cinema
+    assert cinema["runsWithOptions"]["options"]["seedream-4-5"] is None
+    assert "set scene.base.model to nano-banana" in cinema["runsWithOptions"]["note"]
+    assert mcp_server.describe_node("qc-frame-review")["runsWithOptions"]["options"]["vision-llm"] == "key"
 
 
 def test_edit_canvas_applies_everything_or_nothing(nebula):

@@ -13,6 +13,7 @@ import { getReferenceRole } from '../../lib/referenceRoles';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
 import { usesKreaAccount } from '../../lib/kreaConnection';
+import { missingKeyTitle } from '../../lib/nodeKeys';
 import { useGraphStore } from '../../store/graphStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { useBatchPreview } from '../../hooks/useBatchPreview';
@@ -348,7 +349,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         <NodeLabel nodeId={id} label={nodeData.label} displayName={definition.displayName} />
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
         {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning"
-          title={usesKreaAccount(definition, nodeData.params) ? 'Krea sign-in required' : 'API Key Missing'}>&#x26A0;</span>}
+          title={usesKreaAccount(definition, nodeData.params) ? 'Krea sign-in required' : missingKeyTitle(definition, nodeData.params)}>&#x26A0;</span>}
         <span
           className="model-node__id-chip nodrag"
           title="Drag into the chat panel to reference this node"

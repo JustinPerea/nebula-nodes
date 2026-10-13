@@ -3,6 +3,7 @@ import { useUIStore } from '../../store/uiStore';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { shotPortId } from '../../constants/ports';
+import { missingKeyTitle } from '../../lib/nodeKeys';
 import type { CinemaSceneSpec, CinemaShot } from '../../types';
 import '../../styles/cinema-node.css';
 
@@ -10,11 +11,13 @@ interface CinemaSceneNodeData {
   params?: {
     scene?: CinemaSceneSpec;
   };
+  /** Set by the store (kreaConnection.nodeKeyStatus) from the scene's base model. */
+  keyStatus?: 'ok' | 'missing';
 }
 
 export function CinemaSceneNode({ id, data, selected }: NodeProps) {
   const enterCinemaEditor = useUIStore((s) => s.enterCinemaEditor);
-  const params = (data as CinemaSceneNodeData).params;
+  const { params, keyStatus } = data as CinemaSceneNodeData;
   const scene = params?.scene;
   const shots: CinemaShot[] = scene?.shots ?? [];
   const shotCount = shots.length;
@@ -39,7 +42,13 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
 
   return (
     <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`}>
-      <div className="cinema-scene-node__title">⛭ Cinema Scene</div>
+      <div className="cinema-scene-node__title">
+        <span>⛭ Cinema Scene</span>
+        {keyStatus === 'missing' && (
+          <span className="model-node__badge model-node__badge--warning cinema-scene-node__badge"
+            title={missingKeyTitle(NODE_DEFINITIONS['cinema-scene'], params ?? {})}>&#x26A0;</span>
+        )}
+      </div>
 
       <div className="cinema-scene-node__thumb">
         {thumbUrl ? (

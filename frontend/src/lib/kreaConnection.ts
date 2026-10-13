@@ -1,4 +1,5 @@
 import { apiFetch } from './backend';
+import { keysNeeded } from './nodeKeys';
 import type { ModelNodeDefinition } from '../types';
 
 export type KreaConnectionMode = 'api-token' | 'mcp';
@@ -54,12 +55,28 @@ export function withNewKreaMode(
   return { ...params, _kreaAuth: isKreaAccountOnly(def) ? 'mcp' : normalizeKreaMode(mode) };
 }
 
+/** 'missing' when this node, with these params, can't run with what is set
+ * up: its key, its Krea sign-in, or for a local node that calls a provider
+ * (`providerVia`), the key of the model or mode it picks (lib/nodeKeys.ts). */
 export function nodeKeyStatus(
   def: ModelNodeDefinition | undefined,
   params: Record<string, unknown>,
   cache: CredentialReadiness,
 ): 'missing' | undefined {
   if (!def || !cache.loaded) return undefined;
+  if (def.providerVia) {
+    const needs = keysNeeded(def, params);
+    if (needs === null) return 'missing';
+    return needs.some((need) => ownKeyStatus(need.definition, need.params, cache) === 'missing') ? 'missing' : undefined;
+  }
+  return ownKeyStatus(def, params, cache);
+}
+
+function ownKeyStatus(
+  def: ModelNodeDefinition,
+  params: Record<string, unknown>,
+  cache: CredentialReadiness,
+): 'missing' | undefined {
   if (usesKreaAccount(def, params)) {
     return cache.kreaConnection?.status === 'connected' ? undefined : 'missing';
   }

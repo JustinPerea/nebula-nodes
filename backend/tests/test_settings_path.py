@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -24,13 +25,21 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _restore_settings_module(monkeypatch):
-    """Reload settings module with a clean env after each test so the
-    module-level SETTINGS_PATH constant is restored to its repo-root default.
+    """Reload settings module after each test so the module-level
+    SETTINGS_PATH constant is restored to the session's sandbox path.
     Without this, a test that sets NEBULA_SETTINGS_PATH and reloads would
-    leave the constant pointing at a temp path for subsequent tests.
+    leave the constant pointing at its own temp path for subsequent tests.
     """
+    # Reload with the session's sandbox path (conftest.py), not with the
+    # variable removed: removed, SETTINGS_PATH falls back to the repo's real
+    # settings.json, and every later test in the run reads the person's keys
+    # and writes their settings (PUT /api/settings).
+    session_path = os.environ.get("NEBULA_SETTINGS_PATH")
     yield
-    monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
+    if session_path is None:
+        monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
+    else:
+        monkeypatch.setenv("NEBULA_SETTINGS_PATH", session_path)
     import services.settings as _s
     importlib.reload(_s)
 

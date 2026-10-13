@@ -89,7 +89,7 @@ def test_fan_out_multiplies_the_estimate():
         {"id": "n2", "definitionId": "paid", "params": {}},
     ]
     assert refusal(items[1:]) is None
-    assert refusal(items, [("n1", "n2")]) is not None  # 3 × $0.40
+    assert refusal(items, [("n1", "n2", "items")]) is not None  # 3 × $0.40
 
 
 def test_a_paid_node_without_a_price_needs_approval():
@@ -905,7 +905,7 @@ def test_plan_runs_are_counted_and_capped():
 
 def test_plan_runs_multiply_by_batch_items_and_passes():
     batch = {"id": "b", "definitionId": "batch", "params": {"items_text": "a\nb\nc"}}
-    decision = decide([batch, PLAN[0]], [("b", "k0")])
+    decision = decide([batch, PLAN[0]], [("b", "k0", "prompt")])
     assert decision.plan_per_node == {"k0": ("krea", 3)}
     twice = agent_spend.decide(PLAN[:1], [], settings={}, pricing=pricing(), definitions=DEFINITIONS,
                                spent=agent_spend.Spent(), how_to_ask="ASK.", passes=2)
@@ -1014,3 +1014,75 @@ def test_the_status_reports_the_default_plan_run_limit(client):
     caps = {"agentSpend": {"sessionUsd": None, "kreaPlanRuns": 0, "models": {}}}
     assert client.put("/api/settings", json=caps, headers=PERSON).status_code == 200
     assert client.get("/api/agent/spend").json()["limits"]["kreaPlanRuns"] == 0
+
+
+# -- local nodes that call a provider, and settings that arrive by wire ----------
+
+def _real_decide(items, edges=(), settings=None):
+    from services import model_pricing
+    from services.node_registry import NodeRegistry
+
+    return agent_spend.decide(items, list(edges), settings=settings or {"runCostConfirmUsd": 1},
+                              pricing=model_pricing.load_pricing(), definitions=NodeRegistry().get_all(),
+                              spent=agent_spend.Spent(), how_to_ask="ASK.")
+
+
+def test_vision_llm_qc_needs_a_proposal_under_a_limit():
+    qc = {"id": "q", "definitionId": "qc-frame-review", "params": {"mode": "vision-llm"}}
+    refused = _real_decide([qc]).refusal
+    assert refused is not None and "no list price for q (QC Frame Review)" in refused
+    local = _real_decide([{**qc, "params": {"mode": "heuristic"}}])
+    assert local.refusal is None and local.charge == {}
+    # With no limit set nothing is checked, as for any unpriced node.
+    assert _real_decide([qc], settings={"runCostConfirmUsd": None}).refusal is None
+
+
+def test_kling_multi_shot_needs_a_proposal_by_param_or_by_wire():
+    kling = {"id": "k", "definitionId": "kling-v3",
+             "params": {"prompt": "a", "multi_prompt": '[{"prompt": "a", "duration": "10"}]'}}
+    assert "no list price" in _real_decide([kling]).refusal
+    single = _real_decide([{**kling, "params": {"prompt": "a"}}])
+    assert single.refusal is None and single.charge == {"kling-v3": pytest.approx(0.63)}
+    krea = {"id": "k", "definitionId": "krea-video-kling-kling-3-0", "params": {"mode": "std", "duration": 5}}
+    assert _real_decide([krea]).refusal is None
+    assert "no list price" in _real_decide([krea], [("t", "k", "multi_prompt")]).refusal
+
+
+def test_the_spend_check_prices_the_keys_the_run_gets(client, monkeypatch):
+    """One settings read per run: the check and the run see the same keys. If the
+    check re-read settings, a key changed in between would price one route and
+    bill another. Here the stored keys change right after the run reads them."""
+    import main
+
+    PRICES["nodes"] = {"veo-3": {"currency": "usd", "provider": "google", "rows": [{"match": {}, "price": 0.04}]}}
+    node_id = client.post("/api/graph/node", json={"definitionId": "veo-3", "params": {}}).json()["id"]
+    real = main.load_settings
+    read_by_the_run = {"done": False}
+
+    def settings_now():
+        current = real()
+        keys = {"FAL_KEY": "f"} if read_by_the_run["done"] else {"GOOGLE_API_KEY": "g"}
+        return {**current, "apiKeys": keys}
+
+    def after_the_run_read_settings(nodes):
+        read_by_the_run["done"] = True  # from here on the stored key is FAL's: unpriced
+
+    monkeypatch.setattr(main, "load_settings", settings_now)
+    monkeypatch.setattr(main, "_validate_cinema_base_models", after_the_run_read_settings)
+    response = client.post("/api/graph/run", json={"targetNodeId": node_id})
+    assert response.status_code == 200, response.text
+    main.execute_graph.assert_awaited_once()
+    assert main.execute_graph.await_args.kwargs["api_keys"] == {"GOOGLE_API_KEY": "g"}
+
+
+def test_a_qc_node_in_vision_llm_mode_is_refused_on_the_run_routes(client):
+    import main
+
+    price(None)
+    node = client.post("/api/graph/node", json={"definitionId": "qc-loop-safety",
+                                                "params": {"mode": "vision-llm"}}).json()["id"]
+    response = client.post("/api/graph/run", json={"targetNodeId": node})
+    assert response.status_code == 403 and "no list price" in response.json()["detail"]
+    main.execute_graph.assert_not_awaited()
+    assert client.put(f"/api/graph/node/{node}", json={"params": {"mode": "heuristic"}}).status_code == 200
+    assert client.post("/api/graph/run", json={"targetNodeId": node}).status_code == 200

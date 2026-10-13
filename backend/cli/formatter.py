@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 # The readiness rule lives with the backend so the CLI and MCP server agree.
-from services.node_readiness import krea_modes, node_access  # noqa: F401 (node_access is re-exported)
+from services.node_readiness import detail, krea_modes, node_access, provider_via  # noqa: F401 (node_access is re-exported)
 
 
 def format_node_table(nodes: list[dict[str, Any]]) -> str:
@@ -224,23 +224,33 @@ def format_context(
     configured_keys = {k for k, v in api_keys.items() if v}
     krea_signed_in = krea_status == "connected"
 
+    definitions = {n["id"]: n for n in nodes}
     by_cat: dict[str, list[str]] = {}
     access_count: dict[str, int] = {}
     krea_both: list[str] = []
+    keyed_modes: list[str] = []   # free at defaults, a provider call in another mode
+    base_notes: list[str] = []    # a node whose default model can't run but another can
     for n in nodes:
-        access = node_access(n, configured_keys, krea_signed_in)
+        access = node_access(n, configured_keys, krea_signed_in, definitions)
         if access is None:
             continue
         access_count[access] = access_count.get(access, 0) + 1
         if access == "krea" and krea_modes(n) != ["mcp"]:
             krea_both.append(n["id"])
         mark = {"krea": "*", "nous": "^"}.get(access, "")
+        via = provider_via(n)
+        if via and via.get("kind") == "param" and access == "free":
+            mark = "+"
+            keyed_modes.append(n["id"])
+        options = detail(n, configured_keys, krea_signed_in, definitions) if via else None
+        if via and via.get("kind") == "model" and options and options.get("note"):
+            base_notes.append(f"{n['id']}: {options['note']}")
         by_cat.setdefault(n.get("category", "other"), []).append(n["id"] + mark)
 
     cat_names = {
         "image-gen": "Image", "video-gen": "Video", "text-gen": "Text/Chat",
         "audio-gen": "Audio", "3d-gen": "3D", "transform": "Transform",
-        "analyzer": "Analyzer", "utility": "Utility (free)", "universal": "Universal",
+        "analyzer": "Analyzer", "utility": "Utility", "universal": "Universal",
         "cinematic": "Cinema", "character": "Character",
     }
 
@@ -276,6 +286,19 @@ def format_context(
             lines.append("  call: `nebula propose` the _kreaAuth=mcp change; direct edits of it are refused.")
     if access_count.get("nous"):
         lines.append("^ needs a local Nous (Hermes) sign-in; not checked here.")
+    legends: list[str] = []
+    for node_id in keyed_modes:
+        via = provider_via(definitions[node_id]) or {}
+        keys = [str(key) for key in via.get("anyKey") or []]
+        legend = (f"+ free at its defaults; {via.get('param')} other than {'/'.join(via.get('freeWhen') or [])} calls a "
+                  f"{via.get('provider')} model with {' or '.join(keys)}"
+                  f"{' (set here)' if any(key in configured_keys for key in keys) else ''}. No list price, "
+                  "so under a spending limit that takes a proposal.")
+        if legend not in legends:
+            legends.append(legend)
+    lines.extend(legends)
+    for note in base_notes:
+        lines.append(note)
     lines.append("Ids above go to `nebula create <id>`; `nebula info <id>` shows ports and params.")
     lines.append("Port types: Text, Image, Video, Audio, Mesh, Array, SVG, Any")
     lines.append("Connections must match types (Any connects to anything).")

@@ -3,6 +3,7 @@ import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } fro
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { usesKreaAccount } from '../../lib/kreaConnection';
+import { keysNeeded } from '../../lib/nodeKeys';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { PORT_COLORS } from '../../lib/portCompatibility';
@@ -416,10 +417,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
     updateNodeData(activeNode.id, { params });
   }
 
+  // The keys this node needs with its current params: its own, or for a
+  // local node that calls a provider (Cinema Scene, vision-llm QC), the
+  // keys of the base model or mode it picks.
   const requiredKeys = definition
-    ? Array.isArray(definition.envKeyName)
-      ? definition.envKeyName
-      : [definition.envKeyName]
+    ? (keysNeeded(definition, activeNodeData.params) ?? []).flatMap(({ definition: need }) =>
+      Array.isArray(need.envKeyName) ? need.envKeyName : [need.envKeyName])
     : [];
   const usesKreaMcp = usesKreaAccount(definition, activeNodeData.params);
   const missingApiKeys = activeNodeData.keyStatus === 'missing' && !usesKreaMcp

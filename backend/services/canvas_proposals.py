@@ -295,8 +295,10 @@ def cost_for(
     """`free` for local utility nodes, else `paid` with the provider. No prices exist.
 
     A cinema scene is a utility node that calls its base image model once per
-    shot, so it is paid, by that model's provider."""
-    from services import model_pricing
+    shot, so it is paid, by that model's provider. A utility node whose
+    ``providerVia`` param picks provider work (a QC node in vision-llm mode)
+    is paid too, by whichever vision model has a key set."""
+    from services import model_pricing, node_readiness
 
     if (definition or {}).get("id") == model_pricing.CINEMA_SCENE:
         nested = model_pricing.cinema_scene_base(params or {})
@@ -304,6 +306,10 @@ def cost_for(
         provider = str((base or {}).get("apiProvider") or "") or None
         return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}, per shot"}
     provider = str((definition or {}).get("apiProvider") or "") or None
+    if provider == "utility" and not model_pricing.is_local(definition or {}, params or {}):
+        via = node_readiness.provider_via(definition or {}) or {}
+        what = str(via.get("provider") or "provider")
+        return {"kind": "paid", "provider": what, "label": f"paid · {what} model, no list price"}
     if provider == "utility":
         return {"kind": "free", "provider": None, "label": "free · runs locally"}
     return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}"}

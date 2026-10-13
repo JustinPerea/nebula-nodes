@@ -19,6 +19,7 @@ import importlib
 import io
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -57,9 +58,17 @@ ALLOWED_PROVIDERS = {
 def _restore_settings_module(monkeypatch):
     """Reload settings module with a clean env after each test so the
     module-level _INJECTED_KEYS and SETTINGS_PATH are restored."""
+    # Reload with the session's sandbox path (conftest.py), not with the
+    # variable removed: removed, SETTINGS_PATH falls back to the repo's real
+    # settings.json, and every later test in the run reads the person's keys
+    # and writes their settings (PUT /api/settings).
+    session_path = os.environ.get("NEBULA_SETTINGS_PATH")
     yield
     monkeypatch.delenv("NEBULA_INJECTED_KEYS", raising=False)
-    monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
+    if session_path is None:
+        monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
+    else:
+        monkeypatch.setenv("NEBULA_SETTINGS_PATH", session_path)
     import services.settings as _s
     importlib.reload(_s)
 

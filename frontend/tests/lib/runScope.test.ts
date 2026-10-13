@@ -196,3 +196,39 @@ describe('cinema scene cost', () => {
     expect(cinemaSceneBase({ scene: 'not a scene' })).toBeNull();
   });
 });
+
+describe('local nodes that call a provider, and wired price settings', () => {
+  it('counts a vision-llm QC node as paid with no list price, and local modes as free', () => {
+    const qc = (mode: unknown) => priced('qc', 'qc-frame-review', { mode }, 'QC');
+    const vision = summarizeRunScope([qc('vision-llm')], [], { kind: 'graph' }, context);
+    expect(vision.paid).toEqual(['QC']);
+    expect(vision.cost?.unpriced).toEqual(['QC']);
+    expect(runChipLabel(vision)).toBe('1 paid');
+    expect(describeRunScope(vision)).toContain('No list price for QC');
+    for (const mode of ['heuristic', 'opencv']) {
+      const local = summarizeRunScope([qc(mode)], [], { kind: 'graph' }, context);
+      expect(local.paid).toEqual([]);
+      expect(runChipLabel(local)).toBeNull();
+    }
+    // A value the handler would refuse isn't free either.
+    expect(summarizeRunScope([qc('')], [], { kind: 'graph' }, context).paid).toEqual(['QC']);
+  });
+
+  it('leaves a node unpriced when a setting its price reads arrives by wire', () => {
+    const table: PricingTable = { currencies: {}, nodes: { 'krea-video-kling-kling-3-0': {
+      currency: 'usd', per: 'request', rows: [{ match: { _kreaAuth: 'api-token', multi_prompt: '' }, price: 0.42 }],
+    } } };
+    const kling = priced('k', 'krea-video-kling-kling-3-0', { _kreaAuth: 'api-token' }, 'Kling');
+    const shots = priced('t', 'text-input', { value: '[]' });
+    const plain = summarizeRunScope([kling], [], { kind: 'graph' }, { pricing: table, apiKeys: {} });
+    expect(plain.cost?.high).toBeCloseTo(0.42);
+    const wired: Edge[] = [{ id: 'w', source: 't', target: 'k', targetHandle: 'multi_prompt' }];
+    const summary = summarizeRunScope([shots, kling], wired, { kind: 'graph' }, { pricing: table, apiKeys: {} });
+    expect(summary.cost?.unpriced).toEqual(['Kling']);
+    expect(summary.cost?.lines).toEqual([]);
+    // A wire into a port the price doesn't read changes nothing.
+    const other: Edge[] = [{ id: 'w', source: 't', target: 'k', targetHandle: 'prompt' }];
+    expect(summarizeRunScope([shots, kling], other, { kind: 'graph' }, { pricing: table, apiKeys: {} }).cost?.high)
+      .toBeCloseTo(0.42);
+  });
+});

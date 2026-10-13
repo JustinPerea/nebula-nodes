@@ -1884,11 +1884,16 @@ def _guard_approved_runs(change: Callable[[CLIGraph], Any]) -> None:
 
 
 def _require_spend_approval(
-    nodes: list[GraphNode], edges: list[GraphEdge], *, how_to_ask: str | None = None,
+    nodes: list[GraphNode], edges: list[GraphEdge], *, settings: Mapping[str, Any], how_to_ask: str | None = None,
     run_ids: list[str] | None = None, run_id: str | None = None, passes: int = 1, on_canvas: bool = True,
 ) -> None:
     """Refuse a run that isn't the person's when it breaks a spending limit, and
     count it against the caller's session when it doesn't.
+
+    ``settings`` is the snapshot the caller read for this run: its ``apiKeys``
+    are the ones the run receives, so the provider route priced here (a
+    dual-route node, or which vision model QC calls) is the one it bills.
+    Re-reading settings here could price a different route than the run uses.
 
     The person's own runs pass (the canvas asks them itself). Anything else
     is held to the limits in Settings; see services/agent_spend.py. It also
@@ -1900,7 +1905,6 @@ def _require_spend_approval(
     if _is_person_request():
         return
     _refuse_agent_krea_billing_in_run(nodes, on_canvas=on_canvas)
-    settings = load_settings()
     ask = how_to_ask or agent_spend.propose_hint(run_ids or [])
     try:
         pricing = model_pricing.load_pricing()
@@ -1911,7 +1915,7 @@ def _require_spend_approval(
     key, label = _spend_session(headers)
     decision = agent_spend.decide(
         [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes],
-        [(e.source, e.target) for e in edges],
+        [(e.source, e.target, e.target_handle) for e in edges],
         settings=settings, pricing=pricing, definitions=node_registry.get_all(),
         budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes,
     )
@@ -2987,18 +2991,29 @@ def _short(text: Any, limit: int = 140) -> str:
 
 
 def _cinema_price_note() -> str:
-    from handlers.cinema_scene import _COMMERCIAL_OK_DEFAULT_BASES, _DEFAULT_BASE_MODEL
-
+    via = node_readiness.provider_via(node_registry.get(model_pricing.CINEMA_SCENE) or {}) or {}
     try:
         priced = model_pricing.load_pricing().get("nodes") or {}
     except (OSError, ValueError):
         priced = {}
-    unpriced = sorted(base for base in _COMMERCIAL_OK_DEFAULT_BASES if base not in priced)
-    note = (f"Calls its base model (scene.base.model, default {_DEFAULT_BASE_MODEL}) once per shot, and is "
+    unpriced = sorted(base for base in via.get("models") or [] if base not in priced)
+    note = (f"Calls its base model (scene.base.model, default {via.get('default')}) once per shot, and is "
             "priced and limited as that model: shots x its list price.")
     if unpriced:
         note += f" {', '.join(unpriced)} have no list price, so agent runs with them must be proposed (propose_change)."
     return note
+
+
+def _keyed_mode_hint(definition: Mapping[str, Any]) -> str | None:
+    """find_nodes' short form of a param-picked provider call (vision-llm QC)."""
+    via = node_readiness.provider_via(definition)
+    if not via or via.get("kind") != "param":
+        return None
+    free = set(via.get("freeWhen") or [])
+    paid = [option.get("value") for param in definition.get("params") or [] if param.get("key") == via.get("param")
+            for option in param.get("options") or [] if isinstance(option, dict) and option.get("value") not in free]
+    return (f"{via.get('param')}={'/'.join(str(v) for v in paid)} needs {' or '.join(via.get('anyKey') or [])} "
+            "and has no list price")
 
 
 @app.get("/api/agent/nodes")
@@ -3020,14 +3035,15 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
     words = [word for word in query.lower().split() if word]
     limit = max(1, min(int(limit), 100))
     rows: list[tuple[tuple[int, int, str], dict[str, Any]]] = []
-    for definition in node_registry.get_all().values():
+    definitions = node_registry.get_all()
+    for definition in definitions.values():
         if category and definition.get("category") != category:
             continue
         name = str(definition.get("displayName") or definition["id"])
         haystack = f"{definition['id']} {name} {definition.get('description') or ''}".lower()
         if any(word not in haystack for word in words):
             continue
-        access = node_readiness.node_access(definition, keys, krea_signed_in)
+        access = node_readiness.node_access(definition, keys, krea_signed_in, definitions)
         if ready_only and access is None:
             continue
         row: dict[str, Any] = {
@@ -3037,11 +3053,16 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
         if definition.get("description"):
             row["description"] = _short(definition["description"])
         if access is None:
-            row["missing"] = node_readiness.missing(definition, krea_signed_in)
+            row["missing"] = node_readiness.missing(definition, krea_signed_in, definitions)
+        hint = _keyed_mode_hint(definition)
+        if hint:
+            row["needsKeyFor"] = hint  # free at its defaults; describe_node has the detail
         if definition["id"] == model_pricing.CINEMA_SCENE:
             row["price"] = None  # its base model's price, once per shot (describe_node)
-        elif definition.get("apiProvider") == "utility":
+        elif model_pricing.is_local(definition):
             row["price"] = "free"
+        elif definition.get("apiProvider") == "utility":
+            row["price"] = None
         else:
             estimate = model_pricing.estimate_node(
                 pricing.get(definition["id"]), definition, {},
@@ -3086,7 +3107,8 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         krea_signed_in = False
     keys = node_readiness.configured_keys(settings)
-    access = node_readiness.node_access(definition, keys, krea_signed_in)
+    definitions = node_registry.get_all()
+    access = node_readiness.node_access(definition, keys, krea_signed_in, definitions)
     ports = lambda key: [  # noqa: E731
         {"id": port["id"], "type": port.get("dataType"), **({"required": True} if port.get("required") else {}),
          **({"multiple": True} if port.get("multiple") else {})}
@@ -3112,7 +3134,10 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         result["paramsDirect"] = shown("directParams")
         result["paramsFal"] = shown("falParams")
     if access is None:
-        result["missing"] = node_readiness.missing(definition, krea_signed_in)
+        result["missing"] = node_readiness.missing(definition, krea_signed_in, definitions)
+    options = node_readiness.detail(definition, keys, krea_signed_in, definitions)
+    if options:
+        result["runsWithOptions"] = options
     modes = node_readiness.krea_modes(definition)
     if modes:
         result["kreaModes"] = modes
@@ -3123,8 +3148,15 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     if definition["id"] == model_pricing.CINEMA_SCENE:
         result["price"] = None
         result["priceNote"] = _cinema_price_note()
-    elif definition.get("apiProvider") == "utility":
+    elif model_pricing.is_local(definition):
         result["price"] = "free"
+        if options and options.get("note"):
+            # Free at its defaults; the other values of that param are not.
+            result["priceNote"] = f"Free at its defaults. {options['note']}"
+    elif definition.get("apiProvider") == "utility":
+        result["price"] = None
+        result["priceNote"] = (options or {}).get("note") or (
+            "Calls a provider with no list price; agent runs of it must be proposed (propose_change).")
     else:
         try:
             entry = (model_pricing.load_pricing().get("nodes") or {}).get(definition["id"])
@@ -3748,7 +3780,9 @@ def _estimate_proposal_run(
          for n in graph_nodes],
         [(str(e.get("source")), str(e.get("target"))) for e in graph_edges],
     )
-    return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers)
+    wired = model_pricing.wired_ports(
+        items, [(str(e.get("source")), str(e.get("target")), e.get("targetHandle")) for e in graph_edges])
+    return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired)
 
 
 def _node_order(node_id: str) -> tuple[int, str]:
@@ -4697,7 +4731,7 @@ async def execute(request: ExecuteRequest) -> dict:
 
     # After validation, so a graph that can't run reports why, not its cost.
     _require_run_spend_approval(run_id, nodes, request.edges, approval_id=request.approval_id,
-                                run_ids=_end_node_ids(nodes, request.edges))
+                                run_ids=_end_node_ids(nodes, request.edges), settings=settings)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
@@ -4847,7 +4881,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
 
     # After validation, so a graph that can't run reports why, not its cost.
     _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
-                                run_ids=[request.target_node_id])
+                                run_ids=[request.target_node_id], settings=settings)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
@@ -5408,7 +5442,8 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     # each one counts in full. Checked after validation, so a request that
     # can't run doesn't count.
     spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
-    _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id], passes=count)
+    _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id], passes=count,
+                                settings=settings)
 
     # A per-shot run does not acquire the frontend's Canvas-wide ``isExecuting``
     # gate, so sibling work remains available. It does register its background
@@ -8473,7 +8508,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
 
     # Checked last: a request refused for anything else must not count.
     run_id = str(uuid4())
-    _require_spend_approval(sub_nodes, sub_edges, run_id=run_id,
+    _require_spend_approval(sub_nodes, sub_edges, run_id=run_id, settings=settings,
                             run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
     canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
     publish_action(
@@ -8847,7 +8882,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     ))
     # A quick run has no canvas node to propose, so point at one.
     quick_run = f"quick-{uuid4().hex}"
-    _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, on_canvas=False, how_to_ask=(
+    _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, on_canvas=False, settings=settings, how_to_ask=(
         f"Add it to the canvas instead (`nebula create {definition_id}`), then propose the run: "
         "`nebula propose --note \"<why>\" --run <node id>` (MCP: propose_change). "
         "The person accepts on the canvas, and the canvas runs it."

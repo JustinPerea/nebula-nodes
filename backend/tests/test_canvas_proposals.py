@@ -162,6 +162,15 @@ def test_parse_spec_shapes_refs_and_caps():
 def test_cost_never_has_numbers():
     assert cost_for({"apiProvider": "utility"}) == {"kind": "free", "provider": None, "label": "free · runs locally"}
     assert cost_for({"apiProvider": "fal"}) == {"kind": "paid", "provider": "fal", "label": "paid · fal"}
+    # A local node whose mode calls a vision model is paid, with no list price.
+    import json
+    from pathlib import Path
+    qc = json.loads((Path(__file__).resolve().parent.parent / "data" / "node_definitions.json").read_text())["qc-frame-review"]
+    assert cost_for(qc, {"mode": "vision-llm"}) == {
+        "kind": "paid", "provider": "vision", "label": "paid · vision model, no list price"}
+    assert cost_for(qc, {"mode": ""})["kind"] == "paid"
+    assert cost_for(qc, {"mode": "heuristic"}) == cost_for(qc, {}) == {
+        "kind": "free", "provider": None, "label": "free · runs locally"}
 
 
 def test_new_nodes_land_right_of_the_rightmost_referenced_node():
@@ -275,6 +284,33 @@ def test_cost_counts_paid_free_and_ancestors_without_outputs(api):
     api.graph.nodes[n1]["outputs"] = {"text": {"type": "Text", "value": "a cat"}}
     cached = _propose(api, _upscale_body(n1)).json()["proposal"]["cost"]
     assert cached["upTo"] is False and [node["ref"] for node in cached["nodes"]] == ["+img"]
+
+
+def test_a_vision_llm_qc_run_is_paid_and_unpriced_on_the_card_and_in_the_view(api):
+    body = {"note": "check the loop", "nodes": [{"ref": "+qc", "definitionId": "qc-loop-safety",
+                                                  "params": {"mode": "vision-llm"}}], "run": ["+qc"]}
+    view = _propose(api, body).json()["proposal"]
+    assert view["nodes"][0]["cost"]["kind"] == "paid"
+    cost = view["cost"]
+    assert cost["paidRuns"] == 1 and cost["nodes"][0]["kind"] == "paid" and cost["nodes"][0]["price"] is None
+    local = _propose(api, {**body, "nodes": [{**body["nodes"][0], "params": {"mode": "heuristic"}}]}).json()
+    assert local["proposal"]["cost"]["paidRuns"] == 0
+    assert local["proposal"]["nodes"][0]["cost"]["kind"] == "free"
+
+
+def test_a_wired_krea_kling_multi_prompt_leaves_the_estimate_open(api):
+    n1 = api.graph.add_node("text-input", {"value": '[{"prompt": "a", "duration": 10}]'})
+    n1_out = {"text": {"type": "Text", "value": "x"}}
+    api.graph.nodes[n1]["outputs"] = n1_out
+    body = {"note": "multi-shot", "nodes": [{"ref": "+k", "definitionId": "krea-video-kling-kling-3-0",
+                                              "params": {"prompt": "a", "mode": "std", "duration": 5}}],
+            "edges": [{"source": n1, "sourceHandle": "text", "target": "+k", "targetHandle": "multi_prompt"}],
+            "run": ["+k"]}
+    cost = _propose(api, body).json()["proposal"]["cost"]
+    assert cost["estimate"] is None or "+k" in cost["estimate"]["unpriced"]
+    assert {node["ref"]: node["price"] for node in cost["nodes"]}["+k"] is None
+    unwired = _propose(api, {**body, "edges": []}).json()["proposal"]["cost"]
+    assert {node["ref"]: node["price"] for node in unwired["nodes"]}["+k"] == {"low": 0.42, "high": 0.42}
 
 
 def test_open_limits_and_expiry(api):

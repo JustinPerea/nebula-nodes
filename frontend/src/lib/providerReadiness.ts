@@ -2,6 +2,7 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../types';
 import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
 import { configuredDirectKey, directKeyNames } from './directRoute';
+import { modelChoice, paramCallsProvider } from './nodeKeys';
 
 export type ProviderSetupTarget =
   | { kind: 'api-key'; key: string }
@@ -113,15 +114,22 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
       tone: source.state === 'current' ? 'neutral' : 'warning', detail: 'The saved Paper snapshot is retained. Open its source node to refresh or reconnect the editable artwork; refresh never generates.' };
     return { label: 'Paper link required', tone: 'neutral', detail: 'Link an editable element from your local Paper app. Linking and refreshing never generate.' };
   }
-  if (def.id === 'cinema-scene') {
-    const scene = params.scene && typeof params.scene === 'object' ? params.scene as Record<string, unknown> : {};
-    const base = scene.base && typeof scene.base === 'object' ? scene.base as Record<string, unknown> : {};
-    const savedModel = String(base.model ?? '').trim().toLowerCase();
-    const model = !savedModel || ['flux-1-dev', 'flux.1-dev', 'flux-dev'].includes(savedModel) ? 'seedream-4-5' : savedModel;
-    const definition = ['seedream-4-5', 'nano-banana', 'nano-banana-fal-edit', 'flux-kontext'].includes(model) ? NODE_DEFINITIONS[model] : undefined;
+  if (def.providerVia?.kind === 'model') {
+    const model = modelChoice(def, params);
+    const definition = model ? NODE_DEFINITIONS[model] : undefined;
     if (!definition) return { label: 'Scene model unavailable', tone: 'warning', detail: 'Choose a supported base model in Cinema scene settings before generating.' };
     const ready = modelReadiness(definition, {}, cache, health);
     return { ...ready, detail: `${definition.displayName} is the scene base model. ${ready.detail}` };
+  }
+  if (def.providerVia?.kind === 'param') {
+    const via = def.providerVia;
+    if (!paramCallsProvider(def, params)) return { label: 'No API key required', tone: 'neutral',
+      detail: `This ${via.param} runs locally. Other ${via.param} values call a ${via.provider} model and need ${via.anyKey.join(', ')}.` };
+    // The handler calls the first vision model whose key is set.
+    const key = via.anyKey.find((candidate) => cache.apiKeys[candidate]?.trim()) ?? via.anyKey[0];
+    const ready = keyReadiness(key, cache, health);
+    return { ...ready, connectionLabel: `${PROVIDER_KEY_LABELS[key] ?? key} API`,
+      detail: `Calls a ${via.provider} model with the first of ${via.anyKey.join(', ')} that is set; no list price. ${ready.detail}` };
   }
   const keys = (Array.isArray(def.envKeyName) ? def.envKeyName : [def.envKeyName]).filter(Boolean);
   if (!keys.length) return { label: 'No API key required', tone: 'neutral',

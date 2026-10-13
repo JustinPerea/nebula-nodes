@@ -76,6 +76,17 @@ shot, so it is priced, limited and counted as that model, times its shots
 the whole subgraph once per variation with the cache off, so it is counted
 once per variation (``passes``).
 
+The Video QC nodes are local too, but in any mode other than heuristic or
+opencv (vision-llm, or a value the handler would refuse) they call a vision
+model with the first of ANTHROPIC_API_KEY, OPENAI_API_KEY and GOOGLE_API_KEY
+that is set (the definition's ``providerVia``). Nebula has no list price for
+that, so such a run is unpriced: with any limit set it needs a proposal, as
+for any other paid node without one. Heuristic and opencv runs stay free.
+
+A priced setting that arrives by wire (Krea Kling 3.0's ``multi_prompt``
+port) is only known at run time, so that node is unpriced too
+(``model_pricing.wired_ports``).
+
 Nodes that made no provider request get their share of the count back, since
 they can't have cost anything:
 
@@ -89,9 +100,11 @@ A node whose handler was called stays counted, even if it then failed or was
 stopped: a request may already have gone out.
 
 The limits themselves are still checked up front on the whole estimate.
-Which key a handler finds, and what the cache will skip, can only be known
-by running: cache keys depend on upstream outputs, and the cache is lost on
-restart.
+What the cache will skip can only be known by running: cache keys depend on
+upstream outputs, and the cache is lost on restart. Which key a handler
+finds is fixed before that: every run route reads settings once and gives
+the same snapshot to this check and to the run (``main._require_spend_approval``
+takes it), so the route priced is the route billed.
 """
 from __future__ import annotations
 
@@ -508,7 +521,7 @@ def _names(ids: list[str], labels: Mapping[str, str]) -> str:
 
 def decide(
     items: list[Mapping[str, Any]],
-    edges: list[tuple[str, str]],
+    edges: list[tuple[str, str, str | None]],
     *,
     settings: Mapping[str, Any],
     pricing: Mapping[str, Any],
@@ -521,7 +534,10 @@ def decide(
     """Whether an agent may start this run itself, and what it would cost.
 
     ``items`` are the nodes the run includes, each {id, definitionId, params};
-    ``edges`` are (source, target) pairs between them. ``budgets`` are the
+    ``edges`` are the run's (source, target, target handle) edges: they set
+    fan-out, and a priced setting that arrives by wire leaves its node
+    unpriced. ``settings`` must be the snapshot whose ``apiKeys`` the run
+    itself receives, so the route priced is the route billed. ``budgets`` are the
     totals the caller counts against (session_budgets); without them, ``spent``
     is a chat session's total, held to the per-session limits. ``how_to_ask``
     is the sentence that tells the agent what to do instead. ``passes`` is how
@@ -535,8 +551,9 @@ def decide(
     if budgets is None:
         budgets = session_budgets("chat:", spent or Spent(), caps)
     api_keys = settings.get("apiKeys") or {}
-    multipliers = model_pricing.run_multipliers(list(items), edges)
-    estimate = model_pricing.estimate_run(list(items), pricing, definitions, api_keys, multipliers)
+    multipliers = model_pricing.run_multipliers(list(items), [(source, target) for source, target, _ in edges])
+    estimate = model_pricing.estimate_run(list(items), pricing, definitions, api_keys, multipliers,
+                                          model_pricing.wired_ports(list(items), edges))
     definition_of = {str(item["id"]): str(item.get("definitionId") or "") for item in items}
     labels = {node_id: str((definitions.get(def_id) or {}).get("displayName") or "") for node_id, def_id in definition_of.items()}
 

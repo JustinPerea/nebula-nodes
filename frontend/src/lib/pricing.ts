@@ -77,16 +77,29 @@ function matches(values: Record<string, unknown>, match: Record<string, unknown>
   return Object.entries(match ?? {}).every(([key, want]) => asMatchValue(values[key]) === asMatchValue(want));
 }
 
+/** Every setting an entry's price reads: row and extra matches, multiplyBy. */
+export function pricedKeys(entry: PriceEntry): Set<string> {
+  const keys = new Set<string>(entry.multiplyBy ?? []);
+  for (const row of [...(entry.rows ?? []), ...(entry.extras ?? [])]) {
+    for (const key of Object.keys(row.match ?? {})) keys.add(key);
+  }
+  return keys;
+}
+
 /** One run of this node, or null when it's unpriced (no entry, no matching
- * row, or the run bills a different provider than the entry prices). */
+ * row, the run bills a different provider than the entry prices, or a
+ * setting the price reads arrives by wire, so it's only known at run time). */
 export function estimateNode(
   entry: PriceEntry | undefined,
   definition: Partial<ModelNodeDefinition>,
   params: Record<string, unknown> | undefined,
   routeProvider?: string | null,
+  wired: Iterable<string> = [],
 ): NodeEstimate | null {
   if (!entry) return null;
   if (entry.provider && routeProvider && entry.provider !== routeProvider) return null;
+  const priced = pricedKeys(entry);
+  for (const port of wired) if (priced.has(port)) return null;
   const values = effectiveParams(entry, definition, params);
   const row = (entry.rows ?? []).find((candidate) => matches(values, candidate.match));
   if (!row) return null;
