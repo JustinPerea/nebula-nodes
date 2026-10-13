@@ -622,7 +622,72 @@ function runSmokeTest(handle) {
               saved: after.zoomTelemetryEnabled === wanted,
             };
           })().catch((err) => ({ ok: false, error: String(err) })),
-        ]).then(([health, websocket, _mounted, settingsSave]) => {
+          // The other person paths from the packaged file: page (the desktop
+          // pass, docs/MCP-SETUP.md "Who counts as the person"): the spend
+          // read, the /ws hello, and the Krea connector's status and
+          // person-only routes. None of these reaches Krea: with no saved
+          // connection, check stops before any request and disconnect only
+          // clears the empty local vault. Isolated profiles only.
+          (async () => {
+            if (!${JSON.stringify(dataPaths.isolated)}) return { skipped: 'not an isolated profile' };
+            const api = window.nebulaDesktop.apiBaseUrl;
+            const got = window.nebulaDesktop.person ? await window.nebulaDesktop.person.token() : null;
+            if (!got || !got.ok) return { skipped: 'no person token (' + (got && got.error) + ')' };
+            const call = async (path, init, withToken) => {
+              const headers = withToken ? { 'X-Nebula-Person': got.token } : {};
+              try {
+                const response = await fetch(api + path, { cache: 'no-store', ...init, headers });
+                let body = null;
+                try { body = await response.json(); } catch { /* not JSON */ }
+                return { status: response.status, body };
+              } catch (err) {
+                return { status: 0, error: String(err) };
+              }
+            };
+            const hello = (token) => new Promise((resolve) => {
+              const socket = new WebSocket(window.nebulaDesktop.wsBaseUrl + '/ws');
+              const done = (value) => { window.clearTimeout(timer); socket.close(); resolve(value); };
+              const timer = window.setTimeout(() => done('timeout'), 5000);
+              socket.onmessage = (event) => {
+                let frame = null;
+                try { frame = JSON.parse(event.data); } catch { return; }
+                if (frame.type === 'graphSync') socket.send(JSON.stringify({ type: 'hello', personToken: token }));
+                if (frame.type === 'proposalSync' || frame.type === 'personRequired') done(frame.type);
+              };
+              socket.onerror = () => done('error');
+            });
+            const spend = await call('/api/agent/spend', {}, true);
+            const spendNoToken = await call('/api/agent/spend', {}, false);
+            const kreaStatus = await call('/api/krea/connection', {}, true);
+            const kreaCheck = await call('/api/krea/connection/check', { method: 'POST' }, true);
+            const kreaCheckNoToken = await call('/api/krea/connection/check', { method: 'POST' }, false);
+            const kreaDisconnect = await call('/api/krea/connection', { method: 'DELETE' }, true);
+            const kreaDisconnectNoToken = await call('/api/krea/connection', { method: 'DELETE' }, false);
+            const helloAsPerson = await hello(got.token);
+            const helloWrongToken = await hello('x'.repeat(43));
+            const result = {
+              pageOrigin: window.location.origin,
+              spend: { status: spend.status, limited: spend.body && spend.body.limited },
+              spendNoToken: { status: spendNoToken.status, limited: spendNoToken.body && spendNoToken.body.limited },
+              kreaStatus: { status: kreaStatus.status, connection: kreaStatus.body && kreaStatus.body.status },
+              kreaCheck: { status: kreaCheck.status, connection: kreaCheck.body && kreaCheck.body.status },
+              kreaCheckNoToken: { status: kreaCheckNoToken.status, code: kreaCheckNoToken.body && kreaCheckNoToken.body.code },
+              kreaDisconnect: { status: kreaDisconnect.status, connection: kreaDisconnect.body && kreaDisconnect.body.status },
+              kreaDisconnectNoToken: { status: kreaDisconnectNoToken.status, code: kreaDisconnectNoToken.body && kreaDisconnectNoToken.body.code },
+              helloAsPerson,
+              helloWrongToken,
+            };
+            result.ok = spend.status === 200 && spend.body?.limited === false
+              && spendNoToken.status === 200 && spendNoToken.body?.limited !== false
+              && kreaStatus.status === 200 && typeof kreaStatus.body?.status === 'string' && kreaStatus.body.status !== 'error'
+              && kreaCheck.status === 200
+              && kreaCheckNoToken.status === 403 && kreaCheckNoToken.body?.code === 'person_required'
+              && kreaDisconnect.status === 200 && kreaDisconnect.body?.status === 'disconnected'
+              && kreaDisconnectNoToken.status === 403
+              && helloAsPerson === 'proposalSync' && helloWrongToken === 'personRequired';
+            return result;
+          })().catch((err) => ({ ok: false, error: String(err) })),
+        ]).then(([health, websocket, _mounted, settingsSave, personPaths]) => {
           const c = window.nebulaDesktop && window.nebulaDesktop.credentials;
           const m = window.nebulaDesktop && window.nebulaDesktop.migration;
           return {
@@ -637,6 +702,7 @@ function runSmokeTest(handle) {
             health,
             websocket,
             settingsSave,
+            personPaths,
             bridge: {
               hasCredentials: Boolean(c),
               hasMigration: Boolean(m),
@@ -677,6 +743,7 @@ function runSmokeTest(handle) {
         && result.websocket?.connected === true
         // Skipped (not isolated, or no person token with a debug port open) is fine; a failed save is not.
         && (result.settingsSave?.skipped !== undefined || result.settingsSave?.ok === true)
+        && (result.personPaths?.skipped !== undefined || result.personPaths?.ok === true)
         // Credential bridge surface (VAL-KEY-011, VAL-KEY-012, VAL-KEY-013)
         && result.bridge?.hasCredentials === true
         && result.bridge?.setFn === 'function'
@@ -706,6 +773,7 @@ function runSmokeTest(handle) {
         health: result.health,
         websocket: result.websocket,
         settingsSave: result.settingsSave,
+        personPaths: result.personPaths,
         bridge: result.bridge,
       })}`);
 

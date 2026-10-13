@@ -531,11 +531,17 @@ _DESKTOP_CORS_HEADERS = ", ".join((
 
 @app.middleware("http")
 async def desktop_renderer_cors(request: Request, call_next):
-    # The packaged Electron renderer is a file: page, so its Origin is opaque
-    # ("null", or "file://") and the CORS regex above never matches it. In
-    # desktop mode, answer its preflights, and let it read responses only for
-    # requests that carry this launch's person token: a website can also send
-    # "Origin: null" (sandboxed iframe), but it can't know the token.
+    # The packaged Electron renderer is a file: page. Checked live in the
+    # desktop pass (2026-10-13, Electron 44, GrantFileProtocolExtraPrivileges
+    # on): its fetches carry no Origin header and send no preflight, and it
+    # reads responses without Access-Control-Allow-Origin, so this branch
+    # isn't reached from Nebula.app today. Its /ws handshake carries
+    # "Origin: file://" (local_guard allows that). The branch stays for a
+    # renderer that does send an opaque Origin ("null" or "file://", e.g. if
+    # that fuse is turned off): in desktop mode, answer its preflights, and
+    # let it read responses only for requests that carry this launch's person
+    # token: a website can also send "Origin: null" (sandboxed iframe), but it
+    # can't know the token.
     origin = request.headers.get("origin")
     desktop = (
         os.environ.get("NEBULA_DESKTOP_MODE") == "1"
