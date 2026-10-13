@@ -3,7 +3,7 @@
 An agent outside Nebula's chats (Claude Desktop, a terminal tool, a script)
 can't prove who it is: names and headers are its own to write. So by default
 they all share one budget (``outside:shared`` in services/agent_spend.py).
-The person can mint a named token for an app in Settings > Agent spending
+The person can mint a named token for an app in Settings > Connect your agent
 and paste it into that app's MCP config as ``NEBULA_APP_TOKEN``. Requests
 with ``Authorization: Agent <token>`` then count against ``outside:app:<id>``:
 the app's own optional daily limit, and still the shared outside budget too,
