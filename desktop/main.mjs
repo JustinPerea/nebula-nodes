@@ -10,6 +10,7 @@ import { decidePersonToken, registerPersonTokenHandler } from './person-token.mj
 import { registerFolderPickerHandler } from './folder-picker.mjs';
 import { getConnectorEncryptionKey, registerKreaAuthLinkHandler } from './connector-vault.mjs';
 import { installRendererNavigationGuard } from './navigation.mjs';
+import { resolveLaunchOverrides } from './launch-overrides.mjs';
 import {
   CREDENTIALS_FILE_NAME,
   MIGRATION_STATE_FILE_NAME,
@@ -29,8 +30,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Configuration
 // ---------------------------------------------------------------------------
 
+/**
+ * Dev and test overrides (launch-overrides.mjs). A packaged build ignores
+ * all of them, so its profile, keychain and renderer can't be redirected
+ * from the environment.
+ */
+const overrides = resolveLaunchOverrides({ env: process.env, isPackaged: app.isPackaged });
+if (overrides.ignored.length > 0) {
+  console.warn(`Ignoring dev/test-only settings in a packaged build: ${overrides.ignored.join(', ')}`);
+}
+
 /** Loopback CDP port for agent-browser validation. */
-const debugPort = process.env.NEBULA_DESKTOP_DEBUG_PORT;
+const debugPort = overrides.debugPort;
 if (debugPort) {
   app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1');
   app.commandLine.appendSwitch('remote-debugging-port', debugPort);
@@ -46,20 +57,24 @@ if (debugPort) {
  *
  * Must be paired with `NEBULA_DESKTOP_USER_DATA_DIR` for full isolation.
  */
-const appId = process.env.NEBULA_DESKTOP_APP_ID;
+const appId = overrides.appId;
 if (appId) {
   app.setName(appId);
 }
 
 /** Test-only isolated user-data directory for concurrent validators. */
-const userDataDir = process.env.NEBULA_DESKTOP_USER_DATA_DIR;
+const userDataDir = overrides.userDataDir;
 if (userDataDir) {
   app.setPath('userData', userDataDir);
-  // An isolated profile must not read or write the person's login keychain.
-  // safeStorage names its key "<app name> Safe Storage"; with a fresh
-  // NEBULA_DESKTOP_APP_ID every validator run left one more item behind.
-  // Chromium's mock keychain keeps the key in memory for this process.
+}
+if (overrides.mockKeychain) {
+  // NEBULA_DESKTOP_TEST=1: a throwaway test profile must not read or write
+  // the person's login keychain (safeStorage names its key "<app name> Safe
+  // Storage", so every validator run with a fresh app id left an item
+  // behind). The mock keychain's key is a public constant, so anything saved
+  // in this profile is effectively unencrypted. Never use it for real keys.
   app.commandLine.appendSwitch('use-mock-keychain');
+  console.warn('NEBULA_DESKTOP_TEST=1: mock keychain in use; keys saved in this profile are not protected');
 }
 
 /** App data root and migration sources; all inside userDataDir when isolated. */
@@ -69,10 +84,10 @@ const dataPaths = resolveDesktopDataPaths({
   repoRoot: DEFAULT_REPO_ROOT,
 });
 
-const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
+const isDevelopment = Boolean(overrides.devServerUrl);
 const isSmokeTest = process.env.NEBULA_DESKTOP_SMOKE === '1';
 const rendererUrl = isDevelopment
-  ? process.env.VITE_DEV_SERVER_URL
+  ? overrides.devServerUrl
   : new URL('../frontend/dist-desktop/index.html', import.meta.url).toString();
 const preloadPath = fileURLToPath(new URL('./preload.cjs', import.meta.url));
 
@@ -86,7 +101,7 @@ let sidecarHandle = null;
 const person = decidePersonToken({
   debugPort,
   isDevelopment,
-  devOptIn: process.env.NEBULA_DESKTOP_DEV_PERSON,
+  devOptIn: overrides.devPersonOptIn,
 });
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
@@ -681,6 +696,16 @@ if (!acquiredLock) {
     sidecarStarting = true;
 
     try {
+      // A missing renderer build would load as a blank window after a full
+      // sidecar cold start. Say what to run instead, before anything touches
+      // the app data root (directory creation, one-time migration) or spawns.
+      if (!isDevelopment && !existsSync(fileURLToPath(rendererUrl))) {
+        throw new Error(
+          `The desktop renderer is not built: ${fileURLToPath(rendererUrl)}\n` +
+          'Run `cd frontend && npm run build:desktop`, then start the app again.',
+        );
+      }
+
       // Compute App Support paths and create the directory tree before
       // spawning the sidecar. The env vars are merged into the child
       // process environment so the backend resolves state, output,
@@ -776,15 +801,6 @@ if (!acquiredLock) {
       plaintextProviders = plaintextWarning.hasPlaintext
         ? plaintextWarning.providers
         : [];
-
-      // A missing packaged renderer would load as a blank window after a
-      // full sidecar cold start. Say what to run instead, before spawning.
-      if (!isDevelopment && !existsSync(fileURLToPath(rendererUrl))) {
-        throw new Error(
-          `The desktop renderer is not built: ${fileURLToPath(rendererUrl)}\n` +
-          'Run `cd frontend && npm run build:desktop`, then start the app again.',
-        );
-      }
 
       sidecarHandle = await startSidecar({ env: sidecarEnv, personToken: person.token });
       sidecarStarting = false;

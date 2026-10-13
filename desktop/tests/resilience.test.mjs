@@ -30,8 +30,11 @@ const DIST_INDEX = join(REPO_ROOT, 'frontend', 'dist-desktop', 'index.html');
 
 const tempDirs = [];
 
+/** Every profile this file creates starts with this path prefix. */
+const TEMP_PREFIX = join(tmpdir(), 'nebula-res-');
+
 function mkTemp() {
-  const dir = mkdtempSync(join(tmpdir(), 'nebula-res-'));
+  const dir = mkdtempSync(TEMP_PREFIX);
   tempDirs.push(dir);
   return dir;
 }
@@ -142,9 +145,36 @@ function uvicornPids() {
   return pgrepPids('uvicorn main:app');
 }
 
-/** uvicorn PIDs that exist now but did not exist in `before`. */
+/**
+ * Whether `pid` is a backend one of this file's launches started. Every
+ * launch here uses a profile from mkTemp(), and the sidecar's environment
+ * points NEBULA_STATE_DIR (and the other app-data paths) inside it, so the
+ * temp-dir prefix in the process environment is a marker no outside
+ * backend carries. If the environment can't be read the PID counts as ours,
+ * which keeps the check strict.
+ */
+function isOurSidecar(pid) {
+  let out;
+  try {
+    out = execSync(`ps -E -ww -o command= -p ${pid} 2>/dev/null || true`, {
+      encoding: 'utf8',
+      timeout: 3000,
+    });
+  } catch {
+    return true;
+  }
+  if (!out.trim()) return false; // exited between pgrep and ps
+  if (!out.includes('NEBULA_')) return true; // environment not visible
+  return out.includes(`${TEMP_PREFIX}`);
+}
+
+/**
+ * uvicorn PIDs that exist now, did not exist in `before`, and belong to this
+ * file's launches. A dev server restarted on :8000 mid-run, or another
+ * worktree's backend, is new but not ours.
+ */
 function newUvicornPids(before) {
-  return [...uvicornPids()].filter((pid) => !before.has(pid));
+  return [...uvicornPids()].filter((pid) => !before.has(pid) && isOurSidecar(pid));
 }
 
 /** Process name used for each launch: a fresh, test-only Electron identity. */
@@ -183,6 +213,7 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
       env: {
         ...process.env,
         NEBULA_DESKTOP_USER_DATA_DIR: userData,
+        NEBULA_DESKTOP_TEST: '1',
         NEBULA_DESKTOP_APP_ID: appId,
         NEBULA_DESKTOP_DEBUG_PORT: String(debugPortBase),
       },
@@ -215,6 +246,7 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
       // Launch second instance with the same identity.
       const secondResult = await runElectron({
         NEBULA_DESKTOP_USER_DATA_DIR: userData,
+        NEBULA_DESKTOP_TEST: '1',
         NEBULA_DESKTOP_APP_ID: appId,
       }, 15_000);
 
@@ -265,6 +297,7 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
       NEBULA_DESKTOP_SMOKE: '1',
       NEBULA_DESKTOP_APP_ID: appIdA,
       NEBULA_DESKTOP_USER_DATA_DIR: userDataA,
+      NEBULA_DESKTOP_TEST: '1',
     }, 120_000);
 
     assert.equal(resultA.timedOut, false, 'Instance A did not exit within 120s');
@@ -279,6 +312,7 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
       NEBULA_DESKTOP_SMOKE: '1',
       NEBULA_DESKTOP_APP_ID: appIdB,
       NEBULA_DESKTOP_USER_DATA_DIR: userDataB,
+      NEBULA_DESKTOP_TEST: '1',
     }, 120_000);
 
     assert.equal(resultB.timedOut, false, 'Instance B did not exit within 120s');
@@ -327,6 +361,7 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
         ...process.env,
         NEBULA_DESKTOP_SMOKE: '1',
         NEBULA_DESKTOP_USER_DATA_DIR: userData,
+        NEBULA_DESKTOP_TEST: '1',
         NEBULA_DESKTOP_APP_ID: testAppId('quit'),
         NEBULA_DESKTOP_PYTHON: fixture,
         NEBULA_DESKTOP_HEALTH_TIMEOUT_MS: '5000',

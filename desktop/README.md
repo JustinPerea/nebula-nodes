@@ -16,7 +16,7 @@ with relative asset URLs so it resolves over `file://`. It has its own folder
 because the web build (`npm run build`, absolute `/assets/...` URLs) used to
 overwrite it in `frontend/dist/`, and the window then loaded an empty `#root`.
 If `dist-desktop/index.html` is missing, the window says so and names the
-command, before any sidecar starts. The build's budget check also refuses a
+command before it creates any app data, runs the migration or starts a sidecar. The build's budget check also refuses a
 desktop bundle with root-absolute asset URLs.
 
 Electron acquires the single-instance lock, starts one uvicorn sidecar on an
@@ -191,11 +191,20 @@ on success and emits `NEBULA_DESKTOP_SMOKE {"passed":true,...}` to stdout.
 |---|---|
 | `NEBULA_DESKTOP_PYTHON` | Explicit Python executable for the sidecar. Defaults to `backend/.venv/bin/python`. |
 | `NEBULA_DESKTOP_HEALTH_TIMEOUT_MS` | Test-only shorter health timeout. Production default is 60 s. |
-| `NEBULA_DESKTOP_DEBUG_PORT` | Loopback CDP port for Electron validation. |
-| `NEBULA_DESKTOP_USER_DATA_DIR` | Test-only isolated profile. Electron's user data, the app data root (`<dir>/Nebula Nodes/`) and the migration sources (`<dir>/legacy/`, normally absent) all stay inside it, so an isolated launch never reads the repo's `settings.json` or `~/.nebula` and never writes to `~/Library/Application Support`. It also turns on Chromium's mock keychain, so safeStorage never touches the login keychain. |
+| `NEBULA_DESKTOP_DEBUG_PORT` | Loopback CDP port for Electron validation. Dev/test only. |
+| `NEBULA_DESKTOP_USER_DATA_DIR` | Test-only isolated profile. Electron's user data, the app data root (`<dir>/Nebula Nodes/`) and the migration sources (`<dir>/legacy/`, normally absent) all stay inside it, so an isolated launch never reads the repo's `settings.json` or `~/.nebula` and never writes to `~/Library/Application Support`. On its own it still uses the real login keychain for safeStorage. |
 | `NEBULA_DESKTOP_APP_ID` | Test-only isolated application identity for concurrent validators. Must be paired with `NEBULA_DESKTOP_USER_DATA_DIR`. |
+| `NEBULA_DESKTOP_TEST` | Set to `1` together with `NEBULA_DESKTOP_USER_DATA_DIR` for a throwaway test profile: safeStorage switches to Chromium's mock keychain, so the run leaves no "<app id> Safe Storage" item in the login keychain. The mock key is a fixed public constant, so anything saved in that profile is effectively unencrypted (main logs a warning). Never type real API keys into such a profile. Without a user-data dir it does nothing. |
 | `NEBULA_DESKTOP_SMOKE` | Set to `1` to run the end-to-end smoke test (exits 0/1). |
 | `VITE_DEV_SERVER_URL` | Set to the Vite dev server URL for development mode (used by `npm run start:dev`). |
+
+A packaged build (`app.isPackaged`) ignores `NEBULA_DESKTOP_DEBUG_PORT`,
+`NEBULA_DESKTOP_USER_DATA_DIR`, `NEBULA_DESKTOP_APP_ID`, `NEBULA_DESKTOP_TEST`,
+`VITE_DEV_SERVER_URL` and `NEBULA_DESKTOP_DEV_PERSON`, and logs which ones it
+ignored. Its environment can be set from outside (`launchctl setenv`, a wrapper
+script), and none of these should be able to move its profile, weaken its
+keychain, open a debug port or swap its renderer. `launch-overrides.mjs` holds
+that rule.
 
 ## Failure surfaces and diagnostics
 
@@ -236,17 +245,19 @@ No child process or listening port remains after any failure path.
 ## Tests
 
 ```bash
-cd desktop && npm test            # 300 Node lifecycle + credential + migration + integration tests
+cd desktop && npm test            # 310 Node lifecycle + credential + migration + integration tests
 cd desktop && npm run test:smoke  # end-to-end dynamic endpoint + bridge surface smoke
 ```
 
 The integration and resilience files launch the real Electron binary against a
 real sidecar (they skip if `frontend/dist-desktop/` is not built). Every launch
-uses its own `NEBULA_DESKTOP_USER_DATA_DIR` under `os.tmpdir()` and its own
-`NEBULA_DESKTOP_APP_ID`; set `TMPDIR` to keep those profiles somewhere
-specific. Process checks compare against a snapshot of `uvicorn main:app`
-PIDs taken before each test, so a dev backend on port 8000 (or another
-worktree's) doesn't fail them, and the quit-during-startup test polls for its
+uses its own `NEBULA_DESKTOP_USER_DATA_DIR` under `os.tmpdir()`, its own
+`NEBULA_DESKTOP_APP_ID` and `NEBULA_DESKTOP_TEST=1`; set `TMPDIR` to keep
+those profiles somewhere specific. Process checks compare against a snapshot
+of `uvicorn main:app` PIDs taken before each test and only count new PIDs
+whose environment points inside the test's own temp profile, so a dev backend
+on port 8000 (or another worktree's), even one restarted mid-run, doesn't
+fail them, and the quit-during-startup test polls for its
 fixture child instead of sleeping a fixed time (a fresh profile shows the
 migration overlay first).
 
@@ -268,7 +279,7 @@ required live checks:
 
 ```bash
 # Programmatic gate — all must exit zero
-cd desktop && npm test                          # 300 Node lifecycle + credential + migration + integration tests
+cd desktop && npm test                          # 310 Node lifecycle + credential + migration + integration tests
 cd desktop && npm audit                         # 0 vulnerabilities
 cd frontend && npm test                         # 777 Vitest tests
 cd frontend && npm run lint                     # ESLint + style guards

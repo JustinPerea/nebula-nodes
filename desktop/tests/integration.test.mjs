@@ -112,6 +112,7 @@ describe('Electron integration — managed sidecar startup', () => {
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
       NEBULA_DESKTOP_USER_DATA_DIR: userData,
+      NEBULA_DESKTOP_TEST: '1',
       NEBULA_DESKTOP_APP_ID: `nebula-int-${process.pid}-${Date.now()}`,
     }, 120_000);
 
@@ -156,6 +157,7 @@ describe('Electron integration — managed sidecar startup', () => {
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
       NEBULA_DESKTOP_USER_DATA_DIR: userData,
+      NEBULA_DESKTOP_TEST: '1',
       NEBULA_DESKTOP_APP_ID: `nebula-int-${process.pid}-${Date.now()}`,
       NEBULA_DESKTOP_PYTHON: '/nonexistent/path/to/python',
     }, 30_000);
@@ -177,6 +179,7 @@ describe('Electron integration — managed sidecar startup', () => {
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
       NEBULA_DESKTOP_USER_DATA_DIR: userData,
+      NEBULA_DESKTOP_TEST: '1',
       NEBULA_DESKTOP_APP_ID: `nebula-int-${process.pid}-${Date.now()}`,
       NEBULA_DESKTOP_PYTHON: join(FIXTURES, 'exit-with-code.mjs'),
       FIXTURE_EXIT_CODE: '7',
@@ -202,6 +205,7 @@ describe('Electron integration — managed sidecar startup', () => {
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
       NEBULA_DESKTOP_USER_DATA_DIR: userData,
+      NEBULA_DESKTOP_TEST: '1',
       NEBULA_DESKTOP_APP_ID: `nebula-int-${process.pid}-${Date.now()}`,
       NEBULA_DESKTOP_PYTHON: join(FIXTURES, 'never-healthy.mjs'),
       NEBULA_DESKTOP_HEALTH_TIMEOUT_MS: '3000',
