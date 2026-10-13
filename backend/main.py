@@ -82,7 +82,7 @@ from services.settings import (
     update_injected_keys,
 )
 from services.node_registry import NodeRegistry
-from services import agent_connect, agent_spend, app_tokens, model_pricing, node_readiness, output_preview
+from services import agent_connect, agent_spend, backend_address, app_tokens, model_pricing, node_readiness, output_preview
 from services.cli_graph import CLIGraph
 from services.retired_nodes import migrate_node, retired_message
 from services.project_store import (
@@ -2090,6 +2090,26 @@ async def _person_startup() -> None:
 
 
 @app.on_event("startup")
+async def _publish_backend_address() -> None:
+    """Desktop mode: write this launch's address where outside MCP clients look
+    for it (services/backend_address.py). The sidecar's port changes every launch."""
+    url = os.environ.get("NEBULA_URL", "")
+    if not backend_address.launch_assigned() or not url:
+        return
+    try:
+        backend_address.publish(_STATE_DIR, url)
+    except (OSError, ValueError) as exc:
+        print(f"[main] couldn't publish the backend address for outside agents: {exc}", flush=True)
+
+
+@app.on_event("shutdown")
+async def _withdraw_backend_address() -> None:
+    url = os.environ.get("NEBULA_URL", "")
+    if backend_address.launch_assigned() and url:
+        backend_address.withdraw(_STATE_DIR, url)
+
+
+@app.on_event("startup")
 async def _commons_startup() -> None:
     """Scan linked folders. Human authority is the person session, set above."""
     from commons.activation import is_enabled
@@ -2928,6 +2948,8 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
     if budget == "app":
         connected = app_token_store.get(key[len(agent_spend.APP_PREFIX):])
         result["limits"] = {**limits, "appDailyUsd": connected["dailyUsd"] if connected else None}
+        # What `nebula mcp connect` writes into the client's config.
+        result["mcpAddress"] = _mcp_address(request)
     return result
 
 
@@ -2957,6 +2979,15 @@ def _connect_view() -> dict[str, Any]:
     except agent_connect.ConnectError as exc:
         reason = str(exc)
     return {"clients": agent_connect.client_list(), "available": reason is None, "reason": reason}
+
+
+def _mcp_address(request: Request) -> dict[str, str]:
+    """How an outside MCP client reaches this backend from now on: the
+    backend-url file when the port changes per launch (desktop), else this
+    backend's own address."""
+    if backend_address.launch_assigned():
+        return {"urlFile": str(backend_address.url_file(_STATE_DIR))}
+    return {"url": _own_url(request)}
 
 
 def _own_url(request: Request) -> str:
@@ -2996,7 +3027,9 @@ async def create_agent_app(body: dict[str, Any], request: Request) -> dict[str, 
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     result: dict[str, Any] = {"app": {**app_view, "spentUsd": 0.0, "kreaPlanRuns": 0}, "token": token}
     if paths is not None:
-        result["setup"] = agent_connect.render(client_id, paths=paths, url=_own_url(request), token=token,
+        address = _mcp_address(request)
+        result["setup"] = agent_connect.render(client_id, paths=paths, url=address.get("url"),
+                                               url_file=address.get("urlFile"), token=token,
                                                app_name=app_view["name"], daily_usd=app_view["dailyUsd"])
     return result
 

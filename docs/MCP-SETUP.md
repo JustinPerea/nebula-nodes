@@ -519,7 +519,7 @@ the canvas it is a cursor with the name and color you gave it.
 flowchart LR
   S["Settings > Connect your agent<br/>pick app, name, color, daily limit"] -->|"POST /api/agent/spend/apps<br/>(person only)"| T["App token<br/>shown once, with the exact config"]
   T -->|paste or run| C["Agent app config<br/>(config.yaml, mcp.json, claude mcp add...)"]
-  C -->|starts over stdio| M["backend/mcp_server.py<br/>NEBULA_URL + NEBULA_APP_TOKEN"]
+  C -->|starts over stdio| M["backend/mcp_server.py<br/>NEBULA_URL or NEBULA_URL_FILE<br/>+ NEBULA_APP_TOKEN"]
   M -->|"Authorization: Agent token"| B["Nebula backend<br/>its own spending line + named cursor"]
 ```
 
@@ -527,17 +527,27 @@ flowchart LR
 agent**: pick the app, name the agent, pick a cursor color (or keep the
 automatic one) and a daily limit, then Connect. Nebula makes a token and shows
 the exact config for that app, with the token in it, once. Nebula keeps only
-the token's SHA-256, in `~/.nebula/app-tokens.json` (mode 600). Each config
+the token's SHA-256, in `app-tokens.json` in its state dir (`~/.nebula` for a dev
+backend; mode 600). Each config
 starts this checkout's server the same way:
 
 - command: `<repo>/backend/.venv/bin/python` (the venv's own path, not the
   interpreter it links to);
 - args: `<repo>/backend/mcp_server.py`;
-- env: `NEBULA_URL` (the address this backend is listening on) and
-  `NEBULA_APP_TOKEN`.
+- env: `NEBULA_APP_TOKEN`, and where to find Nebula:
+  - a dev backend (`backend/devserver.py`, uvicorn) has a port you chose, so
+    the config has `NEBULA_URL`, the address the request arrived on;
+  - the desktop app's sidecar gets a new port every launch, so the config has
+    `NEBULA_URL_FILE` instead: `<state dir>/backend-url`, which the backend
+    rewrites (mode 600) each time it starts and removes when it quits. The MCP
+    server reads it on every call, so a client that started before you
+    reopened Nebula still finds it, and says "Nebula isn't running" while the
+    app is closed. It only accepts an `http` address on 127.0.0.1, localhost
+    or ::1 (services/backend_address.py).
 
-A packaged desktop app has no checkout to point at yet; Settings says so and
-offers a plain token. That waits for the desktop pass.
+A packaged app with a bundled Python has no checkout to point at yet; Settings
+says so and offers a plain token. That waits for the desktop pass. The desktop
+app running from this checkout is fine: its configs use `NEBULA_URL_FILE`.
 
 **Before you paste it.** Settings and the CLI say both of these for every app:
 
@@ -592,12 +602,14 @@ Formats checked against each app's docs on 2026-10-13.
   `codex mcp add nebula --env NEBULA_URL=... --env NEBULA_APP_TOKEN=... --
   <python> <mcp_server.py>`, or the `[mcp_servers.nebula]` table in
   `~/.codex/config.toml`. Add `tool_timeout_sec = 150` there: a run can take
-  longer than Codex's 60-second default.
+  longer than Codex's 60-second default (`nebula mcp connect codex` sets it
+  for you).
 - **Other MCP clients**: the usual `{"mcpServers": {"nebula": {command, args,
   env}}}` block.
 
 Running a printed command (Claude Code, Codex, OpenClaw) leaves the token in
-your shell history.
+your shell history, and while it runs any program of yours can read it in the
+process list.
 
 #### From the terminal: `nebula mcp connect`
 
@@ -610,25 +622,43 @@ The CLI can't make tokens. Making one is the person's alone, and only the
 canvas opened from the launch link holds the person token; the CLI is also
 what agents run. So make the token in Settings, then give it to the CLI in
 `NEBULA_APP_TOKEN` or paste it at the hidden prompt. The CLI checks it with
-Nebula (a revoked token, or one that isn't an app token, is refused) and then:
+Nebula and refuses a revoked token, one that isn't an app token, or an address
+where something other than Nebula answers. If nothing answers, it writes
+nothing (`--print` still prints). It finds Nebula at `--url`, else
+`$NEBULA_URL`, else the address in `$NEBULA_URL_FILE` (for the desktop app, the
+`backend-url` path its Settings config shows), else `http://localhost:8000`.
+The config it writes uses the address Nebula reports for itself, so a desktop
+config gets `NEBULA_URL_FILE` even if you passed this launch's `--url`. Then:
 
 - **Claude Code, Codex**: runs the app's own `mcp add`. If the app already has
-  a server named `nebula` (checked with `mcp get`), it stops and asks you to
-  disconnect first, since `codex mcp add` would silently replace it.
+  a server named `nebula` (checked with `mcp get`, which looks in every
+  scope), it stops and asks you to disconnect first, since `codex mcp add`
+  would silently replace it.
+  - Codex: the token never goes on `codex mcp add`'s command line. It gets a
+    one-off placeholder, and the CLI then swaps the token in for it in
+    `config.toml` (keeping its mode), adds `tool_timeout_sec = 150`, and checks
+    the file parses back. If it doesn't, it removes the half-made entry.
+  - Claude Code: `claude mcp add` can only take the token on its command line,
+    so it is visible in the process list for the second the command runs. The
+    CLI says so before it runs.
 - **Claude Desktop, Cursor**: shows the change as a diff (token masked), asks,
   copies the old file to `<file>.nebula-backup-<timestamp>` (mode 600) and
   writes the merged file with mode 600. Only `mcpServers.nebula` changes; a
-  file that isn't valid JSON is never touched.
+  file that isn't valid JSON is never touched. When the old file had a nebula
+  entry (a disconnect, or a connect that replaces one), its token is blanked
+  out in the backup, so a revoked app leaves no working token behind.
 - **Hermes, OpenClaw, other**: prints the config and where it goes. Nebula
   doesn't rewrite Hermes's YAML (it would lose your comments), and
   OpenClaw's own command needs its Gateway stopped.
 
 `--print` only prints (with a placeholder if there's no token). `--name` and
 `--daily-usd` fill in the Settings steps when you don't have a token yet.
-`disconnect` removes the entry the same way (or prints the app's remove
-command) and reminds you to revoke the token in Settings. Both refuse to run
-inside an in-app agent (`NEBULA_AGENT_TOKEN` set). Run from a packaged app,
-they say the bundled Python isn't supported yet.
+`disconnect` removes the entry the same way (Claude Code: `claude mcp remove
+nebula` with no `--scope`, so an older local-scope entry goes too; or it prints
+the app's remove command) and reminds you to revoke the token in Settings. Both refuse to run
+inside an in-app agent (`NEBULA_AGENT_TOKEN` set). Run from a packaged app
+(bundled Python), they say it isn't supported yet; the desktop app running
+from this checkout is supported, through `NEBULA_URL_FILE`.
 
 #### Under the hood
 

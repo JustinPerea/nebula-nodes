@@ -14,8 +14,9 @@ def build_parser() -> argparse.ArgumentParser:
         prog="nebula",
         description="Nebula Nodes CLI — build and run media generation pipelines",
     )
-    parser.add_argument("--url", default=os.environ.get("NEBULA_URL", "http://localhost:8000"),
-                        help="Backend URL (default: $NEBULA_URL or http://localhost:8000)")
+    parser.add_argument("--url", default=None,
+                        help="Backend URL (default: $NEBULA_URL, else the address in $NEBULA_URL_FILE, "
+                             "else http://localhost:8000)")
     sub = parser.add_subparsers(dest="command")
 
     # -- Discovery --
@@ -279,9 +280,30 @@ def parse_kv_list(items: list) -> dict[str, str]:
     return result
 
 
+def default_url(environ: dict[str, str] | None = None) -> str:
+    """$NEBULA_URL; else the address the desktop app wrote to $NEBULA_URL_FILE
+    (its port changes every launch; services/backend_address.py); else :8000."""
+    env = os.environ if environ is None else environ
+    url = env.get("NEBULA_URL", "").strip()
+    if url:
+        return url
+    url_file = env.get("NEBULA_URL_FILE", "").strip()
+    if url_file:
+        from services import backend_address
+
+        try:
+            return backend_address.read(url_file)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            sys.exit(1)
+    return "http://localhost:8000"
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    if args.url is None and args.command:
+        args.url = default_url()
 
     if not args.command:
         parser.print_help()

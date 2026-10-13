@@ -4,7 +4,9 @@ Settings > Connect your agent (POST /api/agent/spend/apps with ``client``) and
 ``nebula mcp connect`` both render their snippets here, so the two can't
 drift. Every client gets the same stdio server: this checkout's
 ``backend/.venv/bin/python`` running ``backend/mcp_server.py``, with
-``NEBULA_URL`` and ``NEBULA_APP_TOKEN`` in its environment.
+``NEBULA_APP_TOKEN`` and Nebula's address in its environment: ``NEBULA_URL``
+for a dev backend on a fixed port, or ``NEBULA_URL_FILE`` for the desktop app,
+whose port changes every launch (services/backend_address.py).
 
 Formats were checked against each client's own docs on 2026-10-13:
 
@@ -107,10 +109,18 @@ def checkout_paths(backend_dir: Path | None = None) -> CheckoutPaths:
     return CheckoutPaths(python=str(python), server=str(server))
 
 
-def server_entry(paths: CheckoutPaths, url: str, token: str) -> dict[str, Any]:
-    """The stdio server every client starts."""
-    return {"command": paths.python, "args": [paths.server],
-            "env": {"NEBULA_URL": url.rstrip("/"), "NEBULA_APP_TOKEN": token}}
+def server_entry(paths: CheckoutPaths, url: str | None, token: str, *, url_file: str | None = None) -> dict[str, Any]:
+    """The stdio server every client starts. With ``url_file`` (the desktop
+    app, whose port changes every launch; services/backend_address.py) the
+    server reads Nebula's address from that file on each call instead of a
+    fixed ``NEBULA_URL``."""
+    if url_file:
+        where = {"NEBULA_URL_FILE": url_file}
+    elif url:
+        where = {"NEBULA_URL": url.rstrip("/")}
+    else:
+        raise ConnectError("need Nebula's address (a URL or its backend-url file)")
+    return {"command": paths.python, "args": [paths.server], "env": {**where, "NEBULA_APP_TOKEN": token}}
 
 
 def _json(value: Any) -> str:
@@ -166,7 +176,10 @@ def codex_add_argv(entry: dict[str, Any]) -> list[str]:
 
 def remove_argv(client_id: str) -> list[str] | None:
     return {
-        "claude-code": ["claude", "mcp", "remove", "--scope", "user", SERVER_NAME],
+        # No --scope: remove it from whichever scope holds it. An older setup
+        # (claude mcp add's default) put nebula in local scope, and `claude mcp
+        # get`, which connect checks first, finds it in any scope.
+        "claude-code": ["claude", "mcp", "remove", SERVER_NAME],
         "codex": ["codex", "mcp", "remove", SERVER_NAME],
         "hermes": ["hermes", "mcp", "remove", SERVER_NAME],
         "openclaw": ["openclaw", "mcp", "unset", SERVER_NAME],
@@ -202,16 +215,17 @@ def warnings(c: Client, app_name: str, daily_usd: float | None) -> list[str]:
         f"{app_name} until you revoke it in Settings > Connect your agent.",
     ]
     if c.id in ("claude-code", "codex", "openclaw"):
-        found.append("Running the command also leaves the token in your shell history.")
+        found.append("Running the command also leaves the token in your shell history, and while it runs any "
+                     "program of yours can see it in the process list.")
     return found
 
 
-def render(client_id: str, *, paths: CheckoutPaths, url: str, token: str, app_name: str,
-           daily_usd: float | None = None) -> dict[str, Any]:
+def render(client_id: str, *, paths: CheckoutPaths, url: str | None, token: str, app_name: str,
+           daily_usd: float | None = None, url_file: str | None = None) -> dict[str, Any]:
     """What the person pastes or runs for one client: steps, a main snippet,
     an optional alternative, and the warnings to show beside them."""
     c = client(client_id)
-    entry = server_entry(paths, url, token)
+    entry = server_entry(paths, url, token, url_file=url_file)
     alternative: dict[str, str] | None = None
     if c.id == "hermes":
         main = {"format": "yaml", "where": "~/.hermes/config.yaml", "snippet": hermes_yaml(entry)}
@@ -224,8 +238,8 @@ def render(client_id: str, *, paths: CheckoutPaths, url: str, token: str, app_na
         steps = ["Stop the local OpenClaw Gateway first: openclaw mcp set refuses while it runs.",
                  "Run the command, then start the Gateway again.",
                  "Or, with the Gateway running: Control UI > Settings > MCP > Add server, name it nebula, pick "
-                 "Stdio and enter the command line from the second block. Then add NEBULA_URL and NEBULA_APP_TOKEN from the "
-                 "command above as environment variables if the form offers them.",
+                 "Stdio and enter the command line from the second block. Then add "
+                 f"{' and '.join(entry['env'])} from the command above as environment variables if the form offers them.",
                  "openclaw mcp doctor will flag the token as a literal env value; that is expected."]
         alternative = {"format": "text", "where": "Settings > MCP > Stdio command",
                        "snippet": " ".join(shlex.quote(part) for part in [entry["command"], *entry["args"]])}
