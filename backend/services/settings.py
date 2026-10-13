@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import os
 import time
@@ -86,11 +87,24 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 
 
 def load_settings() -> dict[str, Any]:
+    """The saved settings, with a default for every key the file leaves out.
+
+    A partial ``settings.json`` (a hand-written ``{}``, or one written before
+    a setting existed) used to come back without ``apiKeys``, and the
+    Settings panel then showed "Settings couldn't load". Values in the file
+    always win; loading never writes the file.
+    """
+    # Deep copy: callers mutate the nested dicts (apiKeys, routing), which
+    # must never change DEFAULT_SETTINGS itself.
+    settings = copy.deepcopy(DEFAULT_SETTINGS)
     if SETTINGS_PATH.exists():
         with open(SETTINGS_PATH, "r") as f:
-            settings = json.load(f)
-    else:
-        settings = dict(DEFAULT_SETTINGS)
+            saved = json.load(f)
+        if isinstance(saved, dict):
+            settings.update(saved)
+        else:
+            # Not a JSON object: returned as before, nothing to merge into.
+            settings = saved
 
     # Desktop mode: injected keys replace file-based apiKeys entirely.
     # Non-secret settings from the file (routing, outputPath, etc.) remain.
