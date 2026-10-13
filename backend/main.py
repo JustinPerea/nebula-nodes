@@ -2090,6 +2090,13 @@ async def _person_startup() -> None:
 
 
 @app.on_event("startup")
+async def _parent_watch_startup() -> None:
+    """Desktop sidecar: exit if Electron dies without stopping us (services/parent_watch.py)."""
+    from services import parent_watch
+    parent_watch.start_from_env()
+
+
+@app.on_event("startup")
 async def _commons_startup() -> None:
     """Scan linked folders. Human authority is the person session, set above."""
     from commons.activation import is_enabled

@@ -42,6 +42,9 @@ export const DIAGNOSTIC_TAIL_BYTES = 8_192;
 /** Maximum retained diagnostic lines (tail only). */
 export const MAX_DIAGNOSTIC_LINES = 50;
 
+/** Child fd the backend watches for EOF to notice that this process died. */
+export const PARENT_WATCH_FD = 3;
+
 /** Interval between health polls (ms). */
 const POLL_INTERVAL_MS = 500;
 
@@ -428,12 +431,20 @@ async function spawnAndAwaitHealth(opts) {
     personToken = null,
   } = opts;
 
-  const childEnv = { ...env, NEBULA_URL: `http://127.0.0.1:${port}`, NEBULA_PERSON_TOKEN_STDIN: '1' };
+  const childEnv = {
+    ...env,
+    NEBULA_URL: `http://127.0.0.1:${port}`,
+    NEBULA_PERSON_TOKEN_STDIN: '1',
+    NEBULA_PARENT_WATCH_FD: String(PARENT_WATCH_FD),
+  };
   delete childEnv.NEBULA_PERSON_TOKEN;
+  // fd 3 is the parent lifeline: we never write to it, and the kernel closes
+  // our end whenever this process exits, even on SIGKILL or a crash. The
+  // backend (services/parent_watch.py) sees EOF and shuts itself down.
   const child = spawnFn(argv[0], argv.slice(1), {
     cwd,
     env: childEnv,
-    stdio: ['pipe', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
   });
   writePersonToken(child, personToken);
 

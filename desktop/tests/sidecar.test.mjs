@@ -38,6 +38,7 @@ import {
   sanitizeText,
   boundDiagnostics,
   DEFAULT_REPO_ROOT,
+  PARENT_WATCH_FD,
 } from '../sidecar.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1329,8 +1330,9 @@ describe('startSidecar — person token', () => {
     const call = await start(child, { env: { NEBULA_PERSON_TOKEN: 'leaked', PATH: '/usr/bin' }, personToken: token });
     assert.deepEqual(child.stdin.written, [`${token}\n`]);
     assert.equal(child.stdin.ended, true);
-    assert.deepEqual(call.opts.stdio, ['pipe', 'pipe', 'pipe']);
+    assert.deepEqual(call.opts.stdio, ['pipe', 'pipe', 'pipe', 'pipe']);
     assert.equal(call.opts.env.NEBULA_PERSON_TOKEN_STDIN, '1');
+    assert.equal(call.opts.env.NEBULA_PARENT_WATCH_FD, '3');
     assert.equal('NEBULA_PERSON_TOKEN' in call.opts.env, false);
     assert.equal(JSON.stringify([call.cmd, call.args, call.opts.env]).includes(token), false);
   });
@@ -1363,6 +1365,72 @@ describe('startSidecar — person token', () => {
       assert.equal((await put({ 'X-Nebula-Person': token })).status, 200);
     } finally {
       if (handle) await stopSidecar(handle);
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Parent lifeline: a force-killed Electron must not leave the backend behind
+// ---------------------------------------------------------------------------
+
+describe('parent lifeline', () => {
+  const isAlive = (pid) => {
+    try { process.kill(pid, 0); return true; } catch { return false; }
+  };
+
+  test('the backend watches fd 3', () => {
+    assert.equal(PARENT_WATCH_FD, 3);
+  });
+
+  test('a real backend exits within seconds when its launcher is SIGKILLed', async () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'nebula-lifeline-'));
+    const parentScript = join(scratch, 'parent.mjs');
+    const sidecarUrl = new URL('../sidecar.mjs', import.meta.url).href;
+    writeFileSync(parentScript, `
+      import { startSidecar } from ${JSON.stringify(sidecarUrl)};
+      const handle = await startSidecar({ repoRoot: ${JSON.stringify(REPO_ROOT)}, personToken: null });
+      console.log('LIFELINE ' + JSON.stringify({ pid: handle.pid, port: handle.port }));
+      setInterval(() => {}, 1000);
+    `);
+    const env = { ...process.env };
+    for (const name of ['NEBULA_INJECTED_KEYS', 'NEBULA_PERSON_TOKEN', 'NEBULA_DESKTOP_PYTHON']) delete env[name];
+    Object.assign(env, {
+      NEBULA_SETTINGS_PATH: join(scratch, 'settings.json'),
+      NEBULA_STATE_DIR: join(scratch, 'state'),
+      NEBULA_OUTPUT_ROOT: join(scratch, 'output'),
+      NEBULA_CHARACTER_ROOT: join(scratch, 'characters'),
+      NEBULA_MOODBOARD_ROOT: join(scratch, 'moodboards'),
+      NEBULA_PRESET_ROOT: join(scratch, 'presets'),
+      NEBULA_DESKTOP_MODE: '1',
+    });
+
+    const { spawn } = await import('node:child_process');
+    const parent = spawn(process.execPath, [parentScript], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let info = null;
+    try {
+      info = await new Promise((resolveP, rejectP) => {
+        let out = '';
+        const timer = setTimeout(() => rejectP(new Error(`no sidecar within 90s: ${out}`)), 90_000);
+        parent.stdout.on('data', (chunk) => {
+          out += chunk;
+          const line = out.split('\n').find((l) => l.startsWith('LIFELINE '));
+          if (line) { clearTimeout(timer); resolveP(JSON.parse(line.slice(9))); }
+        });
+        parent.on('exit', (code) => { clearTimeout(timer); rejectP(new Error(`launcher exited ${code}: ${out}`)); });
+      });
+      assert.equal(isAlive(info.pid), true);
+
+      parent.kill('SIGKILL');
+      const deadline = Date.now() + 10_000;
+      while (isAlive(info.pid) && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      assert.equal(isAlive(info.pid), false, 'backend outlived its SIGKILLed launcher by 10 s');
+      await assert.rejects(fetch(`http://127.0.0.1:${info.port}/api/health`));
+    } finally {
+      try { parent.kill('SIGKILL'); } catch { /* gone */ }
+      if (info && isAlive(info.pid)) process.kill(info.pid, 'SIGKILL');
       rmSync(scratch, { recursive: true, force: true });
     }
   });
