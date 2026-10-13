@@ -153,6 +153,26 @@ def nebula_server_config(url: str | None = None) -> dict[str, object]:
     }
 
 
+def nebula_acp_mcp_server(url: str, token: str, name: str) -> dict[str, object]:
+    """The Nebula MCP server as an ACP ``session/new`` stdio entry.
+
+    ACP passes env as a list of {name, value}. The agent starts this server
+    itself, so the session token is in the server's environment (and in
+    the session/new params on the agent's stdin), never in argv."""
+    config = nebula_server_config(url)
+    base = loopback_backend_url(url)
+    return {
+        "name": NEBULA_SERVER_NAME,
+        "command": config["command"],
+        "args": list(config["args"]),  # type: ignore[arg-type]
+        "env": [
+            {"name": "NEBULA_AGENT_TOKEN", "value": token},
+            {"name": "NEBULA_URL", "value": base},
+            {"name": "NEBULA_AGENT_NAME", "value": name},
+        ],
+    }
+
+
 def nebula_server_env_refs(url: str | None = None) -> dict[str, str]:
     """`env` for configs that expand `${VAR}` (Claude Code): the token
     by name, so its value never sits in argv or on disk."""

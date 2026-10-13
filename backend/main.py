@@ -108,6 +108,8 @@ from services.execution_runs import (
     ExecutionRunRegistry,
 )
 from services.chat_session import run_claude
+from services import personal_agents
+from services.acp_session import PersonalSessionError, acp_sessions
 from services.agent_profiles import (
     GrantOverlapsProtectedDir,
     agent_read_grants,
@@ -1699,6 +1701,11 @@ def _spend_session(headers: Mapping[str, str] | None) -> tuple[str, str]:
     if auth.lower().startswith("agent "):
         token = auth[6:].strip()
         record = commons_actors.agent_registry.lookup(token)
+        if record is not None and record.get("spend_key"):
+            # A personal agent's session token names its budget outright
+            # (outside:personal:<id>, services/agent_spend.py).
+            identity = identify_agent(headers)
+            return str(record["spend_key"]), str(record.get("display_name") or (identity.name if identity else "Agent"))
         if record is not None and record.get("session"):
             identity = identify_agent(headers)
             return f"chat:{record['session']}", identity.name if identity else "Agent"
@@ -2087,6 +2094,12 @@ app.include_router(commons_router)
 async def _person_startup() -> None:
     """Set this launch's person token before serving (services/person_session.py)."""
     person_session.initialize()
+
+
+@app.on_event("shutdown")
+async def _personal_agents_shutdown() -> None:
+    """Kill every personal agent's process tree and revoke its token."""
+    await acp_sessions.close_all("shutdown")
 
 
 @app.on_event("startup")
@@ -2554,6 +2567,9 @@ async def chat_websocket(websocket: WebSocket) -> None:
     current_agent: str | None = None
     current_finished: asyncio.Event | None = None
     send_lock = asyncio.Lock()
+    # Who owns this socket's personal agent sessions (services/acp_session.py):
+    # only this connection may answer their permission cards or close them.
+    connection_id = uuid4().hex
 
     async def send_event(event: dict[str, Any]) -> None:
         """Serialize every chat WebSocket write, including cancellation acks."""
@@ -2561,7 +2577,45 @@ async def chat_websocket(websocket: WebSocket) -> None:
             await websocket.send_text(json.dumps(event))
 
     def _event_source(agent: str) -> str:
+        if agent.startswith("personal:"):
+            return "personal"
         return agent if agent in {"claude", "codex"} else "system"
+
+    async def personal_turn(agent: str, session_id: str | None, message: str, selection: str,
+                            enqueue: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
+        """One turn on the person's own agent over ACP. The session (process,
+        token, workspace) outlives the turn; acp_sessions owns it."""
+        agent_id = agent.split(":", 1)[1]
+        ended = {"type": "error", "code": "personal_session_ended",
+                 "message": "This chat's agent has stopped. Send again to start a new conversation."}
+        if session_id:
+            host = acp_sessions.get(session_id, connection_id)
+            if host is None or host.agent_id != agent_id:
+                enqueue(ended)
+                return {"type": "done"}
+        else:
+            try:
+                host = await acp_sessions.open(
+                    connection_id, agent_id, state_dir=_STATE_DIR, output_root=OUTPUT_ROOT,
+                    backend_url=backend_url, workspace_sessions=workspace_sessions)
+            except PersonalSessionError as exc:
+                enqueue({"type": "error", "code": exc.code, "message": exc.message})
+                return {"type": "done"}
+            enqueue({"type": "session", "sessionId": host.id, "agentName": host.display_name, "color": host.color,
+                     "agentInfo": {"name": str(host.agent_info.get("name") or "")[:64],
+                                   "version": str(host.agent_info.get("version") or "")[:32]}})
+        try:
+            with workspace_scope(host.workdir):
+                agen = host.prompt(message, selection)
+                async with aclosing(agen):
+                    async for event in agen:
+                        task = asyncio.current_task()
+                        if task is not None and task.cancelling():
+                            raise asyncio.CancelledError
+                        enqueue(event)
+        except PersonalSessionError as exc:
+            enqueue({"type": "error", "code": exc.code, "message": exc.message})
+        return {"type": "done"}
 
     async def stream_response(
         message: str,
@@ -2609,6 +2663,9 @@ async def chat_websocket(websocket: WebSocket) -> None:
         terminal_done = None
 
         try:
+            if agent.startswith("personal:"):
+                terminal_done = await personal_turn(agent, session_id, message, turn_selection_context, enqueue)
+                return
             runner = AGENT_RUNNERS.get(agent)
             if runner is None:
                 enqueue({
@@ -2774,6 +2831,33 @@ async def chat_websocket(websocket: WebSocket) -> None:
                         "source": source,
                     })
                 continue
+            if msg_type in {"permission", "close_session"}:
+                # The person's answers to a personal agent: they carry the
+                # person token, and only this socket's own sessions count.
+                if chat_marked_as_agent or not person_session.verify(payload.get("personToken")):
+                    await send_event({"type": "error", "code": "person_required", "message": (
+                        "Only the person can answer or close a personal agent, from a Nebula canvas connected as them."
+                    ), "source": "system"})
+                    continue
+                if msg_type == "permission":
+                    for host in acp_sessions.live():
+                        if host.owner == connection_id:
+                            host.resolve_permission(payload.get("requestId"), payload.get("decision"), connection_id)
+                    continue
+                target = acp_sessions.get(payload.get("sessionId"), connection_id)
+                if target is not None and current_task is not None and not current_task.done() \
+                        and (current_agent or "").startswith("personal:"):
+                    current_task.cancel()
+                    try:
+                        await current_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                    current_task = None
+                    current_agent = None
+                closed = await acp_sessions.close(payload.get("sessionId"), connection_id, "closed_by_person")
+                await send_event({"type": "session_closed", "sessionId": payload.get("sessionId") if closed else None,
+                                  "source": "personal"})
+                continue
             if msg_type != "send":
                 continue
 
@@ -2818,6 +2902,9 @@ async def chat_websocket(websocket: WebSocket) -> None:
             session_id = payload.get("sessionId") or None
             agent_raw = payload.get("agent")
             agent = "claude" if agent_raw is None else agent_raw
+            if isinstance(agent, str) and agent.startswith("personal:") \
+                    and not personal_agents.ID_RE.fullmatch(agent.split(":", 1)[1]):
+                agent = ""
             if not isinstance(agent, str) or not agent.strip():
                 await send_event({"type": "error", "code": "agent_invalid", "message": "agent must be text and a nonempty agent identifier.", "source": "system"})
                 await send_event({"type": "done", "source": "system"})
@@ -2880,6 +2967,69 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 await current_task
             except (asyncio.CancelledError, Exception):
                 pass
+        # A personal agent dies with the chat socket that started it: its
+        # process tree is killed and its token revoked.
+        await acp_sessions.close_owned(connection_id, "disconnected")
+
+
+# ---------- Personal agents (person-only) ----------
+
+def _personal_agent_http_error(exc: personal_agents.PersonalAgentError) -> HTTPException:
+    status = {"not_found": 404, "conflict": 409}.get(exc.code, 400)
+    return HTTPException(status_code=status, detail=exc.message)
+
+
+@app.get("/api/personal-agents")
+async def list_personal_agents() -> dict[str, Any]:
+    """Settings > Personal agents and the chat picker. The person's only."""
+    require_person(current_request_headers())
+    views = await asyncio.to_thread(personal_agents.list_agents, _STATE_DIR)
+    return {"warningAcknowledged": personal_agents.warning_acknowledged(_STATE_DIR),
+            "agents": [view.as_dict() for view in views]}
+
+
+@app.post("/api/personal-agents")
+async def create_personal_agent(body: dict[str, Any]) -> dict[str, Any]:
+    """Add a custom ACP agent (an absolute path or a bare command, plus args)."""
+    require_person(current_request_headers())
+    try:
+        view = await asyncio.to_thread(personal_agents.create_custom, _STATE_DIR, body)
+    except personal_agents.PersonalAgentError as exc:
+        raise _personal_agent_http_error(exc) from exc
+    return {"agent": view.as_dict()}
+
+
+@app.put("/api/personal-agents/{agent_id}")
+async def update_personal_agent(agent_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Switch an agent on or off, rename or recolor it (custom: also its command)."""
+    require_person(current_request_headers())
+    if not personal_agents.ID_RE.fullmatch(agent_id):
+        raise HTTPException(status_code=404, detail="No agent with that id")
+    try:
+        view = await asyncio.to_thread(personal_agents.update_agent, _STATE_DIR, agent_id, body)
+    except personal_agents.PersonalAgentError as exc:
+        raise _personal_agent_http_error(exc) from exc
+    return {"agent": view.as_dict()}
+
+
+@app.delete("/api/personal-agents/{agent_id}")
+async def delete_personal_agent(agent_id: str) -> dict[str, Any]:
+    """Remove a custom agent. Built-in ones can only be switched off."""
+    require_person(current_request_headers())
+    try:
+        removed = personal_agents.delete_custom(_STATE_DIR, agent_id)
+    except personal_agents.PersonalAgentError as exc:
+        raise _personal_agent_http_error(exc) from exc
+    if not removed:
+        raise HTTPException(status_code=404, detail="No custom agent with that id")
+    return {"ok": True}
+
+
+@app.post("/api/personal-agents/acknowledge-warning")
+async def acknowledge_personal_agent_warning() -> dict[str, Any]:
+    """The person read the notice (what Nebula can and can't limit)."""
+    require_person(current_request_headers())
+    return {"warningAcknowledgedAt": personal_agents.acknowledge_warning(_STATE_DIR)}
 
 
 # ---------- REST endpoints ----------
@@ -2938,7 +3088,12 @@ def _outside_view() -> dict[str, Any]:
     for connected in app_token_store.list():
         spent = agent_spend_ledger.spent(f"{agent_spend.APP_PREFIX}{connected['id']}")
         apps.append({**connected, "spentUsd": round(spent.total, 4), "kreaPlanRuns": spent.plan_runs})
-    return {"outside": {"spentUsd": round(outside.total, 4), "kreaPlanRuns": outside.plan_runs}, "apps": apps}
+    personal = []
+    for agent_id, name in personal_agents.known_names(_STATE_DIR):
+        spent = agent_spend_ledger.spent(f"{agent_spend.PERSONAL_AGENT_PREFIX}{agent_id}")
+        personal.append({"id": agent_id, "name": name, "spentUsd": round(spent.total, 4), "kreaPlanRuns": spent.plan_runs})
+    return {"outside": {"spentUsd": round(outside.total, 4), "kreaPlanRuns": outside.plan_runs}, "apps": apps,
+            "personal": personal}
 
 
 @app.get("/api/agent/spend/apps")

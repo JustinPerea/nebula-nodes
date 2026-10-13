@@ -33,6 +33,11 @@ Whose total a run counts against (``main._spend_session``):
 - ``outside:shared``: every other caller. Names and headers are the caller's
   to set, so they can't buy a fresh budget, and the key never changes, so
   restarting Nebula doesn't reset it either.
+- ``outside:personal:<agentId>``: one of the person's own agents (Claude,
+  Codex, Gemini or a custom ACP agent) started from the chat panel
+  (services/acp_session.py). It is an outside agent: its runs count in the
+  shared outside budget, with a line per agent in Settings.
+  ``PERSONAL_AGENT_BUDGET = "chat"`` switches it to a per-chat ``chat:`` key.
 - ``outside:app:<id>``: an outside app the person gave its own token in
   Settings (services/app_tokens.py). The app's own daily limit applies, and
   its runs also count inside the outside budget: both are checked and the
@@ -133,6 +138,14 @@ OUTSIDE_PREFIX = "outside:"
 OUTSIDE_SHARED = "outside:shared"
 OUTSIDE_LABEL = "Agents outside Nebula chats"
 APP_PREFIX = "outside:app:"
+# The person's own agents run over ACP in the chat panel
+# (services/acp_session.py). Their spend counts inside the shared outside
+# budget under one key per agent, so Settings can still show a line each.
+PERSONAL_AGENT_PREFIX = "outside:personal:"
+# The single switch: "outside" (default) puts personal agents in the shared
+# 24h outside budget; "chat" gives each personal chat its own session budget
+# (key ``chat:<chat id>``) like the in-app Claude and Codex chats.
+PERSONAL_AGENT_BUDGET = "outside"
 # Keys from before the outside budget had a stable name: one per backend
 # launch. Folded into OUTSIDE_SHARED once (SpendLedger._migrate).
 _LEGACY_PREFIX = "unverified:"
@@ -260,6 +273,13 @@ class Spent:
 
 def is_outside(key: str) -> bool:
     return key.startswith(OUTSIDE_PREFIX)
+
+
+def personal_agent_spend_key(agent_id: str, chat_id: str) -> str:
+    """The budget a personal agent's session token names (see PERSONAL_AGENT_BUDGET)."""
+    if PERSONAL_AGENT_BUDGET == "chat":
+        return f"chat:{chat_id}"
+    return f"{PERSONAL_AGENT_PREFIX}{agent_id}"
 
 
 class SpendLedger:

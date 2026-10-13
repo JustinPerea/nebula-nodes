@@ -329,3 +329,14 @@ def test_clearing_the_canvas_forgets_cursors_anchored_to_its_nodes(api):
 
     assert client.delete("/api/graph").status_code == 200
     assert client.get("/api/canvas/snapshot").json()["agents"] == []
+
+
+def test_a_personal_agent_token_carries_its_own_name_and_color():
+    record = {"runner": "personal:claude", "display_name": "My Claude", "color": "#123ABC"}
+    identity = identify({"Authorization": "Agent p", "X-Nebula-Agent": "Imposter"},
+                        token_lookup=lambda token: record if token == "p" else None)
+    assert identity is not None and identity.verified
+    assert (identity.name, identity.color, identity.id) == ("My Claude", "#123ABC", "personal:claude")
+    bad = {"runner": "personal:x", "display_name": "<<>>", "color": "red"}
+    fallback = identify({"Authorization": "Agent b"}, token_lookup=lambda token: bad)
+    assert fallback.color == "#E8825A" and fallback.name
