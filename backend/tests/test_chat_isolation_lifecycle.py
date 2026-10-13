@@ -54,13 +54,13 @@ class QueueSocket:
             await self.on_send(self, event)
 
 
-@pytest.mark.parametrize("agent", ["claude", "daedalus"])
+@pytest.mark.parametrize("agent", ["claude", "codex"])
 @pytest.mark.asyncio
 async def test_next_send_after_visible_done_waits_for_old_transport_and_resumes(isolated_app, monkeypatch, agent):
     calls = []
     async def runner(message, session_id, model, autonomy, **kwargs):
         call = {"session": session_id, **kwargs, "closed": False}
-        # Every in-app agent, Daedalus included, gets a minted token naming its
+        # Every in-app agent gets a minted token naming its
         # own chat budget while the turn runs.
         call["spend_key"] = main._spend_session({"Authorization": f"Agent {kwargs['agent_token']}"})[0]
         calls.append(call)
@@ -159,7 +159,7 @@ async def test_unexpected_transport_exit_still_closes_runner_and_revokes_authori
     assert chat_actions._active_handler is None
 
 
-@pytest.mark.parametrize("second", [{"commonsToken": "invalid"}, {"agent": "daedalus"}, {"agent": []}])
+@pytest.mark.parametrize("second", [{"commonsToken": "invalid"}, {"agent": "unknown"}, {"agent": []}])
 @pytest.mark.asyncio
 async def test_active_guard_precedes_second_turn_validation_without_terminal_done(isolated_app, monkeypatch, second):
     monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")

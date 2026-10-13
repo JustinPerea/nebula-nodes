@@ -39,15 +39,17 @@ def _write_entries(path: Path, entries: list[object]) -> None:
     )
 
 
-def _point_at_temp_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def _point_at_temp_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Point Hermes at tmp_path with an active profile; return its auth.json.
+
+    The active profile is the high-priority path; the global auth.json is the
+    fallback (services/nous_auth.py, "Profile lookup order")."""
     monkeypatch.delenv("NOUS_INFERENCE_BASE_URL", raising=False)
-    monkeypatch.setattr(
-        nous_auth,
-        "DAEDALUS_PROFILE_AUTH",
-        tmp_path / "profiles" / "daedalus" / "auth.json",
-    )
+    monkeypatch.setattr(nous_auth, "HERMES_HOME", tmp_path)
     monkeypatch.setattr(nous_auth, "ACTIVE_PROFILE_FILE", tmp_path / "active_profile")
     monkeypatch.setattr(nous_auth, "GLOBAL_AUTH_FILE", tmp_path / "auth.json")
+    (tmp_path / "active_profile").write_text("main\n", encoding="utf-8")
+    return tmp_path / "profiles" / "main" / "auth.json"
 
 
 def _b64url(value: object) -> str:
@@ -63,10 +65,10 @@ def test_load_nous_credential_skips_expired_high_priority_profile(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
-        token="expired-daedalus-key",
+        active_auth,
+        token="expired-active-key",
         expires_at="2000-01-01T00:00:00+00:00",
     )
     _write_auth(
@@ -84,10 +86,10 @@ def test_load_nous_credential_keeps_unexpired_high_priority_profile(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
-        token="usable-daedalus-key",
+        active_auth,
+        token="usable-active-key",
         expires_at="2999-01-01T00:00:00+00:00",
     )
     _write_auth(
@@ -98,17 +100,17 @@ def test_load_nous_credential_keeps_unexpired_high_priority_profile(
 
     credential = nous_auth.load_nous_credential()
 
-    assert credential.access_token == "usable-daedalus-key"
+    assert credential.access_token == "usable-active-key"
 
 
 def test_load_nous_credential_reports_all_expired_profiles(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
-        token="expired-daedalus-key",
+        active_auth,
+        token="expired-active-key",
         expires_at="2000-01-01T00:00:00+00:00",
     )
     _write_auth(
@@ -151,9 +153,9 @@ def test_access_token_only_entry_uses_generic_expires_at_fallback(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     _write_entries(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         [
             {
                 "access_token": "expired-access-token",
@@ -178,9 +180,9 @@ def test_multiple_pool_entries_skip_expired_before_usable_entry(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     _write_entries(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         [
             {
                 "agent_key": "expired-first-key",
@@ -204,9 +206,9 @@ def test_blank_or_non_string_agent_key_does_not_shadow_access_token(
     tmp_path: Path,
     bad_agent_key: object,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     _write_entries(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         [
             {
                 "agent_key": bad_agent_key,
@@ -225,9 +227,9 @@ def test_malformed_pool_entries_and_tokens_are_skipped(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     _write_entries(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         [
             "not-an-object",
             {"agent_key": 123, "access_token": []},
@@ -272,9 +274,9 @@ def test_untrusted_persisted_base_url_falls_through_without_forwarding_target(
     tmp_path: Path,
     untrusted_url: str,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         token="poisoned-high-priority-token",
         expires_at="2999-01-01T00:00:00Z",
         base_url=untrusted_url,
@@ -295,9 +297,9 @@ def test_only_untrusted_persisted_base_url_is_controlled_auth_error(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         token="must-not-be-forwarded",
         expires_at="2999-01-01T00:00:00Z",
         base_url="https://inference-api.nousresearch.com.evil.test/v1",
@@ -314,13 +316,13 @@ def test_explicit_https_base_url_override_is_trusted_for_staging(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     monkeypatch.setenv(
         "NOUS_INFERENCE_BASE_URL",
         "https://staging-inference.nous.test/custom/v1/",
     )
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         token="staging-token",
         expires_at="2999-01-01T00:00:00Z",
         # The operator override, not this untrusted persisted value, wins.
@@ -346,10 +348,10 @@ def test_unsafe_explicit_base_url_override_is_controlled_auth_error(
     tmp_path: Path,
     unsafe_override: str,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     monkeypatch.setenv("NOUS_INFERENCE_BASE_URL", unsafe_override)
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         token="must-not-be-forwarded",
         expires_at="2999-01-01T00:00:00Z",
     )
@@ -362,10 +364,10 @@ def test_valid_jwt_requires_future_exp_and_inference_scope(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     token = _jwt({"exp": 32503680000, "scope": ["profile:read", "inference:invoke"]})
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         token=token,
         expires_at=None,
     )
@@ -389,9 +391,9 @@ def test_invalid_high_priority_jwt_falls_through_to_next_profile(
     tmp_path: Path,
     claims: dict[str, object],
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         token=_jwt(claims),
         expires_at=None,
     )
@@ -410,10 +412,10 @@ def test_jwt_inside_expiry_safety_skew_falls_through(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     expires_in_30_seconds = datetime.now(timezone.utc).timestamp() + 30
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         token=_jwt(
             {
                 "exp": expires_in_30_seconds,
@@ -437,9 +439,9 @@ def test_out_of_range_jwt_exp_is_controlled_and_falls_through(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         token=_jwt({"exp": 10**1000, "scope": "inference:invoke"}),
         expires_at=None,
     )
@@ -458,9 +460,9 @@ def test_malformed_utf8_auth_file_is_skipped_without_500(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
-    nous_auth.DAEDALUS_PROFILE_AUTH.parent.mkdir(parents=True, exist_ok=True)
-    nous_auth.DAEDALUS_PROFILE_AUTH.write_bytes(b"\xff\xfe\x00not-json")
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth.parent.mkdir(parents=True, exist_ok=True)
+    active_auth.write_bytes(b"\xff\xfe\x00not-json")
     _write_auth(
         nous_auth.GLOBAL_AUTH_FILE,
         token="safe-after-unicode-error",
@@ -476,11 +478,11 @@ def test_malformed_utf8_jwt_payload_is_skipped_without_500(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     header = _b64url({"alg": "RS256", "typ": "JWT"})
     payload = base64.urlsafe_b64encode(b"\xff\xfe").rstrip(b"=").decode("ascii")
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         token=f"{header}.{payload}.signature",
         expires_at=None,
     )
@@ -499,9 +501,9 @@ def test_opaque_legacy_agent_key_remains_supported(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _point_at_temp_home(monkeypatch, tmp_path)
+    active_auth = _point_at_temp_home(monkeypatch, tmp_path)
     _write_auth(
-        nous_auth.DAEDALUS_PROFILE_AUTH,
+        active_auth,
         token="sk-opaque-hermes-agent-key",
         expires_at=None,
     )
@@ -510,3 +512,32 @@ def test_opaque_legacy_agent_key_remains_supported(
 
     assert credential.access_token == "sk-opaque-hermes-agent-key"
     assert credential.base_url == nous_auth.DEFAULT_INFERENCE_URL
+
+
+def test_daedalus_profile_is_not_read_unless_it_is_the_active_profile(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _point_at_temp_home(monkeypatch, tmp_path)
+    _write_auth(
+        tmp_path / "profiles" / "daedalus" / "auth.json",
+        token="old-daedalus-profile-key",
+        expires_at="2999-01-01T00:00:00Z",
+    )
+
+    with pytest.raises(nous_auth.NousNotAuthenticatedError, match="hermes model"):
+        nous_auth.load_nous_credential()
+
+    (tmp_path / "active_profile").write_text("daedalus", encoding="utf-8")
+    assert nous_auth.load_nous_credential().access_token == "old-daedalus-profile-key"
+
+
+def test_no_active_profile_falls_back_to_global_auth(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _point_at_temp_home(monkeypatch, tmp_path)
+    (tmp_path / "active_profile").unlink()
+    _write_auth(nous_auth.GLOBAL_AUTH_FILE, token="global-key", expires_at="2999-01-01T00:00:00Z")
+
+    assert nous_auth.load_nous_credential().access_token == "global-key"

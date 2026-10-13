@@ -215,9 +215,9 @@ async def run_claude(
       - error         — {message}
       - done          — {}
     """
-    # `autonomy` and `provider` accepted for signature parity with run_hermes
-    # but ignored — Claude doesn't implement the step-approval contract and
-    # routes through Anthropic, not Hermes's provider gateway.
+    # `autonomy` and `provider` are part of the shared runner signature that
+    # /ws/chat calls; Claude has no step-approval contract and no provider
+    # override, so both are ignored.
     del autonomy
     del provider
     system_prompt = NEBULA_SYSTEM_PRIMER
@@ -420,12 +420,10 @@ async def run_claude(
 
 
 # Agent dispatch registry — keyed by the 'agent' field on /ws/chat payloads.
-# Keep this at the bottom so both run_claude and run_hermes are in scope.
+# Keep this at the bottom so run_claude is in scope.
 from services.codex_session import run_codex as _run_codex  # noqa: E402
-from services.hermes_session import run_hermes as _run_hermes  # noqa: E402
 
 AGENT_RUNNERS: dict[str, Any] = {
     "claude": run_claude,
     "codex": _run_codex,
-    "daedalus": _run_hermes,
 }

@@ -26,14 +26,12 @@ class NebulaAPIError(RuntimeError):
 
 
 def with_identity(headers: dict[str, str] | None = None) -> dict[str, str]:
-    """Add the caller's token (it outranks any name) and the Daedalus marker.
+    """Add the caller's token (it outranks any name).
 
     NEBULA_AGENT_TOKEN is an in-app chat's turn token. NEBULA_APP_TOKEN is one
     the person made for an outside app in Settings > Agent spending: it names
     the app's own spending line (services/app_tokens.py). The turn token wins."""
     headers = dict(headers or {})
-    if os.environ.get("DAEDALUS_APPROVAL"):
-        headers.setdefault("X-Daedalus-Caller", "1")
     token = os.environ.get("NEBULA_AGENT_TOKEN") or os.environ.get("NEBULA_APP_TOKEN")
     if token:
         headers = {key: value for key, value in headers.items() if key.lower() != "authorization"}

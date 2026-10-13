@@ -90,34 +90,33 @@ def test_enabled_turn_binds_resume_and_revokes_child_capability(isolated_app, mo
     assert not (isolated_app / "private-library").exists()
 
 
-def test_default_off_daedalus_runs_in_a_private_workspace_with_a_chat_token(isolated_app, monkeypatch):
-    # Daedalus reaches Nebula only through its MCP tools now, so it gets the
-    # same private workspace and minted chat token as Claude and Codex.
+def test_default_off_codex_runs_in_a_private_workspace_with_a_chat_token(isolated_app, monkeypatch):
+    # Every in-app agent gets a private workspace and a minted chat token.
     human_token = "h" * 43
     person_session.current().set(human_token)
     seen = []
     async def runner(message, session_id, model, autonomy, **kwargs):
         record = actors.agent_registry.lookup(kwargs["agent_token"])
-        assert record["workspace"] == kwargs["workdir"] and record["runner"] == "daedalus"
+        assert record["workspace"] == kwargs["workdir"] and record["runner"] == "codex"
         assert record["session"] is not None
         assert kwargs["agent_token"] != human_token
         seen.append((session_id, autonomy, kwargs))
-        yield {"type": "session", "sessionId": "existing-daedalus-id"}
+        yield {"type": "session", "sessionId": "existing-codex-id"}
         yield {"type": "done"}
-    monkeypatch.setitem(chat_session.AGENT_RUNNERS, "daedalus", runner)
+    monkeypatch.setitem(chat_session.AGENT_RUNNERS, "codex", runner)
     with TestClient(main.app).websocket_connect("/ws/chat") as ws:
-        payload = {"type": "send", "message": "Hello", "agent": "daedalus", "autonomy": "step",
-                   "provider": "nous", "personToken": human_token}
+        payload = {"type": "send", "message": "Hello", "agent": "codex", "autonomy": "step",
+                   "personToken": human_token}
         ws.send_json(payload)
         events = receive_done(ws)
         opaque = next(e for e in events if e["type"] == "session")["sessionId"]
-        assert opaque != "existing-daedalus-id"
+        assert opaque != "existing-codex-id"
         ws.send_json({**payload, "sessionId": opaque})
         events2 = receive_done(ws)
         assert not [e for e in events2 if e["type"] == "error"]
-    assert [call[:2] for call in seen] == [(None, "step"), ("existing-daedalus-id", "step")]
+    assert [call[:2] for call in seen] == [(None, "step"), ("existing-codex-id", "step")]
     options = seen[0][2]
-    assert options["provider"] == "nous"
+    assert options["provider"] is None
     assert "CURRENT CANVAS SELECTION" in options["selection_context"]
     assert options["workdir"] == seen[1][2]["workdir"]
     for _, _, kwargs in seen:
@@ -125,8 +124,8 @@ def test_default_off_daedalus_runs_in_a_private_workspace_with_a_chat_token(isol
     assert not (isolated_app / "private-library").exists()
 
 
-def test_daedalus_cannot_resume_a_raw_provider_session(isolated_app, monkeypatch):
-    # Chats from before workspace isolation named Hermes' own session id.
+def test_codex_cannot_resume_a_raw_provider_session(isolated_app, monkeypatch):
+    # Chats from before workspace isolation named the provider's own session id.
     # Accepting one would resume outside any workspace, so it is refused.
     human_token = "h" * 43
     person_session.current().set(human_token)
@@ -134,9 +133,9 @@ def test_daedalus_cannot_resume_a_raw_provider_session(isolated_app, monkeypatch
     async def runner(*args, **kwargs):
         called.append(kwargs)
         yield {"type": "done"}
-    monkeypatch.setitem(chat_session.AGENT_RUNNERS, "daedalus", runner)
+    monkeypatch.setitem(chat_session.AGENT_RUNNERS, "codex", runner)
     with TestClient(main.app).websocket_connect("/ws/chat") as ws:
-        ws.send_json({"type": "send", "message": "Hello", "agent": "daedalus", "sessionId": "old-id",
+        ws.send_json({"type": "send", "message": "Hello", "agent": "codex", "sessionId": "old-id",
                       "personToken": human_token})
         events = receive_done(ws)
     assert not called
@@ -148,7 +147,7 @@ def test_expired_agent_context_fails_without_file_access(isolated_app):
         assert client.get("/api/agent/context", headers={"Authorization": "Agent expired"}).status_code == 401
 
 
-def test_enabled_daedalus_rejects_before_even_a_registered_runner(isolated_app, monkeypatch):
+def test_enabled_commons_rejects_other_agents_before_even_a_registered_runner(isolated_app, monkeypatch):
     monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")
     human_token = "h" * 43
     person_session.current().set(human_token)
@@ -156,10 +155,32 @@ def test_enabled_daedalus_rejects_before_even_a_registered_runner(isolated_app, 
     async def runner(*args, **kwargs):
         called.append(kwargs)
         yield {"type": "done"}
-    monkeypatch.setitem(chat_session.AGENT_RUNNERS, "daedalus", runner)
+    monkeypatch.setitem(chat_session.AGENT_RUNNERS, "other-agent", runner)
     with TestClient(main.app).websocket_connect("/ws/chat") as ws:
-        ws.send_json({"type": "send", "message": "Hello", "agent": "daedalus", "commonsToken": human_token})
+        ws.send_json({"type": "send", "message": "Hello", "agent": "other-agent", "commonsToken": human_token})
         events = receive_done(ws)
     assert "Claude and Codex" in events[0]["message"]
     assert not called
     assert not (isolated_app / "state").exists()
+
+
+@pytest.mark.parametrize("extra", [{}, {"sessionId": "old-daedalus-session", "autonomy": "step"},
+                                   {"provider": "nous"}])
+def test_an_old_daedalus_chat_is_refused_cleanly(isolated_app, extra):
+    # Daedalus was removed on 2026-10-13. A client or saved chat that still
+    # names it gets an error and a done, never a crash or a workspace.
+    human_token = "h" * 43
+    person_session.current().set(human_token)
+    assert "daedalus" not in chat_session.AGENT_RUNNERS
+    with TestClient(main.app).websocket_connect("/ws/chat") as ws:
+        ws.send_json({"type": "send", "message": "Hello", "agent": "daedalus",
+                      "personToken": human_token, **extra})
+        events = receive_done(ws)
+        # The socket stays usable for the next turn.
+        ws.send_json({"type": "send", "message": "Hello", "agent": "daedalus", "personToken": human_token})
+        assert receive_done(ws)[-1]["type"] == "done"
+    errors = [e for e in events if e["type"] == "error"]
+    assert errors and all(e.get("source") in {"system", None} for e in errors)
+    assert events[-1]["type"] == "done"
+    assert not (isolated_app / "state" / "agent-workspaces").exists() or not any(
+        (isolated_app / "state" / "agent-workspaces").iterdir())

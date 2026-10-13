@@ -26,7 +26,7 @@ class NebulaClient:
         return NebulaAPI(self.base_url, client=self._client)
 
     def _identity_headers(self, headers: dict | None = None) -> dict:
-        # The agent token and the Daedalus marker are added by nebula_api.
+        # The agent token is added by nebula_api.
         # A display name for this agent's cursor on the canvas; a verified
         # agent token, when present, takes precedence on the backend.
         headers = dict(headers or {})

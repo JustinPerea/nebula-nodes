@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import tomllib
-from pathlib import Path
 
 import pytest
 
@@ -36,10 +35,8 @@ def test_child_environment_keeps_agent_auth_and_removes_connector_secrets():
         "NEBULA_CONNECTOR_ENCRYPTION_KEY": "vault-fixture",
         "NEBULA_INJECTED_KEYS": "injected-fixture",
         "ANTHROPIC_API_KEY": "existing-agent-auth",
-        "HERMES_HOME": "/existing/profile",
     })
     assert child["ANTHROPIC_API_KEY"] == "existing-agent-auth"
-    assert child["HERMES_HOME"] == "/existing/profile"
     assert all(key not in child for key in config.CONNECTOR_SECRET_ENV_KEYS)
 
 
@@ -70,45 +67,8 @@ def test_scoped_cli_configs_contain_only_bridge_executable_path_and_origin(monke
     assert "vault-fixture" not in json.dumps([claude_args, codex_args])
 
 
-def test_hermes_overlay_only_adds_mcp_leaf_preserves_profile_and_cleans_up(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "HERMES_SYSTEM_MANAGED_DIR", tmp_path / "absent-system-policy")
-    profile = tmp_path / "profile"
-    profile.mkdir()
-    user_config = {"model": {"provider": "nous"}, "mcp_servers": {"existing": {"command": "existing-cli"}}}
-    user_path = profile / "config.yaml"
-    user_path.write_text(json.dumps(user_config))
-    before = user_path.read_bytes()
-    env = {"NEBULA_URL": "http://127.0.0.1:8033", "HERMES_HOME": str(profile)}
-    overlay = config.prepare_hermes_mcp(env)
-    try:
-        path = Path(env["HERMES_MANAGED_DIR"]) / "config.yaml"
-        managed = json.loads(path.read_text())
-        assert set(managed) == {"mcp_servers"}
-        assert sorted(managed["mcp_servers"]) == [config.NEBULA_SERVER_NAME, config.SERVER_NAME]
-        nebula = managed["mcp_servers"][config.NEBULA_SERVER_NAME]
-        assert nebula["args"] == [str(config.NEBULA_MCP_PATH), "--url", "http://127.0.0.1:8033"]
-        # Hermes expands the token from its own env; the file never holds it.
-        assert nebula["env"] == {"NEBULA_AGENT_TOKEN": "${NEBULA_AGENT_TOKEN}", "NEBULA_URL": "http://127.0.0.1:8033"}
-        assert env["HERMES_HOME"] == str(profile)
-        assert user_path.read_bytes() == before
-        # Hermes's canonical loader deep-merges this one leaf over the user
-        # config; there is no replacement mcp_servers list or profile copy.
-        assert "existing" not in managed["mcp_servers"]
-    finally:
-        overlay.cleanup()
-    assert not path.parent.exists()
-
-
-@pytest.mark.parametrize("explicit", [True, False])
-def test_hermes_existing_admin_scope_is_never_replaced(tmp_path, monkeypatch, explicit):
-    policy = tmp_path / "policy"
-    policy.mkdir()
-    monkeypatch.setattr(config, "HERMES_SYSTEM_MANAGED_DIR", policy if not explicit else tmp_path / "absent")
-    env = {"NEBULA_URL": "http://127.0.0.1:8033"}
-    if explicit:
-        env["HERMES_MANAGED_DIR"] = str(policy)
-    before = dict(env)
-    overlay = config.prepare_hermes_mcp(env)
-    assert overlay.directory is None
-    assert "administrator" in overlay.limitation
-    assert env == before
+def test_nebula_server_env_names_the_token_by_reference():
+    # Claude Code expands `${NEBULA_AGENT_TOKEN}` from its own environment, so
+    # the MCP config never holds the token's value.
+    refs = config.nebula_server_env_refs("http://127.0.0.1:8033")
+    assert refs == {"NEBULA_AGENT_TOKEN": "${NEBULA_AGENT_TOKEN}", "NEBULA_URL": "http://127.0.0.1:8033"}

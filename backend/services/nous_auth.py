@@ -35,15 +35,13 @@ Persisted inference URLs are treated as untrusted and may only name
 `https://inference-api.nousresearch.com/v1`. An explicit operator-controlled
 `NOUS_INFERENCE_BASE_URL` may select another secure host for staging/tests.
 
-Profile lookup order:
-  1. The Daedalus profile (`~/.hermes/profiles/daedalus/auth.json`),
-     because Daedalus chat runs through `hermes-daedalus` against this
-     profile and the canvas Nous node should see the same auth.
-  2. The user's currently active profile (read from `~/.hermes/active_profile`).
-  3. The global `~/.hermes/auth.json` as a last resort.
+Profile lookup order (the person's normal Hermes login):
+  1. The currently active profile, named in `~/.hermes/active_profile`
+     (`~/.hermes/profiles/<name>/auth.json`).
+  2. The global `~/.hermes/auth.json`.
 
-If none have a `nous` entry, we raise a clear error pointing the user at
-`hermes-daedalus model` (the right wrapper to run for the Daedalus profile).
+If neither has a `nous` entry, we raise a clear error pointing the user at
+`hermes model` (select Nous Portal), which logs in the active profile.
 """
 from __future__ import annotations
 
@@ -68,7 +66,6 @@ HERMES_HOME = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
 GLOBAL_AUTH_FILE = Path(
     os.environ.get("HERMES_AUTH_FILE", str(HERMES_HOME / "auth.json"))
 )
-DAEDALUS_PROFILE_AUTH = HERMES_HOME / "profiles" / "daedalus" / "auth.json"
 ACTIVE_PROFILE_FILE = HERMES_HOME / "active_profile"
 
 
@@ -76,8 +73,7 @@ class NousNotAuthenticatedError(RuntimeError):
     """Raised when no Hermes profile has a Nous credential.
 
     Surfaced to the user verbatim — the message tells them which command
-    to run and which profile to target, since `hermes-daedalus` and plain
-    `hermes` log into different profiles.
+    to run to log in.
     """
 
 
@@ -375,7 +371,7 @@ def _validate_selected_token(
 
 def _candidate_paths() -> list[Path]:
     """Profile-aware lookup order — see module docstring."""
-    paths: list[Path] = [DAEDALUS_PROFILE_AUTH]
+    paths: list[Path] = []
     if ACTIVE_PROFILE_FILE.exists():
         try:
             name = ACTIVE_PROFILE_FILE.read_text(encoding="utf-8").strip()
@@ -385,7 +381,6 @@ def _candidate_paths() -> list[Path]:
         # malformed marker as absent rather than reading outside profiles/.
         if (
             name
-            and name != "daedalus"
             and name not in {".", ".."}
             and "/" not in name
             and "\\" not in name
@@ -454,8 +449,7 @@ def load_nous_credential() -> NousCredential:
     if expired_paths and not invalid_reasons:
         raise NousCredentialExpiredError(
             "All discovered Nous Portal inference credentials are expired. "
-            "Run `hermes-daedalus model` and select Nous Portal to refresh "
-            "the Daedalus profile."
+            "Run `hermes model` and select Nous Portal to refresh them."
         )
 
     if invalid_reasons:
@@ -464,14 +458,14 @@ def load_nous_credential() -> NousCredential:
         detail = "; ".join(dict.fromkeys(invalid_reasons))[:300]
         raise NousCredentialInvalidError(
             "No usable Nous Portal inference credential passed local "
-            f"validation ({detail}). Run `hermes-daedalus model` and select "
+            f"validation ({detail}). Run `hermes model` and select "
             "Nous Portal to refresh."
         )
 
     raise NousNotAuthenticatedError(
         "No Nous Portal credential found in any Hermes profile. "
-        "Run `hermes-daedalus model` and select Nous Portal — it OAuths in "
-        "the browser and writes the credential into "
-        "~/.hermes/profiles/daedalus/auth.json. "
+        "Run `hermes model` and select Nous Portal — it OAuths in the "
+        "browser and writes the credential into your active Hermes profile "
+        "(or ~/.hermes/auth.json). "
         f"(Last path checked: {last_path})"
     )

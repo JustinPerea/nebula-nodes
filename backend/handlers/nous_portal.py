@@ -1,6 +1,6 @@
 """Nous Portal handler.
 
-Mirrors the OpenRouter handler but pulls auth from `~/.hermes/auth.json`
+Mirrors the OpenRouter handler but pulls auth from the active Hermes profile (then `~/.hermes/auth.json`)
 instead of an env-supplied API key. The credential loader pins persisted
 destinations to the production Nous inference origin; an explicit secure
 `NOUS_INFERENCE_BASE_URL` process override supports staging/tests.
@@ -49,7 +49,7 @@ def _image_to_content_block(value: Any) -> dict[str, Any] | None:
 async def handle_nous_portal_universal(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
-    api_keys: dict[str, str],  # unused — auth lives in ~/.hermes/auth.json
+    api_keys: dict[str, str],  # unused — auth lives in the Hermes login files
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     try:

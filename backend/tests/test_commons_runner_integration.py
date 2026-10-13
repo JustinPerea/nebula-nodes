@@ -10,7 +10,7 @@ import pytest
 
 from cli.client import NebulaClient
 from services.agent_workspaces import create_workspace
-from services import chat_session, codex_session, hermes_session
+from services import chat_session, codex_session
 
 
 def _process(lines=()):
@@ -130,23 +130,6 @@ async def test_codex_private_profile_preserves_mcp_events_and_billing(tmp_path, 
     assert events[-1] == {"type": "done"}
 
 
-# Daedalus with Commons off gets a chat token now (tests/test_hermes_session.py);
-# with Commons on it stays refused, token or not.
-@pytest.mark.parametrize("token", [None, "bound-token"])
-@pytest.mark.asyncio
-async def test_daedalus_refuses_unverified_scoped_access_before_process(monkeypatch, token):
-    monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")
-    spawn = AsyncMock()
-    with patch("services.hermes_session.asyncio.create_subprocess_exec", spawn), \
-         patch("services.hermes_session.prepare_hermes_mcp", Mock()) as overlay:
-        events = [event async for event in hermes_session.run_hermes("hello", None, agent_token=token)]
-    spawn.assert_not_called()
-    overlay.assert_not_called()
-    assert events[0]["type"] == "error" and "has not been verified" in events[0]["message"]
-    assert events[-1] == {"type": "done"}
-    assert chat_session.AGENT_RUNNERS["daedalus"] is hermes_session.run_hermes
-
-
 @pytest.mark.parametrize("payload,expected", [({"enabled": True}, True), ({"enabled": False}, False),
                                              ({"enabled": 1}, False), ({"enabled": "1"}, False),
                                              ({}, False), (None, False)])
@@ -159,8 +142,9 @@ def test_cli_capability_requires_literal_boolean(payload, expected):
         client._client.close()
 
 
-def test_cli_identity_keeps_daedalus_guard_and_overrides_forged_auth(monkeypatch):
+def test_cli_identity_overrides_forged_auth(monkeypatch):
     monkeypatch.setenv("NEBULA_AGENT_TOKEN", "bound-token")
+    # The removed Daedalus runtime's env var no longer adds a marker header.
     monkeypatch.setenv("DAEDALUS_APPROVAL", "step")
     client = NebulaClient()
     seen = []
@@ -175,4 +159,4 @@ def test_cli_identity_keeps_daedalus_guard_and_overrides_forged_auth(monkeypatch
     finally:
         client._client.close()
     assert all(request.headers["Authorization"] == "Agent bound-token" for request in seen)
-    assert all(request.headers["X-Daedalus-Caller"] == "1" for request in seen)
+    assert all("X-Daedalus-Caller" not in request.headers for request in seen)
