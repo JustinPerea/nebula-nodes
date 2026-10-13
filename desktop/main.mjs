@@ -14,6 +14,7 @@ import { getConnectorEncryptionKey, registerKreaAuthLinkHandler } from './connec
 import { installRendererNavigationGuard } from './navigation.mjs';
 import { confineFileScheme } from './renderer-files.mjs';
 import { resolveLaunchOverrides } from './launch-overrides.mjs';
+import { decideWindowAction } from './window-recovery.mjs';
 import { packagedLaunch, treatAsPackaged } from './packaged-launch.mjs';
 import {
   CREDENTIALS_FILE_NAME,
@@ -519,6 +520,61 @@ function showFailure(error) {
   }
 }
 
+/** Disconnected page shown when the sidecar died mid-session (no auto-restart). */
+function createDisconnectedWindow() {
+  const win = new BrowserWindow({
+    show: !isSmokeTest,
+    width: 600,
+    height: 400,
+    resizable: false,
+    minimizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    backgroundColor: '#0d0608',
+    titleBarStyle: 'hiddenInset',
+    title: 'Nebula Nodes \u2014 Disconnected',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  win.loadURL(DISCONNECTED_HTML);
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
+  });
+  return win;
+}
+
+/**
+ * Dock click (`activate`) or a second launch (`second-instance`): focus the
+ * live window, or recreate it when every window was closed.
+ *
+ * @param {{ focusExisting: boolean }} options
+ */
+function showAppWindow({ focusExisting }) {
+  const existing = [mainWindow, loadingWindow].find((win) => win && !win.isDestroyed()) ?? null;
+  const action = decideWindowAction({
+    hasLiveWindow: Boolean(existing),
+    openWindowCount: BrowserWindow.getAllWindows().length,
+    focusExisting,
+    isCleaningUp,
+    hasSidecar: Boolean(sidecarHandle),
+    sidecarDisconnected,
+  });
+  if (action === 'focus') {
+    if (existing.isMinimized()) existing.restore();
+    existing.focus();
+  } else if (action === 'create-main') {
+    mainWindow = createMainWindow(sidecarHandle, plaintextProviders);
+  } else if (action === 'create-disconnected') {
+    mainWindow = createDisconnectedWindow();
+  }
+  // focus() also shows a window, so never on the hidden smoke-run windows.
+  if (action.startsWith('create-') && !isSmokeTest) mainWindow.focus();
+  if (action !== 'none') console.log(`Window request (${focusExisting ? 'second launch' : 'activate'}): ${action}`);
+}
+
 /**
  * Show the mid-session disconnected overlay in the main renderer window.
  * The renderer page is NOT replaced — the injected endpoint metadata
@@ -834,14 +890,9 @@ if (refuseDebugLaunch) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    // Focus the existing window — no second sidecar is started.
-    // During startup the main window may not exist yet; focus the
-    // loading window in that case.
-    const win = mainWindow || loadingWindow;
-    if (win && !win.isDestroyed()) {
-      if (win.isMinimized()) win.restore();
-      win.focus();
-    }
+    // Show the existing window, or recreate it when every window was
+    // closed (window-recovery.mjs). No second sidecar is started.
+    showAppWindow({ focusExisting: true });
   });
 
   app.whenReady().then(async () => {
@@ -1051,39 +1102,9 @@ if (refuseDebugLaunch) {
   });
 
   app.on('activate', () => {
-    // macOS: recreate the window when the dock is activated and no windows
-    // are open. The same sidecar is reused — no new child is spawned.
-    if (BrowserWindow.getAllWindows().length === 0 && !isCleaningUp) {
-      if (sidecarHandle) {
-        mainWindow = createMainWindow(sidecarHandle, plaintextProviders);
-      } else if (sidecarDisconnected) {
-        // Sidecar died mid-session — show the disconnected page rather
-        // than creating a window with a dead endpoint or spawning a new
-        // sidecar. No auto-restart.
-        mainWindow = new BrowserWindow({
-          show: !isSmokeTest,
-          width: 600,
-          height: 400,
-          resizable: false,
-          minimizable: true,
-          maximizable: false,
-          fullscreenable: false,
-          backgroundColor: '#0d0608',
-          titleBarStyle: 'hiddenInset',
-          title: 'Nebula Nodes \u2014 Disconnected',
-          webPreferences: {
-            contextIsolation: true,
-            nodeIntegration: false,
-            sandbox: true,
-          },
-        });
-        const win = mainWindow;
-        win.loadURL(DISCONNECTED_HTML);
-        win.on('closed', () => {
-          if (mainWindow === win) mainWindow = null;
-        });
-      }
-    }
+    // macOS: recreate the window when the Dock icon is clicked and no
+    // windows are open. The same sidecar is reused; no new child is spawned.
+    showAppWindow({ focusExisting: false });
   });
 
   app.on('window-all-closed', () => {
