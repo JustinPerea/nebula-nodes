@@ -216,9 +216,9 @@ describe('Settings > Personal agents', () => {
     expect(rows.map((row) => row.getAttribute('data-agent-id'))).toEqual(['fake', 'gemini']);
     fireEvent.click(screen.getByRole('switch', { name: 'Use Gemini (your setup) in chat' }));
     await waitFor(() => expect(apiMocks.updatePersonalAgent).toHaveBeenCalledWith('gemini', { enabled: true }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Agent id' }), { target: { value: 'mine' } });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Agent command' }), { target: { value: '/usr/local/bin/mine' } });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Agent arguments' }), { target: { value: '--acp  --quiet' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Custom agent id' }), { target: { value: 'mine' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Custom agent command' }), { target: { value: '/usr/local/bin/mine' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Custom agent arguments' }), { target: { value: '--acp  --quiet' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
     await waitFor(() => expect(apiMocks.createPersonalAgent).toHaveBeenCalledWith({
       id: 'mine', displayName: undefined, command: '/usr/local/bin/mine', args: ['--acp', '--quiet'] }));

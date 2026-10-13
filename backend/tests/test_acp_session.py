@@ -682,9 +682,11 @@ async def test_registry_change_while_starting_is_caught_after_start(env):
 
 
 @pytest.mark.asyncio
-async def test_settings_change_while_open_replaces_the_old_chat(env):
+async def test_settings_change_while_open_replaces_the_old_chat(env, slow_kill):
     # open() closes the owner's previous session first. A Settings change
     # during that close must count: the launch key and spec are read after it.
+    # slow_kill holds that close open for a second, so the change lands inside
+    # it on any machine (without it, a fast teardown can finish first).
     env.register({"turns": [[]]}, agent_id="fake")
     env.register({"turns": [[]]}, agent_id="fake2")
     first = await env.open(agent_id="fake")

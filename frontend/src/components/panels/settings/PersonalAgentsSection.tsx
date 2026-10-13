@@ -111,14 +111,14 @@ export function PersonalAgentsSection() {
             </span>
           </span>
           <span className="settings-model-limit__controls">
-            <input className="settings-folder__input" aria-label="Agent id" placeholder="my-agent" maxLength={32}
+            <input className="settings-folder__input" aria-label="Custom agent id" placeholder="my-agent" maxLength={32}
               value={draft.id} disabled={busy} onChange={(event) => setDraft({ ...draft, id: event.target.value })} />
-            <input className="settings-folder__input" aria-label="Agent name" placeholder="Name" maxLength={32}
+            <input className="settings-folder__input" aria-label="Custom agent name" placeholder="Name" maxLength={32}
               value={draft.displayName} disabled={busy}
               onChange={(event) => setDraft({ ...draft, displayName: event.target.value })} />
-            <input className="settings-folder__input" aria-label="Agent command" placeholder="/path/to/agent"
+            <input className="settings-folder__input" aria-label="Custom agent command" placeholder="/path/to/agent"
               value={draft.command} disabled={busy} onChange={(event) => setDraft({ ...draft, command: event.target.value })} />
-            <input className="settings-folder__input" aria-label="Agent arguments" placeholder="--acp"
+            <input className="settings-folder__input" aria-label="Custom agent arguments" placeholder="--acp"
               value={draft.args} disabled={busy} onChange={(event) => setDraft({ ...draft, args: event.target.value })} />
             <button type="submit" className="settings__button settings__button--primary"
               disabled={busy || !draft.id.trim() || !draft.command.trim()}>Add</button>
