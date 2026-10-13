@@ -280,10 +280,13 @@ def parse_kv_list(items: list) -> dict[str, str]:
     return result
 
 
-def default_url(environ: dict[str, str] | None = None) -> str:
+def default_url(environ: dict[str, str] | None = None, *, strict: bool = True) -> str | None:
     """$NEBULA_URL; else the address the desktop app wrote to $NEBULA_URL_FILE
     (its port changes every launch; services/backend_address.py), once the
-    backend there proves it wrote the file; else :8000."""
+    backend there proves it wrote the file; else :8000.
+
+    When that check fails, exit 1, or with ``strict=False`` warn and return
+    None: `nebula mcp connect` can still print a config that names the file."""
     env = os.environ if environ is None else environ
     url = env.get("NEBULA_URL", "").strip()
     if url:
@@ -295,6 +298,9 @@ def default_url(environ: dict[str, str] | None = None) -> str:
         try:
             return backend_address.verified_url(url_file)
         except ValueError as exc:
+            if not strict:
+                print(f"warning: {exc}", file=sys.stderr)
+                return None
             print(f"error: {exc}", file=sys.stderr)
             sys.exit(1)
     return "http://localhost:8000"
@@ -304,7 +310,8 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     if args.url is None and args.command:
-        args.url = default_url()
+        # mcp connect sends the token only to an address that passed the check.
+        args.url = default_url(strict=args.command != "mcp")
 
     if not args.command:
         parser.print_help()

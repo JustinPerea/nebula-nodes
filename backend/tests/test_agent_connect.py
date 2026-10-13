@@ -604,7 +604,7 @@ def test_only_the_backend_that_wrote_the_file_passes_the_check(tmp_path):
     assert len({challenge for _, challenge in seen}) == 2  # a fresh challenge every time
     with pytest.raises(ValueError, match="isn't running"):
         backend_address.verified_url(path, probe=lambda url, challenge: None)
-    for answer in ("", "0" * 64, backend_address.prove("cd" * 32, "ab" * 16)):
+    for answer in ("", "0" * 64, "\u00e9" * 64, backend_address.prove("cd" * 32, "ab" * 16)):
         with pytest.raises(ValueError, match="no token was sent"):
             backend_address.verified_url(path, probe=lambda url, challenge, a=answer: a)
     with pytest.raises(ValueError):
@@ -705,6 +705,38 @@ def test_a_program_on_a_dead_launchs_port_never_gets_the_token(tmp_path, monkeyp
             default_url({"NEBULA_URL_FILE": str(tmp_path / "backend-url")})
         assert squatter.requests and all(path == backend_address.PROOF_PATH for path, _ in squatter.requests)
         assert all(auth is None for _, auth in squatter.requests)
+    finally:
+        squatter.close()
+
+
+@pytest.mark.parametrize("print_only", [True, False])
+def test_mcp_connect_with_a_stale_url_file_sends_no_token(tmp_path, monkeypatch, capsys, print_only):
+    """`nebula mcp connect --print` still prints a config naming the file; a
+    real connect writes nothing. Neither sends the token to the old port."""
+    from cli import __main__ as cli_main
+
+    squatter = _Recorder(secret=None)
+    try:
+        url_file = backend_address.publish(tmp_path / "state", squatter.url, SECRET)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.setenv("NEBULA_URL_FILE", str(url_file))
+        monkeypatch.setenv("NEBULA_APP_TOKEN", TOKEN)
+        for name in ("NEBULA_URL", "NEBULA_AGENT_TOKEN"):
+            monkeypatch.delenv(name, raising=False)
+        argv = ["nebula", "mcp", "connect", "cursor", "--yes"] + (["--print"] if print_only else [])
+        monkeypatch.setattr(sys, "argv", argv)
+        with pytest.raises(SystemExit) as done:
+            cli_main.main()
+        out = capsys.readouterr()
+        assert "isn't the Nebula that wrote" in out.err
+        if print_only:
+            assert done.value.code == 0
+            assert f'"NEBULA_URL_FILE": "{url_file}"' in out.out and '"NEBULA_URL"' not in out.out
+        else:
+            assert done.value.code == 1 and "nothing was written" in out.err
+            assert not mcp_connect.config_path("cursor", tmp_path / "home").exists()
+        assert all(auth is None for _, auth in squatter.requests)
+        assert all(path == backend_address.PROOF_PATH for path, _ in squatter.requests)
     finally:
         squatter.close()
 

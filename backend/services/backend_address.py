@@ -159,7 +159,8 @@ def verified_url(path: str | Path, *, probe: Probe | None = None, timeout: float
     if answer is None:
         raise ValueError(f"Nebula isn't running (nothing answers at {published.url}; {path} is left from an "
                          "earlier launch). Open Nebula, then try again.")
-    if not hmac.compare_digest(answer, prove(published.secret, challenge)):
+    # compare_digest raises TypeError on non-ASCII text, so check that first.
+    if not (answer.isascii() and hmac.compare_digest(answer, prove(published.secret, challenge))):
         raise ValueError(f"the program at {published.url} isn't the Nebula that wrote {path} (Nebula may have "
                          "quit or crashed, and something else took its port), so no token was sent. "
                          "Open Nebula, then try again.")

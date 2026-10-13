@@ -300,18 +300,21 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
               "from the launch link can.", file=sys.stderr)
         return 1
 
-    status = check_token(args.url, token) if token else None
+    # args.url is None when the desktop app's backend-url file failed its
+    # check (Nebula closed, or something else on its old port): no token goes there.
+    where = args.url or f"the address in {os.environ.get('NEBULA_URL_FILE')}"
+    status = check_token(args.url, token) if token and args.url else None
     writes = not print_only and client.kind != "manual"
     if token and status is None:
         if writes:
             # A config written blind can point at nothing (the desktop app's
             # port changes every launch) or at another Nebula.
-            print(f"error: couldn't reach Nebula at {args.url} to check the token, so nothing was written. "
+            print(f"error: couldn't reach Nebula at {where} to check the token, so nothing was written. "
                   "Start Nebula, or pass its address with --url (the desktop app: set NEBULA_URL_FILE to the "
                   "file Settings > Connect your agent names). --print shows the config without checking.",
                   file=sys.stderr)
             return 1
-        print(f"warning: couldn't reach Nebula at {args.url} to check the token.", file=sys.stderr)
+        print(f"warning: couldn't reach Nebula at {where} to check the token.", file=sys.stderr)
     app_name = (status or {}).get("agent") or args.name or client.label
     if status and args.name and args.name != app_name:
         print(f"note: this token belongs to {app_name!r}, not {args.name!r}; the canvas will show {app_name!r}.",
