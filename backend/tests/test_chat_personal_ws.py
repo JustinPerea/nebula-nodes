@@ -259,3 +259,64 @@ def test_a_minted_agent_token_cannot_reach_the_registry(isolated_app):
         response = client.post("/api/personal-agents/acknowledge-warning",
                                headers={"Authorization": f"Agent {token}"})
         assert response.status_code == 403
+
+
+async def _settings(method, path, body=None):
+    import httpx
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://127.0.0.1") as client:
+        return await client.request(method, path, headers=PERSON, json=body)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["switch_off", "delete"])
+async def test_settings_switch_off_or_delete_stops_the_running_agent(ws_env, change):
+    ws_env.register({"turns": [[{"chunk": "one"}]]})
+    socket = Socket()
+    task = asyncio.create_task(main.chat_websocket(socket))
+    send(socket)
+    first = await socket.until_done()
+    session = next(e for e in first if e["type"] == "session")
+    [host] = ws_env.manager.live()
+    pid, token = host.proc.pid, host.token
+
+    if change == "switch_off":
+        response = await _settings("PUT", "/api/personal-agents/fake", {"enabled": False})
+    else:
+        response = await _settings("DELETE", "/api/personal-agents/fake")
+    assert response.status_code == 200
+    # Stopped by the Settings write itself, not at the next send or the idle reap.
+    assert not alive(pid)
+    assert actors.agent_registry.lookup(token) is None
+    assert ws_env.manager.live() == []
+
+    send(socket, "again", session_id=session["sessionId"])
+    stale = await socket.until_done()
+    assert stale[0]["code"] == "personal_session_ended"
+    assert "switched off, removed or changed in Settings" in stale[0]["message"]
+    # Another socket can't learn why someone else's session ended.
+    assert ws_env.manager.ended_message(session["sessionId"], "someone-else") is None
+    socket.disconnect()
+    await asyncio.wait_for(task, 5)
+
+
+@pytest.mark.asyncio
+async def test_a_send_rechecks_settings_before_reusing_the_agent(ws_env):
+    # A registry change that bypassed the routes (another backend process, a
+    # hand edit) is still caught on the next send.
+    ws_env.register({"turns": [[{"chunk": "one"}]]})
+    socket = Socket()
+    task = asyncio.create_task(main.chat_websocket(socket))
+    send(socket)
+    first = await socket.until_done()
+    session = next(e for e in first if e["type"] == "session")
+    [host] = ws_env.manager.live()
+    pid = host.proc.pid
+    personal_agents.update_agent(main._STATE_DIR, "fake", {"enabled": False})
+    assert alive(pid)
+    send(socket, "again", session_id=session["sessionId"])
+    stale = await socket.until_done()
+    assert stale[0]["code"] == "personal_session_ended" and "Settings" in stale[0]["message"]
+    assert not alive(pid)
+    assert ws_env.manager.live() == []
+    socket.disconnect()
+    await asyncio.wait_for(task, 5)

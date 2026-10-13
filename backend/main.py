@@ -81,6 +81,7 @@ from services.settings import (
     is_injected_mode,
     update_injected_keys,
 )
+from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_spend, app_tokens, model_pricing, node_readiness, output_preview
 from services.cli_graph import CLIGraph
@@ -2591,7 +2592,13 @@ async def chat_websocket(websocket: WebSocket) -> None:
         if session_id:
             host = acp_sessions.get(session_id, connection_id)
             if host is None or host.agent_id != agent_id:
-                enqueue(ended)
+                why = acp_sessions.ended_message(session_id, connection_id) if host is None else None
+                enqueue({**ended, "message": why} if why else ended)
+                return {"type": "done"}
+            if not acp_sessions.still_allowed(host, _STATE_DIR):
+                # Switched off, removed or changed in Settings since it started.
+                await acp_sessions.close_stale(_STATE_DIR)
+                enqueue({**ended, "message": host.ended_message()})
                 return {"type": "done"}
         else:
             try:
@@ -2910,6 +2917,9 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 await send_event({"type": "done", "source": "system"})
                 continue
             if commons_enabled and agent not in {"claude", "codex"}:
+                if agent.startswith("personal:"):
+                    # Commons keeps personal agents off; stop any this socket still has.
+                    await acp_sessions.close_owned(connection_id, "commons_enabled")
                 await send_event({"type": "error", "message": "Commons private reference turns support Claude and Codex.", "source": "system"})
                 await send_event({"type": "done", "source": "system"})
                 continue
@@ -3009,6 +3019,9 @@ async def update_personal_agent(agent_id: str, body: dict[str, Any]) -> dict[str
         view = await asyncio.to_thread(personal_agents.update_agent, _STATE_DIR, agent_id, body)
     except personal_agents.PersonalAgentError as exc:
         raise _personal_agent_http_error(exc) from exc
+    # Switching an agent off (or changing a custom agent's command) stops its
+    # running sessions now: process tree killed, token revoked.
+    await acp_sessions.close_stale(_STATE_DIR)
     return {"agent": view.as_dict()}
 
 
@@ -3022,6 +3035,7 @@ async def delete_personal_agent(agent_id: str) -> dict[str, Any]:
         raise _personal_agent_http_error(exc) from exc
     if not removed:
         raise HTTPException(status_code=404, detail="No custom agent with that id")
+    await acp_sessions.close_stale(_STATE_DIR)
     return {"ok": True}
 
 
@@ -4488,27 +4502,9 @@ async def update_settings(body: dict[str, Any]) -> dict:
     return {"status": "saved"}
 
 
-# The credential-update allowlist (18 keys; desktop/credentials.mjs mirrors it).
-_CREDENTIAL_PROVIDER_ALLOWLIST = frozenset({
-    "ANTHROPIC_API_KEY",
-    "ELEVENLABS_API_KEY",
-    "FAL_KEY",
-    "GOOGLE_API_KEY",
-    "GOOGLE_VERTEX_CREDENTIALS",
-    "HIGGSFIELD_API_KEY",
-    "IDEOGRAM_API_KEY",
-    "KREA_API_TOKEN",
-    "KREA_USAGE_KEY",
-    "MESHY_API_KEY",
-    "MINIMAX_API_KEY",
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
-    "QUIVER_API_KEY",
-    "REPLICATE_API_TOKEN",
-    "RUNWAY_API_KEY",
-    "XAI_API_KEY",
-    "WORLDLABS_API_KEY",
-})
+# The credential-update allowlist (services/credential_catalog.py; the
+# desktop app's credentials.mjs mirrors it).
+_CREDENTIAL_PROVIDER_ALLOWLIST = CREDENTIAL_PROVIDERS
 
 
 @app.delete("/api/settings/api-keys/{provider}")

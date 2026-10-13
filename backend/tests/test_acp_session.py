@@ -400,3 +400,115 @@ async def test_live_session_cap(env, monkeypatch):
         assert info.value.code == "personal_agent_limit"
     finally:
         await env.manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_agent_crashing_during_cancel_ends_the_session(env):
+    # Stop arrives after the first chunk; the agent doesn't honor it and
+    # crashes inside the grace period. That must close the session, not leave
+    # it "ready" with a dead process and a live token.
+    env.register({"turns": [[{"chunk": "working"}, {"sleep": 1.0}, {"crash": 3}]]})
+    host = await env.open()
+    token, pid = host.token, host.proc.pid
+    started = asyncio.Event()
+
+    async def consume():
+        async for _event in host.prompt("go"):
+            started.set()
+
+    task = asyncio.create_task(consume())
+    await asyncio.wait_for(started.wait(), 5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert host.closed and host.closed_reason == "crashed"
+    assert actors.agent_registry.lookup(token) is None
+    assert not alive(pid)
+    assert env.manager.get(host.id, OWNER) is None
+    assert env.manager.live() == []
+
+
+@pytest.mark.asyncio
+async def test_close_finishes_the_kill_when_its_caller_is_cancelled(env, tmp_path):
+    marker = tmp_path / "grandchild.pid"
+    env.register({"grandchild": str(marker)})
+    host = await env.open()
+    assert await wait_until(marker.exists)
+    grandchild, pid, token = int(marker.read_text()), host.proc.pid, host.token
+    # Cancel the caller at its first await (the session/close RPC), as
+    # uvicorn does to a websocket task on shutdown or reload.
+    caller = asyncio.create_task(host.close("disconnected"))
+    await asyncio.sleep(0)
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+    assert actors.agent_registry.lookup(token) is None
+    # The shutdown hook's close_all still waits for, and sees, the kill.
+    await env.manager.close_all()
+    assert not alive(pid)
+    assert await wait_until(lambda: not alive(grandchild))
+    assert host.closed_reason == "disconnected"
+
+
+@pytest.mark.asyncio
+async def test_inherited_provider_keys_never_reach_the_agent(env, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-real")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+    monkeypatch.setenv("FAL_KEY", "fal-test-not-real")
+    monkeypatch.setenv("NEBULA_APP_TOKEN", "app-test-not-real")
+    env.register({"turns": [[{"echo_env": "ANTHROPIC_API_KEY"}, {"echo_env": "OPENAI_API_KEY"},
+                             {"echo_env": "FAL_KEY"}, {"echo_env": "NEBULA_APP_TOKEN"}, {"echo_env": "HOME"}]]})
+    host = await env.open()
+    try:
+        texts = [e["text"] for e in await collect(host) if e["type"] == "text"]
+    finally:
+        await env.manager.close_all()
+    assert texts[:4] == ["unset", "unset", "unset", "unset"]
+    assert texts[4] != "unset"  # the rest of the environment still passes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["switch_off", "new_args", "delete"])
+async def test_settings_changes_stop_running_sessions(env, change):
+    env.register({})
+    host = await env.open()
+    pid, token = host.proc.pid, host.token
+    # A rename or recolor leaves it running.
+    personal_agents.update_agent(env.state, "fake", {"displayName": "Renamed", "color": "#abcdef"})
+    assert await env.manager.close_stale(env.state) == []
+    assert alive(pid) and env.manager.still_allowed(host, env.state)
+    if change == "switch_off":
+        personal_agents.update_agent(env.state, "fake", {"enabled": False})
+    elif change == "new_args":
+        args = personal_agents.get_agent(env.state, "fake").args
+        personal_agents.update_agent(env.state, "fake", {"args": [*args, "--extra"]})
+    else:
+        assert personal_agents.delete_custom(env.state, "fake")
+    assert not env.manager.still_allowed(host, env.state)
+    assert await env.manager.close_stale(env.state) == [host.id]
+    assert host.closed and host.closed_reason == "agent_changed"
+    assert "Settings" in host.ended_message()
+    assert not alive(pid)
+    assert actors.agent_registry.lookup(token) is None
+    assert env.manager.live() == []
+
+
+@pytest.mark.asyncio
+async def test_switching_off_mid_turn_ends_the_turn(env):
+    env.register({"turns": [[{"chunk": "working"}, {"wait_cancel": True}]]})
+    host = await env.open()
+    pid = host.proc.pid
+    events = []
+
+    async def consume():
+        async for event in host.prompt("go"):
+            events.append(event)
+
+    task = asyncio.create_task(consume())
+    assert await wait_until(lambda: events)
+    personal_agents.update_agent(env.state, "fake", {"enabled": False})
+    await env.manager.close_stale(env.state)
+    await asyncio.wait_for(task, 5)
+    assert events[-1]["type"] == "error" and events[-1]["code"] == "personal_session_ended"
+    assert "Settings" in events[-1]["message"]
+    assert not alive(pid)

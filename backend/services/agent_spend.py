@@ -36,7 +36,8 @@ Whose total a run counts against (``main._spend_session``):
 - ``outside:personal:<agentId>``: one of the person's own agents (Claude,
   Codex, Gemini or a custom ACP agent) started from the chat panel
   (services/acp_session.py). It is an outside agent: its runs count in the
-  shared outside budget, with a line per agent in Settings.
+  shared outside budget, with a line in Settings for each agent that spent
+  in the last 24 hours (AgentSpendSection's PersonalAgentSpend).
   ``PERSONAL_AGENT_BUDGET = "chat"`` switches it to a per-chat ``chat:`` key.
 - ``outside:app:<id>``: an outside app the person gave its own token in
   Settings (services/app_tokens.py). The app's own daily limit applies, and

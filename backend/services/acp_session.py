@@ -12,9 +12,13 @@ One ``AcpHostSession`` per open personal chat. It owns:
 
 The process lives across turns. It ends on close_session, /clear, switching
 agent, the chat socket disconnecting, the idle timeout, a cancel the agent
-ignores, a crash, or backend shutdown; every path goes through ``close``,
-which kills the whole process tree, revokes the token and releases the
-workspace.
+ignores, a crash (including one during a cancel), Settings switching the agent
+off, removing it or changing its command (``AcpSessionManager.close_stale``),
+or backend shutdown; every path goes through ``close``, which revokes the
+token and kills the whole process tree in a task of its own (so cancelling
+the caller can't skip the kill) and releases the workspace. The agent's
+environment drops Nebula's secrets and every provider key in
+services/credential_catalog.py.
 
 Nebula declines ``fs`` and ``terminal`` and answers those methods -32601.
 That is not a sandbox: the agent still has its own shell, network and files.
@@ -41,6 +45,7 @@ from services.acp_client import (
 from services.acp_events import ToolCallState, capped_json, make_redactor, map_session_update
 from services.agent_process import agent_process_group_options, terminate_agent_process_tree
 from services.child_env import scrubbed_env
+from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.krea_agent_mcp import NEBULA_SERVER_NAME, nebula_acp_mcp_server
 
 logger = logging.getLogger(__name__)
@@ -56,11 +61,16 @@ CLOSE_RPC_TIMEOUT_S = 2.0
 IDLE_TIMEOUT_S = 1800.0
 IDLE_CHECK_INTERVAL_S = 60.0
 MAX_LIVE_SESSIONS = 4
+ENDED_MEMORY = 64
 STDERR_TAIL_BYTES = 8192
 NEBULA_MCP_NAME = NEBULA_SERVER_NAME
 MAX_MESSAGE_CHARS = 100_000
-# Environment variables the agent must never inherit, beyond child_env's list.
-_AGENT_ENV_DROP = ("NEBULA_AGENT_TOKEN", "NEBULA_APP_TOKEN")
+# Environment variables the agent must never inherit, beyond child_env's list:
+# Nebula's own spending tokens, and every provider key the backend may have
+# inherited from the shell that started it. Claude Code bills ANTHROPIC_API_KEY
+# ahead of the subscription login, and Codex OPENAI_API_KEY, so a terminal's
+# key would silently replace the plan the person set the agent up with.
+_AGENT_ENV_DROP = frozenset({"NEBULA_AGENT_TOKEN", "NEBULA_APP_TOKEN"} | CREDENTIAL_PROVIDERS)
 
 PERSONAL_AGENT_PRIMER_TAIL = (
     "YOUR SETUP. You are the person's own agent, with your own tools, memory and "
@@ -141,8 +151,11 @@ class AcpHostSession:
         self._stderr_tail = bytearray()
         self._stderr_task: asyncio.Task | None = None
         self._watch_task: asyncio.Task | None = None
-        self._close_lock = asyncio.Lock()
+        self._close_task: asyncio.Task | None = None
         self._closing = False
+        # What this session was allowed to start as (personal_agents.launch_key);
+        # AcpSessionManager.open sets it, close_stale compares it.
+        self.launch_key: tuple | None = None
         self._tools = ToolCallState()
         self._redact = make_redactor()
         self._background: set[asyncio.Task] = set()
@@ -272,55 +285,64 @@ class AcpHostSession:
         return self.state == "closed"
 
     async def close(self, reason: str) -> None:
-        """End the session: kill the tree, revoke the token, release the workspace. Idempotent."""
-        async with self._close_lock:
-            if self.state == "closed":
-                return
+        """End the session: kill the tree, revoke the token, release the workspace. Idempotent.
+
+        The teardown runs in its own task, started once. Cancelling a caller
+        (a websocket task uvicorn cancels on reload, say) stops that caller
+        waiting, not the kill, and every later close() waits on the same
+        task, so close_all() at shutdown still sees the tree gone."""
+        if self._close_task is None:
             self._closing = True
             self.state = "closed"
             self.closed_reason = reason
-            for pending in list(self._pending_perm.values()):
-                self._settle(pending, "cancelled")
-            conn, proc = self.conn, self.proc
-            try:
-                close_cap = (self.agent_caps.get("sessionCapabilities") or {}).get("close") \
-                    if isinstance(self.agent_caps.get("sessionCapabilities"), dict) else None
-                if conn is not None and not conn.closed and close_cap is not None and self.acp_session_id:
-                    try:
-                        await conn.request("session/close", {"sessionId": self.acp_session_id},
-                                           timeout=CLOSE_RPC_TIMEOUT_S)
-                    except Exception:
-                        pass
-                if proc is not None:
-                    try:
-                        if proc.stdin is not None and not proc.stdin.is_closing():
-                            proc.stdin.close()
-                    except Exception:
-                        pass
-                    try:
-                        await terminate_agent_process_tree(proc)
-                    except Exception:
-                        logger.warning("Personal agent tree cleanup reported a problem", exc_info=True)
-                    # The root may already have exited (a crash, or stdin EOF):
-                    # its process group can still hold grandchildren.
-                    if os.name == "posix" and isinstance(proc.pid, int) and proc.pid > 0:
-                        try:
-                            os.killpg(proc.pid, signal.SIGKILL)
-                        except (ProcessLookupError, PermissionError):
-                            pass
-                if conn is not None:
-                    await conn.close()
-                for task in (self._stderr_task, self._watch_task):
-                    if task is not None and task is not asyncio.current_task() and not task.done():
-                        task.cancel()
-            finally:
-                from commons import actors
-                if self.token is not None:
-                    actors.agent_registry.revoke(self.token)
+            self._close_task = asyncio.create_task(self._teardown())
+        await asyncio.shield(self._close_task)
+
+    async def _teardown(self) -> None:
+        """Kill the tree, revoke the token, release the workspace. Runs once, in its own task."""
+        from commons import actors
+        # Revoke first: whatever the kill below meets, the token is dead.
+        if self.token is not None:
+            actors.agent_registry.revoke(self.token)
+        for pending in list(self._pending_perm.values()):
+            self._settle(pending, "cancelled")
+        conn, proc = self.conn, self.proc
+        try:
+            close_cap = (self.agent_caps.get("sessionCapabilities") or {}).get("close") \
+                if isinstance(self.agent_caps.get("sessionCapabilities"), dict) else None
+            if conn is not None and not conn.closed and close_cap is not None and self.acp_session_id:
                 try:
-                    self._workspaces.release(self.workspace_session)
+                    await conn.request("session/close", {"sessionId": self.acp_session_id},
+                                       timeout=CLOSE_RPC_TIMEOUT_S)
                 except Exception:
                     pass
+            if proc is not None:
+                try:
+                    if proc.stdin is not None and not proc.stdin.is_closing():
+                        proc.stdin.close()
+                except Exception:
+                    pass
+                try:
+                    await terminate_agent_process_tree(proc)
+                except Exception:
+                    logger.warning("Personal agent tree cleanup reported a problem", exc_info=True)
+                # The root may already have exited (a crash, or stdin EOF):
+                # its process group can still hold grandchildren.
+                if os.name == "posix" and isinstance(proc.pid, int) and proc.pid > 0:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        pass
+            if conn is not None:
+                await conn.close()
+            for task in (self._stderr_task, self._watch_task):
+                if task is not None and task is not asyncio.current_task() and not task.done():
+                    task.cancel()
+        finally:
+            try:
+                self._workspaces.release(self.workspace_session)
+            except Exception:
+                pass
 
     # -- protocol callbacks ------------------------------------------------------------
 
@@ -455,6 +477,11 @@ class AcpHostSession:
             try:
                 result = prompt_task.result()
             except AcpConnectionClosed:
+                if self.closed:
+                    # Nebula ended it mid-turn (Settings switched it off, say).
+                    self._turn = None
+                    yield {"type": "error", "code": "personal_session_ended", "message": self.ended_message()}
+                    return
                 await self._wait_exit()
                 detail = self._exit_detail()
                 self._turn = None
@@ -480,9 +507,28 @@ class AcpHostSession:
         finally:
             if self._turn is turn:
                 self._turn = None
+            if self.conn is not None and self.conn.closed and not self.closed:
+                # The agent died during the turn on a path that didn't close
+                # the session (a cancel, say). _watch skipped it because a turn
+                # was running, so this is the last chance: never go back to
+                # "ready" with a dead process and a live token.
+                await asyncio.shield(self._close_after_exit())
             if self.state == "prompting":
                 self.state = "ready"
             self.last_activity = time.monotonic()
+
+    async def _close_after_exit(self) -> None:
+        await self._wait_exit()
+        await self.close("crashed")
+
+    def ended_message(self) -> str:
+        reason = self.closed_reason
+        if reason == "agent_changed":
+            return (f"{self.display_name} was switched off, removed or changed in Settings, so Nebula stopped it. "
+                    "If it's still on there, send again to start a new conversation.")
+        if reason == "commons_enabled":
+            return f"Commons is on, so Nebula stopped {self.display_name}."
+        return "This chat's agent has stopped. Send again to start a new conversation."
 
     async def cancel_turn(self, prompt_task: asyncio.Task | None = None) -> None:
         """session/cancel, answer open cards "cancelled", wait for the agent, else kill it."""
@@ -497,6 +543,9 @@ class AcpHostSession:
             await asyncio.wait_for(asyncio.shield(prompt_task), CANCEL_GRACE_S)
         except asyncio.TimeoutError:
             await self.close("cancel_timeout")
+        except AcpConnectionClosed:
+            # The agent exited while stopping: that ends the session, token and all.
+            await self._close_after_exit()
         except Exception:
             pass
 
@@ -507,6 +556,9 @@ class AcpSessionManager:
     def __init__(self) -> None:
         self._sessions: dict[str, AcpHostSession] = {}
         self._reaper: asyncio.Task | None = None
+        # Why recently ended sessions ended, by id: (owner, message), so a send
+        # that arrives after a prune can still say why. Bounded.
+        self._ended: dict[str, tuple[str, str]] = {}
 
     def live(self) -> list[AcpHostSession]:
         return [s for s in self._sessions.values() if not s.closed]
@@ -517,6 +569,7 @@ class AcpSessionManager:
             raise PersonalSessionError(
                 "personal_agent_warning_required",
                 "Read and accept the personal agent notice before starting one.")
+        key = personal_agents.launch_key(state_dir, agent_id)
         try:
             spec = personal_agents.launch_spec(state_dir, agent_id, home)
         except personal_agents.PersonalAgentError as exc:
@@ -529,6 +582,7 @@ class AcpSessionManager:
                                        f"At most {MAX_LIVE_SESSIONS} personal agents can run at once. Close one first.")
         session = AcpHostSession(spec=spec, owner=owner, state_dir=state_dir, output_root=output_root,
                                  backend_url=backend_url, workspace_sessions=workspace_sessions)
+        session.launch_key = key
         self._sessions[session.id] = session
         try:
             await session.start()
@@ -560,6 +614,21 @@ class AcpSessionManager:
             await session.close(reason)
         self._prune()
 
+    def still_allowed(self, session: AcpHostSession, state_dir: Path) -> bool:
+        """Whether Settings still allow what ``session`` was started as."""
+        current = personal_agents.launch_key(state_dir, session.agent_id)
+        return current is not None and current == session.launch_key
+
+    async def close_stale(self, state_dir: Path) -> list[str]:
+        """Stop every live session Settings no longer allow: the agent was
+        switched off or removed, or a custom agent's command or args changed.
+        Called after every registry write and before reusing a session."""
+        stale = [s for s in self.live() if not self.still_allowed(s, state_dir)]
+        if stale:
+            await asyncio.gather(*(s.close("agent_changed") for s in stale), return_exceptions=True)
+        self._prune()
+        return [s.id for s in stale]
+
     async def close_all(self, reason: str = "shutdown") -> None:
         sessions = list(self._sessions.values())
         if sessions:
@@ -571,7 +640,15 @@ class AcpSessionManager:
 
     def _prune(self) -> None:
         for session_id in [k for k, s in self._sessions.items() if s.closed]:
-            self._sessions.pop(session_id, None)
+            session = self._sessions.pop(session_id)
+            self._ended[session_id] = (session.owner, session.ended_message())
+        while len(self._ended) > ENDED_MEMORY:
+            self._ended.pop(next(iter(self._ended)))
+
+    def ended_message(self, session_id: Any, owner: str) -> str | None:
+        """Why ``session_id`` ended, for its own owner only."""
+        entry = self._ended.get(session_id) if isinstance(session_id, str) else None
+        return entry[1] if entry is not None and entry[0] == owner else None
 
     async def reap_idle(self, now: float | None = None) -> list[str]:
         """Close sessions with no turn and no activity for IDLE_TIMEOUT_S."""

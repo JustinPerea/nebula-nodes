@@ -386,6 +386,25 @@ def launch_spec(state_dir: Path, agent_id: str, home: Path | None = None) -> Lau
                       color=view.color, startup_timeout=timeout, agent_id=agent_id)
 
 
+def launch_key(state_dir: Path, agent_id: str) -> tuple | None:
+    """What a running session of ``agent_id`` was allowed to start as, read from
+    the registry alone (no binary probes, so it is cheap on every send).
+
+    None when the agent is switched off or gone. A live session whose key no
+    longer matches (switched off, removed, or a custom agent's command or args
+    changed) must stop: acp_session.AcpSessionManager.close_stale."""
+    if not isinstance(agent_id, str) or not ID_RE.fullmatch(agent_id):
+        return None
+    data = _load(state_dir)
+    row = _row(data, agent_id)
+    if row is None or not row.get("enabled"):
+        return None
+    if agent_id in PRESETS:
+        preset = PRESETS[agent_id]
+        return ("preset", agent_id, preset.command, tuple(preset.args))
+    return ("custom", agent_id, row.get("command"), tuple(row.get("args") or ()))
+
+
 def known_names(state_dir: Path) -> list[tuple[str, str]]:
     """(id, display name) for every preset and custom agent, without probing binaries."""
     data = _load(state_dir)
