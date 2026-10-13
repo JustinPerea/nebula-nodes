@@ -7,10 +7,14 @@
   "scripts": {
     "start": "electron .",
     "start:dev": "VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "package": "node scripts/package.mjs",
+    "install-app": "node scripts/install-app.mjs",
+    "make-icon": "sh scripts/make-icon.sh",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "test:smoke": "NEBULA_DESKTOP_SMOKE=1 electron ."
   },
   "devDependencies": {
+    "@electron/packager": "20.3.0",
     "electron": "44.3.0",
     "ws": "^8.18.0"
   }

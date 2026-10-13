@@ -84,7 +84,14 @@ describe('main.mjs wiring', () => {
     for (const name of DEV_ONLY_ENV_VARS) {
       assert.equal(source.includes(`process.env.${name}`), false, `main.mjs reads process.env.${name} directly`);
     }
-    assert.match(source, /resolveLaunchOverrides\(\{ env: process\.env, isPackaged: app\.isPackaged \}\)/);
+    assert.match(source, /resolveLaunchOverrides\(\{\s*env: process\.env,\s*isPackaged: treatAsPackaged\(app\.isPackaged, packaged\),\s*\}\)/);
+  });
+
+  test('the packaged bootstrap moves the profile only for a validation build', () => {
+    const boot = readFileSync(new URL('../packaging/bootstrap.mjs', import.meta.url), 'utf8');
+    const setPath = boot.indexOf("app.setPath('userData'");
+    const gate = boot.lastIndexOf('read.config.validation', setPath);
+    assert.ok(setPath > 0 && gate > 0 && setPath - gate < 120, 'setPath must sit behind the validation check');
   });
 
   test('the mock keychain switch is gated on overrides.mockKeychain', () => {

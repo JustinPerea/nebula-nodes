@@ -1,15 +1,130 @@
 # Nebula Desktop
 
-Electron shell with a managed FastAPI sidecar. A single command starts a
-dynamic-port backend and then the packaged renderer — no manual `uvicorn`
-or Vite dev server is required.
+Electron shell with a managed FastAPI sidecar. One click on **Nebula.app**
+(or `npm run start`) starts a dynamic-port backend and then the packaged
+renderer — no manual `uvicorn` or Vite dev server is required. Browser dev
+(`backend/devserver.py` + Vite, see the root README) stays the way to develop.
 
-## Quick start (packaged renderer)
+## Nebula.app (everyday use)
+
+`npm run package` builds a real macOS app, **Nebula.app**, with the Nebula
+icon. Double-click it (or click it in the Dock) and it starts the backend and
+opens the canvas; quit it and the backend stops.
+
+```bash
+cd desktop
+npm install          # once
+npm run package      # builds desktop/out/Nebula-darwin-arm64/Nebula.app
+npm run install-app  # copies it to ~/Applications (run this yourself, in a terminal)
+```
+
+Then open **Nebula** from `~/Applications`, Spotlight or Launchpad. To keep it
+in the Dock, right-click its Dock icon while it runs and choose
+Options > Keep in Dock. `npm run package` rebuilds `frontend/dist-desktop`
+first when it is missing or older than the frontend sources
+(`--rebuild-renderer` forces it).
+
+**It runs your checkout, not a copy.** The bundle holds Electron, the icon and
+a small bootstrap (`packaging/bootstrap.mjs`) plus `nebula-app.json`, which
+records this checkout's absolute path. At every launch the bootstrap checks
+that the checkout still has `desktop/main.mjs`, `backend/main.py` and an
+executable `backend/.venv/bin/python`, then runs the checkout's own
+`desktop/main.mjs`. So after `git pull`:
+
+| What changed | What to do |
+|---|---|
+| Backend (`backend/`) or Electron main/preload (`desktop/*.mjs`, `preload.cjs`) | Nothing. Quit and reopen Nebula. |
+| Frontend (`frontend/`) | `cd frontend && npm run build:desktop` (or `cd desktop && npm run package`), then reopen. |
+| Electron version in `desktop/package.json` | `cd desktop && npm install && npm run package && npm run install-app`. The app logs a warning when the checkout pins a different Electron than the bundle runs. |
+| You moved the checkout | Re-run `npm run package && npm run install-app` from the new place. Until then the app shows a dialog naming the missing path and quits. |
+
+If the venv is missing, the app shows a dialog with the command that creates
+it and quits, before it creates any app data or starts anything. Python is not
+bundled.
+
+**Signing.** Nebula.app is not signed with a Developer ID and not notarized;
+it is for local use on the Mac that built it. `npm run package` ad-hoc signs it
+(`codesign --sign -`) so the bundle is internally consistent after packager
+rewrites `Info.plist` and the icon. Apple's
+[Gatekeeper documentation](https://support.apple.com/guide/security/gatekeeper-and-runtime-protection-sec5599b66df/web)
+describes the identified-developer, notarization and first-open approval checks
+as applying to software that is downloaded and opened. A bundle built locally
+has no `com.apple.quarantine` attribute (checked on the build:
+`xattr -l` shows only `com.apple.provenance`), and it opened with `open`
+without a prompt in validation, although `spctl --assess` reports it as
+`rejected`. If you copy it to another Mac through a download, AirDrop or a
+browser, it arrives quarantined and macOS blocks the first open. Apple's
+[steps](https://support.apple.com/en-us/102445) then apply: try to open it,
+then System Settings > Privacy & Security > **Open Anyway**. Building on that
+Mac avoids this.
+
+**Keychain.** The bundle keeps the Electron app name `nebula-desktop` (no
+`productName`), so it uses the same profile directory, single-instance lock and
+"nebula-desktop Safe Storage" keychain item as `npm run start`. Only one of the
+two can run at a time. Because the ad-hoc signature differs from the
+`npm run start` Electron binary's, macOS may ask once whether Nebula may use
+that keychain item; choose Always Allow. (Electron's
+[code-signing guide](https://www.electronjs.org/docs/latest/tutorial/code-signing)
+notes that ad-hoc signed apps can behave inconsistently with `safeStorage`.)
+
+**Your data.** Nebula.app and `npm run start` both keep data in
+`~/Library/Application Support/Nebula Nodes/`. Browser dev
+(`backend/devserver.py` + Vite) keeps using `~/.nebula`, `<repo>/output` and the
+repo's `settings.json`. The first desktop launch *copies* from those into App
+Support (it never deletes or moves anything; see
+[App Support migration](#app-support-migration)), and from then on the two
+sets of data are separate: projects, outputs and settings made in the app don't
+show up in browser dev, and the other way round.
+
+If App Support already has a `migration-state.json` with `"status": "complete"`
+(this is the case on a Mac where the desktop app ran before), the migration is
+skipped entirely. The app opens with what App Support already holds and copies
+nothing newer from browser dev, and API keys added to the repo's
+`settings.json` since then are not imported: add them in the app's Settings
+(they go to the Keychain). To import again instead, quit Nebula and remove only
+`~/Library/Application Support/Nebula Nodes/migration-state.json`. The next
+launch re-runs the copy: it encrypts repo keys for providers not already in
+`credentials.json`, keeps the existing App Support `settings.json`, and copies
+only files that don't exist at the destination (it never overwrites).
+
+**Quitting.** Cmd-Q, Nebula > Quit, or a SIGTERM/SIGINT/SIGHUP to the app stop
+the backend (SIGTERM, then SIGKILL after 5 s) before the app exits, and free its
+port. Closing the window keeps the app and backend running (macOS
+convention); click the Dock icon to reopen it. If the app crashes or is
+force-quit, the backend notices on its own: Electron hands it one end of a
+pipe as fd 3 (`NEBULA_PARENT_WATCH_FD`) and never writes to it, the kernel
+closes Electron's end when Electron dies, and
+`backend/services/parent_watch.py` then shuts uvicorn down (hard exit after
+5 s). In validation the backend was gone 0.2 s after a `kill -9` of the app.
+
+**Validation builds.** A normal Nebula.app ignores every dev/test override
+(see [Runtime overrides](#runtime-overrides)), so it can't be launched against
+a throwaway profile. `npm run package -- --validation` builds a separate,
+test-only bundle in `desktop/out/validation/` that honours them, for checking
+the real bundle without touching your data:
+
+```bash
+open -n --env NEBULA_DESKTOP_USER_DATA_DIR=/tmp/nebula-check \
+  --env NEBULA_DESKTOP_APP_ID=nebula-check --env NEBULA_DESKTOP_TEST=1 \
+  desktop/out/validation/Nebula-darwin-arm64/Nebula.app
+```
+
+`install-app` refuses validation builds.
+
+**Icon.** `build/icon.icns` (bundle) and `build/icon.png` (Dock icon for
+`npm run start`) are generated from `frontend/public/favicon.svg` by
+`npm run make-icon` (`scripts/make-icon.sh`, macOS `sips` + `iconutil` only)
+and committed, so packaging doesn't need to regenerate them.
+
+## Quick start (development, `npm run start`)
 
 ```bash
 cd frontend && npm run build:desktop
 cd ../desktop && npm run start
 ```
+
+`npm run start` runs the stock Electron binary; it sets the Dock icon to
+`build/icon.png` so it looks like Nebula.app.
 
 `build:desktop` writes the packaged renderer to `frontend/dist-desktop/`, built
 with relative asset URLs so it resolves over `file://`. It has its own folder
@@ -182,7 +297,13 @@ cd desktop && npm run test:smoke
 
 The smoke run starts the sidecar, loads the packaged renderer, and verifies
 that the injected `apiBaseUrl`/`wsBaseUrl` are on a dynamic non-8000 port,
-`/api/health` returns the Nebula identity, and `/ws` handshakes. It exits 0
+`/api/health` returns the Nebula identity, and `/ws` handshakes. In an
+isolated profile (`NEBULA_DESKTOP_USER_DATA_DIR`) it also saves a setting the
+way the Settings panel does (person token over IPC, then `PUT /api/settings`
+with `X-Nebula-Person`) and checks that the same save without the token is
+refused; with a debug port open there is no token, so that check reports
+`skipped`. It never writes settings in a real profile. `NEBULA_DESKTOP_SMOKE=1`
+works the same against a validation Nebula.app binary. It exits 0
 on success and emits `NEBULA_DESKTOP_SMOKE {"passed":true,...}` to stdout.
 
 ## Runtime overrides
@@ -204,7 +325,10 @@ A packaged build (`app.isPackaged`) ignores `NEBULA_DESKTOP_DEBUG_PORT`,
 ignored. Its environment can be set from outside (`launchctl setenv`, a wrapper
 script), and none of these should be able to move its profile, weaken its
 keychain, open a debug port or swap its renderer. `launch-overrides.mjs` holds
-that rule.
+that rule. The one exception is a validation bundle
+(`npm run package -- --validation`, `packaged-launch.mjs`), which is built
+for testing, lives in `desktop/out/validation/` and is refused by
+`install-app`.
 
 ## Failure surfaces and diagnostics
 
@@ -236,7 +360,10 @@ No child process or listening port remains after any failure path.
 | Health timeout after 60 s | Cold startup exceeds budget or backend import hangs | First cold import can take ~40 s. If it exceeds 60 s, check for `PYTHONPATH` contamination or missing dependencies. |
 | "The desktop renderer is not built" | `frontend/dist-desktop/` is missing | Run `cd frontend && npm run build:desktop`. |
 | Blank window | Renderer build is stale | Run `cd frontend && npm run build:desktop` to rebuild the packaged renderer. |
-| Port already in use | A previous sidecar did not shut down cleanly | Check `lsof -nP -iTCP -sTCP:LISTEN` for orphaned uvicorn processes and kill them by PID. |
+| Port already in use | A previous sidecar did not shut down cleanly | Check `lsof -nP -iTCP -sTCP:LISTEN` for orphaned uvicorn processes and kill them by PID. Sidecars started by this version exit on their own when Electron dies (parent watchdog). |
+| Nebula.app: "Nebula can't find its code." | The checkout named in the bundle's `nebula-app.json` moved or was deleted | From the checkout: `cd desktop && npm run package && npm run install-app`. |
+| Nebula.app: "Nebula's backend environment is missing." | `backend/.venv` is missing or broken | `cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`. |
+| Nebula.app asks to use "nebula-desktop Safe Storage" | The ad-hoc signed bundle is a different binary from the one that created the keychain item | Choose Always Allow. Re-packaging can ask again. |
 | Migration failed | Disk full, permission error, or safeStorage unavailable | Check the error message in the migration overlay. Click Retry after resolving the cause. If safeStorage is unavailable, ensure the Keychain is accessible (System Settings > Privacy & Security). |
 | Plaintext key warning after migration | User manually edited App Support `settings.json` and added API keys | Remove the keys from `settings.json` and re-enter them through the Settings panel so they are encrypted via Keychain. |
 | Keys not persisting across restarts | safeStorage encryption key changed (e.g., after OS reinstall or keychain reset) | Re-enter keys through the Settings panel. The old encrypted blobs cannot be decrypted. |
@@ -245,7 +372,7 @@ No child process or listening port remains after any failure path.
 ## Tests
 
 ```bash
-cd desktop && npm test            # 310 Node lifecycle + credential + migration + integration tests
+cd desktop && npm test            # 324 Node lifecycle, credential, migration, packaging and integration tests
 cd desktop && npm run test:smoke  # end-to-end dynamic endpoint + bridge surface smoke
 ```
 
@@ -269,8 +396,10 @@ escalated child cleanup, single-instance lock and isolation, quit during cold
 startup, App Support path computation and env-var injection, credential
 encryption round-trip and persistence, provider allowlist validation, sender
 validation, safeStorage unavailability handling, one-time migration (copy,
-encrypt, idempotent, non-destructive), migration status overlay, and plaintext
-key detection.
+encrypt, idempotent, non-destructive), migration status overlay, plaintext
+key detection, how Nebula.app finds and checks its checkout, when a packaged
+build honours overrides, and the parent lifeline (a real backend exits within
+seconds of its launcher being SIGKILLed).
 
 ## Validation
 
@@ -279,7 +408,7 @@ required live checks:
 
 ```bash
 # Programmatic gate — all must exit zero
-cd desktop && npm test                          # 310 Node lifecycle + credential + migration + integration tests
+cd desktop && npm test                          # 324 Node lifecycle, credential, migration, packaging and integration tests
 cd desktop && npm audit                         # 0 vulnerabilities
 cd frontend && npm test                         # 777 Vitest tests
 cd frontend && npm run lint                     # ESLint + style guards
@@ -306,5 +435,8 @@ pgrep -f "nebula_nodes/desktop.*[Ee]lectron" || echo "No Electron orphans"
 
 ## Deferred
 
-Bundled Python, signing/notarization, auto-update, per-launch bearer auth,
-and paid-provider validation are not in scope for this phase.
+Bundled Python, Developer ID signing and notarization, a DMG, auto-update,
+and paid-provider validation are not in scope yet. Nebula.app is a local,
+ad-hoc signed build that runs from the checkout (see
+[Nebula.app](#nebulaapp-everyday-use)); the distributable target is
+described in [docs/macos-desktop/MACOS-DESKTOP-SPEC.md](../docs/macos-desktop/MACOS-DESKTOP-SPEC.md).

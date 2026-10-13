@@ -11,6 +11,7 @@ import { registerFolderPickerHandler } from './folder-picker.mjs';
 import { getConnectorEncryptionKey, registerKreaAuthLinkHandler } from './connector-vault.mjs';
 import { installRendererNavigationGuard } from './navigation.mjs';
 import { resolveLaunchOverrides } from './launch-overrides.mjs';
+import { packagedLaunch, treatAsPackaged } from './packaged-launch.mjs';
 import {
   CREDENTIALS_FILE_NAME,
   MIGRATION_STATE_FILE_NAME,
@@ -35,7 +36,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * all of them, so its profile, keychain and renderer can't be redirected
  * from the environment.
  */
-const overrides = resolveLaunchOverrides({ env: process.env, isPackaged: app.isPackaged });
+const packaged = packagedLaunch();
+// The default name (package.json `name`, before any test app id) names the
+// profile dir, the single-instance lock and the safeStorage keychain item.
+console.log(`Nebula desktop: app name=${app.getName()} packaged=${app.isPackaged}${packaged?.validation ? ' (validation build)' : ''}`);
+const overrides = resolveLaunchOverrides({
+  env: process.env,
+  isPackaged: treatAsPackaged(app.isPackaged, packaged),
+});
+if (packaged?.validation) {
+  console.warn('Nebula.app validation build: dev/test overrides are honoured. Not for everyday use.');
+}
 if (overrides.ignored.length > 0) {
   console.warn(`Ignoring dev/test-only settings in a packaged build: ${overrides.ignored.join(', ')}`);
 }
@@ -557,7 +568,35 @@ function runSmokeTest(handle) {
             };
             check();
           }),
-        ]).then(([health, websocket]) => {
+          // A person-gated Settings save, the way the Settings panel does it:
+          // token over IPC, then PUT /api/settings with X-Nebula-Person. Only
+          // in an isolated profile, so a smoke run never writes real settings.
+          (async () => {
+            if (!${JSON.stringify(dataPaths.isolated)}) return { skipped: 'not an isolated profile' };
+            const api = window.nebulaDesktop.apiBaseUrl;
+            const got = window.nebulaDesktop.person ? await window.nebulaDesktop.person.token() : null;
+            if (!got || !got.ok) return { skipped: 'no person token (' + (got && got.error) + ')' };
+            const before = await (await fetch(api + '/api/settings', { cache: 'no-store' })).json();
+            const wanted = !before.zoomTelemetryEnabled;
+            const put = await fetch(api + '/api/settings', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', 'X-Nebula-Person': got.token },
+              body: JSON.stringify({ zoomTelemetryEnabled: wanted }),
+            });
+            const unverified = await fetch(api + '/api/settings', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ zoomTelemetryEnabled: !wanted }),
+            });
+            const after = await (await fetch(api + '/api/settings', { cache: 'no-store' })).json();
+            return {
+              ok: put.status === 200 && unverified.status === 403 && after.zoomTelemetryEnabled === wanted,
+              putStatus: put.status,
+              unverifiedStatus: unverified.status,
+              saved: after.zoomTelemetryEnabled === wanted,
+            };
+          })().catch((err) => ({ ok: false, error: String(err) })),
+        ]).then(([health, websocket, _mounted, settingsSave]) => {
           const c = window.nebulaDesktop && window.nebulaDesktop.credentials;
           const m = window.nebulaDesktop && window.nebulaDesktop.migration;
           return {
@@ -571,6 +610,7 @@ function runSmokeTest(handle) {
             },
             health,
             websocket,
+            settingsSave,
             bridge: {
               hasCredentials: Boolean(c),
               hasMigration: Boolean(m),
@@ -609,6 +649,8 @@ function runSmokeTest(handle) {
         && result.health?.body?.status === 'ok'
         && result.health?.body?.app === 'nebula'
         && result.websocket?.connected === true
+        // Skipped (not isolated, or no person token with a debug port open) is fine; a failed save is not.
+        && (result.settingsSave?.skipped !== undefined || result.settingsSave?.ok === true)
         // Credential bridge surface (VAL-KEY-011, VAL-KEY-012, VAL-KEY-013)
         && result.bridge?.hasCredentials === true
         && result.bridge?.setFn === 'function'
@@ -637,6 +679,7 @@ function runSmokeTest(handle) {
         platform: result.preload?.platform,
         health: result.health,
         websocket: result.websocket,
+        settingsSave: result.settingsSave,
         bridge: result.bridge,
       })}`);
 
@@ -691,6 +734,13 @@ if (!acquiredLock) {
   });
 
   app.whenReady().then(async () => {
+    // `npm run start` runs the stock Electron binary, whose Dock icon is
+    // Electron's. Nebula.app gets its icon from the bundle instead.
+    if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
+      const dockIcon = join(__dirname, 'build', 'icon.png');
+      if (existsSync(dockIcon)) app.dock.setIcon(dockIcon);
+    }
+
     // Show a nonblank startup surface before sidecar health is confirmed.
     loadingWindow = createLoadingWindow();
     sidecarStarting = true;
@@ -914,15 +964,32 @@ if (!acquiredLock) {
     if (process.platform !== 'darwin') app.quit();
   });
 
-  app.on('before-quit', async (event) => {
-    // Re-entrant call after cleanup — let the quit proceed.
-    if (isCleaningUp) return;
+  // Quitting always stops the sidecar first (SIGTERM, then SIGKILL after a
+  // grace period; sidecar.mjs). Cmd-Q, the app menu and a SIGTERM/SIGINT/
+  // SIGHUP to Electron all come through here. If Electron dies without
+  // running this (crash, SIGKILL), the backend's parent watchdog
+  // (backend/services/parent_watch.py) sees its pipe close and exits.
+  let quitAllowed = false;
+  let stopInFlight = false;
+  app.on('before-quit', (event) => {
+    if (quitAllowed) return;
+
+    // A second Cmd-Q while the sidecar is stopping must not let Electron
+    // exit before the stop finishes (cleanupSidecar clears sidecarHandle
+    // before it awaits the stop).
+    if (stopInFlight) {
+      event.preventDefault();
+      return;
+    }
 
     if (sidecarHandle) {
       event.preventDefault();
+      stopInFlight = true;
       isCleaningUp = true;
-      await cleanupSidecar();
-      app.quit();
+      cleanupSidecar().finally(() => {
+        quitAllowed = true;
+        app.quit();
+      });
     } else if (sidecarStarting) {
       // Quit during cold startup — prevent immediate exit so the startup
       // promise can clean up the child and quit when it resolves/rejects.
@@ -931,4 +998,11 @@ if (!acquiredLock) {
       quitRequestedDuringStartup = true;
     }
   });
+
+  for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+    process.on(signal, () => {
+      console.log(`Received ${signal}; quitting`);
+      app.quit();
+    });
+  }
 }
