@@ -10,6 +10,12 @@
  * keychain item once "Always Allow" was granted). The file:// privilege fuse
  * has to stay on; see GrantFileProtocolExtraPrivileges below.
  *
+ * Fuses harden the binary, not the code it loads: Nebula.app imports
+ * desktop/main.mjs and friends from the writable checkout at every launch,
+ * so whoever can change the checkout can still run code with the keychain
+ * item (desktop/README.md, "What the keychain prompt does and doesn't
+ * protect").
+ *
  * Every fuse is listed (strictlyRequireAllFuses), so an Electron upgrade that
  * adds one fails the package step until someone decides its value.
  *

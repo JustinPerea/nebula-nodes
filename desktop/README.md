@@ -61,8 +61,10 @@ Mac avoids this.
 **Hardening.** Before the codesign, `npm run package` flips Electron's fuses
 (`packaging/fuses.mjs`, with `@electron/fuses`) and reads them back:
 `ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS` and the `--inspect` arguments are
-compiled out, so nobody can run the app binary as plain Node or attach the
-Node inspector to it, and cookie encryption is on. Check with
+compiled out, so the app binary can't be run as plain Node or have the Node
+inspector attached, and cookie encryption is on. That hardens the binary, not
+the code it runs: see [What the keychain prompt does and doesn't
+protect](#what-the-keychain-prompt-does-and-doesnt-protect). Check with
 `npx electron-fuses read --app out/Nebula-darwin-arm64/Nebula.app`. The
 file:// privilege fuse stays on: without it Chromium gives the renderer the
 origin `null` and blocks its own scripts. Instead, `renderer-files.mjs`
@@ -78,10 +80,26 @@ a dialog and quits, before it opens a port or starts the backend.
 `productName`), so it uses the same profile directory, single-instance lock and
 "nebula-desktop Safe Storage" keychain item as `npm run start`. Only one of the
 two can run at a time. Because the ad-hoc signature differs from the
-`npm run start` Electron binary's, macOS may ask once whether Nebula may use
-that keychain item; choose Always Allow. (Electron's
+`npm run start` Electron binary's, macOS may ask whether Nebula may use that
+keychain item. Apple's
+[Keychain Access guide](https://support.apple.com/guide/keychain-access/if-youre-asked-for-access-to-your-keychain-kyca1243/mac)
+describes the three answers:
+
+- **Always Allow**: this build of Nebula reads the item from now on without
+  asking. Re-packaging gives the bundle a new ad-hoc signature, so the
+  question may come back after `npm run package`.
+- **Allow Once**: this time only; it asks again next time.
+- **Deny**: Nebula can't read the key, so it can't decrypt saved API keys or
+  encrypt new ones. Nothing falls back to plaintext. (Not tried live: that
+  would touch the real login keychain.)
+
+Always Allow is the convenient choice and costs little, for the reason in
+[What the keychain prompt does and doesn't protect](#what-the-keychain-prompt-does-and-doesnt-protect):
+the prompt keeps *other apps* away from the item, but it can't
+vouch for the code Nebula itself runs. (Electron's
 [code-signing guide](https://www.electronjs.org/docs/latest/tutorial/code-signing)
-notes that ad-hoc signed apps can behave inconsistently with `safeStorage`.)
+also notes that ad-hoc signed apps can behave inconsistently with
+`safeStorage`.)
 
 **Your data.** Nebula.app and `npm run start` both keep data in
 `~/Library/Application Support/Nebula Nodes/`. Browser dev
@@ -96,17 +114,25 @@ If App Support already has a `migration-state.json` with `"status": "complete"`
 (this is the case on a Mac where the desktop app ran before), the migration is
 skipped entirely. The app opens with what App Support already holds and copies
 nothing newer from browser dev, and API keys added to the repo's
-`settings.json` since then are not imported: add them in the app's Settings
-(they go to the Keychain). To import again instead, quit Nebula and remove only
-`~/Library/Application Support/Nebula Nodes/migration-state.json`. The next
-launch re-runs the copy: it encrypts repo keys for providers not already in
-`credentials.json`, keeps the existing App Support `settings.json`, and copies
-only files that don't exist at the destination (it never overwrites).
+`settings.json` since then are not imported: the app asks for them again, so
+add them in the app's Settings (they go to the Keychain). Two ways to import
+instead, both with Nebula quit and neither deleting anything:
+
+- **Start fresh from browser dev:** move the whole
+  `~/Library/Application Support/Nebula Nodes` folder aside (rename it, say to
+  `Nebula Nodes.old`). The next launch finds no folder and runs the full copy.
+- **Top up the existing data:** move only `migration-state.json` out of that
+  folder. The next launch re-runs the copy into what's there: it encrypts repo
+  keys for providers not already in `credentials.json`, keeps the existing App
+  Support `settings.json`, and copies only files that don't exist at the
+  destination (it never overwrites).
 
 **Quitting.** Cmd-Q, Nebula > Quit, or a SIGTERM/SIGINT/SIGHUP to the app stop
 the backend (SIGTERM, then SIGKILL after 5 s) before the app exits, and free its
 port. Closing the window keeps the app and backend running (macOS
-convention); click the Dock icon to reopen it. If the app crashes or is
+convention); click the Dock icon, or open Nebula again from Finder,
+Spotlight or `npm run start`, to bring the window back (`window-recovery.mjs`;
+a second launch never starts a second backend). If the app crashes or is
 force-quit, the backend notices on its own: Electron hands it one end of a
 pipe as fd 3 (`NEBULA_PARENT_WATCH_FD`) and never writes to it, the kernel
 closes Electron's end when Electron dies, and
@@ -116,6 +142,18 @@ The backend removes `NEBULA_PARENT_WATCH_FD` from its environment as soon as
 it reads it, and `services/child_env.py` strips it as well, so an agent's
 shell, ffmpeg or a backend test run started from inside the app never
 inherits it (a child that did would watch an unrelated fd and stop itself).
+
+Agent chats (Claude Code, Codex) run in their own process group, so stopping
+the backend doesn't signal them directly. On a normal stop (Cmd-Q, SIGTERM to
+the app or to the backend) the backend's chat socket closes, the turn is
+cancelled and the agent's whole process tree is killed before it exits. If the
+backend is killed outright (the SIGKILL after 5 s, the parent watch's hard
+exit, a crash), a small guardian process it started
+(`backend/services/agent_guardian.py`) sees its pipe close and kills every
+agent tree that's still running. Checked live in the validation app with a
+fake agent CLI that starts a descendant in its own session: quitting the app,
+SIGTERM or SIGKILL to the backend, and `kill -9` of the app all left no agent
+process behind.
 
 **Validation builds.** A normal Nebula.app ignores every dev/test override
 (see [Runtime overrides](#runtime-overrides)), so it can't be launched against
@@ -247,6 +285,37 @@ in a module-level `_INJECTED_KEYS` dict (memory only, never persisted). The
 the user changes a key via Settings — no sidecar restart needed. It is
 person-only, like `PUT /api/settings`: it needs this launch's person token.
 
+### What the keychain prompt does and doesn't protect
+
+Nebula.app is trusted with the "nebula-desktop Safe Storage" item, but at
+every launch it imports `desktop/main.mjs`, `preload.cjs` and the other
+modules from your checkout, which any program running as you can edit. So
+anything that can write the repo (a script, a dependency's install hook, an
+agent with write access to the checkout) gets its code run inside the
+keychain-trusted app on the next launch, where it can decrypt
+`credentials.json` the same way Nebula does. The fuses above don't change
+that: they stop the *binary* being used as Node or debugged, not the app
+loading changed JavaScript from the checkout.
+
+How that compares:
+
+- **Browser dev** keeps keys in plaintext in the repo's `settings.json`, which
+  any process running as you can read at any time, no launch needed. The app
+  is no worse than that, and better against a program that only *reads*
+  files: `credentials.json` is useless without the keychain item.
+- **But the keychain prompt isn't protection against local code.** Once
+  Nebula is allowed, whoever can change the checkout can read the keys
+  through Nebula. Treat write access to this repo as access to your API keys.
+
+This is the price of "`git pull` updates the app" (see
+[It runs your checkout](#nebulaapp-everyday-use)), and it's kept on purpose.
+The alternative, for later, is to bundle the main-process code (`main.mjs`,
+`preload.cjs` and the modules they import) into the app and turn on Electron's
+asar integrity fuses, so a change to that code needs `npm run package` (and a
+new keychain approval) before it runs with the keys. A lighter variant would
+check a hash of the checkout's `desktop/*.mjs` at launch against the one
+recorded at packaging time. Both make every main-process change a rebuild.
+
 ### Person token
 
 Electron main makes one person token per launch (`person-token.mjs`). It goes
@@ -296,6 +365,13 @@ native folder dialog over the main window and returns `{ ok, path }`, with
 main frame, and uses `defaultPath` only when it is an absolute path without
 control characters. Picking a folder saves it through `PUT /api/settings`;
 the renderer never touches the filesystem itself.
+
+Checked in the packaged validation app (renderer served through
+`renderer-files.mjs`, secrets over stdin), with only the native dialog
+stubbed: Storage > Choose… opened the picker over the main window
+(`openDirectory`, `createDirectory`), the save was a `PUT /api/settings` 200
+carrying the person token, the picked path landed in `outputPath`, and the
+same PUT without the token got 403.
 
 ### safeStorage unavailability
 
@@ -401,7 +477,7 @@ No child process or listening port remains after any failure path.
 | Port already in use | A previous sidecar did not shut down cleanly | Check `lsof -nP -iTCP -sTCP:LISTEN` for orphaned uvicorn processes and kill them by PID. Sidecars started by this version exit on their own when Electron dies (parent watchdog). |
 | Nebula.app: "Nebula can't find its code." | The checkout named in the bundle's `nebula-app.json` moved or was deleted | From the checkout: `cd desktop && npm run package && npm run install-app`. |
 | Nebula.app: "Nebula's backend environment is missing." | `backend/.venv` is missing or broken | `cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`. |
-| Nebula.app asks to use "nebula-desktop Safe Storage" | The ad-hoc signed bundle is a different binary from the one that created the keychain item | Choose Always Allow. Re-packaging can ask again. |
+| Nebula.app asks to use "nebula-desktop Safe Storage" | The ad-hoc signed bundle is a different binary from the one that created the keychain item | Always Allow stops the question for this build; Allow Once asks every launch; Deny leaves keys unusable this launch. Re-packaging may ask again. See [what the prompt protects](#what-the-keychain-prompt-does-and-doesnt-protect). |
 | Migration failed | Disk full, permission error, or safeStorage unavailable | Check the error message in the migration overlay. Click Retry after resolving the cause. If safeStorage is unavailable, ensure the Keychain is accessible (System Settings > Privacy & Security). |
 | Plaintext key warning after migration | User manually edited App Support `settings.json` and added API keys | Remove the keys from `settings.json` and re-enter them through the Settings panel so they are encrypted via Keychain. |
 | Keys not persisting across restarts | safeStorage encryption key changed (e.g., after OS reinstall or keychain reset) | Re-enter keys through the Settings panel. The old encrypted blobs cannot be decrypted. |
@@ -410,7 +486,7 @@ No child process or listening port remains after any failure path.
 ## Tests
 
 ```bash
-cd desktop && npm test            # 336 Node lifecycle, credential, migration, packaging and integration tests
+cd desktop && npm test            # 348 Node lifecycle, credential, migration, packaging and integration tests
 cd desktop && npm run test:smoke  # end-to-end dynamic endpoint + bridge surface smoke
 ```
 
@@ -446,7 +522,7 @@ required live checks:
 
 ```bash
 # Programmatic gate — all must exit zero
-cd desktop && npm test                          # 336 Node lifecycle, credential, migration, packaging and integration tests
+cd desktop && npm test                          # 348 Node lifecycle, credential, migration, packaging and integration tests
 cd desktop && npm audit                         # 0 vulnerabilities
 cd frontend && npm test                         # 777 Vitest tests
 cd frontend && npm run lint                     # ESLint + style guards
