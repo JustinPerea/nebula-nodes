@@ -79,7 +79,7 @@ CLAUDE_ALLOW_RULES = ("Bash(nebula)", "Bash(nebula *)", "Read", "Glob", "Grep", 
 CLAUDE_DENY_RULES = ("Bash(dm approve*)", "Bash(ps)", "Bash(ps *)")
 
 # Codex features (codex-cli 0.160.0 names) Nebula's Codex agent may run with.
-# Reviewed: local tool plumbing, image handling and request transport. Anything
+# Reviewed: local tool plumbing, image viewing and request transport. Anything
 # else that is on, including a feature a newer Codex adds, refuses the turn
 # (codex_session.codex_feature_preflight); features at stage "removed" do
 # nothing and are ignored. code_mode_host is how newer models (gpt-6.1-sol)
@@ -91,7 +91,7 @@ CODEX_ALLOWED_FEATURES = frozenset({
     "content_item_kinds", "compaction_image_budget", "enable_request_compression", "fast_mode",
     "guardian_approval", "guardian_reuse_parent_compaction", "mentions_v2", "sleep_tool",
     "system_proxy_fallback", "unbounded_connection_retries", "write_stdin_approval",
-    "image_generation", "code_mode_host",
+    "code_mode_host",
 })
 # Turned off explicitly. Each can start a process outside the sandbox, reach the
 # network or the person's screen and browser, load code or config the agent
@@ -99,14 +99,17 @@ CODEX_ALLOWED_FEATURES = frozenset({
 # plugins and skill dependencies install MCP servers, apps are remote
 # connectors, browser/computer use drive a real browser (which sends a real
 # Origin) or the screen, the daemon can serve a turn from a process started
-# with the user's own config. `--strict-config` turns a renamed name into an error.
+# with the user's own config. image_generation makes images on the ChatGPT plan
+# outside the canvas, Nebula's spending limits and proposals; agents generate
+# through Nebula nodes (Daedalus lost direct generation for the same reason).
+# `--strict-config` turns a renamed name into an error.
 CODEX_DISABLED_FEATURES = (
     "memories", "hooks", "plugins", "remote_plugin", "plugin_sharing", "apps",
     "skill_mcp_dependency_install", "workspace_dependencies",
     "computer_use", "browser_use", "browser_use_external", "browser_use_full_cdp_access",
     "in_app_browser", "in_app_chat", "in_app_dictation", "in_app_local_automation", "in_app_updates",
     "daemon_auto_start", "multi_agent", "realtime_conversation", "tool_suggest", "skill_search",
-    "worktrees", "goals", "auth_elicitation", "tool_call_mcp_elicitation",
+    "worktrees", "goals", "auth_elicitation", "tool_call_mcp_elicitation", "image_generation",
 )
 
 CODEX_CONFIG_PATH = Path.home() / ".codex" / "config.toml"

@@ -223,8 +223,9 @@ async def run_claude(
     system_prompt = NEBULA_SYSTEM_PRIMER
     from commons.activation import is_enabled
     if is_enabled():
-        from commons.skill import COMMONS_SKILL
-        system_prompt = f"{system_prompt}\n\n{COMMONS_SKILL}"
+        # Claude's shell reaches Nebula, so it also gets the CLI twins.
+        from commons.skill import COMMONS_CLI_SKILL
+        system_prompt = f"{system_prompt}\n\n{COMMONS_CLI_SKILL}"
     if selection_context:
         system_prompt = f"{system_prompt}\n\n{selection_context}"
     requested_model = model if catalog_validated else normalize_claude_model(model)

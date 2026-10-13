@@ -495,7 +495,10 @@ name only, never in argv or a file:
   if that fails it exits, and the agent has no Nebula tools.
 - Codex also runs with only reviewed features. `CODEX_DISABLED_FEATURES`
   turns off hooks, plugins, apps, skill MCP installs, browser and computer use,
-  the in-app features, the daemon and the like. `code_mode_host` stays on:
+  the in-app features, the daemon and the like. It also turns off
+  `image_generation`, Codex's own image tool on the ChatGPT plan: images made
+  that way skip the canvas, the spending limits and proposals, so Codex
+  generates through Nebula nodes like the other agents. `code_mode_host` stays on:
   newer models (gpt-6.1-sol) call every tool through it. Checked live, its
   JavaScript has no `fetch`, `require` or `Deno`, and nothing from it reached
   the backend. Before every turn
@@ -514,7 +517,11 @@ name only, never in argv or a file:
   exists), or while the Daedalus profile has scheduled Hermes jobs, which
   would run with every Hermes tool; remove them with
   `hermes-daedalus cron remove <id>`. `-t` is enforced inside Hermes, not by
-  the OS.
+  the OS. docs/HERMES-SETUP.md §6 records the live check of this setup.
+- The Commons skill text the MCP server and in-app Codex get names only the
+  `commons_*` tools. In-app Claude, whose shell reaches Nebula, also gets the
+  `nebula commons` CLI twins (`backend/commons/skill_cli.md`). No primer sent
+  to Codex or Daedalus names a `nebula` command.
 
 ### Long runs and graph edits from the CLI
 

@@ -249,6 +249,7 @@ async def run_hermes(
     extra_dirs: list[Path] | None = None,
     workdir: Path | None = None,
     agent_token: str | None = None,
+    catalog_validated: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """Run a single Daedalus turn via `hermes-daedalus chat -q` and yield events.
 
@@ -273,7 +274,9 @@ async def run_hermes(
         return
     # Hermes has no OS sandbox of its own here; the boundary is its toolsets
     # (DAEDALUS_TOOLSETS) plus a private working directory without secrets.
-    del effort, extra_dirs
+    # /ws/chat calls every runner with the same keywords; Hermes picks its model
+    # from the Nous catalog itself, so the Claude/Codex catalog check is moot.
+    del effort, extra_dirs, catalog_validated
     agent_cwd = workdir or agent_workspace()
     # Model handoff: the frontend chat panel sends a single `model` field,
     # but its meaning depends on the active agent. For Daedalus turns (the

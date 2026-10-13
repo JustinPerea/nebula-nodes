@@ -295,6 +295,12 @@ def test_codex_reaches_nebula_through_its_mcp_server_with_the_token_by_name(monk
     assert "no network access" in prompt
     for cli in ("nebula create", "nebula run", "nebula graph", "nebula nodes", "nebula info", "nebula path"):
         assert cli not in prompt
+    # No CLI command at all, from the Krea primer or the Commons skill either.
+    monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")
+    for message in ("make an image", "make an image with krea"):
+        prompt = codex_session._build_prompt(message)
+        assert "commons_search" in prompt and "propose_change" in prompt
+        assert "`nebula " not in prompt and "nebula commons" not in prompt
 
 
 @pytest.mark.asyncio

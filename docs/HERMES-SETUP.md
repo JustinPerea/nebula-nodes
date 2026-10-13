@@ -275,11 +275,33 @@ Because the `skills` toolset is off, Daedalus can't call `skill_view` or
 supplies its playbook, which tells it to use `find_nodes` / `describe_node`
 for model details and to state new learnings in chat.
 
-**Unverified on this machine:** whether `--skills daedalus-core` still
-preloads under `-t`, and that Hermes maps the bare `nebula` name to the MCP
-server's tools (`toolsets.py` maps a bare server name to `mcp-<name>`). The
-`daedalus` profile doesn't exist here, so only the generated arguments are
-tested. Check both with a real profile before relying on Daedalus.
+**Checked live (2026-10-13, Hermes v0.21.6).** A throwaway profile
+(`HERMES_HOME` in a scratch folder, with `daedalus-core` installed and one
+extra MCP server, `probe`, in its `config.yaml`) ran real Daedalus turns
+through an isolated backend's `/ws/chat`, against a scripted local model:
+
+- The model saw only `clarify` and Hermes's tool-search bridge
+  (`tool_search`, `tool_describe`, `tool_call`). Behind the bridge were the 26
+  `mcp__nebula__*` tools, so the bare `nebula` name does reach the MCP server.
+  `nebula_krea` listed no tools because that backend had no Krea connection.
+- `mcp__nebula__get_spend_limits` answered `agent: "Daedalus"`,
+  `budget: "chat"`: Hermes expanded `${NEBULA_AGENT_TOKEN}` and the backend
+  accepted the chat token.
+- `tool_call` refused `terminal` and `read_file`, and didn't know
+  `mcp__probe__probe_ping`: Hermes never started the `probe` server. A direct
+  `terminal` call failed with "Tool 'terminal' does not exist".
+- The system prompt carried the `daedalus-core` playbook, so `--skills`
+  still preloads under `-t`.
+- Hermes ran from the chat's private workspace, and a second turn in the same
+  chat resumed the same Hermes session (`--resume … --no-restore-cwd`) from
+  the same workspace.
+- With a forged token, Hermes's tool list (`cli.py --toolsets
+  nebula,nebula_krea,clarify --list_tools`) showed only `clarify`: the Nebula
+  server exits when the backend won't vouch for its token.
+
+Not checked: Krea's read-only tools through a connected Krea account, and a
+real model choosing tools on its own. A Hermes update can change any of this,
+so re-run the check after updating Hermes.
 
 The `nebula` CLI wrapper below is optional, for driving the canvas from your
 own terminal; in-app Daedalus doesn't use it.

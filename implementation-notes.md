@@ -1,5 +1,21 @@
 # Implementation Notes
 
+## 2026-10-13 — Review fixes for the in-app agent confinement
+
+Reviewers of the commit above found that Daedalus couldn't run at all, and two smaller leaks.
+
+- **Every in-app Daedalus turn failed (critical).** The confinement change sent Daedalus through the same `/ws/chat` branch as Claude and Codex, which passes `catalog_validated=...`. `run_hermes` had no such parameter, so the call raised `TypeError` before Hermes started, and the chat showed only that error. The full suite still passed: the chat tests swap in fake runners that take `**kwargs`, and the Hermes tests call `run_hermes` directly, so nothing ran main's keywords against the real runner. Fix: `run_hermes` takes `catalog_validated` and drops it, like `effort` and `extra_dirs`. All runners now take the same keywords. New `tests/test_chat_real_runners.py` sends a turn through `/ws/chat` to each real runner (Claude, Codex, Daedalus) and fakes only the process spawn. For Daedalus it checks `-t nebula,nebula_krea,clarify`, the chat's workspace as cwd, and the minted token in env, never in argv or the overlay. For Claude and Codex it checks the workspace and token. The Daedalus case fails with the old code.
+- **Daedalus checked live.** I used a throwaway Hermes home (scratch `HERMES_HOME`, `daedalus-core` installed, plus an extra `probe` MCP server) through a `hermes-daedalus` shim on PATH. Nebula ran as an isolated backend on 8132 and a scripted OpenAI-compatible model ran on 5252 (no paid model). Results are in `docs/HERMES-SETUP.md` §6:
+  - The model saw only `clarify` and the tool-search bridge, and the bridge held the 26 `mcp__nebula__*` tools.
+  - `get_spend_limits` answered Daedalus / budget "chat", so `${NEBULA_AGENT_TOKEN}` expanded.
+  - `tool_call` refused `terminal`, `read_file` and the `probe` server's tool, and Hermes never started `probe`.
+  - The `daedalus-core` playbook was in the system prompt, and resume kept the same session and workspace.
+  - With a forged token, `--list_tools` showed only `clarify`.
+- **Codex's prompt still named CLI commands.** `KREA_MCP_PRIMER` said "or `nebula propose`", and with Commons on Codex got the Commons skill's `nebula commons` twins. Its shell has no network, so those can't work. The Krea primer now names only `propose_change`. `commons/skill.md` names only the MCP tools. The CLI twins moved to `commons/skill_cli.md`, which only Claude gets (`COMMONS_CLI_SKILL`; its shell reaches Nebula). The MCP server's instructions use the tools-only text. The Codex prompt test now asserts that no `` `nebula `` or `nebula commons` appears, with Commons on and with a Krea message.
+- **Codex `image_generation` is now disabled.** It was on the reviewed list as "image handling". It makes images on the ChatGPT plan, outside the canvas, the spending limits and proposals: the same reason Daedalus lost direct generation. It is in `CODEX_DISABLED_FEATURES` now. Checked against codex-cli 0.160.0: `--disable image_generation` lists it as false, and the real preflight with the new flags returns no refusal. Tradeoff: Codex can no longer draw a quick sketch on its own; it has to use a Nebula node.
+
+**Still open:** Krea's read-only tools weren't seen through Hermes with a connected Krea account (the isolated backend had none, so `nebula_krea` listed 0 tools). A Hermes update can change toolset or bridge behavior, so re-run the §6 check after updating Hermes.
+
 ## 2026-10-12 — In-app agents reach Nebula through its MCP server (PR 2 of 3, and person-gate PR B)
 
 Branch `mcp-tools`. Justin's calls: Codex's shell has no network and reaches Nebula only through the Nebula MCP server; Daedalus gets MCP tools only (`-t nebula,nebula_krea,clarify`) from a private workspace and a minted chat token; agents propose any `_kreaAuth` change.
@@ -27,7 +43,7 @@ Branch `mcp-tools`. Justin's calls: Codex's shell has no network and reaches Neb
 **Gaps and surprises**
 
 - **The MCP tools lack save/load, projects, keys and `commons fetch`.** Codex can't do those in-app now. Daedalus's skill no longer saves projects.
-- **Hermes is not live-tested.** No `daedalus` profile exists on this machine. Unverified: whether `--skills daedalus-core` still preloads under `-t`, and whether Hermes maps the bare `nebula` toolset name to the MCP server. The args are unit-tested; `docs/HERMES-SETUP.md` says so.
+- **Hermes was not live-tested in this commit** (no `daedalus` profile here). The 2026-10-13 review fixes above ran it live with a throwaway profile and found the `catalog_validated` crash.
 - **Not tested:** a planted skill that declares an MCP dependency (`skill_mcp_dependency_install` is disabled and `.agents` is write-denied, but no live probe).
 - **MCP stdio servers run outside Codex's sandbox.** That is why the server gets the token and the shell doesn't need network.
 

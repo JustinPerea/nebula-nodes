@@ -15,13 +15,22 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import mcp_server
-from commons.skill import COMMONS_SKILL
+from commons.skill import COMMONS_CLI_SKILL, COMMONS_SKILL
 
 
 def test_mcp_tools_registered_and_instructions_carry_the_skill():
     names = {t.name for t in mcp_server.mcp._tool_manager.list_tools()}
     assert {"commons_search", "commons_get", "commons_add", "commons_comment", "commons_borrow"} <= names
     assert "nothing in the commons fits" in mcp_server.mcp.instructions
+
+
+def test_cli_twins_go_only_to_agents_whose_shell_reaches_nebula():
+    # MCP clients and in-app Codex (shell without network) get the tools only.
+    assert "`nebula " not in COMMONS_SKILL and "nebula commons" not in COMMONS_SKILL
+    assert "nebula commons" not in mcp_server.mcp.instructions
+    # In-app Claude's shell reaches Nebula, so it also gets the CLI twins.
+    assert COMMONS_CLI_SKILL.startswith(COMMONS_SKILL)
+    assert "nebula commons fetch" in COMMONS_CLI_SKILL
 
 
 def test_mcp_reports_nebula_not_running(monkeypatch):
