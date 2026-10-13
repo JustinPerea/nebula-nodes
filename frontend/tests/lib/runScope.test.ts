@@ -230,5 +230,13 @@ describe('local nodes that call a provider, and wired price settings', () => {
     const other: Edge[] = [{ id: 'w', source: 't', target: 'k', targetHandle: 'prompt' }];
     expect(summarizeRunScope([shots, kling], other, { kind: 'graph' }, { pricing: table, apiKeys: {} }).cost?.high)
       .toBeCloseTo(0.42);
+    // A cluster run sends only the edges inside it (graphStore runCluster), so a
+    // wire from outside never arrives and the param is what gets priced, just as
+    // the backend sees it. Inside the cluster, the wire still counts.
+    const outside = summarizeRunScope([shots, kling], wired, { kind: 'cluster', nodeIds: ['k'] }, { pricing: table, apiKeys: {} });
+    expect(outside.cost?.unpriced).toEqual([]);
+    expect(outside.cost?.high).toBeCloseTo(0.42);
+    const inside = summarizeRunScope([shots, kling], wired, { kind: 'cluster', nodeIds: ['t', 'k'] }, { pricing: table, apiKeys: {} });
+    expect(inside.cost?.unpriced).toEqual(['Kling']);
   });
 });

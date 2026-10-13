@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import backendCatalog from '../../../backend/data/node_definitions.json';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { nodeKeyStatus, type CredentialReadiness } from '../../src/lib/kreaConnection';
 import {
@@ -11,6 +12,17 @@ const keys = (apiKeys: Record<string, string>): CredentialReadiness => ({ loaded
 const scene = (model: unknown) => ({ scene: { base: { model }, shots: [] } });
 
 describe('local nodes that call a provider', () => {
+  it('reads the same providerVia as the backend catalog', () => {
+    // The canvas reads providerVia from the TS definitions and the backend
+    // (readiness, pricing, agent surfaces) from node_definitions.json; the
+    // backend parity tests pin only the JSON copy, so the two must not drift.
+    const catalog = backendCatalog as Record<string, { providerVia?: unknown }>;
+    const declared = (defs: Record<string, { providerVia?: unknown }>) =>
+      Object.fromEntries(Object.entries(defs).flatMap(([id, d]) => (d.providerVia ? [[id, d.providerVia]] : [])));
+    expect(declared(NODE_DEFINITIONS)).toEqual(declared(catalog));
+    expect(Object.values(NODE_DEFINITIONS).filter((d) => d.providerVia).length).toBeGreaterThan(0);
+  });
+
   it('badges a cinema scene by the key its base model needs', () => {
     expect(nodeKeyStatus(cinema, scene('seedream-4-5'), keys({}))).toBe('missing');
     expect(nodeKeyStatus(cinema, {}, keys({}))).toBe('missing');

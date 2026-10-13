@@ -102,12 +102,15 @@ export { cinemaSceneBase } from './nodeKeys';
 
 /** Each run node's input ports that have an edge into them. A priced setting
  * that arrives by wire is only known at run time (pricing.estimateNode).
- * Mirrors wired_ports in backend services/model_pricing.py. */
+ * Mirrors wired_ports in backend services/model_pricing.py over the edges the
+ * run sends: only edges whose source also runs, since a cluster run sends just
+ * the edges inside it (graphStore runCluster) and a wire from outside never
+ * reaches the backend. Graph and node scopes already hold every source. */
 export function wiredPorts(nodes: Node<NodeData>[], edges: Edge[]): Map<string, Set<string>> {
   const ids = new Set(nodes.map((node) => node.id));
   const wired = new Map<string, Set<string>>();
   for (const edge of edges) {
-    if (!ids.has(edge.target) || !edge.targetHandle) continue;
+    if (!ids.has(edge.source) || !ids.has(edge.target) || !edge.targetHandle) continue;
     wired.set(edge.target, new Set([...(wired.get(edge.target) ?? []), edge.targetHandle]));
   }
   return wired;

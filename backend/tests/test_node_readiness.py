@@ -139,19 +139,40 @@ def test_qc_provider_via_matches_vision_llm_and_the_handler_modes(definition_id)
 
 
 # What a handler module imports, to find utility nodes that can reach a paid
-# API. Shared plumbing that imports httpx for something other than a provider
-# call is listed here, each with why; the walk stops there.
+# API. The walk fails closed: anything it can't follow (a dynamic import, a
+# subprocess or shell call that could run curl or a provider CLI) counts as a
+# hit, the same as importing httpx, unless the module is listed below with why.
 NETWORK_MODULES = ("httpx", "requests", "aiohttp", "urllib.request", "openai", "anthropic",
                    "google.genai", "google.generativeai", "google.cloud", "fal_client", "replicate",
                    "elevenlabs", "websockets", "boto3")
+# Imports and calls the walk can't see through.
+OPAQUE_MODULES = ("subprocess", "importlib", "pty", "multiprocessing")
+OPAQUE_CALLS = {"__import__", "create_subprocess_exec", "create_subprocess_shell", "system", "popen",
+                "spawnl", "spawnv", "spawnve", "spawnlp", "spawnvp", "execv", "execve", "execvp",
+                "execl", "execlp", "posix_spawn", "posix_spawnp"}
+# Shared plumbing that imports httpx for something other than a provider call.
+# The walk stops at these, so each one's direct imports are pinned below: a new
+# import into one of them fails test_the_walk_stops_only_where_it_was_reviewed
+# until someone checks it and updates the pin.
 NOT_PROVIDER_CALLS = {
     # Downloads a finished output URL into the output folder.
-    "services.output",
+    "services.output": {"httpx", "services.ffmpeg", "services.file_access", "services.settings"},
     # The settings store; its httpx use is Settings > Providers' key check, which
-    # the person starts and which costs nothing.
-    "services.settings",
+    # the person starts and which costs nothing (google_vertex and nous_auth are
+    # the credential checks for those two providers).
+    "services.settings": {"httpx", "services.google_vertex", "services.nous_auth"},
     # Path rules for local files; it imports the agent/workspace stack, never a provider.
-    "services.file_access",
+    "services.file_access": {"services.agent_profiles", "services.agent_workspaces", "services.output"},
+}
+# Modules that spawn a process the walk can't see into, but whose program is
+# known and calls no paid API, each with why. Only their own spawn is excused;
+# the walk still follows what they import.
+LOCAL_PROCESSES = {
+    # Runs the ffmpeg and ffprobe binaries on local files or a public media URL
+    # (services/ffmpeg.py cmd lists); no provider account is involved.
+    "services.ffmpeg",
+    # Runs `node` on the bundled Remotion renderer to render a composition locally.
+    "services.remotion_render",
 }
 # Utility definitions whose handler module can reach the network, but whose own
 # handler never does, each with why.
@@ -170,32 +191,66 @@ def _file_for(module: str) -> Path | None:
     return None
 
 
-def _imports(source: str) -> set[str]:
+def _package_of(module: str) -> str:
+    path = _file_for(module)
+    if path is not None and path.name == "__init__.py":
+        return module
+    return module.rpartition(".")[0]
+
+
+def _imports(source: str, module: str | None = None) -> set[str]:
+    """Modules ``source`` imports. Relative imports resolve against ``module``'s
+    package. A dynamic import or a process spawn adds an ``<opaque:...>`` entry,
+    which the walk counts as a hit."""
     found: set[str] = set()
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
             found |= {alias.name for alias in node.names}
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            found.add(node.module)
-            found |= {f"{node.module}.{alias.name}" for alias in node.names}
+        elif isinstance(node, ast.ImportFrom):
+            base = node.module or ""
+            if node.level:
+                if module is None:
+                    found.add(f"<opaque:relative import .{base}>")
+                    continue
+                package = _package_of(module).split(".") if _package_of(module) else []
+                anchor = package[: len(package) - (node.level - 1)] if node.level - 1 <= len(package) else None
+                if anchor is None:
+                    found.add(f"<opaque:relative import .{base}>")
+                    continue
+                base = ".".join([*anchor, *([base] if base else [])])
+            if base:
+                found.add(base)
+            found |= {f"{base}.{alias.name}" if base else alias.name for alias in node.names}
+        elif isinstance(node, ast.Call):
+            func = node.func
+            name = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
+            if name in OPAQUE_CALLS:
+                found.add(f"<opaque:{name}()>")
+        elif isinstance(node, ast.Constant) and node.value in OPAQUE_CALLS:
+            # getattr(asyncio, "create_subprocess_exec") and the like.
+            found.add(f"<opaque:{node.value}>")
     return found
 
 
 def _reaches_network(roots: set[str]) -> list[str]:
     seen: set[str] = set()
     hits: set[str] = set()
-    stack = list(roots)
+    stack = [(module, None) for module in roots]
     while stack:
-        module = stack.pop()
+        module, importer = stack.pop()
+        if module.startswith("<opaque:"):
+            if importer not in LOCAL_PROCESSES:
+                hits.add(f"{module} in {importer}")
+            continue
         if module in seen or any(module == stop or module.startswith(stop + ".") for stop in NOT_PROVIDER_CALLS):
             continue
         seen.add(module)
         path = _file_for(module)
         if path is None:
-            if any(module == net or module.startswith(net + ".") for net in NETWORK_MODULES):
-                hits.add(module)
+            if any(module == m or module.startswith(m + ".") for m in (*NETWORK_MODULES, *OPAQUE_MODULES)):
+                hits.add(module if importer is None else f"{module} in {importer}")
             continue
-        stack.extend(_imports(path.read_text()))
+        stack.extend((imported, module) for imported in _imports(path.read_text(), module))
     return sorted(hits)
 
 
@@ -205,7 +260,7 @@ def _handler_roots(handler) -> set[str]:
     if handler.__module__ != "execution.sync_runner":
         return {handler.__module__}
     # sync_runner's wrappers import their handler inside the function body.
-    return _imports(textwrap.dedent(inspect.getsource(handler)))
+    return _imports(textwrap.dedent(inspect.getsource(handler)), "execution.sync_runner")
 
 
 def test_every_utility_node_that_can_reach_a_paid_api_says_so():
@@ -229,7 +284,7 @@ def test_every_utility_node_that_can_reach_a_paid_api_says_so():
     # declared as a provider caller too.
     for definition_id in LOCAL_DESPITE_IMPORTS:
         assert definition_id in DEFINITIONS and "providerVia" not in DEFINITIONS[definition_id]
-    for module in NOT_PROVIDER_CALLS:
+    for module in (*NOT_PROVIDER_CALLS, *LOCAL_PROCESSES):
         assert _file_for(module) is not None
 
 
@@ -240,3 +295,42 @@ def test_the_guard_sees_the_vision_and_cinema_calls():
     registry = get_handler_registry(emit=AsyncMock())
     for definition_id in (*QC_IDS, "cinema-scene"):
         assert _reaches_network(_handler_roots(registry[definition_id])), definition_id
+
+
+def _direct_reach(module: str) -> set[str]:
+    """``module``'s own imports that the walk cares about: network, opaque, or in-repo."""
+    reach = set()
+    for name in _imports(_file_for(module).read_text(), module):
+        network = any(name == m or name.startswith(m + ".") for m in (*NETWORK_MODULES, *OPAQUE_MODULES))
+        if name.startswith("<opaque:") or network or _file_for(name) is not None:
+            reach.add(name)
+    return reach
+
+
+@pytest.mark.parametrize("module", sorted(NOT_PROVIDER_CALLS))
+def test_the_walk_stops_only_where_it_was_reviewed(module):
+    """The walk stops at these modules, so they can't quietly gain a provider
+    import: their direct imports are pinned to what was reviewed."""
+    assert _direct_reach(module) == NOT_PROVIDER_CALLS[module]
+
+
+def test_the_walk_fails_closed_on_what_it_cannot_follow():
+    # Relative imports resolve against the importing module's package.
+    assert {"handlers", "handlers.x", "services", "services.y"} <= _imports(
+        "from . import x\nfrom ..services import y\n", "handlers.foo")
+    assert _imports("from .helpers import z\n", "handlers") >= {"handlers.helpers", "handlers.helpers.z"}
+    # ...and one with no known package can't be followed, so it is a hit.
+    assert _reaches_network(_imports("from .x import y\n"))
+    # Dynamic imports and process spawns are hits wherever the walk meets them.
+    for source in (
+        "import importlib\nimportlib.import_module('fal_client')\n",
+        "__import__('fal_client')\n",
+        "import subprocess\nsubprocess.run(['curl', 'https://api.example'])\n",
+        "import asyncio\nasyncio.create_subprocess_exec('npx', 'some-sdk-cli')\n",
+        "import asyncio\nspawn = getattr(asyncio, 'create_subprocess_exec')\n",
+        "import os\nos.system('curl https://api.example')\n",
+    ):
+        assert _reaches_network(_imports(source, "handlers.made_up")), source
+    # A listed local process module is excused for its own spawn only.
+    assert not _reaches_network({"services.ffmpeg"})
+    assert _reaches_network({"<opaque:create_subprocess_exec>"})

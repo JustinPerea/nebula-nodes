@@ -570,7 +570,10 @@ for Cinema Scene's base model, `kind: param` for the QC nodes' mode), and
 readiness, the canvas badge, the run estimate and proposals all read it.
 `backend/tests/test_node_readiness.py` fails when a utility handler that can
 reach the network isn't declared, and pins `providerVia` to the handler
-constants it describes.
+constants it describes. Its import walk fails closed: relative imports are
+resolved, and dynamic imports or spawned processes count as network unless the
+module is listed with a reason. `frontend/tests/lib/nodeKeys.test.ts` keeps the
+canvas's TS copy of `providerVia` equal to the JSON one.
 
 ### In-app agents use this server
 
