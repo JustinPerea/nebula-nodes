@@ -866,28 +866,38 @@ describe('Settings — preferences', () => {
     }));
   });
 
-  it('creates an app token, shows it once, and lists, limits and revokes connected apps', async () => {
+  it('connects an agent, shows its setup once, and lists, limits and revokes connected agents', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    const app = { id: 'a1b2c3d4e5f6', name: 'Claude Desktop', dailyUsd: 5, createdAt: 1, spentUsd: 0.4, kreaPlanRuns: 0 };
-    createConnectedAppMock.mockResolvedValue({ app, token: 'nebula_app_secret' });
+    const app = { id: 'a1b2c3d4e5f6', name: 'Claude Desktop', dailyUsd: 5, createdAt: 1, spentUsd: 0.4, kreaPlanRuns: 0,
+      client: 'claude-desktop', color: null };
+    const setup = {
+      client: 'claude-desktop', label: 'Claude Desktop', kind: 'json', format: 'json',
+      where: '~/Library/Application Support/Claude/claude_desktop_config.json',
+      snippet: '{"mcpServers": {"nebula": {"env": {"NEBULA_APP_TOKEN": "nebula_app_secret"}}}}',
+      steps: ['Quit Claude Desktop completely and open it again.'], alternative: null,
+      warnings: ['Claude Desktop’s own scheduled jobs can run Nebula nodes with this token.'],
+    };
+    createConnectedAppMock.mockResolvedValue({ app, token: 'nebula_app_secret', setup });
     setConnectedAppLimitMock.mockResolvedValue({ app: { ...app, dailyUsd: 10 } });
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1, agentSpend: { sessionUsd: 10, models: {} } });
     openTab('Preferences');
-    expect(screen.getByText(/Put the token in the app.s Nebula MCP server config as/)).toBeInTheDocument();
-    const create = screen.getByRole('button', { name: 'Create token' });
-    expect(create).toBeDisabled();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Add an app' }), { target: { value: ' Claude Desktop ' } });
-    fireEvent.change(screen.getByRole('combobox', { name: 'New app daily limit' }), { target: { value: '5' } });
+    expect(screen.getByRole('heading', { name: 'Connect your agent' })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Agent app' }), { target: { value: 'claude-desktop' } });
+    const name = screen.getByRole('textbox', { name: 'Agent name' });
+    expect(name).toHaveValue('My Claude Desktop');
+    fireEvent.change(name, { target: { value: ' Claude Desktop ' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'New agent daily limit' }), { target: { value: '5' } });
     getOutsideSpendMock.mockResolvedValue({ outside: { spentUsd: 0.4, kreaPlanRuns: 0 }, apps: [app] });
-    fireEvent.click(create);
-    await waitFor(() => expect(createConnectedAppMock).toHaveBeenCalledWith('Claude Desktop', 5));
-    const token = await screen.findByRole('textbox', { name: 'Token for Claude Desktop' });
-    expect(token).toHaveValue('nebula_app_secret');
-    expect(screen.getByText(/can.t show it again/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('nebula_app_secret'));
-    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() => expect(createConnectedAppMock).toHaveBeenCalledWith(
+      'Claude Desktop', 5, { client: 'claude-desktop', color: null }));
+    const panel = await screen.findByRole('region', { name: 'Set up Claude Desktop in Claude Desktop' });
+    expect(panel).toHaveTextContent('nebula_app_secret');
+    expect(panel).toHaveTextContent(/only time it can show it/);
+    fireEvent.click(within(panel).getByRole('button', { name: 'Copy Claude Desktop config' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(setup.snippet));
+    expect(await within(panel).findByRole('button', { name: 'Copy Claude Desktop config' })).toHaveTextContent('Copied');
 
     const row = await screen.findByTestId('settings-app-row');
     expect(row).toHaveTextContent('Claude Desktop');
@@ -896,7 +906,7 @@ describe('Settings — preferences', () => {
     await waitFor(() => expect(setConnectedAppLimitMock).toHaveBeenCalledWith('a1b2c3d4e5f6', 10));
 
     fireEvent.click(screen.getByRole('button', { name: 'Done' }));
-    expect(screen.queryByRole('textbox', { name: 'Token for Claude Desktop' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/nebula_app_secret/)).not.toBeInTheDocument();
     fireEvent.click(within(row).getByRole('button', { name: 'Revoke the token for Claude Desktop' }));
     expect(revokeConnectedAppMock).not.toHaveBeenCalled();
     getOutsideSpendMock.mockResolvedValue({ outside: { spentUsd: 0.4, kreaPlanRuns: 0 }, apps: [] });

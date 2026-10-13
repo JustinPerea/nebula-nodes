@@ -83,7 +83,7 @@ from services.settings import (
 )
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
-from services import agent_spend, app_tokens, model_pricing, node_readiness, output_preview
+from services import agent_connect, agent_spend, backend_address, app_tokens, model_pricing, node_readiness, output_preview
 from services.cli_graph import CLIGraph
 from services.retired_nodes import migrate_node, retired_message
 from services.project_store import (
@@ -2107,6 +2107,47 @@ async def _parent_watch_startup() -> None:
     parent_watch.start_from_env()
 
 
+# This launch's backend-url secret, set once the file is written. Clients
+# check the address with it before sending a token (backend_address_proof).
+_backend_address_secret: str | None = None
+
+
+@app.on_event("startup")
+async def _publish_backend_address() -> None:
+    """Desktop mode: write this launch's address where outside MCP clients look
+    for it (services/backend_address.py). The sidecar's port changes every launch."""
+    global _backend_address_secret
+    url = os.environ.get("NEBULA_URL", "")
+    if not backend_address.launch_assigned() or not url:
+        return
+    secret = backend_address.new_secret()
+    try:
+        backend_address.publish(_STATE_DIR, url, secret)
+    except (OSError, ValueError) as exc:
+        print(f"[main] couldn't publish the backend address for outside agents: {exc}", flush=True)
+        return
+    _backend_address_secret = secret
+
+
+@app.on_event("shutdown")
+async def _withdraw_backend_address() -> None:
+    if _backend_address_secret:
+        backend_address.withdraw(_STATE_DIR, _backend_address_secret)
+
+
+@app.get(backend_address.PROOF_PATH)
+async def backend_address_proof(challenge: str = "") -> dict[str, str]:
+    """Answer a client that read the backend-url file and wants to know this is
+    the backend that wrote it before sending its token. Only this launch knows
+    the secret, so a program squatting on a dead launch's port can't answer."""
+    if _backend_address_secret is None:
+        raise HTTPException(status_code=404, detail="This Nebula publishes no backend-url file.")
+    try:
+        return {"proof": backend_address.prove(_backend_address_secret, challenge)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.on_event("startup")
 async def _commons_startup() -> None:
     """Scan linked folders. Human authority is the person session, set above."""
@@ -2946,6 +2987,8 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
     if budget == "app":
         connected = app_token_store.get(key[len(agent_spend.APP_PREFIX):])
         result["limits"] = {**limits, "appDailyUsd": connected["dailyUsd"] if connected else None}
+        # What `nebula mcp connect` writes into the client's config.
+        result["mcpAddress"] = _mcp_address(request)
     return result
 
 
@@ -2963,29 +3006,91 @@ def _outside_view() -> dict[str, Any]:
 async def list_agent_apps() -> dict[str, Any]:
     """Settings > Agent spending: what the outside agents spent and the apps with tokens. The person's only."""
     require_person(current_request_headers())
-    return _outside_view()
+    return {**_outside_view(), "connect": _connect_view()}
+
+
+def _connect_view() -> dict[str, Any]:
+    """The clients Settings > Connect your agent offers, and whether this
+    backend can point them at a checkout (a packaged app can't yet)."""
+    try:
+        agent_connect.checkout_paths()
+        reason = None
+    except agent_connect.ConnectError as exc:
+        reason = str(exc)
+    return {"clients": agent_connect.client_list(), "available": reason is None, "reason": reason}
+
+
+def _mcp_address(request: Request) -> dict[str, str]:
+    """How an outside MCP client reaches this backend from now on: the
+    backend-url file when the port changes per launch (desktop), else this
+    backend's own address."""
+    if backend_address.launch_assigned():
+        return {"urlFile": str(backend_address.url_file(_STATE_DIR))}
+    return {"url": _own_url(request)}
+
+
+def _own_url(request: Request) -> str:
+    """This backend as an MCP server on this machine reaches it: the address
+    the request actually arrived on (not a Host header, which the Vite proxy
+    or the caller writes)."""
+    server = request.scope.get("server") or ("127.0.0.1", 8000)
+    host, port = server[0] or "127.0.0.1", server[1]
+    if host in ("0.0.0.0", "::", "localhost"):
+        host = "127.0.0.1"
+    if ":" in host:
+        host = f"[{host}]"
+    return f"http://{host}:{port}" if port else f"http://{host}"
 
 
 @app.post("/api/agent/spend/apps")
-async def create_agent_app(body: dict[str, Any]) -> dict[str, Any]:
+async def create_agent_app(body: dict[str, Any], request: Request) -> dict[str, Any]:
     """Make a token for an outside app. The token is in this response only;
-    Nebula keeps a hash of it. The person's only."""
+    Nebula keeps a hash of it. The person's only.
+
+    With ``client`` (Settings > Connect your agent), the response also holds
+    ``setup``: the exact config for that client, with the token in it
+    (services/agent_connect.py). It is shown once, like the token."""
     require_person(current_request_headers())
+    client_id = body.get("client")
+    paths = None
+    if client_id is not None:
+        try:
+            agent_connect.client(client_id)
+            paths = agent_connect.checkout_paths()
+        except agent_connect.ConnectError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
-        app_view, token = app_token_store.create(body.get("name"), body.get("dailyUsd"))
+        app_view, token = app_token_store.create(body.get("name"), body.get("dailyUsd"),
+                                                 client=client_id, color=body.get("color"))
     except app_tokens.AppTokenError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"app": {**app_view, "spentUsd": 0.0, "kreaPlanRuns": 0}, "token": token}
+    result: dict[str, Any] = {"app": {**app_view, "spentUsd": 0.0, "kreaPlanRuns": 0}, "token": token}
+    if paths is not None:
+        address = _mcp_address(request)
+        result["setup"] = agent_connect.render(client_id, paths=paths, url=address.get("url"),
+                                               url_file=address.get("urlFile"), token=token,
+                                               app_name=app_view["name"], daily_usd=app_view["dailyUsd"])
+    return result
 
 
 @app.put("/api/agent/spend/apps/{app_id}")
 async def update_agent_app(app_id: str, body: dict[str, Any]) -> dict[str, Any]:
-    """Change an app's daily limit (null: only the shared outside budget). The person's only."""
+    """Change an app's daily limit (null: only the shared outside budget)
+    and/or its cursor color (#RRGGBB, null for the default). The person's only."""
     require_person(current_request_headers())
-    if set(body) != {"dailyUsd"}:
-        raise HTTPException(status_code=400, detail="Send {dailyUsd}: a positive number of USD, or null")
+    if not body or not set(body) <= {"dailyUsd", "color"}:
+        raise HTTPException(status_code=400,
+                            detail="Send {dailyUsd} (a positive number of USD, or null) and/or {color} (#RRGGBB or null)")
     try:
-        app_view = app_token_store.set_limit(app_id, body["dailyUsd"]) if app_tokens.valid_id(app_id) else None
+        app_view = None
+        if app_tokens.valid_id(app_id):
+            # Check both before saving either, so a bad color doesn't half-apply.
+            if "color" in body:
+                app_tokens.clean_color(body["color"])
+            if "dailyUsd" in body:
+                app_view = app_token_store.set_limit(app_id, body["dailyUsd"])
+            if "color" in body and (app_view is not None or "dailyUsd" not in body):
+                app_view = app_token_store.set_color(app_id, body["color"])
     except app_tokens.AppTokenError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if app_view is None:

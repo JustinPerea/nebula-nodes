@@ -16,6 +16,11 @@ Configure an MCP host to launch:
 <repo>/backend/.venv/bin/python <repo>/backend/mcp_server.py --url http://127.0.0.1:8000
 ```
 
+[Connect your agent](#connect-your-agent) does this for you: Settings (or
+`nebula mcp connect <app>`) gives the agent its own token, cursor name and
+color, and daily limit, and shows the exact config for Hermes, OpenClaw,
+Claude Desktop, Claude Code, Cursor or Codex.
+
 The server exposes these tools for building and running (see
 [Building and running over MCP](#building-and-running-over-mcp)):
 
@@ -232,8 +237,8 @@ Person-only, refused with 403 `person_required` otherwise:
   `/api/krea/connection/check`, `DELETE /api/krea/connection`,
   `/api/krea/trial`). `GET /api/krea/connection`, `/api/krea/tools` and
   `/api/krea/tools/call` stay open;
-- making, limiting and revoking connected-app tokens (`/api/agent/spend/apps`;
-  see Connected apps below);
+- making, limiting, coloring and revoking connected-agent tokens
+  (`/api/agent/spend/apps`; see Connect your agent below);
 - starting any `/ws/chat` turn (Claude, Codex), so no chat
   workspace or agent token is minted without the person;
 - `POST /api/enhance-prompt`, the Create button's rewrite. The gate comes
@@ -436,8 +441,8 @@ The person decides what agents may spend, in **Settings > Preferences**:
   limit" lifts it.
 - **Limit a model**: a per-run limit that replaces the general one for that
   model, a session budget for it (for outside agents, over 24 hours), or both.
-- **Connected apps**: a token per outside app, with its own optional daily
-  limit (see "Connected apps" below).
+- **Connect your agent**: a token per outside agent app, with its own optional
+  daily limit (see "Connect your agent" below).
 
 Any limit also makes an agent ask before running a node with no list price,
 since Nebula can't check it. That includes a Video QC node in any mode but
@@ -528,36 +533,192 @@ How it works (`backend/services/agent_spend.py`):
 its session has used. `budget` is `chat`, `shared` or `app`; outside callers
 also get `outsideSpent`, the shared 24-hour total.
 
-### Connected apps
+### Connect your agent
 
-An outside agent can't prove who it is, so by default every one of them shares
-the outside budget. To give an app its own line, the person makes a token in
-**Settings > Agent spending > Connected apps** (name, optional daily limit).
-The token is shown once; Nebula keeps only its SHA-256 in
-`~/.nebula/app-tokens.json` (mode 600). Put it in the app's Nebula MCP server
-config as an environment variable:
+Bring an agent you already use (Hermes, OpenClaw, Claude Desktop, Claude Code,
+Cursor, Codex or any other MCP client) onto the canvas. It stays in its own
+app with its own memory, skills and tools, and calls Nebula's MCP server. On
+the canvas it is a cursor with the name and color you gave it.
 
-```json
-{"mcpServers": {"nebula": {"command": "<repo>/backend/.venv/bin/python",
-  "args": ["<repo>/backend/mcp_server.py", "--url", "http://127.0.0.1:8000"],
-  "env": {"NEBULA_APP_TOKEN": "nebula_app_..."}}}}
+```mermaid
+flowchart LR
+  S["Settings > Connect your agent<br/>pick app, name, color, daily limit"] -->|"POST /api/agent/spend/apps<br/>(person only)"| T["App token<br/>shown once, with the exact config"]
+  T -->|paste or run| C["Agent app config<br/>(config.yaml, mcp.json, claude mcp add...)"]
+  C -->|starts over stdio| M["backend/mcp_server.py<br/>NEBULA_URL or NEBULA_URL_FILE<br/>+ NEBULA_APP_TOKEN"]
+  M -->|"Authorization: Agent token"| B["Nebula backend<br/>its own spending line + named cursor"]
 ```
 
-The MCP server and the `nebula` CLI send it as `Authorization: Agent <token>`
-(an in-app chat's `NEBULA_AGENT_TOKEN` wins if both are set; the backend
-scrubs `NEBULA_APP_TOKEN` from every process it starts, so an in-app chat
-never spends as an app). The app then shows by its name on the canvas, and
-Settings lists what it spent in the last 24 hours. Revoking the token makes
-its requests fail with 401; what it spent stays in the outside total.
+**In Settings.** Settings > Preferences > Agent spending > **Connect your
+agent**: pick the app, name the agent, pick a cursor color (or keep the
+automatic one) and a daily limit, then Connect. Nebula makes a token and shows
+the exact config for that app, with the token in it, once. Nebula keeps only
+the token's SHA-256, in `app-tokens.json` in its state dir (`~/.nebula` for a dev
+backend; mode 600). Each config
+starts this checkout's server the same way:
 
-Routes, all person-only: `GET /api/agent/spend/apps` (the outside total and
-each app), `POST /api/agent/spend/apps` `{name, dailyUsd}` (returns the token
-once), `PUT /api/agent/spend/apps/{id}` `{dailyUsd}`, `DELETE
-/api/agent/spend/apps/{id}`.
+- command: `<repo>/backend/.venv/bin/python` (the venv's own path, not the
+  interpreter it links to);
+- args: `<repo>/backend/mcp_server.py`;
+- env: `NEBULA_APP_TOKEN`, and where to find Nebula:
+  - a dev backend (`backend/devserver.py`, uvicorn) has a port you chose, so
+    the config has `NEBULA_URL`, the address the request arrived on;
+  - the desktop app's sidecar gets a new port every launch, so the config has
+    `NEBULA_URL_FILE` instead: `<state dir>/backend-url`, which the backend
+    rewrites (mode 600) each time it starts and removes when it quits. The MCP
+    server reads it on every call, so a client that started before you
+    reopened Nebula still finds it, and says "Nebula isn't running" while the
+    app is closed. It only accepts an `http` address on 127.0.0.1, localhost
+    or ::1 (services/backend_address.py).
 
-Remaining risk: the token is a bearer secret in the app's config file.
-Anything that can read the file can spend as the app, inside the app's limit
-and the shared outside budget, until the person revokes it.
+    The file also holds a secret made fresh each launch. Before the MCP
+    server or the CLI sends the token, it checks the address: it sends a
+    random challenge to `GET /api/agent/address-proof`, and only the backend
+    that wrote the file can answer it (an HMAC keyed by that secret). So if
+    Nebula crashed and left the file behind, and another program now holds
+    that port, the program gets a challenge and never the token.
+
+Requests from the MCP server and the CLI ignore `HTTP_PROXY` and similar
+variables. Nebula is always on this machine, and httpx would otherwise send
+even a 127.0.0.1 request, token and all, through a configured proxy.
+
+A packaged app with a bundled Python has no checkout to point at yet; Settings
+says so and offers a plain token. That waits for the desktop pass. The desktop
+app running from this checkout is fine: its configs use `NEBULA_URL_FILE`.
+
+**Before you paste it.** Settings and the CLI say both of these for every app:
+
+- The agent's own scheduled jobs, cron tasks and automations can run Nebula
+  nodes with this token while you aren't watching, up to its daily limit and
+  the shared outside budget.
+- The token sits in plain text in that app's config file. Anything that can
+  read the file can spend as the agent until you revoke the token.
+
+#### Per app
+
+Formats checked against each app's docs on 2026-10-13.
+
+- **Hermes** ([MCP config reference](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/mcp-config-reference.md)).
+  Add the entry under `mcp_servers` in `~/.hermes/config.yaml`, then run
+  `/reload-mcp`. Nebula sets `trust: untrusted`, so Hermes asks you before any
+  Nebula tool without `readOnlyHint` (everything that edits, runs or
+  proposes). `hermes mcp add` has no env flag, so it can't carry the token.
+
+  ```yaml
+  mcp_servers:
+    nebula:
+      command: "<repo>/backend/.venv/bin/python"
+      args: ["<repo>/backend/mcp_server.py"]
+      env:
+        NEBULA_URL: "http://127.0.0.1:8000"
+        NEBULA_APP_TOKEN: "nebula_app_..."
+      trust: untrusted
+  ```
+
+- **OpenClaw** ([MCP](https://github.com/openclaw/openclaw/blob/main/docs/tools/mcp.md),
+  [saved servers](https://github.com/openclaw/openclaw/blob/main/docs/cli/mcp/registry.md)).
+  `openclaw mcp set nebula '<json>'` saves it under `mcp.servers`, but it
+  refuses while the local Gateway runs: stop the Gateway, run it, start it
+  again. With the Gateway running, use Control UI > Settings > MCP > Add
+  server > Stdio instead and enter the command line; add the two environment
+  variables if the form offers them. `openclaw mcp doctor` flags the literal
+  token in `env`; that is expected. A remote Gateway would need an HTTP
+  transport, which Nebula's MCP server doesn't have yet.
+- **Claude Desktop** ([connect local servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers)).
+  Claude menu > Settings > Developer > Edit Config opens
+  `~/Library/Application Support/Claude/claude_desktop_config.json`. Add the
+  `nebula` entry inside `mcpServers`, then quit and reopen Claude Desktop.
+- **Claude Code** ([MCP](https://code.claude.com/docs/en/mcp)).
+  `claude mcp add --scope user --env NEBULA_URL=... --env NEBULA_APP_TOKEN=...
+  --transport stdio nebula -- <python> <mcp_server.py>`. An option has to sit
+  between `--env` and the name, or Claude Code reads the name as another
+  `KEY=value`. User scope is stored in `~/.claude.json`.
+- **Cursor** ([MCP](https://cursor.com/docs/context/mcp)). The `nebula` entry
+  inside `mcpServers` in `~/.cursor/mcp.json`, with `"type": "stdio"`.
+- **Codex** ([MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)).
+  `codex mcp add nebula --env NEBULA_URL=... --env NEBULA_APP_TOKEN=... --
+  <python> <mcp_server.py>`, or the `[mcp_servers.nebula]` table in
+  `~/.codex/config.toml`. Add `tool_timeout_sec = 150` there: a run can take
+  longer than Codex's 60-second default (`nebula mcp connect codex` sets it
+  for you).
+- **Other MCP clients**: the usual `{"mcpServers": {"nebula": {command, args,
+  env}}}` block.
+
+Running a printed command (Claude Code, Codex, OpenClaw) leaves the token in
+your shell history, and while it runs any program of yours can read it in the
+process list.
+
+#### From the terminal: `nebula mcp connect`
+
+```bash
+nebula mcp connect <hermes|openclaw|claude-desktop|claude-code|cursor|codex|other> [--name N] [--daily-usd N] [--print] [--yes]
+nebula mcp disconnect <client> [--yes]
+```
+
+The CLI can't make tokens. Making one is the person's alone, and only the
+canvas opened from the launch link holds the person token; the CLI is also
+what agents run. So make the token in Settings, then give it to the CLI in
+`NEBULA_APP_TOKEN` or paste it at the hidden prompt. The CLI checks it with
+Nebula and refuses a revoked token, one that isn't an app token, or an address
+where something other than Nebula answers. If nothing answers, it writes
+nothing (`--print` still prints). It finds Nebula at `--url`, else
+`$NEBULA_URL`, else the address in `$NEBULA_URL_FILE` (for the desktop app, the
+`backend-url` path its Settings config shows), else `http://localhost:8000`.
+The config it writes uses the address Nebula reports for itself, so a desktop
+config gets `NEBULA_URL_FILE` even if you passed this launch's `--url`. Then:
+
+- **Claude Code, Codex**: runs the app's own `mcp add`. If the app already has
+  a server named `nebula` (checked with `mcp get`, which looks in every
+  scope), it stops and asks you to disconnect first, since `codex mcp add`
+  would silently replace it.
+  - Codex: the token never goes on `codex mcp add`'s command line. It gets a
+    one-off placeholder, and the CLI then swaps the token in for it in
+    `config.toml` (keeping its mode), adds `tool_timeout_sec = 150`, and checks
+    the file parses back. If it doesn't, it removes the half-made entry.
+  - Claude Code: `claude mcp add` can only take the token on its command line,
+    so it is visible in the process list for the second the command runs. The
+    CLI says so before it runs.
+- **Claude Desktop, Cursor**: shows the change as a diff (token masked), asks,
+  copies the old file to `<file>.nebula-backup-<timestamp>` (mode 600) and
+  writes the merged file with mode 600. Only `mcpServers.nebula` changes; a
+  file that isn't valid JSON is never touched. When the old file had a nebula
+  entry (a disconnect, or a connect that replaces one), its token is blanked
+  out in the backup, so a revoked app leaves no working token behind.
+- **Hermes, OpenClaw, other**: prints the config and where it goes. Nebula
+  doesn't rewrite Hermes's YAML (it would lose your comments), and
+  OpenClaw's own command needs its Gateway stopped.
+
+`--print` only prints (with a placeholder if there's no token). `--name` and
+`--daily-usd` fill in the Settings steps when you don't have a token yet.
+`disconnect` removes the entry the same way (Claude Code: `claude mcp remove
+nebula` with no `--scope`, so an older local-scope entry goes too; or it prints
+the app's remove command) and reminds you to revoke the token in Settings. Both refuse to run
+inside an in-app agent (`NEBULA_AGENT_TOKEN` set). Run from a packaged app
+(bundled Python), they say it isn't supported yet; the desktop app running
+from this checkout is supported, through `NEBULA_URL_FILE`.
+
+#### Under the hood
+
+The MCP server and the `nebula` CLI send the token as `Authorization: Agent
+<token>` (an in-app chat's `NEBULA_AGENT_TOKEN` wins if both are set; the
+backend scrubs `NEBULA_APP_TOKEN` from every process it starts, so an in-app
+chat never spends as an app). The agent shows by its name and color on the
+canvas, and `get_spend_limits` reports `budget: "app"` with its
+`appDailyUsd`. Settings lists what it spent in the last 24 hours. Revoking the
+token makes its requests fail with 401; what it spent stays in the outside
+total.
+
+Routes, all person-only: `GET /api/agent/spend/apps` (the outside total, each
+app, and `connect`: the clients on offer and whether this backend can point
+them at a checkout), `POST /api/agent/spend/apps` `{name, dailyUsd, client?,
+color?}` (returns the token once, plus `setup` when `client` is given), `PUT
+/api/agent/spend/apps/{id}` `{dailyUsd?, color?}`, `DELETE
+/api/agent/spend/apps/{id}`. The config text comes from
+`backend/services/agent_connect.py`, shared by Settings and the CLI.
+
+Remaining risk: the token is a bearer secret in the app's config file, and an
+agent with its own shell can read it from there or from its MCP child's
+environment. Anything that can read it can spend as the app, inside the app's
+limit and the shared outside budget, until the person revokes it.
 
 ### Building and running over MCP
 

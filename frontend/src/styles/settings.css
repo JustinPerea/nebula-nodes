@@ -538,7 +538,7 @@ body.app-slava-restraint .settings-model-limit__remove {
   padding: 0;
 }
 
-/* Connected apps: outside apps with their own spending token. */
+/* Connect your agent: outside agent apps with their own spending token. */
 body.app-slava-restraint .settings-apps { display: grid; gap: var(--sr-space-2); margin-top: var(--sr-space-3); }
 body.app-slava-restraint .settings-apps__title {
   margin: 0 0 4px;
@@ -555,6 +555,75 @@ body.app-slava-restraint .settings-apps__token .settings-hint { margin: 0; }
 body.app-slava-restraint .settings-apps__token-row { display: flex; align-items: center; gap: var(--sr-space-2); }
 body.app-slava-restraint .settings-apps__token-row .settings-folder__input { flex: 1; height: 28px; }
 body.app-slava-restraint .settings-agent-spent { color: var(--sr-ink); }
+body.app-slava-restraint .settings-apps .settings-apps__client { flex: 1 1 100%; }
+body.app-slava-restraint .settings-apps__app-name { display: inline-flex; align-items: center; gap: 7px; }
+body.app-slava-restraint .settings-apps__colors { display: inline-flex; align-items: center; gap: 5px; flex: 1 1 100%; }
+body.app-slava-restraint .settings-apps__swatch,
+body.app-slava-restraint .settings-apps__dot {
+  --swatch: var(--sr-ink-meta);
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  background: var(--swatch);
+  cursor: pointer;
+  transition: transform var(--sr-motion-fast), box-shadow var(--sr-motion-fast);
+}
+body.app-slava-restraint .settings-apps__swatch[style] { border-color: transparent; }
+body.app-slava-restraint .settings-apps__dot { width: 9px; height: 9px; cursor: default; flex: none; }
+body.app-slava-restraint .settings-apps__swatch--auto {
+  background: conic-gradient(#3FC1A5, #7AD3FF, #B392F0, #FF6B9A, #FF9F43, #F2C14E, #C3E86B, #3FC1A5);
+  opacity: 0.55;
+}
+body.app-slava-restraint .settings-apps__swatch:hover:not(:disabled) { transform: scale(1.12); }
+body.app-slava-restraint .settings-apps__swatch[aria-checked="true"] {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--sr-canvas), 0 0 0 3px var(--sr-ink);
+}
+body.app-slava-restraint .settings-apps__swatch:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--sr-canvas), 0 0 0 3px var(--sr-accent); }
+body.app-slava-restraint .settings-apps__setup {
+  display: grid;
+  gap: var(--sr-space-2);
+  padding: var(--sr-space-3);
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+body.app-slava-restraint .settings-apps__setup-title { margin: 0; color: var(--sr-ink); font: 500 var(--sr-type-body) var(--sr-ui); }
+body.app-slava-restraint .settings-apps__setup .settings-hint { margin: 0; }
+body.app-slava-restraint .settings-apps__steps,
+body.app-slava-restraint .settings-apps__warnings {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-label);
+  line-height: var(--sr-line-meta);
+}
+body.app-slava-restraint .settings-apps__warnings {
+  padding: 8px 10px 8px 26px;
+  border: 1px solid rgba(245, 197, 24, 0.28);
+  border-radius: 7px;
+  background: var(--sr-warning-soft);
+  color: var(--sr-ink);
+}
+body.app-slava-restraint .settings-apps__block { display: grid; gap: 4px; min-width: 0; }
+body.app-slava-restraint .settings-apps__block-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sr-space-2); }
+body.app-slava-restraint .settings-apps__code {
+  max-height: 220px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.4);
+  color: var(--sr-ink);
+  font: var(--sr-type-label) / 1.45 var(--sr-mono);
+  /* Kept unwrapped: a wrapped YAML or shell line would read as two. */
+  white-space: pre;
+}
 
 /* ── Preferences ────────────────────────────────────────────────────── */
 
