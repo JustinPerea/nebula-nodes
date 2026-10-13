@@ -5579,8 +5579,8 @@ useGraphStore.subscribe((state, previous) => {
   }
 });
 
-// Dev-only window bridge so the Puppeteer driver in scripts/puppeteer-driver/
-// can call clearGraph() between automated demo runs.
+// Dev-only window bridge so scripted UI capture (the nebula-nodes-visuals
+// skill's capture template) can call clearGraph() between runs.
 if (typeof window !== 'undefined' && import.meta.env?.DEV) {
   (window as unknown as { __nebulaGraphStore?: typeof useGraphStore }).__nebulaGraphStore = useGraphStore;
 }

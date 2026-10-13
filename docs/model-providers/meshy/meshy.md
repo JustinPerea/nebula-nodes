@@ -130,7 +130,7 @@ Text to Image:
 - `nano-banana-2` is now exposed in the node definition alongside `nano-banana`
   and `nano-banana-pro` (added 2026-05-17).
 
-## Daedalus Workflow
+## Agent Workflow
 
 Before building a Meshy graph:
 

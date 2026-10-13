@@ -1,7 +1,7 @@
 """Process-lifecycle helpers for interactive agent CLI turns.
 
 Agent CLIs can spawn shells and other descendants while operating Nebula's
-graph.  Killing only the direct ``claude``/``codex``/``hermes`` process leaves
+graph.  Killing only the direct ``claude``/``codex`` process leaves
 those descendants running after the user presses Stop.  Every interactive
 turn therefore starts in an isolated process group and cancellation terminates
 the whole tree before the WebSocket confirms it to the client.

@@ -5,7 +5,7 @@ The person sets these in Settings > Preferences:
 - ``runCostConfirmUsd``: the per-run threshold. Their own Run button asks
   them at or over it, and agents are held to it too.
 - ``agentSpend.sessionUsd``: what one agent chat session may spend in total.
-  Each in-app chat (Claude, Codex or Daedalus) is its own session: the turn
+  Each in-app chat (Claude or Codex) is its own session: the turn
   token its Nebula MCP server sends names the chat (``main._spend_session``).
 - ``agentSpend.outsideDailyUsd``: what every agent without a Nebula chat
   (Claude Desktop, terminal tools, scripts) may spend together over the last

@@ -228,7 +228,7 @@ graph inputs.
 
 - No `thinking_level` UI param. Nano Banana 2 supports `minimal` and `high`
   and Nano Banana Pro thinks by default. Today the handler cannot expose
-  this control to Daedalus.
+  this control to agents.
 - No grounding controls. `enable_web_search` is supported by Nano Banana 2
   and Nano Banana Pro; image-search grounding is supported by Nano Banana 2
   only. Neither is exposed.
@@ -272,7 +272,7 @@ graph inputs.
   Gemini accepts a wider range (Matryoshka embeddings) up to the model's
   full dimension.
 
-## Daedalus Guidance
+## Agent Guidance
 
 When choosing a Gemini-family node:
 

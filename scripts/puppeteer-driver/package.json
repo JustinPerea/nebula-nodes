@@ -3,9 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Claude-as-operator driver for nebula UI demo recording.",
+  "description": "Shared Puppeteer install for Nebula UI capture (the nebula-nodes-visuals capture template) and the Remotion foundation smoke test.",
   "scripts": {
-    "drive": "node drive.mjs"
+    "remotion-smoke": "node remotion-foundation-smoke.mjs"
   },
   "dependencies": {
     "puppeteer": "^24.5.0"

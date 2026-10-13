@@ -51,17 +51,14 @@ on Krea's consent screen. Expired credentials refresh when possible; rejected
 credentials require a new sign-in. OAuth credentials are local to this Nebula
 installation, so other people cloning the repo connect their own accounts.
 
-Nebula's Claude, Codex and Daedalus agents receive a local MCP bridge for read-only
+Nebula's Claude and Codex agents receive a local MCP bridge for read-only
 discovery: models (`list_models`, `get_model_schema`), Krea's prompting guide,
 the account's styles and moodboards, and node apps and node types. Krea Files
 listings stay off the bridge because they include private and workspace-shared
 file names. Nothing on the bridge generates, uploads, writes, deletes or spends.
 Media requests continue through the canvas graph; the bridge cannot bypass run
-history by directly calling `generate`. Hermes (Daedalus) uses
-a temporary managed MCP overlay when no administrator-managed overlay is
-already present; an existing managed policy is preserved, and the Daedalus
-turn is refused instead, since the overlay is also how it reaches Nebula's own
-MCP tools (see [MCP-SETUP.md](MCP-SETUP.md#in-app-agents-use-this-server)).
+history by directly calling `generate` (see
+[MCP-SETUP.md](MCP-SETUP.md#in-app-agents-use-this-server)).
 Switching a Krea node between account billing (`_kreaAuth`) and its API key
 is the person's call. The backend enforces it: an agent's direct edit, project
 snapshot save or run request that changes `_kreaAuth`, or brings in a dual-mode

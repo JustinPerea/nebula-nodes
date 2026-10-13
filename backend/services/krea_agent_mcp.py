@@ -1,9 +1,9 @@
-"""Invocation-scoped MCP servers for Nebula's in-app agents (Claude, Codex, Hermes).
+"""Invocation-scoped MCP servers for Nebula's in-app agents (Claude, Codex).
 
 Two servers, both started per turn by the agent's own CLI:
   - `nebula` (backend/mcp_server.py): the canvas, runs, spend and Commons
-    tools. It is how in-app agents reach Nebula; Codex's shell has no network
-    and Hermes has no terminal, so for them it is the only way.
+    tools. It is how in-app agents reach Nebula; Codex's shell has no network,
+    so for it this is the only way.
   - `nebula_krea` (backend/krea_mcp_server.py): read-only Krea discovery.
 
 Each child only knows the local backend address. The turn's agent token
@@ -17,8 +17,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import tempfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 from urllib.parse import urlsplit, urlunsplit
@@ -46,7 +44,6 @@ NEBULA_MCP_TOOLS = (
 # to 45 s by default and 300 s at most); Codex's own default is 60 s.
 CODEX_NEBULA_TOOL_TIMEOUT_SEC = 150
 DEFAULT_NEBULA_URL = "http://127.0.0.1:8000"
-HERMES_SYSTEM_MANAGED_DIR = Path("/etc/hermes")
 # Secrets every child loses; services/child_env.py is the one list.
 CONNECTOR_SECRET_ENV_KEYS = SECRET_ENV_KEYS
 # Read-only Krea MCP tools Nebula's agents may call. None of them generates,
@@ -157,7 +154,7 @@ def nebula_server_config(url: str | None = None) -> dict[str, object]:
 
 
 def nebula_server_env_refs(url: str | None = None) -> dict[str, str]:
-    """`env` for configs that expand `${VAR}` (Claude Code, Hermes): the token
+    """`env` for configs that expand `${VAR}` (Claude Code): the token
     by name, so its value never sits in argv or on disk."""
     return {"NEBULA_AGENT_TOKEN": "${NEBULA_AGENT_TOKEN}",
             "NEBULA_URL": loopback_backend_url(url or resolve_nebula_url())}
@@ -174,44 +171,3 @@ def codex_mcp_args() -> list[str]:
         "-c", f"mcp_servers.{SERVER_NAME}.command={json.dumps(config['command'])}",
         "-c", f"mcp_servers.{SERVER_NAME}.args={json.dumps(config['args'])}",
     ]
-
-
-@dataclass
-class HermesMcpOverlay:
-    directory: tempfile.TemporaryDirectory[str] | None = None
-    limitation: str | None = None
-
-    def cleanup(self) -> None:
-        if self.directory is not None:
-            self.directory.cleanup()
-
-
-def prepare_hermes_mcp(env: dict[str, str]) -> HermesMcpOverlay:
-    """Add only the MCP leaves through Hermes's managed overlay, preserving its home.
-
-    Hermes deep-merges this layer over the user's profile config. Never replace
-    an existing administrator layer, including one explicitly selected by env;
-    the caller refuses the turn then, since Daedalus reaches Nebula only here.
-    Hermes passes stdio servers a filtered environment plus their `env`, and
-    expands `${NEBULA_AGENT_TOKEN}` from its own, so the file holds no secret.
-    """
-    configured_scope = env.get("HERMES_MANAGED_DIR", "").strip()
-    if configured_scope or HERMES_SYSTEM_MANAGED_DIR.is_dir():
-        return HermesMcpOverlay(limitation=(
-            "Daedalus can't run here: Nebula's MCP tools could not be added because an "
-            "existing Hermes administrator configuration scope must be preserved."
-        ))
-    directory = tempfile.TemporaryDirectory(prefix="nebula-hermes-mcp-")
-    try:
-        url = env["NEBULA_URL"]
-        config = {"mcp_servers": {
-            NEBULA_SERVER_NAME: {**nebula_server_config(url), "env": nebula_server_env_refs(url)},
-            SERVER_NAME: krea_server_config(url),
-        }}
-        # JSON is valid YAML; no new YAML dependency or profile rewrite is needed.
-        (Path(directory.name) / "config.yaml").write_text(json.dumps(config), encoding="utf-8")
-        env["HERMES_MANAGED_DIR"] = directory.name
-    except BaseException:
-        directory.cleanup()
-        raise
-    return HermesMcpOverlay(directory=directory)

@@ -112,7 +112,7 @@ export function AgentSpendSection() {
       <p className="settings-hint" id="settings-agent-spend-who">
         &ldquo;You&rdquo; means this canvas, opened from the link the backend printed at launch (or the desktop app).
         Only it can change these limits, keys and connections. That holds against Nebula&rsquo;s own chats (Codex&rsquo;s
-        shell has no network; Daedalus has only Nebula&rsquo;s tools) and any agent that reaches Nebula only through its
+        shell has no network) and any agent that reaches Nebula only through its
         MCP server or API. A program running as you with its own unrestricted shell could read the link&rsquo;s token,
         so these limits don&rsquo;t bind it.
       </p>

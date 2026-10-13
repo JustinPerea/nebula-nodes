@@ -125,7 +125,7 @@ def test_expired_credential_blocks_previously_cached_models(
 
 
 @respx.mock
-def test_rejected_token_uses_daedalus_refresh_instruction(
+def test_rejected_token_uses_hermes_model_refresh_instruction(
     client,
     monkeypatch,
 ) -> None:
@@ -138,7 +138,7 @@ def test_rejected_token_uses_daedalus_refresh_instruction(
     response = client.get("/api/nous/models")
 
     assert response.status_code == 401
-    assert "hermes-daedalus model" in response.json()["detail"]
+    assert "`hermes model`" in response.json()["detail"]
 
 
 @respx.mock(assert_all_called=False)

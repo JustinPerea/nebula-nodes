@@ -50,9 +50,9 @@ def test_unknown_agent_token_falls_back_to_the_self_reported_name():
     assert (identity.id, identity.name, identity.verified) == ("ext:claude-code", "Claude Code", False)
 
 
-def test_daedalus_header_is_named_daedalus():
-    identity = identify({"x-daedalus-caller": "1"}, token_lookup=_lookup)
-    assert identity is not None and identity.name == "Daedalus"
+def test_removed_daedalus_header_names_no_one():
+    # Daedalus was removed; its old marker header no longer yields an identity.
+    assert identify({"x-daedalus-caller": "1"}, token_lookup=_lookup) is None
 
 
 def test_self_reported_names_are_cleaned_and_colours_are_stable():

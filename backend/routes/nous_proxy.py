@@ -52,7 +52,7 @@ async def get_models() -> dict[str, Any]:
             raise HTTPException(
                 status_code=401,
                 detail=(
-                    "Nous Portal token rejected — run `hermes-daedalus model` "
+                    "Nous Portal token rejected — run `hermes model` "
                     "and select Nous Portal to refresh."
                 ),
             )

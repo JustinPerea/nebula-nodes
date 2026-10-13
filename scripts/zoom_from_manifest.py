@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""zoom_from_manifest.py — apply zoom-and-hold using a Daedalus zoom manifest.
+"""zoom_from_manifest.py — apply zoom-and-hold using a Nebula zoom manifest.
 
 Replaces Chris Lema's chain step 3 (OpenCV face-detection zoom) with
-agent-telemetry-driven zoom for the Daedalus demo recording. Each entry in
+agent-telemetry-driven zoom for a Nebula agent demo recording. Each entry in
 the zoom manifest (produced by the frontend's useZoomManifest hook) marks a
 canvas mutation event with a node ID, screen-space bounds, and timestamp.
 This script generates ffmpeg crop+scale segments that hold on each node as

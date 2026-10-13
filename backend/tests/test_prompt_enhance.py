@@ -146,7 +146,7 @@ class TestEnhancePromptFallthrough:
 # -- POST /api/enhance-prompt: the person's Create button only ------------------
 
 AGENT_MARKERS = [{"Authorization": "Agent x"}, {"X-Nebula-Agent": "codex"},
-                 {"X-Daedalus-Caller": "hermes"}, {"X-Nebula-Client": "nebula-cli"}]
+                 {"X-Nebula-Client": "nebula-cli"}]
 
 
 @pytest.fixture

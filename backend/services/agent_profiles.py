@@ -101,7 +101,7 @@ CODEX_ALLOWED_FEATURES = frozenset({
 # Origin) or the screen, the daemon can serve a turn from a process started
 # with the user's own config. image_generation makes images on the ChatGPT plan
 # outside the canvas, Nebula's spending limits and proposals; agents generate
-# through Nebula nodes (Daedalus lost direct generation for the same reason).
+# through Nebula nodes.
 # `--strict-config` turns a renamed name into an error.
 CODEX_DISABLED_FEATURES = (
     "memories", "hooks", "plugins", "remote_plugin", "plugin_sharing", "apps",

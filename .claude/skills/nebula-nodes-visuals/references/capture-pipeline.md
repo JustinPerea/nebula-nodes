@@ -45,7 +45,7 @@ chat.clear();
 chat.pushUser('Build a product-shot generator with prompt variants');
 chat.pushAssistant("Here's the plan:\nProduct brief feeds Hero shot and Detail shot.\nOne prompt, two variants — wiring now.", { streaming:false });
 ```
-- The three agents are real: **Claude / Codex / Daedalus**. Codex status `Codex · ChatGPT · ready` is real when Codex is logged in on the machine (backend on `:8000`).
+- The two agents are real: **Claude / Codex**. Codex status `Codex · ChatGPT · ready` is real when Codex is logged in on the machine (backend on `:8000`).
 - **Chat bubbles are `white-space: pre-wrap`**, so `\n` makes real line breaks inside ONE bubble. Use this for multi-line replies. `{streaming:true}` shows the `▊` cursor.
 - `pushThinking(lines)` routes to the Agent Log, not the chat bubble — so for a visible "digesting" beat, rely on the `thinking…` status + the stop button (set busy), not the thinking lines.
 

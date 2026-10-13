@@ -9,7 +9,7 @@ itself, even by accident or because a prompt told it to.
 Two checks, both required:
 
 1. No agent markers. A request that carries ``Authorization: Agent ...``,
-   ``X-Daedalus-Caller``, ``X-Nebula-Agent`` or ``X-Nebula-Client`` is refused,
+   ``X-Nebula-Agent`` or ``X-Nebula-Client`` is refused,
    even when the token is invalid or expired and even with a valid person
    token. Something that claims to be an agent never counts as the person.
 2. This launch's person token (services/person_session.py) in the
@@ -23,8 +23,8 @@ With no person session (desktop stdin missing, or a debugging port open),
 nothing counts as the person.
 
 What this does and doesn't protect. The limits and person-only actions bind
-agents that reach Nebula only through its API: in-app Claude, in-app Codex
-and Hermes once their shells have no network, and outside clients that only
+agents that reach Nebula only through its API: in-app Claude and in-app Codex
+once their shells have no network, and outside clients that only
 have MCP or the ``nebula`` CLI. They do not bind a program running as the same
 OS user with its own unsandboxed shell: it can read the token where the
 person's browser keeps it (Chrome's on-disk Session Storage and History), read
@@ -37,7 +37,7 @@ from typing import Mapping
 
 from services import person_session
 
-AGENT_MARKER_HEADERS = ("x-daedalus-caller", "x-nebula-agent", "x-nebula-client")
+AGENT_MARKER_HEADERS = ("x-nebula-agent", "x-nebula-client")
 PERSON_HEADER = person_session.PERSON_HEADER
 
 PERSON_REQUIRED = "person_required"

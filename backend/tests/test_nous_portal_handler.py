@@ -1,7 +1,7 @@
 """Tests for the Nous Portal universal handler.
 
-Auth model: Nous Portal uses Hermes OAuth credentials stored in
-~/.hermes/profiles/daedalus/auth.json (and profile fallbacks). It does NOT
+Auth model: Nous Portal uses Hermes OAuth credentials stored in the active
+Hermes profile's auth.json (then ~/.hermes/auth.json). It does NOT
 use a user-supplied environment variable key — envKeyName is [] intentionally.
 
 The inference endpoint (https://inference-api.nousresearch.com/v1/chat/completions)
@@ -44,7 +44,7 @@ async def test_raises_when_not_authenticated():
     """Handler must surface NousNotAuthenticatedError as RuntimeError with a clear message."""
     with patch(
         "handlers.nous_portal.load_nous_credential",
-        side_effect=NousNotAuthenticatedError("Run hermes-daedalus model to authenticate"),
+        side_effect=NousNotAuthenticatedError("Run hermes model to authenticate"),
     ):
         with pytest.raises(RuntimeError, match="hermes"):
             await handle_nous_portal_universal(
