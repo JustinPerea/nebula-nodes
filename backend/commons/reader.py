@@ -19,6 +19,7 @@ from typing import Any
 
 from commons.records import validate_box
 from commons.search import AXES
+from services.agent_process import spawn_agent_process
 from services.child_env import scrubbed_env
 
 PROMPT_VERSION = "reader-1"
@@ -134,7 +135,7 @@ def build_message(png: bytes, palette: list[dict], fewshots: list[dict]) -> dict
 
 
 async def read_image(png: bytes, palette: list[dict], fewshots: list[dict], *, vocab, timeout: float = 300,
-                     spawn=asyncio.create_subprocess_exec) -> ReaderResult:
+                     spawn=spawn_agent_process) -> ReaderResult:
     started = time.monotonic()
     cmd = build_command(SYSTEM_PROMPT, analysis_schema(vocab, len(palette)))
     payload = (json.dumps(build_message(png, palette, fewshots)) + "\n").encode()

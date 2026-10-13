@@ -32,6 +32,20 @@ def agent_process_group_options() -> dict[str, Any]:
     return {}
 
 
+async def spawn_agent_process(*args: Any, **kwargs: Any) -> asyncio.subprocess.Process:
+    """Start an agent CLI in its own process group, watched by the guardian.
+
+    Use this for every agent process (turns, preflights, model discovery):
+    cancellation kills the group with ``terminate_agent_process_tree``, and
+    services/agent_guardian.py kills it if the backend dies first.
+    """
+    from services import agent_guardian
+
+    proc = await asyncio.create_subprocess_exec(*args, **kwargs, **agent_process_group_options())
+    agent_guardian.track(proc)
+    return proc
+
+
 async def terminate_agent_process_tree(proc: Any) -> None:
     """Kill an agent subprocess and every process it spawned, then reap it.
 
