@@ -28,6 +28,12 @@ Rules, with any limit set:
   proposal. A run is counted when it starts, at its upper bound, and the
   person's runs (including accepted proposals) aren't counted.
 
+An accepted proposal's run is the person's, so it isn't held to these limits;
+what makes that safe is that Accept approves values, not node ids
+(services/run_approvals.py). Agents can't change those nodes until the canvas
+starts the run, and the backend refuses the run if anything in it changed
+since Accept.
+
 Runs billed to a signed-in Krea plan (``plan``) aren't per-call charges and
 are neither limited nor counted, as on the canvas.
 

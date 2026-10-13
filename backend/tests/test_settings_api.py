@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -225,3 +225,22 @@ def test_successful_key_update_copies_loaded_settings_and_preserves_other_provid
         **initial["apiKeys"], "OPENAI_API_KEY": "synthetic-new",
     }}
     clear.assert_called_once_with()
+
+
+@pytest.mark.parametrize("headers", [{}, FORGED_ORIGIN, {**PERSON, "X-Nebula-Agent": "Codex"},
+                                     {"X-Nebula-Client": "nebula-cli"}])
+def test_only_the_person_starts_a_codex_login(monkeypatch, person, headers):
+    """Starting a ChatGPT login runs `codex logout` first: the person's account, like their keys."""
+    import services.codex_session as codex_session
+
+    start = AsyncMock(return_value={"status": "started"})
+    monkeypatch.setattr(codex_session, "start_codex_chatgpt_login", start)
+    client = TestClient(main.app)
+    refused = client.post("/api/agents/codex/login/chatgpt", json={"deviceAuth": True}, headers=headers)
+    assert refused.status_code == 403
+    if headers in ({}, FORGED_ORIGIN):
+        assert refused.json()["code"] == "person_required"
+    start.assert_not_called()
+    allowed = client.post("/api/agents/codex/login/chatgpt", json={"deviceAuth": True}, headers=PERSON)
+    assert allowed.status_code == 200 and allowed.json() == {"status": "started"}
+    start.assert_awaited_once_with(device_auth=True)

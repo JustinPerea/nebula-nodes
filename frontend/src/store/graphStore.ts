@@ -715,14 +715,15 @@ interface GraphState {
   acknowledgeUncertainWorldLabsRun: () => void;
   reconcilePersistedWorldLabsRun: () => Promise<void>;
   dismissProviderRecoveryWarning: () => void;
-  executeNode: (nodeId: string) => Promise<void>;
+  /** `approvalId`: the run a proposal's Accept approved (see AcceptedProposal). */
+  executeNode: (nodeId: string, options?: { approvalId?: string }) => Promise<void>;
   /** Regenerate one tracked Cinema shot. Distinct shots may run concurrently.
    * `variations` > 1 generates seeded candidates into shot.variations. */
   executeShot: (nodeId: string, shotId: string, seed?: number, variations?: number) => Promise<void>;
   isShotAdmissionBlocked: (nodeId: string, shotId: string) => boolean;
   /** Promote a variation to the canonical scene image and dynamic output port. */
   promoteShotVariation: (nodeId: string, shotId: string, index: number) => Promise<void>;
-  executeCluster: (nodeIds: string[]) => Promise<void>;
+  executeCluster: (nodeIds: string[], options?: { approvalId?: string }) => Promise<void>;
   executeClusterConcurrent: (nodeIds: string[], createOrigin?: CreateRunOrigin) => Promise<void>;
   authorGenerationCluster: (request: GenerationRequest) => Promise<{ modelNodeIds: string[]; allNodeIds: string[] }>;
   /** Merge what the backend committed for an accepted agent proposal (new nodes, wires, param changes). */
@@ -3889,7 +3890,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }
   },
 
-  executeNode: async (nodeId) => {
+  executeNode: async (nodeId, options) => {
     const { nodes, edges, isExecuting, resetExecution } = get();
     if (isExecuting || get().isImportingGraph) return;
     const uploadIssue = pendingCinemaUploadIssue(nodesInExecutionScope(nodes, edges, nodeId));
@@ -3925,7 +3926,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }));
     pendingStartRunIds.add(runId);
     try {
-      const result = await apiExecuteNode(snapshot.nodes, snapshot.edges, nodeId, runId);
+      const result = await apiExecuteNode(snapshot.nodes, snapshot.edges, nodeId, runId, undefined, options?.approvalId);
       pendingStartRunIds.delete(runId);
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started' && result.status !== 'validation_error') {
@@ -4101,7 +4102,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     applyShotVariationPromotion(set, nodeId, nextScene, shotId, variation.url);
   },
 
-  executeCluster: async (nodeIds) => {
+  executeCluster: async (nodeIds, options) => {
     const { nodes, edges, isExecuting, resetExecution } = get();
     if (isExecuting || get().isImportingGraph) return;
     const idSet = new Set(nodeIds);
@@ -4151,7 +4152,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }));
     pendingStartRunIds.add(runId);
     try {
-      const result = await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId);
+      const result = await apiExecuteGraph(snapshot.nodes, snapshot.edges, runId, undefined, options?.approvalId);
       pendingStartRunIds.delete(runId);
       if (await honorCancellationAfterStart(runId, result.status, set, get)) return;
       if (result.status !== 'started' && result.status !== 'validation_error') {

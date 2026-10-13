@@ -5,7 +5,7 @@
 - Adapt file selection and export to browser helpers rather than importing old desktop bridge and dialog machinery. A browser export acknowledges only that a download was started, never that a filesystem save completed. Packaged Electron integration remains outside this slice.
 - Retain the local readiness fixes: failed comment/folder submissions keep drafts, committed writes clear only their own submitted draft, polling cannot replace newer review proposals, and model requests remain behind explicit actions.
 
-- Enabled native chat sends and approval continuations carry `commonsToken` from the human browser session plus the selected `brand`; child actor tokens never enter the renderer. Disabled sends preserve their existing envelope and do not resolve Commons auth. Missing session authority preserves the draft and displays entry instructions. Brand changes start a new opaque conversation; running/authorizing turns cannot change brand or agent.
+- Every chat send and approval continuation carries the person token as `personToken` (updated 2026-10-12; the backend still reads the old `commonsToken` during the migration). Commons sends also carry the selected `brand`. A send without the token is refused with `person_required` before any agent turn starts, and the tab shows the "not connected as you" banner. Child actor tokens never enter the renderer. Missing session authority preserves the draft and displays entry instructions. Brand changes start a new opaque conversation; running/authorizing turns cannot change brand or agent.
 - Daedalus remains available in normal disabled mode. Enabled Commons shows its option disabled and explains that private reference chats currently support Claude/Codex, matching the verified native runner boundary. No silent fallback to a broader filesystem authority.
 - After two 401 responses, clear the browser's expired Commons token so ongoing polls do not repeatedly send rejected authority. A new dev fragment supersedes any cached session.
 
@@ -13,7 +13,7 @@
 
 - Browser routes `#commons` and `#view=commons` only become active after capability opt-in. Clearing a Commons route restores the recorded workspace; Back removes only that route while preserving other fragment fields. An authentication fragment alone does not navigate or generate anything.
 
-- Browser auth errors point to a fresh Commons dev link from the backend terminal; this slice does not promise an unmerged packaged-desktop sign-in implementation. Existing optional bridge token resolution remains compatible but is not a release claim.
+- Browser auth errors point to a fresh person link from the backend terminal (`backend/devserver.py`, or `--open`); this slice does not promise an unmerged packaged-desktop sign-in implementation. Existing optional bridge token resolution remains compatible but is not a release claim.
 
 ## Validation
 

@@ -131,11 +131,14 @@ export async function executeGraph(
   edges: Array<{ id: string; source: string; sourceHandle?: string | null; target: string; targetHandle?: string | null }>,
   runId?: string,
   preserveGraphParams = false,
+  approvalId?: string,
 ): Promise<ExecutionStartResult> {
   const response = await apiFetch('/api/execute', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes, edges, runId, ...(preserveGraphParams ? { preserveGraphParams } : {}) }),
+    body: JSON.stringify({
+      nodes, edges, runId, ...(preserveGraphParams ? { preserveGraphParams } : {}), ...(approvalId ? { approvalId } : {}),
+    }),
   });
   if (!response.ok) {
     let detail = '';
@@ -156,11 +159,15 @@ export async function executeNode(
   targetNodeId: string,
   runId?: string,
   preserveGraphParams = false,
+  approvalId?: string,
 ): Promise<ExecutionStartResult> {
   const response = await apiFetch('/api/execute-node', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes, edges, targetNodeId, runId, ...(preserveGraphParams ? { preserveGraphParams } : {}) }),
+    body: JSON.stringify({
+      nodes, edges, targetNodeId, runId,
+      ...(preserveGraphParams ? { preserveGraphParams } : {}), ...(approvalId ? { approvalId } : {}),
+    }),
   });
   if (!response.ok) {
     let detail = '';

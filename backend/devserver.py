@@ -22,6 +22,7 @@ through its API, not those.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import webbrowser
 from pathlib import Path
@@ -85,8 +86,13 @@ def announce(token: str, backend_origin: str, *, ui: str | None, open_browser: b
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse(argv)
-    host = "127.0.0.1" if args.host in ("0.0.0.0", "") else args.host
+    host = {"0.0.0.0": "127.0.0.1", "": "127.0.0.1", "::": "::1"}.get(args.host, args.host)
     backend_origin = f"http://{f'[{host}]' if ':' in host else host}:{args.port}"
+    # Where this backend is, for every agent child it starts (chat turns, the
+    # model catalog probe, CLI logins, the Krea MCP server). Not a secret. The
+    # reload workers inherit it; without it they would fall back to port 8000,
+    # which may be a different Nebula.
+    os.environ["NEBULA_URL"] = backend_origin
     token = person_session.new_token()
     # uvicorn.Config has no app_dir: BACKEND_DIR is on sys.path (above), and
     # each reload worker re-runs this module's top level, so it is there too.

@@ -80,12 +80,14 @@ def resolve_nebula_url(
     env: Mapping[str, str] | None = None,
     argv: Sequence[str] | None = None,
 ) -> str:
-    """Use the sidecar's explicit address, or the current uvicorn CLI address."""
+    """Use the explicit address (the sidecar and backend/devserver.py set it),
+    else the --host/--port of the uvicorn or devserver.py command line."""
     environ = os.environ if env is None else env
     if environ.get("NEBULA_URL", "").strip():
         return loopback_backend_url(environ["NEBULA_URL"])
     arguments = list(sys.argv if argv is None else argv)
-    if any("uvicorn" in Path(arg).name or arg.endswith(":app") for arg in arguments):
+    if any("uvicorn" in Path(arg).name or arg.endswith(":app") or Path(arg).name == "devserver.py"
+           for arg in arguments):
         host, port = "127.0.0.1", "8000"
         for index, argument in enumerate(arguments):
             for flag in ("--host", "--port"):

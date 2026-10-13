@@ -197,7 +197,11 @@ Person-only, refused with 403 `person_required` otherwise:
 - creating and deleting pins; accepting and rejecting proposals (plus the
   per-proposal accept key, sent only to a `/ws` that said hello as the person);
 - `PUT /api/settings` (every field), `DELETE /api/settings/api-keys/{provider}`,
-  `POST /api/credentials/update`;
+  `POST /api/credentials/update`, and `POST /api/agents/codex/login/chatgpt`
+  (it runs `codex logout` first, clearing the person's Codex sign-in);
+- starting or releasing a run approved on Accept (`approvalId` on
+  `/api/execute` and `/api/execute-node`, `DELETE /api/canvas/approvals/{id}`;
+  see Proposals below);
 - Krea connect, check, disconnect and trial (`/api/krea/connection/connect`,
   `/api/krea/connection/check`, `DELETE /api/krea/connection`,
   `/api/krea/trial`). `GET /api/krea/connection`, `/api/krea/tools` and
@@ -222,8 +226,11 @@ environment minus `NEBULA_PERSON_TOKEN`, `NEBULA_CONNECTOR_ENCRYPTION_KEY`,
 
 Remaining risk, plainly: a program running as you with its own unsandboxed
 shell can still read the token (the backend's memory, Chrome's on-disk Session
-Storage and History). The token binds Nebula's in-app agents and any client
-that reaches Nebula only through its MCP server, CLI or API; it is not a
+Storage and History). The token binds in-app Claude and any client that
+reaches Nebula only through its MCP server, CLI or API. In-app Codex and
+Hermes are bound only once their shells have no network (Codex reaching Nebula
+through the Nebula MCP server alone, Hermes limited to MCP tools); until that
+lands they can read the token like any other local program. It is not a
 sandbox against hostile local code.
 
 ### Pins
@@ -339,6 +346,19 @@ Rules:
 - Proposals live in memory only and are lost on restart.
 - Accepting never executes anything on the backend. The canvas starts the
   runs through the same path as its own Run button.
+- Accept approves values, not just node ids (`backend/services/run_approvals.py`).
+  Accept refuses (409, invalidated) if anything the listed runs would start
+  changed since the proposal was made: a node's settings, its wires in, or a
+  node gone. After Accept, every node those runs can start is locked against
+  edits by anyone but the person until the canvas starts the run: set params,
+  `apply`, wire, unwire and delete on them return 409 ("in a run the person
+  approved ... hasn't started yet"). The canvas sends the approval id from the
+  accept response with its run (also when the run waits for another to
+  finish), and the backend starts it only if the live graph and the request
+  still match what was accepted ("changed since you accepted" otherwise; the
+  person can then run it by hand). An approval is used up by that run, and
+  also ends when the person dismisses the waiting run, on import, project
+  switch or Clear canvas, and after 30 minutes.
 
 Who can accept: only the person, enforced in three layers.
 
@@ -350,8 +370,10 @@ Who can accept: only the person, enforced in three layers.
    the snapshot, the journal or MCP results.
 3. There is no accept command in the CLI or MCP server.
 
-In-app agents (Claude, Codex, Hermes) never get the person token: it is in
-no environment, argv or file the backend hands them.
+In-app agents (Claude, Codex, Hermes) are never handed the person token: it
+is in no environment, argv or file the backend gives them. (Codex and Hermes
+can still read it from the browser's storage while their shells have network;
+see "Who counts as the person".)
 
 Before the click, the bar's "See what Accept writes" list shows every value
 Accept will write: new nodes' params and `from → to` for changed params, in

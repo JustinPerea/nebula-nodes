@@ -19,9 +19,9 @@ import {
   type ChatProvider,
 } from '../../lib/api';
 import { ChatModelPicker } from './ChatModelPicker';
-import { apiFetch, backendAssetUrlSync, backendWebSocketUrl } from '../../lib/backend';
+import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
-import { reportPersonRequired } from '../../lib/personSession';
+import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
 import {
   chatCancellationDisconnectNotice,
@@ -850,6 +850,7 @@ export function ChatPanel() {
     let cancelled = false;
     let ws: WebSocket | null = null;
     let retryTimer: number | null = null;
+    let reconnectNow = false;
 
     const scheduleReconnect = () => {
       if (cancelled || retryTimer) return;
@@ -880,6 +881,11 @@ export function ChatPanel() {
                 parts: [...msg.parts, { kind: 'system', ...disconnectNotice }],
                 streaming: false,
               }));
+            }
+            if (reconnectNow && ws === socket) {
+              reconnectNow = false;
+              connect();
+              return;
             }
             scheduleReconnect();
           };
@@ -1083,8 +1089,23 @@ export function ChatPanel() {
 
     connect();
 
+    // A person link pasted into this open tab pins the backend that issued it.
+    // A chat socket opened before that (on the dev proxy, say) can never carry
+    // the token, so every send would be refused: reconnect it to the pinned
+    // backend right away, the way the canvas socket does.
+    const stopListening = onPersonConnected(() => {
+      const socket = ws;
+      if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) return;
+      void personTokenForSocket(socket.url).then((token) => {
+        if (cancelled || ws !== socket || token) return;
+        reconnectNow = true;
+        socket.close();
+      });
+    });
+
     return () => {
       cancelled = true;
+      stopListening();
       if (retryTimer) window.clearTimeout(retryTimer);
       ws?.close();
       wsRef.current = null;

@@ -422,6 +422,9 @@ class Proposal:
     cost: dict[str, Any]
     # What the existing nodes looked like at submit time, for the view.
     existing: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # What the listed runs would start, per node (new nodes by ref), at submit
+    # time. Accept refuses when the live graph would run anything else.
+    run_fingerprint: dict[str, str] = field(default_factory=dict)
     status: str = OPEN
     reason: str | None = None
     # Only ever sent to browser sockets; never in view(), REST, journal or logs.
@@ -488,6 +491,7 @@ class ProposalBook:
         positions: dict[str, dict[str, float]],
         cost: dict[str, Any],
         existing: dict[str, dict[str, Any]] | None = None,
+        run_fingerprint: dict[str, str] | None = None,
     ) -> Proposal:
         """Build and open a proposal (enforcing the open caps)."""
         now = self._clock()
@@ -501,6 +505,7 @@ class ProposalBook:
             expires_at=now + PROPOSAL_TTL_SECONDS,
             cost=cost,
             existing=copy.deepcopy(existing or {}),
+            run_fingerprint=dict(run_fingerprint or {}),
         )
         self.open(proposal)
         return proposal

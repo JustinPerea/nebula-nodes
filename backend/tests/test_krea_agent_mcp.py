@@ -25,6 +25,9 @@ def test_backend_url_tracks_sidecar_and_uvicorn_preview():
     assert config.resolve_nebula_url({}, ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8033"]) == "http://127.0.0.1:8033"
     assert config.resolve_nebula_url({}, ["uvicorn", "main:app", "--host=::", "--port=8033"]) == "http://[::1]:8033"
     assert config.resolve_nebula_url({}, ["pytest", "--port", "9999"]) == config.DEFAULT_NEBULA_URL
+    # A devserver.py reload worker inherits its parent's argv.
+    assert config.resolve_nebula_url({}, ["backend/devserver.py", "--port", "8131"]) == "http://127.0.0.1:8131"
+    assert config.resolve_nebula_url({}, ["devserver.py"]) == "http://127.0.0.1:8000"
 
 
 def test_child_environment_keeps_agent_auth_and_removes_connector_secrets():

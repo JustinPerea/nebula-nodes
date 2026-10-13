@@ -31,7 +31,7 @@ from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, BinaryIO, Mapping
+from typing import Any, BinaryIO, Callable, Mapping
 from urllib.parse import quote, unquote_to_bytes, urlsplit
 
 from uuid import uuid4
@@ -140,6 +140,7 @@ from services.person_gate import (
     PersonGateError,
     has_agent_marker,
     is_person,
+    person_gate_error,
     require_person,
 )
 from services.canvas_edits import EditSpec, parse_edit
@@ -157,6 +158,8 @@ from services.canvas_proposals import (
     summarize_cost,
 )
 from services.local_guard import host_allowed
+from services import run_approvals as approvals
+from services.run_approvals import RunApprovals
 from services.zoom_manifest import init_manifest, append_entry
 from services.project_context import get_current_project
 from routes.openrouter_proxy import router as openrouter_router
@@ -554,10 +557,7 @@ async def desktop_renderer_cors(request: Request, call_next):
     return response
 
 
-@app.exception_handler(PersonGateError)
-async def person_gate_error(request, exc: PersonGateError):
-    # `code` lets the canvas show "this tab isn't connected as you" (person_required).
-    return JSONResponse(status_code=exc.status, content={"detail": exc.detail, "code": exc.code})
+app.add_exception_handler(PersonGateError, person_gate_error)
 
 
 app.include_router(krea_connector_router)
@@ -1759,13 +1759,91 @@ def _settle_hold(run_id: str) -> None:
             pass
 
 
-def _require_run_spend_approval(run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], **kwargs: Any) -> None:
-    """The spend check for a run already noted for its actor: a refusal forgets the note."""
+def _require_run_spend_approval(
+    run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, approval_id: str | None = None, **kwargs: Any,
+) -> None:
+    """The approval and spend checks for a run already noted for its actor: a
+    refusal forgets the note."""
     try:
+        _check_run_approval(approval_id, nodes, edges)
         _require_spend_approval(nodes, edges, run_id=run_id, **kwargs)
     except HTTPException:
         canvas_events.forget_run(run_id)
         raise
+
+
+# What the person's Accept clicks approved, waiting for the canvas to run it.
+# See services/run_approvals.py.
+run_approvals = RunApprovals()
+
+
+def _approval_shape(graph: CLIGraph, run_ids: list[str]) -> dict[str, list[Any]]:
+    return approvals.shape(graph.nodes, graph.edges, approvals.run_scope(graph.edges, run_ids))
+
+
+def _check_run_approval(approval_id: str | None, nodes: list[GraphNode], edges: list[GraphEdge]) -> None:
+    """A run that says it is the one the person approved on Accept must be
+    exactly that run: the person's, the approved nodes and wires, and the
+    live graph still holding the approved values. It uses the approval up."""
+    if approval_id is None:
+        return
+    if not _is_person_request():
+        raise HTTPException(status_code=403, detail=(
+            "Only the person's canvas starts a run they approved. Agents run through "
+            "/api/graph/run, inside the spending limits."))
+    approval = run_approvals.take(approval_id)
+    if approval is None:
+        raise HTTPException(status_code=409, detail=(
+            "This approved run expired or was already started, so nothing ran. "
+            "Look over the nodes, then click Run on them yourself."))
+    requested_nodes = {node.id: {"definitionId": node.definition_id} for node in nodes}
+    requested_edges = [
+        {"source": edge.source, "sourceHandle": edge.source_handle,
+         "target": edge.target, "targetHandle": edge.target_handle}
+        for edge in edges
+    ]
+    requested = approvals.shape(requested_nodes, requested_edges, requested_nodes)
+    live = approvals.fingerprint(cli_graph.nodes, cli_graph.edges, approval.run_node_ids)
+    changed = set(approvals.changed_nodes(approval.fingerprint, live))
+    changed.update(key for key in set(requested) | set(approval.shape) if requested.get(key) != approval.shape.get(key))
+    if changed:
+        names = sorted(changed, key=_node_order)
+        raise HTTPException(status_code=409, detail=(
+            f"{_listed(names, 4)} changed since you accepted {approval.agent_name}'s proposal, so nothing ran. "
+            "Look over the nodes, then click Run on them yourself."))
+
+
+def _refuse_agent_change_to_approved_runs(candidate: CLIGraph) -> None:
+    """409 when an edit that isn't the person's would change a run the person
+    approved on Accept and the canvas hasn't started yet: params, deletes and
+    wires into it all count. The person's own edits always pass."""
+    waiting = run_approvals.open_list()
+    if not waiting or _is_person_request():
+        return
+    for approval in waiting:
+        now = approvals.fingerprint(candidate.nodes, candidate.edges, approval.run_node_ids)
+        changed = sorted(approvals.changed_nodes(approval.fingerprint, now), key=_node_order)
+        if changed:
+            raise HTTPException(status_code=409, detail=(
+                f"{_listed(changed, 4)} {'is' if len(changed) == 1 else 'are'} in a run the person approved "
+                f"from {approval.agent_name}'s proposal {approval.proposal_id}, and it hasn't started yet. "
+                "Leave it until that run starts, or propose the change instead."))
+
+
+def _guard_approved_runs(change: Callable[[CLIGraph], Any]) -> None:
+    """Try a direct edit on a copy of the graph, then apply the check above.
+
+    A copy that refuses the edit means the real edit will refuse it in its
+    own words. If it somehow didn't, the run itself still checks the live
+    graph against what was approved (see _check_run_approval)."""
+    if not run_approvals.open_list() or _is_person_request():
+        return
+    probe = cli_graph.clone()
+    try:
+        change(probe)
+    except Exception:  # noqa: BLE001 - the real edit reports its own error
+        return
+    _refuse_agent_change_to_approved_runs(probe)
 
 
 def _require_spend_approval(
@@ -3461,6 +3539,13 @@ def _stage_proposal(
     return candidate, id_map, edge_ids, run_ids
 
 
+def _proposal_run_fingerprint(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str]) -> dict[str, str]:
+    """What the proposal's runs would start on this staged graph, with new
+    nodes named by their refs (their ids differ each time it is staged)."""
+    ref_for = {new_id: ref for ref, new_id in id_map.items()}
+    return approvals.fingerprint(candidate.nodes, candidate.edges, run_ids, name=lambda node_id: ref_for.get(node_id, node_id))
+
+
 def _outputs_available(outputs: Any) -> bool:
     if not isinstance(outputs, dict):
         return False
@@ -3595,6 +3680,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     known, visible_area = _proposal_layout_hints()
     positions = place_new_nodes(spec, known, visible_area)
     cost = _proposal_cost(candidate, id_map, run_ids)
+    run_fingerprint = _proposal_run_fingerprint(candidate, id_map, run_ids)
     existing = {
         node_id: {
             "name": f"{_node_label(node_id)} ({node_id})",
@@ -3610,6 +3696,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
             positions=positions,
             cost=cost,
             existing=existing,
+            run_fingerprint=run_fingerprint,
         )
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
@@ -3748,6 +3835,17 @@ def _refuse_overwriting_later_edits(proposal: Proposal) -> None:
         raise HTTPException(status_code=409, detail=f"{_listed(stale, 4)} changed after it was proposed")
 
 
+def _refuse_changed_runs(proposal: Proposal, candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str]) -> None:
+    """409 when what the proposal's runs would start has changed since it was
+    proposed: a node's settings, its wires in, or a node gone. The person is
+    deciding on the runs and cost the proposal showed, not on newer values."""
+    now = _proposal_run_fingerprint(candidate, id_map, run_ids)
+    changed = approvals.changed_nodes(proposal.run_fingerprint, now)
+    if changed:
+        raise HTTPException(status_code=409, detail=(
+            f"what it runs changed after it was proposed ({_listed(sorted(changed, key=_node_order), 4)})"))
+
+
 def _ensure_still_decidable(proposal: Proposal) -> None:
     """Re-check after an await: still open and still for the open project."""
     if not proposal.is_open:
@@ -3796,6 +3894,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         try:
             _refuse_overwriting_later_edits(proposal)
             candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions)
+            _refuse_changed_runs(proposal, candidate, id_map, run_ids)
         except HTTPException as exc:
             # cli_graph is only replaced at commit, so nothing changed.
             staging_error = exc
@@ -3821,6 +3920,15 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         # Unreachable while the stretch above stays await-free. If it ever
         # happens the graph is already committed, so still sync the canvas.
         pass
+    # Still before any await: from here no agent edit can change what the
+    # canvas is about to run, and the run must match it value for value.
+    approval = run_approvals.grant(
+        proposal_id=proposal.id,
+        agent_name=proposal.agent.name,
+        run_node_ids=run_ids,
+        fingerprint=approvals.fingerprint(cli_graph.nodes, cli_graph.edges, run_ids),
+        shape=_approval_shape(cli_graph, run_ids),
+    ) if run_ids else None
     await _broadcast_graph_sync()
     publish_action(f"Accepted {proposal.agent.name}'s proposal ({len(id_map)} nodes)")
     person = dict(_PERSON_ACTOR)
@@ -3868,6 +3976,8 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         "proposalId": proposal.id,
         "idMap": id_map,
         "runNodeIds": run_ids,
+        # Only the person's canvas gets this; it sends it with the run it starts.
+        "approvalId": approval.id if approval is not None else None,
         **_rf_created(list(id_map.values()), edge_ids),
         "updatedNodes": updated,
     }
@@ -3888,6 +3998,14 @@ async def reject_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     canvas_proposals.close(proposal.id, "rejected", reason=reason)
     await _announce_closed_proposals([proposal], actor=dict(_PERSON_ACTOR))
     return {"status": "rejected", "proposalId": proposal.id}
+
+
+@app.delete("/api/canvas/approvals/{approval_id}")
+async def release_run_approval(approval_id: str) -> dict[str, Any]:
+    """The person let go of a run they approved on Accept (dismissed the held
+    run, or the canvas didn't start it). The nodes it locked are free again."""
+    require_person(current_request_headers())
+    return {"status": "released" if run_approvals.drop(approval_id) else "not_found"}
 
 
 @app.get("/api/project")
@@ -3936,6 +4054,9 @@ async def get_agent_models(agent: str, refresh: bool = False) -> dict[str, Any]:
 
 @app.post("/api/agents/codex/login/chatgpt")
 async def start_codex_chatgpt_login(request: Request) -> dict[str, Any]:
+    """Sign Codex in to ChatGPT. It runs `codex logout` first, which clears the
+    person's stored Codex credentials, so only the person may start it."""
+    require_person(current_request_headers())
     from services.codex_session import start_codex_chatgpt_login as start_login
 
     payload: dict[str, Any] = {}
@@ -4441,7 +4562,7 @@ async def execute(request: ExecuteRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"Graph contains a cycle: {exc}")
 
     # After validation, so a graph that can't run reports why, not its cost.
-    _require_run_spend_approval(run_id, nodes, request.edges,
+    _require_run_spend_approval(run_id, nodes, request.edges, approval_id=request.approval_id,
                                 run_ids=_end_node_ids(nodes, request.edges))
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
@@ -4588,7 +4709,8 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"Subgraph contains a cycle: {exc}")
 
     # After validation, so a graph that can't run reports why, not its cost.
-    _require_run_spend_approval(run_id, sub_nodes, sub_edges, run_ids=[request.target_node_id])
+    _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
+                                run_ids=[request.target_node_id])
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
     try:
@@ -5384,6 +5506,8 @@ async def _broadcast_graph_sync(*, graph_replaced: bool = False, reason: str = "
         await _broadcast_pins()
         await _journal_detached_pins(detached, "the canvas was replaced")
         # Proposals point at node ids that just restarted: none of them still fit.
+        # Nor do runs approved on Accept that haven't started.
+        run_approvals.clear()
         await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was replaced"))
     return export
 
@@ -5979,6 +6103,9 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         body.get("target", ""),
         body.get("targetHandle", ""),
     )
+    _guard_approved_runs(lambda probe: probe.connect(
+        body["source"], body["sourceHandle"], body["target"], body["targetHandle"],
+    ))
     try:
         edge = cli_graph.connect(
             body["source"], body["sourceHandle"],
@@ -6088,6 +6215,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
                 # failure; the caller requested a pair, not a standalone node.
                 raise HTTPException(status_code=400, detail=f"Cannot connect this node: {exc}") from exc
 
+        _refuse_agent_change_to_approved_runs(candidate)
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[short_id]],
@@ -6306,6 +6434,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             raise HTTPException(status_code=400, detail="params must be an object")
         _validate_params(node.get("definitionId", ""), params)
         params = _coerce_params(node.get("definitionId", ""), params)
+        _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
         if node.get("definitionId") == "cinema-scene" and "scene" in params:
             # Studio/Inspector PUTs carry authoring snapshots captured before
             # a generation or promotion may have installed fresher media.
@@ -6490,6 +6619,7 @@ async def clear_graph() -> dict:
     with _paid_graph_mutation("clear the canvas"):
         _reject_graph_replacement_during_paid_start("clear the canvas")
         cli_graph.clear()
+        run_approvals.clear()
     agent_presence.forget_graph()
     await _broadcast_graph_sync()
     publish_action("Cleared the canvas")
@@ -6653,6 +6783,7 @@ async def delete_graph_node(node_id: str) -> dict:
         if node is None:
             raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
         _ensure_node_deletable(node_id, node)
+        _guard_approved_runs(lambda probe: probe.remove_node(node_id))
         label = _node_label(node_id)
         removed_definition = str(node.get("definitionId") or "")
         removed_position = copy.deepcopy(node.get("position"))
@@ -6778,6 +6909,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         if moves:
             candidate.update_positions(moves)
         touched = sorted(set(id_map.values()) | set(params_before))
+        _refuse_agent_change_to_approved_runs(candidate)
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[node_id] for node_id in touched],
@@ -7007,6 +7139,9 @@ def _url_to_output_path(value: str) -> Path | None:
 async def delete_graph_edge(body: dict[str, Any]) -> dict:
     """Remove the edge matching source/sourceHandle/target/targetHandle."""
     _check_workspace_revision()
+    _guard_approved_runs(lambda probe: probe.remove_edge(
+        body.get("source", ""), body.get("sourceHandle", ""), body.get("target", ""), body.get("targetHandle", ""),
+    ))
     removed = cli_graph.remove_edge(
         body.get("source", ""),
         body.get("sourceHandle", ""),
@@ -7346,6 +7481,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
             include_outputs=False,
         )
         created_edge_ids = _stage_graph_edges(candidate, raw_edges, id_map)
+        _refuse_agent_change_to_approved_runs(candidate)
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[node_id] for node_id in id_map.values()],

@@ -77,6 +77,15 @@ def is_person(headers: Mapping[str, str] | None) -> bool:
     return not has_agent_marker(headers) and has_person_token(headers)
 
 
+async def person_gate_error(request, exc: PersonGateError):
+    """The HTTP response for a refusal: {detail, code}. ``code`` lets the canvas
+    show "this tab isn't connected as you" (person_required). Every app that
+    mounts a person-only route registers this for PersonGateError."""
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(status_code=exc.status, content={"detail": exc.detail, "code": exc.code})
+
+
 def require_person(headers: Mapping[str, str] | None) -> None:
     """Raise PersonGateError(403) unless this request is the person."""
     if has_agent_marker(headers):

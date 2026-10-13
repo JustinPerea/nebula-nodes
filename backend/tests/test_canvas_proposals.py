@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import asyncio
 import io
 import json
@@ -30,6 +31,7 @@ from services.execution_runs import ExecutionRunRegistry
 from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
+from services.run_approvals import APPROVAL_TTL_SECONDS, RunApprovals
 from services.selection_context import SelectionContextStore
 from tests.conftest import FORGED_ORIGIN, PERSON, PERSON_HELLO
 
@@ -73,6 +75,8 @@ def api(tmp_path, monkeypatch, person):
     monkeypatch.setattr(main_module, "project_store", store)
     monkeypatch.setattr(main_module, "canvas_pins", CanvasPins(lambda: main_module.project_store))
     monkeypatch.setattr(main_module, "canvas_proposals", book)
+    approvals = RunApprovals(clock)
+    monkeypatch.setattr(main_module, "run_approvals", approvals)
     monkeypatch.setattr(main_module, "agent_presence", AgentPresence())
     monkeypatch.setattr(main_module, "selection_context", SelectionContextStore())
     monkeypatch.setattr(main_module, "canvas_events", journal)
@@ -91,6 +95,7 @@ def api(tmp_path, monkeypatch, person):
     ctx.main = main_module
     ctx.graph = graph
     ctx.book = book
+    ctx.approvals = approvals
     ctx.clock = clock
     ctx.journal = journal
     ctx.sent = sent
@@ -527,6 +532,217 @@ def test_accept_refuses_to_overwrite_a_later_edit(api):
     assert response.status_code == 409 and f"{n1}.value changed" in response.json()["detail"]
     assert api.graph.nodes[n1]["params"]["value"] == "person's"
     assert api.book.get(proposal_id).status == "invalidated"
+
+
+# -- what Accept approved is what runs ---------------------------------------------
+
+CHEAP = {"model": "gemini-3.1-flash-lite-image"}
+DEAR = {"model": "gemini-3-pro-image", "imageSize": "4K"}
+
+
+@pytest.fixture
+def runs(api, monkeypatch):
+    """The canvas's run path without providers: records what would have run."""
+    started: list[list[str]] = []
+
+    async def fake_execute_graph(*, nodes, **kwargs):
+        started.append(sorted(node.id for node in nodes))
+
+    monkeypatch.setattr(api.main, "execute_graph", fake_execute_graph)
+    monkeypatch.setattr(api.main, "validate_graph", lambda *args, **kwargs: [])
+    return started
+
+
+def _accept_cheap_image(api) -> tuple[str, str, dict]:
+    """Claude proposes a cheap image from n1's prompt; the person accepts it."""
+    n1 = api.graph.add_node("text-input", {"value": "a cat"}, position={"x": 0, "y": 0})
+    body = {
+        "note": "cheap image",
+        "nodes": [{"ref": "+img", "definitionId": "nano-banana", "params": dict(CHEAP)}],
+        "edges": [{"source": n1, "sourceHandle": "text", "target": "+img", "targetHandle": "prompt"}],
+        "run": ["+img"],
+    }
+    proposal_id = _propose(api, body).json()["proposal"]["id"]
+    accepted = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                               headers={**PERSON, KEY: _key(api, proposal_id)}, json={})
+    assert accepted.status_code == 200, accepted.text
+    result = accepted.json()
+    return n1, result["runNodeIds"][0], result
+
+
+def _graph_state(api) -> dict:
+    return {"nodes": copy.deepcopy(api.graph.nodes), "edges": copy.deepcopy(api.graph.edges)}
+
+
+def _canvas_run(api, target: str, approval_id: str | None, headers=PERSON, *, graph=None):
+    """What the canvas sends for one node: its whole graph, the target, the approval."""
+    state = graph or _graph_state(api)
+    nodes = [{"id": node_id, "definitionId": node["definitionId"], "params": node.get("params") or {}, "outputs": {}}
+             for node_id, node in state["nodes"].items()]
+    edges = [{"id": edge["id"], "source": edge["source"], "sourceHandle": edge["sourceHandle"],
+              "target": edge["target"], "targetHandle": edge["targetHandle"]} for edge in state["edges"]]
+    body = {"nodes": nodes, "edges": edges, "targetNodeId": target}
+    if approval_id is not None:
+        body["approvalId"] = approval_id
+    return api.client.post("/api/execute-node", headers=headers, json=body)
+
+
+def test_accept_returns_an_approval_only_the_canvas_sees(api):
+    n1, new_img, result = _accept_cheap_image(api)
+    approval_id = result["approvalId"]
+    assert isinstance(approval_id, str) and len(approval_id) > 20
+    assert approval_id not in json.dumps(api.sent) and approval_id not in json.dumps(api.browser)
+    assert approval_id not in json.dumps(api.journal.read(after=0, limit=100))
+    assert approval_id not in json.dumps(api.client.get("/api/canvas/proposals", headers=CLAUDE).json())
+    # A proposal with no runs approves no run.
+    other = api.graph.add_node("text-input", {"value": "old"})
+    body = {"note": "Retitle", "params": [{"nodeId": other, "params": {"value": "new"}}]}
+    proposal_id = _propose(api, body).json()["proposal"]["id"]
+    plain = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                            headers={**PERSON, KEY: _key(api, proposal_id)}, json={})
+    assert plain.status_code == 200 and plain.json()["approvalId"] is None
+
+
+def test_an_agent_cannot_change_an_approved_run_before_the_canvas_starts_it(api, runs):
+    """The scratch scenario from review: Claude swaps the model and size after Accept."""
+    n1, new_img, result = _accept_cheap_image(api)
+    edge = next(e for e in api.graph.edges if e["target"] == new_img)
+    refused = [
+        api.client.put(f"/api/graph/node/{new_img}", headers=CLAUDE, json={"params": DEAR}),
+        api.client.put(f"/api/graph/node/{n1}", headers=CLAUDE, json={"params": {"value": "a 4K poster"}}),
+        api.client.request("DELETE", "/api/graph/edge", headers=CLAUDE, json={
+            "source": edge["source"], "sourceHandle": edge["sourceHandle"],
+            "target": edge["target"], "targetHandle": edge["targetHandle"]}),
+        api.client.delete(f"/api/graph/node/{n1}", headers=CLAUDE),
+        api.client.post("/api/graph/apply", headers=CLAUDE, json={
+            "note": "bigger", "params": [{"nodeId": new_img, "params": DEAR}]}),
+        api.client.post("/api/graph/apply", headers=CLAUDE, json={
+            "note": "a reference", "nodes": [{"ref": "+p", "definitionId": "image-input"}],
+            "edges": [{"source": "+p", "sourceHandle": "image", "target": new_img, "targetHandle": "images"}]}),
+        # A forged browser Origin is not the person either.
+        api.client.put(f"/api/graph/node/{new_img}", headers=FORGED_ORIGIN, json={"params": DEAR}),
+    ]
+    for response in refused:
+        assert response.status_code == 409, response.text
+        assert "in a run the person approved" in response.json()["detail"]
+    assert api.graph.nodes[new_img]["params"] == CHEAP
+    assert api.graph.nodes[n1]["params"]["value"] == "a cat"
+    assert len(api.graph.edges) == 1
+    # Edits outside the run set still go through.
+    other = api.graph.add_node("text-input", {"value": "elsewhere"})
+    assert api.client.put(f"/api/graph/node/{other}", headers=CLAUDE,
+                          json={"params": {"value": "fine"}}).status_code == 200
+    # The canvas's run is exactly what was approved.
+    started = _canvas_run(api, new_img, result["approvalId"])
+    assert started.status_code == 200, started.text
+    assert runs == [sorted([n1, new_img])]
+    # Once it started, the locks lift (that run already has its values).
+    assert api.client.put(f"/api/graph/node/{new_img}", headers=CLAUDE, json={"params": DEAR}).status_code == 200
+
+
+def test_a_run_that_changed_since_accept_is_refused(api, runs):
+    n1, new_img, result = _accept_cheap_image(api)
+    # However it got there (here: written straight into the graph), the live
+    # value no longer matches what the person accepted.
+    api.graph.update_params(new_img, DEAR)
+    refused = _canvas_run(api, new_img, result["approvalId"])
+    assert refused.status_code == 409
+    assert f"{new_img} changed since you accepted Claude Code's proposal" in refused.json()["detail"]
+    assert runs == []
+    # The approval is used up: no retry with it, and the locks are gone.
+    again = _canvas_run(api, new_img, result["approvalId"])
+    assert again.status_code == 409 and "expired or was already started" in again.json()["detail"]
+    assert runs == []
+
+
+def test_the_run_must_start_exactly_the_approved_nodes(api, runs):
+    n1, new_img, result = _accept_cheap_image(api)
+    extra = _graph_state(api)
+    extra["nodes"]["n99"] = {"definitionId": "image-input", "params": {}}
+    extra["edges"].append({"id": "e99", "source": "n99", "sourceHandle": "image",
+                           "target": new_img, "targetHandle": "images"})
+    refused = _canvas_run(api, new_img, result["approvalId"], graph=extra)
+    assert refused.status_code == 409 and "changed since you accepted" in refused.json()["detail"]
+    assert runs == []
+
+
+def test_only_the_person_can_use_or_release_an_approval(api, runs):
+    n1, new_img, result = _accept_cheap_image(api)
+    approval_id = result["approvalId"]
+    for headers in (CLAUDE, FORGED_ORIGIN, {**PERSON, **CLAUDE}):
+        used = _canvas_run(api, new_img, approval_id, headers=headers)
+        assert used.status_code == 403, used.text
+        released = api.client.delete(f"/api/canvas/approvals/{approval_id}", headers=headers)
+        assert released.status_code == 403
+    assert runs == []
+    # Still waiting, still locked.
+    assert api.client.put(f"/api/graph/node/{new_img}", headers=CLAUDE, json={"params": DEAR}).status_code == 409
+    released = api.client.delete(f"/api/canvas/approvals/{approval_id}", headers=PERSON)
+    assert released.json() == {"status": "released"}
+    assert api.client.put(f"/api/graph/node/{new_img}", headers=CLAUDE, json={"params": DEAR}).status_code == 200
+    gone = _canvas_run(api, new_img, approval_id)
+    assert gone.status_code == 409 and runs == []
+
+
+def test_the_person_can_still_edit_and_an_approval_expires(api, runs):
+    n1, new_img, result = _accept_cheap_image(api)
+    edited = api.client.put(f"/api/graph/node/{n1}", headers=PERSON, json={"params": {"value": "a dog"}})
+    assert edited.status_code == 200
+    api.clock.now += APPROVAL_TTL_SECONDS + 1
+    assert api.client.put(f"/api/graph/node/{new_img}", headers=CLAUDE, json={"params": DEAR}).status_code == 200
+    expired = _canvas_run(api, new_img, result["approvalId"])
+    assert expired.status_code == 409 and "expired" in expired.json()["detail"]
+    assert runs == []
+
+
+def test_replacing_or_clearing_the_canvas_drops_approvals(api):
+    _n1, _img, _result = _accept_cheap_image(api)
+    assert api.approvals.open_list()
+    assert api.client.delete("/api/graph", headers=PERSON).status_code == 200
+    assert api.approvals.open_list() == []
+
+
+def test_a_run_of_several_approved_nodes_goes_through_execute(api, runs):
+    n1 = api.graph.add_node("text-input", {"value": "a cat"})
+    body = {
+        "note": "two images",
+        "nodes": [{"ref": "+a", "definitionId": "nano-banana", "params": dict(CHEAP)},
+                  {"ref": "+b", "definitionId": "nano-banana", "params": dict(CHEAP)}],
+        "edges": [{"source": n1, "sourceHandle": "text", "target": "+a", "targetHandle": "prompt"},
+                  {"source": n1, "sourceHandle": "text", "target": "+b", "targetHandle": "prompt"}],
+        "run": ["+a", "+b"],
+    }
+    proposal_id = _propose(api, body).json()["proposal"]["id"]
+    result = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                             headers={**PERSON, KEY: _key(api, proposal_id)}, json={}).json()
+    state = _graph_state(api)
+    request = {
+        "nodes": [{"id": node_id, "definitionId": node["definitionId"], "params": node["params"], "outputs": {}}
+                  for node_id, node in state["nodes"].items()],
+        "edges": [{"id": e["id"], "source": e["source"], "sourceHandle": e["sourceHandle"],
+                   "target": e["target"], "targetHandle": e["targetHandle"]} for e in state["edges"]],
+        "approvalId": result["approvalId"],
+    }
+    started = api.client.post("/api/execute", headers=PERSON, json=request)
+    assert started.status_code == 200, started.text
+    assert runs == [sorted([n1, *result["runNodeIds"]])]
+
+
+def test_accept_refuses_when_what_it_runs_changed_after_it_was_proposed(api):
+    """Before Accept too: the card showed the runs and cost at proposal time."""
+    n1 = api.graph.add_node("text-input", {"value": "a cat"})
+    n2 = api.graph.add_node("nano-banana", dict(CHEAP))
+    api.graph.connect(n1, "text", n2, "prompt")
+    body = {"note": "run the cheap one", "run": [n2]}
+    proposal_id = _propose(api, body).json()["proposal"]["id"]
+    key = _key(api, proposal_id)
+    # No approval exists yet, so this edit lands; Accept must notice it.
+    assert api.client.put(f"/api/graph/node/{n2}", headers=CLAUDE, json={"params": DEAR}).status_code == 200
+    response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept", headers={**PERSON, KEY: key}, json={})
+    assert response.status_code == 409
+    assert f"what it runs changed after it was proposed ({n2})" in response.json()["detail"]
+    assert api.book.get(proposal_id).status == "invalidated"
+    assert api.approvals.open_list() == []
 
 
 @pytest.mark.parametrize("route", ["accept", "reject"])

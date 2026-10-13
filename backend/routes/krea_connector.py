@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.krea_connector import ConnectorError, get_connector
 from services.krea_plans import sanitize_plans, trial_link
-from services.person_gate import PersonGateError, has_person_token, require_person
+from services.person_gate import has_person_token, require_person
 
 
 def local_origin(request: Request):
@@ -46,12 +46,12 @@ def local_origin(request: Request):
 
 
 def person_only(request: Request):
-    """The Krea account is the person's to connect, re-scope or drop."""
-    try:
-        require_person(request.headers)
-    except PersonGateError as exc:
-        # An HTTPException, so the router also works mounted on its own app.
-        raise HTTPException(exc.status, exc.detail) from exc
+    """The Krea account is the person's to connect, re-scope or drop.
+
+    A refusal is a PersonGateError, rendered by person_gate.person_gate_error
+    (main registers it) as {detail, code: "person_required"}, so a tab that
+    isn't connected as the person shows why, as it does for Settings."""
+    require_person(request.headers)
 
 
 router = APIRouter(prefix="/api/krea", tags=["krea-connection"], dependencies=[Depends(local_origin)])

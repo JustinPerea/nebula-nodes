@@ -11,6 +11,8 @@ vi.mock('../src/lib/backend', async (original) => ({
   backendWebSocketUrl: vi.fn().mockResolvedValue('ws://127.0.0.1/test-chat'),
 }));
 import { ChatPanel } from '../src/components/panels/ChatPanel';
+import { backendWebSocketUrl } from '../src/lib/backend';
+import { PERSON_CONNECTED_EVENT } from '../src/lib/personSession';
 import { resetCommonsSessionForTests } from '../src/lib/commonsApi';
 import { useUIStore } from '../src/store/uiStore';
 const initialUI = useUIStore.getState();
@@ -24,6 +26,11 @@ class ChatSocket extends WebSocket {
     this.onopen?.call(this, new Event('open'));
   }
   send(data: string) { this.sent.push(JSON.parse(data)); }
+  close() {
+    if (this.readyState === WebSocket.CLOSED) return;
+    Object.defineProperty(this, 'readyState', { value: WebSocket.CLOSED, writable: true, configurable: true });
+    this.onclose?.call(this, new CloseEvent('close'));
+  }
   receive(event: unknown) { this.onmessage?.call(this, new MessageEvent('message', { data: JSON.stringify(event) })); }
 }
 beforeEach(() => {
@@ -93,6 +100,31 @@ describe('Commons chat integration', () => {
     await sendText('Make a simple graph');
     await waitFor(() => expect(socket.sent).toHaveLength(1));
     expect(socket.sent[0]).not.toHaveProperty('personToken');
+  });
+  it('reconnects to the pinned backend when a person link is pasted into the open tab', async () => {
+    // Before the link, discovery settled on the dev proxy; the link pins 127.0.0.1.
+    vi.mocked(backendWebSocketUrl).mockResolvedValueOnce('ws://localhost:5173/ws/chat');
+    const first = await connected();
+    expect(first.url).toBe('ws://localhost:5173/ws/chat');
+    const token = crypto.randomUUID(); connectAsPerson(token);
+    await act(async () => { window.dispatchEvent(new CustomEvent(PERSON_CONNECTED_EVENT)); });
+    await waitFor(() => expect(ChatSocket.instances).toHaveLength(2));
+    const second = ChatSocket.instances[1];
+    expect(second.url).toBe('ws://127.0.0.1/test-chat');
+    await act(async () => second.open());
+    await sendText('Make a simple graph');
+    await waitFor(() => expect(second.sent).toHaveLength(1));
+    expect(second.sent[0]).toMatchObject({ type: 'send', personToken: token });
+    expect(first.sent).toHaveLength(0);
+  });
+  it('keeps a chat socket that is already on the pinned backend when a link arrives', async () => {
+    const token = crypto.randomUUID(); connectAsPerson(token);
+    const socket = await connected();
+    await act(async () => { window.dispatchEvent(new CustomEvent(PERSON_CONNECTED_EVENT)); });
+    await sendText('Make a simple graph');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    expect(ChatSocket.instances).toHaveLength(1);
+    expect(socket.sent[0]).toMatchObject({ personToken: token });
   });
   it('raises the person banner when the backend refuses a turn as person_required', async () => {
     const seen = vi.fn(); window.addEventListener('nebula:person-required', seen);

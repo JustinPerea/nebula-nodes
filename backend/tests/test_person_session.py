@@ -183,8 +183,14 @@ def test_devserver_main_builds_a_real_config_for_both_modes(monkeypatch):
             pass
 
     monkeypatch.setattr(devserver, "ChangeReload", FakeReload)
+    monkeypatch.setenv("NEBULA_URL", "http://127.0.0.1:8000")  # restored after the test
     devserver.main(["--port", "8123", "--ui", "http://localhost:5251"])
     (config, target, sockets), = supervised
+    # Agent children (and the reload workers that start them) point at this backend, not 8000.
+    from services.krea_agent_mcp import agent_child_env, resolve_nebula_url
+    assert os.environ["NEBULA_URL"] == "http://127.0.0.1:8123"
+    assert resolve_nebula_url() == "http://127.0.0.1:8123"
+    assert agent_child_env()["NEBULA_URL"] == "http://127.0.0.1:8123"
     assert (config.app, config.host, config.port, config.should_reload) == ("main:app", "127.0.0.1", 8123, True)
     assert sockets == ["socket"]
     assert isinstance(target.__self__, devserver.PersonServer)

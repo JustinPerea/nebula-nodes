@@ -83,9 +83,10 @@ export function AgentSpendSection() {
       </p>
       <p className="settings-hint" id="settings-agent-spend-who">
         &ldquo;You&rdquo; means this canvas, opened from the link the backend printed at launch (or the desktop app).
-        Only it can change these limits, keys and connections. That holds against Nebula&rsquo;s own chats and any
-        agent that reaches Nebula only through its MCP server or API. A program running as you with its own
-        unrestricted shell could still read the link&rsquo;s token, so these limits don&rsquo;t bind it.
+        Only it can change these limits, keys and connections. That holds against Nebula&rsquo;s Claude chats and
+        any agent that reaches Nebula only through its MCP server or API. Codex and Hermes chats still have a shell
+        with network access for now, and a program running as you with its own unrestricted shell could read the
+        link&rsquo;s token, so these limits don&rsquo;t fully bind them.
       </p>
       <div className="settings-list">
         <div className="settings-pref">
