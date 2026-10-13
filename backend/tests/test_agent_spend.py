@@ -1086,3 +1086,16 @@ def test_a_qc_node_in_vision_llm_mode_is_refused_on_the_run_routes(client):
     main.execute_graph.assert_not_awaited()
     assert client.put(f"/api/graph/node/{node}", json={"params": {"mode": "heuristic"}}).status_code == 200
     assert client.post("/api/graph/run", json={"targetNodeId": node}).status_code == 200
+
+
+def test_a_personal_agent_token_spends_in_the_shared_outside_budget(monkeypatch):
+    import main
+    from commons import actors
+    monkeypatch.setattr(actors, "agent_registry", actors.AgentRegistry())
+    token = actors.agent_registry.mint("personal:claude", [Path("/tmp")], spend_key="outside:personal:claude",
+                                       display_name="Claude (your setup)", color="#D97757")
+    key, label = main._spend_session({"Authorization": f"Agent {token}"})
+    assert key == "outside:personal:claude" and label == "Claude (your setup)"
+    assert key.startswith(agent_spend.PERSONAL_AGENT_PREFIX) and agent_spend.is_outside(key)
+    budgets = main._spend_budgets(key, {})
+    assert [b.who for b in budgets] == ["agents outside Nebula chats"]

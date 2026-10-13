@@ -146,6 +146,14 @@ def identify(
         if record is not None:
             runner = str(record.get("runner") or "agent").lower()
             name, color = _KNOWN_AGENTS.get(runner, (clean_agent_name(runner.title()) or "Agent", "#E8825A"))
+            # A personal agent's token carries the name and color the person
+            # gave it (services/personal_agents.py), so prefer those.
+            recorded_name = clean_agent_name(str(record.get("display_name") or ""))
+            recorded_color = record.get("color")
+            if recorded_name:
+                name = recorded_name
+            if isinstance(recorded_color, str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", recorded_color):
+                color = recorded_color
             return AgentIdentity(id=runner, name=name, color=color, verified=True)
         app = app_lookup(auth[6:].strip())
         if app is not None:

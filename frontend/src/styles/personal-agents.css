@@ -1,0 +1,173 @@
+/* Personal agents (ACP): the permission card, plan, thoughts, the one-time
+   warning and the Settings section. Colors come from the shared --sr tokens
+   so both the default theme and Slava restraint read them. */
+
+.permission-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--sr-accent-border, #6b5a2a);
+  border-radius: 6px;
+  background: var(--sr-canvas-elevated, #1b1910);
+  font-size: 12px;
+}
+
+.permission-card--allowed,
+.permission-card--denied,
+.permission-card--timed_out,
+.permission-card--cancelled {
+  border-color: var(--sr-edge, #2a2a2a);
+  opacity: 0.85;
+}
+
+.permission-card__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sr-ink-muted, #b8b8b8);
+  font-size: 11px;
+}
+
+.permission-card__icon { color: var(--sr-accent, #e8c46a); flex-shrink: 0; }
+.permission-card__kind {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--sr-edge, #333);
+  font-size: 10px;
+  text-transform: lowercase;
+}
+
+.permission-card__title { font-weight: 600; color: var(--sr-ink, #f0f0f0); overflow-wrap: anywhere; }
+
+.permission-card__input {
+  margin: 0;
+  max-height: 140px;
+  overflow: auto;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--sr-canvas, #121212);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.permission-card__note { margin: 0; color: var(--sr-ink-muted, #b8b8b8); font-size: 11px; }
+
+.permission-card__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.permission-card__actions button {
+  min-height: 28px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--sr-edge-strong, #555);
+  background: var(--sr-canvas, #161616);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 160ms cubic-bezier(0.2, 0.9, 0.3, 1.2), background-color 120ms ease;
+}
+
+.permission-card__actions button:active:not(:disabled) { transform: scale(0.96); }
+.permission-card__actions button:disabled { cursor: default; opacity: 0.6; }
+.permission-card__allow { font-weight: 600; border-color: var(--sr-accent-border, #8a7a3a) !important; }
+.permission-card__timer { margin-left: auto; color: var(--sr-ink-muted, #999); font-size: 10px; }
+.permission-card__outcome { color: var(--sr-ink-muted, #aaa); font-size: 11px; font-style: italic; }
+
+.permission-card__actions button:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #9ab8ff);
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .permission-card__actions button { transition: none; }
+  .permission-card__actions button:active:not(:disabled) { transform: none; }
+}
+
+.chat__plan {
+  margin: 0;
+  padding: 6px 8px 6px 22px;
+  border-left: 2px solid var(--sr-edge-strong, #444);
+  font-size: 11px;
+  color: var(--sr-ink-muted, #bbb);
+}
+
+.chat__plan li { margin: 2px 0; }
+.chat__plan li[data-plan-status='completed'] { text-decoration: line-through; opacity: 0.7; }
+.chat__plan li[data-plan-status='in_progress'] { color: var(--sr-ink, #eee); font-weight: 600; }
+
+.chat__thought { font-size: 11px; color: var(--sr-ink-muted, #999); }
+.chat__thought summary { cursor: pointer; }
+.chat__thought-body { margin: 4px 0 0; white-space: pre-wrap; font-style: italic; }
+
+.chat-panel__personal-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.personal-warning {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 50%);
+  color: var(--sr-ink, #f0f0f0);
+  font-family: var(--sr-ui, sans-serif);
+}
+
+.personal-warning__card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(460px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 18px;
+  border: 1px solid var(--sr-edge-strong, #555);
+  border-radius: var(--sr-radius-panel, 12px);
+  background: var(--sr-canvas-elevated, #202020);
+  box-shadow: var(--sr-shadow-panel, 0 12px 36px rgb(0 0 0 / 30%));
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.personal-warning__title { margin: 0; font-size: 16px; }
+.personal-warning__lead { margin: 0; }
+.personal-warning__list { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--sr-ink-muted, #ccc); }
+.personal-warning__error { margin: 0; color: #e08a8a; }
+.personal-warning__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+.personal-warning__actions button {
+  padding: 8px 12px;
+  border: 1px solid var(--sr-edge-strong, #555);
+  border-radius: 6px;
+  background: var(--sr-canvas, #161616);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.personal-warning__accept { font-weight: 600; border-color: var(--sr-accent-border, #777) !important; }
+
+.personal-warning__actions button:focus-visible {
+  outline: var(--sr-focus-outline, 2px solid #9ab8ff);
+  outline-offset: var(--sr-focus-offset, 2px);
+}
+
+.personal-agents__status { font-size: 11px; color: var(--sr-ink-muted, #999); }
+.personal-agents__status[data-status='ready'] { color: #8fc89d; }
+.personal-agents__swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+}

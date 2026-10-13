@@ -676,6 +676,28 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def load_agent_token_file(environ: Any = None) -> bool:
+    """A personal agent's server gets its session token as a file path
+    (NEBULA_AGENT_TOKEN_FILE, services/agent_token_file.py) so the value never
+    reaches argv. Read it into this process's NEBULA_AGENT_TOKEN. A token
+    already in the environment (the in-app chats) wins. Raises TokenFileError
+    (a ValueError) when the file is set but missing, unreadable, open to other
+    users or malformed: the server must then exit, never fall back to calls
+    without a token. Returns whether a file was read."""
+    from services import agent_token_file
+
+    env = os.environ if environ is None else environ
+    if env.get("NEBULA_AGENT_TOKEN"):
+        return False
+    path = env.get(agent_token_file.ENV_VAR)
+    if path is None:
+        return False
+    if not path.strip():
+        raise agent_token_file.TokenFileError(f"{agent_token_file.ENV_VAR} is empty")
+    env["NEBULA_AGENT_TOKEN"] = agent_token_file.read(path)
+    return True
+
+
 def agent_workspace_scope():
     """With a turn token (an in-app chat), confine local paths to that turn's
     workspace, as the `nebula` CLI does. The backend's registry names the
@@ -701,6 +723,8 @@ if __name__ == "__main__":
 
     with ExitStack() as stack:
         try:
+            # Before the workspace check: that call needs the token.
+            load_agent_token_file()
             stack.enter_context(agent_workspace_scope())
         except (NebulaAPIError, ValueError) as exc:
             # Fail closed: an agent whose token can't be checked gets no Nebula tools.

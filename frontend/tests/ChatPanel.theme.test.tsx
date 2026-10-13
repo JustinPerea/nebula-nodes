@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 const apiMocks = vi.hoisted(() => ({
   fetchClaudeStatus: vi.fn(),
   fetchCodexStatus: vi.fn(),
-  fetchChatModels: vi.fn(),
+  fetchChatModels: vi.fn(), fetchPersonalAgents: vi.fn(),
   apiFetch: vi.fn(),
 }));
 
@@ -13,6 +13,7 @@ vi.mock('../src/lib/api', async (importOriginal) => ({
   fetchClaudeStatus: apiMocks.fetchClaudeStatus,
   fetchCodexStatus: apiMocks.fetchCodexStatus,
   fetchChatModels: apiMocks.fetchChatModels,
+  fetchPersonalAgents: apiMocks.fetchPersonalAgents,
 }));
 
 vi.mock('../src/lib/backend', async (importOriginal) => ({
@@ -78,6 +79,7 @@ beforeEach(() => {
     panels: { ...state.panels, chat: { ...state.panels.chat, visible: true } },
   }));
   apiMocks.fetchClaudeStatus.mockResolvedValue({ installed: true, loggedIn: true });
+  apiMocks.fetchPersonalAgents.mockResolvedValue({ warningAcknowledged: false, agents: [] });
   apiMocks.fetchCodexStatus.mockResolvedValue({ installed: true, loggedIn: true, mode: 'chatgpt' });
   apiMocks.fetchChatModels.mockImplementation(async (agent: keyof typeof modelCatalogs) => modelCatalogs[agent]);
 });

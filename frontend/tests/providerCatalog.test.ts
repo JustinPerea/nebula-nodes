@@ -9,6 +9,7 @@ const keys = PROVIDER_KEYS.map((spec) => spec.key);
 
 describe('provider catalog', () => {
   it('lists exactly the keys the backend accepts', () => {
+    // backend/main.py's _CREDENTIAL_PROVIDER_ALLOWLIST aliases this catalog.
     const source = readFileSync(resolve(__dirname, '../../backend/services/credential_catalog.py'), 'utf8');
     const block = source.match(/CREDENTIAL_PROVIDERS: frozenset\[str\] = frozenset\(\{([\s\S]*?)\}\)/)?.[1] ?? '';
     const allowed = [...block.matchAll(/"([A-Z0-9_]+)"/g)].map((match) => match[1]);

@@ -2882,3 +2882,145 @@ Closes the "inherited shell `*_API_KEY` environment in the sidecar" item from th
 - **Behaviour change to know about:** anyone who relied on a shell `ANTHROPIC_API_KEY` for in-app Claude chats will now use the Claude CLI's saved login instead. Codex already refused `OPENAI_API_KEY`. A backend started by plain `uvicorn main:app` (not devserver, not the app) still inherits the shell; that path is undocumented.
 - **Not in the catalog, so not stripped:** `ANTHROPIC_AUTH_TOKEN`, `GOOGLE_APPLICATION_CREDENTIALS`, `CLAUDE_CODE_USE_*`. They are agent/cloud auth selectors rather than Nebula provider keys; whether `child_env.scrubbed_env` should also drop catalog keys for agent children of a hand-started backend is left open.
 - **Tests:** new sidecar tests (catalog parity; every catalog key + app/agent token planted in the env never reaches the spawn env, other vars kept); the real-backend stdin test now plants `OPENAI_API_KEY`/`FAL_KEY`/`NEBULA_APP_TOKEN` and checks `ps -E`. Devserver: worker env captured at supervisor construction has none of the names, output lists names only; existing devserver test now `delenv`s those names so `main()` can't strip the pytest process's real env. Desktop 354/354 (each file alone), backend `run_files.py` done 200, no failures.
+
+## 2026-10-13 — ACP host design pass (personal agents in the chat panel)
+
+Design only, no code yet. The full design went back to the coordinating workflow. Decisions that weren't in the brief:
+
+- **Spec read at ACP protocol v1** (agentclientprotocol.com/protocol/v1/*, fetched 2026-10-13). Nebula sends `protocolVersion: 1` and refuses any other version the agent answers with. v2 is a draft.
+- **No SDK dependency.** A JSON-RPC-over-stdio client of about 250 lines (`services/acp_client.py`) replaces `agent-client-protocol`.
+- **Spend key `outside:personal:<agentId>`.** It starts with `outside:`, so `spent_outside()` and `session_budgets()` already count it in the shared 24h budget, and Settings can still show a line per agent. One constant, `agent_spend.PERSONAL_AGENT_BUDGET = "outside"`, switches it to a per-chat `chat:<id>` key. The token record gains `spend_key`, `display_name` and `color`.
+- **The session token has to carry a workspace.** `mcp_server.py` fails closed unless `/api/agent/context` returns one. The ACP session therefore takes a private workspace from `workspace_sessions` and uses it as the ACP `cwd`.
+- **Guardian.** `agent_guardian` exists only on the desktop-app branch, and this worktree is based on main. For now: `agent_process_group_options` + `terminate_agent_process_tree`, stdin EOF when the backend dies, and an idle reaper. Switch to `spawn_agent_process` when desktop-app merges (done in the merge with main, below).
+- **npx adapter pins (14-day rule, checked on registry.npmjs.org 2026-10-13):** claude-agent-acp 0.84.0 (2026-09-28), codex-acp 2.0.0 (2026-09-28). `npm_config_before` (now minus 14 days) also holds transitive deps to the rule. Gemini uses the person's installed `gemini --acp` (flag checked in the docs at v0.61.0). Hermes is a preset with status `needs_setup` and can't be started.
+- **Deny with no reject option.** If the agent offers no `reject_once`, a timeout or deny answers `cancelled` and sends `session/cancel`. Nebula never picks `reject_always`, because that would write a rule into the agent's own config.
+
+## 2026-10-13 — ACP host build (personal agents in the chat panel)
+
+Built from the design above. Where it differs, or decides something the design left open:
+
+- **Presets start switched off.** The person turns each on in Settings > Preferences > Personal agents. Without this, Justin's installed `npx` would put "Claude (your setup)" in the picker the moment this merges.
+- **`initialize` and `session/new` wait for the launch spec's startup timeout (180 s for npx), not 30 s.** The first npx run downloads the adapter before it can answer `initialize`, so 30 s would fail it on a cold cache.
+- **Cleanup also calls `killpg` after `terminate_agent_process_tree`.** That helper returns at once if the root has already exited (a crash, or a clean exit on stdin EOF), and grandchildren in the agent's own process group would survive. The group kill covers that case. `test_close_kills_the_whole_tree` checks it.
+- **"Allow" when the agent offered no `allow_once` counts as deny.** The card hides the button in that case anyway. If there's also no `reject_once`, it answers `cancelled` and sends `session/cancel`, as designed.
+- **`close_session` during a running personal turn cancels the turn first,** then closes. The UI never sends it while busy, but the backend shouldn't depend on that.
+- **Two small new chat events:** `system` (a stop reason like `refusal` or `max_tokens` becomes a plain line) and `session_closed` (the reply to `close_session`).
+- **The primer** is `chat_session.NEBULA_MCP_PRIMER` plus a short "your setup" paragraph. It goes as the first text block of the first turn only.
+- **`/api/personal-agents` joined `PERSON_READ_PREFIXES`** in `frontend/src/lib/backend.ts`. Without it the GET goes out without the person header and gets 403.
+- **Route tests accept 401 or 403** for a forged `Authorization: Agent` header: an unknown agent token is refused by the actor resolver before the person gate runs. A *valid* minted token gets 403 (`test_a_minted_agent_token_cannot_reach_the_registry`).
+- **Custom-agent args are capped at 512 characters** each, so tests and the live check pass the fake agent's script as a file path, not inline JSON.
+- **Existing frontend tests:** the ChatPanel and Settings tests mock `lib/api`. They now also mock `fetchPersonalAgents`, because the panel and Settings load the registry on open.
+- **Live check (ports 8142/5262, isolated `NEBULA_*` paths, temp HOME):** the fake agent was registered as a custom agent through the person-only route. Headless Playwright then captured the picker, the one-time notice, a tool call, mid-stream text, the permission card and the finished turn, with no page errors. The demo script's `edit_canvas` step is scripted narrative from the fake agent: no node was actually added. No processes were left behind afterwards.
+- **Real Claude adapter turn: skipped, though the package passes the 14-day rule** (0.84.0, published 2026-09-28; latest 0.90.0 is from today). On macOS, Claude Code keeps its login in the login keychain. With a temp HOME the adapter would still go to the keychain and might pop a prompt on Justin's screen. With the real HOME it would read and write `~/.claude.json`. The run rules forbid both. Justin can run the turn himself (Settings > Personal agents > Claude on, then chat). Codex and Gemini were skipped as instructed.
+- **The guardian switch waited for desktop-app,** as designed: `_spawn()` is the one place to change. Done in the merge with main, below.
+- **FORjustin.md** is gitignored and lives only in the main checkout, which this workflow may not edit. Lesson for it: "ACP is just JSON-RPC over a pipe. The hard part isn't the protocol, it's every way a session can end. Route all of them through one idempotent `close()` that kills the process group and revokes the token, and test each way with a real subprocess. A mock would hide the grandchild that outlives its parent."
+- **Commit trailers:** commits from the frontend commit onward use only the `Co-Authored-By` line, per a mid-run attribution update from the harness.
+
+## 2026-10-13 — ACP host: review fixes
+
+- **Settings now stop running agents (major).** `personal_agents.launch_key()` reads only the registry (no binary
+  probes), so it is cheap to check on every send. Each session stores the key it started with.
+  `AcpSessionManager.close_stale()` closes every live session whose key no longer matches (switched off, removed, or a
+  custom agent's command or args changed). It runs after every PUT and DELETE on `/api/personal-agents*`, and
+  `personal_turn` re-checks before reusing a host, which also catches registry edits that bypassed the routes. Renaming
+  or recoloring doesn't count as a change. I compare a launch key rather than a revision counter so a rename doesn't
+  kill a session.
+- **Commons:** `is_enabled()` reads an env var fixed at startup, so Commons can't actually switch on while a session
+  is live. The refusal path still calls `close_owned(..., "commons_enabled")` for personal agents, as a cheap backstop.
+- **Why a session ended survives the prune.** The manager remembers `(owner, message)` for the last 64 ended
+  sessions, so a send after a Settings switch-off says "switched off, removed or changed in Settings". Before, it
+  showed the generic message. Only the owning socket gets it.
+- **Provider keys (minor).** I copied `backend/services/credential_catalog.py` byte for byte from desktop-app's
+  c1c652f0, and made the same `main._CREDENTIAL_PROVIDER_ALLOWLIST = CREDENTIAL_PROVIDERS` alias, so the merge
+  stays clean (an identical add on both sides). `_agent_env` drops every catalog name plus NEBULA_AGENT_TOKEN and
+  NEBULA_APP_TOKEN. The catalog's docstring mentions mirror tests that live on desktop-app; they arrive with that merge.
+- **The frontend catalog test read main.py's literal frozenset,** which the alias removes. I pointed it at
+  credential_catalog.py instead. **desktop-app has this same failure right now** (its main.py has the alias, and its
+  frontend/tests/providerCatalog.test.ts still parses main.py), and it needs the same one-line fix.
+- **close() can't be skipped by cancellation (minor).** The teardown runs once, in its own task. `close()` starts it
+  and awaits it through `asyncio.shield`, so cancelling the caller only stops the waiting, and later close() calls
+  (close_all at shutdown) wait on the same task. The token is revoked at the start of teardown, before the slow
+  session/close RPC and the kill. `_close_lock` is gone.
+- **A crash during cancel closes the session (minor).** `cancel_turn` treats `AcpConnectionClosed` as a crash. As a
+  general backstop, `prompt()`'s finally closes the session whenever the connection is dead, instead of going back to
+  "ready". When Nebula itself closed the session mid-turn, the turn ends with the reason (`ended_message`), not
+  "exited (code -9)".
+- **Per-agent spend lines (minor).** I went with the UI over a doc change. `PersonalAgentSpend` in
+  AgentSpendSection shows one read-only row for each personal agent that spent, or used Krea plan runs, in the last 24 h.
+  Agents at $0 are hidden: the backend lists every preset, even ones never switched on, and four $0.00 rows would be
+  noise. I changed the docs from "a line per agent" to "a line for each agent that spent in the last 24 hours".
+- Live check (ports 8142/5262, isolated paths, temp HOME, backend started with a fake ANTHROPIC_API_KEY): the agent
+  saw it as unset. A PUT `enabled=false` left no agent process, and the next send gave the Settings message. The
+  reviewer's crash-during-cancel repro now returns 401 for the session token right after the cancel.
+- Unchanged: the model picker's status line still reads "ready" until the picker refetches the list. That's cosmetic,
+  and the send path is authoritative.
+
+## 2026-10-13: ACP host, second review fixes
+
+- **A close during start now wins (major, findings 1 and 5).** `start()` checks `_closing` after every await
+  (spawn, initialize, session/new) and gives up with `personal_session_ended` and the close reason. So a session that
+  Settings, a replaced chat or shutdown closed while it was starting never turns "ready" over "closed", never holds a
+  live-session slot, and never mints a token after the teardown's revoke. The check right after initialize and the
+  mint have no await between them, so the mint is either before the teardown (which then revokes it) or not at all.
+  The teardown also revokes a second time in its `finally`, as a belt and braces step. `closed` is now true from the
+  moment `close()` begins, so `_prune` and `live()` drop a session whose teardown has started. I kept the shielded,
+  run-once teardown task.
+- **The spawn window.** A close during `_spawn` finds no process to kill. `start()` now kills a process that arrives
+  after closing began, itself and shielded, and never stores it on the session. I pulled the kill steps into
+  `_kill_tree()` so the teardown and this path share them.
+- **When the kill ends the connection,** start used to say "exited while starting (code -15)". It now says why Nebula
+  stopped it.
+- **open() reads Settings after its last await (major, finding 2).** The launch key and spec are read after
+  `close_owned()`, with nothing awaited between the read and registering the session, so `close_stale` can always see
+  it. `open()` re-checks `still_allowed` after `start()` (for registry edits that skip the routes) and closes and
+  refuses if it fails. `personal_turn` now checks `still_allowed` before every prompt, new chat or reused. Tradeoff:
+  the owner's previous session is now closed before a bad agent id or a disabled agent is reported, where before the
+  error came first. The UI only offers ready agents, and a send with no session id means a new chat anyway, so I
+  judged that fine.
+- **The token no longer reaches argv (major, security, finding 3).** I did not re-verify the adapter and SDK argv
+  path myself (no real adapter runs allowed); I took it from the review. The fix doesn't depend on any adapter's
+  behavior: `session/new` carries no token at all, only `NEBULA_AGENT_TOKEN_FILE`, a path. New module
+  `services/agent_token_file.py` writes `<state>/agent-tokens/<backend pid>/<session id>.token` with O_EXCL and
+  O_NOFOLLOW, mode 0600, in 0700 folders (it tightens an existing folder that is looser). The file is outside the
+  agent's workspace. The teardown deletes it. A startup hook in main.py (`_personal_agents_startup`) removes leftovers.
+- **Why a pid level in the path.** Two backends could share a state dir. Startup cleanup skips the folder of any other
+  pid that is alive, so one backend never deletes another's live token files. Its own pid folder can only be from a
+  dead process that had the same pid, so it goes. `clear_stale` must only run before sessions start, and the
+  docstring says so.
+- **mcp_server.py fails closed.** `load_agent_token_file()` runs before `agent_workspace_scope()`. When
+  `NEBULA_AGENT_TOKEN` is unset and `NEBULA_AGENT_TOKEN_FILE` is set, it reads the file. The read requires a regular
+  file (not a symlink) owned by this user, no group or other permission bits, at most 512 bytes, and one token
+  matching `[A-Za-z0-9_-]{20,256}`. Anything else (including an empty variable) raises a ValueError, and the existing
+  handler exits 1. An in-app chat's `NEBULA_AGENT_TOKEN` still wins, and `nebula_server_env_refs` is unchanged.
+  `NEBULA_AGENT_TOKEN_FILE` was added to the variables the agent's own environment drops, so a value inherited from a
+  shell can't reach it.
+- **Text caps (minor, finding 4).** Message and thought chunks are redacted, then capped at 20,000 characters each,
+  and a turn's text and thought together at 200,000 (`TurnTextBudget`, one per `_Turn`). The first cut in a turn adds
+  one `system` line: "This reply was too long to show in full, so Nebula cut some of it." After the budget runs out,
+  text chunks are dropped. Redact-then-cap is tested, because capping first could leave the start of the token
+  showing. Not covered: tool results still have only their per-result cap (20,000) and no per-turn total, and a token
+  split across two chunks isn't redacted. The doc says the first; the second predates this change.
+- **Fake agent.** `fake_acp_agent.py` gained `initDelay` and `sessionNewDelay`, so the tests can hit the start races
+  deterministically. The race tests slow the teardown's tree kill to one second (the reviewer's approach), so start
+  resumes mid-teardown.
+- **Mutation checks.** For each fix I reverted only that fix and ran its tests; every one failed, then passed again
+  after the restore. One gotcha: a mutation that keeps the file size identical, restored within the same second,
+  leaves a stale `.pyc` that Python reuses. The redact-order mutation hit this and made the full suite fail once. I
+  re-ran every mutation with `PYTHONDONTWRITEBYTECODE=1` and cleared caches before the final suite run.
+- **Docs.** PERSONAL-AGENTS.md: the sequence diagram, the "Where the token lives" paragraph (it was wrong; the token
+  could reach argv through the adapter), the start-race guarantee, and a new "Output caps" bullet with the real
+  limits. MCP-SETUP.md's personal-token paragraph now describes the file.
+
+### Third review round (2026-10-13)
+
+Two reviewers checked 5eba86fc. Concurrency said ship, with one older gap; the token-file reviewer found two small issues. All three are fixed, each with a test that fails when only its fix is reverted.
+
+- **The startup sweep followed a symlinked `agent-tokens` folder.** `clear_stale` listed and deleted the entries of whatever `<state>/agent-tokens` pointed to. Any program running as the person (an agent included) could plant that symlink, and the next backend start would empty the target folder. The sweep now opens the folder with `O_DIRECTORY | O_NOFOLLOW` and works through that descriptor (`os.scandir(fd)`, `rmtree(dir_fd=)`, `unlink(dir_fd=)`). A symlink, a non-directory or another user's folder is left alone, and a swap after the check can't redirect it. A symlinked pid folder inside the real one is unlinked, not followed.
+- **Shutdown could miss a teardown already under way.** A session leaves the registry the moment its close begins. So if the idle reaper or a cancelled caller started a close, and something else pruned the session, `close_all` never waited for that kill, and the loop could cancel it halfway and leave grandchildren running. The manager now keeps the unfinished teardown tasks of pruned sessions, and `close_all` waits on them (shielded, so cancelling `close_all` doesn't cancel a kill).
+- **An agent could start after shutdown.** An `open()` waiting on `close_owned()` when shutdown ran went on to start a fresh agent and mint a token after `close_all` returned. The new `shutdown()` sets a flag first, and `open()` refuses (`personal_agent_shutting_down`) after `close_owned` and again after `start()`. The backend's shutdown hook calls `shutdown()`. `close_all()` keeps working for tests and reuse, since only `shutdown()` sets the flag, which never clears.
+- **Doc fix.** PERSONAL-AGENTS.md said a cut drops the rest of the turn's text. Only the 200,000-character turn budget does that. A chunk over 20,000 characters is trimmed and later chunks still show.
+
+## 2026-10-13 — ACP host: merged with main (desktop app + Connect your agent)
+
+- **Personal agents now use the agent guardian.** `_spawn()` calls `spawn_agent_process`, so a SIGKILLed backend no longer leaves an agent's grandchildren running: the guardian kills the group, as it does for in-app chats. New test `test_the_agent_guardian_watches_every_personal_agent` (fails with the old `create_subprocess_exec` call). PERSONAL-AGENTS.md drops the "doesn't use the guardian yet" caveat.
+- **Conflicts, all additive:** `OutsideSpend` keeps main's `connect` and adds `personal`. `PERSON_READ_PREFIXES` keeps main's comment and adds `/api/personal-agents`. MCP-SETUP.md puts "Personal agents' session tokens" before main's "Connect your agent". This file keeps main's entries first, then the ACP ones.

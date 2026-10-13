@@ -533,6 +533,24 @@ How it works (`backend/services/agent_spend.py`):
 its session has used. `budget` is `chat`, `shared` or `app`; outside callers
 also get `outsideSpent`, the shared 24-hour total.
 
+### Personal agents' session tokens
+
+A personal agent (your own Claude Code, Codex, Gemini or custom ACP agent in the
+chat panel, [PERSONAL-AGENTS.md](PERSONAL-AGENTS.md)) gets a session token
+that Nebula writes to a 0600 file (`<state dir>/agent-tokens/<pid>/<session>.token`).
+The `env` of this MCP server's entry in ACP `session/new` carries only the
+file's path, as `NEBULA_AGENT_TOKEN_FILE`, with `NEBULA_AGENT_NAME` set to the
+agent's name, because adapters may put that environment on a command line
+(the Claude adapter's `claude --mcp-config <json>`). At startup this server
+reads the file into its own `NEBULA_AGENT_TOKEN` and exits if the file is
+missing, unreadable, open to other users or malformed. The token's record names its budget outright: `outside:personal:<agentId>`, inside
+the shared outside budget, with its own line in Settings once it has spent in
+the last 24 hours (`GET /api/agent/spend/apps` returns every one under
+`personal`). `/api/agent/spend`
+reports `budget: "shared"` for it. The token is revoked, and its file deleted,
+when the chat session ends. `agent_spend.PERSONAL_AGENT_BUDGET = "chat"` would give each personal
+chat its own session budget instead.
+
 ### Connect your agent
 
 Bring an agent you already use (Hermes, OpenClaw, Claude Desktop, Claude Code,

@@ -1,7 +1,8 @@
 """Who wrote this? The backend decides; callers never self-declare (§4).
 
 - human:justin: only via the per-launch person token (services/person_session.py)
-- agent:<runner>/<model>: Nebula's own runners, via a per-turn agent token
+- agent:<runner>/<model>: Nebula's own runners, via a per-turn agent token, and
+  the person's own agents (runner ``personal:<id>``), via a per-session token
 - agent:app:<id>: an outside app with a token the person issued (services/app_tokens.py)
 - agent:mcp:<clientInfo.name>: external harnesses, self-reported, never human
 - agent:cli: the nebula CLI with no token
@@ -52,7 +53,8 @@ class AgentRegistry:
         self._lock = threading.Lock()
 
     def mint(self, runner: str, allowed_dirs: list[Path], *, brand: str | None = None,
-             workspace: Path | None = None, session: str | None = None) -> str:
+             workspace: Path | None = None, session: str | None = None, spend_key: str | None = None,
+             display_name: str | None = None, color: str | None = None) -> str:
         identity = None
         if workspace is not None:
             from services.agent_workspaces import workspace_identity, validate_workspace
@@ -61,7 +63,11 @@ class AgentRegistry:
         token = secrets.token_urlsafe(32)
         with self._lock:
             # `session` is the chat session the turn belongs to; spending limits count per session.
+            # `spend_key`, when set, names the budget outright (a personal agent's
+            # `outside:personal:<id>`, services/agent_spend.py); `display_name`
+            # and `color` are how presence shows it (services/agent_presence.py).
             self._tokens[token] = {"runner": runner, "model": None, "brand": brand, "session": session,
+                                   "spend_key": spend_key, "display_name": display_name, "color": color,
                                    "workspace": Path(workspace).expanduser().resolve() if workspace is not None else None,
                                    "workspace_identity": identity,
                                    "allowed_dirs": tuple(Path(d).resolve() for d in allowed_dirs)}

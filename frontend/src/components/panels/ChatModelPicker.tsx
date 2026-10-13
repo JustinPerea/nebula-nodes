@@ -2,7 +2,9 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import type { CSSProperties, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, X } from 'lucide-react';
-import { chatAuthUsesProviderBilling, type ChatModelCatalog } from '../../lib/api';
+import {
+  chatAuthUsesProviderBilling, isPersonalAgent, type ChatAgentId, type ChatModelCatalog, type PersonalAgent,
+} from '../../lib/api';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { ScrollFade } from '../ScrollFade';
 import '../../styles/chat-model-picker.css';
@@ -10,14 +12,16 @@ import '../../styles/chat-model-picker.css';
 type Agent = 'claude' | 'codex';
 
 export interface ChatModelPickerProps {
-  agent: Agent;
+  agent: ChatAgentId;
+  /** The person's own agents that are ready to start (Settings > Personal agents). */
+  personalAgents?: PersonalAgent[];
   model: string | null;
   effort: string | null;
   catalog: ChatModelCatalog | null;
   loading: boolean;
   error: string | null;
   disabled: boolean;
-  onAgentChange: (agent: Agent) => void;
+  onAgentChange: (agent: ChatAgentId) => void;
   onModelChange: (model: string) => void;
   onEffortChange: (effort: string | null) => void;
   onRetry: () => void;
@@ -27,8 +31,10 @@ const PROVIDERS: Array<{ id: Agent; label: string }> = [
   { id: 'claude', label: 'Claude Code' }, { id: 'codex', label: 'Codex' },
 ];
 
-export function ChatModelPicker({ agent, model, effort, catalog, loading, error, disabled,
+export function ChatModelPicker({ agent, personalAgents = [], model, effort, catalog, loading, error, disabled,
   onAgentChange, onModelChange, onEffortChange, onRetry }: ChatModelPickerProps) {
+  const personal = isPersonalAgent(agent)
+    ? personalAgents.find((item) => `personal:${item.id}` === agent) ?? null : null;
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState({ x: 8, y: 8 });
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -73,8 +79,10 @@ export function ChatModelPicker({ agent, model, effort, catalog, loading, error,
   const selected = model ? models.find((item) => item.id === model) : models.find((item) => item.isDefault);
   const offeredEffort = selected?.supportedEfforts.find((item) => item.id === effort);
   const defaultEffort = selected?.supportedEfforts.find((item) => item.id === selected.defaultEffort);
-  const provider = PROVIDERS.find((item) => item.id === agent)!;
-  const modelLabel = selected?.label ?? model ?? (loading ? 'Loading models…' : 'Choose model');
+  const provider = PROVIDERS.find((item) => item.id === agent) ?? {
+    id: agent, label: personal?.displayName ?? 'Your agent' };
+  const modelLabel = isPersonalAgent(agent) ? provider.label
+    : selected?.label ?? model ?? (loading ? 'Loading models…' : 'Choose model');
   const effortLabel = effort ? offeredEffort?.label ?? 'Unavailable effort'
     : defaultEffort ? `${defaultEffort.label} · default` : 'CLI default';
   const unavailable = error ?? current?.error?.message ?? (
@@ -131,7 +139,9 @@ export function ChatModelPicker({ agent, model, effort, catalog, loading, error,
       onClick={() => { triggerRef.current?.focus({ preventScroll: true }); setOpen((value) => !value); }}>
       <span id={`${id}-selection`} className="chat-model-picker__selection">
         <span className="chat-model-picker__model-label">{modelLabel}</span>
-        <span className="chat-model-picker__effort-label">{selected ? effortLabel : provider.label}</span>
+        <span className="chat-model-picker__effort-label">
+          {isPersonalAgent(agent) ? 'Your own agent' : selected ? effortLabel : provider.label}
+        </span>
       </span>
       <ChevronDown size={14} aria-hidden="true" />
     </button>
@@ -150,13 +160,25 @@ export function ChatModelPicker({ agent, model, effort, catalog, loading, error,
           aria-pressed={agent === item.id} onClick={() => { if (item.id !== agent) onAgentChange(item.id); }}>
           {item.label}
         </button>)}
+        {personalAgents.filter((item) => item.status === 'ready').map((item) => {
+          const id: ChatAgentId = `personal:${item.id}`;
+          return <button key={id} type="button" data-chat-provider={id} aria-pressed={agent === id}
+            onClick={() => { if (id !== agent) onAgentChange(id); }}>
+            <span className="chat-panel__personal-dot" style={{ background: item.color }} aria-hidden="true" />
+            {item.displayName}
+          </button>;
+        })}
       </div>
       <p className="chat-model-picker__connection">
-        {agent === 'claude' ? 'Uses your existing Claude Code login.' : 'Uses your existing Codex connection.'}
-        {ready && <span>{connection}</span>}
+        {isPersonalAgent(agent) ? 'Your own agent, with its own model, settings and tools.'
+          : agent === 'claude' ? 'Uses your existing Claude Code login.' : 'Uses your existing Codex connection.'}
+        {ready && !isPersonalAgent(agent) && <span>{connection}</span>}
       </p>
       <ScrollFade className="chat-model-picker__body">
-        {loading ? <p role="status">Loading models…</p> : !ready || !models.length ? <div className="chat-model-picker__unavailable">
+        {isPersonalAgent(agent) ? <p className="chat-model-picker__personal" role="status">
+          {personal?.note || 'It picks its own model.'} Nebula doesn&rsquo;t choose its model or effort; change those
+          in the agent&rsquo;s own settings.
+        </p> : loading ? <p role="status">Loading models…</p> : !ready || !models.length ? <div className="chat-model-picker__unavailable">
           <p role="status">{unavailable}</p>
           <button type="button" className="chat-model-picker__retry" onClick={onRetry}>Retry model discovery</button>
         </div> : <>
