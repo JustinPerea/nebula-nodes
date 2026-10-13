@@ -23,6 +23,20 @@ PATHS = agent_connect.CheckoutPaths(python="/repo/backend/.venv/bin/python", ser
 URL = "http://127.0.0.1:8000"
 TOKEN = "nebula_app_TESTTOKEN"
 REPO = Path(__file__).resolve().parents[2]
+REAL_BACKEND_DIR = agent_connect._backend_dir
+
+
+@pytest.fixture(autouse=True)
+def fake_checkout(tmp_path_factory, monkeypatch):
+    """A checkout with a venv, wherever the tests run. CI installs the
+    backend's packages without one, and connect refuses a checkout that has
+    none (its configs would name a python that isn't there)."""
+    backend = tmp_path_factory.mktemp("checkout") / "backend"
+    (backend / ".venv" / "bin").mkdir(parents=True)
+    (backend / ".venv" / "bin" / "python").symlink_to(sys.executable)
+    (backend / "mcp_server.py").write_text("")
+    monkeypatch.setattr(agent_connect, "_backend_dir", lambda: backend)
+    return backend
 
 
 def setup(client_id, daily=None):
@@ -158,10 +172,11 @@ def test_the_warning_names_the_daily_limit():
     assert "up to the shared budget" in setup("hermes")["warnings"][0]
 
 
-def test_checkout_paths_keep_the_venv_symlink_and_refuse_an_app_bundle(tmp_path):
+def test_checkout_paths_keep_the_venv_symlink_and_refuse_an_app_bundle(tmp_path, fake_checkout):
+    assert REAL_BACKEND_DIR() == REPO / "backend"
     paths = agent_connect.checkout_paths()
-    assert paths.python == str(REPO / "backend" / ".venv" / "bin" / "python")
-    assert paths.server == str(REPO / "backend" / "mcp_server.py")
+    assert paths.python == str(fake_checkout / ".venv" / "bin" / "python") and Path(paths.python).is_symlink()
+    assert paths.server == str(fake_checkout / "mcp_server.py")
     bundle = tmp_path / "Nebula Nodes.app" / "Contents" / "Resources" / "backend"
     bundle.mkdir(parents=True)
     (bundle / "mcp_server.py").write_text("")
@@ -450,9 +465,14 @@ def test_cli_print_mode_changes_nothing(tmp_path):
     env["HOME"] = str(tmp_path)
     done = subprocess.run([sys.executable, "-m", "nebula", "--url", "http://127.0.0.1:9", "mcp", "connect", "cursor",
                            "--print"], cwd=REPO, env=env, capture_output=True, text=True, timeout=60)
-    assert done.returncode == 0, done.stderr
-    assert agent_connect.TOKEN_PLACEHOLDER in done.stdout and '"type": "stdio"' in done.stdout
-    assert '"NEBULA_URL": "http://127.0.0.1:9"' in done.stdout
+    # The real CLI on this real checkout: CI has no backend/.venv, and then
+    # the right answer is a refusal (the config would name a missing python).
+    if (REPO / "backend" / ".venv" / "bin" / "python").exists():
+        assert done.returncode == 0, done.stderr
+        assert agent_connect.TOKEN_PLACEHOLDER in done.stdout and '"type": "stdio"' in done.stdout
+        assert '"NEBULA_URL": "http://127.0.0.1:9"' in done.stdout
+    else:
+        assert done.returncode == 1 and "no backend virtualenv" in done.stderr, done.stderr
     assert not list(tmp_path.rglob("*"))
 
 
@@ -471,7 +491,7 @@ def client(monkeypatch, tmp_path, person):
     return TestClient(main.app)
 
 
-def test_only_the_person_gets_a_token_and_its_setup(client):
+def test_only_the_person_gets_a_token_and_its_setup(client, fake_checkout):
     body = {"name": "My Hermes", "dailyUsd": 3, "client": "hermes", "color": "#3fc1a5"}
     for headers in ({}, FORGED_ORIGIN, {**PERSON, "X-Nebula-Agent": "Hermes"},
                     {**PERSON, "Authorization": "Agent nebula_app_x"}):
@@ -484,7 +504,7 @@ def test_only_the_person_gets_a_token_and_its_setup(client):
     assert app["client"] == "hermes" and app["color"] == "#3FC1A5" and app["dailyUsd"] == 3
     assert setup_view["format"] == "yaml" and f'NEBULA_APP_TOKEN: "{token}"' in setup_view["snippet"]
     assert "trust: untrusted" in setup_view["snippet"] and "its $3 daily limit" in setup_view["warnings"][0]
-    assert str(REPO / "backend" / ".venv" / "bin" / "python") in setup_view["snippet"]
+    assert str(fake_checkout / ".venv" / "bin" / "python") in setup_view["snippet"]
     # The listing never repeats the token or the setup, and says what the picker offers.
     listing = client.get("/api/agent/spend/apps", headers=PERSON).json()
     assert token not in json.dumps(listing) and listing["connect"]["available"] is True
