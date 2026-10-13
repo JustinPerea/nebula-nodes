@@ -446,6 +446,73 @@
       }
     },
     {
+      "name": "an unreadable multiplier is unpriced",
+      "nodeId": "vid",
+      "params": {
+        "model": "fast",
+        "duration": "abc"
+      },
+      "expected": null
+    },
+    {
+      "name": "a zero multiplier is unpriced",
+      "nodeId": "img",
+      "params": {
+        "quality": "high",
+        "n": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "a negative multiplier is unpriced",
+      "nodeId": "vid",
+      "params": {
+        "model": "fast",
+        "duration": -4
+      },
+      "expected": null
+    },
+    {
+      "name": "a true/false multiplier is unpriced",
+      "nodeId": "img",
+      "params": {
+        "quality": "high",
+        "n": true
+      },
+      "expected": null
+    },
+    {
+      "name": "a hex multiplier is unpriced",
+      "nodeId": "img",
+      "params": {
+        "quality": "high",
+        "n": "0x10"
+      },
+      "expected": null
+    },
+    {
+      "name": "an underscored multiplier is unpriced",
+      "nodeId": "img",
+      "params": {
+        "quality": "high",
+        "n": "1_000"
+      },
+      "expected": null
+    },
+    {
+      "name": "a padded decimal multiplier multiplies",
+      "nodeId": "img",
+      "params": {
+        "quality": "high",
+        "n": " 3 "
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.501,
+        "high": 0.501
+      }
+    },
+    {
       "name": "first matching row wins",
       "nodeId": "vid",
       "params": {

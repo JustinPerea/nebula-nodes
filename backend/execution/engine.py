@@ -914,6 +914,10 @@ async def _execute_graph(
     # Values used on edges belong to an invocation, not merely a node ID.
     # Static ancestors use (), and a nested iterator appends its item index.
     invocation_outputs: dict[str, dict[InvocationContext, dict[str, PortValueDict]]] = {}
+    # How many invocations of each node reached its handler this run. A batch
+    # item that stops at a credential check after an earlier item already
+    # called the provider must not mark the node as having spent nothing.
+    handler_calls: dict[str, int] = {}
     batch_outputs: dict[str, list[dict[str, Any]]] = {}
     batch_variants: dict[str, list[dict[str, Any]]] = {}
     axis_items: dict[InvocationContext, Any] = {}
@@ -1360,6 +1364,7 @@ async def _execute_graph(
                 # The only provider entry point: the spending limits count a
                 # node only if its run got here (execution/provider_calls.py).
                 provider_calls.mark(execution_run_id.get(), nid)
+                handler_calls[nid] = handler_calls.get(nid, 0) + 1
                 node_outputs = await handler(node, resolved_inputs, api_keys)
 
             validate_file_references(node_outputs)
@@ -1387,7 +1392,8 @@ async def _execute_graph(
                     retryable=retryable,
                     category=category,
                     friendly=friendly,
-                    missing_credential=isinstance(exc, MissingCredentialError),
+                    missing_credential=isinstance(exc, MissingCredentialError)
+                    and handler_calls.get(nid, 0) <= 1,
                 )
             )
             return nid, False, 0

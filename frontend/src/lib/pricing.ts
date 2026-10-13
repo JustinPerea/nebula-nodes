@@ -86,6 +86,18 @@ export function pricedKeys(entry: PriceEntry): Set<string> {
   return keys;
 }
 
+// A plain decimal, as both this file and backend/services/model_pricing.py
+// read it, so "0x10", "1_000" or non-ASCII digits never price on one side only.
+const DECIMAL = /^[ \t\n\r]*[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?[ \t\n\r]*$/;
+
+/** A positive, finite count or duration; null for anything else. */
+function multiplier(value: unknown): number | null {
+  if (typeof value === 'string' && !DECIMAL.test(value)) return null;
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
 /** One run of this node, or null when it's unpriced (no entry, no matching
  * row, the run bills a different provider than the entry prices, or a
  * setting the price reads arrives by wire, so it's only known at run time). */
@@ -115,8 +127,12 @@ export function estimateNode(
   }
   let factor = 1;
   for (const key of entry.multiplyBy ?? []) {
-    const amount = Number(values[key]);
-    factor *= Number.isFinite(amount) && amount > 0 ? amount : 1;
+    // Absent (no param, no default) counts once. A value that is there but
+    // unreadable leaves the run unpriced, never one unit.
+    if (values[key] === undefined) continue;
+    const amount = multiplier(values[key]);
+    if (amount === null) return null;
+    factor *= amount;
   }
   const result: NodeEstimate = { currency: entry.currency, low: low * factor, high: high * factor };
   if (entry.plus) result.plus = String(entry.plus);

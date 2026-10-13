@@ -204,6 +204,21 @@ def priced_keys(entry: Mapping[str, Any]) -> set[str]:
     return keys | {str(key) for key in entry.get("multiplyBy") or []}
 
 
+# A plain decimal, as both this file and frontend/src/lib/pricing.ts read it,
+# so "0x10", "1_000" or non-ASCII digits never price on one side only.
+_DECIMAL = re.compile(r"[ \t\n\r]*[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?[ \t\n\r]*")
+
+
+def _multiplier(value: Any) -> float | None:
+    """A positive, finite count or duration; None for anything else."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    if isinstance(value, str) and not _DECIMAL.fullmatch(value):
+        return None
+    amount = float(value)
+    return amount if math.isfinite(amount) and amount > 0 else None
+
+
 def estimate_node(
     entry: Mapping[str, Any] | None,
     definition: Mapping[str, Any],
@@ -239,11 +254,14 @@ def estimate_node(
             bounds = (low, high)
             factor = 1.0
             for key in entry.get("multiplyBy") or []:
-                try:
-                    amount = float(values.get(key))
-                except (TypeError, ValueError):
-                    amount = 1.0
-                factor *= amount if math.isfinite(amount) and amount > 0 else 1.0
+                # Absent (no param, no default) counts once. A value that is
+                # there but unreadable leaves the run unpriced, never one unit.
+                if key not in values:
+                    continue
+                amount = _multiplier(values[key])
+                if amount is None:
+                    return None
+                factor *= amount
             result = {"currency": entry["currency"], "low": bounds[0] * factor, "high": bounds[1] * factor}
             if entry.get("plus"):
                 result["plus"] = str(entry["plus"])

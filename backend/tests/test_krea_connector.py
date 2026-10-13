@@ -622,3 +622,18 @@ def test_browser_vault_refuses_symlinked_or_shared_key(tmp_path, monkeypatch):
     target.chmod(0o600)
     key.symlink_to(target)
     assert service.KreaConnector(directory).status()["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_a_session_with_no_connection_stops_before_krea_as_a_missing_credential(connector):
+    """The not-connected check runs before any request, so an agent's plan run
+    that stops there gets its count back (the engine marks MissingCredentialError)."""
+    from execution.missing_credential import MissingCredentialError
+
+    with respx.mock(assert_all_called=False) as router:
+        krea = router.route(host="api.krea.ai")
+        with pytest.raises(MissingCredentialError, match="Connect your Krea account first") as raised:
+            async with connector.session():
+                pass
+    assert isinstance(raised.value, service.ConnectorError)
+    assert not krea.called
