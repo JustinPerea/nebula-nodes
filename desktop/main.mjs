@@ -1,14 +1,21 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, shell } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT } from './sidecar.mjs';
-import { prepareAppDataEnv } from './paths.mjs';
+import {
+  startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT, SIDECAR_STRIPPED_ENV_KEYS,
+} from './sidecar.mjs';
+import { prepareAppDataEnv, resolveDesktopDataPaths } from './paths.mjs';
 import { createPaperLinkSenderValidator, registerPaperLinkHandler } from './paper-links.mjs';
-import { decidePersonToken, registerPersonTokenHandler } from './person-token.mjs';
+import { DEBUG_SWITCHES, debugSwitchesInUse, decidePersonToken, registerPersonTokenHandler } from './person-token.mjs';
 import { registerFolderPickerHandler } from './folder-picker.mjs';
 import { getConnectorEncryptionKey, registerKreaAuthLinkHandler } from './connector-vault.mjs';
 import { installRendererNavigationGuard } from './navigation.mjs';
+import { confineFileScheme } from './renderer-files.mjs';
+import { resolveLaunchOverrides } from './launch-overrides.mjs';
+import { decideWindowAction } from './window-recovery.mjs';
+import { packagedLaunch, treatAsPackaged } from './packaged-launch.mjs';
 import {
   CREDENTIALS_FILE_NAME,
   MIGRATION_STATE_FILE_NAME,
@@ -28,8 +35,50 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Configuration
 // ---------------------------------------------------------------------------
 
+/**
+ * Dev and test overrides (launch-overrides.mjs). A packaged build ignores
+ * all of them, so its profile, keychain and renderer can't be redirected
+ * from the environment.
+ */
+const packaged = packagedLaunch();
+// The default name (package.json `name`, before any test app id) names the
+// profile dir, the single-instance lock and the safeStorage keychain item.
+console.log(`Nebula desktop: app name=${app.getName()} packaged=${app.isPackaged}${packaged?.validation ? ' (validation build)' : ''}`);
+const overrides = resolveLaunchOverrides({
+  env: process.env,
+  isPackaged: treatAsPackaged(app.isPackaged, packaged),
+});
+if (packaged?.validation) {
+  console.warn('Nebula.app validation build: dev/test overrides are honoured. Not for everyday use.');
+}
+if (overrides.ignored.length > 0) {
+  console.warn(`Ignoring dev/test-only settings in a packaged build: ${overrides.ignored.join(', ')}`);
+}
+
+/**
+ * Debug switches this launch was started with, before main.mjs adds its own.
+ * Chromium honours `--remote-debugging-port` and friends from argv even in a
+ * packaged build (`open -a Nebula --args --remote-debugging-port=9222`),
+ * which launch-overrides.mjs never sees. Any of them means no person token;
+ * a normal Nebula.app refuses to start at all (see the lifecycle below).
+ */
+const launchDebugSwitches = debugSwitchesInUse({
+  hasSwitch: (name) => app.commandLine.hasSwitch(name),
+  argv: process.argv,
+  execArgv: process.execArgv,
+  nodeOptions: process.env.NODE_OPTIONS,
+});
+const refuseDebugLaunch = launchDebugSwitches.length > 0 && treatAsPackaged(app.isPackaged, packaged);
+if (launchDebugSwitches.length > 0) {
+  console.warn(`Debug switches on the command line: ${launchDebugSwitches.join(', ')}; no person token this launch`);
+}
+if (refuseDebugLaunch) {
+  // Best effort: drop them before Chromium starts its DevTools server.
+  for (const name of DEBUG_SWITCHES) app.commandLine.removeSwitch(name);
+}
+
 /** Loopback CDP port for agent-browser validation. */
-const debugPort = process.env.NEBULA_DESKTOP_DEBUG_PORT;
+const debugPort = overrides.debugPort;
 if (debugPort) {
   app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1');
   app.commandLine.appendSwitch('remote-debugging-port', debugPort);
@@ -45,22 +94,38 @@ if (debugPort) {
  *
  * Must be paired with `NEBULA_DESKTOP_USER_DATA_DIR` for full isolation.
  */
-const appId = process.env.NEBULA_DESKTOP_APP_ID;
+const appId = overrides.appId;
 if (appId) {
   app.setName(appId);
 }
 
 /** Test-only isolated user-data directory for concurrent validators. */
-const userDataDir = process.env.NEBULA_DESKTOP_USER_DATA_DIR;
+const userDataDir = overrides.userDataDir;
 if (userDataDir) {
   app.setPath('userData', userDataDir);
 }
+if (overrides.mockKeychain) {
+  // NEBULA_DESKTOP_TEST=1: a throwaway test profile must not read or write
+  // the person's login keychain (safeStorage names its key "<app name> Safe
+  // Storage", so every validator run with a fresh app id left an item
+  // behind). The mock keychain's key is a public constant, so anything saved
+  // in this profile is effectively unencrypted. Never use it for real keys.
+  app.commandLine.appendSwitch('use-mock-keychain');
+  console.warn('NEBULA_DESKTOP_TEST=1: mock keychain in use; keys saved in this profile are not protected');
+}
 
-const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
-const isSmokeTest = process.env.NEBULA_DESKTOP_SMOKE === '1';
+/** App data root and migration sources; all inside userDataDir when isolated. */
+const dataPaths = resolveDesktopDataPaths({
+  userDataDir,
+  home: homedir(),
+  repoRoot: DEFAULT_REPO_ROOT,
+});
+
+const isDevelopment = Boolean(overrides.devServerUrl);
+const isSmokeTest = overrides.smoke;
 const rendererUrl = isDevelopment
-  ? process.env.VITE_DEV_SERVER_URL
-  : new URL('../frontend/dist/index.html', import.meta.url).toString();
+  ? overrides.devServerUrl
+  : new URL('../frontend/dist-desktop/index.html', import.meta.url).toString();
 const preloadPath = fileURLToPath(new URL('./preload.cjs', import.meta.url));
 
 // ---------------------------------------------------------------------------
@@ -72,8 +137,9 @@ let sidecarHandle = null;
 /** This launch's person token (person-token.mjs). None with a debug port open. */
 const person = decidePersonToken({
   debugPort,
+  debugSwitches: launchDebugSwitches,
   isDevelopment,
-  devOptIn: process.env.NEBULA_DESKTOP_DEV_PERSON,
+  devOptIn: overrides.devPersonOptIn,
 });
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
@@ -82,6 +148,8 @@ let loadingWindow = null;
 let isCleaningUp = false;
 let quitRequestedDuringStartup = false;
 let sidecarStarting = false;
+/** The error that stopped startup, kept so a Dock click or second launch can show it again. @type {Error | null} */
+let startupError = null;
 let sidecarDisconnected = false;
 let plaintextProviders = [];
 
@@ -454,6 +522,65 @@ function showFailure(error) {
   }
 }
 
+/** Disconnected page shown when the sidecar died mid-session (no auto-restart). */
+function createDisconnectedWindow() {
+  const win = new BrowserWindow({
+    show: !isSmokeTest,
+    width: 600,
+    height: 400,
+    resizable: false,
+    minimizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    backgroundColor: '#0d0608',
+    titleBarStyle: 'hiddenInset',
+    title: 'Nebula Nodes \u2014 Disconnected',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  win.loadURL(DISCONNECTED_HTML);
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
+  });
+  return win;
+}
+
+/**
+ * Dock click (`activate`) or a second launch (`second-instance`): focus the
+ * live window, or recreate it when every window was closed.
+ *
+ * @param {{ focusExisting: boolean }} options
+ */
+function showAppWindow({ focusExisting }) {
+  const existing = [mainWindow, loadingWindow].find((win) => win && !win.isDestroyed()) ?? null;
+  const action = decideWindowAction({
+    hasLiveWindow: Boolean(existing),
+    openWindowCount: BrowserWindow.getAllWindows().length,
+    focusExisting,
+    isCleaningUp,
+    hasSidecar: Boolean(sidecarHandle),
+    sidecarDisconnected,
+    startupFailed: Boolean(startupError) && !sidecarStarting,
+  });
+  if (action === 'focus') {
+    if (existing.isMinimized()) existing.restore();
+    existing.focus();
+  } else if (action === 'create-main') {
+    mainWindow = createMainWindow(sidecarHandle, plaintextProviders);
+  } else if (action === 'create-disconnected') {
+    mainWindow = createDisconnectedWindow();
+  } else if (action === 'create-failure') {
+    showFailure(startupError);
+  }
+  // focus() also shows a window, so never on the hidden smoke-run windows.
+  const created = action === 'create-failure' ? loadingWindow : mainWindow;
+  if (action.startsWith('create-') && !isSmokeTest) created.focus();
+  if (action !== 'none') console.log(`Window request (${focusExisting ? 'second launch' : 'activate'}): ${action}`);
+}
+
 /**
  * Show the mid-session disconnected overlay in the main renderer window.
  * The renderer page is NOT replaced — the injected endpoint metadata
@@ -519,7 +646,110 @@ function runSmokeTest(handle) {
               resolve({ connected: false, reason: 'error' });
             };
           }),
-        ]).then(([health, websocket]) => {
+          // React mounts after the load event; wait for it, bounded, rather
+          // than sampling #root once at did-finish-load.
+          new Promise((resolve) => {
+            const deadline = Date.now() + 15000;
+            const check = () => {
+              if (document.querySelector('#root')?.children.length || Date.now() > deadline) resolve();
+              else window.setTimeout(check, 50);
+            };
+            check();
+          }),
+          // A person-gated Settings save, the way the Settings panel does it:
+          // token over IPC, then PUT /api/settings with X-Nebula-Person. Only
+          // in an isolated profile, so a smoke run never writes real settings.
+          (async () => {
+            if (!${JSON.stringify(dataPaths.isolated)}) return { skipped: 'not an isolated profile' };
+            const api = window.nebulaDesktop.apiBaseUrl;
+            const got = window.nebulaDesktop.person ? await window.nebulaDesktop.person.token() : null;
+            if (!got || !got.ok) return { skipped: 'no person token (' + (got && got.error) + ')' };
+            const before = await (await fetch(api + '/api/settings', { cache: 'no-store' })).json();
+            const wanted = !before.zoomTelemetryEnabled;
+            const put = await fetch(api + '/api/settings', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', 'X-Nebula-Person': got.token },
+              body: JSON.stringify({ zoomTelemetryEnabled: wanted }),
+            });
+            const unverified = await fetch(api + '/api/settings', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ zoomTelemetryEnabled: !wanted }),
+            });
+            const after = await (await fetch(api + '/api/settings', { cache: 'no-store' })).json();
+            return {
+              ok: put.status === 200 && unverified.status === 403 && after.zoomTelemetryEnabled === wanted,
+              putStatus: put.status,
+              unverifiedStatus: unverified.status,
+              saved: after.zoomTelemetryEnabled === wanted,
+            };
+          })().catch((err) => ({ ok: false, error: String(err) })),
+          // The other person paths from the packaged file: page (the desktop
+          // pass, docs/MCP-SETUP.md "Who counts as the person"): the spend
+          // read, the /ws hello, and the Krea connector's status and
+          // person-only routes. None of these reaches Krea: with no saved
+          // connection, check stops before any request and disconnect only
+          // clears the empty local vault. Isolated profiles only.
+          (async () => {
+            if (!${JSON.stringify(dataPaths.isolated)}) return { skipped: 'not an isolated profile' };
+            const api = window.nebulaDesktop.apiBaseUrl;
+            const got = window.nebulaDesktop.person ? await window.nebulaDesktop.person.token() : null;
+            if (!got || !got.ok) return { skipped: 'no person token (' + (got && got.error) + ')' };
+            const call = async (path, init, withToken) => {
+              const headers = withToken ? { 'X-Nebula-Person': got.token } : {};
+              try {
+                const response = await fetch(api + path, { cache: 'no-store', ...init, headers });
+                let body = null;
+                try { body = await response.json(); } catch { /* not JSON */ }
+                return { status: response.status, body };
+              } catch (err) {
+                return { status: 0, error: String(err) };
+              }
+            };
+            const hello = (token) => new Promise((resolve) => {
+              const socket = new WebSocket(window.nebulaDesktop.wsBaseUrl + '/ws');
+              const done = (value) => { window.clearTimeout(timer); socket.close(); resolve(value); };
+              const timer = window.setTimeout(() => done('timeout'), 5000);
+              socket.onmessage = (event) => {
+                let frame = null;
+                try { frame = JSON.parse(event.data); } catch { return; }
+                if (frame.type === 'graphSync') socket.send(JSON.stringify({ type: 'hello', personToken: token }));
+                if (frame.type === 'proposalSync' || frame.type === 'personRequired') done(frame.type);
+              };
+              socket.onerror = () => done('error');
+            });
+            const spend = await call('/api/agent/spend', {}, true);
+            const spendNoToken = await call('/api/agent/spend', {}, false);
+            const kreaStatus = await call('/api/krea/connection', {}, true);
+            const kreaCheck = await call('/api/krea/connection/check', { method: 'POST' }, true);
+            const kreaCheckNoToken = await call('/api/krea/connection/check', { method: 'POST' }, false);
+            const kreaDisconnect = await call('/api/krea/connection', { method: 'DELETE' }, true);
+            const kreaDisconnectNoToken = await call('/api/krea/connection', { method: 'DELETE' }, false);
+            const helloAsPerson = await hello(got.token);
+            const helloWrongToken = await hello('x'.repeat(43));
+            const result = {
+              pageOrigin: window.location.origin,
+              spend: { status: spend.status, limited: spend.body && spend.body.limited },
+              spendNoToken: { status: spendNoToken.status, limited: spendNoToken.body && spendNoToken.body.limited },
+              kreaStatus: { status: kreaStatus.status, connection: kreaStatus.body && kreaStatus.body.status },
+              kreaCheck: { status: kreaCheck.status, connection: kreaCheck.body && kreaCheck.body.status },
+              kreaCheckNoToken: { status: kreaCheckNoToken.status, code: kreaCheckNoToken.body && kreaCheckNoToken.body.code },
+              kreaDisconnect: { status: kreaDisconnect.status, connection: kreaDisconnect.body && kreaDisconnect.body.status },
+              kreaDisconnectNoToken: { status: kreaDisconnectNoToken.status, code: kreaDisconnectNoToken.body && kreaDisconnectNoToken.body.code },
+              helloAsPerson,
+              helloWrongToken,
+            };
+            result.ok = spend.status === 200 && spend.body?.limited === false
+              && spendNoToken.status === 200 && spendNoToken.body?.limited !== false
+              && kreaStatus.status === 200 && typeof kreaStatus.body?.status === 'string' && kreaStatus.body.status !== 'error'
+              && kreaCheck.status === 200
+              && kreaCheckNoToken.status === 403 && kreaCheckNoToken.body?.code === 'person_required'
+              && kreaDisconnect.status === 200 && kreaDisconnect.body?.status === 'disconnected'
+              && kreaDisconnectNoToken.status === 403
+              && helloAsPerson === 'proposalSync' && helloWrongToken === 'personRequired';
+            return result;
+          })().catch((err) => ({ ok: false, error: String(err) })),
+        ]).then(([health, websocket, _mounted, settingsSave, personPaths]) => {
           const c = window.nebulaDesktop && window.nebulaDesktop.credentials;
           const m = window.nebulaDesktop && window.nebulaDesktop.migration;
           return {
@@ -533,6 +763,8 @@ function runSmokeTest(handle) {
             },
             health,
             websocket,
+            settingsSave,
+            personPaths,
             bridge: {
               hasCredentials: Boolean(c),
               hasMigration: Boolean(m),
@@ -571,6 +803,9 @@ function runSmokeTest(handle) {
         && result.health?.body?.status === 'ok'
         && result.health?.body?.app === 'nebula'
         && result.websocket?.connected === true
+        // Skipped (not isolated, or no person token with a debug port open) is fine; a failed save is not.
+        && (result.settingsSave?.skipped !== undefined || result.settingsSave?.ok === true)
+        && (result.personPaths?.skipped !== undefined || result.personPaths?.ok === true)
         // Credential bridge surface (VAL-KEY-011, VAL-KEY-012, VAL-KEY-013)
         && result.bridge?.hasCredentials === true
         && result.bridge?.setFn === 'function'
@@ -599,10 +834,13 @@ function runSmokeTest(handle) {
         platform: result.preload?.platform,
         health: result.health,
         websocket: result.websocket,
+        settingsSave: result.settingsSave,
+        personPaths: result.personPaths,
         bridge: result.bridge,
       })}`);
 
       clearTimeout(smokeTimeout);
+      isCleaningUp = true; // this stop is ours, not a mid-session crash
       await stopSidecar(handle).catch(() => {});
       sidecarHandle = null;
       app.exit(passed ? 0 : 1);
@@ -636,35 +874,70 @@ async function cleanupSidecar() {
 // App lifecycle
 // ---------------------------------------------------------------------------
 
-const acquiredLock = app.requestSingleInstanceLock();
-if (!acquiredLock) {
+const acquiredLock = refuseDebugLaunch ? false : app.requestSingleInstanceLock();
+if (refuseDebugLaunch) {
+  // A normal Nebula.app never runs with a debugger attachable from outside:
+  // no window, no backend, no token. Validation builds and `npm run start`
+  // carry on without a person token instead (person-token.mjs).
+  app.whenReady().then(async () => {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Nebula',
+      message: 'Nebula won\'t start with debugging switches.',
+      detail:
+        `It was opened with ${launchDebugSwitches.map((name) => `--${name}`).join(', ')}, ` +
+        'which would let other programs on this Mac control it. Open Nebula normally ' +
+        '(from the Dock or Finder) instead.',
+      buttons: ['Quit'],
+    });
+    app.exit(1);
+  });
+} else if (!acquiredLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    // Focus the existing window — no second sidecar is started.
-    // During startup the main window may not exist yet; focus the
-    // loading window in that case.
-    const win = mainWindow || loadingWindow;
-    if (win && !win.isDestroyed()) {
-      if (win.isMinimized()) win.restore();
-      win.focus();
-    }
+    // Show the existing window, or recreate it when every window was
+    // closed (window-recovery.mjs). No second sidecar is started.
+    showAppWindow({ focusExisting: true });
   });
 
   app.whenReady().then(async () => {
+    // file:// reads only inside the renderer bundle (renderer-files.mjs),
+    // installed before any window can load anything.
+    if (!isDevelopment) {
+      confineFileScheme(protocol, net, dirname(fileURLToPath(rendererUrl)));
+    }
+
+    // `npm run start` runs the stock Electron binary, whose Dock icon is
+    // Electron's. Nebula.app gets its icon from the bundle instead.
+    if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
+      const dockIcon = join(__dirname, 'build', 'icon.png');
+      if (existsSync(dockIcon)) app.dock.setIcon(dockIcon);
+    }
+
     // Show a nonblank startup surface before sidecar health is confirmed.
     loadingWindow = createLoadingWindow();
     sidecarStarting = true;
 
     try {
+      // A missing renderer build would load as a blank window after a full
+      // sidecar cold start. Say what to run instead, before anything touches
+      // the app data root (directory creation, one-time migration) or spawns.
+      if (!isDevelopment && !existsSync(fileURLToPath(rendererUrl))) {
+        throw new Error(
+          `The desktop renderer is not built: ${fileURLToPath(rendererUrl)}\n` +
+          'Run `cd frontend && npm run build:desktop`, then start the app again.',
+        );
+      }
+
       // Compute App Support paths and create the directory tree before
       // spawning the sidecar. The env vars are merged into the child
       // process environment so the backend resolves state, output,
       // characters, moodboards, presets, and settings to
-      // ~/Library/Application Support/Nebula Nodes/.
+      // ~/Library/Application Support/Nebula Nodes/ (or <userDataDir>/Nebula Nodes/ when isolated).
       // In browser/dev mode (no Electron), none of these are set —
       // the backend uses its default paths.
-      const { root: appDataRoot, envVars: pathEnvVars } = prepareAppDataEnv();
+      const { root: appDataRoot, envVars: pathEnvVars } = prepareAppDataEnv({ root: dataPaths.appDataRoot });
 
       // Register credential IPC handlers before the renderer loads.
       //
@@ -704,9 +977,9 @@ if (!acquiredLock) {
       if (isMigrationNeeded(migrationStatePath)) {
         const migrationOptions = {
           appDataRoot,
-          legacySettingsPath: join(DEFAULT_REPO_ROOT, 'settings.json'),
-          legacyNebulaDir: join(homedir(), '.nebula'),
-          legacyOutputDir: join(DEFAULT_REPO_ROOT, 'output'),
+          legacySettingsPath: dataPaths.legacy.settingsPath,
+          legacyNebulaDir: dataPaths.legacy.nebulaDir,
+          legacyOutputDir: dataPaths.legacy.outputDir,
           safeStorage,
         };
         await runMigrationWithOverlay(
@@ -719,25 +992,32 @@ if (!acquiredLock) {
       // --- Decrypt credentials for sidecar injection (VAL-INJECT-001) ---
       //
       // Decrypt all stored API keys from credentials.json via safeStorage.
-      // The decrypted keys are passed to the sidecar via NEBULA_INJECTED_KEYS
-      // (JSON dict). The backend stores them in memory only — never persisted.
+      // They go to the sidecar over stdin with the Krea vault key, after the
+      // person token (sidecar.mjs launchSecretsLine,
+      // backend/services/launch_secrets.py), never in its environment: any
+      // same-user process can read a process's initial env with `ps -E`.
+      // The backend keeps them in memory only, never persisted.
       const injectedKeys = await credentialService.decryptAll();
       const sidecarEnv = { ...process.env, ...pathEnvVars };
       sidecarEnv.NEBULA_DESKTOP_MODE = '1';
-      // The person token goes over the sidecar's stdin, never its env.
-      delete sidecarEnv.NEBULA_PERSON_TOKEN;
-      delete sidecarEnv.NEBULA_CONNECTOR_SESSION;
+      // The interpreter override is dev/test-only (launch-overrides.mjs): a
+      // packaged build always runs the checkout's backend/.venv/bin/python.
+      delete sidecarEnv.NEBULA_DESKTOP_PYTHON;
+      if (overrides.python) sidecarEnv.NEBULA_DESKTOP_PYTHON = overrides.python;
+      // sidecar.mjs reads its health budget from this env; same rule.
+      delete sidecarEnv.NEBULA_DESKTOP_HEALTH_TIMEOUT_MS;
+      if (overrides.healthTimeoutMs) sidecarEnv.NEBULA_DESKTOP_HEALTH_TIMEOUT_MS = overrides.healthTimeoutMs;
+      // Secrets never ride in the env, including provider keys and tokens
+      // inherited from a launching terminal (startSidecar strips these too).
+      for (const name of SIDECAR_STRIPPED_ENV_KEYS) delete sidecarEnv[name];
+      let connectorEncryptionKey = null;
       try {
-        sidecarEnv.NEBULA_CONNECTOR_ENCRYPTION_KEY = await getConnectorEncryptionKey(
+        connectorEncryptionKey = await getConnectorEncryptionKey(
           join(appDataRoot, 'connector-vault-key.enc'), safeStorage,
         );
       } catch {
         // Existing API-key workflows remain available; OAuth fails closed.
-        delete sidecarEnv.NEBULA_CONNECTOR_ENCRYPTION_KEY;
         console.warn('Krea account connection unavailable: OS credential storage is locked');
-      }
-      if (Object.keys(injectedKeys).length > 0) {
-        sidecarEnv.NEBULA_INJECTED_KEYS = JSON.stringify(injectedKeys);
       }
 
       // --- Plaintext key detection (VAL-UX-005) ---
@@ -753,8 +1033,13 @@ if (!acquiredLock) {
         ? plaintextWarning.providers
         : [];
 
-      sidecarHandle = await startSidecar({ env: sidecarEnv, personToken: person.token });
+      sidecarHandle = await startSidecar({
+        env: sidecarEnv,
+        personToken: person.token,
+        launchSecrets: { injectedKeys, connectorEncryptionKey },
+      });
       sidecarStarting = false;
+      startupError = null;
       const handle = sidecarHandle;
       console.log(
         `Sidecar started: pid=${handle.pid} port=${handle.port} ` +
@@ -806,7 +1091,8 @@ if (!acquiredLock) {
       }
 
       // Surface the failure visibly — no normal renderer is loaded.
-      showFailure(err);
+      startupError = err instanceof Error ? err : new Error(String(err));
+      showFailure(startupError);
 
       if (isSmokeTest) {
         const errorDetails = err instanceof SidecarError
@@ -825,39 +1111,9 @@ if (!acquiredLock) {
   });
 
   app.on('activate', () => {
-    // macOS: recreate the window when the dock is activated and no windows
-    // are open. The same sidecar is reused — no new child is spawned.
-    if (BrowserWindow.getAllWindows().length === 0 && !isCleaningUp) {
-      if (sidecarHandle) {
-        mainWindow = createMainWindow(sidecarHandle, plaintextProviders);
-      } else if (sidecarDisconnected) {
-        // Sidecar died mid-session — show the disconnected page rather
-        // than creating a window with a dead endpoint or spawning a new
-        // sidecar. No auto-restart.
-        mainWindow = new BrowserWindow({
-          show: !isSmokeTest,
-          width: 600,
-          height: 400,
-          resizable: false,
-          minimizable: true,
-          maximizable: false,
-          fullscreenable: false,
-          backgroundColor: '#0d0608',
-          titleBarStyle: 'hiddenInset',
-          title: 'Nebula Nodes \u2014 Disconnected',
-          webPreferences: {
-            contextIsolation: true,
-            nodeIntegration: false,
-            sandbox: true,
-          },
-        });
-        const win = mainWindow;
-        win.loadURL(DISCONNECTED_HTML);
-        win.on('closed', () => {
-          if (mainWindow === win) mainWindow = null;
-        });
-      }
-    }
+    // macOS: recreate the window when the Dock icon is clicked and no
+    // windows are open. The same sidecar is reused; no new child is spawned.
+    showAppWindow({ focusExisting: false });
   });
 
   app.on('window-all-closed', () => {
@@ -865,15 +1121,32 @@ if (!acquiredLock) {
     if (process.platform !== 'darwin') app.quit();
   });
 
-  app.on('before-quit', async (event) => {
-    // Re-entrant call after cleanup — let the quit proceed.
-    if (isCleaningUp) return;
+  // Quitting always stops the sidecar first (SIGTERM, then SIGKILL after a
+  // grace period; sidecar.mjs). Cmd-Q, the app menu and a SIGTERM/SIGINT/
+  // SIGHUP to Electron all come through here. If Electron dies without
+  // running this (crash, SIGKILL), the backend's parent watchdog
+  // (backend/services/parent_watch.py) sees its pipe close and exits.
+  let quitAllowed = false;
+  let stopInFlight = false;
+  app.on('before-quit', (event) => {
+    if (quitAllowed) return;
+
+    // A second Cmd-Q while the sidecar is stopping must not let Electron
+    // exit before the stop finishes (cleanupSidecar clears sidecarHandle
+    // before it awaits the stop).
+    if (stopInFlight) {
+      event.preventDefault();
+      return;
+    }
 
     if (sidecarHandle) {
       event.preventDefault();
+      stopInFlight = true;
       isCleaningUp = true;
-      await cleanupSidecar();
-      app.quit();
+      cleanupSidecar().finally(() => {
+        quitAllowed = true;
+        app.quit();
+      });
     } else if (sidecarStarting) {
       // Quit during cold startup — prevent immediate exit so the startup
       // promise can clean up the child and quit when it resolves/rejects.
@@ -882,4 +1155,11 @@ if (!acquiredLock) {
       quitRequestedDuringStartup = true;
     }
   });
+
+  for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+    process.on(signal, () => {
+      console.log(`Received ${signal}; quitting`);
+      app.quit();
+    });
+  }
 }

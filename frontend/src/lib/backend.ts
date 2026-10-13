@@ -265,7 +265,9 @@ function shouldRetryWithDiscovery(baseUrl: string, response?: Response): boolean
 // limited) and the Krea connector (an opaque desktop origin must prove it is
 // the person). Every write carries it. Other reads don't, so a plain GET never
 // carries the secret. The packaged app sends it on every request to its own
-// sidecar, whose opaque file: origin can only read replies that carry it.
+// sidecar. (Its file: page sends no Origin on fetches and isn't held to CORS,
+// checked live in the desktop pass; the backend's opaque-origin CORS branch
+// only matters if that changes. See desktop_renderer_cors in backend/main.py.)
 const PERSON_READ_PREFIXES = ['/api/agent/spend', '/api/krea/', '/api/personal-agents'];
 
 function wantsPersonHeader(path: string, method: string): boolean {

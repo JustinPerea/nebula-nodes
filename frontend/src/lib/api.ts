@@ -251,14 +251,35 @@ export interface ConnectedApp {
   createdAt: number | null;
   spentUsd: number;
   kreaPlanRuns: number;
+  /** Which agent app it is (Settings > Connect your agent), null for tokens made before. */
+  client?: string | null;
+  /** Its cursor color on the canvas (#RRGGBB); null means one derived from its id. */
+  color?: string | null;
 }
+
+export interface AgentClientOption { id: string; label: string }
 
 export interface OutsideSpend {
   /** Every agent outside Nebula's chats, apps included, over the last 24 hours. */
   outside: { spentUsd: number; kreaPlanRuns: number };
   apps: ConnectedApp[];
+  /** The agent apps Connect your agent offers, and whether this backend can point them at a checkout. */
+  connect?: { clients: AgentClientOption[]; available: boolean; reason: string | null };
   /** The person's own agents (outside:personal:<id>), each also inside `outside`. */
   personal?: Array<{ id: string; name: string; spentUsd: number; kreaPlanRuns: number }>;
+}
+
+/** The exact config for one agent app (backend services/agent_connect.py). Holds the token: shown once. */
+export interface AgentSetup {
+  client: string;
+  label: string;
+  kind: 'command' | 'json' | 'manual';
+  format: 'json' | 'yaml' | 'shell' | 'toml' | 'text';
+  where: string;
+  snippet: string;
+  steps: string[];
+  alternative: { format: string; where: string; snippet: string } | null;
+  warnings: string[];
 }
 
 async function agentAppsCall<T>(path: string, init: RequestInit | undefined, what: string): Promise<T> {
@@ -276,10 +297,21 @@ export function getOutsideSpend(): Promise<OutsideSpend> {
 }
 
 /** The token is in this response only; the backend keeps a hash. */
-export function createConnectedApp(name: string, dailyUsd: number | null): Promise<{ app: ConnectedApp; token: string }> {
+export function createConnectedApp(
+  name: string,
+  dailyUsd: number | null,
+  options: { client?: string; color?: string | null } = {},
+): Promise<{ app: ConnectedApp; token: string; setup?: AgentSetup }> {
   return agentAppsCall('/api/agent/spend/apps', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, dailyUsd }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, dailyUsd, ...options }),
   }, 'Creating the app token');
+}
+
+export function setConnectedAppColor(id: string, color: string | null): Promise<{ app: ConnectedApp }> {
+  return agentAppsCall(`/api/agent/spend/apps/${encodeURIComponent(id)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ color }),
+  }, 'Saving the app color');
 }
 
 export function setConnectedAppLimit(id: string, dailyUsd: number | null): Promise<{ app: ConnectedApp }> {

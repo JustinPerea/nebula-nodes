@@ -4,12 +4,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const distDir = path.resolve(scriptDir, '../dist');
+const distDir = path.resolve(scriptDir, process.env.NEBULA_DESKTOP_BUILD === '1' ? '../dist-desktop' : '../dist');
 const indexHtml = await readFile(path.join(distDir, 'index.html'), 'utf8');
 const entryMatch = indexHtml.match(/<script[^>]+src="(?:\/|\.\/)assets\/(index-[^"]+\.js)"/);
 
+// Electron loads the desktop bundle over file://, where a root-absolute
+// /assets/... URL points at the filesystem root and nothing mounts.
+if (process.env.NEBULA_DESKTOP_BUILD === '1' && /(?:src|href)="\/(?!\/)/.test(indexHtml)) {
+  throw new Error('Desktop build has root-absolute asset URLs; it must be built with base "./"');
+}
+
 if (!entryMatch) {
-  throw new Error('Could not identify the production entry script in dist/index.html');
+  throw new Error(`Could not identify the production entry script in ${path.basename(distDir)}/index.html`);
 }
 
 const entryPath = path.join(distDir, 'assets', entryMatch[1]);

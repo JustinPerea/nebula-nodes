@@ -49,7 +49,7 @@ from services.acp_client import (
     AUTH_REQUIRED, METHOD_NOT_FOUND, STREAM_LIMIT_BYTES, AcpConnection, AcpConnectionClosed, AcpError,
 )
 from services.acp_events import ToolCallState, TurnTextBudget, capped_json, make_redactor, map_session_update
-from services.agent_process import agent_process_group_options, terminate_agent_process_tree
+from services.agent_process import spawn_agent_process, terminate_agent_process_tree
 from services.child_env import scrubbed_env
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.krea_agent_mcp import NEBULA_SERVER_NAME, nebula_acp_mcp_server
@@ -103,11 +103,12 @@ def _primer() -> str:
 
 
 async def _spawn(argv: list[str], env: dict[str, str], cwd: Path) -> asyncio.subprocess.Process:
-    """The one place an agent process starts. When the desktop-app branch's
-    agent guardian lands on main, swap this for ``spawn_agent_process``."""
-    return await asyncio.create_subprocess_exec(
+    """The one place an agent process starts: in its own process group, and
+    watched by the agent guardian (services/agent_guardian.py), which kills
+    the group if the backend dies without running any cleanup."""
+    return await spawn_agent_process(
         *argv, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-        env=env, cwd=str(cwd), limit=STREAM_LIMIT_BYTES, **agent_process_group_options())
+        env=env, cwd=str(cwd), limit=STREAM_LIMIT_BYTES)
 
 
 async def _kill_tree(proc: asyncio.subprocess.Process) -> None:

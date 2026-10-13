@@ -1,5 +1,11 @@
 # Nebula for macOS
 
+> **Status (2026-10-13):** this is the distributable target. What exists today
+> is a local build: `cd desktop && npm run package` makes an ad-hoc signed,
+> un-notarized `Nebula.app` that runs the checkout's own backend venv,
+> Electron main code and renderer instead of bundled copies. See
+> [desktop/README.md](../../desktop/README.md#nebulaapp-everyday-use).
+
 ## Goal
 
 Package Nebula Nodes as a signed, notarized macOS application without rewriting

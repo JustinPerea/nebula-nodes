@@ -14,8 +14,9 @@ def build_parser() -> argparse.ArgumentParser:
         prog="nebula",
         description="Nebula Nodes CLI — build and run media generation pipelines",
     )
-    parser.add_argument("--url", default=os.environ.get("NEBULA_URL", "http://localhost:8000"),
-                        help="Backend URL (default: $NEBULA_URL or http://localhost:8000)")
+    parser.add_argument("--url", default=None,
+                        help="Backend URL (default: $NEBULA_URL, else the address in $NEBULA_URL_FILE, "
+                             "else http://localhost:8000)")
     sub = parser.add_subparsers(dest="command")
 
     # -- Discovery --
@@ -233,6 +234,26 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--brand")
     csub.add_parser("status", help="Worker, meter and queue status")
 
+    # -- Outside apps --
+    mcp_p = sub.add_parser("mcp", help="Connect an outside agent app (Hermes, Claude Code, Codex...) to Nebula's MCP server")
+    mcp_sub = mcp_p.add_subparsers(dest="mcp_cmd", required=True)
+    from services.agent_connect import CLIENTS
+
+    mcp_connect_p = mcp_sub.add_parser(
+        "connect", help="Add Nebula's MCP server to an app, with a token made in Settings > Connect your agent",
+        description=("The token comes from Settings > Connect your agent ($NEBULA_APP_TOKEN, or pasted at the "
+                     "prompt): only the Nebula canvas you opened from the launch link can make one."))
+    mcp_connect_p.add_argument("client", choices=list(CLIENTS))
+    mcp_connect_p.add_argument("--name", help="The name you gave the app in Settings (checked against the token)")
+    mcp_connect_p.add_argument("--daily-usd", dest="daily_usd", type=float, default=None,
+                               help="The daily limit you set in Settings (used in the steps when there's no token yet)")
+    mcp_connect_p.add_argument("--print", dest="print_only", action="store_true",
+                               help="Only print the config; change nothing")
+    mcp_connect_p.add_argument("--yes", action="store_true", help="Apply without asking")
+    mcp_disconnect_p = mcp_sub.add_parser("disconnect", help="Remove Nebula's MCP server from an app")
+    mcp_disconnect_p.add_argument("client", choices=list(CLIENTS))
+    mcp_disconnect_p.add_argument("--yes", action="store_true", help="Apply without asking")
+
     return parser
 
 
@@ -259,13 +280,49 @@ def parse_kv_list(items: list) -> dict[str, str]:
     return result
 
 
+def default_url(environ: dict[str, str] | None = None, *, strict: bool = True) -> str | None:
+    """$NEBULA_URL; else the address the desktop app wrote to $NEBULA_URL_FILE
+    (its port changes every launch; services/backend_address.py), once the
+    backend there proves it wrote the file; else :8000.
+
+    When that check fails, exit 1, or with ``strict=False`` warn and return
+    None: `nebula mcp connect` can still print a config that names the file."""
+    env = os.environ if environ is None else environ
+    url = env.get("NEBULA_URL", "").strip()
+    if url:
+        return url
+    url_file = env.get("NEBULA_URL_FILE", "").strip()
+    if url_file:
+        from services import backend_address
+
+        try:
+            return backend_address.verified_url(url_file)
+        except ValueError as exc:
+            if not strict:
+                print(f"warning: {exc}", file=sys.stderr)
+                return None
+            print(f"error: {exc}", file=sys.stderr)
+            sys.exit(1)
+    return "http://localhost:8000"
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    if args.url is None and args.command:
+        # mcp connect sends the token only to an address that passed the check.
+        args.url = default_url(strict=args.command != "mcp")
 
     if not args.command:
         parser.print_help()
         sys.exit(0)
+
+    if args.command == "mcp":
+        # Edits this machine's app configs; never acts as an agent's session.
+        from .commands import mcp_connect
+
+        run = mcp_connect.run_connect if args.mcp_cmd == "connect" else mcp_connect.run_disconnect
+        sys.exit(run(args))
 
     client = NebulaClient(args.url)
 

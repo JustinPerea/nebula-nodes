@@ -29,7 +29,10 @@ body .workspace-overlays--home .workspace-dock-panel.panel {
   left: auto !important;
   max-width: calc(100vw - 32px) !important;
 }
-body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel { transform-origin: calc(100% - 18px) 0; animation: project-home-settings-enter var(--workspace-dock-spring) backwards; }
+/* The glass panel is 66% opaque. Over the canvas that reads as glass, but on
+   home it hangs over the solid "New project" pill, which showed through the
+   search field. Same tint, laid over the canvas colour, so nothing does. */
+body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel { background: linear-gradient(var(--sr-glass), var(--sr-glass)), var(--sr-canvas); transform-origin: calc(100% - 18px) 0; animation: project-home-settings-enter var(--workspace-dock-spring) backwards; }
 body.app-slava-restraint .workspace-overlays--home .workspace-dock-panel.panel.panel--exiting { animation: project-home-settings-exit var(--sr-motion-handle, 220ms cubic-bezier(0.32, 0.72, 0, 1)) forwards; }
 @keyframes project-home-settings-enter { from { opacity: 0; transform: translateY(-8px) scale(0.96); } }
 @keyframes project-home-settings-exit { to { opacity: 0; transform: translateY(-8px) scale(0.96); } }

@@ -511,6 +511,21 @@ async def test_no_agent_starts_once_shutdown_began(env, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_the_agent_guardian_watches_every_personal_agent(env, monkeypatch):
+    """A SIGKILLed backend runs no cleanup; the guardian then kills the group."""
+    from services import agent_guardian
+
+    tracked = []
+    monkeypatch.setattr(agent_guardian, "track", lambda proc: tracked.append(proc.pid))
+    env.register({"turns": [[{"chunk": "x"}]]})
+    host = await env.open()
+    try:
+        assert tracked == [host.proc.pid]
+    finally:
+        await env.manager.close_all()
+
+
+@pytest.mark.asyncio
 async def test_inherited_provider_keys_never_reach_the_agent(env, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-real")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")

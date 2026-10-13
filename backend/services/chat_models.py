@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator
 
-from services.agent_process import agent_process_group_options, terminate_agent_process_tree
+from services.agent_process import spawn_agent_process, terminate_agent_process_tree
 from services.agent_profiles import claude_profile_env
 from services.krea_agent_mcp import agent_child_env
 
@@ -65,10 +65,10 @@ async def _discard_stderr(stream: asyncio.StreamReader) -> None:
 
 @asynccontextmanager
 async def _process(args: list[str], cwd: Path, env: dict[str, str]) -> AsyncIterator[Any]:
-    proc = await asyncio.create_subprocess_exec(
+    proc = await spawn_agent_process(
         *args, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE, cwd=str(cwd), env=env,
-        limit=MAX_LINE_BYTES, **agent_process_group_options(),
+        limit=MAX_LINE_BYTES,
     )
     stderr_task = asyncio.create_task(_discard_stderr(proc.stderr))
     try:

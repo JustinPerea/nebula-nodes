@@ -117,9 +117,10 @@ Commons (`NEBULA_COMMONS_ENABLED=1`) keeps chat to the built-in Claude and Codex
 
 Reattaching after a reconnect (`session/load`), Hermes profile setup, OpenClaw (it rejects client MCP servers), remote
 agents and an HTTP MCP transport, image and file prompts, session modes and model choice, slash commands, environment
-variables for custom agents, and more than one personal session per chat panel. Personal agents also don't use the
-desktop app's agent guardian yet. If the backend is killed outright, a well-behaved agent exits when its stdin closes
-and the token dies with the backend, but the agent's own grandchildren could linger.
+variables for custom agents, and more than one personal session per chat panel.
+
+If the backend is killed outright (no cleanup runs), the agent guardian (`services/agent_guardian.py`) kills the
+agent's whole process group, as it does for in-app chats, and the token dies with the backend.
 
 Code: `backend/services/acp_client.py` (JSON-RPC over stdio), `acp_events.py` (update mapping), `acp_session.py`
 (sessions), `personal_agents.py` (registry and presets), `agent_binaries.py` (binary lookup). Tests drive a stdlib fake

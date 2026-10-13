@@ -24,7 +24,12 @@ _MAX_VIDEO_UPLOAD = 500 * 1024 * 1024
 
 
 DEFAULT_NEBULA_URL = "http://127.0.0.1:8000"
-_base_url = os.environ.get("NEBULA_URL", DEFAULT_NEBULA_URL).rstrip("/")
+# NEBULA_URL (or --url) is a fixed address. Without it, NEBULA_URL_FILE names
+# the file the desktop app rewrites with its address each launch
+# (services/backend_address.py); it is read and checked on every call, so a
+# client started before Nebula was reopened still finds it, and a stale file
+# never gets the token sent to whatever took the old port.
+_base_url: str | None = os.environ.get("NEBULA_URL", "").strip().rstrip("/") or None
 
 INSTRUCTIONS = """\
 Nebula Nodes is a node-graph studio for AI images, video and audio. You work on the person's open canvas; they see your cursor and every change live.
@@ -52,8 +57,22 @@ def set_nebula_url(url: str) -> None:
     _base_url = url.rstrip("/")
 
 
+def _current_url() -> str:
+    if _base_url:
+        return _base_url
+    url_file = os.environ.get("NEBULA_URL_FILE", "").strip()
+    if url_file:
+        from services import backend_address
+
+        try:
+            return backend_address.verified_url(url_file)
+        except ValueError as exc:
+            raise NebulaAPIError(str(exc), kind="connect") from exc
+    return DEFAULT_NEBULA_URL
+
+
 def _api() -> NebulaAPI:
-    return NebulaAPI(_base_url)
+    return NebulaAPI(_current_url())
 
 
 @mcp.tool(annotations=_READ)
@@ -650,8 +669,9 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Nebula Nodes MCP server")
     parser.add_argument(
         "--url",
-        default=_base_url,
-        help=f"Nebula backend URL (default: {DEFAULT_NEBULA_URL})",
+        default=None,
+        help=f"Nebula backend URL (default: $NEBULA_URL, else the address in $NEBULA_URL_FILE, "
+             f"else {DEFAULT_NEBULA_URL})",
     )
     return parser.parse_args(argv)
 
@@ -697,7 +717,8 @@ def agent_workspace_scope():
 
 if __name__ == "__main__":
     args = _parse_args(sys.argv[1:])
-    set_nebula_url(args.url)
+    if args.url:
+        set_nebula_url(args.url)
     from contextlib import ExitStack
 
     with ExitStack() as stack:
