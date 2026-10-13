@@ -309,12 +309,27 @@ How that compares:
 
 This is the price of "`git pull` updates the app" (see
 [It runs your checkout](#nebulaapp-everyday-use)), and it's kept on purpose.
-The alternative, for later, is to bundle the main-process code (`main.mjs`,
-`preload.cjs` and the modules they import) into the app and turn on Electron's
-asar integrity fuses, so a change to that code needs `npm run package` (and a
-new keychain approval) before it runs with the keys. A lighter variant would
-check a hash of the checkout's `desktop/*.mjs` at launch against the one
-recorded at packaging time. Both make every main-process change a rebuild.
+Closing this takes more than locking down the Electron side. At launch the
+main process decrypts every provider key and the connector encryption key and
+sends them over stdin to the checkout's backend, which runs as
+`backend/.venv/bin/python` from the checkout. The backend code and the venv
+stay writable too. A dependency install hook that edits
+`backend/services/launch_secrets.py`, or a `.pth`/`sitecustomize.py` dropped
+into `backend/.venv`, gets every key in plaintext on the next launch, with no
+rebuild and no keychain prompt.
+
+So any later fix has to cover all three: the main-process code, the backend
+code, and the interpreter with its site-packages. One option is to bundle the
+main-process code (`main.mjs`, `preload.cjs` and their imports) into an asar
+with Electron's integrity fuses on, and ship a frozen backend and Python inside
+the app, so a change to any of it needs `npm run package` (and a new keychain
+approval) before it runs with the keys. A lighter variant would check hashes of
+`desktop/*.mjs`, `backend/**/*.py` and the venv at launch against ones recorded
+at packaging time. A third is to stop handing keys to the checkout's Python
+at all and make provider calls through a component inside the bundle. Every
+option makes a code change a rebuild, which is why none is done yet. Bundling
+or hashing only the Electron side would leave the backend path open, so it's
+not a partial fix.
 
 ### Person token
 

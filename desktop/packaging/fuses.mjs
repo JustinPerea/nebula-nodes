@@ -39,7 +39,10 @@ export const NEBULA_FUSES = Object.freeze({
   // --inspect / --inspect-brk / --inspect-port open the Node inspector.
   [FuseV1Options.EnableNodeCliInspectArguments]: false,
   // The app is a plain folder (asar: false) that runs the checkout's
-  // desktop/main.mjs, so there is no asar to validate or require.
+  // desktop/main.mjs, so there is no asar to validate or require. Turning
+  // these on would not by itself protect the keys: main.mjs hands them to the
+  // checkout's backend and venv, which an asar can't cover (desktop/README.md,
+  // "What the keychain prompt does and doesn't protect").
   [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: false,
   [FuseV1Options.OnlyLoadAppFromAsar]: false,
   [FuseV1Options.LoadBrowserProcessSpecificV8Snapshot]: false,
