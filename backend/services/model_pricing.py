@@ -378,13 +378,16 @@ def estimate_run(
 
     ``priced`` maps node id to {low, high, model}, ``model`` being the
     definition billed (a cinema scene's base model); paid nodes without a list
-    price go in ``unpriced``, Krea-account runs in ``plan``. ``low``/``high`` are None
-    when nothing is priced."""
+    price go in ``unpriced``, Krea-account runs in ``plan``. ``planRuns`` maps
+    each of those to {model, runs}: how many runs it bills to the Krea plan
+    (batch runs times a cinema scene's shots). ``low``/``high`` are None when
+    nothing is priced."""
     nodes_pricing = pricing.get("nodes") or {}
     low = high = 0.0
     priced: dict[str, dict[str, float]] = {}
     unpriced: list[str] = []
     plan: list[str] = []
+    plan_runs: dict[str, dict[str, Any]] = {}
     plus: list[str] = []
     for item in items:
         node_id = str(item["id"])
@@ -402,6 +405,8 @@ def estimate_run(
             continue
         if uses_krea_account(definition, params):
             plan.append(node_id)
+            plan_runs[node_id] = {"model": str(definition.get("id") or item.get("definitionId") or ""),
+                                  "runs": (multipliers or {}).get(node_id, (1, 1))[1] * calls}
             continue
         estimate = estimate_node(
             nodes_pricing.get(definition.get("id") or item.get("definitionId")),
@@ -425,5 +430,6 @@ def estimate_run(
         "priced": priced,
         "unpriced": unpriced,
         "plan": plan,
+        "planRuns": plan_runs,
         "plus": plus,
     }

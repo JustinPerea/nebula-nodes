@@ -1,11 +1,16 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { NODE_DEFINITIONS } from '../../../constants/nodeDefinitions';
+import { getOutsideSpend, type OutsideSpend } from '../../../lib/api';
 import { saveField } from '../../../lib/settingsWrites';
 import { useSettingsDraftStore, type AgentSpendLimits, type ModelSpendLimit } from '../../../store/settingsDraftStore';
 import { useUIStore } from '../../../store/uiStore';
+import { ConnectedApps } from './ConnectedApps';
 
 const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
+const PLAN_RUN_CHOICES = [5, 10, 25, 50, 100, 250] as const;
+/** The outside budget's select value while it follows the per-session one. */
+const SAME_AS_SESSION = 'session';
 const MODEL_RUN_CHOICES = [0.5, 1, 2, 5, 10, 20] as const;
 const MODEL_SESSION_CHOICES = [5, 10, 25, 50, 100] as const;
 
@@ -16,6 +21,24 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 function usd(value: number) {
   return value < 1 ? `$${value.toFixed(2)}` : `$${value}`;
+}
+
+/** What was spent, to the cent ("$3.40", "$0.00"). */
+function spentUsd(value: number) {
+  return `$${value.toFixed(2)}`;
+}
+
+/** What the outside agents and connected apps spent in the last 24 hours. The person's view only. */
+function useOutsideSpend() {
+  const [view, setView] = useState<OutsideSpend | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const reload = useCallback(() => {
+    getOutsideSpend()
+      .then((next) => { setView(next); setError(null); })
+      .catch((exc: unknown) => setError(exc instanceof Error ? exc.message : String(exc)));
+  }, []);
+  useEffect(() => { reload(); }, [reload]);
+  return { view, error, reload };
 }
 
 function LimitSelect({ id, label, value, choices, none, suffix = '', disabled, onChange, describedBy }: {
@@ -49,6 +72,7 @@ export function AgentSpendSection() {
   const pending = useSettingsDraftStore((s) => !!s.pending.agentSpend);
   const error = useSettingsDraftStore((s) => s.errors.agentSpend);
   const perRun = useUIStore((s) => s.runCostConfirmUsd);
+  const outside = useOutsideSpend();
 
   const paidModels = useMemo(() => {
     const groups = new Map<string, { id: string; name: string }[]>();
@@ -83,10 +107,10 @@ export function AgentSpendSection() {
       </p>
       <p className="settings-hint" id="settings-agent-spend-who">
         &ldquo;You&rdquo; means this canvas, opened from the link the backend printed at launch (or the desktop app).
-        Only it can change these limits, keys and connections. That holds against Nebula&rsquo;s Claude chats and
-        any agent that reaches Nebula only through its MCP server or API. Codex and Hermes chats still have a shell
-        with network access for now, and a program running as you with its own unrestricted shell could read the
-        link&rsquo;s token, so these limits don&rsquo;t fully bind them.
+        Only it can change these limits, keys and connections. That holds against Nebula&rsquo;s own chats (Codex&rsquo;s
+        shell has no network; Daedalus has only Nebula&rsquo;s tools) and any agent that reaches Nebula only through its
+        MCP server or API. A program running as you with its own unrestricted shell could read the link&rsquo;s token,
+        so these limits don&rsquo;t bind it.
       </p>
       <div className="settings-list">
         <div className="settings-pref">
@@ -97,6 +121,42 @@ export function AgentSpendSection() {
           <LimitSelect id="settings-agent-session" value={limits.sessionUsd} choices={SESSION_CHOICES}
             none="No limit" disabled={pending} describedBy="settings-agent-spend-help"
             onChange={(sessionUsd) => save({ ...limits, sessionUsd })} />
+        </div>
+        <div className="settings-pref">
+          <span className="settings-pref__text">
+            <label className="settings-pref__title" htmlFor="settings-agent-outside">Agents outside Nebula chats</label>
+            <span className="settings-pref__description" id="settings-agent-outside-help">
+              Shared by every agent that isn&rsquo;t a Nebula chat: Claude Desktop, terminal tools, scripts. Counts the
+              last 24 hours; restarting Nebula doesn&rsquo;t reset it.
+              {outside.view && (
+                <span className="settings-agent-spent" data-testid="settings-agent-outside-spent">
+                  {' '}{spentUsd(outside.view.outside.spentUsd)} in the last 24 h
+                  {outside.view.outside.kreaPlanRuns > 0 && `, ${outside.view.outside.kreaPlanRuns} Krea plan runs`}.
+                </span>
+              )}
+            </span>
+          </span>
+          <OutsideSelect limits={limits} disabled={pending} onChange={save} />
+        </div>
+        <div className="settings-pref">
+          <span className="settings-pref__text">
+            <label className="settings-pref__title" htmlFor="settings-agent-plan-runs">Krea plan runs</label>
+            <span className="settings-pref__description" id="settings-agent-plan-runs-help">
+              Per agent chat, or for the outside agents over 24 hours. Krea doesn&rsquo;t price its compute units per
+              model, so these count runs. Only you can move a node between your API balance and your Krea plan; agents
+              have to ask.
+            </span>
+          </span>
+          <select id="settings-agent-plan-runs" className="settings__select settings__select--compact"
+            aria-describedby="settings-agent-plan-runs-help" disabled={pending}
+            value={limits.kreaPlanRuns === null ? 'none' : String(limits.kreaPlanRuns)}
+            onChange={(event) => save({ ...limits, kreaPlanRuns: event.target.value === 'none' ? null : Number(event.target.value) })}>
+            {limits.kreaPlanRuns !== null && !(PLAN_RUN_CHOICES as readonly number[]).includes(limits.kreaPlanRuns) && (
+              <option value={String(limits.kreaPlanRuns)}>{limits.kreaPlanRuns} run{limits.kreaPlanRuns === 1 ? '' : 's'}</option>
+            )}
+            {PLAN_RUN_CHOICES.map((choice) => <option key={choice} value={String(choice)}>{choice} runs</option>)}
+            <option value="none">No limit</option>
+          </select>
         </div>
         {modelIds.map((id) => {
           const name = NODE_DEFINITIONS[id]?.displayName ?? id;
@@ -143,6 +203,35 @@ export function AgentSpendSection() {
         </div>
       </div>
       {error && <p className="settings-row__error" role="alert">{error}</p>}
+      <ConnectedApps view={outside.view} loadError={outside.error} onChanged={outside.reload} />
     </section>
+  );
+}
+
+/** The outside agents' 24-hour budget: the per-session amount until the person picks one. */
+function OutsideSelect({ limits, disabled, onChange }: {
+  limits: AgentSpendLimits;
+  disabled: boolean;
+  onChange: (next: AgentSpendLimits) => void;
+}) {
+  const own = limits.outsideDailyUsd;
+  const current = own === undefined ? SAME_AS_SESSION : own === null ? 'none' : String(own);
+  const custom = typeof own === 'number' && !(SESSION_CHOICES as readonly number[]).includes(own);
+  const session = limits.sessionUsd === null ? 'no limit' : usd(limits.sessionUsd);
+  return (
+    <select id="settings-agent-outside" className="settings__select settings__select--compact"
+      aria-describedby="settings-agent-outside-help" value={current} disabled={disabled}
+      onChange={(event) => {
+        const { value } = event.target;
+        const next = { ...limits };
+        if (value === SAME_AS_SESSION) delete next.outsideDailyUsd;
+        else next.outsideDailyUsd = value === 'none' ? null : Number(value);
+        onChange(next);
+      }}>
+      <option value={SAME_AS_SESSION}>Same as a chat ({session})</option>
+      {custom && <option value={current}>{usd(own)} / 24 h</option>}
+      {SESSION_CHOICES.map((choice) => <option key={choice} value={String(choice)}>{usd(choice)} / 24 h</option>)}
+      <option value="none">No limit</option>
+    </select>
   );
 }

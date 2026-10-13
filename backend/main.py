@@ -28,10 +28,11 @@ import zipfile
 from collections import OrderedDict, deque
 from contextlib import ExitStack, aclosing, contextmanager, nullcontext
 from contextvars import ContextVar
+from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, BinaryIO, Callable, Mapping
+from typing import Any, BinaryIO, Callable, Iterable, Mapping
 from urllib.parse import quote, unquote_to_bytes, urlsplit
 
 from uuid import uuid4
@@ -81,7 +82,7 @@ from services.settings import (
     update_injected_keys,
 )
 from services.node_registry import NodeRegistry
-from services import agent_spend, model_pricing, node_readiness, output_preview
+from services import agent_spend, app_tokens, model_pricing, node_readiness, output_preview
 from services.cli_graph import CLIGraph
 from services.retired_nodes import migrate_node, retired_message
 from services.project_store import (
@@ -143,7 +144,7 @@ from services.person_gate import (
     person_gate_error,
     require_person,
 )
-from services.canvas_edits import EditSpec, parse_edit
+from services.canvas_edits import INTERNAL_OK as KREA_BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_proposals import (
     MAX_REASON,
     Proposal,
@@ -1678,30 +1679,78 @@ def _is_person_request() -> bool:
     return is_person(current_request_headers())
 
 
-_SPEND_LAUNCH = uuid4().hex[:12]
 agent_spend_ledger = agent_spend.SpendLedger(_STATE_DIR / "agent-spend.json")
+# Tokens the person made for outside apps (Settings > Agent spending).
+app_token_store = app_tokens.AppTokens(_STATE_DIR / "app-tokens.json")
+app_tokens.install(app_token_store)
 
 
 def _spend_session(headers: Mapping[str, str] | None) -> tuple[str, str]:
     """Which running total a non-person request counts against: (key, label).
 
-    Only a token Nebula minted for an in-app chat (Claude, Codex, Daedalus)
-    names its own budget. Names and headers are set by the caller, so
-    everything else (outside agents, scripts) shares one budget per backend
-    launch: a caller can't start a fresh budget by renaming itself."""
+    A token Nebula minted for an in-app chat (Claude, Codex, Daedalus) names
+    that chat's own budget, and a token the person made for an outside app
+    names that app's line. Names and headers are set by the caller, so
+    everything else (outside agents, scripts) shares one budget that doesn't
+    change with a restart: a caller can't start a fresh budget by renaming
+    itself or relaunching Nebula."""
     lower = {k.lower(): v for k, v in (headers or {}).items()}
     auth = lower.get("authorization", "")
     if auth.lower().startswith("agent "):
-        record = commons_actors.agent_registry.lookup(auth[6:].strip())
+        token = auth[6:].strip()
+        record = commons_actors.agent_registry.lookup(token)
         if record is not None and record.get("session"):
             identity = identify_agent(headers)
             return f"chat:{record['session']}", identity.name if identity else "Agent"
-    return f"unverified:{_SPEND_LAUNCH}", "Agents without a Nebula chat token"
+        connected = app_tokens.lookup(token)
+        if connected is not None:
+            return f"{agent_spend.APP_PREFIX}{connected['id']}", connected["name"]
+    return agent_spend.OUTSIDE_SHARED, agent_spend.OUTSIDE_LABEL
 
 
-# What each agent run was counted at, per node, so a node that turns out to
-# have had no key can be given back (see _release_unspent_hold).
-_spend_holds: OrderedDict[str, tuple[str, dict[str, tuple[str, float]]]] = OrderedDict()
+def _spend_budgets(key: str, settings: Mapping[str, Any]) -> list[agent_spend.Budget]:
+    """The budgets a run counted against ``key`` is checked against."""
+    caps = agent_spend.caps_from_settings(settings)
+    spent = agent_spend_ledger.spent(key)
+    if not agent_spend.is_outside(key):
+        return agent_spend.session_budgets(key, spent, caps)
+    connected = app_token_store.get(key[len(agent_spend.APP_PREFIX):]) if key.startswith(agent_spend.APP_PREFIX) else None
+    return agent_spend.session_budgets(
+        key, spent, caps, outside_spent=agent_spend_ledger.spent_outside(),
+        app_name=connected["name"] if connected else None,
+        app_daily_usd=connected["dailyUsd"] if connected else None)
+
+
+@dataclass
+class _SpendHold:
+    """What an agent run was counted at, per node, so a node that turns out to
+    have spent nothing can be given back (see _release_unspent_hold). ``at``
+    is when it was counted: an outside budget's give-back lands then."""
+    key: str
+    per_node: dict[str, tuple[str, float]]
+    plan_nodes: dict[str, tuple[str, int]]
+    at: float | None
+
+    def take(self, node_ids: Iterable[str] | None = None) -> tuple[dict[str, float], dict[str, int]]:
+        """Remove these nodes' shares (all of them with None) and total them per model."""
+        ids = list(self.per_node) + [i for i in self.plan_nodes if i not in self.per_node] if node_ids is None else list(node_ids)
+        by_model: dict[str, float] = {}
+        plan: dict[str, int] = {}
+        for node_id in ids:
+            share = self.per_node.pop(node_id, None)
+            if share is not None:
+                by_model[share[0]] = by_model.get(share[0], 0.0) + share[1]
+            runs = self.plan_nodes.pop(node_id, None)
+            if runs is not None:
+                plan[runs[0]] = plan.get(runs[0], 0) + runs[1]
+        return by_model, plan
+
+    def give_back(self, by_model: Mapping[str, float], plan: Mapping[str, int]) -> None:
+        if by_model or plan:
+            agent_spend_ledger.refund(self.key, by_model, plan, at=self.at)
+
+
+_spend_holds: OrderedDict[str, _SpendHold] = OrderedDict()
 _MAX_SPEND_HOLDS = 500
 
 
@@ -1714,10 +1763,7 @@ def _release_unspent_hold(event: Any, run_id: str | None) -> None:
         hold = _spend_holds.get(run_id)
         if hold is None:
             return
-        key, per_node = hold
-        share = per_node.pop(event.node_id, None)
-        if share is not None:
-            agent_spend_ledger.refund(key, {share[0]: share[1]})
+        hold.give_back(*hold.take([event.node_id]))
     except Exception:  # noqa: BLE001 - bookkeeping must not break a run
         pass
 
@@ -1729,12 +1775,8 @@ def _return_hold(run_id: str) -> None:
     hold = _spend_holds.pop(run_id, None)
     if hold is None:
         return
-    key, per_node = hold
-    by_model: dict[str, float] = {}
-    for definition_id, amount in per_node.values():
-        by_model[definition_id] = by_model.get(definition_id, 0.0) + amount
     try:
-        agent_spend_ledger.refund(key, by_model)
+        hold.give_back(*hold.take())
     except Exception:  # noqa: BLE001 - bookkeeping must not mask the refusal
         pass
 
@@ -1747,16 +1789,11 @@ def _settle_hold(run_id: str) -> None:
     called = provider_calls.take(run_id)
     if hold is None or called is None:
         return
-    key, per_node = hold
-    by_model: dict[str, float] = {}
-    for node_id, (definition_id, amount) in per_node.items():
-        if node_id not in called:
-            by_model[definition_id] = by_model.get(definition_id, 0.0) + amount
-    if by_model:
-        try:
-            agent_spend_ledger.refund(key, by_model)
-        except Exception:  # noqa: BLE001 - bookkeeping must not break a run
-            pass
+    unspent = [node_id for node_id in {**hold.per_node, **hold.plan_nodes} if node_id not in called]
+    try:
+        hold.give_back(*hold.take(unspent))
+    except Exception:  # noqa: BLE001 - bookkeeping must not break a run
+        pass
 
 
 def _require_run_spend_approval(
@@ -1871,20 +1908,21 @@ def _require_spend_approval(
         [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes],
         [(e.source, e.target) for e in edges],
         settings=settings, pricing=pricing, definitions=node_registry.get_all(),
-        spent=agent_spend_ledger.spent(key), how_to_ask=ask, passes=passes,
+        budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes,
     )
     if decision.refusal:
         raise HTTPException(status_code=403, detail=decision.refusal)
-    agent_spend_ledger.record(key, label, decision.charge)
-    if run_id is not None and decision.per_node:
-        _place_hold(run_id, key, dict(decision.per_node))
+    at = agent_spend_ledger.record(key, label, decision.charge, decision.plan_charge)
+    if run_id is not None and (decision.per_node or decision.plan_per_node):
+        _place_hold(run_id, key, dict(decision.per_node), dict(decision.plan_per_node), at=at)
 
 
-def _place_hold(run_id: str, key: str, per_node: dict[str, tuple[str, float]]) -> None:
+def _place_hold(run_id: str, key: str, per_node: dict[str, tuple[str, float]],
+                plan_nodes: dict[str, tuple[str, int]] | None = None, *, at: float | None = None) -> None:
     """Remember what a run was counted at, per node, and start recording which
     nodes call their provider. A hold dropped to keep the table bounded takes
     its record with it, so that run keeps its whole count."""
-    _spend_holds[run_id] = (key, per_node)
+    _spend_holds[run_id] = _SpendHold(key, per_node, dict(plan_nodes or {}), at)
     _spend_holds.move_to_end(run_id)
     while len(_spend_holds) > _MAX_SPEND_HOLDS:
         dropped, _ = _spend_holds.popitem(last=False)
@@ -2848,19 +2886,81 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
     agent can plan before it runs anything. The person's canvas isn't limited."""
     settings = load_settings()
     caps = agent_spend.caps_from_settings(settings)
+    limits = {"perRunUsd": agent_spend.threshold_from_settings(settings), **caps}
     if _is_person_request():
-        return {"limited": False, "limits": {"perRunUsd": agent_spend.threshold_from_settings(settings), **caps}}
+        return {"limited": False, "limits": limits}
     key, label = _spend_session(request.headers)
-    spent = agent_spend_ledger.spent(key)
-    return {
-        "limited": True,
-        "agent": label,
-        # "chat": this in-app chat's own budget; "shared": the one budget every
-        # agent without a Nebula chat token shares until the backend restarts.
-        "budget": "chat" if key.startswith("chat:") else "shared",
-        "limits": {"perRunUsd": agent_spend.threshold_from_settings(settings), **caps},
-        "spent": {"totalUsd": round(spent.total, 4), "models": spent.models},
-    }
+
+    def view(spent: agent_spend.Spent) -> dict[str, Any]:
+        return {"totalUsd": round(spent.total, 4), "models": spent.models, "kreaPlanRuns": spent.plan_runs}
+
+    # "chat": this in-app chat's own budget. "shared": the one budget every
+    # agent without a Nebula chat or app token shares, over the last 24 hours.
+    # "app": an outside app's own line, which also counts inside "shared".
+    budget = "chat" if not agent_spend.is_outside(key) else "app" if key.startswith(agent_spend.APP_PREFIX) else "shared"
+    result: dict[str, Any] = {"limited": True, "agent": label, "budget": budget, "limits": limits,
+                              "spent": view(agent_spend_ledger.spent(key))}
+    if budget != "chat":
+        result["window"] = "24h"
+        result["outsideSpent"] = view(agent_spend_ledger.spent_outside())
+    if budget == "app":
+        connected = app_token_store.get(key[len(agent_spend.APP_PREFIX):])
+        result["limits"] = {**limits, "appDailyUsd": connected["dailyUsd"] if connected else None}
+    return result
+
+
+def _outside_view() -> dict[str, Any]:
+    """The outside agents' last 24 hours and each connected app's share, for Settings."""
+    outside = agent_spend_ledger.spent_outside()
+    apps = []
+    for connected in app_token_store.list():
+        spent = agent_spend_ledger.spent(f"{agent_spend.APP_PREFIX}{connected['id']}")
+        apps.append({**connected, "spentUsd": round(spent.total, 4), "kreaPlanRuns": spent.plan_runs})
+    return {"outside": {"spentUsd": round(outside.total, 4), "kreaPlanRuns": outside.plan_runs}, "apps": apps}
+
+
+@app.get("/api/agent/spend/apps")
+async def list_agent_apps() -> dict[str, Any]:
+    """Settings > Agent spending: what the outside agents spent and the apps with tokens. The person's only."""
+    require_person(current_request_headers())
+    return _outside_view()
+
+
+@app.post("/api/agent/spend/apps")
+async def create_agent_app(body: dict[str, Any]) -> dict[str, Any]:
+    """Make a token for an outside app. The token is in this response only;
+    Nebula keeps a hash of it. The person's only."""
+    require_person(current_request_headers())
+    try:
+        app_view, token = app_token_store.create(body.get("name"), body.get("dailyUsd"))
+    except app_tokens.AppTokenError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"app": {**app_view, "spentUsd": 0.0, "kreaPlanRuns": 0}, "token": token}
+
+
+@app.put("/api/agent/spend/apps/{app_id}")
+async def update_agent_app(app_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Change an app's daily limit (null: only the shared outside budget). The person's only."""
+    require_person(current_request_headers())
+    if set(body) != {"dailyUsd"}:
+        raise HTTPException(status_code=400, detail="Send {dailyUsd}: a positive number of USD, or null")
+    try:
+        app_view = app_token_store.set_limit(app_id, body["dailyUsd"]) if app_tokens.valid_id(app_id) else None
+    except app_tokens.AppTokenError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if app_view is None:
+        raise HTTPException(status_code=404, detail="No connected app with that id")
+    return {"app": app_view}
+
+
+@app.delete("/api/agent/spend/apps/{app_id}")
+async def revoke_agent_app(app_id: str) -> dict[str, Any]:
+    """Revoke an app's token: its requests are refused from now on. What it
+    spent stays counted in the outside budget. The person's only."""
+    require_person(current_request_headers())
+    if not (app_tokens.valid_id(app_id) and app_token_store.revoke(app_id)):
+        raise HTTPException(status_code=404, detail="No connected app with that id")
+    return {"status": "revoked"}
 
 
 def _short(text: Any, limit: int = 140) -> str:
@@ -2999,7 +3099,9 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     if modes:
         result["kreaModes"] = modes
         if len(modes) > 1:
-            result["kreaNote"] = 'Set params {"_kreaAuth": "mcp"} to bill the signed-in Krea account instead of the API token.'
+            result["kreaNote"] = ("Billing mode is the person's choice, and new nodes start on the API token. "
+                                  'To bill the signed-in Krea plan instead, propose {"_kreaAuth": "mcp"} with '
+                                  "propose_change; direct edits of _kreaAuth are refused.")
     if definition["id"] == model_pricing.CINEMA_SCENE:
         result["price"] = None
         result["priceNote"] = _cinema_price_note()
@@ -3013,10 +3115,12 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         if not entry:
             result["price"] = None
             if modes == ["mcp"]:
-                result["priceNote"] = "Billed to the signed-in Krea plan; not limited or counted."
+                result["priceNote"] = ("Billed to the signed-in Krea plan. Agent runs count against the Krea plan-run "
+                                       "limit set in Nebula Settings.")
             elif modes:
-                result["priceNote"] = ("With _kreaAuth mcp it bills the Krea plan (not limited); with the API token "
-                                       "it has no list price, so agent runs of it must be proposed (propose_change).")
+                result["priceNote"] = ("On the API token it has no list price, so agent runs of it must be proposed "
+                                       "(propose_change). Switched to the Krea plan (the person's call), agent runs "
+                                       "count against the Krea plan-run limit set in Nebula Settings.")
             else:
                 result["priceNote"] = "No list price; agent runs of it must be proposed (propose_change)."
         else:
@@ -3671,9 +3775,16 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     await _sweep_proposals()
     _validate_graph_ingress_complexity(body)
     try:
-        spec = parse_spec(body)
+        # A proposal is where an agent asks to change a Krea node's billing
+        # (_kreaAuth): direct edits refuse that (_refuse_agent_krea_billing_change).
+        spec = parse_spec(body, internal_ok=KREA_BILLING_PARAMS)
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
+    for node in spec.nodes:
+        _check_krea_auth(node.definition_id, node.params, node.ref)
+    for change in spec.params:
+        current = cli_graph.nodes.get(change.node_id) or {}
+        _check_krea_auth(str(current.get("definitionId") or ""), change.params, change.node_id)
     try:
         candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec)
     except HTTPException as exc:
@@ -6072,6 +6183,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     position = body.get("position")
     _validate_params(definition_id, params)
     params = _coerce_params(definition_id, params)
+    _refuse_agent_krea_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
         _graph_worldlabs_recovery_checkpoints(
             [{"id": "new-node", "definitionId": definition_id, "params": params}]
@@ -6168,6 +6280,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
                 raise HTTPException(status_code=400, detail=f"connect.{key} must be a non-empty string")
     _validate_params(definition_id, params)
     params = _coerce_params(definition_id, params)
+    _refuse_agent_krea_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
         _graph_worldlabs_recovery_checkpoints(
             [{"id": "new-node", "definitionId": definition_id, "params": params}]
@@ -6437,6 +6550,8 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             raise HTTPException(status_code=400, detail="params must be an object")
         _validate_params(node.get("definitionId", ""), params)
         params = _coerce_params(node.get("definitionId", ""), params)
+        _refuse_agent_krea_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
+                                            {**params_before, **params})])
         _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
         if node.get("definitionId") == "cinema-scene" and "scene" in params:
             # Studio/Inspector PUTs carry authoring snapshots captured before
@@ -6817,6 +6932,42 @@ async def delete_graph_node(node_id: str) -> dict:
     return {"status": "deleted", "id": node_id}
 
 
+def _krea_billing(definition_id: str, params: Mapping[str, Any]) -> str | None:
+    """How a Krea node that offers both API-token and plan billing bills with
+    these params; None for every other node (account-only nodes have no
+    choice to change)."""
+    definition = node_registry.get(definition_id) or {}
+    modes = node_readiness.krea_modes(definition)
+    if len(modes) < 2:
+        return None
+    param = next((p for p in definition.get("params") or [] if p.get("key") == "_kreaAuth"), {})
+    return str(params.get("_kreaAuth") or param.get("default") or "api-token")
+
+
+KREA_BILLING_REFUSAL = (
+    "Changing how a Krea node is billed (_kreaAuth: the API token's balance or the signed-in Krea "
+    "plan) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the "
+    "change instead with propose_change (`nebula propose`); the person accepts it on the canvas."
+)
+
+
+def _refuse_agent_krea_billing_change(changes: Iterable[tuple[str, str, Mapping[str, Any] | None, Mapping[str, Any]]]) -> None:
+    """403 when an edit that isn't the person's would change a Krea node's
+    billing mode. ``changes`` are (label, definitionId, params before or None
+    for a new node, params after). A new node counts as changed when it
+    starts on a mode other than the node's default (the API token). The
+    person's own edits and accepted proposals always pass."""
+    if _is_person_request():
+        return
+    switched = []
+    for label, definition_id, before, after in changes:
+        mode = _krea_billing(definition_id, after)
+        if mode is not None and mode != _krea_billing(definition_id, before or {}):
+            switched.append(label)
+    if switched:
+        raise HTTPException(status_code=403, detail=f"{_listed(switched, 4)}: {KREA_BILLING_REFUSAL}")
+
+
 def _check_krea_auth(definition_id: str, params: dict[str, Any], label: str) -> None:
     """Direct edits may set `_kreaAuth`; only to a billing mode the node offers."""
     if "_kreaAuth" not in params:
@@ -6855,6 +7006,12 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     for change in additions.params:
         current = cli_graph.nodes.get(change.node_id) or {}
         _check_krea_auth(str(current.get("definitionId") or ""), change.params, change.node_id)
+    _refuse_agent_krea_billing_change(
+        [(node.ref, node.definition_id, None, node.params) for node in additions.nodes]
+        + [(change.node_id, str((cli_graph.nodes.get(change.node_id) or {}).get("definitionId") or ""),
+            (cli_graph.nodes.get(change.node_id) or {}).get("params") or {},
+            {**((cli_graph.nodes.get(change.node_id) or {}).get("params") or {}), **change.params})
+           for change in additions.params])
 
     positions: dict[str, dict[str, float]] = {}
     if additions.nodes:
@@ -7383,6 +7540,9 @@ async def import_graph(body: dict[str, Any]) -> dict:
         reference_key="id",
         include_outputs=True,
     )
+    _refuse_agent_krea_billing_change(
+        (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), None,
+         candidate.nodes[node_id].get("params") or {}) for node_id in id_map.values())
     _stage_graph_edges(candidate, raw_edges, id_map)
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
@@ -7483,6 +7643,9 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
             reference_key="tempId",
             include_outputs=False,
         )
+        _refuse_agent_krea_billing_change(
+            (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), None,
+             candidate.nodes[node_id].get("params") or {}) for node_id in id_map.values())
         created_edge_ids = _stage_graph_edges(candidate, raw_edges, id_map)
         _refuse_agent_change_to_approved_runs(candidate)
         _commit_graph_candidate_with_recoveries(

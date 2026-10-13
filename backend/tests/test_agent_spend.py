@@ -152,7 +152,7 @@ def test_caps_are_validated(bad):
 def test_caps_drop_empty_model_entries():
     caps = agent_spend.validate_caps({"sessionUsd": 10, "models": {"paid": {"perRunUsd": None}, "krea": {"sessionUsd": 4}}},
                                      DEFINITIONS)
-    assert caps == {"sessionUsd": 10.0, "models": {"krea": {"perRunUsd": None, "sessionUsd": 4.0}}}
+    assert caps == {"sessionUsd": 10.0, "kreaPlanRuns": None, "models": {"krea": {"perRunUsd": None, "sessionUsd": 4.0}}}
 
 
 def test_the_ledger_keeps_sessions_apart_and_survives_a_restart(tmp_path):
@@ -335,7 +335,11 @@ def test_a_session_budget_holds_across_runs_and_renaming_does_not_reset_it(clien
     assert client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=as_claude).status_code == 200
     assert client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=as_claude).status_code == 200
     third = client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=as_claude)
-    assert third.status_code == 403 and "already used $0.80 of its $1.00 budget" in third.json()["detail"]
+    # A name isn't a chat token: this is an outside agent, held to the shared
+    # outside budget, which is the per-session amount while it's unset.
+    assert third.status_code == 403
+    assert ("agents outside Nebula chats have already used $0.80 of their $1.00 budget in the last 24 hours"
+            in third.json()["detail"])
     status = client.get("/api/agent/spend", headers=as_claude).json()
     assert status["spent"]["totalUsd"] == 0.8 and status["limits"]["sessionUsd"] == 1
     # Names and session headers are the caller's to set, so they can't buy a fresh budget.
@@ -663,3 +667,300 @@ def test_a_scenes_shots_fall_under_its_base_models_own_limit(client):
     response = client.post("/api/cinema/generate-shot", json=_shot_request(2))
     assert response.status_code == 403
     assert "per-run limit for" in response.json()["detail"]
+
+
+# -- the outside agents' budget: stable, rolling 24 hours ------------------------------
+
+class Clock:
+    def __init__(self, now: float = 1_760_000_000.0) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+
+HOUR = 60 * 60
+
+
+def test_outside_spending_counts_the_last_24_hours():
+    clock = Clock()
+    ledger = agent_spend.SpendLedger(None, clock=clock)
+    ledger.record("outside:shared", "Outside", {"paid": 0.5})
+    clock.now += 20 * HOUR
+    ledger.record("outside:shared", "Outside", {"paid": 0.25})
+    assert ledger.spent("outside:shared") == agent_spend.Spent(0.75, {"paid": 0.75})
+    clock.now += 4 * HOUR + 1  # the first run is now older than 24 hours
+    assert ledger.spent("outside:shared") == agent_spend.Spent(0.25, {"paid": 0.25})
+    clock.now += 20 * HOUR
+    assert ledger.spent("outside:shared") == agent_spend.Spent()
+
+
+def test_a_give_back_lands_in_its_runs_window():
+    clock = Clock()
+    ledger = agent_spend.SpendLedger(None, clock=clock)
+    first = ledger.record("outside:shared", "Outside", {"paid": 0.5})
+    clock.now += 23 * HOUR
+    second = ledger.record("outside:shared", "Outside", {"paid": 0.4})
+    clock.now += 2 * HOUR  # the first run has left the window
+    ledger.refund("outside:shared", {"paid": 0.5}, at=first)
+    assert ledger.spent("outside:shared").total == pytest.approx(0.4)  # not 0.4 - 0.5
+    ledger.refund("outside:shared", {"paid": 0.4}, at=second)
+    assert ledger.spent("outside:shared") == agent_spend.Spent()
+    # Without the run's time an outside give-back can't be placed, so nothing comes back.
+    ledger.record("outside:shared", "Outside", {"paid": 0.3})
+    ledger.refund("outside:shared", {"paid": 0.3})
+    assert ledger.spent("outside:shared").total == pytest.approx(0.3)
+
+
+def test_old_outside_events_are_dropped_when_saved(tmp_path):
+    clock = Clock()
+    path = tmp_path / "agent-spend.json"
+    ledger = agent_spend.SpendLedger(path, clock=clock)
+    ledger.record("outside:shared", "Outside", {"paid": 0.5})
+    clock.now += 25 * HOUR
+    ledger.record("outside:shared", "Outside", {"paid": 0.1})
+    import json
+    events = json.loads(path.read_text())["sessions"]["outside:shared"]["events"]
+    assert [event[2] for event in events] == [0.1]
+
+
+def test_the_old_per_launch_budgets_fold_into_the_outside_one(tmp_path):
+    import json
+
+    clock = Clock()
+    path = tmp_path / "agent-spend.json"
+    path.write_text(json.dumps({"sessions": {
+        "unverified:aaa": {"agent": "x", "total": 0.9, "models": {"paid": 0.6}, "updated": clock.now - HOUR},
+        "unverified:bbb": {"agent": "x", "total": 5, "models": {"paid": 5}, "updated": clock.now - 30 * HOUR},
+        "chat:c1": {"agent": "Claude", "total": 1, "models": {"paid": 1}, "updated": clock.now},
+    }}))
+    ledger = agent_spend.SpendLedger(path, clock=clock)
+    # Counted at its last update (fail closed), the unattributed rest included; the stale one is gone.
+    assert ledger.spent_outside().total == pytest.approx(0.9)
+    assert ledger.spent("chat:c1").total == 1
+    saved = json.loads(path.read_text())["sessions"]
+    assert not any(key.startswith("unverified:") for key in saved)
+    clock.now += 23 * HOUR + 1
+    assert agent_spend.SpendLedger(path, clock=clock).spent_outside() == agent_spend.Spent()
+
+
+def test_restarting_nebula_does_not_reset_the_outside_budget(client, tmp_path, monkeypatch):
+    import main
+
+    path = tmp_path / "agent-spend.json"
+    monkeypatch.setattr(main, "agent_spend_ledger", agent_spend.SpendLedger(path))
+    assert not hasattr(main, "_SPEND_LAUNCH")  # the key no longer depends on the launch
+    price(0.6)
+    node_id = add_paid_node(client)
+    caps = {"runCostConfirmUsd": None, "agentSpend": {"sessionUsd": 50, "outsideDailyUsd": 1, "models": {}}}
+    assert client.put("/api/settings", json=caps, headers=PERSON).status_code == 200
+    assert client.post("/api/graph/run", json={"targetNodeId": node_id}).status_code == 200
+    # A restart: a fresh ledger over the same file, and a caller with another name.
+    monkeypatch.setattr(main, "agent_spend_ledger", agent_spend.SpendLedger(path))
+    status = client.get("/api/agent/spend", headers={"X-Nebula-Agent": "Someone New"}).json()
+    assert status["budget"] == "shared" and status["spent"]["totalUsd"] == pytest.approx(0.6)
+    assert status["limits"]["outsideDailyUsd"] == 1
+    again = client.post("/api/graph/run", json={"targetNodeId": node_id}, headers={"X-Nebula-Agent": "Someone New"})
+    assert again.status_code == 403
+    assert "agents outside Nebula chats have already used $0.60 of their $1.00 budget in the last 24 hours" \
+        in again.json()["detail"] and "propose" in again.json()["detail"]
+
+
+def test_the_outside_budget_defaults_to_the_session_budget():
+    assert agent_spend.caps_from_settings({"agentSpend": {"sessionUsd": 5}})["outsideDailyUsd"] == 5
+    assert agent_spend.caps_from_settings({"agentSpend": {"sessionUsd": 5, "outsideDailyUsd": None}})["outsideDailyUsd"] is None
+    assert agent_spend.caps_from_settings({"agentSpend": {"sessionUsd": 5, "outsideDailyUsd": 2}})["outsideDailyUsd"] == 2
+    # Unreadable falls back to the session amount, never to no limit.
+    assert agent_spend.caps_from_settings({"agentSpend": {"sessionUsd": 5, "outsideDailyUsd": "lots"}})["outsideDailyUsd"] == 5
+    assert "outsideDailyUsd" not in agent_spend.validate_caps({"sessionUsd": 5}, DEFINITIONS)
+    with pytest.raises(ValueError):
+        agent_spend.validate_caps({"outsideDailyUsd": 0}, DEFINITIONS)
+
+
+def test_chats_and_outside_agents_are_held_to_their_own_budgets(client):
+    from commons.actors import agent_registry
+
+    price(0.4)
+    node_id = add_paid_node(client)
+    caps = {"runCostConfirmUsd": None, "agentSpend": {"sessionUsd": 5, "outsideDailyUsd": 0.5, "models": {}}}
+    client.put("/api/settings", json=caps, headers=PERSON)
+    assert client.post("/api/graph/run", json={"targetNodeId": node_id}).status_code == 200
+    assert client.post("/api/graph/run", json={"targetNodeId": node_id}).status_code == 403
+    token = agent_registry.mint("claude", [], session="chat-9")
+    try:
+        chat = {"Authorization": f"Agent {token}"}
+        assert client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=chat).status_code == 200
+        assert client.get("/api/agent/spend", headers=chat).json()["budget"] == "chat"
+    finally:
+        agent_registry.revoke(token)
+
+
+# -- app tokens the person issues -------------------------------------------------------
+
+@pytest.fixture
+def apps(client, tmp_path, monkeypatch):
+    import main
+    from services import app_tokens
+
+    store = app_tokens.AppTokens(tmp_path / "app-tokens.json")
+    monkeypatch.setattr(main, "app_token_store", store)
+    monkeypatch.setattr(app_tokens, "_store", store)
+    return store
+
+
+def make_app(client, name="Claude Desktop", daily=None) -> tuple[str, dict]:
+    response = client.post("/api/agent/spend/apps", json={"name": name, "dailyUsd": daily}, headers=PERSON)
+    assert response.status_code == 200, response.text
+    return response.json()["token"], response.json()["app"]
+
+
+def test_only_the_person_manages_app_tokens(client, apps):
+    for headers in ({}, FORGED_ORIGIN, {**PERSON, "X-Nebula-Agent": "Claude"}):
+        assert client.post("/api/agent/spend/apps", json={"name": "Sneaky"}, headers=headers).status_code == 403
+        assert client.get("/api/agent/spend/apps", headers=headers).status_code == 403
+    token, app = make_app(client)
+    assert token.startswith("nebula_app_")
+    # Only a hash is stored, and the list never shows the token.
+    assert token not in (apps._path.read_text()) and token not in client.get("/api/agent/spend/apps", headers=PERSON).text
+    assert client.put(f"/api/agent/spend/apps/{app['id']}", json={"dailyUsd": 3}, headers={"Authorization": f"Agent {token}"}).status_code == 403
+    assert client.delete(f"/api/agent/spend/apps/{app['id']}", headers=FORGED_ORIGIN).status_code == 403
+    assert client.post("/api/agent/spend/apps", json={"name": "  "}, headers=PERSON).status_code == 400
+    assert client.post("/api/agent/spend/apps", json={"name": "x", "dailyUsd": -1}, headers=PERSON).status_code == 400
+
+
+def test_an_app_token_counts_against_its_own_line_and_the_shared_budget(client, apps):
+    price(0.4)
+    node_id = add_paid_node(client)
+    caps = {"runCostConfirmUsd": None, "agentSpend": {"sessionUsd": 5, "outsideDailyUsd": 1, "models": {}}}
+    client.put("/api/settings", json=caps, headers=PERSON)
+    token, app = make_app(client, daily=5)
+    as_app = {"Authorization": f"Agent {token}"}
+    status = client.get("/api/agent/spend", headers=as_app).json()
+    assert status["budget"] == "app" and status["agent"] == "Claude Desktop" and status["limits"]["appDailyUsd"] == 5
+    assert client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=as_app).status_code == 200
+    assert client.post("/api/graph/run", json={"targetNodeId": node_id}).status_code == 200  # untokened: shared
+    # $0.40 fits the app's $5 but not the shared $1 ($0.80 used): the stricter wins.
+    refused = client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=as_app)
+    assert refused.status_code == 403
+    assert "agents outside Nebula chats have already used $0.80 of their $1.00 budget" in refused.json()["detail"]
+    view = client.get("/api/agent/spend/apps", headers=PERSON).json()
+    assert view["outside"]["spentUsd"] == pytest.approx(0.8)
+    assert view["apps"][0]["spentUsd"] == pytest.approx(0.4) and view["apps"][0]["name"] == "Claude Desktop"
+
+
+def test_an_apps_own_daily_limit_applies(client, apps):
+    price(0.4)
+    node_id = add_paid_node(client)
+    client.put("/api/settings", json={"runCostConfirmUsd": None, "agentSpend": {"sessionUsd": None, "models": {}}},
+               headers=PERSON)
+    token, app = make_app(client, name="Script", daily=0.5)
+    as_app = {"Authorization": f"Agent {token}"}
+    assert client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=as_app).status_code == 200
+    refused = client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=as_app)
+    assert refused.status_code == 403 and "Script has already used $0.40 of its $0.50 daily limit" in refused.json()["detail"]
+    raised = client.put(f"/api/agent/spend/apps/{app['id']}", json={"dailyUsd": 2}, headers=PERSON)
+    assert raised.status_code == 200 and raised.json()["app"]["dailyUsd"] == 2
+    assert client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=as_app).status_code == 200
+
+
+def test_a_revoked_app_token_is_refused_and_its_spending_still_counts(client, apps):
+    price(0.4)
+    node_id = add_paid_node(client)
+    client.put("/api/settings", json={"runCostConfirmUsd": None, "agentSpend": {"sessionUsd": 1, "models": {}}},
+               headers=PERSON)
+    token, app = make_app(client)
+    as_app = {"Authorization": f"Agent {token}"}
+    assert client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=as_app).status_code == 200
+    assert client.delete(f"/api/agent/spend/apps/{app['id']}", headers=PERSON).status_code == 200
+    assert client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=as_app).status_code == 401
+    assert client.get("/api/agent/spend").json()["outsideSpent"]["totalUsd"] == pytest.approx(0.4)
+    assert client.delete(f"/api/agent/spend/apps/{app['id']}", headers=PERSON).status_code == 404
+
+
+def test_an_app_token_names_the_app_on_the_canvas(client, apps):
+    import main
+
+    token, _app = make_app(client, name="Claude Desktop")
+    identity = main.identify_agent({"Authorization": f"Agent {token}"})
+    assert identity is not None and identity.name == "Claude Desktop" and identity.verified
+    assert main.identify_agent({"Authorization": "Agent nebula_app_forged"}) is None
+
+
+# -- Krea plan runs ----------------------------------------------------------------------
+
+PLAN = [{"id": f"k{i}", "definitionId": "krea", "params": {}} for i in range(3)]
+
+
+def test_plan_runs_are_counted_and_capped():
+    settings = {"runCostConfirmUsd": None, "agentSpend": {"kreaPlanRuns": 2}}
+    message = refusal(PLAN, settings=settings)
+    assert message is not None and "bills 3 runs to the signed-in Krea plan" in message
+    assert "0 runs of its 2-run Krea plan limit" in message
+    one = decide(PLAN[:1], settings=settings)
+    assert one.refusal is None and one.plan_charge == {"krea": 1} and one.plan_per_node == {"k0": ("krea", 1)}
+    assert decide(PLAN[:1], settings=settings, spent=agent_spend.Spent(plan_runs=2)).refusal is not None
+    # With no limit the runs are still counted.
+    assert decide(PLAN, settings={}).plan_charge == {"krea": 3}
+
+
+def test_plan_runs_multiply_by_batch_items_and_passes():
+    batch = {"id": "b", "definitionId": "batch", "params": {"items_text": "a\nb\nc"}}
+    decision = decide([batch, PLAN[0]], [("b", "k0")])
+    assert decision.plan_per_node == {"k0": ("krea", 3)}
+    twice = agent_spend.decide(PLAN[:1], [], settings={}, pricing=pricing(), definitions=DEFINITIONS,
+                               spent=agent_spend.Spent(), how_to_ask="ASK.", passes=2)
+    assert twice.plan_charge == {"krea": 2}
+
+
+def test_the_ledger_keeps_plan_runs():
+    clock = Clock()
+    ledger = agent_spend.SpendLedger(None, clock=clock)
+    ledger.record("chat:a", "Claude", {}, {"krea": 2})
+    ledger.refund("chat:a", {}, {"krea": 1})
+    assert ledger.spent("chat:a") == agent_spend.Spent(plan_runs=1)
+    at = ledger.record("outside:shared", "Outside", {}, {"krea": 3})
+    ledger.refund("outside:shared", {}, {"krea": 1}, at=at)
+    assert ledger.spent_outside().plan_runs == 2
+    clock.now += 25 * HOUR
+    assert ledger.spent_outside().plan_runs == 0
+
+
+PLAN_NODE = "krea-2-generate"
+
+
+def add_plan_node(client) -> str:
+    # Only the person can put a dual-mode Krea node on the plan.
+    response = client.post("/api/graph/node", json={"definitionId": PLAN_NODE, "params": {"_kreaAuth": "mcp"}},
+                           headers=PERSON)
+    assert response.status_code == 200, response.text
+    return response.json()["id"]
+
+
+def test_agent_plan_runs_need_a_proposal_over_the_cap(client):
+    import main
+
+    first, second = add_plan_node(client), add_plan_node(client)
+    caps = {"runCostConfirmUsd": 1, "agentSpend": {"sessionUsd": None, "kreaPlanRuns": 1, "models": {}}}
+    assert client.put("/api/settings", json=caps, headers=PERSON).status_code == 200
+    both = client.post("/api/graph/run", json={})
+    assert both.status_code == 403 and "bills 2 runs to the signed-in Krea plan" in both.json()["detail"]
+    main.execute_graph.assert_not_awaited()
+    assert client.post("/api/graph/run", json={"targetNodeId": first}).status_code == 200
+    status = client.get("/api/agent/spend").json()
+    assert status["spent"]["kreaPlanRuns"] == 1 and status["limits"]["kreaPlanRuns"] == 1
+    again = client.post("/api/graph/run", json={"targetNodeId": second})
+    assert again.status_code == 403 and "1 run of their 1-run Krea plan limit in the last 24 hours" in again.json()["detail"]
+    # The person's own runs are never counted.
+    assert client.post("/api/graph/run", json={"targetNodeId": second}, headers=PERSON).status_code == 200
+
+
+def test_a_plan_node_that_never_reached_its_handler_gives_its_run_back(client, monkeypatch):
+    import main
+
+    async def answered_from_the_cache(*, nodes, run_id=None, **kwargs):
+        return None  # no node reached its handler
+
+    monkeypatch.setattr(main, "execute_graph", AsyncMock(side_effect=answered_from_the_cache))
+    node_id = add_plan_node(client)
+    assert client.post("/api/graph/run", json={"targetNodeId": node_id}).status_code == 200
+    assert client.get("/api/agent/spend").json()["spent"]["kreaPlanRuns"] == 0

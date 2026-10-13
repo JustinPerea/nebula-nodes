@@ -12,6 +12,9 @@ environment as-is would hold these in its own initial environment, where
 - NEBULA_INJECTED_KEYS: the desktop app's provider keys.
 - NEBULA_CONNECTOR_SESSION: the old desktop canvas nonce. Nothing sets it
   any more; an older Electron shell might.
+- NEBULA_APP_TOKEN: an outside app's spending token (services/app_tokens.py).
+  Nebula never sets it; a backend started from that app's shell might carry
+  it, and an in-app chat must not spend as that app.
 """
 from __future__ import annotations
 
@@ -23,6 +26,7 @@ SECRET_ENV_KEYS = (
     "NEBULA_CONNECTOR_ENCRYPTION_KEY",
     "NEBULA_INJECTED_KEYS",
     "NEBULA_CONNECTOR_SESSION",
+    "NEBULA_APP_TOKEN",
 )
 
 

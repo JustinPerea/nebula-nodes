@@ -96,7 +96,9 @@ def test_spend_shows_the_limits_an_agent_works_under(cli, capsys):
     client, _ = cli
     spend.run(client)
     out = capsys.readouterr().out
-    assert "Per run:" in out and "This session:" in out
+    # The CLI here has no chat token, so it shares the outside agents' 24-hour budget.
+    assert "Per run:" in out and "All agents outside Nebula chats, last 24 hours" in out
+    assert "This session:" not in out and "Krea plan runs:" in out
 
 
 DEFINITIONS = [
@@ -129,5 +131,6 @@ def test_context_counts_free_and_krea_nodes_and_lists_ids():
     assert text.startswith("Nebula Nodes — 5 of 6 nodes can run here")
     assert "1 with your keys, 1 free, 2 on the Krea account, 1 with a Nous sign-in" in text
     assert "gpt-image-1-generate" in text and "krea-files*" in text
-    assert "--param _kreaAuth=mcp" in text
+    assert "--param _kreaAuth=mcp" not in text
+    assert "`nebula propose` the _kreaAuth=mcp change" in text
     assert "Krea account: signed in" in text

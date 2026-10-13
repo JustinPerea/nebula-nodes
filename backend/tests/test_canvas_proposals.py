@@ -428,6 +428,28 @@ def test_the_person_token_works_without_an_origin_and_the_old_nonce_does_not(api
     assert ok.status_code == 200 and api.book.get(proposal_id).reason == "not now"
 
 
+def test_a_krea_billing_switch_goes_through_a_proposal(api):
+    """Direct edits can't change _kreaAuth (tests/test_graph_apply.py); a
+    proposal can ask, and the person's Accept applies it."""
+    node_id = api.graph.add_node("krea-2-generate", {"_kreaAuth": "api-token"})
+    bad = _propose(api, {"note": "Bill it to the plan", "params": [{"nodeId": node_id, "params": {"_kreaAuth": "free"}}]})
+    assert bad.status_code == 400 and "api-token, mcp" in bad.json()["detail"]
+    body = {"note": "Bill it to the plan", "params": [{"nodeId": node_id, "params": {"_kreaAuth": "mcp"}}],
+            "nodes": [{"ref": "+k", "definitionId": "krea-2-generate", "params": {"_kreaAuth": "mcp"}}]}
+    created = _propose(api, body)
+    assert created.status_code == 201, created.text
+    assert api.graph.nodes[node_id]["params"]["_kreaAuth"] == "api-token"
+    proposal_id = created.json()["proposal"]["id"]
+    accepted = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                               headers={**PERSON, KEY: _key(api, proposal_id)}, json={})
+    assert accepted.status_code == 200, accepted.text
+    assert api.graph.nodes[node_id]["params"]["_kreaAuth"] == "mcp"
+    assert api.graph.nodes[accepted.json()["idMap"]["+k"]]["params"]["_kreaAuth"] == "mcp"
+    # Other underscore params still can't be proposed.
+    internal = _propose(api, {"note": "x", "params": [{"nodeId": node_id, "params": {"_previewUrl": "x"}}]})
+    assert internal.status_code == 422
+
+
 def test_accept_applies_everything_with_dragged_positions_and_never_runs(api, monkeypatch):
     def explode(*args, **kwargs):  # pragma: no cover - must never be reached
         raise AssertionError("accept must never execute")

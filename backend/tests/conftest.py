@@ -70,7 +70,8 @@ def spending_limits_off(monkeypatch):
 
     monkeypatch.setattr(agent_spend, "threshold_from_settings", lambda settings: None)
     monkeypatch.setattr(agent_spend, "caps_from_settings",
-                        lambda settings: {"sessionUsd": None, "models": {}})
+                        lambda settings: {"sessionUsd": None, "outsideDailyUsd": None, "kreaPlanRuns": None,
+                                          "models": {}})
 
 
 # The person's launch token in tests (services/person_session.py). The

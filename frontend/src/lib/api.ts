@@ -242,6 +242,54 @@ export async function updateSettings(settings: Record<string, unknown>): Promise
   return response.json();
 }
 
+/** An outside app the person gave a spending token (backend services/app_tokens.py). */
+export interface ConnectedApp {
+  id: string;
+  name: string;
+  /** Its own limit over the last 24 hours; null means only the shared outside budget applies. */
+  dailyUsd: number | null;
+  createdAt: number | null;
+  spentUsd: number;
+  kreaPlanRuns: number;
+}
+
+export interface OutsideSpend {
+  /** Every agent outside Nebula's chats, apps included, over the last 24 hours. */
+  outside: { spentUsd: number; kreaPlanRuns: number };
+  apps: ConnectedApp[];
+}
+
+async function agentAppsCall<T>(path: string, init: RequestInit | undefined, what: string): Promise<T> {
+  const response = await apiFetch(path, init);
+  if (!response.ok) {
+    let detail = '';
+    try { detail = (await response.json()).detail ?? ''; } catch { /* not JSON */ }
+    throw new Error(detail || `${what} failed: ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+export function getOutsideSpend(): Promise<OutsideSpend> {
+  return agentAppsCall('/api/agent/spend/apps', undefined, 'Loading connected apps');
+}
+
+/** The token is in this response only; the backend keeps a hash. */
+export function createConnectedApp(name: string, dailyUsd: number | null): Promise<{ app: ConnectedApp; token: string }> {
+  return agentAppsCall('/api/agent/spend/apps', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, dailyUsd }),
+  }, 'Creating the app token');
+}
+
+export function setConnectedAppLimit(id: string, dailyUsd: number | null): Promise<{ app: ConnectedApp }> {
+  return agentAppsCall(`/api/agent/spend/apps/${encodeURIComponent(id)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dailyUsd }),
+  }, 'Saving the app limit');
+}
+
+export function revokeConnectedApp(id: string): Promise<{ status: string }> {
+  return agentAppsCall(`/api/agent/spend/apps/${encodeURIComponent(id)}`, { method: 'DELETE' }, 'Revoking the app');
+}
+
 /** Remove one browser-managed provider key without resubmitting other settings. */
 export async function deleteSettingsApiKey(provider: string): Promise<{ status: string }> {
   const response = await apiFetch(`/api/settings/api-keys/${encodeURIComponent(provider)}`, {

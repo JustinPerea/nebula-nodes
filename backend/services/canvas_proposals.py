@@ -199,8 +199,9 @@ def _params(raw: Any, label: str, internal_ok: frozenset[str] = frozenset()) -> 
 def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset()) -> ProposalSpec:
     """Shape-check and sanitise a proposal body. Graph validation happens in main.
 
-    `internal_ok` names underscore params a caller may set anyway (direct
-    edits allow `_kreaAuth`, the Krea billing choice the CLI also sets)."""
+    `internal_ok` names underscore params a caller may set anyway: proposals
+    and direct edits name `_kreaAuth`, the Krea billing choice. Only a
+    proposal may change it; direct edits from agents that would are refused."""
     if not isinstance(body, dict):
         raise ProposalError(422, "the proposal must be a JSON object")
     unknown = sorted(set(body) - _ALLOWED_KEYS)

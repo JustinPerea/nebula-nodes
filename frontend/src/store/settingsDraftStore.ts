@@ -10,6 +10,11 @@ export interface ModelSpendLimit {
 
 export interface AgentSpendLimits {
   sessionUsd: number | null;
+  /** What every agent outside Nebula's chats may spend together over the last
+   * 24 hours. Left out (undefined): the same as sessionUsd. Null: no limit. */
+  outsideDailyUsd?: number | null;
+  /** Runs one chat, or the outside agents in 24 hours, may bill to the Krea plan. Null: no limit. */
+  kreaPlanRuns: number | null;
   /** Keyed by node definition id. */
   models: Record<string, ModelSpendLimit>;
 }
@@ -104,7 +109,18 @@ export function readAgentSpend(value: unknown): AgentSpendLimits {
     const limit = { perRunUsd: readLimit(entry.perRunUsd), sessionUsd: readLimit(entry.sessionUsd) };
     if (limit.perRunUsd !== null || limit.sessionUsd !== null) models[id] = limit;
   }
-  return { sessionUsd: readLimit(raw.sessionUsd), models };
+  const planRuns = raw.kreaPlanRuns;
+  const limits: AgentSpendLimits = {
+    sessionUsd: readLimit(raw.sessionUsd),
+    kreaPlanRuns: typeof planRuns === 'number' && Number.isInteger(planRuns) && planRuns > 0 ? planRuns : null,
+    models,
+  };
+  // Only a saved value overrides the per-session amount; an unreadable one
+  // falls back to it, as on the backend (never to no limit).
+  if ('outsideDailyUsd' in raw && (raw.outsideDailyUsd === null || readLimit(raw.outsideDailyUsd) !== null)) {
+    limits.outsideDailyUsd = readLimit(raw.outsideDailyUsd);
+  }
+  return limits;
 }
 
 /** True while any key or field is still being written. */

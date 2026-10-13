@@ -2,6 +2,7 @@
 
 - human:justin: only via the per-launch person token (services/person_session.py)
 - agent:<runner>/<model>: Nebula's own runners, via a per-turn agent token
+- agent:app:<id>: an outside app with a token the person issued (services/app_tokens.py)
 - agent:mcp:<clientInfo.name>: external harnesses, self-reported, never human
 - agent:cli: the nebula CLI with no token
 """
@@ -107,6 +108,12 @@ def resolve_actor(headers: Mapping[str, str]) -> Actor:
     if auth.startswith("Agent "):
         record = agent_registry.lookup(auth[6:].strip())
         if record is None:
+            from services import app_tokens
+            app = app_tokens.lookup(auth[6:].strip())
+            if app is not None:
+                # An outside app the person gave a token: still an outside
+                # agent, with no workspace or extra directories.
+                return Actor(f"agent:app:{app['id']}", "agent")
             raise AuthError("invalid or expired agent token")
         if record["workspace"] is not None:
             from services.agent_workspaces import validate_workspace

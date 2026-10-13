@@ -206,6 +206,8 @@ Person-only, refused with 403 `person_required` otherwise:
   `/api/krea/connection/check`, `DELETE /api/krea/connection`,
   `/api/krea/trial`). `GET /api/krea/connection`, `/api/krea/tools` and
   `/api/krea/tools/call` stay open;
+- making, limiting and revoking connected-app tokens (`/api/agent/spend/apps`;
+  see Connected apps below);
 - starting any `/ws/chat` turn (Claude, Codex, Hermes, Daedalus), so no chat
   workspace or agent token is minted without the person;
 - `POST /api/enhance-prompt`, the Create button's rewrite. The gate comes
@@ -221,7 +223,7 @@ spending limits. The person isn't limited.
 Every process the backend starts (agents, the Commons reader, ffmpeg, the
 Remotion renderer, git, `open`, `ps`, `sips`, `brctl`) gets the backend's
 environment minus `NEBULA_PERSON_TOKEN`, `NEBULA_CONNECTOR_ENCRYPTION_KEY`,
-`NEBULA_INJECTED_KEYS` and `NEBULA_CONNECTOR_SESSION`
+`NEBULA_INJECTED_KEYS`, `NEBULA_CONNECTOR_SESSION` and `NEBULA_APP_TOKEN`
 (`services/child_env.py`).
 
 Remaining risk, plainly: a program running as you with its own unsandboxed
@@ -398,12 +400,19 @@ The person decides what agents may spend, in **Settings > Preferences**:
   a run that could cost this much, and an agent run at or over it is refused.
   Off means no per-run limit.
 - **Per chat session**: the most one agent chat may run in total.
+- **Agents outside Nebula chats**: what every agent without a Nebula chat
+  (Claude Desktop, terminal tools, scripts) may run together over the last 24
+  hours. Unset, it is the per-session amount. Restarting Nebula doesn't reset it.
+- **Krea plan runs**: how many runs one chat, or the outside agents over 24
+  hours, may bill to the signed-in Krea plan.
 - **Limit a model**: a per-run limit that replaces the general one for that
-  model, a session budget for it, or both.
+  model, a session budget for it (for outside agents, over 24 hours), or both.
+- **Connected apps**: a token per outside app, with its own optional daily
+  limit (see "Connected apps" below).
 
 Any limit also makes an agent ask before running a node with no list price,
-since Nebula can't check it. Krea runs billed to the account's plan and free
-nodes always pass. The person's own runs from the canvas are never limited.
+since Nebula can't check it. Free nodes always pass. The person's own runs
+from the canvas are never limited.
 
 How it works (`backend/services/agent_spend.py`):
 
@@ -432,12 +441,34 @@ How it works (`backend/services/agent_spend.py`):
 
   A node whose handler was called stays counted, even if it failed. The
   limit is still checked on the whole estimate first, since which key a
-  handler finds and what the cache skips are only known by running. Only
-  the in-app Claude, Codex and Daedalus chats get their own session budget,
-  from the agent token Nebula mints for each chat. Everything else (outside
-  agents, scripts) shares one budget until the backend restarts, because a
-  name or header is the caller's to set and renaming would reset the budget.
+  handler finds and what the cache skips are only known by running.
+- Whose total a run counts against:
+  - `chat:<session>`: the in-app Claude, Codex and Daedalus chats each get
+    their own session budget, from the agent token Nebula mints for each chat.
+  - `outside:shared`: everything else (outside agents, scripts). A name or
+    header is the caller's to set, so renaming can't buy a fresh budget, and
+    the key is the same every launch, so restarting the backend can't either.
+    It counts events from the last 24 hours: a refund lands at the time of
+    the run it refunds, never in a later window, and older events are dropped
+    when the file is saved. Budgets from before this change
+    (`unverified:<launch>`) were folded in once, counted at their last update.
+  - `outside:app:<id>`: an app the person gave a token (below). Its own daily
+    limit applies, and its runs also count in `outside:shared`; both are
+    checked and the stricter wins, so a token never adds headroom.
+
   Totals are kept in `~/.nebula/agent-spend.json`.
+- Krea plan runs: a node billed to the signed-in Krea plan has no per-call
+  price (Krea charges compute units it doesn't publish per model), so it is
+  counted as runs: batch runs times a cinema scene's shots times variations.
+  With "Krea plan runs" set, a run that would go over it needs a proposal; with
+  it unset, the runs are still counted and shown. The same give-back rules
+  apply. An agent can't move a node onto the plan itself: an edit through
+  `edit_canvas` (`/api/graph/apply`), `nebula set`/`create`
+  (`/api/graph/node`), `/api/graph/node-and-connect`, `/api/graph/cluster` or
+  `/api/graph/import` that changes `_kreaAuth`, or adds a node that offers
+  both modes already set to `mcp`, gets a 403 pointing at `propose_change`.
+  Proposals carry `_kreaAuth`, and the person's Accept applies it. Nodes that
+  offer only the plan (Krea Files, Moodboards) have nothing to switch.
 - A refusal is a 403 whose message names the cost, the limit and the exact
   `nebula propose ... --run <node>` to send instead. Accepting a proposal is
   the person's approval, so the canvas runs it without checking a limit.
@@ -445,7 +476,39 @@ How it works (`backend/services/agent_spend.py`):
   change from anyone without the person token.
 
 `nebula spend` (or `GET /api/agent/spend`) shows an agent its limits and what
-its session has used.
+its session has used. `budget` is `chat`, `shared` or `app`; outside callers
+also get `outsideSpent`, the shared 24-hour total.
+
+### Connected apps
+
+An outside agent can't prove who it is, so by default every one of them shares
+the outside budget. To give an app its own line, the person makes a token in
+**Settings > Agent spending > Connected apps** (name, optional daily limit).
+The token is shown once; Nebula keeps only its SHA-256 in
+`~/.nebula/app-tokens.json` (mode 600). Put it in the app's Nebula MCP server
+config as an environment variable:
+
+```json
+{"mcpServers": {"nebula": {"command": "<repo>/backend/.venv/bin/python",
+  "args": ["<repo>/backend/mcp_server.py", "--url", "http://127.0.0.1:8000"],
+  "env": {"NEBULA_APP_TOKEN": "nebula_app_..."}}}}
+```
+
+The MCP server and the `nebula` CLI send it as `Authorization: Agent <token>`
+(an in-app chat's `NEBULA_AGENT_TOKEN` wins if both are set; the backend
+scrubs `NEBULA_APP_TOKEN` from every process it starts, so an in-app chat
+never spends as an app). The app then shows by its name on the canvas, and
+Settings lists what it spent in the last 24 hours. Revoking the token makes
+its requests fail with 401; what it spent stays in the outside total.
+
+Routes, all person-only: `GET /api/agent/spend/apps` (the outside total and
+each app), `POST /api/agent/spend/apps` `{name, dailyUsd}` (returns the token
+once), `PUT /api/agent/spend/apps/{id}` `{dailyUsd}`, `DELETE
+/api/agent/spend/apps/{id}`.
+
+Remaining risk: the token is a bearer secret in the app's config file.
+Anything that can read the file can spend as the app, inside the app's limit
+and the shared outside budget, until the person revokes it.
 
 ### Building and running over MCP
 
@@ -457,8 +520,9 @@ order (unwire, remove, add and change, rename, move) with the validators the
 single-edit routes use, and commits it at once. A bad wire or a missing node
 leaves the canvas exactly as it was. Limits match proposals (12 new nodes, 24
 wires, 12 param changes, 24 removals). Nodes with unresolved World Labs paid
-state can't be removed. Krea nodes may set `_kreaAuth` to a billing mode the
-node offers; other `_` params are refused. The route never runs anything and
+state can't be removed. Krea nodes may name `_kreaAuth` only to keep the mode
+they have: a change is refused with 403 and must be proposed (see Spending
+limits). Other `_` params are refused. The route never runs anything and
 is for agents only (the canvas edits through its own routes).
 
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so

@@ -184,8 +184,13 @@ class AgentWorkspaceContext:
         if auth.startswith("Agent "):
             record = agent_registry.lookup(auth[6:].strip())
             if record is None:
-                await JSONResponse({"detail": "invalid or expired agent token"}, status_code=401)(scope, receive, send)
-                return
+                from services import app_tokens
+                # An outside app's token (services/app_tokens.py) names its
+                # spending line only; it has no workspace to confine.
+                if app_tokens.lookup(auth[6:].strip()) is None:
+                    await JSONResponse({"detail": "invalid or expired agent token"}, status_code=401)(scope, receive, send)
+                    return
+                record = {}
             current = record.get("workspace")
             if current is not None:
                 try:

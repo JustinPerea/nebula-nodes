@@ -272,7 +272,8 @@ def format_context(
     if access_count.get("krea"):
         lines.append("* runs on the signed-in Krea account (workspace compute).")
         if krea_both:
-            lines.append("  Those that also take a token default to it: create them with --param _kreaAuth=mcp.")
+            lines.append("  Those that also take a token default to it. Moving one to the Krea plan is the person's")
+            lines.append("  call: `nebula propose` the _kreaAuth=mcp change; direct edits of it are refused.")
     if access_count.get("nous"):
         lines.append("^ needs a local Nous (Hermes) sign-in; not checked here.")
     lines.append("Ids above go to `nebula create <id>`; `nebula info <id>` shows ports and params.")

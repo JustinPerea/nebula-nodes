@@ -359,7 +359,8 @@ def edit_canvas(
     - `move`: {"n4" or "+img": {"x": 0, "y": 0}}. New nodes are placed for you.
     - `note`: one line on what this is for; shown beside your cursor.
     Limits per call: 12 new nodes, 24 wires, 12 param changes.
-    Krea nodes take params {"_kreaAuth": "mcp"} to bill the Krea account.
+    Krea billing (`_kreaAuth`: API token or the Krea plan) is the person's call:
+    send a change to it with propose_change; edit_canvas refuses it.
     Nothing runs; call run_nodes next. Returns `idMap` (ref → node id) and a summary.
     """
     body: dict[str, Any] = {key: value for key, value in {
@@ -514,9 +515,11 @@ def view_output(node_id: str, port: str | None = None, size: str = "medium", ctx
 def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
     """What you may spend without asking: the per-run limit, the session and
     per-model budgets the person set, and what this session has used.
-    `budget` is "chat" when this is an in-app chat's own budget, or "shared"
-    (one budget for every outside agent until Nebula restarts). Runs over a
-    limit must go through propose_change."""
+    `budget` is "chat" when this is an in-app chat's own budget, "shared" (one
+    budget for every outside agent, counting the last 24 hours; restarting
+    Nebula doesn't reset it), or "app" (an app token the person made, which
+    also counts inside "shared"). `kreaPlanRuns` counts runs billed to the
+    Krea plan. Runs over a limit must go through propose_change."""
     return _canvas_call("GET", "/api/agent/spend", ctx)
 
 

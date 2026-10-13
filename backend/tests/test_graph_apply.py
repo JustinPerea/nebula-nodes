@@ -193,16 +193,71 @@ def test_unknown_nodes_and_identity(api):
 
 
 def test_krea_billing_choice_is_checked_per_node(api):
-    ok = _apply(api, {"nodes": [{"ref": "+k", "definitionId": "krea-2-generate", "params": {"_kreaAuth": "mcp"}}]})
+    ok = _apply(api, {"nodes": [{"ref": "+k", "definitionId": "krea-2-generate", "params": {"_kreaAuth": "api-token"}}]})
     assert ok.status_code == 200, ok.text
     node_id = ok.json()["idMap"]["+k"]
-    assert api.graph.nodes[node_id]["params"]["_kreaAuth"] == "mcp"
     bad = _apply(api, {"params": [{"nodeId": node_id, "params": {"_kreaAuth": "free"}}]})
     assert bad.status_code == 400 and "api-token, mcp" in bad.json()["detail"]
     not_krea = _apply(api, {"nodes": [{"ref": "+t", "definitionId": "text-input", "params": {"_kreaAuth": "mcp"}}]})
     assert not_krea.status_code == 400 and "isn't a Krea node" in not_krea.json()["detail"]
     internal = _apply(api, {"nodes": [{"ref": "+t", "definitionId": "text-input", "params": {"_previewUrl": "x"}}]})
     assert internal.status_code == 422
+
+
+# -- Krea billing is the person's call ---------------------------------------------
+
+def _refused_for_billing(response) -> bool:
+    return response.status_code == 403 and "propose_change" in response.json()["detail"] and \
+        "_kreaAuth" in response.json()["detail"]
+
+
+def test_an_agent_cant_switch_a_krea_node_to_the_plan(api):
+    node_id = api.graph.add_node("krea-2-generate", {"_kreaAuth": "api-token"})
+    before = _state(api)
+    switched = _apply(api, {"params": [{"nodeId": node_id, "params": {"_kreaAuth": "mcp"}}]})
+    assert _refused_for_billing(switched), switched.text
+    assert _state(api) == before
+    # Not through `nebula set` (PUT /api/graph/node) either, nor back again.
+    put = api.client.put(f"/api/graph/node/{node_id}", headers=AGENT, json={"params": {"_kreaAuth": "mcp"}})
+    assert _refused_for_billing(put)
+    on_plan = api.graph.add_node("krea-2-generate", {"_kreaAuth": "mcp"})
+    back = api.client.put(f"/api/graph/node/{on_plan}", headers=AGENT, json={"params": {"_kreaAuth": "api-token"}})
+    assert _refused_for_billing(back)
+    # A forged Origin is still an agent.
+    forged = api.client.put(f"/api/graph/node/{node_id}", headers=FORGED_ORIGIN, json={"params": {"_kreaAuth": "mcp"}})
+    assert _refused_for_billing(forged)
+    # Setting the mode it already has, or other params, isn't a change.
+    same = _apply(api, {"params": [{"nodeId": on_plan, "params": {"_kreaAuth": "mcp", "seed": 7}}]})
+    assert same.status_code == 200, same.text
+    # The person may switch it.
+    mine = api.client.put(f"/api/graph/node/{node_id}", headers=PERSON, json={"params": {"_kreaAuth": "mcp"}})
+    assert mine.status_code == 200, mine.text
+    assert api.graph.nodes[node_id]["params"]["_kreaAuth"] == "mcp"
+
+
+def test_an_agent_cant_add_a_dual_mode_krea_node_on_the_plan(api):
+    added = _apply(api, {"nodes": [{"ref": "+k", "definitionId": "krea-2-generate", "params": {"_kreaAuth": "mcp"}}]})
+    assert _refused_for_billing(added) and "+k" in added.json()["detail"]
+    created = api.client.post("/api/graph/node", headers=AGENT,
+                              json={"definitionId": "krea-2-generate", "params": {"_kreaAuth": "mcp"}})
+    assert _refused_for_billing(created)
+    cluster = api.client.post("/api/graph/cluster", headers=AGENT, json={
+        "nodes": [{"tempId": "a", "definitionId": "krea-2-generate", "params": {"_kreaAuth": "mcp"}}], "edges": []})
+    assert _refused_for_billing(cluster)
+    imported = api.client.post("/api/graph/import", headers=AGENT, json={
+        "nodes": [{"id": "a", "definitionId": "krea-2-generate", "params": {"_kreaAuth": "mcp"}}], "edges": []})
+    assert _refused_for_billing(imported)
+    assert api.graph.nodes == {}
+    # Account-only nodes have no choice to change, and the default is the API token.
+    allowed = _apply(api, {"nodes": [
+        {"ref": "+f", "definitionId": "krea-files", "params": {"_kreaAuth": "mcp"}},
+        {"ref": "+k", "definitionId": "krea-2-generate", "params": {}},
+    ]})
+    assert allowed.status_code == 200, allowed.text
+    # The person may add one on the plan.
+    mine = api.client.post("/api/graph/node", headers=PERSON,
+                           json={"definitionId": "krea-2-generate", "params": {"_kreaAuth": "mcp"}})
+    assert mine.status_code == 200, mine.text
 
 
 def test_limits_match_proposals():

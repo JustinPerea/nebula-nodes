@@ -28,7 +28,9 @@ MAX_RENAME = 24
 MAX_MOVE = 50
 MAX_LABEL = 80
 _ALLOWED_KEYS = frozenset({"note", "nodes", "edges", "params", "rename", "move", "remove", "unwire"})
-# The Krea billing choice (Krea account vs API token); main checks the value per node.
+# The Krea billing choice (Krea account vs API token). Proposals carry it so an
+# agent can ask for a switch; main checks the value per node, and refuses a
+# direct edit that would change it (main._refuse_agent_krea_billing_change).
 INTERNAL_OK = frozenset({"_kreaAuth"})
 
 

@@ -7,8 +7,15 @@ The person sets these in Settings > Preferences:
 - ``agentSpend.sessionUsd``: what one agent chat session may spend in total.
   Each in-app chat (Claude, Codex or Daedalus) is its own session: the turn
   token its Nebula MCP server sends names the chat (``main._spend_session``).
+- ``agentSpend.outsideDailyUsd``: what every agent without a Nebula chat
+  (Claude Desktop, terminal tools, scripts) may spend together over the last
+  24 hours. Left unset, it is the per-session budget, so adding it never made
+  anything looser.
+- ``agentSpend.kreaPlanRuns``: how many runs one chat session, or the outside
+  agents together over 24 hours, may bill to the signed-in Krea plan.
 - ``agentSpend.models[<definitionId>]``: per-model limits, ``perRunUsd`` (it
-  replaces the general per-run threshold for that model) and ``sessionUsd``.
+  replaces the general per-run threshold for that model) and ``sessionUsd``
+  (per chat session, and over 24 hours for the outside agents).
 
 Agents can't be asked, so the backend refuses an agent's run that would break
 a limit and points it at a proposal, which the person accepts on the canvas.
@@ -18,6 +25,21 @@ marker (services/person_gate.py), not one with a browser Origin, which any
 local program can write. Everyone else, including a canvas tab opened without
 the person link, is held to these limits.
 
+Whose total a run counts against (``main._spend_session``):
+
+- ``chat:<session>``: an in-app chat, named by the token Nebula minted for it.
+- ``outside:shared``: every other caller. Names and headers are the caller's
+  to set, so they can't buy a fresh budget, and the key never changes, so
+  restarting Nebula doesn't reset it either.
+- ``outside:app:<id>``: an outside app the person gave its own token in
+  Settings (services/app_tokens.py). The app's own daily limit applies, and
+  its runs also count inside the outside budget: both are checked and the
+  stricter wins, so issuing tokens never adds headroom.
+
+Outside totals are rolling: each run is an event with its time, and only the
+last 24 hours count (``WINDOW_SECONDS``). A give-back lands at the time of the
+run it gives back, so it never reaches into a later window.
+
 Rules, with any limit set:
 
 - A paid node without a list price needs a proposal, since its cost can't be
@@ -26,9 +48,9 @@ Rules, with any limit set:
   the same comparison the canvas makes (``shouldConfirmRunCost`` in
   frontend/src/lib/runScope.ts). Nodes with their own per-run limit are judged
   by it; the rest by the general threshold.
-- Per session: a run that would take the session's total over a budget needs a
-  proposal. A run is counted when it starts, at its upper bound, and the
-  person's runs (including accepted proposals) aren't counted.
+- Per budget: a run that would take a total over a budget needs a proposal. A
+  run is counted when it starts, at its upper bound, and the person's runs
+  (including accepted proposals) aren't counted.
 
 An accepted proposal's run is the person's, so it isn't held to these limits;
 what makes that safe is that Accept approves values, not node ids
@@ -36,8 +58,12 @@ what makes that safe is that Accept approves values, not node ids
 starts the run, and the backend refuses the run if anything in it changed
 since Accept.
 
-Runs billed to a signed-in Krea plan (``plan``) aren't per-call charges and
-are neither limited nor counted, as on the canvas.
+Runs billed to a signed-in Krea plan (``plan``) have no per-call USD price:
+Krea charges compute units it doesn't publish per model. They are counted as
+runs instead (times a node's batch runs, shots and passes) against
+``kreaPlanRuns``, and always counted even with no limit set. Agents can't move
+a node onto the plan themselves: changing ``_kreaAuth`` takes a proposal
+(``main._refuse_agent_krea_billing_change``).
 
 A cinema scene is a local node that calls its base image model once per
 shot, so it is priced, limited and counted as that model, times its shots
@@ -71,7 +97,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from services import model_pricing
 
@@ -79,6 +105,16 @@ SETTING_KEY = "runCostConfirmUsd"
 CAPS_KEY = "agentSpend"
 DEFAULT_THRESHOLD_USD = 1.0
 MAX_SESSIONS = 500
+MAX_PLAN_RUNS = 100_000
+
+WINDOW_SECONDS = 24 * 60 * 60
+OUTSIDE_PREFIX = "outside:"
+OUTSIDE_SHARED = "outside:shared"
+OUTSIDE_LABEL = "Agents outside Nebula chats"
+APP_PREFIX = "outside:app:"
+# Keys from before the outside budget had a stable name: one per backend
+# launch. Folded into OUTSIDE_SHARED once (SpendLedger._migrate).
+_LEGACY_PREFIX = "unverified:"
 
 
 # -- settings ----------------------------------------------------------------------
@@ -95,6 +131,15 @@ def validate_threshold(value: Any) -> float | None:
     return amount
 
 
+def validate_plan_runs(value: Any) -> int | None:
+    """A whole number of runs from 1 up, or None for no limit."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_PLAN_RUNS:
+        raise ValueError(f"{CAPS_KEY}.kreaPlanRuns must be a whole number of runs from 1 to {MAX_PLAN_RUNS}, or null")
+    return value
+
+
 def threshold_from_settings(settings: Mapping[str, Any]) -> float | None:
     """The per-run threshold; None means never ask. A missing or unreadable
     value falls back to the default, like the canvas does."""
@@ -107,10 +152,13 @@ def threshold_from_settings(settings: Mapping[str, Any]) -> float | None:
 
 
 def validate_caps(value: Any, known_definitions: Mapping[str, Any]) -> dict[str, Any]:
-    """Normalize ``agentSpend`` from a request; raise ValueError when it's malformed."""
+    """Normalize ``agentSpend`` from a request; raise ValueError when it's malformed.
+
+    ``outsideDailyUsd`` is kept only when the request names it: left out, the
+    outside agents share the per-session amount (see caps_from_settings)."""
     if not isinstance(value, dict):
         raise ValueError(f"{CAPS_KEY} must be an object")
-    unknown = set(value) - {"sessionUsd", "models"}
+    unknown = set(value) - {"sessionUsd", "outsideDailyUsd", "kreaPlanRuns", "models"}
     if unknown:
         raise ValueError(f"{CAPS_KEY} has unknown fields: {', '.join(sorted(unknown))}")
     models_in = value.get("models", {})
@@ -127,19 +175,35 @@ def validate_caps(value: Any, known_definitions: Mapping[str, Any]) -> dict[str,
         entry = {key: validate_threshold(limits.get(key)) for key in ("perRunUsd", "sessionUsd")}
         if entry["perRunUsd"] is not None or entry["sessionUsd"] is not None:
             models[definition_id] = entry
-    return {"sessionUsd": validate_threshold(value.get("sessionUsd")), "models": models}
+    caps: dict[str, Any] = {"sessionUsd": validate_threshold(value.get("sessionUsd"))}
+    if "outsideDailyUsd" in value:
+        caps["outsideDailyUsd"] = validate_threshold(value["outsideDailyUsd"])
+    caps["kreaPlanRuns"] = validate_plan_runs(value.get("kreaPlanRuns"))
+    caps["models"] = models
+    return caps
 
 
 def caps_from_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
-    """The saved agent limits; anything unreadable counts as unset."""
+    """The saved agent limits; anything unreadable counts as unset, except an
+    unreadable outside budget, which falls back to the per-session one."""
     raw = settings.get(CAPS_KEY)
-    empty: dict[str, Any] = {"sessionUsd": None, "models": {}}
+    empty: dict[str, Any] = {"sessionUsd": None, "outsideDailyUsd": None, "kreaPlanRuns": None, "models": {}}
     if not isinstance(raw, dict):
         return empty
     try:
         session = validate_threshold(raw.get("sessionUsd"))
     except ValueError:
         session = None
+    outside = session
+    if "outsideDailyUsd" in raw:
+        try:
+            outside = validate_threshold(raw.get("outsideDailyUsd"))
+        except ValueError:
+            outside = session
+    try:
+        plan_runs = validate_plan_runs(raw.get("kreaPlanRuns"))
+    except ValueError:
+        plan_runs = None
     models: dict[str, dict[str, float | None]] = {}
     for definition_id, limits in (raw.get("models") or {}).items() if isinstance(raw.get("models"), dict) else []:
         if not isinstance(limits, dict):
@@ -152,7 +216,7 @@ def caps_from_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
                 entry[key] = None
         if entry["perRunUsd"] is not None or entry["sessionUsd"] is not None:
             models[str(definition_id)] = entry
-    return {"sessionUsd": session, "models": models}
+    return {"sessionUsd": session, "outsideDailyUsd": outside, "kreaPlanRuns": plan_runs, "models": models}
 
 
 # -- what a session has spent ------------------------------------------------------
@@ -161,14 +225,24 @@ def caps_from_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
 class Spent:
     total: float = 0.0
     models: dict[str, float] = field(default_factory=dict)
+    plan_runs: int = 0
+
+
+def is_outside(key: str) -> bool:
+    return key.startswith(OUTSIDE_PREFIX)
 
 
 class SpendLedger:
-    """Running totals per agent session, kept in a small JSON file so a chat
-    session's budget survives a restart."""
+    """Totals per agent session, kept in a small JSON file so budgets survive
+    a restart.
 
-    def __init__(self, path: Path | None) -> None:
+    A chat key keeps running totals: {agent, total, models, planRuns}. An
+    outside key keeps events, [time, definitionId, usd, planRuns], and counts
+    only the last 24 hours of them; events older than that are dropped on save."""
+
+    def __init__(self, path: Path | None, *, clock: Callable[[], float] = time.time) -> None:
         self._path = path
+        self._clock = clock
         self._lock = threading.Lock()
         self._sessions: dict[str, dict[str, Any]] | None = None
 
@@ -182,48 +256,163 @@ class SpendLedger:
                         self._sessions = {str(k): v for k, v in data["sessions"].items() if isinstance(v, dict)}
                 except (OSError, ValueError):
                     self._sessions = {}
+            if self._migrate(self._sessions):
+                self._save(self._sessions)
         return self._sessions
+
+    def _migrate(self, sessions: dict[str, dict[str, Any]]) -> bool:
+        """Fold the per-launch budgets older versions kept for agents without a
+        chat token into the outside budget, once. Anything updated in the last
+        24 hours counts as spent at that time (it was spent then or earlier,
+        so this can only overcount); older totals are dropped."""
+        legacy = [key for key in sessions if key.startswith(_LEGACY_PREFIX)]
+        if not legacy:
+            return False
+        since = self._clock() - WINDOW_SECONDS
+        shared = sessions.get(OUTSIDE_SHARED)
+        if not isinstance(shared, dict) or not isinstance(shared.get("events"), list):
+            shared = {"agent": OUTSIDE_LABEL, "events": []}
+        for key in legacy:
+            entry = sessions.pop(key)
+            try:
+                at = float(entry.get("updated") or 0)
+                total = float(entry.get("total") or 0)
+                models = {str(k): float(v) for k, v in (entry.get("models") or {}).items()}
+            except (TypeError, ValueError, AttributeError):
+                # Unreadable: count it as spent now at whatever total it shows.
+                at, models = self._clock(), {}
+                try:
+                    total = float(entry.get("total") or 0)
+                except (TypeError, ValueError, AttributeError):
+                    total = 0.0
+            if at <= since:
+                continue
+            for definition_id, amount in models.items():
+                if amount > 0:
+                    shared["events"].append([at, definition_id, round(amount, 6), 0])
+            rest = round(total - sum(amount for amount in models.values() if amount > 0), 6)
+            if rest > 0:
+                shared["events"].append([at, "", rest, 0])
+        if shared["events"]:
+            shared["updated"] = self._clock()
+            sessions[OUTSIDE_SHARED] = shared
+        return True
+
+    @staticmethod
+    def _events(entry: Mapping[str, Any]) -> list[list[Any]]:
+        events = entry.get("events")
+        if not isinstance(events, list):
+            return []
+
+        def readable(event: Any) -> bool:
+            return (isinstance(event, list) and len(event) == 4 and isinstance(event[1], str)
+                    and all(isinstance(value, (int, float)) and not isinstance(value, bool)
+                            and math.isfinite(value) for value in (event[0], event[2], event[3])))
+        return [event for event in events if readable(event)]
+
+    def _sum(self, events: list[list[Any]]) -> Spent:
+        since = self._clock() - WINDOW_SECONDS
+        total = 0.0
+        runs = 0
+        models: dict[str, float] = {}
+        for at, definition_id, amount, plan_runs in events:
+            if float(at) <= since:
+                continue
+            total += float(amount)
+            runs += int(plan_runs)
+            if amount:
+                models[str(definition_id)] = models.get(str(definition_id), 0.0) + float(amount)
+        return Spent(max(0.0, round(total, 6)),
+                     {k: round(v, 6) for k, v in models.items() if round(v, 6) > 0 and k},
+                     max(0, runs))
 
     def spent(self, key: str) -> Spent:
         with self._lock:
             entry = self._load().get(key) or {}
+            if is_outside(key):
+                return self._sum(self._events(entry))
         models = entry.get("models") if isinstance(entry.get("models"), dict) else {}
-        return Spent(float(entry.get("total") or 0.0), {str(k): float(v) for k, v in models.items()})
+        return Spent(float(entry.get("total") or 0.0), {str(k): float(v) for k, v in models.items()},
+                     int(entry.get("planRuns") or 0))
 
-    def record(self, key: str, label: str, by_model: Mapping[str, float]) -> None:
-        if not by_model:
-            return
+    def spent_outside(self) -> Spent:
+        """Everything every outside agent (shared or with an app token) spent in the last 24 hours."""
+        with self._lock:
+            events = [event for key, entry in self._load().items() if is_outside(key) for event in self._events(entry)]
+            return self._sum(events)
+
+    def record(self, key: str, label: str, by_model: Mapping[str, float],
+               plan_runs: Mapping[str, int] | None = None) -> float:
+        """Count a run that is starting; returns its time, which a give-back passes as ``at``."""
+        now = self._clock()
+        plan_runs = {k: v for k, v in (plan_runs or {}).items() if v}
+        if not by_model and not plan_runs:
+            return now
         with self._lock:
             sessions = self._load()
-            entry = sessions.pop(key, None) or {"agent": label, "total": 0.0, "models": {}}
-            for definition_id, amount in by_model.items():
-                entry["models"][definition_id] = round(entry["models"].get(definition_id, 0.0) + amount, 6)
-                entry["total"] = round(entry["total"] + amount, 6)
+            if is_outside(key):
+                entry = sessions.pop(key, None) or {"agent": label, "events": []}
+                events = self._events(entry)
+                for definition_id in set(by_model) | set(plan_runs):
+                    events.append([now, definition_id, round(by_model.get(definition_id, 0.0), 6),
+                                   int(plan_runs.get(definition_id, 0))])
+                entry["events"] = events
+            else:
+                entry = sessions.pop(key, None) or {"agent": label, "total": 0.0, "models": {}}
+                for definition_id, amount in by_model.items():
+                    entry["models"][definition_id] = round(entry["models"].get(definition_id, 0.0) + amount, 6)
+                    entry["total"] = round(entry["total"] + amount, 6)
+                entry["planRuns"] = int(entry.get("planRuns") or 0) + sum(plan_runs.values())
             entry["agent"] = label
-            entry["updated"] = time.time()
+            entry["updated"] = now
             sessions[key] = entry  # most recent last
-            while len(sessions) > MAX_SESSIONS:
-                sessions.pop(next(iter(sessions)))
+            chats = [k for k in sessions if not is_outside(k)]
+            # Outside keys are never dropped for room: one per app plus the
+            # shared one, and saving prunes their old events.
+            for dropped in chats[:max(0, len(chats) - MAX_SESSIONS)]:
+                sessions.pop(dropped)
             self._save(sessions)
+        return now
 
-    def refund(self, key: str, by_model: Mapping[str, float]) -> None:
-        """Give back part of what record() counted, for nodes that couldn't have spent it."""
+    def refund(self, key: str, by_model: Mapping[str, float], plan_runs: Mapping[str, int] | None = None,
+               *, at: float | None = None) -> None:
+        """Give back part of what record() counted, for nodes that couldn't have
+        spent it. On an outside key it lands at ``at``, the run's own time; with
+        no time it gives nothing back, rather than guess a window."""
+        plan_runs = {k: v for k, v in (plan_runs or {}).items() if v}
         with self._lock:
             sessions = self._load()
             entry = sessions.get(key)
             if entry is None:
                 return
-            for definition_id, amount in by_model.items():
-                left = round(entry["models"].get(definition_id, 0.0) - amount, 6)
-                if left > 0:
-                    entry["models"][definition_id] = left
-                else:
-                    entry["models"].pop(definition_id, None)
-                entry["total"] = max(0.0, round(entry["total"] - amount, 6))
-            entry["updated"] = time.time()
+            if is_outside(key):
+                if at is None:
+                    return
+                events = self._events(entry)
+                for definition_id in set(by_model) | set(plan_runs):
+                    events.append([at, definition_id, -round(by_model.get(definition_id, 0.0), 6),
+                                   -int(plan_runs.get(definition_id, 0))])
+                entry["events"] = events
+            else:
+                for definition_id, amount in by_model.items():
+                    left = round(entry["models"].get(definition_id, 0.0) - amount, 6)
+                    if left > 0:
+                        entry["models"][definition_id] = left
+                    else:
+                        entry["models"].pop(definition_id, None)
+                    entry["total"] = max(0.0, round(entry["total"] - amount, 6))
+                entry["planRuns"] = max(0, int(entry.get("planRuns") or 0) - sum(plan_runs.values()))
+            entry["updated"] = self._clock()
             self._save(sessions)
 
-    def _save(self, sessions: Mapping[str, Any]) -> None:
+    def _save(self, sessions: dict[str, Any]) -> None:
+        since = self._clock() - WINDOW_SECONDS
+        for key in [k for k in sessions if is_outside(k)]:
+            kept = [event for event in self._events(sessions[key]) if float(event[0]) > since]
+            if kept:
+                sessions[key]["events"] = kept
+            else:
+                sessions.pop(key)
         if self._path is None:
             return
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -235,14 +424,58 @@ class SpendLedger:
 # -- the decision ------------------------------------------------------------------
 
 @dataclass
+class Budget:
+    """One total a run counts against, and its limits.
+
+    ``who`` names it in a refusal ("this session", "agents outside Nebula
+    chats"); ``window`` follows the amount (" in the last 24 hours");
+    ``model_caps`` says whether the per-model session limits apply to it."""
+    who: str
+    spent: Spent
+    usd: float | None
+    plan_runs: int | None = None
+    model_caps: bool = True
+    plural: bool = False
+    window: str = ""
+    noun: str = "budget"
+
+    def _has(self) -> str:
+        return f"{self.who} {'have' if self.plural else 'has'} already used"
+
+    def _its(self) -> str:
+        return "their" if self.plural else "its"
+
+
+def session_budgets(key: str, spent: Spent, caps: Mapping[str, Any], *, outside_spent: Spent | None = None,
+                    app_name: str | None = None, app_daily_usd: float | None = None) -> list[Budget]:
+    """The budgets a run from ``key`` counts against (see the module docstring)."""
+    if not is_outside(key):
+        return [Budget("this session", spent, caps.get("sessionUsd"), caps.get("kreaPlanRuns"))]
+    window = " in the last 24 hours"
+    shared = Budget("agents outside Nebula chats", outside_spent if outside_spent is not None else spent,
+                    caps.get("outsideDailyUsd"), caps.get("kreaPlanRuns"), plural=True, window=window)
+    if not key.startswith(APP_PREFIX):
+        return [shared]
+    own = Budget(app_name or "this app", spent, app_daily_usd, None, model_caps=False, window=window,
+                 noun="daily limit")
+    return [own, shared]
+
+
+@dataclass
 class Decision:
     refusal: str | None
     charge: dict[str, float]  # upper-bound USD per node definition, to record if the run goes ahead
     per_node: dict[str, tuple[str, float]] = field(default_factory=dict)  # node id -> (definition, USD)
+    plan_charge: dict[str, int] = field(default_factory=dict)  # Krea plan runs per node definition
+    plan_per_node: dict[str, tuple[str, int]] = field(default_factory=dict)  # node id -> (definition, runs)
 
 
 def _usd(amount: float) -> str:
     return f"${amount:,.2f}" if amount >= 0.01 or amount == 0 else f"${amount:.3f}"
+
+
+def _runs(count: int) -> str:
+    return f"{count} run{'' if count == 1 else 's'}"
 
 
 def _names(ids: list[str], labels: Mapping[str, str]) -> str:
@@ -263,22 +496,27 @@ def decide(
     settings: Mapping[str, Any],
     pricing: Mapping[str, Any],
     definitions: Mapping[str, Mapping[str, Any]],
-    spent: Spent,
+    spent: Spent | None = None,
+    budgets: list[Budget] | None = None,
     how_to_ask: str,
     passes: int = 1,
 ) -> Decision:
     """Whether an agent may start this run itself, and what it would cost.
 
     ``items`` are the nodes the run includes, each {id, definitionId, params};
-    ``edges`` are (source, target) pairs between them; ``spent`` is what this
-    agent's session has already been charged. ``how_to_ask`` is the sentence
-    that tells the agent what to do instead. ``passes`` is how many times the
-    request runs these nodes, uncached (a cinema shot's variations)."""
+    ``edges`` are (source, target) pairs between them. ``budgets`` are the
+    totals the caller counts against (session_budgets); without them, ``spent``
+    is a chat session's total, held to the per-session limits. ``how_to_ask``
+    is the sentence that tells the agent what to do instead. ``passes`` is how
+    many times the request runs these nodes, uncached (a cinema shot's
+    variations)."""
     if isinstance(passes, bool) or not isinstance(passes, int) or passes < 1:
         raise ValueError("passes must be a positive whole number")
     threshold = threshold_from_settings(settings)
     caps = caps_from_settings(settings)
-    model_caps: Mapping[str, Mapping[str, float | None]] = caps["models"]
+    model_caps: Mapping[str, Mapping[str, float | None]] = caps.get("models") or {}
+    if budgets is None:
+        budgets = session_budgets("chat:", spent or Spent(), caps)
     api_keys = settings.get("apiKeys") or {}
     multipliers = model_pricing.run_multipliers(list(items), edges)
     estimate = model_pricing.estimate_run(list(items), pricing, definitions, api_keys, multipliers)
@@ -295,14 +533,24 @@ def decide(
         amount = line["high"] * passes
         by_model[def_id] = by_model.get(def_id, 0.0) + amount
         per_node[str(node_id)] = (def_id, amount)
+    plan_charge: dict[str, int] = {}
+    plan_per_node: dict[str, tuple[str, int]] = {}
+    for node_id, line in (estimate.get("planRuns") or {}).items():
+        def_id, count = str(line["model"]), int(line["runs"]) * passes
+        plan_charge[def_id] = plan_charge.get(def_id, 0) + count
+        plan_per_node[str(node_id)] = (def_id, count)
+
+    def decision(refusal: str | None) -> Decision:
+        return Decision(refusal, by_model, per_node, plan_charge, plan_per_node)
 
     def refuse(reason: str) -> Decision:
-        return Decision(f"Needs the person's approval: {reason} {how_to_ask}", by_model, per_node)
+        return decision(f"Needs the person's approval: {reason} {how_to_ask}")
 
-    limited = (threshold is not None or caps["sessionUsd"] is not None
+    limited = (threshold is not None
+               or any(budget.usd is not None or budget.plan_runs is not None for budget in budgets)
                or any(v is not None for limits in model_caps.values() for v in limits.values()))
     if not limited:
-        return Decision(None, by_model, per_node)
+        return decision(None)
 
     if estimate["unpriced"]:
         return refuse(f"Nebula has no list price for {_names(estimate['unpriced'], labels)}, "
@@ -323,20 +571,29 @@ def decide(
         return refuse(f"this run could cost up to {_usd(general)} (mostly {_names(priced[:2], labels)}), "
                       f"at or over the {_usd(threshold)} per-run limit set in Nebula Settings.")
 
-    # Per session.
+    # Per budget: every total this run counts against.
     run_total = sum(by_model.values())
-    budget = caps["sessionUsd"]
-    if budget is not None and run_total > 0 and spent.total + run_total > budget:
-        return refuse(f"this run could cost up to {_usd(run_total)}, and this session has already used "
-                      f"{_usd(spent.total)} of its {_usd(budget)} budget set in Nebula Settings.")
-    for def_id, amount in by_model.items():
-        model_budget = (model_caps.get(def_id) or {}).get("sessionUsd")
-        used = spent.models.get(def_id, 0.0)
-        if model_budget is not None and amount > 0 and used + amount > model_budget:
-            name = (definitions.get(def_id) or {}).get("displayName") or def_id
-            return refuse(f"this run's {name} nodes could cost up to {_usd(amount)}, and this session has "
-                          f"already used {_usd(used)} of its {_usd(model_budget)} {name} budget set in Nebula Settings.")
-    return Decision(None, by_model, per_node)
+    run_plan = sum(plan_charge.values())
+    for budget in budgets:
+        used = budget.spent
+        if budget.usd is not None and run_total > 0 and used.total + run_total > budget.usd:
+            return refuse(f"this run could cost up to {_usd(run_total)}, and {budget._has()} "
+                          f"{_usd(used.total)} of {budget._its()} {_usd(budget.usd)} {budget.noun}{budget.window} "
+                          "set in Nebula Settings.")
+        if budget.model_caps:
+            for def_id, amount in by_model.items():
+                model_budget = (model_caps.get(def_id) or {}).get("sessionUsd")
+                model_used = used.models.get(def_id, 0.0)
+                if model_budget is not None and amount > 0 and model_used + amount > model_budget:
+                    name = (definitions.get(def_id) or {}).get("displayName") or def_id
+                    return refuse(f"this run's {name} nodes could cost up to {_usd(amount)}, and {budget._has()} "
+                                  f"{_usd(model_used)} of {budget._its()} {_usd(model_budget)} {name} budget"
+                                  f"{budget.window} set in Nebula Settings.")
+        if budget.plan_runs is not None and run_plan > 0 and used.plan_runs + run_plan > budget.plan_runs:
+            return refuse(f"this run bills {_runs(run_plan)} to the signed-in Krea plan, and {budget._has()} "
+                          f"{_runs(used.plan_runs)} of {budget._its()} {budget.plan_runs}-run Krea plan limit"
+                          f"{budget.window} set in Nebula Settings.")
+    return decision(None)
 
 
 def propose_hint(run_ids: list[str]) -> str:

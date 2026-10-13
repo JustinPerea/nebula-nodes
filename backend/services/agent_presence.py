@@ -9,7 +9,8 @@ instead of taking screenshots.
 
 Identity comes only from request headers, in this order:
 1. ``Authorization: Agent <token>``: a token minted for an in-app chat runner
-   (verified, named after the runner).
+   (verified, named after the runner), or one the person made for an outside
+   app (verified, named as the person named it; services/app_tokens.py).
 2. ``X-Daedalus-Caller``: set by the Daedalus runtime's CLI.
 3. ``X-Nebula-Agent: <name>``: a self-reported name for outside agents.
 Requests with none of these (the browser's own requests) never move a cursor.
@@ -124,10 +125,17 @@ def _default_token_lookup(token: str) -> dict | None:
     return agent_registry.lookup(token)
 
 
+def _default_app_lookup(token: str) -> dict | None:
+    from services import app_tokens
+
+    return app_tokens.lookup(token)
+
+
 def identify(
     headers: Mapping[str, str] | None,
     *,
     token_lookup: Callable[[str], dict | None] = _default_token_lookup,
+    app_lookup: Callable[[str], dict | None] = _default_app_lookup,
 ) -> AgentIdentity | None:
     """Name the agent behind a request, or None for the browser and anonymous calls."""
     if not headers:
@@ -140,6 +148,12 @@ def identify(
             runner = str(record.get("runner") or "agent").lower()
             name, color = _KNOWN_AGENTS.get(runner, (clean_agent_name(runner.title()) or "Agent", "#E8825A"))
             return AgentIdentity(id=runner, name=name, color=color, verified=True)
+        app = app_lookup(auth[6:].strip())
+        if app is not None:
+            # Named by the person when they made the token, so it is verified.
+            name = clean_agent_name(str(app.get("name") or "")) or "App"
+            return AgentIdentity(id=f"app:{app['id']}", name=name, color=_external_color(f"app-{app['id']}"),
+                                 verified=True)
     if lower.get("x-daedalus-caller"):
         name, color = _KNOWN_AGENTS["daedalus"]
         return AgentIdentity(id="daedalus", name=name, color=color, verified=True)

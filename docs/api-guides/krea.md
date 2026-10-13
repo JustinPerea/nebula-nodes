@@ -74,6 +74,8 @@ Use these legacy wrapper nodes for their established graph wiring. The new Krea 
 
 Image/video generation and style training are asynchronous. Nebula submits a job, polls it while queued or processing, and materializes completed media into the local run output. Stop requests cancel Nebula's pending work and request Krea cancellation after a job ID is known; Krea decides whether cancellation is still possible. Earlier results and run history remain available.
 
+Each node bills either the API token's balance or, once you switch it, your signed-in Krea plan (`_kreaAuth`). Only you can switch it: agents have to propose the change, and their runs billed to the plan count against "Krea plan runs" in Settings > Agent spending. Krea charges plan runs in compute units it doesn't publish per model, so Nebula counts them as runs, not dollars.
+
 Common failures are missing/rejected credentials, HTTP 402 for API balance, invalid model-specific parameters, moderation, or provider job errors. A public catalog entry establishes the documented route and schema, not successful execution for every workspace. Catalog verification does not include a paid provider run.
 
 This expansion covers Krea's image and video generation routes. Enhancement, 3D/audio generation, saved Krea node apps, asset management, and standalone style-management endpoints are outside this catalog expansion. Nebula uses asset upload and job polling/cancellation internally.

@@ -77,6 +77,8 @@ def _capture_turn_spawn(monkeypatch, module, stdout: bytes, extra=None):
         spawned.append({
             "args": list(args), "cwd": kwargs.get("cwd"), "env": dict(env),
             "actor": actors.agent_registry.lookup(token) if token else None,
+            # Which budget the turn's runs count against while it runs.
+            "spendKey": main._spend_session({"Authorization": f"Agent {token}"})[0] if token else None,
             "overlay": (Path(env["HERMES_MANAGED_DIR"]) / "config.yaml").read_text()
             if env.get("HERMES_MANAGED_DIR") else None,
         })
@@ -93,6 +95,8 @@ def _assert_turn_spawn(spawned, events, agent):
     spawn = spawned[0]
     actor = spawn["actor"]
     assert actor is not None and actor["runner"] == agent
+    # Every in-app chat, Daedalus included, has its own budget, not the outside agents' shared one.
+    assert actor["session"] and spawn["spendKey"] == f"chat:{actor['session']}"
     assert Path(spawn["cwd"]).resolve() == actor["workspace"]
     assert spawn["env"]["NEBULA_URL"]
     return spawn

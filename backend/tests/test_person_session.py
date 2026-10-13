@@ -21,6 +21,7 @@ SECRETS = {
     "NEBULA_CONNECTOR_ENCRYPTION_KEY": "vault-fixture",
     "NEBULA_INJECTED_KEYS": '{"OPENAI_API_KEY": "injected-fixture"}',
     "NEBULA_CONNECTOR_SESSION": "old-nonce-fixture",
+    "NEBULA_APP_TOKEN": "nebula_app_fixture",
 }
 
 
