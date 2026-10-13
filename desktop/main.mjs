@@ -121,7 +121,7 @@ const dataPaths = resolveDesktopDataPaths({
 });
 
 const isDevelopment = Boolean(overrides.devServerUrl);
-const isSmokeTest = process.env.NEBULA_DESKTOP_SMOKE === '1';
+const isSmokeTest = overrides.smoke;
 const rendererUrl = isDevelopment
   ? overrides.devServerUrl
   : new URL('../frontend/dist-desktop/index.html', import.meta.url).toString();
@@ -947,6 +947,9 @@ if (refuseDebugLaunch) {
       // packaged build always runs the checkout's backend/.venv/bin/python.
       delete sidecarEnv.NEBULA_DESKTOP_PYTHON;
       if (overrides.python) sidecarEnv.NEBULA_DESKTOP_PYTHON = overrides.python;
+      // sidecar.mjs reads its health budget from this env; same rule.
+      delete sidecarEnv.NEBULA_DESKTOP_HEALTH_TIMEOUT_MS;
+      if (overrides.healthTimeoutMs) sidecarEnv.NEBULA_DESKTOP_HEALTH_TIMEOUT_MS = overrides.healthTimeoutMs;
       // Secrets never ride in the env (startSidecar strips these names too).
       for (const name of LAUNCH_SECRET_ENV_KEYS) delete sidecarEnv[name];
       let connectorEncryptionKey = null;

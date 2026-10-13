@@ -17,6 +17,8 @@
  * - `NEBULA_DESKTOP_PYTHON` picks the interpreter that runs the backend, and
  *   that process receives the person token and the decrypted provider keys.
  *   A packaged build always runs the checkout's backend/.venv/bin/python.
+ * - `NEBULA_DESKTOP_SMOKE=1` runs the end-to-end smoke check and quits.
+ * - `NEBULA_DESKTOP_HEALTH_TIMEOUT_MS` shortens the sidecar's health budget.
  */
 
 /** Env vars a packaged build refuses. */
@@ -28,6 +30,8 @@ export const DEV_ONLY_ENV_VARS = Object.freeze([
   'VITE_DEV_SERVER_URL',
   'NEBULA_DESKTOP_DEV_PERSON',
   'NEBULA_DESKTOP_PYTHON',
+  'NEBULA_DESKTOP_SMOKE',
+  'NEBULA_DESKTOP_HEALTH_TIMEOUT_MS',
 ]);
 
 /**
@@ -39,6 +43,8 @@ export const DEV_ONLY_ENV_VARS = Object.freeze([
  *   devServerUrl: string | undefined,
  *   devPersonOptIn: string | undefined,
  *   python: string | undefined,
+ *   smoke: boolean,
+ *   healthTimeoutMs: string | undefined,
  *   mockKeychain: boolean,
  *   ignored: string[],
  * }}
@@ -57,6 +63,8 @@ export function resolveLaunchOverrides({ env, isPackaged }) {
       devServerUrl: undefined,
       devPersonOptIn: undefined,
       python: undefined,
+      smoke: false,
+      healthTimeoutMs: undefined,
       mockKeychain: false,
       ignored: DEV_ONLY_ENV_VARS.filter((name) => pick(name) !== undefined),
     };
@@ -70,6 +78,8 @@ export function resolveLaunchOverrides({ env, isPackaged }) {
     devServerUrl: pick('VITE_DEV_SERVER_URL'),
     devPersonOptIn: pick('NEBULA_DESKTOP_DEV_PERSON'),
     python: pick('NEBULA_DESKTOP_PYTHON'),
+    smoke: env.NEBULA_DESKTOP_SMOKE === '1',
+    healthTimeoutMs: pick('NEBULA_DESKTOP_HEALTH_TIMEOUT_MS'),
     mockKeychain: Boolean(userDataDir) && env.NEBULA_DESKTOP_TEST === '1',
     ignored: [],
   };

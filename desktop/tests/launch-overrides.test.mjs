@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { DEV_ONLY_ENV_VARS, resolveLaunchOverrides } from '../launch-overrides.mjs';
 
 const ALL = {
@@ -11,6 +11,8 @@ const ALL = {
   VITE_DEV_SERVER_URL: 'http://localhost:5173',
   NEBULA_DESKTOP_DEV_PERSON: '1',
   NEBULA_DESKTOP_PYTHON: '/opt/other/python3',
+  NEBULA_DESKTOP_SMOKE: '1',
+  NEBULA_DESKTOP_HEALTH_TIMEOUT_MS: '3000',
 };
 
 describe('resolveLaunchOverrides', () => {
@@ -22,8 +24,31 @@ describe('resolveLaunchOverrides', () => {
     assert.equal(result.devServerUrl, undefined);
     assert.equal(result.devPersonOptIn, undefined);
     assert.equal(result.python, undefined);
+    assert.equal(result.smoke, false);
+    assert.equal(result.healthTimeoutMs, undefined);
     assert.equal(result.mockKeychain, false);
     assert.deepEqual([...result.ignored].sort(), [...DEV_ONLY_ENV_VARS].sort());
+  });
+
+  test('every NEBULA_DESKTOP_* switch the desktop code reads is dev/test-only', () => {
+    // A new test switch added to main.mjs or sidecar.mjs must land in
+    // DEV_ONLY_ENV_VARS (or be listed here as deliberately honoured).
+    const honouredInPackagedBuilds = new Set(['NEBULA_DESKTOP_MODE']);
+    const files = [
+      ...readdirSync(new URL('../', import.meta.url)).filter((f) => f.endsWith('.mjs') || f.endsWith('.cjs')),
+      ...readdirSync(new URL('../packaging/', import.meta.url)).map((f) => `packaging/${f}`),
+    ];
+    assert.ok(files.includes('main.mjs') && files.includes('sidecar.mjs'));
+    const sources = files
+      .map((file) => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'))
+      .join('\n');
+    const read = new Set(sources.match(/NEBULA_DESKTOP_[A-Z_]+/g));
+    for (const name of read) {
+      if (honouredInPackagedBuilds.has(name)) continue;
+      assert.ok(DEV_ONLY_ENV_VARS.includes(name), `${name} is read by desktop code but packaged builds honour it`);
+    }
+    assert.ok(DEV_ONLY_ENV_VARS.includes('NEBULA_DESKTOP_SMOKE'));
+    assert.ok(DEV_ONLY_ENV_VARS.includes('NEBULA_DESKTOP_HEALTH_TIMEOUT_MS'));
   });
 
   test('a packaged build with a clean environment reports nothing ignored', () => {
@@ -40,6 +65,8 @@ describe('resolveLaunchOverrides', () => {
     assert.equal(result.devServerUrl, 'http://localhost:5173');
     assert.equal(result.devPersonOptIn, '1');
     assert.equal(result.python, '/opt/other/python3');
+    assert.equal(result.smoke, true);
+    assert.equal(result.healthTimeoutMs, '3000');
     assert.equal(result.mockKeychain, true);
     assert.deepEqual(result.ignored, []);
   });
@@ -95,6 +122,14 @@ describe('main.mjs wiring', () => {
     const set = source.indexOf('if (overrides.python) sidecarEnv.NEBULA_DESKTOP_PYTHON = overrides.python;');
     const start = source.search(/startSidecar\(\{\s*env: sidecarEnv/);
     assert.ok(del > 0 && set > del && start > set, 'main must replace the inherited value before starting the sidecar');
+  });
+
+  test('the smoke switch and health budget come only from the overrides', () => {
+    assert.match(source, /const isSmokeTest = overrides\.smoke;/);
+    const del = source.indexOf('delete sidecarEnv.NEBULA_DESKTOP_HEALTH_TIMEOUT_MS;');
+    const set = source.indexOf('if (overrides.healthTimeoutMs) sidecarEnv.NEBULA_DESKTOP_HEALTH_TIMEOUT_MS = overrides.healthTimeoutMs;');
+    const start = source.search(/startSidecar\(\{\s*env: sidecarEnv/);
+    assert.ok(del > 0 && set > del && start > set, 'main must replace the inherited budget before starting the sidecar');
   });
 
   test('the packaged bootstrap moves the profile only for a validation build', () => {
