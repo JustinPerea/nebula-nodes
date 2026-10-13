@@ -58,6 +58,22 @@ browser, it arrives quarantined and macOS blocks the first open. Apple's
 then System Settings > Privacy & Security > **Open Anyway**. Building on that
 Mac avoids this.
 
+**Hardening.** Before the codesign, `npm run package` flips Electron's fuses
+(`packaging/fuses.mjs`, with `@electron/fuses`) and reads them back:
+`ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS` and the `--inspect` arguments are
+compiled out, so nobody can run the app binary as plain Node or attach the
+Node inspector to it, and cookie encryption is on. Check with
+`npx electron-fuses read --app out/Nebula-darwin-arm64/Nebula.app`. The
+file:// privilege fuse stays on: without it Chromium gives the renderer the
+origin `null` and blocks its own scripts. Instead, `renderer-files.mjs`
+intercepts the `file:` scheme and serves only files inside
+`frontend/dist-desktop`, so the renderer can't read the repo-root
+`settings.json` or anything else on disk. A normal Nebula.app opened with
+Chromium or Node debug switches (`open -a Nebula --args
+--remote-debugging-port=9222`, `--remote-debugging-pipe`, `--inspect*`) shows
+a dialog and quits, before it opens a port or starts the backend.
+`npm run start` keeps the stock Electron binary and its fuses.
+
 **Keychain.** The bundle keeps the Electron app name `nebula-desktop` (no
 `productName`), so it uses the same profile directory, single-instance lock and
 "nebula-desktop Safe Storage" keychain item as `npm run start`. Only one of the
@@ -96,6 +112,10 @@ pipe as fd 3 (`NEBULA_PARENT_WATCH_FD`) and never writes to it, the kernel
 closes Electron's end when Electron dies, and
 `backend/services/parent_watch.py` then shuts uvicorn down (hard exit after
 5 s). In validation the backend was gone 0.2 s after a `kill -9` of the app.
+The backend removes `NEBULA_PARENT_WATCH_FD` from its environment as soon as
+it reads it, and `services/child_env.py` strips it as well, so an agent's
+shell, ffmpeg or a backend test run started from inside the app never
+inherits it (a child that did would watch an unrelated fd and stop itself).
 
 **Validation builds.** A normal Nebula.app ignores every dev/test override
 (see [Runtime overrides](#runtime-overrides)), so it can't be launched against
@@ -230,9 +250,11 @@ its own sidecar, in the `/ws` hello frame and with each chat turn; Settings,
 keys, Krea connections, proposals and chats need it (see
 [docs/MCP-SETUP.md](../docs/MCP-SETUP.md#who-counts-as-the-person)).
 
-- `NEBULA_DESKTOP_DEBUG_PORT` set: no token at all, because anything on the
-  machine can drive a renderer with an open debug port. Person-only actions
-  stay locked and the window says why.
+- `NEBULA_DESKTOP_DEBUG_PORT` set, or debug switches on the command line
+  (`--remote-debugging-port`, `--remote-debugging-pipe`, `--inspect*`, also in
+  `NODE_OPTIONS`): no token at all, because anything on the machine can drive
+  a renderer with an open debug port. Person-only actions stay locked and the
+  window says why. A normal Nebula.app refuses to start with those switches.
 - `VITE_DEV_SERVER_URL` (desktop dev): no token unless
   `NEBULA_DESKTOP_DEV_PERSON=1`.
 
@@ -310,7 +332,7 @@ on success and emits `NEBULA_DESKTOP_SMOKE {"passed":true,...}` to stdout.
 
 | Variable | Purpose |
 |---|---|
-| `NEBULA_DESKTOP_PYTHON` | Explicit Python executable for the sidecar. Defaults to `backend/.venv/bin/python`. |
+| `NEBULA_DESKTOP_PYTHON` | Explicit Python executable for the sidecar. Defaults to `backend/.venv/bin/python`. Dev/test only: that process receives the person token and the provider keys. |
 | `NEBULA_DESKTOP_HEALTH_TIMEOUT_MS` | Test-only shorter health timeout. Production default is 60 s. |
 | `NEBULA_DESKTOP_DEBUG_PORT` | Loopback CDP port for Electron validation. Dev/test only. |
 | `NEBULA_DESKTOP_USER_DATA_DIR` | Test-only isolated profile. Electron's user data, the app data root (`<dir>/Nebula Nodes/`) and the migration sources (`<dir>/legacy/`, normally absent) all stay inside it, so an isolated launch never reads the repo's `settings.json` or `~/.nebula` and never writes to `~/Library/Application Support`. On its own it still uses the real login keychain for safeStorage. |
@@ -321,10 +343,12 @@ on success and emits `NEBULA_DESKTOP_SMOKE {"passed":true,...}` to stdout.
 
 A packaged build (`app.isPackaged`) ignores `NEBULA_DESKTOP_DEBUG_PORT`,
 `NEBULA_DESKTOP_USER_DATA_DIR`, `NEBULA_DESKTOP_APP_ID`, `NEBULA_DESKTOP_TEST`,
-`VITE_DEV_SERVER_URL` and `NEBULA_DESKTOP_DEV_PERSON`, and logs which ones it
-ignored. Its environment can be set from outside (`launchctl setenv`, a wrapper
-script), and none of these should be able to move its profile, weaken its
-keychain, open a debug port or swap its renderer. `launch-overrides.mjs` holds
+`VITE_DEV_SERVER_URL`, `NEBULA_DESKTOP_DEV_PERSON` and
+`NEBULA_DESKTOP_PYTHON`, and logs which ones it ignored. Its environment can be
+set from outside (`launchctl setenv`, a wrapper script), and none of these
+should be able to move its profile, weaken its keychain, open a debug port,
+swap its renderer or swap the interpreter that gets the keys. Command-line
+debug switches are handled separately (see the person token section). `launch-overrides.mjs` holds
 that rule. The one exception is a validation bundle
 (`npm run package -- --validation`, `packaged-launch.mjs`), which is built
 for testing, lives in `desktop/out/validation/` and is refused by

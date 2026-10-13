@@ -14,6 +14,7 @@
     "test:smoke": "NEBULA_DESKTOP_SMOKE=1 electron ."
   },
   "devDependencies": {
+    "@electron/fuses": "2.1.3",
     "@electron/packager": "20.3.0",
     "electron": "44.3.0",
     "ws": "^8.18.0"

@@ -11,7 +11,9 @@
  * the absolute path of this checkout. At launch it runs this checkout's
  * desktop/main.mjs, frontend/dist-desktop and backend/.venv, so `git pull`
  * updates the app. Nothing is bundled from Python and nothing is signed with
- * a Developer ID (see desktop/README.md, "Nebula.app").
+ * a Developer ID (see desktop/README.md, "Nebula.app"). Electron's fuses are
+ * flipped (packaging/fuses.mjs) so the binary can't be run as Node or
+ * attached to with --inspect.
  *
  * The renderer is rebuilt first (`npm run build:desktop`) when
  * frontend/dist-desktop is missing or older than the frontend sources; pass
@@ -28,9 +30,11 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statS
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packager } from '@electron/packager';
+import { FuseState, flipFuses, getCurrentFuseWire } from '@electron/fuses';
 
 import { APP_CONFIG_FILE_NAME, REQUIRED_REPO_FILES } from '../app-repo.mjs';
 import { APP_BUNDLE_ID, APP_NAME } from '../packaging/app-identity.mjs';
+import { NEBULA_FUSES, wantedFuseBits } from '../packaging/fuses.mjs';
 
 const DESKTOP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = resolve(DESKTOP_DIR, '..');
@@ -140,9 +144,23 @@ const [appDir] = await packager({
 rmSync(stage, { recursive: true, force: true });
 
 const appPath = join(appDir, `${APP_NAME}.app`);
+const appBinary = join(appPath, 'Contents', 'MacOS', APP_NAME);
 
-// 5. Ad-hoc sign the whole bundle. Packager rewrites Info.plist and the
-// icon, which breaks the seal on Electron's prebuilt signature; an ad-hoc
+// 5. Harden the Electron binary (packaging/fuses.mjs), then read the wire
+// back and stop if any fuse is not what we asked for.
+await flipFuses(appBinary, NEBULA_FUSES);
+const wire = await getCurrentFuseWire(appBinary);
+for (const [index, enabled] of Object.entries(wantedFuseBits())) {
+  const want = enabled ? FuseState.ENABLE : FuseState.DISABLE;
+  if (wire[index] !== want) {
+    console.error(`package: fuse ${index} is ${wire[index]}, expected ${want}`);
+    process.exit(1);
+  }
+}
+console.log('package: Electron fuses set (RunAsNode, NODE_OPTIONS and --inspect off)');
+
+// 6. Ad-hoc sign the whole bundle. Packager rewrites Info.plist, the icon
+// and (step 5) the fuse wire, which breaks the seal on Electron's prebuilt signature; an ad-hoc
 // signature ("-") makes the bundle internally consistent again. It is not a
 // Developer ID signature and does not notarize anything.
 const signed = spawnSync('codesign', ['--force', '--deep', '--sign', '-', appPath], { stdio: 'inherit' });
