@@ -2085,8 +2085,12 @@ app.include_router(commons_router)
 
 @app.on_event("startup")
 async def _person_startup() -> None:
-    """Set this launch's person token before serving (services/person_session.py)."""
+    """Set this launch's person token before serving (services/person_session.py),
+    then read the desktop's provider keys and Krea vault key from the next
+    stdin line (services/launch_secrets.py)."""
     person_session.initialize()
+    from services import launch_secrets
+    launch_secrets.initialize()
 
 
 @app.on_event("startup")

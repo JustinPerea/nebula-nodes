@@ -262,6 +262,10 @@ function isPortCollision(text) {
  * @param {string | null} [options.personToken] — this launch's person token,
  *   written to the child's stdin (never argv or env). Null: the backend gets
  *   an empty line and runs with no person session (fail closed).
+ * @param {{ injectedKeys?: Record<string,string>, connectorEncryptionKey?: string } | null} [options.launchSecrets]
+ *   — decrypted provider keys and the Krea vault key, written to stdin as one
+ *   JSON line after the token (backend/services/launch_secrets.py). Never env:
+ *   a process's initial environment is readable with `ps -E`.
  * @returns {Promise<SidecarHandle>}
  * @throws {SidecarError}
  */
@@ -285,6 +289,7 @@ export async function startSidecar(options = {}) {
 
   const env = options.env ?? process.env;
   const personToken = typeof options.personToken === 'string' ? options.personToken : null;
+  const launchSecrets = launchSecretsLine(options.launchSecrets);
   const repoRoot = options.repoRoot ?? DEFAULT_REPO_ROOT;
   const backendDir = join(repoRoot, 'backend');
   const healthTimeoutMs =
@@ -334,6 +339,7 @@ export async function startSidecar(options = {}) {
         env,
         python: pythonPath,
         personToken,
+        launchSecrets,
       });
       result.attempts = totalAttempts;
       return result;
@@ -403,14 +409,40 @@ function killIfNeeded(child) {
   }
 }
 
-/** Hand the person token to the backend over stdin, then close it. */
-function writePersonToken(child, personToken) {
+/** Environment variables that held launch secrets in older shells; never passed on. */
+export const LAUNCH_SECRET_ENV_KEYS = Object.freeze([
+  'NEBULA_PERSON_TOKEN',
+  'NEBULA_CONNECTOR_SESSION',
+  'NEBULA_INJECTED_KEYS',
+  'NEBULA_CONNECTOR_ENCRYPTION_KEY',
+]);
+
+/** The JSON stdin line for backend/services/launch_secrets.py. */
+export function launchSecretsLine(secrets) {
+  const payload = {};
+  const keys = secrets?.injectedKeys;
+  if (keys && typeof keys === 'object') {
+    const clean = {};
+    for (const [name, value] of Object.entries(keys)) {
+      if (typeof value === 'string' && value) clean[name] = value;
+    }
+    payload.injectedKeys = clean;
+  }
+  if (typeof secrets?.connectorEncryptionKey === 'string' && secrets.connectorEncryptionKey) {
+    payload.connectorEncryptionKey = secrets.connectorEncryptionKey;
+  }
+  // JSON.stringify never emits a raw newline, so this is exactly one line.
+  return `${JSON.stringify(payload)}\n`;
+}
+
+/** Hand the person token, then the launch-secrets line, to the backend over stdin, then close it. */
+function writeLaunchStdin(child, personToken, launchSecrets) {
   const stdin = child?.stdin;
   if (!stdin || typeof stdin.end !== 'function') return;
   // A child that died before reading closes the pipe: not our error to raise.
   if (typeof stdin.on === 'function') stdin.on('error', () => {});
   try {
-    stdin.end(personToken ? `${personToken}\n` : '\n');
+    stdin.end((personToken ? `${personToken}\n` : '\n') + launchSecrets);
   } catch {
     // already gone
   }
@@ -429,15 +461,17 @@ async function spawnAndAwaitHealth(opts) {
     env,
     python,
     personToken = null,
+    launchSecrets = launchSecretsLine(null),
   } = opts;
 
   const childEnv = {
     ...env,
     NEBULA_URL: `http://127.0.0.1:${port}`,
     NEBULA_PERSON_TOKEN_STDIN: '1',
+    NEBULA_LAUNCH_SECRETS_STDIN: '1',
     NEBULA_PARENT_WATCH_FD: String(PARENT_WATCH_FD),
   };
-  delete childEnv.NEBULA_PERSON_TOKEN;
+  for (const name of LAUNCH_SECRET_ENV_KEYS) delete childEnv[name];
   // fd 3 is the parent lifeline: we never write to it, and the kernel closes
   // our end whenever this process exits, even on SIGKILL or a crash. The
   // backend (services/parent_watch.py) sees EOF and shuts itself down.
@@ -446,7 +480,7 @@ async function spawnAndAwaitHealth(opts) {
     env: childEnv,
     stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
   });
-  writePersonToken(child, personToken);
+  writeLaunchStdin(child, personToken, launchSecrets);
 
   const diagBuf = new DiagnosticBuffer();
 

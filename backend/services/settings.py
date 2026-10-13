@@ -23,9 +23,12 @@ SETTINGS_PATH = Path(
 # ---------------------------------------------------------------------------
 #
 # When Electron launches the sidecar it decrypts API keys from the Keychain
-# and passes them via the NEBULA_INJECTED_KEYS env var as a JSON dict. The
-# backend stores them in this module-level dict (memory only — never persisted
-# to disk). load_settings() merges them into the apiKeys field, giving them
+# and sends them over the sidecar's stdin (services/launch_secrets.py calls
+# set_injected_keys at startup). The NEBULA_INJECTED_KEYS env var (a JSON
+# dict) is still read here for tests and hand-started backends; Electron no
+# longer uses it, because a process's environment is readable with `ps -E`.
+# The backend stores them in this module-level dict (memory only — never
+# persisted to disk). load_settings() merges them into the apiKeys field, giving them
 # precedence over any file-based values. Browser/dev mode (no env var) leaves
 # this dict empty and the backend reads keys from settings.json as before.
 
@@ -45,6 +48,13 @@ if _raw_injected:
 def is_injected_mode() -> bool:
     """Return True when credential injection (desktop mode) is active."""
     return bool(_INJECTED_KEYS)
+
+
+def set_injected_keys(keys: dict[str, str]) -> None:
+    """Replace the injected keys (the desktop launch-secrets line). Memory only."""
+    global _INJECTED_KEYS
+    _INJECTED_KEYS = {str(k): str(v) for k, v in keys.items() if v}
+    clear_provider_validation_cache()
 
 
 def update_injected_keys(provider: str, key: str) -> None:

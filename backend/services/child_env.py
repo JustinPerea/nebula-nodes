@@ -10,6 +10,8 @@ environment as-is would hold these in its own initial environment, where
   Nebula never puts it in the environment; this catches a launcher that did.
 - NEBULA_CONNECTOR_ENCRYPTION_KEY: the Krea OAuth vault key.
 - NEBULA_INJECTED_KEYS: the desktop app's provider keys.
+  Electron sends both over stdin now (services/launch_secrets.py); these
+  catch a hand-started backend or an older shell that set them.
 - NEBULA_CONNECTOR_SESSION: the old desktop canvas nonce. Nothing sets it
   any more; an older Electron shell might.
 - NEBULA_APP_TOKEN: an outside app's spending token (services/app_tokens.py).

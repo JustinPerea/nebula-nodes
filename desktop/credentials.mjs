@@ -417,7 +417,7 @@ export function createCredentialService(options) {
     /**
      * Decrypt all stored credentials into a plain key-value dict.
      *
-     * Used by main.mjs at startup to build `NEBULA_INJECTED_KEYS`.
+     * Used by main.mjs at startup for the sidecar's stdin launch-secrets line.
      * Providers that fail to decrypt (corrupted blob, unavailable
      * safeStorage) are silently skipped — the caller decides how to
      * handle missing keys.

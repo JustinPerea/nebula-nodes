@@ -14,6 +14,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createServer as realCreateServer } from 'node:net';
 import { statSync as realStatSync, writeFileSync, mkdirSync, chmodSync, mkdtempSync, rmSync } from 'node:fs';
@@ -38,6 +39,8 @@ import {
   sanitizeText,
   boundDiagnostics,
   DEFAULT_REPO_ROOT,
+  LAUNCH_SECRET_ENV_KEYS,
+  launchSecretsLine,
   PARENT_WATCH_FD,
 } from '../sidecar.mjs';
 
@@ -1328,10 +1331,11 @@ describe('startSidecar — person token', () => {
     const token = 'A'.repeat(43);
     const child = childWithStdin();
     const call = await start(child, { env: { NEBULA_PERSON_TOKEN: 'leaked', PATH: '/usr/bin' }, personToken: token });
-    assert.deepEqual(child.stdin.written, [`${token}\n`]);
+    assert.deepEqual(child.stdin.written, [`${token}\n{}\n`]);
     assert.equal(child.stdin.ended, true);
     assert.deepEqual(call.opts.stdio, ['pipe', 'pipe', 'pipe', 'pipe']);
     assert.equal(call.opts.env.NEBULA_PERSON_TOKEN_STDIN, '1');
+    assert.equal(call.opts.env.NEBULA_LAUNCH_SECRETS_STDIN, '1');
     assert.equal(call.opts.env.NEBULA_PARENT_WATCH_FD, '3');
     assert.equal('NEBULA_PERSON_TOKEN' in call.opts.env, false);
     assert.equal(JSON.stringify([call.cmd, call.args, call.opts.env]).includes(token), false);
@@ -1340,9 +1344,35 @@ describe('startSidecar — person token', () => {
   test('without a token the backend gets an empty line and runs with no person (fail closed)', async () => {
     const child = childWithStdin();
     const call = await start(child, { env: {}, personToken: null });
-    assert.deepEqual(child.stdin.written, ['\n']);
+    assert.deepEqual(child.stdin.written, ['\n{}\n']);
     assert.equal(child.stdin.ended, true);
     assert.equal(call.opts.env.NEBULA_PERSON_TOKEN_STDIN, '1');
+  });
+
+  test('provider keys and the vault key go over stdin after the token, never env or argv', async () => {
+    const token = 'D'.repeat(43);
+    const secrets = { injectedKeys: { FAL_KEY: 'fal-stdin-fixture', OPENAI_API_KEY: '' }, connectorEncryptionKey: 'vault-stdin-fixture' };
+    const child = childWithStdin();
+    const call = await start(child, {
+      env: { NEBULA_INJECTED_KEYS: '{"FAL_KEY":"env-leak"}', NEBULA_CONNECTOR_ENCRYPTION_KEY: 'env-leak', NEBULA_CONNECTOR_SESSION: 'env-leak' },
+      personToken: token,
+      launchSecrets: secrets,
+    });
+    const [written] = child.stdin.written;
+    const [first, second, rest] = written.split('\n');
+    assert.equal(first, token);
+    assert.deepEqual(JSON.parse(second), { injectedKeys: { FAL_KEY: 'fal-stdin-fixture' }, connectorEncryptionKey: 'vault-stdin-fixture' });
+    assert.equal(rest, '');
+    for (const name of LAUNCH_SECRET_ENV_KEYS) assert.equal(name in call.opts.env, false, name);
+    const visible = JSON.stringify([call.cmd, call.args, call.opts.env]);
+    for (const value of ['fal-stdin-fixture', 'vault-stdin-fixture', 'env-leak']) assert.equal(visible.includes(value), false, value);
+  });
+
+  test('a launch-secrets line is always exactly one line', () => {
+    assert.equal(launchSecretsLine(null), '{}\n');
+    const line = launchSecretsLine({ injectedKeys: { GOOGLE_VERTEX_CREDENTIALS: '{\n  "type": "service_account"\n}' } });
+    assert.equal(line.indexOf('\n'), line.length - 1);
+    assert.deepEqual(JSON.parse(line).injectedKeys.GOOGLE_VERTEX_CREDENTIALS, '{\n  "type": "service_account"\n}');
   });
 
   test('a real backend reads the stdin token: only it unlocks a person-only route', async () => {
@@ -1353,16 +1383,33 @@ describe('startSidecar — person token', () => {
       NEBULA_SETTINGS_PATH: join(scratch, 'settings.json'),
       NEBULA_STATE_DIR: join(scratch, 'state'),
       NEBULA_OUTPUT_ROOT: join(scratch, 'output'),
+      NEBULA_DESKTOP_MODE: '1',
     };
+    for (const name of LAUNCH_SECRET_ENV_KEYS) delete env[name];
+    const falKey = 'fal-stdin-' + 'e'.repeat(20);
+    const vaultKey = randomBytes(32).toString('base64url') + '=';
     let handle;
     try {
-      handle = await startSidecar({ env, repoRoot: REPO_ROOT, personToken: token });
+      handle = await startSidecar({
+        env, repoRoot: REPO_ROOT, personToken: token,
+        launchSecrets: { injectedKeys: { FAL_KEY: falKey }, connectorEncryptionKey: vaultKey },
+      });
       const put = (headers) => fetch(`${handle.apiBaseUrl}/api/settings`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers }, body: '{}',
       });
       assert.equal((await put({ Origin: 'http://localhost:5173' })).status, 403);
       assert.equal((await put({ 'X-Nebula-Person': 'C'.repeat(43) })).status, 403);
       assert.equal((await put({ 'X-Nebula-Person': token })).status, 200);
+      // The stdin keys arrived: the provider key is configured, and the
+      // desktop-mode Krea vault opened (without a key it reports "error").
+      const settings = await (await fetch(`${handle.apiBaseUrl}/api/settings`)).json();
+      assert.equal(settings.apiKeys.FAL_KEY, '***' + falKey.slice(-4));
+      const krea = await (await fetch(`${handle.apiBaseUrl}/api/krea/connection`)).json();
+      assert.equal(krea.status, 'disconnected');
+      // ...and none of the secrets is in the backend's argv or initial environment.
+      const visible = execFileSync('ps', ['-E', '-ww', '-o', 'args=', '-p', String(handle.pid)], { encoding: 'utf8' });
+      assert.ok(visible.includes('NEBULA_LAUNCH_SECRETS_STDIN=1'), 'ps -E shows the environment');
+      for (const value of [token, falKey, vaultKey]) assert.equal(visible.includes(value), false);
     } finally {
       if (handle) await stopSidecar(handle);
       rmSync(scratch, { recursive: true, force: true });

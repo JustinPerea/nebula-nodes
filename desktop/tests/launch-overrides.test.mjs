@@ -93,7 +93,7 @@ describe('main.mjs wiring', () => {
   test('the sidecar gets NEBULA_DESKTOP_PYTHON only from the overrides', () => {
     const del = source.indexOf('delete sidecarEnv.NEBULA_DESKTOP_PYTHON;');
     const set = source.indexOf('if (overrides.python) sidecarEnv.NEBULA_DESKTOP_PYTHON = overrides.python;');
-    const start = source.indexOf('startSidecar({ env: sidecarEnv');
+    const start = source.search(/startSidecar\(\{\s*env: sidecarEnv/);
     assert.ok(del > 0 && set > del && start > set, 'main must replace the inherited value before starting the sidecar');
   });
 

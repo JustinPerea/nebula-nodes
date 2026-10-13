@@ -3,7 +3,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT } from './sidecar.mjs';
+import {
+  startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT, LAUNCH_SECRET_ENV_KEYS,
+} from './sidecar.mjs';
 import { prepareAppDataEnv, resolveDesktopDataPaths } from './paths.mjs';
 import { createPaperLinkSenderValidator, registerPaperLinkHandler } from './paper-links.mjs';
 import { DEBUG_SWITCHES, debugSwitchesInUse, decidePersonToken, registerPersonTokenHandler } from './person-token.mjs';
@@ -865,8 +867,11 @@ if (refuseDebugLaunch) {
       // --- Decrypt credentials for sidecar injection (VAL-INJECT-001) ---
       //
       // Decrypt all stored API keys from credentials.json via safeStorage.
-      // The decrypted keys are passed to the sidecar via NEBULA_INJECTED_KEYS
-      // (JSON dict). The backend stores them in memory only — never persisted.
+      // They go to the sidecar over stdin with the Krea vault key, after the
+      // person token (sidecar.mjs launchSecretsLine,
+      // backend/services/launch_secrets.py), never in its environment: any
+      // same-user process can read a process's initial env with `ps -E`.
+      // The backend keeps them in memory only, never persisted.
       const injectedKeys = await credentialService.decryptAll();
       const sidecarEnv = { ...process.env, ...pathEnvVars };
       sidecarEnv.NEBULA_DESKTOP_MODE = '1';
@@ -874,20 +879,16 @@ if (refuseDebugLaunch) {
       // packaged build always runs the checkout's backend/.venv/bin/python.
       delete sidecarEnv.NEBULA_DESKTOP_PYTHON;
       if (overrides.python) sidecarEnv.NEBULA_DESKTOP_PYTHON = overrides.python;
-      // The person token goes over the sidecar's stdin, never its env.
-      delete sidecarEnv.NEBULA_PERSON_TOKEN;
-      delete sidecarEnv.NEBULA_CONNECTOR_SESSION;
+      // Secrets never ride in the env (startSidecar strips these names too).
+      for (const name of LAUNCH_SECRET_ENV_KEYS) delete sidecarEnv[name];
+      let connectorEncryptionKey = null;
       try {
-        sidecarEnv.NEBULA_CONNECTOR_ENCRYPTION_KEY = await getConnectorEncryptionKey(
+        connectorEncryptionKey = await getConnectorEncryptionKey(
           join(appDataRoot, 'connector-vault-key.enc'), safeStorage,
         );
       } catch {
         // Existing API-key workflows remain available; OAuth fails closed.
-        delete sidecarEnv.NEBULA_CONNECTOR_ENCRYPTION_KEY;
         console.warn('Krea account connection unavailable: OS credential storage is locked');
-      }
-      if (Object.keys(injectedKeys).length > 0) {
-        sidecarEnv.NEBULA_INJECTED_KEYS = JSON.stringify(injectedKeys);
       }
 
       // --- Plaintext key detection (VAL-UX-005) ---
@@ -903,7 +904,11 @@ if (refuseDebugLaunch) {
         ? plaintextWarning.providers
         : [];
 
-      sidecarHandle = await startSidecar({ env: sidecarEnv, personToken: person.token });
+      sidecarHandle = await startSidecar({
+        env: sidecarEnv,
+        personToken: person.token,
+        launchSecrets: { injectedKeys, connectorEncryptionKey },
+      });
       sidecarStarting = false;
       const handle = sidecarHandle;
       console.log(
