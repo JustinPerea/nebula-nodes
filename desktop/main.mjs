@@ -148,6 +148,8 @@ let loadingWindow = null;
 let isCleaningUp = false;
 let quitRequestedDuringStartup = false;
 let sidecarStarting = false;
+/** The error that stopped startup, kept so a Dock click or second launch can show it again. @type {Error | null} */
+let startupError = null;
 let sidecarDisconnected = false;
 let plaintextProviders = [];
 
@@ -561,6 +563,7 @@ function showAppWindow({ focusExisting }) {
     isCleaningUp,
     hasSidecar: Boolean(sidecarHandle),
     sidecarDisconnected,
+    startupFailed: Boolean(startupError) && !sidecarStarting,
   });
   if (action === 'focus') {
     if (existing.isMinimized()) existing.restore();
@@ -569,9 +572,12 @@ function showAppWindow({ focusExisting }) {
     mainWindow = createMainWindow(sidecarHandle, plaintextProviders);
   } else if (action === 'create-disconnected') {
     mainWindow = createDisconnectedWindow();
+  } else if (action === 'create-failure') {
+    showFailure(startupError);
   }
   // focus() also shows a window, so never on the hidden smoke-run windows.
-  if (action.startsWith('create-') && !isSmokeTest) mainWindow.focus();
+  const created = action === 'create-failure' ? loadingWindow : mainWindow;
+  if (action.startsWith('create-') && !isSmokeTest) created.focus();
   if (action !== 'none') console.log(`Window request (${focusExisting ? 'second launch' : 'activate'}): ${action}`);
 }
 
@@ -1032,6 +1038,7 @@ if (refuseDebugLaunch) {
         launchSecrets: { injectedKeys, connectorEncryptionKey },
       });
       sidecarStarting = false;
+      startupError = null;
       const handle = sidecarHandle;
       console.log(
         `Sidecar started: pid=${handle.pid} port=${handle.port} ` +
@@ -1083,7 +1090,8 @@ if (refuseDebugLaunch) {
       }
 
       // Surface the failure visibly — no normal renderer is loaded.
-      showFailure(err);
+      startupError = err instanceof Error ? err : new Error(String(err));
+      showFailure(startupError);
 
       if (isSmokeTest) {
         const errorDetails = err instanceof SidecarError

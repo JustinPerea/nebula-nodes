@@ -20,8 +20,9 @@
  *   isCleaningUp: boolean,         // quitting: never open a window
  *   hasSidecar: boolean,           // a running sidecar handle
  *   sidecarDisconnected: boolean,  // the sidecar died mid-session
+ *   startupFailed?: boolean,       // the sidecar never became healthy; the failure window was shown
  * }} state
- * @returns {'focus' | 'create-main' | 'create-disconnected' | 'none'}
+ * @returns {'focus' | 'create-main' | 'create-disconnected' | 'create-failure' | 'none'}
  */
 export function decideWindowAction({
   hasLiveWindow,
@@ -30,6 +31,7 @@ export function decideWindowAction({
   isCleaningUp,
   hasSidecar,
   sidecarDisconnected,
+  startupFailed = false,
 }) {
   if (isCleaningUp) return 'none';
   if (hasLiveWindow) return focusExisting ? 'focus' : 'none';
@@ -38,6 +40,10 @@ export function decideWindowAction({
   if (hasSidecar) return 'create-main';
   // No auto-restart: show the disconnected page instead of a dead canvas.
   if (sidecarDisconnected) return 'create-disconnected';
+  // Startup failed and its error window was closed. The startup path never
+  // runs again, so without this the app would sit in the Dock with no window
+  // and ignore every Dock click and second launch.
+  if (startupFailed) return 'create-failure';
   // Still starting up: the startup path opens the window when it is ready.
   return 'none';
 }

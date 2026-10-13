@@ -39,6 +39,22 @@ describe('decideWindowAction', () => {
     assert.equal(decideWindowAction({ ...idle, hasSidecar: false }), 'none');
   });
 
+  test('after a failed startup whose error window was closed, the error comes back', () => {
+    assert.equal(decideWindowAction({ ...idle, hasSidecar: false, startupFailed: true }), 'create-failure');
+    assert.equal(decideWindowAction({ ...idle, hasSidecar: false, startupFailed: true, focusExisting: false }), 'create-failure');
+  });
+
+  test('a failed startup whose error window is still open just focuses it', () => {
+    assert.equal(
+      decideWindowAction({ ...idle, hasSidecar: false, startupFailed: true, hasLiveWindow: true, openWindowCount: 1 }),
+      'focus',
+    );
+  });
+
+  test('a failed startup never opens a window while quitting', () => {
+    assert.equal(decideWindowAction({ ...idle, hasSidecar: false, startupFailed: true, isCleaningUp: true }), 'none');
+  });
+
   test('another window (a dialog) being open is left alone', () => {
     assert.equal(decideWindowAction({ ...idle, openWindowCount: 1 }), 'none');
   });
@@ -55,6 +71,12 @@ describe('main.mjs wiring', () => {
 
   test('second-instance recreates the window through the shared path', () => {
     assert.match(handlerBody('second-instance'), /showAppWindow\(\{ focusExisting: true \}\)/);
+  });
+
+  test('a failed startup is remembered and re-shown through showFailure', () => {
+    assert.match(source, /startupError = err instanceof Error/);
+    assert.match(source, /startupFailed: Boolean\(startupError\) && !sidecarStarting/);
+    assert.match(source, /action === 'create-failure'\) \{\n\s+showFailure\(startupError\)/);
   });
 
   test('activate uses the same path without stealing focus from open windows', () => {
