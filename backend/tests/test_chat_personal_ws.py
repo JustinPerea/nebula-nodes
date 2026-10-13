@@ -320,3 +320,39 @@ async def test_a_send_rechecks_settings_before_reusing_the_agent(ws_env):
     assert ws_env.manager.live() == []
     socket.disconnect()
     await asyncio.wait_for(task, 5)
+
+
+@pytest.mark.asyncio
+async def test_a_new_chat_checks_settings_before_its_first_prompt(ws_env, monkeypatch):
+    # Settings change between open() returning and the first prompt: the
+    # agent must get no prompt at all.
+    ws_env.register({"turns": [[{"chunk": "one"}]]})
+    real_open = ws_env.manager.open
+
+    async def open_then_switch_off(*args, **kwargs):
+        host = await real_open(*args, **kwargs)
+        personal_agents.update_agent(main._STATE_DIR, "fake", {"enabled": False})
+        return host
+
+    monkeypatch.setattr(ws_env.manager, "open", open_then_switch_off)
+    socket = Socket()
+    task = asyncio.create_task(main.chat_websocket(socket))
+    send(socket)
+    events = await socket.until_done()
+    error = next(e for e in events if e["type"] == "error")
+    assert error["code"] == "personal_session_ended" and "Settings" in error["message"]
+    assert not any(e["type"] == "text" for e in events)
+    assert "session/prompt" not in ws_env.methods()
+    assert ws_env.manager.live() == []
+    assert actors.agent_registry._tokens == {}
+    socket.disconnect()
+    await asyncio.wait_for(task, 5)
+
+
+def test_startup_clears_token_files_a_dead_backend_left(isolated_app):
+    from services import agent_token_file
+    leftover = agent_token_file.root(main._STATE_DIR) / "999999999"
+    leftover.mkdir(parents=True)
+    (leftover / "abc.token").write_text("dead-token-from-an-old-backend")
+    with TestClient(main.app):
+        assert not leftover.exists()

@@ -2097,6 +2097,14 @@ async def _person_startup() -> None:
     person_session.initialize()
 
 
+@app.on_event("startup")
+async def _personal_agents_startup() -> None:
+    """Delete token files a dead backend left behind (services/agent_token_file.py).
+    Their tokens died with it; this only removes litter."""
+    from services import agent_token_file
+    await asyncio.to_thread(agent_token_file.clear_stale, _STATE_DIR)
+
+
 @app.on_event("shutdown")
 async def _personal_agents_shutdown() -> None:
     """Kill every personal agent's process tree and revoke its token."""
@@ -2595,11 +2603,6 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 why = acp_sessions.ended_message(session_id, connection_id) if host is None else None
                 enqueue({**ended, "message": why} if why else ended)
                 return {"type": "done"}
-            if not acp_sessions.still_allowed(host, _STATE_DIR):
-                # Switched off, removed or changed in Settings since it started.
-                await acp_sessions.close_stale(_STATE_DIR)
-                enqueue({**ended, "message": host.ended_message()})
-                return {"type": "done"}
         else:
             try:
                 host = await acp_sessions.open(
@@ -2611,6 +2614,12 @@ async def chat_websocket(websocket: WebSocket) -> None:
             enqueue({"type": "session", "sessionId": host.id, "agentName": host.display_name, "color": host.color,
                      "agentInfo": {"name": str(host.agent_info.get("name") or "")[:64],
                                    "version": str(host.agent_info.get("version") or "")[:32]}})
+        # Reused or just started, Settings must still allow it before it gets
+        # a prompt: switched off, removed or changed since it started.
+        if host.closed or not acp_sessions.still_allowed(host, _STATE_DIR):
+            await acp_sessions.close_stale(_STATE_DIR)
+            enqueue({**ended, "message": host.ended_message()})
+            return {"type": "done"}
         try:
             with workspace_scope(host.workdir):
                 agen = host.prompt(message, selection)

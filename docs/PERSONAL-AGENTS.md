@@ -17,8 +17,8 @@ sequenceDiagram
   participant M as nebula MCP server (started by your agent)
   You->>N: send (person token)
   N->>A: spawn, initialize (fs and terminal declined)
-  N->>A: session/new with the nebula MCP server + a session token
-  A->>M: starts it; canvas tools count against the outside budget
+  N->>A: session/new with the nebula MCP server + the path of a session token file
+  A->>M: starts it; it reads the token file, and canvas tools count against the outside budget
   N->>A: session/prompt
   A-->>You: text, thoughts, tool calls, plan
   A->>You: permission request: Allow once / Deny card
@@ -76,18 +76,30 @@ Nebula won't start a personal agent until you accept this:
   reason: `/clear`, switching agent, closing the chat panel or tab, 30 minutes idle, a crash (including one while
   you stop a turn), a cancel the agent ignores for 10 seconds, or the backend stopping.
 - **Settings take effect at once.** Switching an agent off, removing it, or changing a custom agent's command or
-  arguments stops every running session of it on the spot: process tree killed, token revoked. The next send in that
-  chat says so and starts nothing. Renaming or recoloring leaves it running. Each send also re-checks Settings before
-  reusing a running agent.
-- **Where the token lives.** It goes to the agent only inside the `session/new` parameters (over its stdin) and into
-  the environment of the `nebula` MCP server the agent starts. It isn't in any argv or file, and the agent's own
-  environment doesn't get it. Any program running as your macOS user can still read a process environment (`ps eww`).
+  arguments stops every running session of it on the spot: process tree killed, token revoked. That holds for a
+  session that is still starting too: it gives up at its next step, never mints a token after the stop and never
+  reports itself ready. The next send in that chat says so and starts nothing. Renaming or recoloring leaves it
+  running. Each send re-checks Settings before prompting, whether the agent was running already or just started.
+- **Where the token lives.** In Nebula's memory, and in one file per session:
+  `<state dir>/agent-tokens/<backend pid>/<session id>.token`, mode 0600 in 0700 folders, outside the agent's
+  workspace. `session/new` carries only that file's path (`NEBULA_AGENT_TOKEN_FILE` in the `nebula` MCP server's
+  environment), never the token. That matters because adapters may put the MCP server's environment on a command
+  line: the pinned Claude adapter starts `claude` with `--mcp-config <json>`, which any local account can read with
+  `ps`. The `nebula` MCP server reads the file when it starts and keeps the token in its own environment; if the file
+  is missing, unreadable, open to other users or malformed, it exits instead of running without a token. The agent's
+  own environment doesn't get the token. The file is deleted when the session ends, and a backend start deletes any
+  that a crashed backend left (their tokens died with it). Any program running as your macOS user can still read the
+  file, or the MCP server's environment (`ps eww`).
 - **Cleanup.** The agent runs in its own process group with a scrubbed environment: no Nebula secrets or spending
   tokens, and none of the provider keys Nebula knows by name (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `FAL_KEY` and the
   rest of `backend/services/credential_catalog.py`) even if the shell that started Nebula exported them. So Claude Code
   and Codex use your own login, not a terminal's API key. On close Nebula kills the whole process tree, including
-  grandchildren, and finishes the kill even if whatever asked for the close is itself interrupted. Text and tool output are capped, and the session token is
-  replaced with `***` anywhere the agent echoes it.
+  grandchildren, and finishes the kill even if whatever asked for the close is itself interrupted.
+- **Output caps.** The session token is replaced with `***` anywhere the agent echoes it, and then output is capped:
+  each reply or thinking chunk at 20,000 characters, a turn's reply and thinking text together at 200,000, each tool
+  input at 4,000, each tool result at 20,000, and a plan at 50 entries of 500 characters. When reply or thinking text
+  is cut, the chat shows one line saying so (once per turn) and drops the rest of that turn's text. Tool results have
+  no per-turn total yet.
 
 ## Using it
 

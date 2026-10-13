@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from services.acp_events import (
-    MAX_PLAN_ENTRIES, MAX_TOOL_RESULT_CHARS, ToolCallState, make_redactor, map_session_update,
+    MAX_PLAN_ENTRIES, MAX_TEXT_CHUNK_CHARS, MAX_TOOL_RESULT_CHARS, MAX_TURN_TEXT_CHARS, TEXT_CUT_NOTICE,
+    ToolCallState, TurnTextBudget, make_redactor, map_session_update,
 )
 
 TOKEN = "secret-session-token-abcdef"
@@ -74,3 +75,42 @@ def test_dropped_kinds():
                  "config_option_update", "session_info_update", "notice", "something_new"]:
         assert run({"sessionUpdate": kind, "content": text("x")}) == []
     assert run("not a dict") == []
+
+
+NOTICE = {"type": "system", "text": TEXT_CUT_NOTICE}
+
+
+def test_a_huge_chunk_is_capped_with_one_notice():
+    # A 50 MB chunk fits in one ACP line but would freeze the chat tab.
+    for kind, event_type in (("agent_message_chunk", "text"), ("agent_thought_chunk", "thought")):
+        events = run({"sessionUpdate": kind, "content": text("z" * 5_000_000)})
+        assert events == [{"type": event_type, "text": "z" * MAX_TEXT_CHUNK_CHARS}, NOTICE]
+
+
+def test_redaction_happens_before_the_cap():
+    # Capping first could cut the token in half and show its first part.
+    head = "a" * (MAX_TEXT_CHUNK_CHARS - 5)
+    [event, notice] = run({"sessionUpdate": "agent_message_chunk", "content": text(head + TOKEN + "b" * 100)})
+    assert TOKEN[:5] not in event["text"] and event["text"].endswith("***" + "b" * 2)
+    assert notice == NOTICE
+
+
+def test_turn_budget_caps_the_running_total_and_notices_once():
+    budget, state = TurnTextBudget(), ToolCallState()
+    chunk = "c" * MAX_TEXT_CHUNK_CHARS
+    shown, notices = 0, 0
+    for i in range(MAX_TURN_TEXT_CHARS // MAX_TEXT_CHUNK_CHARS + 5):
+        kind = "agent_thought_chunk" if i % 2 else "agent_message_chunk"
+        for event in map_session_update({"sessionUpdate": kind, "content": text(chunk)}, state,
+                                        redact=redact, budget=budget):
+            if event["type"] == "system":
+                notices += 1
+            else:
+                shown += len(event["text"])
+    assert shown == MAX_TURN_TEXT_CHARS and notices == 1
+    assert map_session_update({"sessionUpdate": "agent_message_chunk", "content": text("more")}, state,
+                              redact=redact, budget=budget) == []
+    # Small replies are untouched.
+    fresh = TurnTextBudget()
+    assert map_session_update({"sessionUpdate": "agent_message_chunk", "content": text("hi")}, state,
+                              redact=redact, budget=fresh) == [{"type": "text", "text": "hi"}]

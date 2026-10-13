@@ -2790,3 +2790,59 @@ Built from the design above. Where it differs, or decides something the design l
   reviewer's crash-during-cancel repro now returns 401 for the session token right after the cancel.
 - Unchanged: the model picker's status line still reads "ready" until the picker refetches the list. That's cosmetic,
   and the send path is authoritative.
+
+## 2026-10-13: ACP host, second review fixes
+
+- **A close during start now wins (major, findings 1 and 5).** `start()` checks `_closing` after every await
+  (spawn, initialize, session/new) and gives up with `personal_session_ended` and the close reason. So a session that
+  Settings, a replaced chat or shutdown closed while it was starting never turns "ready" over "closed", never holds a
+  live-session slot, and never mints a token after the teardown's revoke. The check right after initialize and the
+  mint have no await between them, so the mint is either before the teardown (which then revokes it) or not at all.
+  The teardown also revokes a second time in its `finally`, as a belt and braces step. `closed` is now true from the
+  moment `close()` begins, so `_prune` and `live()` drop a session whose teardown has started. I kept the shielded,
+  run-once teardown task.
+- **The spawn window.** A close during `_spawn` finds no process to kill. `start()` now kills a process that arrives
+  after closing began, itself and shielded, and never stores it on the session. I pulled the kill steps into
+  `_kill_tree()` so the teardown and this path share them.
+- **When the kill ends the connection,** start used to say "exited while starting (code -15)". It now says why Nebula
+  stopped it.
+- **open() reads Settings after its last await (major, finding 2).** The launch key and spec are read after
+  `close_owned()`, with nothing awaited between the read and registering the session, so `close_stale` can always see
+  it. `open()` re-checks `still_allowed` after `start()` (for registry edits that skip the routes) and closes and
+  refuses if it fails. `personal_turn` now checks `still_allowed` before every prompt, new chat or reused. Tradeoff:
+  the owner's previous session is now closed before a bad agent id or a disabled agent is reported, where before the
+  error came first. The UI only offers ready agents, and a send with no session id means a new chat anyway, so I
+  judged that fine.
+- **The token no longer reaches argv (major, security, finding 3).** I did not re-verify the adapter and SDK argv
+  path myself (no real adapter runs allowed); I took it from the review. The fix doesn't depend on any adapter's
+  behavior: `session/new` carries no token at all, only `NEBULA_AGENT_TOKEN_FILE`, a path. New module
+  `services/agent_token_file.py` writes `<state>/agent-tokens/<backend pid>/<session id>.token` with O_EXCL and
+  O_NOFOLLOW, mode 0600, in 0700 folders (it tightens an existing folder that is looser). The file is outside the
+  agent's workspace. The teardown deletes it. A startup hook in main.py (`_personal_agents_startup`) removes leftovers.
+- **Why a pid level in the path.** Two backends could share a state dir. Startup cleanup skips the folder of any other
+  pid that is alive, so one backend never deletes another's live token files. Its own pid folder can only be from a
+  dead process that had the same pid, so it goes. `clear_stale` must only run before sessions start, and the
+  docstring says so.
+- **mcp_server.py fails closed.** `load_agent_token_file()` runs before `agent_workspace_scope()`. When
+  `NEBULA_AGENT_TOKEN` is unset and `NEBULA_AGENT_TOKEN_FILE` is set, it reads the file. The read requires a regular
+  file (not a symlink) owned by this user, no group or other permission bits, at most 512 bytes, and one token
+  matching `[A-Za-z0-9_-]{20,256}`. Anything else (including an empty variable) raises a ValueError, and the existing
+  handler exits 1. An in-app chat's `NEBULA_AGENT_TOKEN` still wins, and `nebula_server_env_refs` is unchanged.
+  `NEBULA_AGENT_TOKEN_FILE` was added to the variables the agent's own environment drops, so a value inherited from a
+  shell can't reach it.
+- **Text caps (minor, finding 4).** Message and thought chunks are redacted, then capped at 20,000 characters each,
+  and a turn's text and thought together at 200,000 (`TurnTextBudget`, one per `_Turn`). The first cut in a turn adds
+  one `system` line: "This reply was too long to show in full, so Nebula cut some of it." After the budget runs out,
+  text chunks are dropped. Redact-then-cap is tested, because capping first could leave the start of the token
+  showing. Not covered: tool results still have only their per-result cap (20,000) and no per-turn total, and a token
+  split across two chunks isn't redacted. The doc says the first; the second predates this change.
+- **Fake agent.** `fake_acp_agent.py` gained `initDelay` and `sessionNewDelay`, so the tests can hit the start races
+  deterministically. The race tests slow the teardown's tree kill to one second (the reviewer's approach), so start
+  resumes mid-teardown.
+- **Mutation checks.** For each fix I reverted only that fix and ran its tests; every one failed, then passed again
+  after the restore. One gotcha: a mutation that keeps the file size identical, restored within the same second,
+  leaves a stale `.pyc` that Python reuses. The redact-order mutation hit this and made the full suite fail once. I
+  re-ran every mutation with `PYTHONDONTWRITEBYTECODE=1` and cleared caches before the final suite run.
+- **Docs.** PERSONAL-AGENTS.md: the sequence diagram, the "Where the token lives" paragraph (it was wrong; the token
+  could reach argv through the adapter), the start-race guarantee, and a new "Output caps" bullet with the real
+  limits. MCP-SETUP.md's personal-token paragraph now describes the file.

@@ -5,7 +5,9 @@ panel already knows ``text``, ``tool_use`` and ``tool_result`` (the Claude
 and Codex runners emit them); ACP adds ``thought`` and ``plan``.
 
 Everything forwarded goes through ``redact`` first, which hides the session's
-Nebula token if the agent ever echoes it back (in a tool input, say).
+Nebula token if the agent ever echoes it back (in a tool input, say), and is
+then capped: message and thought text per chunk and per turn
+(``TurnTextBudget``), tool inputs, results, titles and plan entries each.
 """
 from __future__ import annotations
 
@@ -18,6 +20,11 @@ MAX_TOOL_INPUT_CHARS = 4_000
 MAX_PLAN_ENTRIES = 50
 MAX_PLAN_ENTRY_CHARS = 500
 MAX_TITLE_CHARS = 200
+# Message and thought text: one chunk, and everything one turn sends. An agent
+# that streams more would freeze the chat tab.
+MAX_TEXT_CHUNK_CHARS = 20_000
+MAX_TURN_TEXT_CHARS = 200_000
+TEXT_CUT_NOTICE = "This reply was too long to show in full, so Nebula cut some of it."
 _PLAN_PRIORITIES = {"high", "medium", "low"}
 _PLAN_STATUSES = {"pending", "in_progress", "completed"}
 
@@ -110,6 +117,32 @@ def _tool_content_text(content: Any) -> str:
 
 
 @dataclass
+class TurnTextBudget:
+    """How much message and thought text one turn may still send, and
+    whether the turn has shown the cut notice yet (it shows it once)."""
+    left: int = field(default_factory=lambda: MAX_TURN_TEXT_CHARS)
+    noticed: bool = False
+
+
+def _text_events(kind: str, text: str, redact: Redact, budget: TurnTextBudget | None) -> list[dict[str, Any]]:
+    """Redact, then cap: a cut never leaves part of a secret behind."""
+    text = redact(text)
+    cut = False
+    if len(text) > MAX_TEXT_CHUNK_CHARS:
+        text, cut = text[:MAX_TEXT_CHUNK_CHARS], True
+    if budget is not None:
+        if len(text) > budget.left:
+            text, cut = text[:budget.left], True
+        budget.left -= len(text)
+    events: list[dict[str, Any]] = [{"type": kind, "text": text}] if text else []
+    if cut and (budget is None or not budget.noticed):
+        if budget is not None:
+            budget.noticed = True
+        events.append({"type": "system", "text": TEXT_CUT_NOTICE})
+    return events
+
+
+@dataclass
 class _ToolCall:
     reported_use: bool = False
     reported_result: bool = False
@@ -191,17 +224,20 @@ def _tool_result_event(tool_call_id: str, call: _ToolCall, redact: Redact) -> di
     }
 
 
-def map_session_update(update: Any, state: ToolCallState, *, redact: Redact) -> list[dict[str, Any]]:
-    """Chat events for one ``session/update`` ``update`` object."""
+def map_session_update(update: Any, state: ToolCallState, *, redact: Redact,
+                       budget: TurnTextBudget | None = None) -> list[dict[str, Any]]:
+    """Chat events for one ``session/update`` ``update`` object.
+
+    ``budget`` is the turn's text allowance; without one, only the per-chunk
+    cap applies."""
     if not isinstance(update, dict):
         return []
     kind = update.get("sessionUpdate")
-    if kind == "agent_message_chunk":
+    if kind in {"agent_message_chunk", "agent_thought_chunk"}:
         text = content_block_text(update.get("content"))
-        return [{"type": "text", "text": redact(text)}] if text else []
-    if kind == "agent_thought_chunk":
-        text = content_block_text(update.get("content"))
-        return [{"type": "thought", "text": redact(text)}] if text else []
+        if not text:
+            return []
+        return _text_events("text" if kind == "agent_message_chunk" else "thought", text, redact, budget)
     if kind in {"tool_call", "tool_call_update"}:
         tool_call_id = update.get("toolCallId")
         if not isinstance(tool_call_id, str) or not tool_call_id:

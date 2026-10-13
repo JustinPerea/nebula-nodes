@@ -5,10 +5,13 @@ One ``AcpHostSession`` per open personal chat. It owns:
 - the agent subprocess (its own process group, a scrubbed environment, an
   absolute binary, cwd = a private Nebula workspace);
 - an ``AcpConnection`` (services/acp_client.py) speaking ACP v1 to it;
-- one Nebula session token, minted after ``initialize`` and handed to the
-  agent only inside the ``nebula`` MCP server entry of ``session/new``. It
-  names the shared outside budget (``outside:personal:<agentId>``) and is
-  revoked whenever the session ends, however it ends.
+- one Nebula session token, minted after ``initialize`` and written to a
+  0600 file outside the workspace (services/agent_token_file.py). Only the
+  file's path goes to the agent, in the ``nebula`` MCP server entry of
+  ``session/new``, because adapters may put that entry's environment in
+  argv. The token names the shared outside budget
+  (``outside:personal:<agentId>``) and is revoked, and its file deleted,
+  whenever the session ends, however it ends.
 
 The process lives across turns. It ends on close_session, /clear, switching
 agent, the chat socket disconnecting, the idle timeout, a cancel the agent
@@ -16,7 +19,10 @@ ignores, a crash (including one during a cancel), Settings switching the agent
 off, removing it or changing its command (``AcpSessionManager.close_stale``),
 or backend shutdown; every path goes through ``close``, which revokes the
 token and kills the whole process tree in a task of its own (so cancelling
-the caller can't skip the kill) and releases the workspace. The agent's
+the caller can't skip the kill) and releases the workspace. A close that
+lands while the session is still starting wins: ``start`` checks after each
+of its awaits and gives up, so it never mints a token or turns "ready" once
+the teardown has begun. The agent's
 environment drops Nebula's secrets and every provider key in
 services/credential_catalog.py.
 
@@ -38,11 +44,11 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 from uuid import uuid4
 
-from services import agent_binaries, agent_spend, personal_agents
+from services import agent_binaries, agent_spend, agent_token_file, personal_agents
 from services.acp_client import (
     AUTH_REQUIRED, METHOD_NOT_FOUND, STREAM_LIMIT_BYTES, AcpConnection, AcpConnectionClosed, AcpError,
 )
-from services.acp_events import ToolCallState, capped_json, make_redactor, map_session_update
+from services.acp_events import ToolCallState, TurnTextBudget, capped_json, make_redactor, map_session_update
 from services.agent_process import agent_process_group_options, terminate_agent_process_tree
 from services.child_env import scrubbed_env
 from services.credential_catalog import CREDENTIAL_PROVIDERS
@@ -70,7 +76,8 @@ MAX_MESSAGE_CHARS = 100_000
 # inherited from the shell that started it. Claude Code bills ANTHROPIC_API_KEY
 # ahead of the subscription login, and Codex OPENAI_API_KEY, so a terminal's
 # key would silently replace the plan the person set the agent up with.
-_AGENT_ENV_DROP = frozenset({"NEBULA_AGENT_TOKEN", "NEBULA_APP_TOKEN"} | CREDENTIAL_PROVIDERS)
+_AGENT_ENV_DROP = frozenset({"NEBULA_AGENT_TOKEN", "NEBULA_APP_TOKEN", agent_token_file.ENV_VAR}
+                            | CREDENTIAL_PROVIDERS)
 
 PERSONAL_AGENT_PRIMER_TAIL = (
     "YOUR SETUP. You are the person's own agent, with your own tools, memory and "
@@ -103,6 +110,26 @@ async def _spawn(argv: list[str], env: dict[str, str], cwd: Path) -> asyncio.sub
         env=env, cwd=str(cwd), limit=STREAM_LIMIT_BYTES, **agent_process_group_options())
 
 
+async def _kill_tree(proc: asyncio.subprocess.Process) -> None:
+    """Close the agent's stdin, then kill it and everything it started."""
+    try:
+        if proc.stdin is not None and not proc.stdin.is_closing():
+            proc.stdin.close()
+    except Exception:
+        pass
+    try:
+        await terminate_agent_process_tree(proc)
+    except Exception:
+        logger.warning("Personal agent tree cleanup reported a problem", exc_info=True)
+    # The root may already have exited (a crash, or stdin EOF): its process
+    # group can still hold grandchildren.
+    if os.name == "posix" and isinstance(proc.pid, int) and proc.pid > 0:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
 @dataclass
 class PendingPermission:
     id: str
@@ -116,6 +143,7 @@ class PendingPermission:
 @dataclass
 class _Turn:
     queue: asyncio.Queue = field(default_factory=asyncio.Queue)
+    text_budget: TurnTextBudget = field(default_factory=TurnTextBudget)
 
 
 _TURN_END = object()
@@ -142,6 +170,7 @@ class AcpHostSession:
         self.agent_caps: dict[str, Any] = {}
         self.agent_info: dict[str, Any] = {}
         self.token: str | None = None
+        self.token_file: Path | None = None
         self.state = "starting"
         self.last_activity = time.monotonic()
         self.closed_reason: str | None = None
@@ -171,10 +200,25 @@ class AcpHostSession:
         env["NEBULA_URL"] = self.backend_url
         return env
 
+    def _give_up_if_closing(self) -> None:
+        """Raise once close() has begun. start() calls this after each await,
+        so a session closed while it starts (Settings switched it off, the
+        chat was replaced or the backend is stopping) never mints a token
+        after the teardown revoked, and never turns "ready" over "closed"."""
+        if self._closing:
+            raise PersonalSessionError("personal_session_ended", self.ended_message())
+
     async def start(self) -> None:
         from commons import actors
         try:
-            self.proc = await _spawn(self.spec.argv, self._agent_env(), self.workdir)
+            self._give_up_if_closing()
+            proc = await _spawn(self.spec.argv, self._agent_env(), self.workdir)
+            if self._closing:
+                # The teardown ran during the spawn and found no process to
+                # kill, so this one is start's to kill.
+                await asyncio.shield(_kill_tree(proc))
+                self._give_up_if_closing()
+            self.proc = proc
             self._stderr_task = asyncio.create_task(self._drain_stderr())
             self.conn = AcpConnection(self.proc, on_notification=self._on_notification,
                                       on_request=self._on_request, on_cancel_request=self._on_cancel_request)
@@ -186,6 +230,7 @@ class AcpHostSession:
             except asyncio.TimeoutError as exc:
                 raise PersonalSessionError("personal_agent_start_timeout",
                                            f"{self.display_name} didn't answer in time.") from exc
+            self._give_up_if_closing()
             init = init if isinstance(init, dict) else {}
             if init.get("protocolVersion") != ACP_PROTOCOL_VERSION:
                 raise PersonalSessionError(
@@ -193,6 +238,9 @@ class AcpHostSession:
                     f"{self.display_name} speaks ACP version {init.get('protocolVersion')!r}; Nebula speaks 1.")
             self.agent_caps = init.get("agentCapabilities") if isinstance(init.get("agentCapabilities"), dict) else {}
             self.agent_info = init.get("agentInfo") if isinstance(init.get("agentInfo"), dict) else {}
+            # From the check above to the file write nothing awaits, so a
+            # teardown either starts after this (and revokes the token and
+            # deletes the file) or already stopped start() above.
             self.token = actors.agent_registry.mint(
                 f"personal:{self.agent_id}", [self.output_root, self.workdir], workspace=self.workdir,
                 spend_key=agent_spend.personal_agent_spend_key(self.agent_id, self.id),
@@ -201,11 +249,13 @@ class AcpHostSession:
             name = str(self.agent_info.get("name") or self.agent_id)[:64]
             version = str(self.agent_info.get("version") or "")[:32]
             actors.agent_registry.set_model(self.token, f"{name}@{version}" if version else name)
-            mcp = nebula_acp_mcp_server(self.backend_url, self.token, self.display_name)
+            self.token_file = agent_token_file.write(self.state_dir, self.id, self.token)
+            mcp = nebula_acp_mcp_server(self.backend_url, self.token_file, self.display_name)
             try:
                 created = await self.conn.request("session/new", {"cwd": str(self.workdir), "mcpServers": [mcp]},
                                                   timeout=max(INIT_TIMEOUT_S, self.spec.startup_timeout))
             except AcpError as exc:
+                self._give_up_if_closing()
                 if exc.code == AUTH_REQUIRED:
                     raise PersonalSessionError(
                         "auth_required",
@@ -216,6 +266,7 @@ class AcpHostSession:
             except asyncio.TimeoutError as exc:
                 raise PersonalSessionError("personal_agent_start_timeout",
                                            f"{self.display_name} didn't start a session in time.") from exc
+            self._give_up_if_closing()
             session_id = created.get("sessionId") if isinstance(created, dict) else None
             if not isinstance(session_id, str) or not session_id or len(session_id) > 256:
                 raise PersonalSessionError("personal_agent_start_failed", f"{self.display_name} returned no session id.")
@@ -224,7 +275,12 @@ class AcpHostSession:
             self.last_activity = time.monotonic()
             self._watch_task = asyncio.create_task(self._watch())
         except AcpConnectionClosed as exc:
+            # A close during start kills the agent, which ends the connection:
+            # say why Nebula stopped it, not that it exited.
+            stopped_by_nebula = self._closing
             await self.close("start_failed")
+            if stopped_by_nebula:
+                raise PersonalSessionError("personal_session_ended", self.ended_message()) from exc
             raise PersonalSessionError("personal_agent_start_failed",
                                        f"{self.display_name} exited while starting{self._exit_detail()}") from exc
         except PersonalSessionError:
@@ -282,7 +338,8 @@ class AcpHostSession:
 
     @property
     def closed(self) -> bool:
-        return self.state == "closed"
+        """True from the moment close() begins, whatever start() is doing."""
+        return self._closing or self.state == "closed"
 
     async def close(self, reason: str) -> None:
         """End the session: kill the tree, revoke the token, release the workspace. Idempotent.
@@ -317,28 +374,18 @@ class AcpHostSession:
                 except Exception:
                     pass
             if proc is not None:
-                try:
-                    if proc.stdin is not None and not proc.stdin.is_closing():
-                        proc.stdin.close()
-                except Exception:
-                    pass
-                try:
-                    await terminate_agent_process_tree(proc)
-                except Exception:
-                    logger.warning("Personal agent tree cleanup reported a problem", exc_info=True)
-                # The root may already have exited (a crash, or stdin EOF):
-                # its process group can still hold grandchildren.
-                if os.name == "posix" and isinstance(proc.pid, int) and proc.pid > 0:
-                    try:
-                        os.killpg(proc.pid, signal.SIGKILL)
-                    except (ProcessLookupError, PermissionError):
-                        pass
+                await _kill_tree(proc)
             if conn is not None:
                 await conn.close()
             for task in (self._stderr_task, self._watch_task):
                 if task is not None and task is not asyncio.current_task() and not task.done():
                     task.cancel()
         finally:
+            # Again at the end: start() can't mint once closing began, but a
+            # token must never outlive its session whatever changes later.
+            if self.token is not None:
+                actors.agent_registry.revoke(self.token)
+            agent_token_file.remove(self.token_file)
             try:
                 self._workspaces.release(self.workspace_session)
             except Exception:
@@ -355,7 +402,8 @@ class AcpHostSession:
         if method != "session/update" or params.get("sessionId") != self.acp_session_id or self._turn is None:
             return
         self.last_activity = time.monotonic()
-        for event in map_session_update(params.get("update"), self._tools, redact=self._redact):
+        for event in map_session_update(params.get("update"), self._tools, redact=self._redact,
+                                        budget=self._turn.text_budget):
             self._emit(event)
 
     async def _on_request(self, method: str, params: dict, request_id: Any) -> Any:
@@ -569,14 +617,17 @@ class AcpSessionManager:
             raise PersonalSessionError(
                 "personal_agent_warning_required",
                 "Read and accept the personal agent notice before starting one.")
+        # One personal chat per panel: a new one replaces the old.
+        await self.close_owned(owner)
+        self._prune()
+        # Read what Settings allow only now. From here to registering the
+        # session nothing awaits, so a Settings change can't fall between the
+        # read and the moment close_stale can see the session.
         key = personal_agents.launch_key(state_dir, agent_id)
         try:
             spec = personal_agents.launch_spec(state_dir, agent_id, home)
         except personal_agents.PersonalAgentError as exc:
             raise PersonalSessionError(exc.code, exc.message) from exc
-        # One personal chat per panel: a new one replaces the old.
-        await self.close_owned(owner)
-        self._prune()
         if len(self.live()) >= MAX_LIVE_SESSIONS:
             raise PersonalSessionError("personal_agent_limit",
                                        f"At most {MAX_LIVE_SESSIONS} personal agents can run at once. Close one first.")
@@ -586,6 +637,11 @@ class AcpSessionManager:
         self._sessions[session.id] = session
         try:
             await session.start()
+            # A registry change that didn't go through close_stale (another
+            # backend process, a hand edit) while it started: stop it now.
+            if not self.still_allowed(session, state_dir):
+                await session.close("agent_changed")
+                raise PersonalSessionError("personal_session_ended", session.ended_message())
         except BaseException:
             self._sessions.pop(session.id, None)
             raise

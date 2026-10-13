@@ -8,6 +8,8 @@ Script keys (all optional):
   protocolVersion:  what initialize answers (default 1)
   closeCap:         advertise sessionCapabilities.close (default true)
   sessionNewError:  {code, message} to answer session/new with
+  initDelay:        seconds to wait before answering initialize
+  sessionNewDelay:  seconds to wait before answering session/new
   junkStdout:       print non-JSON lines on stdout before answering
   grandchild:       path; spawn a sleeping grandchild and write its pid there
   turns:            list of step lists, one per session/prompt (the last repeats)
@@ -177,6 +179,7 @@ def main() -> None:
         rid = message.get("id")
         params = message.get("params") or {}
         if method == "initialize":
+            time.sleep(float(SCRIPT.get("initDelay") or 0))
             caps = {"loadSession": False, "promptCapabilities": {}, "mcpCapabilities": {"http": False}}
             if SCRIPT.get("closeCap", True):
                 caps["sessionCapabilities"] = {"close": {}}
@@ -185,6 +188,7 @@ def main() -> None:
                                         "agentInfo": {"name": "fake-acp-agent", "version": "1.0.0"},
                                         "authMethods": []}})
         elif method == "session/new":
+            time.sleep(float(SCRIPT.get("sessionNewDelay") or 0))
             if SCRIPT.get("sessionNewError"):
                 send({"id": rid, "error": SCRIPT["sessionNewError"]})
             else:

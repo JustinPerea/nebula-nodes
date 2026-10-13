@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import stat
 import sys
 import time
 from pathlib import Path
@@ -108,10 +109,20 @@ async def test_initialize_session_new_and_token_lifecycle(env):
         assert server["args"][0].endswith("backend/mcp_server.py") and Path(server["args"][0]).is_absolute()
         assert server["args"][1:] == ["--url", "http://127.0.0.1:8142"]
         env_vars = {item["name"]: item["value"] for item in server["env"]}
-        assert env_vars["NEBULA_AGENT_TOKEN"] == host.token
+        assert set(env_vars) == {"NEBULA_AGENT_TOKEN_FILE", "NEBULA_URL", "NEBULA_AGENT_NAME"}
         assert env_vars["NEBULA_AGENT_NAME"] == "Fake Agent"
-        # Not in argv, and not in the agent's own environment.
-        assert host.token not in " ".join(server["args"])
+        # The token's value is nowhere in session/new: adapters may put this
+        # entry's environment in argv (claude --mcp-config <json>).
+        raw_new = next(line for line in env.log.read_text().splitlines() if '"session/new"' in line)
+        assert host.token not in raw_new
+        # Only a path to a private file outside the agent's workspace.
+        token_file = Path(env_vars["NEBULA_AGENT_TOKEN_FILE"])
+        assert token_file == host.token_file and token_file.read_text() == host.token
+        assert token_file.is_relative_to(env.state / "agent-tokens" / str(os.getpid()))
+        assert not token_file.is_relative_to(host.workdir)
+        assert stat.S_IMODE(token_file.stat().st_mode) == 0o600
+        assert stat.S_IMODE(token_file.parent.stat().st_mode) == 0o700
+        assert stat.S_IMODE(token_file.parent.parent.stat().st_mode) == 0o700
         record = actors.agent_registry.lookup(host.token)
         assert record is not None
         assert record["spend_key"] == "outside:personal:fake"
@@ -131,6 +142,7 @@ async def test_initialize_session_new_and_token_lifecycle(env):
     finally:
         await env.manager.close_all()
     assert actors.agent_registry.lookup(token) is None
+    assert not token_file.exists()
     assert "session/close" in env.methods()
     assert not alive(pid)
     assert not env.workspaces._sessions[host.id].active
@@ -512,3 +524,147 @@ async def test_switching_off_mid_turn_ends_the_turn(env):
     assert events[-1]["type"] == "error" and events[-1]["code"] == "personal_session_ended"
     assert "Settings" in events[-1]["message"]
     assert not alive(pid)
+
+
+# -- a close that lands while the session is still starting -----------------------
+
+@pytest.fixture
+def slow_kill(monkeypatch):
+    """Make the teardown's tree kill take a second, as the SIGTERM grace and
+    process snapshot can in real life, so start() resumes mid-teardown."""
+    real = acp_session.terminate_agent_process_tree
+
+    async def slow(proc):
+        await asyncio.sleep(1.0)
+        await real(proc)
+
+    monkeypatch.setattr(acp_session, "terminate_agent_process_tree", slow)
+
+
+async def _starting_session(env, method: str):
+    """Begin env.open() and return (task, host) once the agent has received ``method``."""
+    opening = asyncio.create_task(env.open())
+    assert await wait_until(lambda: method in env.methods())
+    [host] = list(env.manager._sessions.values())
+    return opening, host
+
+
+@pytest.mark.asyncio
+async def test_close_during_session_new_wins_over_start(env, slow_kill):
+    # Settings switch the agent off while session/new is in flight. The agent
+    # still answers it; start() must not turn the closed session "ready".
+    env.register({"sessionNewDelay": 0.3})
+    opening, host = await _starting_session(env, "session/new")
+    pid, token, token_file = host.proc.pid, host.token, host.token_file
+    assert token is not None and token_file.exists()
+    personal_agents.update_agent(env.state, "fake", {"enabled": False})
+    assert await env.manager.close_stale(env.state) == [host.id]
+    with pytest.raises(PersonalSessionError) as info:
+        await opening
+    assert info.value.code == "personal_session_ended" and "Settings" in info.value.message
+    assert host.closed and host.state == "closed" and host.closed_reason == "agent_changed"
+    assert actors.agent_registry.lookup(token) is None
+    assert not token_file.exists()
+    assert not alive(pid)
+    # It holds no slot and no later close is needed to free it.
+    assert env.manager.live() == [] and env.manager._sessions == {}
+
+
+@pytest.mark.asyncio
+async def test_close_during_initialize_mints_no_token(env, slow_kill):
+    # The teardown revokes first; a start() that resumed after it and minted
+    # would leave a live token nobody revokes.
+    env.register({"initDelay": 0.3})
+    opening, host = await _starting_session(env, "initialize")
+    pid = host.proc.pid
+    await env.manager.close_owned(OWNER, "replaced")
+    with pytest.raises(PersonalSessionError) as info:
+        await opening
+    assert info.value.code == "personal_session_ended"
+    assert host.token is None and actors.agent_registry._tokens == {}
+    assert "session/new" not in env.methods()
+    assert not (env.state / "agent-tokens" / str(os.getpid())).exists() \
+        or list((env.state / "agent-tokens" / str(os.getpid())).iterdir()) == []
+    assert not alive(pid)
+    assert env.manager._sessions == {}
+
+
+@pytest.mark.asyncio
+async def test_close_during_spawn_kills_the_late_process(env, monkeypatch):
+    # The teardown ran before the spawn returned, so it saw no process.
+    real_spawn = acp_session._spawn
+    spawned: list = []
+    release = asyncio.Event()
+
+    async def slow_spawn(argv, child_env, cwd):
+        proc = await real_spawn(argv, child_env, cwd)
+        spawned.append(proc)
+        await release.wait()
+        return proc
+
+    monkeypatch.setattr(acp_session, "_spawn", slow_spawn)
+    env.register({})
+    opening = asyncio.create_task(env.open())
+    assert await wait_until(lambda: spawned)
+    [host] = list(env.manager._sessions.values())
+    await env.manager.close_all("shutdown")
+    release.set()
+    with pytest.raises(PersonalSessionError) as info:
+        await opening
+    assert info.value.code == "personal_session_ended"
+    assert host.proc is None and host.token is None and actors.agent_registry._tokens == {}
+    assert await wait_until(lambda: not alive(spawned[0].pid))
+    assert env.methods() == []
+    assert env.manager._sessions == {}
+
+
+@pytest.mark.asyncio
+async def test_registry_change_while_starting_is_caught_after_start(env):
+    # A change that bypassed close_stale (another backend process, a hand
+    # edit) during start: open() checks again before handing the session out.
+    env.register({"initDelay": 0.3})
+    opening = asyncio.create_task(env.open())
+    assert await wait_until(lambda: "initialize" in env.methods())
+    personal_agents.update_agent(env.state, "fake", {"enabled": False})
+    with pytest.raises(PersonalSessionError) as info:
+        await opening
+    assert info.value.code == "personal_session_ended" and "Settings" in info.value.message
+    assert actors.agent_registry._tokens == {}
+    assert env.manager.live() == [] and env.manager._sessions == {}
+
+
+@pytest.mark.asyncio
+async def test_settings_change_while_open_replaces_the_old_chat(env):
+    # open() closes the owner's previous session first. A Settings change
+    # during that close must count: the launch key and spec are read after it.
+    env.register({"turns": [[]]}, agent_id="fake")
+    env.register({"turns": [[]]}, agent_id="fake2")
+    first = await env.open(agent_id="fake")
+    opening = asyncio.create_task(env.open(agent_id="fake2"))
+    assert await wait_until(lambda: first.closed, timeout=5)
+    personal_agents.update_agent(env.state, "fake2", {"enabled": False})
+    await env.manager.close_stale(env.state)
+    with pytest.raises(PersonalSessionError) as info:
+        await opening
+    assert info.value.code == "personal_agent_disabled"
+    assert env.manager.live() == []
+    assert actors.agent_registry._tokens == {}
+    assert env.methods().count("initialize") == 1  # fake2 never started
+
+
+@pytest.mark.asyncio
+async def test_long_text_is_capped_per_chunk_and_per_turn(env, monkeypatch):
+    from services import acp_events
+    monkeypatch.setattr(acp_events, "MAX_TURN_TEXT_CHARS", 50_000)
+    big = "x" * (acp_events.MAX_TEXT_CHUNK_CHARS + 5_000)
+    env.register({"turns": [[{"chunk": big}, {"thought": big}, {"chunk": big}, {"chunk": big}, {"chunk": "tail"}]]})
+    host = await env.open()
+    try:
+        events = await collect(host)
+    finally:
+        await env.manager.close_all()
+    shown = [e for e in events if e["type"] in {"text", "thought"}]
+    assert all(len(e["text"]) <= acp_events.MAX_TEXT_CHUNK_CHARS for e in shown)
+    assert sum(len(e["text"]) for e in shown) == 50_000
+    assert [e for e in events if e["type"] == "system"] == [{"type": "system", "text": acp_events.TEXT_CUT_NOTICE}]
+    assert events[-1]["type"] == "result"

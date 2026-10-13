@@ -6,9 +6,11 @@ Two servers, both started per turn by the agent's own CLI:
     so for it this is the only way.
   - `nebula_krea` (backend/krea_mcp_server.py): read-only Krea discovery.
 
-Each child only knows the local backend address. The turn's agent token
-reaches the Nebula server by environment variable *name* (`${NEBULA_AGENT_TOKEN}`
-or Codex's `env_vars`), never as a value in argv or a config file. OAuth
+Each child only knows the local backend address. For the in-app chats the
+turn's agent token reaches the Nebula server by environment variable *name*
+(`${NEBULA_AGENT_TOKEN}` or Codex's `env_vars`), never as a value in argv or a
+config file. Personal agents over ACP get a token file's path instead
+(`nebula_acp_mcp_server`). OAuth
 credentials and the vault key stay in the backend; media execution still goes
 through normal graph nodes.
 """
@@ -153,12 +155,15 @@ def nebula_server_config(url: str | None = None) -> dict[str, object]:
     }
 
 
-def nebula_acp_mcp_server(url: str, token: str, name: str) -> dict[str, object]:
+def nebula_acp_mcp_server(url: str, token_file: Path, name: str) -> dict[str, object]:
     """The Nebula MCP server as an ACP ``session/new`` stdio entry.
 
-    ACP passes env as a list of {name, value}. The agent starts this server
-    itself, so the session token is in the server's environment (and in
-    the session/new params on the agent's stdin), never in argv."""
+    ACP passes env as a list of {name, value}, and adapters may turn that
+    environment into argv: the pinned Claude adapter gives it to the Claude
+    Agent SDK, which starts ``claude --mcp-config <json>``. So the session
+    token's value is never here. The entry names a 0600 file holding it
+    (services/agent_token_file.py) and backend/mcp_server.py reads that file
+    at startup, exiting if it can't. Only the path can reach argv."""
     config = nebula_server_config(url)
     base = loopback_backend_url(url)
     return {
@@ -166,7 +171,7 @@ def nebula_acp_mcp_server(url: str, token: str, name: str) -> dict[str, object]:
         "command": config["command"],
         "args": list(config["args"]),  # type: ignore[arg-type]
         "env": [
-            {"name": "NEBULA_AGENT_TOKEN", "value": token},
+            {"name": "NEBULA_AGENT_TOKEN_FILE", "value": str(token_file)},
             {"name": "NEBULA_URL", "value": base},
             {"name": "NEBULA_AGENT_NAME", "value": name},
         ],
