@@ -10,6 +10,7 @@ const ALL = {
   NEBULA_DESKTOP_TEST: '1',
   VITE_DEV_SERVER_URL: 'http://localhost:5173',
   NEBULA_DESKTOP_DEV_PERSON: '1',
+  NEBULA_DESKTOP_PYTHON: '/opt/other/python3',
 };
 
 describe('resolveLaunchOverrides', () => {
@@ -20,6 +21,7 @@ describe('resolveLaunchOverrides', () => {
     assert.equal(result.appId, undefined);
     assert.equal(result.devServerUrl, undefined);
     assert.equal(result.devPersonOptIn, undefined);
+    assert.equal(result.python, undefined);
     assert.equal(result.mockKeychain, false);
     assert.deepEqual([...result.ignored].sort(), [...DEV_ONLY_ENV_VARS].sort());
   });
@@ -37,6 +39,7 @@ describe('resolveLaunchOverrides', () => {
     assert.equal(result.appId, 'nebula-test');
     assert.equal(result.devServerUrl, 'http://localhost:5173');
     assert.equal(result.devPersonOptIn, '1');
+    assert.equal(result.python, '/opt/other/python3');
     assert.equal(result.mockKeychain, true);
     assert.deepEqual(result.ignored, []);
   });
@@ -85,6 +88,13 @@ describe('main.mjs wiring', () => {
       assert.equal(source.includes(`process.env.${name}`), false, `main.mjs reads process.env.${name} directly`);
     }
     assert.match(source, /resolveLaunchOverrides\(\{\s*env: process\.env,\s*isPackaged: treatAsPackaged\(app\.isPackaged, packaged\),\s*\}\)/);
+  });
+
+  test('the sidecar gets NEBULA_DESKTOP_PYTHON only from the overrides', () => {
+    const del = source.indexOf('delete sidecarEnv.NEBULA_DESKTOP_PYTHON;');
+    const set = source.indexOf('if (overrides.python) sidecarEnv.NEBULA_DESKTOP_PYTHON = overrides.python;');
+    const start = source.indexOf('startSidecar({ env: sidecarEnv');
+    assert.ok(del > 0 && set > del && start > set, 'main must replace the inherited value before starting the sidecar');
   });
 
   test('the packaged bootstrap moves the profile only for a validation build', () => {

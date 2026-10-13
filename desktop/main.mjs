@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, shell } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
@@ -6,10 +6,11 @@ import { homedir } from 'node:os';
 import { startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT } from './sidecar.mjs';
 import { prepareAppDataEnv, resolveDesktopDataPaths } from './paths.mjs';
 import { createPaperLinkSenderValidator, registerPaperLinkHandler } from './paper-links.mjs';
-import { decidePersonToken, registerPersonTokenHandler } from './person-token.mjs';
+import { DEBUG_SWITCHES, debugSwitchesInUse, decidePersonToken, registerPersonTokenHandler } from './person-token.mjs';
 import { registerFolderPickerHandler } from './folder-picker.mjs';
 import { getConnectorEncryptionKey, registerKreaAuthLinkHandler } from './connector-vault.mjs';
 import { installRendererNavigationGuard } from './navigation.mjs';
+import { confineFileScheme } from './renderer-files.mjs';
 import { resolveLaunchOverrides } from './launch-overrides.mjs';
 import { packagedLaunch, treatAsPackaged } from './packaged-launch.mjs';
 import {
@@ -49,6 +50,28 @@ if (packaged?.validation) {
 }
 if (overrides.ignored.length > 0) {
   console.warn(`Ignoring dev/test-only settings in a packaged build: ${overrides.ignored.join(', ')}`);
+}
+
+/**
+ * Debug switches this launch was started with, before main.mjs adds its own.
+ * Chromium honours `--remote-debugging-port` and friends from argv even in a
+ * packaged build (`open -a Nebula --args --remote-debugging-port=9222`),
+ * which launch-overrides.mjs never sees. Any of them means no person token;
+ * a normal Nebula.app refuses to start at all (see the lifecycle below).
+ */
+const launchDebugSwitches = debugSwitchesInUse({
+  hasSwitch: (name) => app.commandLine.hasSwitch(name),
+  argv: process.argv,
+  execArgv: process.execArgv,
+  nodeOptions: process.env.NODE_OPTIONS,
+});
+const refuseDebugLaunch = launchDebugSwitches.length > 0 && treatAsPackaged(app.isPackaged, packaged);
+if (launchDebugSwitches.length > 0) {
+  console.warn(`Debug switches on the command line: ${launchDebugSwitches.join(', ')}; no person token this launch`);
+}
+if (refuseDebugLaunch) {
+  // Best effort: drop them before Chromium starts its DevTools server.
+  for (const name of DEBUG_SWITCHES) app.commandLine.removeSwitch(name);
 }
 
 /** Loopback CDP port for agent-browser validation. */
@@ -111,6 +134,7 @@ let sidecarHandle = null;
 /** This launch's person token (person-token.mjs). None with a debug port open. */
 const person = decidePersonToken({
   debugPort,
+  debugSwitches: launchDebugSwitches,
   isDevelopment,
   devOptIn: overrides.devPersonOptIn,
 });
@@ -718,8 +742,25 @@ async function cleanupSidecar() {
 // App lifecycle
 // ---------------------------------------------------------------------------
 
-const acquiredLock = app.requestSingleInstanceLock();
-if (!acquiredLock) {
+const acquiredLock = refuseDebugLaunch ? false : app.requestSingleInstanceLock();
+if (refuseDebugLaunch) {
+  // A normal Nebula.app never runs with a debugger attachable from outside:
+  // no window, no backend, no token. Validation builds and `npm run start`
+  // carry on without a person token instead (person-token.mjs).
+  app.whenReady().then(async () => {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Nebula',
+      message: 'Nebula won\'t start with debugging switches.',
+      detail:
+        `It was opened with ${launchDebugSwitches.map((name) => `--${name}`).join(', ')}, ` +
+        'which would let other programs on this Mac control it. Open Nebula normally ' +
+        '(from the Dock or Finder) instead.',
+      buttons: ['Quit'],
+    });
+    app.exit(1);
+  });
+} else if (!acquiredLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
@@ -734,6 +775,12 @@ if (!acquiredLock) {
   });
 
   app.whenReady().then(async () => {
+    // file:// reads only inside the renderer bundle (renderer-files.mjs),
+    // installed before any window can load anything.
+    if (!isDevelopment) {
+      confineFileScheme(protocol, net, dirname(fileURLToPath(rendererUrl)));
+    }
+
     // `npm run start` runs the stock Electron binary, whose Dock icon is
     // Electron's. Nebula.app gets its icon from the bundle instead.
     if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
@@ -823,6 +870,10 @@ if (!acquiredLock) {
       const injectedKeys = await credentialService.decryptAll();
       const sidecarEnv = { ...process.env, ...pathEnvVars };
       sidecarEnv.NEBULA_DESKTOP_MODE = '1';
+      // The interpreter override is dev/test-only (launch-overrides.mjs): a
+      // packaged build always runs the checkout's backend/.venv/bin/python.
+      delete sidecarEnv.NEBULA_DESKTOP_PYTHON;
+      if (overrides.python) sidecarEnv.NEBULA_DESKTOP_PYTHON = overrides.python;
       // The person token goes over the sidecar's stdin, never its env.
       delete sidecarEnv.NEBULA_PERSON_TOKEN;
       delete sidecarEnv.NEBULA_CONNECTOR_SESSION;

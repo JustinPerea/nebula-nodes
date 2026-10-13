@@ -14,6 +14,9 @@
  *   throwaway test profiles. A user-data dir alone keeps the real keychain.
  * - `VITE_DEV_SERVER_URL` loads the renderer from a dev server.
  * - `NEBULA_DESKTOP_DEV_PERSON` only matters together with the dev server.
+ * - `NEBULA_DESKTOP_PYTHON` picks the interpreter that runs the backend, and
+ *   that process receives the person token and the decrypted provider keys.
+ *   A packaged build always runs the checkout's backend/.venv/bin/python.
  */
 
 /** Env vars a packaged build refuses. */
@@ -24,6 +27,7 @@ export const DEV_ONLY_ENV_VARS = Object.freeze([
   'NEBULA_DESKTOP_TEST',
   'VITE_DEV_SERVER_URL',
   'NEBULA_DESKTOP_DEV_PERSON',
+  'NEBULA_DESKTOP_PYTHON',
 ]);
 
 /**
@@ -34,6 +38,7 @@ export const DEV_ONLY_ENV_VARS = Object.freeze([
  *   appId: string | undefined,
  *   devServerUrl: string | undefined,
  *   devPersonOptIn: string | undefined,
+ *   python: string | undefined,
  *   mockKeychain: boolean,
  *   ignored: string[],
  * }}
@@ -51,6 +56,7 @@ export function resolveLaunchOverrides({ env, isPackaged }) {
       appId: undefined,
       devServerUrl: undefined,
       devPersonOptIn: undefined,
+      python: undefined,
       mockKeychain: false,
       ignored: DEV_ONLY_ENV_VARS.filter((name) => pick(name) !== undefined),
     };
@@ -63,6 +69,7 @@ export function resolveLaunchOverrides({ env, isPackaged }) {
     appId: pick('NEBULA_DESKTOP_APP_ID'),
     devServerUrl: pick('VITE_DEV_SERVER_URL'),
     devPersonOptIn: pick('NEBULA_DESKTOP_DEV_PERSON'),
+    python: pick('NEBULA_DESKTOP_PYTHON'),
     mockKeychain: Boolean(userDataDir) && env.NEBULA_DESKTOP_TEST === '1',
     ignored: [],
   };
