@@ -152,7 +152,7 @@ def test_caps_are_validated(bad):
 def test_caps_drop_empty_model_entries():
     caps = agent_spend.validate_caps({"sessionUsd": 10, "models": {"paid": {"perRunUsd": None}, "krea": {"sessionUsd": 4}}},
                                      DEFINITIONS)
-    assert caps == {"sessionUsd": 10.0, "kreaPlanRuns": None, "models": {"krea": {"perRunUsd": None, "sessionUsd": 4.0}}}
+    assert caps == {"sessionUsd": 10.0, "models": {"krea": {"perRunUsd": None, "sessionUsd": 4.0}}}
 
 
 def test_the_ledger_keeps_sessions_apart_and_survives_a_restart(tmp_path):
@@ -964,3 +964,53 @@ def test_a_plan_node_that_never_reached_its_handler_gives_its_run_back(client, m
     node_id = add_plan_node(client)
     assert client.post("/api/graph/run", json={"targetNodeId": node_id}).status_code == 200
     assert client.get("/api/agent/spend").json()["spent"]["kreaPlanRuns"] == 0
+
+
+@pytest.mark.parametrize(("saved", "expected"), [
+    ({}, agent_spend.DEFAULT_PLAN_RUNS),  # never set: the default, not no limit
+    ({"agentSpend": {"sessionUsd": 5}}, agent_spend.DEFAULT_PLAN_RUNS),
+    ({"agentSpend": {"kreaPlanRuns": None}}, None),  # the person's "No limit"
+    ({"agentSpend": {"kreaPlanRuns": 25}}, 25),
+    ({"agentSpend": {"kreaPlanRuns": 0}}, 0),
+    # Unreadable (hand-edited, or from an older build): every plan run asks.
+    ({"agentSpend": {"kreaPlanRuns": "lots"}}, 0),
+    ({"agentSpend": {"kreaPlanRuns": -1}}, 0),
+    ({"agentSpend": {"kreaPlanRuns": agent_spend.MAX_PLAN_RUNS + 1}}, 0),
+    ({"agentSpend": {"kreaPlanRuns": True}}, 0),
+    ({"agentSpend": "garbage"}, 0),
+])
+def test_plan_runs_fail_closed(saved, expected):
+    assert agent_spend.caps_from_settings(saved)["kreaPlanRuns"] == expected
+
+
+def test_plan_runs_are_held_to_the_default_until_the_person_picks():
+    settings = {"runCostConfirmUsd": None}
+    many = [{"id": f"k{i}", "definitionId": "krea", "params": {}} for i in range(agent_spend.DEFAULT_PLAN_RUNS + 1)]
+    message = refusal(many, settings=settings)
+    assert message is not None and f"{agent_spend.DEFAULT_PLAN_RUNS}-run Krea plan limit" in message
+    assert refusal(many[:-1], settings=settings) is None
+    assert refusal(many, settings={**settings, "agentSpend": {"kreaPlanRuns": None}}) is None
+    asks = refusal(PLAN[:1], settings={**settings, "agentSpend": {"kreaPlanRuns": 0}})
+    assert asks is not None and "0 runs of its 0-run Krea plan limit" in asks
+
+
+def test_the_plan_run_default_doesnt_make_unpriced_nodes_ask():
+    # With every USD limit off, an unpriced node runs as before; plan runs are still capped.
+    unpriced = [{"id": "n4", "definitionId": "unpriced", "params": {}}]
+    assert refusal(unpriced, settings={"runCostConfirmUsd": None}) is None
+
+
+def test_plan_run_limits_are_kept_only_when_named():
+    assert "kreaPlanRuns" not in agent_spend.validate_caps({"sessionUsd": 5}, DEFINITIONS)
+    assert agent_spend.validate_caps({"kreaPlanRuns": None}, DEFINITIONS)["kreaPlanRuns"] is None
+    assert agent_spend.validate_caps({"kreaPlanRuns": 0}, DEFINITIONS)["kreaPlanRuns"] == 0
+    for bad in (-1, 2.5, "10", True, agent_spend.MAX_PLAN_RUNS + 1):
+        with pytest.raises(ValueError):
+            agent_spend.validate_caps({"kreaPlanRuns": bad}, DEFINITIONS)
+
+
+def test_the_status_reports_the_default_plan_run_limit(client):
+    assert client.get("/api/agent/spend").json()["limits"]["kreaPlanRuns"] == agent_spend.DEFAULT_PLAN_RUNS
+    caps = {"agentSpend": {"sessionUsd": None, "kreaPlanRuns": 0, "models": {}}}
+    assert client.put("/api/settings", json=caps, headers=PERSON).status_code == 200
+    assert client.get("/api/agent/spend").json()["limits"]["kreaPlanRuns"] == 0

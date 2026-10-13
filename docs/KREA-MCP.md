@@ -63,12 +63,14 @@ already present; an existing managed policy is preserved, and the Daedalus
 turn is refused instead, since the overlay is also how it reaches Nebula's own
 MCP tools (see [MCP-SETUP.md](MCP-SETUP.md#in-app-agents-use-this-server)).
 Switching a Krea node between account billing (`_kreaAuth`) and its API key
-is the person's call. The backend enforces it: an agent's direct edit that
-changes `_kreaAuth`, or adds a dual-mode Krea node already set to `mcp`, gets a
-403 pointing at `propose_change`, and the person accepts the switch on the
+is the person's call. The backend enforces it: an agent's direct edit, project
+snapshot save or run request that changes `_kreaAuth`, or brings in a dual-mode
+Krea node already set to `mcp`, gets a 403 pointing at `propose_change` (the
+routes are listed in [MCP-SETUP.md](MCP-SETUP.md#spending-limits)), and the
+person accepts the switch on the
 canvas (the proposal bar shows it as "Billed to: API token balance → Krea
 plan"). Agent runs billed to the plan count against the "Krea plan runs" limit
-in Settings > Agent spending ([MCP-SETUP.md](MCP-SETUP.md#spending-limits)).
+(10 until the person picks one) in Settings > Agent spending ([MCP-SETUP.md](MCP-SETUP.md#spending-limits)).
 An already-running/resumed agent may need a new turn to see the connection.
 
 Tokens never appear in settings, graph exports or agent configuration. Desktop

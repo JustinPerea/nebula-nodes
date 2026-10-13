@@ -10,10 +10,13 @@ import pytest
 import main as main_module
 from models.graph import ExecuteNodeRequest, ExecuteRequest, GraphNode
 from models.events import ExecutedEvent, GraphCancelledEvent, ProviderRecoveryEvent
+from services import agent_spend
+from services.agent_presence import request_headers_scope
 from services.cli_graph import CLIGraph
 from services.execution_runs import ExecutionRunRegistry
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
+from tests.conftest import PERSON
 
 
 @pytest.fixture
@@ -32,6 +35,7 @@ def replay_runtime(monkeypatch, tmp_path):
     monkeypatch.setattr(main_module, "_watch_for_cross_process_stop", lambda *_args: None)
     monkeypatch.setattr(main_module, "_claim_fresh_paid_worldlabs_starts", lambda **_kwargs: None)
     monkeypatch.setattr(main_module, "_release_paid_worldlabs_starts", AsyncMock())
+    monkeypatch.setattr(main_module, "agent_spend_ledger", agent_spend.SpendLedger(None))
     return graph, registry, broadcast
 
 
@@ -56,11 +60,12 @@ def test_preserve_params_wire_alias_is_optional_and_defaults_to_false(request_ty
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("who", ["person", "agent"])
 @pytest.mark.parametrize("single_node", [False, True])
 @pytest.mark.parametrize("preserve", [False, True])
 @pytest.mark.parametrize("outcome", ["success", "cancel", "absorbed-return", "absorbed-error"])
 async def test_replay_preserves_live_params_and_ordinary_runs_still_sync_metadata(
-    replay_runtime, monkeypatch, single_node, preserve, outcome,
+    replay_runtime, monkeypatch, person, who, single_node, preserve, outcome,
 ):
     graph, registry, broadcast = replay_runtime
     before = copy.deepcopy(graph.nodes["n1"]["params"])
@@ -88,7 +93,8 @@ async def test_replay_preserves_live_params_and_ordinary_runs_still_sync_metadat
 
     monkeypatch.setattr(main_module, "execute_graph", fake_execute_graph)
     node = GraphNode(id="n1", definitionId="text-input", params={"value": "saved prompt", "seed": 7})
-    response = await start_request(single_node, "replay-param-contract", preserve, node)
+    with request_headers_scope(PERSON if who == "person" else {"X-Nebula-Agent": "Codex"}):
+        response = await start_request(single_node, "replay-param-contract", preserve, node)
     record = registry.get(response["runId"])
     assert record is not None
     await asyncio.wait_for(started.wait(), timeout=1)
@@ -100,9 +106,12 @@ async def test_replay_preserves_live_params_and_ordinary_runs_still_sync_metadat
     else:
         await record.task
     assert accepted == [{"value": "saved prompt", "seed": 7}]
-    assert graph.nodes["n1"]["params"] == (before if preserve else {
-        "value": "saved prompt", "seed": 7, "_sourceDuration": 1.2,
-    })
+    # The person's run mirrors its params onto the canvas. A run that isn't
+    # the person's writes back only what the run itself added: its request
+    # can't edit the canvas (that goes through the edit routes and their checks).
+    synced = ({"value": "saved prompt", "seed": 7, "_sourceDuration": 1.2} if who == "person"
+              else {**before, "_sourceDuration": 1.2})
+    assert graph.nodes["n1"]["params"] == (before if preserve else synced)
     assert graph.nodes["n1"]["outputs"] == {"text": {"type": "Text", "value": "saved recipe result"}}
 
 

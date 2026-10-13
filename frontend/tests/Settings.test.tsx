@@ -807,19 +807,19 @@ describe('Settings — preferences', () => {
     openTab('Preferences');
     expect(screen.getByText(/The per-run limit above \(\$1\) applies to agents too/)).toBeInTheDocument();
     fireEvent.change(screen.getByRole('combobox', { name: 'Per chat session' }), { target: { value: '10' } });
-    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ agentSpend: { sessionUsd: 10, kreaPlanRuns: null, models: {} } }));
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ agentSpend: { sessionUsd: 10, models: {} } }));
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Limit a model' }), { target: { value: 'gpt-image-1-generate' } });
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
-      agentSpend: { sessionUsd: 10, kreaPlanRuns: null, models: { 'gpt-image-1-generate': { perRunUsd: 1, sessionUsd: null } } },
+      agentSpend: { sessionUsd: 10, models: { 'gpt-image-1-generate': { perRunUsd: 1, sessionUsd: null } } },
     }));
     const perSession = await screen.findByRole('combobox', { name: 'GPT Image 1 per session' });
     fireEvent.change(perSession, { target: { value: '25' } });
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
-      agentSpend: { sessionUsd: 10, kreaPlanRuns: null, models: { 'gpt-image-1-generate': { perRunUsd: 1, sessionUsd: 25 } } },
+      agentSpend: { sessionUsd: 10, models: { 'gpt-image-1-generate': { perRunUsd: 1, sessionUsd: 25 } } },
     }));
     fireEvent.click(screen.getByRole('button', { name: 'Remove the limits for GPT Image 1' }));
-    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ agentSpend: { sessionUsd: 10, kreaPlanRuns: null, models: {} } }));
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ agentSpend: { sessionUsd: 10, models: {} } }));
     expect(screen.queryByRole('combobox', { name: 'GPT Image 1 per session' })).not.toBeInTheDocument();
   });
   it('limits the outside agents over 24 hours and Krea plan runs, and shows what they spent', async () => {
@@ -836,17 +836,33 @@ describe('Settings — preferences', () => {
     expect(within(outside).getByRole('option', { name: 'Same as a chat ($10)' })).toBeInTheDocument();
     fireEvent.change(outside, { target: { value: '5' } });
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
-      agentSpend: { sessionUsd: 10, outsideDailyUsd: 5, kreaPlanRuns: null, models: {} },
+      agentSpend: { sessionUsd: 10, outsideDailyUsd: 5, models: {} },
     }));
     fireEvent.change(screen.getByRole('combobox', { name: 'Agents outside Nebula chats' }), { target: { value: 'session' } });
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
-      agentSpend: { sessionUsd: 10, kreaPlanRuns: null, models: {} },
+      agentSpend: { sessionUsd: 10, models: {} },
     }));
 
     expect(screen.getByText(/Only you can move a node between your API balance and your Krea plan; agents/)).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Krea plan runs' }), { target: { value: '25' } });
+    // Unset, plan runs are held to the default, never to no limit.
+    const planRuns = screen.getByRole('combobox', { name: 'Krea plan runs' });
+    expect(planRuns).toHaveValue('default');
+    expect(within(planRuns).getByRole('option', { name: '10 (default)' })).toBeInTheDocument();
+    fireEvent.change(planRuns, { target: { value: '25' } });
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
       agentSpend: { sessionUsd: 10, kreaPlanRuns: 25, models: {} },
+    }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Krea plan runs' }), { target: { value: '0' } });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
+      agentSpend: { sessionUsd: 10, kreaPlanRuns: 0, models: {} },
+    }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Krea plan runs' }), { target: { value: 'none' } });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
+      agentSpend: { sessionUsd: 10, kreaPlanRuns: null, models: {} },
+    }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Krea plan runs' }), { target: { value: 'default' } });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
+      agentSpend: { sessionUsd: 10, models: {} },
     }));
   });
 

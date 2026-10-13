@@ -3,7 +3,9 @@ import { X } from 'lucide-react';
 import { NODE_DEFINITIONS } from '../../../constants/nodeDefinitions';
 import { getOutsideSpend, type OutsideSpend } from '../../../lib/api';
 import { saveField } from '../../../lib/settingsWrites';
-import { useSettingsDraftStore, type AgentSpendLimits, type ModelSpendLimit } from '../../../store/settingsDraftStore';
+import {
+  DEFAULT_PLAN_RUNS, useSettingsDraftStore, type AgentSpendLimits, type ModelSpendLimit,
+} from '../../../store/settingsDraftStore';
 import { useUIStore } from '../../../store/uiStore';
 import { ConnectedApps } from './ConnectedApps';
 
@@ -11,6 +13,8 @@ const SESSION_CHOICES = [2, 5, 10, 25, 50, 100] as const;
 const PLAN_RUN_CHOICES = [5, 10, 25, 50, 100, 250] as const;
 /** The outside budget's select value while it follows the per-session one. */
 const SAME_AS_SESSION = 'session';
+/** The plan-runs select value while it is the default. */
+const DEFAULT_CHOICE = 'default';
 const MODEL_RUN_CHOICES = [0.5, 1, 2, 5, 10, 20] as const;
 const MODEL_SESSION_CHOICES = [5, 10, 25, 50, 100] as const;
 
@@ -147,16 +151,7 @@ export function AgentSpendSection() {
               have to ask.
             </span>
           </span>
-          <select id="settings-agent-plan-runs" className="settings__select settings__select--compact"
-            aria-describedby="settings-agent-plan-runs-help" disabled={pending}
-            value={limits.kreaPlanRuns === null ? 'none' : String(limits.kreaPlanRuns)}
-            onChange={(event) => save({ ...limits, kreaPlanRuns: event.target.value === 'none' ? null : Number(event.target.value) })}>
-            {limits.kreaPlanRuns !== null && !(PLAN_RUN_CHOICES as readonly number[]).includes(limits.kreaPlanRuns) && (
-              <option value={String(limits.kreaPlanRuns)}>{limits.kreaPlanRuns} run{limits.kreaPlanRuns === 1 ? '' : 's'}</option>
-            )}
-            {PLAN_RUN_CHOICES.map((choice) => <option key={choice} value={String(choice)}>{choice} runs</option>)}
-            <option value="none">No limit</option>
-          </select>
+          <PlanRunsSelect limits={limits} disabled={pending} onChange={save} />
         </div>
         {modelIds.map((id) => {
           const name = NODE_DEFINITIONS[id]?.displayName ?? id;
@@ -205,6 +200,34 @@ export function AgentSpendSection() {
       {error && <p className="settings-row__error" role="alert">{error}</p>}
       <ConnectedApps view={outside.view} loadError={outside.error} onChanged={outside.reload} />
     </section>
+  );
+}
+
+/** Krea plan runs: DEFAULT_PLAN_RUNS until the person picks a number, 0 (ask every time) or no limit. */
+function PlanRunsSelect({ limits, disabled, onChange }: {
+  limits: AgentSpendLimits;
+  disabled: boolean;
+  onChange: (next: AgentSpendLimits) => void;
+}) {
+  const own = limits.kreaPlanRuns;
+  const current = own === undefined ? DEFAULT_CHOICE : own === null ? 'none' : String(own);
+  const custom = typeof own === 'number' && own !== 0 && !(PLAN_RUN_CHOICES as readonly number[]).includes(own);
+  return (
+    <select id="settings-agent-plan-runs" className="settings__select settings__select--compact"
+      aria-describedby="settings-agent-plan-runs-help" value={current} disabled={disabled}
+      onChange={(event) => {
+        const { value } = event.target;
+        const next = { ...limits };
+        if (value === DEFAULT_CHOICE) delete next.kreaPlanRuns;
+        else next.kreaPlanRuns = value === 'none' ? null : Number(value);
+        onChange(next);
+      }}>
+      <option value={DEFAULT_CHOICE}>{DEFAULT_PLAN_RUNS} (default)</option>
+      <option value="0">Ask every time</option>
+      {custom && <option value={current}>{own} run{own === 1 ? '' : 's'}</option>}
+      {PLAN_RUN_CHOICES.map((choice) => <option key={choice} value={String(choice)}>{choice} runs</option>)}
+      <option value="none">No limit</option>
+    </select>
   );
 }
 

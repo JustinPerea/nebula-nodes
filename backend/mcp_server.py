@@ -519,7 +519,9 @@ def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
     budget for every outside agent, counting the last 24 hours; restarting
     Nebula doesn't reset it), or "app" (an app token the person made, which
     also counts inside "shared"). `kreaPlanRuns` counts runs billed to the
-    Krea plan. Runs over a limit must go through propose_change."""
+    Krea plan (its limit is 10 until the person sets one; 0 means every plan
+    run needs a proposal). Runs over a limit must go through propose_change,
+    and so does billing any Krea node differently from the canvas."""
     return _canvas_call("GET", "/api/agent/spend", ctx)
 
 

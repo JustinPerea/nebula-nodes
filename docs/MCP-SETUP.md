@@ -404,7 +404,9 @@ The person decides what agents may spend, in **Settings > Preferences**:
   (Claude Desktop, terminal tools, scripts) may run together over the last 24
   hours. Unset, it is the per-session amount. Restarting Nebula doesn't reset it.
 - **Krea plan runs**: how many runs one chat, or the outside agents over 24
-  hours, may bill to the signed-in Krea plan.
+  hours, may bill to the signed-in Krea plan. Default 10 until you pick a
+  number; "Ask every time" (0) makes every plan run a proposal, and only "No
+  limit" lifts it.
 - **Limit a model**: a per-run limit that replaces the general one for that
   model, a session budget for it (for outside agents, over 24 hours), or both.
 - **Connected apps**: a token per outside app, with its own optional daily
@@ -460,13 +462,26 @@ How it works (`backend/services/agent_spend.py`):
 - Krea plan runs: a node billed to the signed-in Krea plan has no per-call
   price (Krea charges compute units it doesn't publish per model), so it is
   counted as runs: batch runs times a cinema scene's shots times variations.
-  With "Krea plan runs" set, a run that would go over it needs a proposal; with
-  it unset, the runs are still counted and shown. The same give-back rules
-  apply. An agent can't move a node onto the plan itself: an edit through
-  `edit_canvas` (`/api/graph/apply`), `nebula set`/`create`
-  (`/api/graph/node`), `/api/graph/node-and-connect`, `/api/graph/cluster` or
-  `/api/graph/import` that changes `_kreaAuth`, or adds a node that offers
-  both modes already set to `mcp`, gets a 403 pointing at `propose_change`.
+  A run that would go over "Krea plan runs" needs a proposal. Left unset, the
+  limit is 10; a saved value Nebula can't read counts as 0 (every plan run
+  asks), and only the person's "No limit" (`null`) lifts it. The runs are
+  always counted and shown, and the same give-back rules apply. An agent
+  can't move a node onto the plan itself; anything that isn't the person
+  gets a 403 pointing at `propose_change` when it would change `_kreaAuth`,
+  or bring in a node that offers both modes already set to `mcp`:
+  - edits: `edit_canvas` (`/api/graph/apply`), `nebula set`/`create`
+    (`/api/graph/node`), `/api/graph/node-and-connect`, `/api/graph/cluster`
+    and `/api/graph/import`;
+  - project snapshots: `PUT /api/projects/{id}` and `/api/projects/recover`
+    (opening a project loads its snapshot onto the canvas), compared with the
+    live canvas and the project as saved;
+  - runs that take nodes in the request: `/api/execute`, `/api/execute-node`
+    and `/api/quick`. A node there may bill only the way the canvas node with
+    its id and definition does; any other node starts on the API token. A
+    run's params are written back to the canvas only onto a node of the same
+    definition, and for a run that isn't the person's only what the run
+    itself changed, never `_kreaAuth`.
+
   Proposals carry `_kreaAuth`, and the person's Accept applies it. Nodes that
   offer only the plan (Krea Files, Moodboards) have nothing to switch.
 - A refusal is a 403 whose message names the cost, the limit and the exact

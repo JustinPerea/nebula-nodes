@@ -12,7 +12,9 @@ The person sets these in Settings > Preferences:
   24 hours. Left unset, it is the per-session budget, so adding it never made
   anything looser.
 - ``agentSpend.kreaPlanRuns``: how many runs one chat session, or the outside
-  agents together over 24 hours, may bill to the signed-in Krea plan.
+  agents together over 24 hours, may bill to the signed-in Krea plan. Left
+  unset it is DEFAULT_PLAN_RUNS; only the person's explicit null ("No
+  limit") lifts it, and an unreadable value is 0 (every plan run asks).
 - ``agentSpend.models[<definitionId>]``: per-model limits, ``perRunUsd`` (it
   replaces the general per-run threshold for that model) and ``sessionUsd``
   (per chat session, and over 24 hours for the outside agents).
@@ -63,7 +65,10 @@ Krea charges compute units it doesn't publish per model. They are counted as
 runs instead (times a node's batch runs, shots and passes) against
 ``kreaPlanRuns``, and always counted even with no limit set. Agents can't move
 a node onto the plan themselves: changing ``_kreaAuth`` takes a proposal
-(``main._refuse_agent_krea_billing_change``).
+(``main._refuse_agent_krea_billing_change``). That holds on every way in: the
+edit routes, project snapshots, and the run routes, which take params in the
+request (a run may only bill a node the way its canvas node does, and a node
+that exists only for the run starts on the API token).
 
 A cinema scene is a local node that calls its base image model once per
 shot, so it is priced, limited and counted as that model, times its shots
@@ -106,6 +111,9 @@ CAPS_KEY = "agentSpend"
 DEFAULT_THRESHOLD_USD = 1.0
 MAX_SESSIONS = 500
 MAX_PLAN_RUNS = 100_000
+# Plan runs per chat, or for the outside agents over 24 hours, until the
+# person picks a number (or "No limit") in Settings.
+DEFAULT_PLAN_RUNS = 10
 
 WINDOW_SECONDS = 24 * 60 * 60
 OUTSIDE_PREFIX = "outside:"
@@ -132,11 +140,12 @@ def validate_threshold(value: Any) -> float | None:
 
 
 def validate_plan_runs(value: Any) -> int | None:
-    """A whole number of runs from 1 up, or None for no limit."""
+    """A whole number of runs from 0 (every plan run needs a proposal) up, or
+    None for no limit."""
     if value is None:
         return None
-    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_PLAN_RUNS:
-        raise ValueError(f"{CAPS_KEY}.kreaPlanRuns must be a whole number of runs from 1 to {MAX_PLAN_RUNS}, or null")
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= MAX_PLAN_RUNS:
+        raise ValueError(f"{CAPS_KEY}.kreaPlanRuns must be a whole number of runs from 0 to {MAX_PLAN_RUNS}, or null")
     return value
 
 
@@ -154,8 +163,9 @@ def threshold_from_settings(settings: Mapping[str, Any]) -> float | None:
 def validate_caps(value: Any, known_definitions: Mapping[str, Any]) -> dict[str, Any]:
     """Normalize ``agentSpend`` from a request; raise ValueError when it's malformed.
 
-    ``outsideDailyUsd`` is kept only when the request names it: left out, the
-    outside agents share the per-session amount (see caps_from_settings)."""
+    ``outsideDailyUsd`` and ``kreaPlanRuns`` are kept only when the request
+    names them: left out, the outside agents share the per-session amount and
+    plan runs are held to DEFAULT_PLAN_RUNS (see caps_from_settings)."""
     if not isinstance(value, dict):
         raise ValueError(f"{CAPS_KEY} must be an object")
     unknown = set(value) - {"sessionUsd", "outsideDailyUsd", "kreaPlanRuns", "models"}
@@ -178,18 +188,23 @@ def validate_caps(value: Any, known_definitions: Mapping[str, Any]) -> dict[str,
     caps: dict[str, Any] = {"sessionUsd": validate_threshold(value.get("sessionUsd"))}
     if "outsideDailyUsd" in value:
         caps["outsideDailyUsd"] = validate_threshold(value["outsideDailyUsd"])
-    caps["kreaPlanRuns"] = validate_plan_runs(value.get("kreaPlanRuns"))
+    if "kreaPlanRuns" in value:
+        caps["kreaPlanRuns"] = validate_plan_runs(value["kreaPlanRuns"])
     caps["models"] = models
     return caps
 
 
 def caps_from_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
     """The saved agent limits; anything unreadable counts as unset, except an
-    unreadable outside budget, which falls back to the per-session one."""
+    unreadable outside budget, which falls back to the per-session one, and
+    plan runs: unset is DEFAULT_PLAN_RUNS and unreadable is 0 (every plan run
+    needs a proposal). Krea doesn't price plan runs, so no USD limit stands
+    behind them; only an explicit null (the person's "No limit") lifts it."""
+    if CAPS_KEY not in settings:
+        return {"sessionUsd": None, "outsideDailyUsd": None, "kreaPlanRuns": DEFAULT_PLAN_RUNS, "models": {}}
     raw = settings.get(CAPS_KEY)
-    empty: dict[str, Any] = {"sessionUsd": None, "outsideDailyUsd": None, "kreaPlanRuns": None, "models": {}}
     if not isinstance(raw, dict):
-        return empty
+        return {"sessionUsd": None, "outsideDailyUsd": None, "kreaPlanRuns": 0, "models": {}}
     try:
         session = validate_threshold(raw.get("sessionUsd"))
     except ValueError:
@@ -200,10 +215,12 @@ def caps_from_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
             outside = validate_threshold(raw.get("outsideDailyUsd"))
         except ValueError:
             outside = session
-    try:
-        plan_runs = validate_plan_runs(raw.get("kreaPlanRuns"))
-    except ValueError:
-        plan_runs = None
+    plan_runs: int | None = DEFAULT_PLAN_RUNS
+    if "kreaPlanRuns" in raw:
+        try:
+            plan_runs = validate_plan_runs(raw["kreaPlanRuns"])
+        except ValueError:
+            plan_runs = 0
     models: dict[str, dict[str, float | None]] = {}
     for definition_id, limits in (raw.get("models") or {}).items() if isinstance(raw.get("models"), dict) else []:
         if not isinstance(limits, dict):
@@ -546,13 +563,15 @@ def decide(
     def refuse(reason: str) -> Decision:
         return decision(f"Needs the person's approval: {reason} {how_to_ask}")
 
-    limited = (threshold is not None
-               or any(budget.usd is not None or budget.plan_runs is not None for budget in budgets)
-               or any(v is not None for limits in model_caps.values() for v in limits.values()))
-    if not limited:
+    # Plan-run limits stand on their own: a Krea plan cap (on by default)
+    # doesn't make unpriced nodes need a proposal when no USD limit is set.
+    usd_limited = (threshold is not None
+                   or any(budget.usd is not None for budget in budgets)
+                   or any(v is not None for limits in model_caps.values() for v in limits.values()))
+    if not usd_limited and not any(budget.plan_runs is not None for budget in budgets):
         return decision(None)
 
-    if estimate["unpriced"]:
+    if usd_limited and estimate["unpriced"]:
         return refuse(f"Nebula has no list price for {_names(estimate['unpriced'], labels)}, "
                       "so it can't check this run against the spending limits set in Nebula Settings.")
 

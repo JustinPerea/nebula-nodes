@@ -21,10 +21,10 @@ discovery: `list_models`, `get_model_schema`, `get_prompting_guide`,
 `list_styles`, `list_moodboards`, `get_node_apps`, `get_node_app_versions`
 and `list_node_types`. Krea Files are not on the bridge. Generate, train, create
 or delete through Nebula GRAPH commands. Which way a node bills is the user's
-call: an agent's direct edit that changes `_kreaAuth` (or adds a dual-mode node
-set to `mcp`) is refused, so propose the change (`propose_change`, `nebula
+call: an agent's direct edit, project save or run request that changes
+`_kreaAuth` (or brings in a dual-mode node set to `mcp`) is refused, so propose the change (`propose_change`, `nebula
 propose`) and let the user accept it. Agent runs billed to the plan count
-against the "Krea plan runs" limit in Settings. Krea Moodboards and Krea Moodboard
+against the "Krea plan runs" limit in Settings (10 until the user picks one). Krea Moodboards and Krea Moodboard
 Create only offer `mcp`; Krea 3D Export only works with an API token.
 
 ## Gateway Model Nodes

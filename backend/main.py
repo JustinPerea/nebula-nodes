@@ -1885,16 +1885,21 @@ def _guard_approved_runs(change: Callable[[CLIGraph], Any]) -> None:
 
 def _require_spend_approval(
     nodes: list[GraphNode], edges: list[GraphEdge], *, how_to_ask: str | None = None,
-    run_ids: list[str] | None = None, run_id: str | None = None, passes: int = 1,
+    run_ids: list[str] | None = None, run_id: str | None = None, passes: int = 1, on_canvas: bool = True,
 ) -> None:
     """Refuse a run that isn't the person's when it breaks a spending limit, and
     count it against the caller's session when it doesn't.
 
     The person's own runs pass (the canvas asks them itself). Anything else
-    is held to the limits in Settings; see services/agent_spend.py."""
+    is held to the limits in Settings; see services/agent_spend.py. It also
+    can't bill a Krea node differently from the canvas (``on_canvas`` False:
+    nodes that only exist for this run, like /api/quick's, which start on the
+    API token): run routes take params in the request, so the billing-mode
+    check on edits alone wouldn't hold."""
     headers = current_request_headers()
     if _is_person_request():
         return
+    _refuse_agent_krea_billing_in_run(nodes, on_canvas=on_canvas)
     settings = load_settings()
     ask = how_to_ask or agent_spend.propose_hint(run_ids or [])
     try:
@@ -1915,6 +1920,19 @@ def _require_spend_approval(
     at = agent_spend_ledger.record(key, label, decision.charge, decision.plan_charge)
     if run_id is not None and (decision.per_node or decision.plan_per_node):
         _place_hold(run_id, key, dict(decision.per_node), dict(decision.plan_per_node), at=at)
+
+
+def _refuse_agent_krea_billing_in_run(nodes: list[GraphNode], *, on_canvas: bool = True) -> None:
+    """403 when a run that isn't the person's bills a dual-mode Krea node
+    other than the way the canvas node it names does. A node that isn't on
+    the canvas, or is there as another definition, starts on the default
+    (the API token)."""
+    changes = []
+    for node in nodes:
+        live = cli_graph.nodes.get(node.id) if on_canvas else None
+        before = live.get("params") or {} if live and live.get("definitionId") == node.definition_id else None
+        changes.append((node.id if on_canvas else node.definition_id, node.definition_id, before, node.params))
+    _refuse_agent_krea_billing_change(changes)
 
 
 def _place_hold(run_id: str, key: str, per_node: dict[str, tuple[str, float]],
@@ -4364,9 +4382,10 @@ def _execution_is_cancelling(run_id: str) -> bool:
 
 async def _finalize_cancelled_execution(
     nodes: list[GraphNode], run_id: str, *, preserve_graph_params: bool = False,
+    submitted: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> None:
     """Sync late live-run params, preserve replay canvas params, then emit Stop."""
-    if not preserve_graph_params and _sync_params_to_cli_graph(nodes):
+    if not preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted):
         await _broadcast_graph_sync()
     await manager.broadcast(GraphCancelledEvent(run_id=run_id))
     _journal(
@@ -4651,6 +4670,7 @@ async def execute(request: ExecuteRequest) -> dict:
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
+    submitted = _submitted_params(nodes)
     _validate_cinema_base_models(nodes)
 
     errors = validate_graph(nodes, request.edges, api_keys)
@@ -4706,7 +4726,7 @@ async def execute(request: ExecuteRequest) -> dict:
             # authoritative terminal state.
             if _execution_is_cancelling(run_id):
                 raise asyncio.CancelledError
-            if not request.preserve_graph_params and _sync_params_to_cli_graph(nodes):
+            if not request.preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted):
                 # ExecutedEvent carries outputs, but handlers such as
                 # video-edit also enrich params. Without a final graphSync the
                 # backend persisted those edits while the live Canvas stayed
@@ -4714,11 +4734,13 @@ async def execute(request: ExecuteRequest) -> dict:
                 await _broadcast_graph_sync()
             print("[exec] _run completed successfully", file=sys.stderr, flush=True)
         except asyncio.CancelledError:
-            await _finalize_cancelled_execution(nodes, run_id, preserve_graph_params=request.preserve_graph_params)
+            await _finalize_cancelled_execution(nodes, run_id, preserve_graph_params=request.preserve_graph_params,
+                                                submitted=submitted)
             raise
         except Exception as e:
             if _execution_is_cancelling(run_id):
-                await _finalize_cancelled_execution(nodes, run_id, preserve_graph_params=request.preserve_graph_params)
+                await _finalize_cancelled_execution(nodes, run_id, preserve_graph_params=request.preserve_graph_params,
+                                                submitted=submitted)
                 raise asyncio.CancelledError from e
             print(f"[exec] _run FAILED: {e}", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
@@ -4786,6 +4808,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
+    submitted = _submitted_params(nodes)
 
     # Compute the subgraph: target node + all its ancestors
     sub_nodes, sub_edges = get_subgraph(
@@ -4847,14 +4870,16 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
             )
             if _execution_is_cancelling(run_id):
                 raise asyncio.CancelledError
-            if not request.preserve_graph_params and _sync_params_to_cli_graph(sub_nodes):
+            if not request.preserve_graph_params and _sync_params_to_cli_graph(sub_nodes, submitted=submitted):
                 await _broadcast_graph_sync()
         except asyncio.CancelledError:
-            await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params)
+            await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params,
+                                                submitted=submitted)
             raise
         except Exception as exc:
             if _execution_is_cancelling(run_id):
-                await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params)
+                await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params,
+                                                submitted=submitted)
                 raise asyncio.CancelledError from exc
             traceback.print_exc()
             raise
@@ -5839,16 +5864,27 @@ def _sync_provider_recovery_to_cli_graph(
     return True, durability_warning, safety_hold_changed
 
 
-def _sync_params_to_cli_graph(nodes: list[GraphNode]) -> bool:
+def _sync_params_to_cli_graph(
+    nodes: list[GraphNode], *, submitted: Mapping[str, Mapping[str, Any]] | None = None,
+) -> bool:
     """Mirror handler-mutated params from in-memory GraphNode instances back
     to cli_graph. Pydantic deep-copies params at model_validate time, so any
     handler that enriches node.params (e.g. video-edit seeding clips +
     sourceDuration after probing) needs an explicit sync — otherwise the
     next /api/graph/export sees the pre-execution state and the canvas
-    reverts to whatever the user last set manually."""
+    reverts to whatever the user last set manually.
+
+    Only a canvas node of the same definition is written. ``submitted`` is
+    for a run whose params came from a request that isn't the person's
+    (``_submitted_params``): the params as that request sent them. Then
+    only what the run itself changed is copied, never ``_kreaAuth``, so a
+    request can't edit the canvas by running a node with the canvas node's
+    id; edits go through the edit routes and their checks."""
     persisted = False
     for node in nodes:
         current = cli_graph.nodes.get(node.id, {})
+        if current and current.get("definitionId") != node.definition_id:
+            continue
         if node.definition_id == "cinema-scene":
             # Whole-scene execution mutates only shot.output. The request's
             # authored scene and variation history are snapshots: copying
@@ -5894,15 +5930,31 @@ def _sync_params_to_cli_graph(nodes: list[GraphNode]) -> bool:
             pinned = node.params.get("_paperSource", {})
             if live.get("id") == pinned.get("id") and live.get("sequence", 0) >= pinned.get("sequence", 0):
                 continue
-        if (
-            node.id in cli_graph.nodes
-            and cli_graph.nodes[node.id].get("params") != node.params
-        ):
-            cli_graph.nodes[node.id]["params"] = copy.deepcopy(node.params)
+        if node.id not in cli_graph.nodes:
+            continue
+        params = node.params
+        if submitted is not None:
+            sent = submitted.get(node.id) or {}
+            params = {
+                key: value for key, value in (cli_graph.nodes[node.id].get("params") or {}).items()
+                if key == "_kreaAuth" or key not in sent or key in node.params
+            }
+            params.update({key: value for key, value in node.params.items()
+                           if key != "_kreaAuth" and (key not in sent or sent[key] != value)})
+        if cli_graph.nodes[node.id].get("params") != params:
+            cli_graph.nodes[node.id]["params"] = copy.deepcopy(params)
             persisted = True
     if persisted:
         cli_graph._maybe_persist()
     return persisted
+
+
+def _submitted_params(nodes: list[GraphNode]) -> dict[str, dict[str, Any]] | None:
+    """The params a run request sent, for ``_sync_params_to_cli_graph``; None
+    for the person's own runs, whose params are theirs to keep."""
+    if _is_person_request():
+        return None
+    return {node.id: copy.deepcopy(node.params) for node in nodes}
 
 
 def _validate_connect_handles(
@@ -7917,6 +7969,32 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
     return result, candidate
 
 
+def _snapshot_nodes(snapshot: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """A saved RF snapshot's nodes as {id: {definitionId, params}}."""
+    nodes: dict[str, dict[str, Any]] = {}
+    for node in snapshot.get("nodes") or []:
+        data = node.get("data") if isinstance(node, dict) else None
+        if isinstance(data, dict) and isinstance(node.get("id"), str):
+            params = data.get("params")
+            nodes[node["id"]] = {"definitionId": data.get("definitionId"), "params": params if isinstance(params, dict) else {}}
+    return nodes
+
+
+def _refuse_agent_krea_billing_in_project(candidate: CLIGraph, *before: Mapping[str, Mapping[str, Any]]) -> None:
+    """A project snapshot from a request that isn't the person's can't change
+    how a Krea node bills: opening the project later loads it onto the canvas.
+    ``before`` holds what each node was, by id, most current first (the live
+    canvas, then the project as saved); a node in none of them, or there as
+    another definition, starts on the default (the API token)."""
+    changes = []
+    for node_id, node in candidate.nodes.items():
+        definition_id = str(node.get("definitionId") or "")
+        prior = next((known.get("params") or {} for graph in before
+                      if (known := graph.get(node_id)) and known.get("definitionId") == definition_id), None)
+        changes.append((node_id, definition_id, prior, node.get("params") or {}))
+    _refuse_agent_krea_billing_change(changes)
+
+
 def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> bool:
     """Overlay CLI changes while retaining frontend-only data and run recipes."""
     previous = project["snapshot"]
@@ -8054,6 +8132,9 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
             return {"project": public_project(existing), "workspaceRevision": catalog["workspaceRevision"]}
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in source["snapshot"]["nodes"]}
         snapshot, candidate = _stage_project_snapshot(body.get("snapshot"), historical=historical)
+        _refuse_agent_krea_billing_in_project(
+            candidate, *([cli_graph.nodes] if catalog["activeProjectId"] == source["id"] else []),
+            _snapshot_nodes(source["snapshot"]))
         try:
             project = make_project(body.get("name", f"{source['name'][:100]} (recovered)"), snapshot)
         except ValueError as exc:
@@ -8129,7 +8210,9 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
                 raise HTTPException(status_code=409, detail="Only the currently open project can autosave its canvas")
             historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
             historical.update({node_id: node["definitionId"] for node_id, node in cli_graph.nodes.items()})
-            project["snapshot"], _ = _stage_project_snapshot(body["snapshot"], historical=historical)
+            staged, candidate = _stage_project_snapshot(body["snapshot"], historical=historical)
+            _refuse_agent_krea_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
+            project["snapshot"] = staged
             project["_backendNodeIds"] = sorted(set(cli_graph.nodes) & {node["id"] for node in project["snapshot"]["nodes"]})
             project["_backendEdgeIds"] = sorted({edge["id"] for edge in cli_graph.edges} & {edge["id"] for edge in project["snapshot"]["edges"]})
             project["_nodeCounter"] = cli_graph._counter
@@ -8764,7 +8847,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     ))
     # A quick run has no canvas node to propose, so point at one.
     quick_run = f"quick-{uuid4().hex}"
-    _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, how_to_ask=(
+    _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, on_canvas=False, how_to_ask=(
         f"Add it to the canvas instead (`nebula create {definition_id}`), then propose the run: "
         "`nebula propose --note \"<why>\" --run <node id>` (MCP: propose_change). "
         "The person accepts on the canvas, and the canvas runs it."
