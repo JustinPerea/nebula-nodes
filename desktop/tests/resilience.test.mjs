@@ -347,7 +347,7 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
   // VAL-ELECTRON-009: Quit during cold startup cleans up without loading
   // the workspace.
   // -------------------------------------------------------------------------
-  test('quit during cold startup leaves no child process or listener', { timeout: 45_000 }, async () => {
+  test('quit during cold startup leaves no child process or listener', { timeout: 45_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
     const userData = mkTemp();
     const uvicornBefore = uvicornPids();
     const fixture = join(FIXTURES, 'never-healthy.mjs');

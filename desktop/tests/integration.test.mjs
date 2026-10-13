@@ -152,7 +152,7 @@ describe('Electron integration — managed sidecar startup', () => {
     assertNoListener(apiPort);
   });
 
-  test('invalid Python override surfaces a visible failure with no orphan', { timeout: 30_000 }, async () => {
+  test('invalid Python override surfaces a visible failure with no orphan', { timeout: 30_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
     const userData = mkTemp();
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
@@ -200,7 +200,7 @@ describe('Electron integration — managed sidecar startup', () => {
     assert.notEqual(result.exitCode, 0);
   });
 
-  test('health timeout terminates child and surfaces timeout failure', { timeout: 30_000 }, async () => {
+  test('health timeout terminates child and surfaces timeout failure', { timeout: 30_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
     const userData = mkTemp();
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
