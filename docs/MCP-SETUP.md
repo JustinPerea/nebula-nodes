@@ -168,6 +168,64 @@ restarted; run `nebula look` in both cases. Every event carries the project
 id it happened in. Param values go through the same redaction as the
 snapshot, and outputs never appear.
 
+### Who counts as the person
+
+Some actions are the person's alone. The backend knows the person by one
+secret per launch, the **person token** (`backend/services/person_session.py`,
+checked in `backend/services/person_gate.py`):
+
+- Browser dev: `backend/devserver.py` makes it and prints (or, with
+  `--open`, opens) `http://localhost:5173/#nebula-person=<token>&backend=<origin>`.
+  The canvas moves it into that tab's sessionStorage, strips it from the
+  address bar, and from then on talks only to that backend (no port
+  discovery). It never goes into an environment variable, argv or a file.
+- Packaged app: Electron main makes it, writes it to the sidecar's stdin, and
+  hands it over IPC only to the app's own main frame. With
+  `NEBULA_DESKTOP_DEBUG_PORT` set there is no token at all, so person-only
+  actions stay locked and the window says why.
+
+The canvas sends it as `X-Nebula-Person` on every write and on
+`GET /api/agent/spend`, in a `{type: "hello"}` frame on `/ws`, and as
+`personToken` on every `/ws/chat` send. A request is the person's only when it
+carries no agent marker (`Authorization: Agent`, `X-Daedalus-Caller`,
+`X-Nebula-Agent`, `X-Nebula-Client`) and does carry a valid token. `Origin`
+proves nothing: any local program can write `Origin: http://localhost:5173`.
+(The Host/Origin guard in `services/local_guard.py` still keeps websites out.)
+
+Person-only, refused with 403 `person_required` otherwise:
+
+- creating and deleting pins; accepting and rejecting proposals (plus the
+  per-proposal accept key, sent only to a `/ws` that said hello as the person);
+- `PUT /api/settings` (every field), `DELETE /api/settings/api-keys/{provider}`,
+  `POST /api/credentials/update`;
+- Krea connect, check, disconnect and trial (`/api/krea/connection/connect`,
+  `/api/krea/connection/check`, `DELETE /api/krea/connection`,
+  `/api/krea/trial`). `GET /api/krea/connection`, `/api/krea/tools` and
+  `/api/krea/tools/call` stay open;
+- starting any `/ws/chat` turn (Claude, Codex, Hermes, Daedalus), so no chat
+  workspace or agent token is minted without the person;
+- `POST /api/enhance-prompt`, the Create button's rewrite. The gate comes
+  first; then prompts over 4,000 characters get a 413 that says so, and more
+  than 20 calls a minute get a 429. Each call logs provider, length and outcome
+  (never the prompt) to `nebula.enhance_prompt`. An agent that wants a prompt
+  rewritten writes it itself, or adds a text node (`claude-chat`,
+  `gpt-4o-chat`, `gemini-chat`), whose run is held to the spending limits.
+
+Everything else, including running nodes, is open to agents and held to the
+spending limits. The person isn't limited.
+
+Every process the backend starts (agents, the Commons reader, ffmpeg, the
+Remotion renderer, git, `open`, `ps`, `sips`, `brctl`) gets the backend's
+environment minus `NEBULA_PERSON_TOKEN`, `NEBULA_CONNECTOR_ENCRYPTION_KEY`,
+`NEBULA_INJECTED_KEYS` and `NEBULA_CONNECTOR_SESSION`
+(`services/child_env.py`).
+
+Remaining risk, plainly: a program running as you with its own unsandboxed
+shell can still read the token (the backend's memory, Chrome's on-disk Session
+Storage and History). The token binds Nebula's in-app agents and any client
+that reaches Nebula only through its MCP server, CLI or API; it is not a
+sandbox against hostile local code.
+
 ### Pins
 
 The person can pin a short note to a node or to a spot on the canvas for
@@ -196,8 +254,8 @@ Rules:
   `POST /api/canvas/pins` and `DELETE /api/canvas/pins/{id}` refuse any
   request that carries an agent marker (`Authorization: Agent`,
   `X-Daedalus-Caller`, `X-Nebula-Agent`, `X-Nebula-Client`), even an invalid
-  one, and require a browser `Origin` (or, in the packaged app, the
-  per-launch connector session). The CLI and MCP server send no `Origin`.
+  one, and require the person token (see "Who counts as the person"). The
+  CLI and MCP server never have it.
 - `POST /api/canvas/pins/{id}/resolve` needs a named agent
   (`NEBULA_AGENT_NAME`, `--as`, or an in-app agent token).
 - Text is plain text: whitespace collapsed, control characters dropped, 1–280
@@ -285,17 +343,15 @@ Rules:
 Who can accept: only the person, enforced in three layers.
 
 1. `POST /api/canvas/proposals/{id}/accept` and `/reject` apply the same
-   person gate as pins (no agent marker, browser `Origin` or the desktop
-   connector session).
+   person gate as pins (no agent marker, and the person token).
 2. They also need the proposal's accept key in `X-Nebula-Proposal-Key`. The
-   key is random per proposal, sent only over browser WebSockets
-   (`proposalOpened` / `proposalSync`), and never appears in the REST views,
+   key is random per proposal, sent only over `/ws` sockets that said hello
+   with the person token (`proposalOpened` / `proposalSync`), and never appears in the REST views,
    the snapshot, the journal or MCP results.
 3. There is no accept command in the CLI or MCP server.
 
-In the packaged app, in-app agents (Claude, Codex, Hermes) start with
-`NEBULA_CONNECTOR_SESSION` removed from their environment, so they cannot
-borrow the desktop session for layer 1.
+In-app agents (Claude, Codex, Hermes) never get the person token: it is in
+no environment, argv or file the backend hands them.
 
 Before the click, the bar's "See what Accept writes" list shows every value
 Accept will write: new nodes' params and `from → to` for changed params, in
@@ -307,10 +363,11 @@ proposal changes was edited after the proposal was made, Accept fails with
 edit. A proposal arriving while the person reads another never replaces the
 one on screen.
 
-Remaining risk: a program running as the same user on the same machine can
-set any `Origin` header on the `/ws` handshake, receive the keys and accept,
-or read the backend process's environment. These layers stop an agent from approving its own proposal by accident or through
-the normal tools; they are not a sandbox against hostile local code.
+Remaining risk: a program running as the same user with its own unsandboxed
+shell can read the person token (see "Who counts as the person"), say hello
+on `/ws`, receive the keys and accept. These layers stop an agent from
+approving its own proposal through Nebula's tools and API; they are not a
+sandbox against hostile local code.
 
 ### Spending limits
 
@@ -363,8 +420,8 @@ How it works (`backend/services/agent_spend.py`):
 - A refusal is a 403 whose message names the cost, the limit and the exact
   `nebula propose ... --run <node>` to send instead. Accepting a proposal is
   the person's approval, so the canvas runs it without checking a limit.
-- Only the person can change the limits: `PUT /api/settings` refuses
-  `runCostConfirmUsd` and `agentSpend` from anyone else.
+- Only the person can change the limits: `PUT /api/settings` refuses every
+  change from anyone without the person token.
 
 `nebula spend` (or `GET /api/agent/spend`) shows an agent its limits and what
 its session has used.

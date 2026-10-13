@@ -164,33 +164,48 @@ describe('backendWebSocketUrl with injected endpoint (VAL-TRANSPORT-005)', () =>
     return import('../../src/lib/backend');
   }
 
-  it('sends the desktop nonce only to the connector API on its injected backend', async () => {
+  const DESKTOP_TOKEN = 'synthetic-desktop-person-token-0000000000';
+
+  it('sends the desktop person token on every request to its own sidecar, from the IPC bridge', async () => {
+    const token = vi.fn().mockResolvedValue({ ok: true, token: DESKTOP_TOKEN });
     const backend = await importWithBridge({ apiBaseUrl: 'http://127.0.0.1:56789',
-      wsBaseUrl: 'ws://127.0.0.1:56789', connectorSession: 'synthetic-desktop-nonce' });
+      wsBaseUrl: 'ws://127.0.0.1:56789', person: { token } } as unknown as Record<string, string>);
     fetchSpy.mockResolvedValue({ ok: true, status: 200 });
     await backend.apiFetch('/api/krea/connection', { method: 'GET', headers: { 'X-Existing': 'preserved' } });
     const [url, init] = fetchSpy.mock.calls[0];
     expect(url).toBe('http://127.0.0.1:56789/api/krea/connection');
-    expect(init.headers.get('X-Nebula-Connector-Session')).toBe('synthetic-desktop-nonce');
+    expect(init.headers.get('X-Nebula-Person')).toBe(DESKTOP_TOKEN);
     expect(init.headers.get('X-Existing')).toBe('preserved');
+    // The packaged renderer's opaque origin can only read replies that carry
+    // the token, so even plain reads to its own sidecar send it.
     await backend.apiFetch('/api/settings');
-    expect(fetchSpy.mock.calls[1]).toEqual(['http://127.0.0.1:56789/api/settings']);
-    // Changing settings can change spending limits, which only the person may do.
+    expect(fetchSpy.mock.calls[1][1].headers.get('X-Nebula-Person')).toBe(DESKTOP_TOKEN);
     await backend.apiFetch('/api/settings', { method: 'PUT', body: '{}' });
-    expect(fetchSpy.mock.calls[2][1].headers.get('X-Nebula-Connector-Session')).toBe('synthetic-desktop-nonce');
+    expect(fetchSpy.mock.calls[2][1].headers.get('X-Nebula-Person')).toBe(DESKTOP_TOKEN);
+    expect(token).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls.flat().some((value) => String(value).includes('connectorSession'))).toBe(false);
   });
 
-  it('sends the desktop nonce to person-only canvas routes and the canvas socket', async () => {
+  it('keeps the token out of every socket URL', async () => {
+    const token = vi.fn().mockResolvedValue({ ok: true, token: DESKTOP_TOKEN });
     const backend = await importWithBridge({ apiBaseUrl: 'http://127.0.0.1:56789',
-      wsBaseUrl: 'ws://127.0.0.1:56789', connectorSession: 'synthetic desktop nonce' });
-    fetchSpy.mockResolvedValue({ ok: true, status: 201 });
-    await backend.apiFetch('/api/canvas/pins', { method: 'POST', body: '{}' });
-    await backend.apiFetch('/api/canvas/proposals/p_1/accept', { method: 'POST', body: '{}' });
-    expect(fetchSpy.mock.calls[0][1].headers.get('X-Nebula-Connector-Session')).toBe('synthetic desktop nonce');
-    expect(fetchSpy.mock.calls[1][1].headers.get('X-Nebula-Connector-Session')).toBe('synthetic desktop nonce');
-    await expect(backend.backendWebSocketUrl('/ws'))
-      .resolves.toBe('ws://127.0.0.1:56789/ws?connectorSession=synthetic%20desktop%20nonce');
+      wsBaseUrl: 'ws://127.0.0.1:56789', person: { token } } as unknown as Record<string, string>);
+    await expect(backend.backendWebSocketUrl('/ws')).resolves.toBe('ws://127.0.0.1:56789/ws');
     await expect(backend.backendWebSocketUrl('/ws/chat')).resolves.toBe('ws://127.0.0.1:56789/ws/chat');
+    await expect(backend.personTokenForSocket('ws://127.0.0.1:56789/ws')).resolves.toBe(DESKTOP_TOKEN);
+    await expect(backend.personTokenForSocket('ws://127.0.0.1:9/ws')).resolves.toBeNull();
+  });
+
+  it('sends nothing when the desktop shell withholds the token (debug port open)', async () => {
+    const token = vi.fn().mockResolvedValue({ ok: false, error: 'DEBUG_PORT' });
+    const backend = await importWithBridge({ apiBaseUrl: 'http://127.0.0.1:56789',
+      wsBaseUrl: 'ws://127.0.0.1:56789', person: { token } } as unknown as Record<string, string>);
+    fetchSpy.mockResolvedValue({ ok: true, status: 200 });
+    await backend.apiFetch('/api/settings', { method: 'PUT', body: '{}' });
+    expect(new Headers(fetchSpy.mock.calls[0][1].headers).get('X-Nebula-Person')).toBeNull();
+    const session = await import('../../src/lib/personSession');
+    expect(session.personUnavailableReason()).toBe('debug-port');
+    expect(session.personRequiredMessage()).toMatch(/remote-debugging port/);
   });
 
   afterEach(() => {
@@ -659,5 +674,158 @@ describe('WS reconnect with injected endpoint (VAL-TRANSPORT-008)', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
 
     wsClient.disconnect();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Browser person link: the token is bound to the backend that issued it.
+// ---------------------------------------------------------------------------
+
+describe('browser person link', () => {
+  const TOKEN = 'browser-person-token-000000000000000000000';
+  let fetchSpy: ReturnType<typeof vi.fn>;
+
+  async function importFresh() {
+    vi.resetModules();
+    fetchSpy = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', fetchSpy);
+    return import('../../src/lib/backend');
+  }
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    history.replaceState({}, '', '/');
+  });
+  afterEach(() => {
+    sessionStorage.clear();
+    history.replaceState({}, '', '/');
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it('moves the link into this tab, strips it from the address bar and pins its backend', async () => {
+    history.replaceState({ keep: 1 }, '', `/canvas?x=1#nebula-person=${TOKEN}&backend=http://127.0.0.1:8131&view=2`);
+    const backend = await importFresh();
+    expect(location.hash).toBe('#view=2');
+    expect(location.search).toBe('?x=1');
+    expect(history.state).toEqual({ keep: 1 });
+    expect(JSON.parse(sessionStorage.getItem('nebula.person')!)).toEqual({ token: TOKEN, backend: 'http://127.0.0.1:8131' });
+    expect(backend.getCachedBackendBaseUrl()).toBe('http://127.0.0.1:8131');
+    await expect(backend.getBackendBaseUrl({ force: true })).resolves.toBe('http://127.0.0.1:8131');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('sends the token on writes and the spend view, never on other reads', async () => {
+    sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8131' }));
+    const backend = await importFresh();
+    await backend.apiFetch('/api/settings');
+    await backend.apiFetch('/api/agent/spend');
+    await backend.apiFetch('/api/settings', { method: 'PUT', body: '{}' });
+    await backend.apiFetch('/api/canvas/proposals/p_1/accept', { method: 'POST', body: '{}' });
+    const header = (index: number) => {
+      const init = fetchSpy.mock.calls[index][1] as RequestInit | undefined;
+      return init?.headers ? new Headers(init.headers).get('X-Nebula-Person') : null;
+    };
+    expect(fetchSpy.mock.calls[0][0]).toBe('http://127.0.0.1:8131/api/settings');
+    expect(header(0)).toBeNull();
+    expect(header(1)).toBe(TOKEN);
+    expect(header(2)).toBe(TOKEN);
+    expect(header(3)).toBe(TOKEN);
+  });
+
+  it('never rediscovers another backend after a failed read while pinned', async () => {
+    sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8131' }));
+    const backend = await importFresh();
+    fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(backend.apiFetch('/api/settings')).rejects.toThrow('Failed to fetch');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls.every(([url]) => String(url).startsWith('http://127.0.0.1:8131/'))).toBe(true);
+  });
+
+  it('refuses a link that names a non-loopback backend, but still strips it', async () => {
+    history.replaceState({}, '', `/#nebula-person=${TOKEN}&backend=https://evil.example`);
+    const backend = await importFresh();
+    expect(location.hash).toBe('');
+    expect(sessionStorage.getItem('nebula.person')).toBeNull();
+    expect(backend.getCachedBackendBaseUrl()).not.toBe('https://evil.example');
+    await backend.apiFetch('/api/settings', { method: 'PUT', body: '{}' });
+    const init = fetchSpy.mock.calls[0][1] as RequestInit;
+    expect(new Headers(init.headers).get('X-Nebula-Person')).toBeNull();
+  });
+
+  it('the canvas socket says hello with the token on open, never in its URL', async () => {
+    sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8131' }));
+    const sockets: Array<{ url: string; sent: string[]; readyState: number; onopen: (() => void) | null;
+      onmessage: ((event: MessageEvent) => void) | null }> = [];
+    class MockWS {
+      static OPEN = 1;
+      readyState = 1;
+      sent: string[] = [];
+      onopen: (() => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(public url: string) { sockets.push(this); }
+      send(data: string) { this.sent.push(data); }
+      close() { this.readyState = 3; }
+    }
+    vi.stubGlobal('WebSocket', MockWS);
+    await importFresh();
+    const { wsClient } = await import('../../src/lib/wsClient');
+    const seen = vi.fn();
+    window.addEventListener('nebula:person-required', seen);
+    wsClient.connect();
+    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    expect(sockets[0].url).toBe('ws://127.0.0.1:8131/ws');
+    sockets[0].onopen?.();
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(1));
+    expect(JSON.parse(sockets[0].sent[0])).toEqual({ type: 'hello', personToken: TOKEN });
+    sockets[0].onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'personRequired', message: 'x' }) }));
+    expect(seen).toHaveBeenCalledTimes(1);
+    window.removeEventListener('nebula:person-required', seen);
+    wsClient.disconnect();
+  });
+
+  it('a link pasted into the open tab makes the canvas socket say hello without a reload', async () => {
+    const sockets: Array<{ url: string; sent: string[]; onopen: (() => void) | null }> = [];
+    class MockWS {
+      static OPEN = 1;
+      readyState = 1;
+      sent: string[] = [];
+      onopen: (() => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(public url: string) { sockets.push(this); }
+      send(data: string) { this.sent.push(data); }
+      close() { this.readyState = 3; }
+    }
+    vi.stubGlobal('WebSocket', MockWS);
+    await importFresh();
+    const { wsClient } = await import('../../src/lib/wsClient');
+    wsClient.connect();
+    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    sockets[0].onopen?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sockets[0].sent).toHaveLength(0);
+    // Test mode talks to http://localhost:8000; a link for that backend re-says hello there.
+    const backendOrigin = new URL(sockets[0].url).origin.replace('ws:', 'http:');
+    history.replaceState({}, '', `/#nebula-person=${TOKEN}&backend=${backendOrigin}`);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(1));
+    expect(JSON.parse(sockets[0].sent[0])).toEqual({ type: 'hello', personToken: TOKEN });
+    expect(location.hash).toBe('');
+    wsClient.disconnect();
+  });
+
+  it('reports a person_required refusal so the canvas can show the banner', async () => {
+    const backend = await importFresh();
+    const seen = vi.fn();
+    window.addEventListener('nebula:person-required', seen);
+    fetchSpy.mockResolvedValue(new Response(JSON.stringify({ detail: 'Only the person', code: 'person_required' }), { status: 403 }));
+    await backend.apiFetch('/api/settings', { method: 'PUT', body: '{}' });
+    await vi.waitFor(() => expect(seen).toHaveBeenCalledTimes(1));
+    window.removeEventListener('nebula:person-required', seen);
   });
 });

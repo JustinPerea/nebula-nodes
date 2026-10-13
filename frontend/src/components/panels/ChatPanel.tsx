@@ -20,7 +20,8 @@ import {
 } from '../../lib/api';
 import { ChatModelPicker } from './ChatModelPicker';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl } from '../../lib/backend';
-import { commonsChatAuthority } from '../../lib/commonsChatAuthority';
+import { chatAuthority } from '../../lib/commonsChatAuthority';
+import { reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
 import {
   chatCancellationDisconnectNotice,
@@ -52,7 +53,7 @@ function loadChatSelection(): ChatSelection {
   } catch { return empty; }
 }
 
-const BACKEND_START_COMMAND = 'cd backend && .venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000';
+const BACKEND_START_COMMAND = 'backend/.venv/bin/python backend/devserver.py --port 8000 --open';
 const CHAT_PANEL_RESIZE_CURSORS: Record<string, string> = {
   l: 'ew-resize',
   r: 'ew-resize',
@@ -985,6 +986,7 @@ export function ChatPanel() {
           }
           if (type === 'error') {
             const errText = String(event.message ?? 'unknown error');
+            if (event.code === 'person_required') reportPersonRequired();
             if (['model_unsupported', 'effort_unsupported', 'model_required', 'auth_required'].includes(String(event.code))) {
               setCatalogRefresh((value) => value + 1);
             }
@@ -1270,15 +1272,14 @@ export function ChatPanel() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (busyRef.current || authorityPendingRef.current) return;
     if (catalogLoading || selectionIssue) { setNotice(selectionIssue || 'Models are loading.'); return; }
-    let authority: Awaited<ReturnType<typeof commonsChatAuthority>> = {};
-    if (commonsEnabled) {
-      authorityPendingRef.current = true;
-      setAuthorizing(true);
-      try { authority = await commonsChatAuthority(true, brand); }
-      catch (error) { setNotice((error as Error).message); return; }
-      finally { authorityPendingRef.current = false; setAuthorizing(false); }
-      if (busyRef.current || ws.readyState !== WebSocket.OPEN || !useUIStore.getState().commonsEnabled) return;
-    }
+    // Every turn carries the person token (the backend starts none without it).
+    let authority: Awaited<ReturnType<typeof chatAuthority>> = {};
+    authorityPendingRef.current = true;
+    if (commonsEnabled) setAuthorizing(true);
+    try { authority = await chatAuthority(ws.url, commonsEnabled, brand); }
+    catch (error) { setNotice((error as Error).message); reportPersonRequired(); return; }
+    finally { authorityPendingRef.current = false; if (commonsEnabled) setAuthorizing(false); }
+    if (busyRef.current || ws.readyState !== WebSocket.OPEN || useUIStore.getState().commonsEnabled !== commonsEnabled) return;
 
     const enhanceTargetId = pendingEnhanceTargetRef.current ?? undefined;
     pendingEnhanceTargetRef.current = null;
@@ -1349,15 +1350,13 @@ export function ChatPanel() {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN || authorityPendingRef.current || busyRef.current) return;
       if (catalogLoading || selectionIssue) { setNotice(selectionIssue || 'Models are loading.'); return; }
-      let authority: Awaited<ReturnType<typeof commonsChatAuthority>> = {};
-      if (commonsEnabled) {
-        authorityPendingRef.current = true;
-        setAuthorizing(true);
-        try { authority = await commonsChatAuthority(true, brand); }
-        catch (error) { setNotice((error as Error).message); return; }
-        finally { authorityPendingRef.current = false; setAuthorizing(false); }
-        if (ws.readyState !== WebSocket.OPEN || !useUIStore.getState().commonsEnabled) return;
-      }
+      let authority: Awaited<ReturnType<typeof chatAuthority>> = {};
+      authorityPendingRef.current = true;
+      if (commonsEnabled) setAuthorizing(true);
+      try { authority = await chatAuthority(ws.url, commonsEnabled, brand); }
+      catch (error) { setNotice((error as Error).message); reportPersonRequired(); return; }
+      finally { authorityPendingRef.current = false; if (commonsEnabled) setAuthorizing(false); }
+      if (ws.readyState !== WebSocket.OPEN || useUIStore.getState().commonsEnabled !== commonsEnabled) return;
       setMessages((prev) => {
         // Mark the most recent approval message as responded so its
         // Approve/Reject buttons disable + dim during streaming.

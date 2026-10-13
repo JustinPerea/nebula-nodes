@@ -16,7 +16,8 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { execFileSync } from 'node:child_process';
 import { createServer as realCreateServer } from 'node:net';
-import { statSync as realStatSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
+import { statSync as realStatSync, writeFileSync, mkdirSync, chmodSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
@@ -1288,6 +1289,81 @@ describe('Real fixture — loopback binding only', () => {
       }
     } finally {
       await stopSidecar(handle);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// startSidecar — person token over stdin
+// ---------------------------------------------------------------------------
+
+describe('startSidecar — person token', () => {
+  function childWithStdin() {
+    const child = stubChild();
+    const stdin = new EventEmitter();
+    stdin.written = [];
+    stdin.ended = false;
+    stdin.end = (chunk) => { if (chunk !== undefined) stdin.written.push(chunk); stdin.ended = true; };
+    child.stdin = stdin;
+    return child;
+  }
+
+  async function start(child, options) {
+    const spawnFn = stubSpawn(() => child);
+    await startSidecar({
+      repoRoot: REPO_ROOT,
+      ...options,
+      deps: {
+        spawn: spawnFn,
+        fetch: stubFetch({ status: 200, body: { status: 'ok', app: 'nebula', version: '0.1.0' } }),
+        createServer: stubCreateServer(54390),
+        statSync: stubStatSync(),
+      },
+    });
+    return spawnFn.calls[0];
+  }
+
+  test('writes the token to stdin and keeps it out of argv and env', async () => {
+    const token = 'A'.repeat(43);
+    const child = childWithStdin();
+    const call = await start(child, { env: { NEBULA_PERSON_TOKEN: 'leaked', PATH: '/usr/bin' }, personToken: token });
+    assert.deepEqual(child.stdin.written, [`${token}\n`]);
+    assert.equal(child.stdin.ended, true);
+    assert.deepEqual(call.opts.stdio, ['pipe', 'pipe', 'pipe']);
+    assert.equal(call.opts.env.NEBULA_PERSON_TOKEN_STDIN, '1');
+    assert.equal('NEBULA_PERSON_TOKEN' in call.opts.env, false);
+    assert.equal(JSON.stringify([call.cmd, call.args, call.opts.env]).includes(token), false);
+  });
+
+  test('without a token the backend gets an empty line and runs with no person (fail closed)', async () => {
+    const child = childWithStdin();
+    const call = await start(child, { env: {}, personToken: null });
+    assert.deepEqual(child.stdin.written, ['\n']);
+    assert.equal(child.stdin.ended, true);
+    assert.equal(call.opts.env.NEBULA_PERSON_TOKEN_STDIN, '1');
+  });
+
+  test('a real backend reads the stdin token: only it unlocks a person-only route', async () => {
+    const token = 'B'.repeat(43);
+    const scratch = mkdtempSync(join(tmpdir(), 'nebula-person-sidecar-'));
+    const env = {
+      ...process.env,
+      NEBULA_SETTINGS_PATH: join(scratch, 'settings.json'),
+      NEBULA_STATE_DIR: join(scratch, 'state'),
+      NEBULA_OUTPUT_ROOT: join(scratch, 'output'),
+    };
+    let handle;
+    try {
+      handle = await startSidecar({ env, repoRoot: REPO_ROOT, personToken: token });
+      const put = (headers) => fetch(`${handle.apiBaseUrl}/api/settings`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers }, body: '{}',
+      });
+      assert.equal((await put({ Origin: 'http://localhost:5173' })).status, 403);
+      assert.equal((await put({ 'X-Nebula-Person': 'C'.repeat(43) })).status, 403);
+      assert.equal((await put({ 'X-Nebula-Person': token })).status, 200);
+    } finally {
+      if (handle) await stopSidecar(handle);
+      rmSync(scratch, { recursive: true, force: true });
     }
   });
 });

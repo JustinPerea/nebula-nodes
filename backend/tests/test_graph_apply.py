@@ -18,13 +18,13 @@ from services.cli_graph import CLIGraph
 from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
+from tests.conftest import FORGED_ORIGIN, PERSON
 
 AGENT = {"X-Nebula-Agent": "Claude Desktop"}
-BROWSER = {"Origin": "http://localhost:5173"}
 
 
 @pytest.fixture
-def api(tmp_path, monkeypatch):
+def api(tmp_path, monkeypatch, person):
     import main as main_module
 
     graph = CLIGraph(persist_path=tmp_path / "state.json")
@@ -187,7 +187,9 @@ def test_unknown_nodes_and_identity(api):
     assert _apply(api, {"move": {"n99": {"x": 0, "y": 0}}}).status_code == 404
     assert _apply(api, {"params": [{"nodeId": "n99", "params": {"value": "x"}}]}).status_code == 404
     assert _apply(api, {"rename": {prompt: "x"}}, headers={}).status_code == 400
-    assert _apply(api, {"rename": {prompt: "x"}}, headers=BROWSER).status_code == 403
+    assert _apply(api, {"rename": {prompt: "x"}}, headers=PERSON).status_code == 403
+    # A forged Origin is not the person: it still has to name itself.
+    assert _apply(api, {"rename": {prompt: "x"}}, headers=FORGED_ORIGIN).status_code == 400
 
 
 def test_krea_billing_choice_is_checked_per_node(api):

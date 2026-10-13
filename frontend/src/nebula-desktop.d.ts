@@ -96,13 +96,28 @@ export interface FolderPickerBridge {
   readonly choose: (defaultPath?: string) => Promise<FolderPickResult>;
 }
 
+export interface PersonTokenResult {
+  readonly ok: boolean;
+  readonly token?: string | null;
+  /** Why there is no token: a debug port is open, the renderer is the dev
+   * server, or the asking frame isn't the app's own page. */
+  readonly error?: 'DEBUG_PORT' | 'DEV_RENDERER' | 'UNTRUSTED_SENDER' | string;
+}
+
+export interface PersonBridge {
+  readonly token: () => Promise<PersonTokenResult>;
+}
+
 export interface NebulaDesktopBridge {
   readonly platform: string;
   readonly shell: string;
   readonly apiBaseUrl: string;
   readonly wsBaseUrl: string;
-  /** Per-sidecar request nonce for the packaged renderer's connector API. */
-  readonly connectorSession?: string;
+  /**
+   * This launch's person token, handed over IPC to the trusted main frame
+   * only (frontend/src/lib/personSession.ts). Absent in older shells.
+   */
+  readonly person?: Readonly<PersonBridge>;
   /** Frozen credential namespace — set / has / clear (NO get). */
   readonly credentials: Readonly<CredentialBridge>;
   /** Frozen migration namespace — status / retry. */
@@ -119,8 +134,6 @@ export interface NebulaDesktopBridge {
    * in the Keychain. The renderer shows a warning when non-empty.
    * VAL-UX-005
    */
-  /** Optional Commons session bridge; browser mode uses a terminal dev link. */
-  readonly commons?: Readonly<{ uiToken: () => Promise<string | null> }>;
   readonly plaintextKeyWarning: readonly string[];
 }
 

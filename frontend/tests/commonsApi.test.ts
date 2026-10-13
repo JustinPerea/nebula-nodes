@@ -26,8 +26,8 @@ describe('commonsApi', () => {
 
   it('uses the desktop bridge without minting over HTTP', async () => {
     const token = crypto.randomUUID();
-    const uiToken = vi.fn().mockResolvedValue(token);
-    vi.stubGlobal('nebulaDesktop', { commons: { uiToken } });
+    const uiToken = vi.fn().mockResolvedValue({ ok: true, token });
+    vi.stubGlobal('nebulaDesktop', { apiBaseUrl: 'http://127.0.0.1:56789', person: { token: uiToken } });
     apiFetch.mockImplementation(async () => json({ results: [] }));
     await commonsApi.search({ query: 'grid', filters: {} });
     await commonsApi.search({ query: 'type', filters: {} });
@@ -41,14 +41,17 @@ describe('commonsApi', () => {
     history.replaceState({}, '', `/#commons-token=${token}`);
     apiFetch.mockResolvedValue(json({}));
     await commonsApi.status();
-    expect(sessionStorage.getItem('nebula.commons.token')).toBe(token);
+    expect(JSON.parse(sessionStorage.getItem('nebula.person')!)).toEqual({ token, backend: 'http://127.0.0.1:8000' });
+    expect(sessionStorage.getItem('nebula.commons.token')).toBeNull();
     expect(location.hash).toBe('');
     expect(apiFetch.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${token}`);
   });
 
   it('re-resolves once on 401 and surfaces the entry instructions', async () => {
-    const uiToken = vi.fn().mockResolvedValueOnce(crypto.randomUUID()).mockResolvedValueOnce(crypto.randomUUID());
-    vi.stubGlobal('nebulaDesktop', { commons: { uiToken } });
+    const uiToken = vi.fn()
+      .mockResolvedValueOnce({ ok: true, token: crypto.randomUUID() })
+      .mockResolvedValueOnce({ ok: true, token: crypto.randomUUID() });
+    vi.stubGlobal('nebulaDesktop', { apiBaseUrl: 'http://127.0.0.1:56789', person: { token: uiToken } });
     apiFetch.mockImplementation(async () => json({ detail: 'invalid UI session token' }, 401));
     await expect(commonsApi.status()).rejects.toThrow('use a fresh Commons dev link from the backend terminal');
     expect(uiToken).toHaveBeenCalledTimes(2);
@@ -60,8 +63,16 @@ describe('commonsApi', () => {
     apiFetch.mockImplementation(async () => json({ detail: 'invalid UI session token' }, 401));
     await expect(commonsApi.status()).rejects.toThrow('no UI session');
     expect(sessionStorage.getItem('nebula.commons.token')).toBeNull();
+    expect(sessionStorage.getItem('nebula.person')).toBeNull();
     await expect(commonsApi.status()).rejects.toThrow('no UI session');
     expect(apiFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('makes no request from a desktop window that may not have the token', async () => {
+    const token = vi.fn().mockResolvedValue({ ok: false, error: 'DEBUG_PORT' });
+    vi.stubGlobal('nebulaDesktop', { apiBaseUrl: 'http://127.0.0.1:56789', person: { token } });
+    await expect(commonsApi.status()).rejects.toThrow('no UI session');
+    expect(apiFetch).not.toHaveBeenCalled();
   });
 
   it('does not make a request without human authority', async () => {

@@ -21,6 +21,11 @@ Two checks, applied to every HTTP request and WebSocket before routing:
 `file://` is allowed because the packaged desktop app loads its UI from a
 file URL, and web pages can't forge that origin. `null` is rejected: any
 website can produce it from a sandboxed iframe.
+
+This guard only keeps websites out. An allowed Origin doesn't prove the
+person sent the request: any local program (an agent's curl, say) can write
+`Origin: http://localhost:5173`. Person-only actions check the launch token
+instead (services/person_gate.py).
 """
 
 from __future__ import annotations

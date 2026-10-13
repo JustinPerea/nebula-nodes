@@ -106,11 +106,17 @@ function closePicker() {
   fireEvent.keyDown(screen.getByRole('dialog', { name: 'Chat model settings' }), { key: 'Escape' });
 }
 
-function sendText(text: string) {
+// A send first looks up the person token for the chat socket (async), so let
+// it settle before checking what went out.
+async function sendText(text: string) {
   const input = screen.getByPlaceholderText('Message…');
   fireEvent.change(input, { target: { value: text } });
-  fireEvent.keyDown(input, { key: 'Enter', shiftKey: false });
+  await act(async () => { fireEvent.keyDown(input, { key: 'Enter', shiftKey: false }); });
   return input;
+}
+
+async function clickSend() {
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send message' })); });
 }
 
 describe('ChatPanel appearance', () => {
@@ -201,7 +207,7 @@ describe('ChatPanel appearance', () => {
 
   it('preserves conversation history and same-provider sessions, then starts a fresh session when the provider changes', async () => {
     const socket = await connected();
-    sendText('Review this graph');
+    await sendText('Review this graph');
     expect(socket.sent[0]).toMatchObject({ agent: 'claude', model: 'sonnet', effort: null, sessionId: null });
     await act(async () => {
       socket.receive({ type: 'session', sessionId: 'claude-conversation' });
@@ -214,7 +220,7 @@ describe('ChatPanel appearance', () => {
     closePicker();
     expect(screen.getByText('The first review is saved.')).toBeInTheDocument();
     expect(socket.sent).toHaveLength(1);
-    sendText('Continue with more detail');
+    await sendText('Continue with more detail');
     expect(socket.sent[1]).toMatchObject({ agent: 'claude', model: 'opus', effort: 'high', sessionId: 'claude-conversation' });
     await act(async () => socket.receive({ type: 'done' }));
     await openPicker();
@@ -225,13 +231,13 @@ describe('ChatPanel appearance', () => {
     expect(screen.getByText('Review this graph')).toBeInTheDocument();
     expect(screen.getByText('The first review is saved.')).toBeInTheDocument();
     expect(socket.sent).toHaveLength(2);
-    sendText('Now inspect with Codex');
+    await sendText('Now inspect with Codex');
     expect(socket.sent[2]).toMatchObject({ agent: 'codex', model: 'gpt-test', effort: 'xhigh', sessionId: null });
   });
 
   it('locks provider, model and effort selection while a turn is running', async () => {
     const socket = await connected();
-    sendText('Inspect the graph');
+    await sendText('Inspect the graph');
     expect(socket.sent).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Choose chat model' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Choose chat model' }));
@@ -242,7 +248,7 @@ describe('ChatPanel appearance', () => {
 
   it('refreshes rejected model choices without resending, keeps history and requires explicit repair', async () => {
     const socket = await connected();
-    sendText('Save the first review');
+    await sendText('Save the first review');
     await act(async () => {
       socket.receive({ type: 'session', sessionId: 'saved-review' });
       socket.receive({ type: 'text', text: 'Earlier review remains available.' });
@@ -252,7 +258,7 @@ describe('ChatPanel appearance', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Opus' }));
     fireEvent.click(screen.getByRole('radio', { name: 'High' }));
     closePicker();
-    sendText('Run a deeper review');
+    await sendText('Run a deeper review');
     expect(socket.sent).toHaveLength(2);
     apiMocks.fetchChatModels.mockImplementation(async (agent: keyof typeof modelCatalogs, refresh: boolean) => (
       agent === 'claude' && refresh
@@ -271,7 +277,7 @@ describe('ChatPanel appearance', () => {
     expect(screen.getByText('Earlier review remains available.')).toBeInTheDocument();
     expect(screen.getByText('Run a deeper review')).toBeInTheDocument();
     expect(JSON.parse(window.localStorage.getItem('nebula:chat-selection')!).claude).toEqual({ model: 'opus', effort: 'high' });
-    const draft = sendText('Wait until I choose again');
+    const draft = await sendText('Wait until I choose again');
     expect(draft).toHaveValue('Wait until I choose again');
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
     expect(socket.sent).toHaveLength(2);
@@ -279,7 +285,7 @@ describe('ChatPanel appearance', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Sonnet' }));
     closePicker();
     expect(socket.sent).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await clickSend();
     expect(socket.sent).toHaveLength(3);
     expect(socket.sent[2]).toMatchObject({ message: 'Wait until I choose again', model: 'sonnet', effort: 'high', sessionId: 'saved-review' });
   });
@@ -298,7 +304,7 @@ describe('ChatPanel appearance', () => {
     await openPicker();
     await screen.findByRole('radio', { name: 'Sonnet' });
     closePicker();
-    const input = sendText('Keep this draft until I choose');
+    const input = await sendText('Keep this draft until I choose');
     expect(socket.sent).toHaveLength(0);
     expect(input).toHaveValue('Keep this draft until I choose');
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
@@ -306,7 +312,7 @@ describe('ChatPanel appearance', () => {
     await openPicker();
     fireEvent.click(screen.getByRole('radio', { name: title === 'model' ? 'Sonnet' : 'High' }));
     closePicker();
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await clickSend();
     expect(socket.sent).toHaveLength(1);
     expect(socket.sent[0]).toMatchObject({ agent: 'claude', model: 'sonnet' });
   });
@@ -318,7 +324,7 @@ describe('ChatPanel appearance', () => {
     const socket = ChatTestSocket.instances[0];
     await act(async () => socket.open());
     await waitFor(() => expect(apiMocks.fetchChatModels).toHaveBeenCalled());
-    const input = sendText('Wait for the account catalog');
+    const input = await sendText('Wait for the account catalog');
     expect(input).toHaveValue('Wait for the account catalog');
     expect(socket.sent).toHaveLength(0);
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();

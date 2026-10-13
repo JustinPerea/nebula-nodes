@@ -31,8 +31,8 @@ from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
 from services.selection_context import SelectionContextStore
+from tests.conftest import FORGED_ORIGIN, PERSON, PERSON_HELLO
 
-BROWSER = {"Origin": "http://localhost:5173"}
 CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 CODEX = {"X-Nebula-Agent": "Codex"}
 KEY = "X-Nebula-Proposal-Key"
@@ -47,7 +47,7 @@ class Clock:
 
 
 @pytest.fixture
-def api(tmp_path, monkeypatch):
+def api(tmp_path, monkeypatch, person):
     import main as main_module
 
     graph = CLIGraph(persist_path=tmp_path / "state.json")
@@ -188,8 +188,10 @@ def test_new_nodes_land_right_of_the_rightmost_referenced_node():
 def test_only_named_agents_propose(api):
     api.graph.add_node("text-input", {"value": "a cat"})
     assert _propose(api, _upscale_body(), headers={}).status_code == 400
-    refused = _propose(api, _upscale_body(), headers=BROWSER)
+    refused = _propose(api, _upscale_body(), headers=PERSON)
     assert refused.status_code == 403 and "edit directly" in refused.json()["detail"]
+    # A forged Origin is not the person; it still has to name itself.
+    assert _propose(api, _upscale_body(), headers=FORGED_ORIGIN).status_code == 400
 
 
 def test_a_proposal_is_validated_like_direct_edits_and_changes_nothing(api):
@@ -294,15 +296,15 @@ def test_deleting_a_referenced_node_import_and_clear_invalidate(api):
     n2 = api.graph.add_node("text-input", {"value": "a dog"})
     first = _propose(api, _upscale_body(n1)).json()["proposal"]["id"]
     second = _propose(api, _upscale_body(n2)).json()["proposal"]["id"]
-    assert api.client.delete(f"/api/graph/node/{n1}", headers=BROWSER).status_code == 200
+    assert api.client.delete(f"/api/graph/node/{n1}", headers=PERSON).status_code == 200
     assert api.book.get(first).status == "invalidated" and "was deleted" in api.book.get(first).reason
     assert api.book.get(second).status == "open"
-    assert api.client.delete("/api/graph", headers=BROWSER).status_code == 200
+    assert api.client.delete("/api/graph", headers=PERSON).status_code == 200
     assert api.book.get(second).status == "invalidated" and "cleared" in api.book.get(second).reason
 
     n3 = api.graph.add_node("text-input", {"value": "again"})
     third = _propose(api, _upscale_body(n3)).json()["proposal"]["id"]
-    imported = api.client.post("/api/graph/import", headers=BROWSER, json={"nodes": [], "edges": []})
+    imported = api.client.post("/api/graph/import", headers=PERSON, json={"nodes": [], "edges": []})
     assert imported.status_code == 200, imported.text
     assert api.book.get(third).status == "invalidated" and "replaced" in api.book.get(third).reason
     kinds = [e["kind"] for e in api.journal.read(after=0, limit=100)["events"]]
@@ -333,22 +335,30 @@ def test_accept_key_is_absent_from_every_agent_surface(api):
     assert snapshot["proposals"][0]["id"] == proposal_id
 
 
-def test_websocket_sync_sends_keys_only_to_browser_sockets(api):
+def test_websocket_sync_sends_keys_only_after_a_person_hello(api):
     n1 = api.graph.add_node("text-input", {"value": "a cat"})
     proposal_id = _propose(api, _upscale_body(n1)).json()["proposal"]["id"]
     key = _key(api, proposal_id)
-    with api.client.websocket_connect("/ws", headers=BROWSER) as ws:
-        messages = [ws.receive_json() for _ in range(3)]
+    with api.client.websocket_connect("/ws", headers=FORGED_ORIGIN) as ws:
+        messages = [ws.receive_json() for _ in range(2)]
+        ws.send_json(PERSON_HELLO)
+        messages.append(ws.receive_json())
     assert [m["type"] for m in messages] == ["graphSync", "canvasPins", "proposalSync"]
     assert messages[2]["proposals"][0]["id"] == proposal_id
     assert messages[2]["proposals"][0]["acceptKey"] == key
 
-    seen: list[dict] = []
-    with api.client.websocket_connect("/ws") as ws:
-        seen.append(ws.receive_json())
-        seen.append(ws.receive_json())
-    assert [m["type"] for m in seen] == ["graphSync", "canvasPins"]
-    assert key not in json.dumps(seen)
+    # A forged Origin, no hello, or a wrong token never get the key.
+    for headers, hello in ((FORGED_ORIGIN, None), ({}, None), (FORGED_ORIGIN, {"type": "hello", "personToken": "x" * 43})):
+        seen: list[dict] = []
+        with api.client.websocket_connect("/ws", headers=headers) as ws:
+            seen.append(ws.receive_json())
+            seen.append(ws.receive_json())
+            if hello is not None:
+                ws.send_json(hello)
+                seen.append(ws.receive_json())
+        assert [m["type"] for m in seen][:2] == ["graphSync", "canvasPins"]
+        assert "proposalSync" not in [m["type"] for m in seen]
+        assert key not in json.dumps(seen)
 
 
 def test_real_broadcast_browser_reaches_browser_sockets_only(api, monkeypatch):
@@ -381,32 +391,35 @@ def test_accept_and_reject_security_matrix(api):
     url = f"/api/canvas/proposals/{proposal_id}"
     for action in ("accept", "reject"):
         for marker in ({"Authorization": "Agent bogus"}, {"X-Daedalus-Caller": "1"}, CLAUDE, {"X-Nebula-Client": "nebula-cli"}):
-            refused = api.client.post(f"{url}/{action}", headers={**BROWSER, **marker, KEY: key}, json={})
+            refused = api.client.post(f"{url}/{action}", headers={**PERSON, **marker, KEY: key}, json={})
             # An unknown agent token is refused (401) before the route runs.
             assert refused.status_code in {401, 403}, (action, marker)
         assert api.client.post(f"{url}/{action}", headers={KEY: key}, json={}).status_code == 403
-        assert api.client.post(f"{url}/{action}", headers=BROWSER, json={}).status_code == 403
-        assert api.client.post(f"{url}/{action}", headers={**BROWSER, KEY: "wrong"}, json={}).status_code == 403
+        # A forged Origin with the right key is not the person.
+        assert api.client.post(f"{url}/{action}", headers={**FORGED_ORIGIN, KEY: key}, json={}).status_code == 403
+        assert api.client.post(f"{url}/{action}", headers=PERSON, json={}).status_code == 403
+        assert api.client.post(f"{url}/{action}", headers={**PERSON, KEY: "wrong"}, json={}).status_code == 403
     assert api.book.get(proposal_id).status == "open"
     assert len(api.graph.nodes) == 1
 
-    accepted = api.client.post(f"{url}/accept", headers={**BROWSER, KEY: key}, json={})
+    accepted = api.client.post(f"{url}/accept", headers={**PERSON, KEY: key}, json={})
     assert accepted.status_code == 200, accepted.text
-    again = api.client.post(f"{url}/accept", headers={**BROWSER, KEY: key}, json={})
+    again = api.client.post(f"{url}/accept", headers={**PERSON, KEY: key}, json={})
     assert again.status_code == 409 and "accepted" in again.json()["detail"]
 
 
-def test_desktop_session_header_stands_in_for_origin(api, monkeypatch):
+def test_the_person_token_works_without_an_origin_and_the_old_nonce_does_not(api, monkeypatch):
+    # The packaged renderer's Origin is opaque; the person token is the proof.
     monkeypatch.setenv("NEBULA_DESKTOP_MODE", "1")
     monkeypatch.setenv("NEBULA_CONNECTOR_SESSION", "sess-123")
     n1 = api.graph.add_node("text-input", {"value": "a cat"})
     proposal_id = _propose(api, _upscale_body(n1)).json()["proposal"]["id"]
     key = _key(api, proposal_id)
-    wrong = api.client.post(f"/api/canvas/proposals/{proposal_id}/reject",
-                            headers={"X-Nebula-Connector-Session": "nope", KEY: key}, json={})
-    assert wrong.status_code == 403
+    old = api.client.post(f"/api/canvas/proposals/{proposal_id}/reject",
+                          headers={"X-Nebula-Connector-Session": "sess-123", KEY: key}, json={})
+    assert old.status_code == 403
     ok = api.client.post(f"/api/canvas/proposals/{proposal_id}/reject",
-                         headers={"X-Nebula-Connector-Session": "sess-123", KEY: key}, json={"reason": "not now"})
+                         headers={"X-Nebula-Person": PERSON["X-Nebula-Person"], KEY: key}, json={"reason": "not now"})
     assert ok.status_code == 200 and api.book.get(proposal_id).reason == "not now"
 
 
@@ -430,7 +443,7 @@ def test_accept_applies_everything_with_dragged_positions_and_never_runs(api, mo
     api.sent.clear()
     response = api.client.post(
         f"/api/canvas/proposals/{proposal_id}/accept",
-        headers={**BROWSER, KEY: key},
+        headers={**PERSON, KEY: key},
         json={"positions": {"+img": {"x": 900, "y": -40}}},
     )
     assert response.status_code == 200, response.text
@@ -473,11 +486,11 @@ def test_accept_is_all_or_nothing(api):
     proposal_id = _propose(api, body).json()["proposal"]["id"]
     key = _key(api, proposal_id)
     # Meanwhile the person wires something else into that single input.
-    wired = api.client.post("/api/graph/connect", headers=BROWSER,
+    wired = api.client.post("/api/graph/connect", headers=PERSON,
                             json={"source": n3, "sourceHandle": "text", "target": n2, "targetHandle": "prompt"})
     assert wired.status_code == 200, wired.text
     before = json.dumps(api.graph.get_state(), sort_keys=True)
-    response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept", headers={**BROWSER, KEY: key}, json={})
+    response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept", headers={**PERSON, KEY: key}, json={})
     assert response.status_code == 409 and "no longer fits" in response.json()["detail"]
     assert json.dumps(api.graph.get_state(), sort_keys=True) == before
     assert api.book.get(proposal_id).status == "invalidated"
@@ -510,7 +523,7 @@ def test_accept_refuses_to_overwrite_a_later_edit(api):
     proposal_id = _propose(api, body).json()["proposal"]["id"]
     key = _key(api, proposal_id)
     api.graph.update_params(n1, {"value": "person's"})  # the person edits it meanwhile
-    response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept", headers={**BROWSER, KEY: key}, json={})
+    response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept", headers={**PERSON, KEY: key}, json={})
     assert response.status_code == 409 and f"{n1}.value changed" in response.json()["detail"]
     assert api.graph.nodes[n1]["params"]["value"] == "person's"
     assert api.book.get(proposal_id).status == "invalidated"
@@ -532,7 +545,7 @@ def test_decision_rechecks_after_reading_the_body(api, monkeypatch, route):
     monkeypatch.setattr(api.main, "_proposal_body", body_then_withdraw)
     before = json.dumps(api.graph.get_state(), sort_keys=True)
     response = api.client.post(f"/api/canvas/proposals/{proposal_id}/{route}",
-                               headers={**BROWSER, KEY: key}, json={})
+                               headers={**PERSON, KEY: key}, json={})
     assert response.status_code == 409 and "already withdrawn" in response.json()["detail"]
     assert json.dumps(api.graph.get_state(), sort_keys=True) == before
     assert api.book.get(proposal_id).status == "withdrawn"
@@ -544,7 +557,7 @@ def test_accept_rejects_bad_positions(api):
     key = _key(api, proposal_id)
     for positions in ({"+nope": {"x": 1, "y": 1}}, {"+img": {"x": 1e8, "y": 0}}, {"+img": {"x": "1", "y": 0}}):
         response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
-                                   headers={**BROWSER, KEY: key}, json={"positions": positions})
+                                   headers={**PERSON, KEY: key}, json={"positions": positions})
         assert response.status_code == 422, positions
     assert api.book.get(proposal_id).status == "open" and len(api.graph.nodes) == 1
 
@@ -572,7 +585,7 @@ def test_waiting_for_a_decision_returns_when_the_person_rejects(api):
             async def later():
                 await asyncio.sleep(0.1)
                 return await http.post(f"/api/canvas/proposals/{proposal_id}/reject",
-                                       headers={**BROWSER, KEY: key}, json={"reason": "too pricey"})
+                                       headers={**PERSON, KEY: key}, json={"reason": "too pricey"})
 
             task = asyncio.create_task(later())
             waited = await http.get(f"/api/canvas/proposals/{proposal_id}?wait=5", headers=CLAUDE)

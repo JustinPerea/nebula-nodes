@@ -8,14 +8,14 @@ from fastapi.testclient import TestClient
 
 import main
 from commons import actors
-from services import chat_session
+from services import chat_session, person_session
 from tests.test_commons_integration import isolated_app, receive_done  # noqa: F401
 
 
 def enable_human(monkeypatch):
     monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")
     token = "h" * 43
-    actors.ui_session.set(token)
+    person_session.current().set(token)
     return token
 
 

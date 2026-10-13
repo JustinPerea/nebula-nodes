@@ -11,6 +11,7 @@ from PIL import Image
 from commons import actors, evaluation, intake, records
 from commons.db import CommonsDB, now_iso
 from commons.store import CommonsStore
+from services import person_session
 
 @pytest.fixture
 def store(tmp_path):
@@ -125,11 +126,10 @@ def test_worker_never_claims_quarantined_transitive_cluster(store):
     assert records.claim_next(store, now_iso=now_iso()) is None
 
 @pytest.mark.asyncio
-async def test_api_denies_every_evaluation_surface_to_agents(store, source, monkeypatch):
+async def test_api_denies_every_evaluation_surface_to_agents(store, source, monkeypatch, fresh_person_session):
     from routes.commons import router, store_dep
     app=FastAPI(); app.include_router(router); app.dependency_overrides[store_dep]=lambda:store
-    monkeypatch.setattr(actors,'ui_session',actors.UISession())
-    token=secrets.token_urlsafe(32); actors.ui_session.set(token)
+    token=secrets.token_urlsafe(32); person_session.current().set(token)
     human={'Authorization':f'Bearer {token}'}
     await evaluation.prepare(store, str(source))
     client=TestClient(app)
@@ -207,11 +207,10 @@ def test_video_all_keyframes_participate_in_clustering(tmp_path, monkeypatch):
     assert len(evaluation.clusters([row,linked]))==1
 
 @pytest.mark.asyncio
-async def test_full_authenticated_api_seal_and_validation(store, source, monkeypatch):
+async def test_full_authenticated_api_seal_and_validation(store, source, monkeypatch, fresh_person_session):
     from routes.commons import router, store_dep
     app=FastAPI(); app.include_router(router); app.dependency_overrides[store_dep]=lambda:store
-    monkeypatch.setattr(actors,'ui_session',actors.UISession())
-    token=secrets.token_urlsafe(32); actors.ui_session.set(token)
+    token=secrets.token_urlsafe(32); person_session.current().set(token)
     client=TestClient(app); headers={'Authorization':f'Bearer {token}'}
     url='/api/commons/evaluation'
     result=client.post(url+'/prepare',headers=headers,json={'path':str(source)})

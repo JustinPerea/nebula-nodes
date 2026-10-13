@@ -13,6 +13,7 @@ import copy
 import difflib
 import hashlib
 import json
+import logging
 import math
 import os
 import random
@@ -24,7 +25,7 @@ import tempfile
 import time as _time_module
 import unicodedata
 import zipfile
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from contextlib import ExitStack, aclosing, contextmanager, nullcontext
 from contextvars import ContextVar
 from functools import wraps
@@ -132,11 +133,13 @@ from services.canvas_events import (
     parse_kinds,
 )
 from services.canvas_pins import CanvasPins, PinError, pin_summary
+from services import person_session
+from services.child_env import scrubbed_env
 from services.person_gate import (
+    PERSON_HEADER,
     PersonGateError,
-    desktop_session_matches,
     has_agent_marker,
-    is_browser_request,
+    is_person,
     require_person,
 )
 from services.canvas_edits import EditSpec, parse_edit
@@ -153,7 +156,7 @@ from services.canvas_proposals import (
     place_new_nodes,
     summarize_cost,
 )
-from services.local_guard import origin_allowed
+from services.local_guard import host_allowed
 from services.zoom_manifest import init_manifest, append_entry
 from services.project_context import get_current_project
 from routes.openrouter_proxy import router as openrouter_router
@@ -516,32 +519,45 @@ app.add_middleware(RequestHeadersContext)
 app.add_middleware(LocalRequestGuard)
 
 
+_DESKTOP_RENDERER_ORIGINS = frozenset({"null", "file://"})
+_DESKTOP_CORS_HEADERS = ", ".join((
+    "Content-Type", "Authorization", "X-Nebula-Person", "X-Nebula-Workspace-Revision", "X-Nebula-Proposal-Key",
+))
+
+
 @app.middleware("http")
-async def krea_desktop_cors(request: Request, call_next):
-    # A packaged Electron file has an opaque origin. Limit this exception to
-    # the private sidecar's connector API; browser mode keeps normal CORS.
-    desktop_krea = (
+async def desktop_renderer_cors(request: Request, call_next):
+    # The packaged Electron renderer is a file: page, so its Origin is opaque
+    # ("null", or "file://") and the CORS regex above never matches it. In
+    # desktop mode, answer its preflights, and let it read responses only for
+    # requests that carry this launch's person token: a website can also send
+    # "Origin: null" (sandboxed iframe), but it can't know the token.
+    origin = request.headers.get("origin")
+    desktop = (
         os.environ.get("NEBULA_DESKTOP_MODE") == "1"
-        and request.url.path.startswith("/api/krea/")
-        and request.headers.get("origin") == "null"
+        and origin in _DESKTOP_RENDERER_ORIGINS
+        and host_allowed(request.headers.get("host"))
         and request.client is not None
         and request.client.host in {"127.0.0.1", "::1"}
-        and bool(os.environ.get("NEBULA_CONNECTOR_SESSION"))
-        and (request.method == "OPTIONS" or secrets.compare_digest(
-            request.headers.get("x-nebula-connector-session", "").encode(),
-            os.environ["NEBULA_CONNECTOR_SESSION"].encode(),
-        ))
     )
-    if desktop_krea and request.method == "OPTIONS":
+    if desktop and request.method == "OPTIONS":
         response = Response(status_code=204)
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Nebula-Connector-Session"
-    else:
-        response = await call_next(request)
-    if desktop_krea:
-        response.headers["Access-Control-Allow-Origin"] = "null"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = _DESKTOP_CORS_HEADERS
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+        return response
+    response = await call_next(request)
+    if desktop and person_session.verify(request.headers.get(PERSON_HEADER)):
+        response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Vary"] = "Origin"
     return response
+
+
+@app.exception_handler(PersonGateError)
+async def person_gate_error(request, exc: PersonGateError):
+    # `code` lets the canvas show "this tab isn't connected as you" (person_required).
+    return JSONResponse(status_code=exc.status, content={"detail": exc.detail, "code": exc.code})
 
 
 app.include_router(krea_connector_router)
@@ -1657,9 +1673,9 @@ def _end_node_ids(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[str]:
 
 
 def _is_person_request() -> bool:
-    """The person's canvas, not an agent, the CLI or curl (see services/person_gate.py)."""
-    headers = current_request_headers()
-    return not has_agent_marker(headers) and is_browser_request(headers)
+    """The person: no agent marker and this launch's person token (see
+    services/person_gate.py). Not an agent, the CLI, curl, or a forged Origin."""
+    return is_person(current_request_headers())
 
 
 _SPEND_LAUNCH = uuid4().hex[:12]
@@ -1930,14 +1946,17 @@ app.include_router(commons_router)
 
 
 @app.on_event("startup")
+async def _person_startup() -> None:
+    """Set this launch's person token before serving (services/person_session.py)."""
+    person_session.initialize()
+
+
+@app.on_event("startup")
 async def _commons_startup() -> None:
-    """Initialize human authority before serving, then scan linked folders."""
+    """Scan linked folders. Human authority is the person session, set above."""
     from commons.activation import is_enabled
     if not is_enabled():
         return
-    from commons.ui_auth import initialize_ui_session
-
-    initialize_ui_session(commons_actors.ui_session)
     if os.environ.get("NEBULA_COMMONS_NO_STARTUP_SCAN") == "1":
         return
     from commons import folders as commons_folders, records as commons_records, review as commons_review, runtime as commons_runtime
@@ -2146,21 +2165,11 @@ async def convert_to_glb(path: str) -> Any:
 
 # ---------- WebSocket connection manager ----------
 
-def _websocket_is_browser(websocket: WebSocket) -> bool:
-    """True for the person's canvas: an allowed browser Origin, or the desktop session.
-
-    Browsers always send Origin on a WebSocket handshake; the CLI and MCP
-    don't. The packaged desktop renderer may send `Origin: null`, so in
-    desktop mode the per-launch connector session (query param) counts too.
-    Browser-only messages (proposal accept keys) go only to these sockets.
-    """
+def _websocket_has_agent_marker(websocket: WebSocket) -> bool:
     try:
-        if desktop_session_matches(websocket.query_params.get("connectorSession")):
-            return True
-        origin = websocket.headers.get("origin")
-    except Exception:  # noqa: BLE001 - a malformed handshake is simply not a browser
-        return False
-    return origin is not None and origin_allowed(origin)
+        return has_agent_marker(websocket.headers)
+    except Exception:  # noqa: BLE001 - a malformed handshake is never the person
+        return True
 
 
 class ConnectionManager:
@@ -2171,8 +2180,17 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self.active_connections.append(websocket)
-        if _websocket_is_browser(websocket):
+
+    def promote(self, websocket: WebSocket, person_token: object) -> bool:
+        """Mark a socket as the person's canvas after a valid hello frame.
+
+        The hello carries this launch's person token; a handshake with an agent
+        marker never qualifies. Only these sockets get proposal accept keys."""
+        if _websocket_has_agent_marker(websocket) or not person_session.verify(person_token):
+            return False
+        if websocket in self.active_connections:
             self.browser_connections.add(websocket)
+        return True
 
     def is_browser(self, websocket: WebSocket) -> bool:
         return websocket in self.browser_connections
@@ -2320,8 +2338,22 @@ def _validation_response(errors: list[ValidationErrorDetail]) -> dict[str, Any]:
 
 # ---------- WebSocket endpoint ----------
 
+def _proposal_sync_message() -> dict[str, Any]:
+    return {
+        "type": "proposalSync",
+        "proposals": [
+            {**_proposal_view(p), "acceptKey": p.accept_key,
+             "personValues": canvas_proposals.person_values(p)}
+            for p in canvas_proposals.open_list()
+        ],
+    }
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
+    """Canvas events. Every socket gets the graph, pins and broadcasts (the CLI
+    and MCP listen here too). Proposal accept keys go only to a socket that
+    sent {type: "hello", personToken} with this launch's person token."""
     await manager.connect(websocket)
     try:
         # Events emitted while a browser is disconnected are not replayed.
@@ -2330,18 +2362,24 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         export = await export_graph_for_frontend()
         await websocket.send_text(json.dumps({"type": "graphSync", **export}))
         await websocket.send_text(json.dumps(_pins_message()))
-        if manager.is_browser(websocket):
-            # Accept keys travel only to the person's canvas sockets.
-            await websocket.send_text(json.dumps({
-                "type": "proposalSync",
-                "proposals": [
-                    {**_proposal_view(p), "acceptKey": p.accept_key,
-                     "personValues": canvas_proposals.person_values(p)}
-                    for p in canvas_proposals.open_list()
-                ],
-            }))
         while True:
-            await websocket.receive_text()
+            raw = await websocket.receive_text()
+            if manager.is_browser(websocket):
+                continue
+            try:
+                frame = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(frame, dict) or frame.get("type") != "hello":
+                continue
+            if manager.promote(websocket, frame.get("personToken")):
+                # Accept keys travel only to the person's canvas sockets.
+                await websocket.send_text(json.dumps(_proposal_sync_message()))
+            else:
+                await websocket.send_text(json.dumps({
+                    "type": "personRequired",
+                    "message": "This tab isn't connected as you, so it can't accept or reject proposals.",
+                }))
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
@@ -2356,7 +2394,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
         type: "send",
         message: str,
         sessionId: str|null (opaque Claude/Codex conversation ID),
-        commonsToken: str (human UI token, required only with Commons enabled),
+        personToken: str (this launch's person token, required on every send;
+            the old name commonsToken is still read),
         brand: str|null (Commons-enabled Claude/Codex turns),
         model: str|null,
         effort: str|null (model-specific effort, Claude/Codex),
@@ -2370,6 +2409,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
     from services.chat_models import ChatModelSelectionError, validate_chat_model_selection
 
     await websocket.accept()
+    chat_marked_as_agent = _websocket_has_agent_marker(websocket)
     server_host, server_port = websocket.scope.get("server") or ("127.0.0.1", 8000)
     backend_url = f"http://{server_host}:{server_port}"
     current_task: asyncio.Task[None] | None = None
@@ -2614,14 +2654,22 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 })
                 continue
 
+            # Only the person starts chats: every send carries this launch's
+            # person token (commonsToken is the old name), checked before any
+            # workspace or agent token exists. Without it, an agent could
+            # start turns of its own, each with a fresh chat budget.
+            human_token = payload.get("personToken")
+            if human_token is None:
+                human_token = payload.get("commonsToken")
+            if chat_marked_as_agent or not person_session.verify(human_token):
+                await send_event({"type": "error", "code": "person_required", "message": (
+                    "Only the person can start a chat, from a Nebula canvas connected as them. Open the "
+                    "link the backend printed at launch (backend/devserver.py, or restart it with --open)."
+                ), "source": "system"})
+                await send_event({"type": "done", "source": "system"})
+                continue
             from commons.activation import is_enabled
             commons_enabled = is_enabled()
-            if commons_enabled:
-                human_token = payload.get("commonsToken")
-                if not isinstance(human_token, str) or not commons_actors.ui_session.verify(human_token):
-                    await send_event({"type": "error", "message": "No current UI session: use the Commons dev link before starting a private reference turn.", "source": "system"})
-                    await send_event({"type": "done", "source": "system"})
-                    continue
             user_message = payload.get("message", "")
             if not isinstance(user_message, str):
                 await send_event({"type": "error", "message": "message must be text.", "source": "system"})
@@ -3214,7 +3262,7 @@ async def _journal_detached_pins(pins: list[dict[str, Any]], reason: str) -> Non
         )
 
 
-def _pin_http_error(exc: PinError | PersonGateError) -> HTTPException:
+def _pin_http_error(exc: PinError) -> HTTPException:
     return HTTPException(status_code=exc.status, detail=exc.detail)
 
 
@@ -3233,15 +3281,15 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
 
     Body: {text, nodeId} or {text, position: {x, y}}.
     """
+    require_person(current_request_headers())
     try:
-        require_person(current_request_headers())
         pin = canvas_pins.add(
             body.get("text"),
             node_id=body.get("nodeId"),
             position=body.get("position"),
             graph_nodes=cli_graph.nodes,
         )
-    except (PersonGateError, PinError) as exc:
+    except PinError as exc:
         raise _pin_http_error(exc) from exc
     await _broadcast_pins()
     anchor = pin.get("anchor") or {}
@@ -3257,10 +3305,10 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
 @app.delete("/api/canvas/pins/{pin_id}")
 async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
     """Delete a note. Only the person can do this."""
+    require_person(current_request_headers())
     try:
-        require_person(current_request_headers())
         pin = canvas_pins.remove(pin_id)
-    except (PersonGateError, PinError) as exc:
+    except PinError as exc:
         raise _pin_http_error(exc) from exc
     await _broadcast_pins()
     _journal(
@@ -3309,7 +3357,7 @@ _SYSTEM_ACTOR: dict[str, Any] = {"kind": "system"}
 _PERSON_ACTOR: dict[str, Any] = {"kind": "person"}
 
 
-def _proposal_http_error(exc: ProposalError | PersonGateError) -> HTTPException:
+def _proposal_http_error(exc: ProposalError) -> HTTPException:
     return HTTPException(status_code=exc.status, detail=exc.detail)
 
 
@@ -3529,7 +3577,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     headers = current_request_headers()
     identity = identify_agent(headers)
     if identity is None:
-        if is_browser_request(headers):
+        if is_person(headers):
             raise HTTPException(status_code=403, detail="The person doesn't need to propose; edit directly")
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
     await _sweep_proposals()
@@ -3663,15 +3711,13 @@ async def withdraw_canvas_proposal(proposal_id: str) -> dict[str, Any]:
 async def _decidable_proposal(proposal_id: str) -> Proposal:
     """The person-only checks shared by accept and reject, in order.
 
-    1. No agent markers and a browser (or the desktop session).
-    2. The per-proposal accept key, which only browser sockets ever received.
+    1. No agent markers and this launch's person token.
+    2. The per-proposal accept key, which only sockets that said hello with
+       the person token ever received.
     3. Still open, and for the project that is open now.
     """
     headers = current_request_headers()
-    try:
-        require_person(headers)
-    except PersonGateError as exc:
-        raise _proposal_http_error(exc) from exc
+    require_person(headers)
     lower = {k.lower(): v for k, v in (headers or {}).items()}
     supplied = lower.get(_PROPOSAL_KEY_HEADER) or ""
     proposal = canvas_proposals.get(proposal_id)
@@ -3945,6 +3991,9 @@ async def get_settings() -> dict:
 
 @app.put("/api/settings")
 async def update_settings(body: dict[str, Any]) -> dict:
+    # Settings are the person's: keys, output paths, routing and the limits
+    # that hold agents back. Agents only ever read them (GET).
+    require_person(current_request_headers())
     if "kreaConnectionMode" in body and body["kreaConnectionMode"] not in ("api-token", "mcp"):
         raise HTTPException(400, "Krea connection mode must be api-token or mcp")
     if "zoomTelemetryEnabled" in body and not isinstance(body["zoomTelemetryEnabled"], bool):
@@ -3957,11 +4006,6 @@ async def update_settings(body: dict[str, Any]) -> dict:
                 body[agent_spend.CAPS_KEY] = agent_spend.validate_caps(body[agent_spend.CAPS_KEY], node_registry.get_all())
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
-        # Spending limits hold agents back, so only the person sets them.
-        try:
-            require_person(current_request_headers())
-        except PersonGateError as exc:
-            raise HTTPException(exc.status, exc.detail) from exc
     # Desktop mode: credentials are managed via the Keychain credential IPC
     # and POST /api/credentials/update — never via this endpoint. Ignore any
     # apiKeys in the request body so a compromised renderer cannot overwrite
@@ -4032,6 +4076,7 @@ async def remove_settings_api_key(provider: str) -> dict:
     Credential values and Krea MCP OAuth state never enter the response. The
     desktop credential bridge remains responsible for injected credentials.
     """
+    require_person(current_request_headers())
     if provider not in _CREDENTIAL_PROVIDER_ALLOWLIST:
         raise HTTPException(400, "Unknown credential provider")
     if is_injected_mode():
@@ -4049,10 +4094,11 @@ async def remove_settings_api_key(provider: str) -> dict:
 async def credentials_update(body: dict[str, Any]) -> dict:
     """Update an in-memory injected credential without sidecar restart.
 
-    Called by Electron main when the user changes a provider key via the
-    Settings panel credential IPC. Loopback-only (same security boundary as
-    all other endpoints). Never persists to disk.
+    Called by the desktop Settings panel after it stores a provider key
+    through the credential IPC. Person-only: an agent that could call this
+    could swap or clear the person's injected keys. Never persists to disk.
     """
+    require_person(current_request_headers())
     provider = body.get("provider")
     key = body.get("key")
 
@@ -6661,7 +6707,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     headers = current_request_headers()
     identity = identify_agent(headers)
     if identity is None:
-        if is_browser_request(headers):
+        if is_person(headers):
             raise HTTPException(status_code=403, detail="This route is for agents; the canvas edits directly")
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
     _validate_graph_ingress_complexity(body)
@@ -8485,22 +8531,72 @@ class EnhancePromptRequest(BaseModel):
     prompt: str
 
 
+# Generous for a Create prompt (the enhancer writes one paragraph back), and a
+# bound on what one call can send to a paid provider.
+ENHANCE_PROMPT_MAX_CHARS = 4000
+# A person clicks Enhance now and then. Anything faster is a loop, and with a
+# fall-through over three providers each call can cost up to three requests.
+ENHANCE_RATE_LIMIT = 20
+ENHANCE_RATE_WINDOW_S = 60.0
+_enhance_calls: deque[float] = deque()
+_enhance_log = logging.getLogger("nebula.enhance_prompt")
+
+
+def _admit_enhance_call() -> None:
+    """Count one Enhance call, or 429 when the last minute already had the limit."""
+    now = _time_module.monotonic()
+    while _enhance_calls and now - _enhance_calls[0] > ENHANCE_RATE_WINDOW_S:
+        _enhance_calls.popleft()
+    if len(_enhance_calls) >= ENHANCE_RATE_LIMIT:
+        _enhance_log.warning("enhance-prompt refused: %d calls in the last %.0fs",
+                             len(_enhance_calls), ENHANCE_RATE_WINDOW_S)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Enhance was used {ENHANCE_RATE_LIMIT} times in the last minute. Wait a moment and try again.",
+        )
+    _enhance_calls.append(now)
+
+
 @app.post("/api/enhance-prompt")
 async def enhance_prompt_route(body: EnhancePromptRequest) -> dict[str, str]:
-    """One-shot LLM rewrite of a Create prompt, using the first configured provider."""
+    """One-shot LLM rewrite of a Create prompt, using the first configured provider.
+
+    Person-only: it calls an LLM with the person's keys and has no list price,
+    so it can't be held to the agent spending limits. Agents rewrite prompts
+    themselves, or add a text node, whose run is held to the limits. The gate
+    runs before anything else, so a refused caller learns nothing about which
+    keys exist. Every call is logged (provider, prompt length, outcome) and
+    rate-limited, so use that gets past the gate still shows up."""
+    try:
+        require_person(current_request_headers())
+    except PersonGateError as exc:
+        exc.detail = (f"{exc.detail} Prompt enhancement is the person's Create button. Rewrite the prompt "
+                      "yourself, or add a text node (claude-chat, gpt-4o-chat, gemini-chat) to the graph; "
+                      "running it is held to the spending limits.")
+        raise
     prompt = (body.prompt or "").strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt is empty.")
+    if len(prompt) > ENHANCE_PROMPT_MAX_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Prompt is too long for Enhance ({len(prompt)} characters; the limit is {ENHANCE_PROMPT_MAX_CHARS}).",
+        )
+    _admit_enhance_call()
     api_keys = load_settings().get("apiKeys", {})
     try:
-        return await enhance_prompt(prompt, api_keys)
+        result = await enhance_prompt(prompt, api_keys)
     except NoEnhanceProviderError:
+        _enhance_log.info("enhance-prompt: chars=%d outcome=no_key", len(prompt))
         raise HTTPException(
             status_code=400,
             detail="No LLM API key configured (OpenAI, Anthropic, or Google). Add one in Settings.",
         )
     except EnhanceProviderError as exc:
+        _enhance_log.info("enhance-prompt: chars=%d outcome=provider_error", len(prompt))
         raise HTTPException(status_code=502, detail=str(exc))
+    _enhance_log.info("enhance-prompt: provider=%s chars=%d outcome=ok", result.get("provider"), len(prompt))
+    return result
 
 
 class CharacterCreate(BaseModel):
@@ -8905,6 +9001,7 @@ async def reveal_in_finder(body: dict[str, Any]) -> dict:
         *cmd,
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
+        env=scrubbed_env(),
     )
     return {"status": "ok"}
 

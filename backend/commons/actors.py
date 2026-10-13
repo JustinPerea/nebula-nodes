@@ -1,6 +1,6 @@
 """Who wrote this? The backend decides; callers never self-declare (§4).
 
-- human:justin: only via the per-launch UI bearer token (PLAN component 5)
+- human:justin: only via the per-launch person token (services/person_session.py)
 - agent:<runner>/<model>: Nebula's own runners, via a per-turn agent token
 - agent:mcp:<clientInfo.name>: external harnesses, self-reported, never human
 - agent:cli: the nebula CLI with no token
@@ -45,30 +45,6 @@ class Actor:
 SYSTEM_WORKER = Actor("worker:analysis", "system")
 
 
-class UISession:
-    def __init__(self) -> None:
-        self._token: str | None = None
-        self._lock = threading.Lock()
-
-    @property
-    def is_set(self) -> bool:
-        with self._lock:
-            return self._token is not None
-
-    def set(self, token: str) -> None:
-        if not isinstance(token, str) or re.fullmatch(r"[A-Za-z0-9_-]{43}", token) is None:
-            raise ValueError("invalid UI session token format")
-        with self._lock:
-            if self._token is not None:
-                raise RuntimeError("UI session already initialized")
-            self._token = token
-
-    def verify(self, token: str) -> bool:
-        with self._lock:
-            current = self._token
-        return bool(current) and hmac.compare_digest(current.encode(), token.encode())
-
-
 class AgentRegistry:
     def __init__(self) -> None:
         self._tokens: dict[str, dict] = {}
@@ -107,17 +83,25 @@ class AgentRegistry:
         return None
 
 
-ui_session = UISession()
 agent_registry = AgentRegistry()
+
+
+def ui_session():
+    """The person's session (services/person_session.py): one per launch, shared
+    with the person gate. Read through this function, never cached, so the
+    person and Commons always check the same object."""
+    from services import person_session
+    return person_session.current()
 
 
 def resolve_actor(headers: Mapping[str, str]) -> Actor:
     lower = {k.lower(): v for k, v in headers.items()}
     auth = lower.get("authorization", "")
     if auth.startswith("Bearer "):
-        if not ui_session.is_set:
+        session = ui_session()
+        if not session.is_set:
             raise AuthError("no UI session: open Nebula from the desktop app or use the dev link")
-        if ui_session.verify(auth[7:].strip()):
+        if session.verify(auth[7:].strip()):
             return Actor(HUMAN, "human")
         raise AuthError("invalid UI session token")
     if auth.startswith("Agent "):

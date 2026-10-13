@@ -40,13 +40,15 @@ def test_child_environment_keeps_agent_auth_and_removes_connector_secrets():
     assert all(key not in child for key in config.CONNECTOR_SECRET_ENV_KEYS)
 
 
-def test_child_environment_drops_the_desktop_canvas_session():
-    # The launch nonce is what lets a request count as the person's canvas
+def test_child_environment_drops_the_person_token_and_the_old_desktop_nonce():
+    # The person token is what lets a request count as the person
     # (person_gate). An agent that inherited it could accept its own proposals.
     child = config.agent_child_env({
         "NEBULA_DESKTOP_MODE": "1",
+        "NEBULA_PERSON_TOKEN": "person-token-fixture",
         "NEBULA_CONNECTOR_SESSION": "launch-nonce-fixture",
     })
+    assert "NEBULA_PERSON_TOKEN" not in child
     assert "NEBULA_CONNECTOR_SESSION" not in child
     assert child["NEBULA_DESKTOP_MODE"] == "1"
 

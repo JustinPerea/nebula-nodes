@@ -93,7 +93,25 @@ decrypts keys from the Keychain and passes them to the backend via
 `NEBULA_INJECTED_KEYS` (a JSON dict). The backend stores them in a
 module-level `_INJECTED_KEYS` dict (memory only, never persisted). The
 `POST /api/credentials/update` endpoint allows in-memory key updates when
-the user changes a key via Settings — no sidecar restart needed.
+the user changes a key via Settings — no sidecar restart needed. It is
+person-only, like `PUT /api/settings`: it needs this launch's person token.
+
+### Person token
+
+Electron main makes one person token per launch (`person-token.mjs`). It goes
+to the sidecar over stdin (`NEBULA_PERSON_TOKEN_STDIN=1`), never argv or env,
+and to the renderer only through the frozen `nebulaDesktop.person.token()`
+preload method, whose `person:token` IPC handler answers only the application
+window's main frame. The renderer sends it as `X-Nebula-Person` on requests to
+its own sidecar, in the `/ws` hello frame and with each chat turn; Settings,
+keys, Krea connections, proposals and chats need it (see
+[docs/MCP-SETUP.md](../docs/MCP-SETUP.md#who-counts-as-the-person)).
+
+- `NEBULA_DESKTOP_DEBUG_PORT` set: no token at all, because anything on the
+  machine can drive a renderer with an open debug port. Person-only actions
+  stay locked and the window says why.
+- `VITE_DEV_SERVER_URL` (desktop dev): no token unless
+  `NEBULA_DESKTOP_DEV_PERSON=1`.
 
 ### Settings panel integration
 

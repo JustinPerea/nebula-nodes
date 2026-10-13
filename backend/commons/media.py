@@ -21,6 +21,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from services.child_env import scrubbed_env
+
 IMAGE_CAP = 25 * 1024 * 1024
 VIDEO_CAP = 500 * 1024 * 1024
 ACCEPTED_EXT = {"jpg", "jpeg", "png", "webp", "gif", "heic", "mp4", "mov"}
@@ -77,7 +79,7 @@ def _heic_to_png(data: bytes) -> bytes:
         try:
             subprocess.run(
                 ["sips", "-s", "format", "png", str(src), "--out", str(dst)],
-                check=True, capture_output=True, timeout=TOOL_TIMEOUT,
+                check=True, capture_output=True, timeout=TOOL_TIMEOUT, env=scrubbed_env(),
             )
         except (OSError, subprocess.SubprocessError) as exc:
             raise MediaError(f"HEIC conversion failed: {exc}") from exc
@@ -142,7 +144,7 @@ def _input(path: Path) -> list[str]:
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(args, capture_output=True, timeout=TOOL_TIMEOUT, check=False)
+        return subprocess.run(args, capture_output=True, timeout=TOOL_TIMEOUT, check=False, env=scrubbed_env())
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise MediaError(f"{args[0]} failed: {exc}") from exc
 

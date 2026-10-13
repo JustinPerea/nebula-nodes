@@ -14,6 +14,8 @@ const ipcRenderer = electron.ipcRenderer;
 //   - migration has status / retry.
 //   - paperLinks has one guarded artwork-opening method.
 //   - folders has one method: show the OS folder chooser, return the pick.
+//   - person has one method: ask main for this launch's person token. Main
+//     answers only its own main frame, and never while a debug port is open.
 //   - The root and every namespace are frozen.
 function readEndpointArg(argv, prefix) {
   for (const arg of argv) {
@@ -26,7 +28,6 @@ function readEndpointArg(argv, prefix) {
 
 const apiBaseUrl = readEndpointArg(process.argv, '--nebula-api-base=');
 const wsBaseUrl = readEndpointArg(process.argv, '--nebula-ws-base=');
-const connectorSession = readEndpointArg(process.argv, '--nebula-connector-session=');
 const rendererUrl = readEndpointArg(process.argv, '--nebula-renderer-url=');
 
 // Sandboxed preloads cannot require local helper modules. Keep this comparison
@@ -94,12 +95,17 @@ const folders = Object.freeze({
   choose: (defaultPath) => ipcRenderer.invoke('dialog:choose-folder', defaultPath),
 });
 
+// The person token never rides in argv (other processes can read it there).
+const person = Object.freeze({
+  token: () => ipcRenderer.invoke('person:token'),
+});
+
 const metadata = Object.freeze({
   platform: process.platform,
   shell: 'electron',
   apiBaseUrl,
   wsBaseUrl,
-  ...(isTrustedRenderer() ? { connectorSession } : {}),
+  ...(isTrustedRenderer() ? { person } : {}),
   credentials,
   migration,
   paperLinks,

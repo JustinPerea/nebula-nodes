@@ -7,6 +7,7 @@ from cli.formatter import format_selection
 from services.cli_graph import CLIGraph
 from services.node_registry import NodeRegistry
 from services.selection_context import SelectionContextStore, selection_prompt_context
+from tests.conftest import PERSON_TOKEN
 
 
 @pytest.fixture
@@ -129,7 +130,7 @@ def test_canvas_selection_api_rejects_malformed_payloads(client, body):
     assert client.post("/api/canvas/selection", json=body).status_code == 422
 
 
-def test_chat_dispatch_receives_atomic_selection_context(client):
+def test_chat_dispatch_receives_atomic_selection_context(client, person):
     from main import cli_graph
     from services.chat_session import AGENT_RUNNERS
 
@@ -146,7 +147,7 @@ def test_chat_dispatch_receives_atomic_selection_context(client):
     try:
         with client.websocket_connect("/ws/chat") as websocket:
             websocket.send_json({
-                "type": "send",
+                "type": "send", "personToken": PERSON_TOKEN,
                 "message": "change these",
                 "agent": "claude",
                 "selectedNodeIds": [node_id, "n404"],

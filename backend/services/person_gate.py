@@ -1,78 +1,85 @@
-"""Actions only the person may take from the Nebula canvas.
+"""Actions only the person may take, and how Nebula tells the person apart.
 
-Pins are the person's notes to agents, and accepting a proposal is the
-person's approval. An agent must not be able to do either for itself, even by
-accident or because a prompt told it to.
+Pins are the person's notes to agents, accepting a proposal is the person's
+approval, and the spending limits, Settings, provider keys and the Krea
+connection are the person's to change. Runs the person starts aren't held to
+the agent spending limits. An agent must not be able to do any of this for
+itself, even by accident or because a prompt told it to.
 
 Two checks, both required:
 
 1. No agent markers. A request that carries ``Authorization: Agent ...``,
    ``X-Daedalus-Caller``, ``X-Nebula-Agent`` or ``X-Nebula-Client`` is refused,
-   even when the token is invalid or expired. Something that claims to be an
-   agent never counts as the person.
-2. A browser. Browsers always send ``Origin`` on POST, PUT and DELETE (also
-   same-origin, also through the Vite proxy); the ``nebula`` CLI, the MCP
-   server and curl send none. The packaged desktop renderer may send
-   ``Origin: null``, so in desktop mode the per-launch connector session the
-   preload hands to trusted renderers counts instead.
+   even when the token is invalid or expired and even with a valid person
+   token. Something that claims to be an agent never counts as the person.
+2. This launch's person token (services/person_session.py) in the
+   ``X-Nebula-Person`` header. The canvas gets it from the link the dev
+   launcher prints (or opens), or from Electron main over IPC. An ``Origin``
+   header proves nothing here: any local program can write one. Origins are
+   checked only by LocalRequestGuard, which keeps websites (CSRF, DNS
+   rebinding) away from the backend.
 
-In-app agents (Claude, Codex, Hermes) start with agent_child_env(), which
-strips ``NEBULA_CONNECTOR_SESSION``, so they cannot borrow the desktop
-session to pass check 2.
+With no person session (desktop stdin missing, or a debugging port open),
+nothing counts as the person.
 
-Remaining risk: every agent runs as the same OS user with a shell. A local
-program that deliberately forges an ``Origin`` header passes check 2, and one
-that reads the backend process's environment could find the desktop session.
-These checks stop confused or prompt-injected agents using their normal tools,
-not a malicious program on the same machine.
+What this does and doesn't protect. The limits and person-only actions bind
+agents that reach Nebula only through its API: in-app Claude, in-app Codex
+and Hermes once their shells have no network, and outside clients that only
+have MCP or the ``nebula`` CLI. They do not bind a program running as the same
+OS user with its own unsandboxed shell: it can read the token where the
+person's browser keeps it (Chrome's on-disk Session Storage and History), read
+the reload supervisor's memory or a debug CDP port, edit settings.json, or
+start its own backend. No check inside the app can stop that.
 """
 from __future__ import annotations
 
-import os
-import secrets
 from typing import Mapping
 
-from services.local_guard import origin_allowed
+from services import person_session
 
 AGENT_MARKER_HEADERS = ("x-daedalus-caller", "x-nebula-agent", "x-nebula-client")
-CONNECTOR_SESSION_HEADER = "x-nebula-connector-session"
+PERSON_HEADER = person_session.PERSON_HEADER
+
+PERSON_REQUIRED = "person_required"
+AGENT_REFUSED = "agent_refused"
+PERSON_REQUIRED_DETAIL = (
+    "Only the person can do this, from a Nebula canvas connected as them. This tab isn't: "
+    "open the link the backend printed at launch (backend/devserver.py, or restart it with --open)."
+)
 
 
 class PersonGateError(Exception):
-    def __init__(self, status: int, detail: str) -> None:
+    def __init__(self, status: int, detail: str, code: str = PERSON_REQUIRED) -> None:
         super().__init__(detail)
         self.status = status
         self.detail = detail
+        self.code = code
 
 
-def desktop_session_matches(supplied: str | None) -> bool:
-    """True in desktop mode when ``supplied`` is this launch's connector session."""
-    expected = os.environ.get("NEBULA_CONNECTOR_SESSION")
-    if os.environ.get("NEBULA_DESKTOP_MODE") != "1" or not expected or not supplied:
-        return False
-    return secrets.compare_digest(supplied.encode(), expected.encode())
+def _lower(headers: Mapping[str, str] | None) -> dict[str, str]:
+    return {k.lower(): v for k, v in (headers or {}).items()}
 
 
 def has_agent_marker(headers: Mapping[str, str] | None) -> bool:
-    lower = {k.lower(): v for k, v in (headers or {}).items()}
+    lower = _lower(headers)
     if lower.get("authorization", "").strip().lower().startswith("agent "):
         return True
     return any(lower.get(name) for name in AGENT_MARKER_HEADERS)
 
 
-def is_browser_request(headers: Mapping[str, str] | None) -> bool:
-    lower = {k.lower(): v for k, v in (headers or {}).items()}
-    if desktop_session_matches(lower.get(CONNECTOR_SESSION_HEADER)):
-        return True
-    origin = lower.get("origin")
-    # origin_allowed() lets a missing Origin through (non-browser clients),
-    # so require its presence here.
-    return origin is not None and origin_allowed(origin)
+def has_person_token(headers: Mapping[str, str] | None) -> bool:
+    """True when the headers carry this launch's person token (markers not checked)."""
+    return person_session.verify(_lower(headers).get(PERSON_HEADER))
+
+
+def is_person(headers: Mapping[str, str] | None) -> bool:
+    """No agent marker and this launch's person token."""
+    return not has_agent_marker(headers) and has_person_token(headers)
 
 
 def require_person(headers: Mapping[str, str] | None) -> None:
-    """Raise PersonGateError(403) unless this request came from the person's canvas."""
+    """Raise PersonGateError(403) unless this request is the person."""
     if has_agent_marker(headers):
-        raise PersonGateError(403, "Only the person can do this from the Nebula canvas.")
-    if not is_browser_request(headers):
-        raise PersonGateError(403, "This action only works from the Nebula canvas.")
+        raise PersonGateError(403, "Only the person can do this from the Nebula canvas.", AGENT_REFUSED)
+    if not has_person_token(headers):
+        raise PersonGateError(403, PERSON_REQUIRED_DETAIL, PERSON_REQUIRED)

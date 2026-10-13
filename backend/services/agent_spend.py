@@ -11,6 +11,10 @@ The person sets these in Settings > Preferences:
 Agents can't be asked, so the backend refuses an agent's run that would break
 a limit and points it at a proposal, which the person accepts on the canvas.
 These limits never stop the person's own runs; the canvas asks them itself.
+"The person" means a request with this launch's person token and no agent
+marker (services/person_gate.py), not one with a browser Origin, which any
+local program can write. Everyone else, including a canvas tab opened without
+the person link, is held to these limits.
 
 Rules, with any limit set:
 

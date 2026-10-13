@@ -17,6 +17,7 @@ from commons import actors, evaluation, intake, records, review
 from commons.db import CommonsDB, now_iso
 from commons.reader import MODEL_ID, ReaderResult
 from commons.store import CommonsStore
+from services import person_session
 from tests.test_commons_evaluation import labels, store, source  # noqa: F401
 from tests.test_commons_review import output
 
@@ -158,13 +159,12 @@ async def test_attempt_left_running_by_a_crash_is_failed_at_startup(store, sourc
 @pytest.mark.asyncio
 async def test_startup_fails_interrupted_attempts(store, source, monkeypatch):
     import main
-    from commons import runtime, ui_auth
+    from commons import runtime
     await evaluation.prepare(store, str(source))
     monkeypatch.setenv('NEBULA_COMMONS_REVIEW_CALL_BUDGET', '15')
     review._reserve(store, 0)
     monkeypatch.delenv('NEBULA_COMMONS_NO_STARTUP_SCAN')
     monkeypatch.setattr(runtime, 'get_store', lambda: store)
-    monkeypatch.setattr(ui_auth, 'initialize_ui_session', lambda session: None)
 
     await main._commons_startup()
 
@@ -265,12 +265,11 @@ async def test_v3_database_migrates_to_v4_without_changing_the_batch(store, sour
 
 
 @pytest.mark.asyncio
-async def test_close_api_is_human_only_and_status_reports_state(store, source, monkeypatch):
+async def test_close_api_is_human_only_and_status_reports_state(store, source, monkeypatch, fresh_person_session):
     from routes import commons as routes
     app = FastAPI(); app.include_router(routes.router); app.dependency_overrides[routes.store_dep] = lambda: store
     monkeypatch.setattr(routes, '_worker_status', lambda: {'state': 'idle', 'running': False})
-    monkeypatch.setattr(actors, 'ui_session', actors.UISession())
-    token = secrets.token_urlsafe(32); actors.ui_session.set(token)
+    token = secrets.token_urlsafe(32); person_session.current().set(token)
     human = {'Authorization': f'Bearer {token}'}
     client = TestClient(app)
 

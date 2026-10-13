@@ -23,10 +23,10 @@ from services.canvas_events import (
 )
 from services.cli_graph import CLIGraph
 from services.selection_context import SelectionContextStore
+from tests.conftest import FORGED_ORIGIN, PERSON as PERSON_HEADERS
 
 PERSON = {"kind": "person"}
 CODEX = {"kind": "agent", "id": "codex", "name": "Codex", "color": "#5B9DFF", "verified": True}
-BROWSER = {"Origin": "http://localhost:5173"}
 AGENT = {"X-Nebula-Agent": "Claude Code"}
 PROJECT = "a" * 32
 
@@ -41,11 +41,15 @@ class Clock:
 
 # -- actors and param diffs -------------------------------------------------
 
-def test_actor_comes_from_identity_then_browser_origin_else_anonymous():
+def test_actor_comes_from_identity_then_the_person_token_else_anonymous(person):
     assert actor_for_headers({"x-nebula-agent": "Claude Code"})["kind"] == "agent"
-    assert actor_for_headers({"origin": "http://localhost:5173"}) == PERSON
-    assert actor_for_headers({"origin": "file://"}) == PERSON
+    assert actor_for_headers(PERSON_HEADERS) == PERSON
+    assert actor_for_headers({"x-nebula-person": person.token}) == PERSON
+    # An Origin proves nothing: an agent's edit is never credited to the person.
+    assert actor_for_headers(FORGED_ORIGIN) == {"kind": "anonymous"}
+    assert actor_for_headers({"origin": "file://"}) == {"kind": "anonymous"}
     assert actor_for_headers({"origin": "https://evil.example"}) == {"kind": "anonymous"}
+    assert actor_for_headers({**PERSON_HEADERS, "x-nebula-agent": "Codex"})["kind"] == "agent"
     assert actor_for_headers({}) == {"kind": "anonymous"}
     assert actor_for_headers(None) == {"kind": "anonymous"}
 
@@ -239,7 +243,7 @@ def test_snapshot_footer_gives_the_watch_cursor():
 # -- HTTP -------------------------------------------------------------------
 
 @pytest.fixture
-def api(monkeypatch):
+def api(monkeypatch, person):
     import main as main_module
 
     graph = CLIGraph()
@@ -266,16 +270,18 @@ def _kinds(journal: CanvasEventJournal) -> list[tuple[str, str]]:
 
 def test_edits_are_attributed_to_person_agent_or_anonymous(api):
     client, _graph, journal, _ = api
-    person = client.post("/api/graph/node", headers=BROWSER,
+    person = client.post("/api/graph/node", headers=PERSON_HEADERS,
                          json={"definitionId": "text-input", "params": {"value": "a"}}).json()["id"]
     agent = client.post("/api/graph/node", headers=AGENT,
                         json={"definitionId": "text-input", "params": {"value": "b"}}).json()["id"]
     client.post("/api/graph/node", json={"definitionId": "text-input", "params": {"value": "c"}})
+    client.post("/api/graph/node", headers=FORGED_ORIGIN, json={"definitionId": "text-input", "params": {"value": "d"}})
     events = journal.read(after=0)["events"]
     assert [(e["kind"], e["actor"]["kind"], e.get("nodeId")) for e in events] == [
         ("node.added", "person", person),
         ("node.added", "agent", agent),
         ("node.added", "anonymous", "n3"),
+        ("node.added", "anonymous", "n4"),
     ]
     assert events[1]["actor"]["name"] == "Claude Code"
     assert events[0]["data"]["definitionId"] == "text-input"
@@ -285,9 +291,9 @@ def test_edits_are_attributed_to_person_agent_or_anonymous(api):
 def test_param_updates_journal_only_changed_keys(api):
     client, graph, journal, _ = api
     node = graph.add_node("gpt-image-2-5-generate", {"quality": "low"})
-    client.put(f"/api/graph/node/{node}", headers=BROWSER, json={"params": {"quality": "low"}})
+    client.put(f"/api/graph/node/{node}", headers=PERSON_HEADERS, json={"params": {"quality": "low"}})
     assert journal.latest == 0
-    client.put(f"/api/graph/node/{node}", headers=BROWSER, json={"params": {"quality": "high"}})
+    client.put(f"/api/graph/node/{node}", headers=PERSON_HEADERS, json={"params": {"quality": "high"}})
     (event,) = journal.read(after=0)["events"]
     assert event["kind"] == "node.params" and event["data"]["keys"] == ["quality"]
     assert event["data"]["values"] == {"quality": "high"}
@@ -298,10 +304,10 @@ def test_small_layout_nudges_are_not_moves(api):
     client, graph, journal, _ = api
     first = graph.add_node("text-input", {}, position={"x": 0, "y": 0})
     second = graph.add_node("text-input", {}, position={"x": 100, "y": 0})
-    client.put("/api/graph/layout", headers=BROWSER,
+    client.put("/api/graph/layout", headers=PERSON_HEADERS,
                json={"positions": {first: {"x": 3, "y": 4}, second: {"x": 100, "y": 0}}})
     assert journal.latest == 0
-    client.put("/api/graph/layout", headers=BROWSER,
+    client.put("/api/graph/layout", headers=PERSON_HEADERS,
                json={"positions": {first: {"x": 50, "y": 4}, second: {"x": 100, "y": 9}}})
     (event,) = journal.read(after=0)["events"]
     assert event["kind"] == "node.moved" and event["actor"] == PERSON
@@ -316,7 +322,7 @@ def test_first_drag_of_an_agent_created_node_is_a_move(api):
     node = graph.add_node("text-input", {})
     still = graph.add_node("text-input", {})
     # Drawn at (0, 100) and (300, 100). Saving `still` where it was drawn is not a move.
-    client.put("/api/graph/layout", headers=BROWSER,
+    client.put("/api/graph/layout", headers=PERSON_HEADERS,
                json={"positions": {node: {"x": 120, "y": 260}, still: {"x": 300, "y": 100}}})
     (event,) = journal.read(after=0)["events"]
     assert event["kind"] == "node.moved" and event["actor"] == PERSON
@@ -326,9 +332,9 @@ def test_first_drag_of_an_agent_created_node_is_a_move(api):
 def test_unchanged_selection_is_not_journaled(api):
     client, graph, journal, _ = api
     node = graph.add_node("text-input", {})
-    client.post("/api/canvas/selection", headers=BROWSER, json={"nodeIds": [node]})
-    client.post("/api/canvas/selection", headers=BROWSER, json={"nodeIds": [node]})
-    client.post("/api/canvas/selection", headers=BROWSER, json={"nodeIds": []})
+    client.post("/api/canvas/selection", headers=PERSON_HEADERS, json={"nodeIds": [node]})
+    client.post("/api/canvas/selection", headers=PERSON_HEADERS, json={"nodeIds": [node]})
+    client.post("/api/canvas/selection", headers=PERSON_HEADERS, json={"nodeIds": []})
     assert [(e["kind"], e["data"]["count"]) for e in journal.read(after=0)["events"]] == [
         ("selection.changed", 1),
         ("selection.changed", 0),
@@ -341,8 +347,8 @@ def test_wiring_unwiring_and_delete_are_journaled(api):
     image = graph.add_node("gpt-image-2-5-generate", {})
     wire = {"source": text, "sourceHandle": "text", "target": image, "targetHandle": "prompt"}
     assert client.post("/api/graph/connect", headers=AGENT, json=wire).status_code == 200
-    assert client.request("DELETE", "/api/graph/edge", headers=BROWSER, json=wire).status_code == 200
-    assert client.delete(f"/api/graph/node/{image}", headers=BROWSER).status_code == 200
+    assert client.request("DELETE", "/api/graph/edge", headers=PERSON_HEADERS, json=wire).status_code == 200
+    assert client.delete(f"/api/graph/node/{image}", headers=PERSON_HEADERS).status_code == 200
     events = journal.read(after=0)["events"]
     assert [(e["kind"], e["actor"]["kind"]) for e in events] == [
         ("edge.added", "agent"), ("edge.removed", "person"), ("node.removed", "person"),
@@ -358,17 +364,17 @@ def test_cluster_journals_each_node_and_wire(api):
                   {"tempId": "b", "definitionId": "gpt-image-2-5-generate", "params": {}}],
         "edges": [{"source": "a", "sourceHandle": "text", "target": "b", "targetHandle": "prompt"}],
     }
-    assert client.post("/api/graph/cluster", headers=BROWSER, json=body).status_code == 200
+    assert client.post("/api/graph/cluster", headers=PERSON_HEADERS, json=body).status_code == 200
     assert [kind for kind, _ in _kinds(journal)] == ["node.added", "node.added", "edge.added"]
 
 
 def test_import_tags_the_project_and_clear_is_journaled(api):
     client, graph, journal, _ = api
     graph.add_node("text-input", {})
-    imported = client.post("/api/graph/import", headers=BROWSER, json={
+    imported = client.post("/api/graph/import", headers=PERSON_HEADERS, json={
         "nodes": [{"id": "x1", "definitionId": "text-input", "params": {"value": "hi"}}], "edges": []})
     assert imported.status_code == 200
-    assert client.delete("/api/graph", headers=BROWSER).status_code == 200
+    assert client.delete("/api/graph", headers=PERSON_HEADERS).status_code == 200
     events = journal.read(after=0)["events"]
     assert [e["kind"] for e in events] == ["canvas.replaced", "canvas.cleared"]
     assert events[0]["data"] == {"reason": "import"} and events[0]["projectId"] == PROJECT

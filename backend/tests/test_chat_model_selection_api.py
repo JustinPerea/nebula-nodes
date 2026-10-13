@@ -13,6 +13,9 @@ from services import chat_models, chat_session
 from tests.test_chat_models import catalog, model
 from tests.test_chat_isolation_lifecycle import QueueSocket
 from tests.test_commons_integration import isolated_app, receive_done  # noqa: F401
+from tests.conftest import PERSON_TOKEN
+
+pytestmark = pytest.mark.usefixtures("person")
 
 
 @pytest.mark.parametrize("agent", ["claude", "codex"])
@@ -52,7 +55,7 @@ def test_invalid_choice_never_starts_runner_or_authority(isolated_app, monkeypat
         yield {"type": "done"}
     monkeypatch.setitem(chat_session.AGENT_RUNNERS, "codex", runner)
     with TestClient(main.app).websocket_connect("/ws/chat") as ws:
-        ws.send_json({"type": "send", "message": "hello", "agent": "codex", **choice})
+        ws.send_json({"type": "send", "personToken": PERSON_TOKEN, "message": "hello", "agent": "codex", **choice})
         events = receive_done(ws)
     assert events[0]["code"] == code and events[0]["type"] == "error"
     assert calls == []
@@ -65,7 +68,7 @@ def test_false_like_agents_are_not_silently_defaulted(isolated_app, monkeypatch,
     acquire = Mock(side_effect=AssertionError("invalid agent must not acquire workspace"))
     monkeypatch.setattr(main.workspace_sessions, "acquire", acquire)
     with TestClient(main.app).websocket_connect("/ws/chat") as ws:
-        ws.send_json({"type": "send", "message": "hello", "agent": agent})
+        ws.send_json({"type": "send", "personToken": PERSON_TOKEN, "message": "hello", "agent": agent})
         events = receive_done(ws)
     assert events[0]["code"] == "agent_invalid"
     acquire.assert_not_called()
@@ -81,7 +84,7 @@ def test_validated_choices_apply_next_turn_and_keep_resume_history(isolated_app,
         yield {"type": "done"}
     monkeypatch.setitem(chat_session.AGENT_RUNNERS, "codex", runner)
     with TestClient(main.app).websocket_connect("/ws/chat") as ws:
-        payload = {"type": "send", "message": "hello", "agent": "codex", "model": "runtime-model", "effort": effort}
+        payload = {"type": "send", "personToken": PERSON_TOKEN, "message": "hello", "agent": "codex", "model": "runtime-model", "effort": effort}
         ws.send_json(payload)
         first = receive_done(ws)
         session_id = next(event["sessionId"] for event in first if event["type"] == "session")
@@ -104,9 +107,9 @@ def test_unknown_effort_default_omits_override_and_missing_model_default_require
         yield {"type": "done"}
     monkeypatch.setitem(chat_session.AGENT_RUNNERS, "claude", runner)
     with TestClient(main.app).websocket_connect("/ws/chat") as ws:
-        ws.send_json({"type": "send", "message": "hello", "agent": "claude", "effort": "low"})
+        ws.send_json({"type": "send", "personToken": PERSON_TOKEN, "message": "hello", "agent": "claude", "effort": "low"})
         assert receive_done(ws)[0]["code"] == "model_required"
-        ws.send_json({"type": "send", "message": "hello", "agent": "claude", "model": "runtime-model", "effort": None})
+        ws.send_json({"type": "send", "personToken": PERSON_TOKEN, "message": "hello", "agent": "claude", "model": "runtime-model", "effort": None})
         assert not [event for event in receive_done(ws) if event["type"] == "error"]
     assert len(calls) == 1 and calls[0]["effort"] is None and calls[0]["catalog_validated"]
 
@@ -147,7 +150,7 @@ async def test_cancel_during_catalog_discovery_waits_for_cleanup_without_turn_au
             assert cleaned
             socket.disconnect()
 
-    socket = QueueSocket({"type": "send", "message": "hello", "agent": agent,
+    socket = QueueSocket({"type": "send", "personToken": PERSON_TOKEN, "message": "hello", "agent": agent,
                           "model": "runtime-model"}, send)
     task = asyncio.create_task(main.chat_websocket(socket))
     try:
@@ -211,7 +214,7 @@ async def test_failed_catalog_cleanup_reports_failed_cancellation_without_confir
         if event["type"] == "cancellation" and event["status"] == "failed":
             socket.disconnect()
 
-    socket = QueueSocket({"type": "send", "message": "hello", "agent": agent,
+    socket = QueueSocket({"type": "send", "personToken": PERSON_TOKEN, "message": "hello", "agent": agent,
                           "model": "runtime-model"}, send)
     task = asyncio.create_task(main.chat_websocket(socket))
     try:

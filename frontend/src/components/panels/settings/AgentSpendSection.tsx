@@ -81,6 +81,12 @@ export function AgentSpendSection() {
         Your own runs aren&rsquo;t limited.{' '}
         {perRun === null ? 'There is no per-run limit.' : `The per-run limit above (${usd(perRun)}) applies to agents too.`}
       </p>
+      <p className="settings-hint" id="settings-agent-spend-who">
+        &ldquo;You&rdquo; means this canvas, opened from the link the backend printed at launch (or the desktop app).
+        Only it can change these limits, keys and connections. That holds against Nebula&rsquo;s own chats and any
+        agent that reaches Nebula only through its MCP server or API. A program running as you with its own
+        unrestricted shell could still read the link&rsquo;s token, so these limits don&rsquo;t bind it.
+      </p>
       <div className="settings-list">
         <div className="settings-pref">
           <span className="settings-pref__text">

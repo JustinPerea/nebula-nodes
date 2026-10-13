@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
+from services.child_env import scrubbed_env
 from services.output import get_run_dir
 from services.file_access import require_allowed_path, validate_file_references
 
@@ -48,6 +49,7 @@ async def render_remotion_manifest(
         cwd=str(_REPO_ROOT / "frontend"),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env=scrubbed_env(),
     )
     stderr_chunks: list[bytes] = []
     worker_error: str | None = None

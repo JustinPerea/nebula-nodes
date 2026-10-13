@@ -10,13 +10,18 @@ from fastapi import WebSocketDisconnect
 import main
 from commons import actors
 from services import chat_actions, chat_session
+from tests.conftest import PERSON_TOKEN
 from tests.test_commons_integration import isolated_app  # noqa: F401
+
+
+pytestmark = pytest.mark.usefixtures("person")
 
 
 class QueueSocket:
     """Expose a sent event before its awaitable returns, like a real transport."""
     def __init__(self, initial, on_send=None, on_receive=None):
         self.scope = {"server": ("127.0.0.1", 54321)}
+        self.headers = {}
         self.initial = initial
         self.on_send = on_send
         self.on_receive = on_receive
@@ -82,12 +87,12 @@ async def test_next_send_after_visible_done_waits_for_old_transport_and_resumes(
                 assert actors.agent_registry.lookup(calls[-1]["agent_token"]) is None
                 assert not main.workspace_sessions._sessions[session_ids[-1]].active
             if done_count == 1:
-                socket.put({"type": "send", "message": "second", "agent": agent,
+                socket.put({"type": "send", "message": "second", "agent": agent, "personToken": PERSON_TOKEN,
                             "sessionId": session_ids[-1]})
                 await second_received.wait()
             else:
                 socket.disconnect()
-    socket = QueueSocket({"type": "send", "message": "first", "agent": agent}, send, receive)
+    socket = QueueSocket({"type": "send", "message": "first", "agent": agent, "personToken": PERSON_TOKEN}, send, receive)
     await asyncio.wait_for(main.chat_websocket(socket), timeout=3)
     assert len(calls) == 2
     assert calls[1]["session"] == "synthetic-provider-session"
@@ -119,7 +124,7 @@ async def test_nonobject_envelope_is_rejected_and_disconnect_cleans_active_turn(
             assert actors.agent_registry.lookup(seen["agent_token"]) is not None
             assert not seen.get("cleaned")
             socket.disconnect()
-    socket = QueueSocket({"type": "send", "message": "first", "agent": "claude"}, send)
+    socket = QueueSocket({"type": "send", "message": "first", "agent": "claude", "personToken": PERSON_TOKEN}, send)
     await asyncio.wait_for(main.chat_websocket(socket), timeout=3)
     assert seen["cleaned"]
     assert actors.agent_registry.lookup(seen["agent_token"]) is None
@@ -143,7 +148,7 @@ async def test_unexpected_transport_exit_still_closes_runner_and_revokes_authori
         if event["type"] == "session":
             seen["opaque"] = event["sessionId"]
             socket.incoming.put_nowait(RuntimeError("synthetic transport failure"))
-    socket = QueueSocket({"type": "send", "message": "first", "agent": "claude"}, send)
+    socket = QueueSocket({"type": "send", "message": "first", "agent": "claude", "personToken": PERSON_TOKEN}, send)
     with pytest.raises(RuntimeError, match="synthetic transport failure"):
         await asyncio.wait_for(main.chat_websocket(socket), timeout=3)
     assert seen["cleaned"]
@@ -156,8 +161,7 @@ async def test_unexpected_transport_exit_still_closes_runner_and_revokes_authori
 @pytest.mark.asyncio
 async def test_active_guard_precedes_second_turn_validation_without_terminal_done(isolated_app, monkeypatch, second):
     monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")
-    human = "h" * 43
-    actors.ui_session.set(human)
+    human = PERSON_TOKEN
     calls = []
     async def runner(message, session_id, model, autonomy, **kwargs):
         calls.append(kwargs)
@@ -193,7 +197,7 @@ async def test_invalid_agent_type_never_starts_native_runner(isolated_app, monke
     async def send(socket, event):
         if event["type"] == "done":
             socket.disconnect()
-    socket = QueueSocket({"type": "send", "message": "hello", "agent": agent}, send)
+    socket = QueueSocket({"type": "send", "message": "hello", "agent": agent, "personToken": PERSON_TOKEN}, send)
     await asyncio.wait_for(main.chat_websocket(socket), timeout=3)
     assert called == []
     assert any(event["type"] == "error" and "agent must be text" in event["message"] for event in socket.events)

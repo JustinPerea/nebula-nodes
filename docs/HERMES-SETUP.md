@@ -289,8 +289,8 @@ If you see "hermes-daedalus: command not found," re-run
 Same as before — Hermes integration reuses the existing dev setup.
 
 ```bash
-# Terminal 1
-cd backend && python -m uvicorn main:app --port 8000
+# Terminal 1 (prints the link that opens the canvas as you)
+backend/.venv/bin/python backend/devserver.py --port 8000
 
 # Terminal 2
 cd frontend && npm run dev

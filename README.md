@@ -80,8 +80,10 @@ cd nebula-nodes
 ```bash
 python3.12 -m venv backend/.venv
 backend/.venv/bin/python -m pip install -r backend/requirements.txt
-backend/.venv/bin/python -m uvicorn main:app --app-dir backend --reload --reload-dir backend --host 127.0.0.1 --port 8000
+backend/.venv/bin/python backend/devserver.py --port 8000
 ```
+
+It prints a link like `http://localhost:5173/#nebula-person=…&backend=http://127.0.0.1:8000` (add `--open` to open it in your browser instead). That link connects the canvas as you: only a tab opened from it can change Settings, keys and connections, accept agent proposals and start agent chats. The token lasts until the backend stops, and survives code reloads. A tab opened without it still works for building and running, with those actions locked. Agents and scripts on your machine never get the token, so they stay held to the spending limits (see [docs/MCP-SETUP.md](docs/MCP-SETUP.md#who-counts-as-the-person)).
 
 **Terminal 2 — frontend**, from the repository root:
 
@@ -90,7 +92,7 @@ npm --prefix frontend ci
 npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173
 ```
 
-Open **[127.0.0.1:5173](http://127.0.0.1:5173)**, then add the provider keys you need in **Settings** (the gear at the top right of Projects, or the bottom of the left rail inside a project). Provider usage is billed to your accounts. Browser mode stores keys in the gitignored, plaintext `settings.json`; the macOS desktop app uses Keychain encryption.
+Open the link from Terminal 1, then add the provider keys you need in **Settings** (the gear at the top right of Projects, or the bottom of the left rail inside a project). Provider usage is billed to your accounts. Browser mode stores keys in the gitignored, plaintext `settings.json`; the macOS desktop app uses Keychain encryption.
 
 Try a **Text Input → GPT Image 2 → Preview** graph and hit **Run**. Generated files go to `output/` by default; change the location in **Settings → Storage**.
 

@@ -7,6 +7,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+from services.child_env import scrubbed_env
+
 KNOWLEDGE_PATHS = (
     ".agents/skills", "docs/model-providers", "docs/api-guides",
     "docs/MODEL_REFERENCE.md", "docs/fal-model-schemas.md", "docs/KREA-MCP.md",
@@ -25,7 +27,7 @@ def _tracked_files(project_root: Path) -> list[str]:
     try:
         result = subprocess.run(
             ["git", "ls-files", "-z", "--", *KNOWLEDGE_PATHS], cwd=project_root,
-            capture_output=True, timeout=5, check=True,
+            capture_output=True, timeout=5, check=True, env=scrubbed_env(),
         )
     except (OSError, subprocess.SubprocessError):
         # GitHub source ZIPs have no .git directory. Use the tracked portable

@@ -71,3 +71,43 @@ def spending_limits_off(monkeypatch):
     monkeypatch.setattr(agent_spend, "threshold_from_settings", lambda settings: None)
     monkeypatch.setattr(agent_spend, "caps_from_settings",
                         lambda settings: {"sessionUsd": None, "models": {}})
+
+
+# The person's launch token in tests (services/person_session.py). The
+# `person` fixture installs it; without that fixture it verifies as nothing.
+PERSON_TOKEN = "test-person-token-" + "0" * 25
+# What the person's canvas sends. A real browser also sends Origin, which
+# proves nothing on its own: FORGED_ORIGIN is what any local program can send.
+PERSON = {"Origin": "http://localhost:5173", "X-Nebula-Person": PERSON_TOKEN}
+FORGED_ORIGIN = {"Origin": "http://localhost:5173"}
+PERSON_HELLO = {"type": "hello", "personToken": PERSON_TOKEN}
+
+
+class PersonFixture:
+    """This test's person: the launch token and the headers the canvas sends."""
+
+    def __init__(self, token: str) -> None:
+        self.token = token
+        self.headers = {"Origin": "http://localhost:5173", "X-Nebula-Person": token}
+        self.hello = {"type": "hello", "personToken": token}
+
+
+@pytest.fixture
+def fresh_person_session(monkeypatch):
+    """Swap in an empty person session (services/person_session.py), the one
+    object the person gate, /ws, /ws/chat and Commons all read."""
+    from services import person_session
+
+    session = person_session.PersonSession()
+    monkeypatch.setattr(person_session, "_session", session)
+    monkeypatch.setattr(person_session, "_provided", None)
+    return session
+
+
+@pytest.fixture
+def person(fresh_person_session) -> PersonFixture:
+    """A person session holding PERSON_TOKEN. Send ``PERSON`` (or
+    ``person.headers``) where the canvas would, and keep forged-Origin cases
+    (FORGED_ORIGIN) as negatives."""
+    fresh_person_session.set(PERSON_TOKEN)
+    return PersonFixture(PERSON_TOKEN)

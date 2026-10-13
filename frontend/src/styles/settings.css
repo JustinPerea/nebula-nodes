@@ -144,6 +144,8 @@ body.app-slava-restraint .settings-hint {
   line-height: var(--sr-line-meta);
 }
 
+body.app-slava-restraint .settings-hint + .settings-hint { margin-top: 6px; }
+
 body.app-slava-restraint .settings-hint a {
   color: var(--sr-ink);
   text-decoration: underline;

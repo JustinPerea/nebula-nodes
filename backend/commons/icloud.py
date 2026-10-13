@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from services.child_env import scrubbed_env
+
 SF_DATALESS = 0x40000000
 
 
@@ -32,7 +34,7 @@ class DatalessDownloader:
         async with self._sem:
             try:
                 await asyncio.to_thread(self._run, ["brctl", "download", str(path)],
-                                        capture_output=True, timeout=30)
+                                        capture_output=True, timeout=30, env=scrubbed_env())
             except (OSError, subprocess.SubprocessError):
                 pass  # the poll below decides
             deadline = self._clock() + self.timeout

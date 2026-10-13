@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 from urllib.parse import urlsplit, urlunsplit
+from services.child_env import SECRET_ENV_KEYS, scrubbed_env
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -20,15 +21,8 @@ BRIDGE_PATH = PROJECT_ROOT / "backend" / "krea_mcp_server.py"
 SERVER_NAME = "nebula_krea"
 DEFAULT_NEBULA_URL = "http://127.0.0.1:8000"
 HERMES_SYSTEM_MANAGED_DIR = Path("/etc/hermes")
-CONNECTOR_SECRET_ENV_KEYS = (
-    "NEBULA_CONNECTOR_ENCRYPTION_KEY",
-    "NEBULA_INJECTED_KEYS",
-    # The desktop launch nonce marks a request as coming from the person's
-    # canvas (services/person_gate.py). An agent holding it could accept its
-    # own proposals or write pins as the person. The backend reads it from its
-    # own environment, so agent children never need it.
-    "NEBULA_CONNECTOR_SESSION",
-)
+# Secrets every child loses; services/child_env.py is the one list.
+CONNECTOR_SECRET_ENV_KEYS = SECRET_ENV_KEYS
 # Read-only Krea MCP tools Nebula's agents may call. None of them generates,
 # uploads, writes, deletes or spends; everything else stays behind graph nodes.
 # Krea Files listings are deliberately absent: they expose private and
@@ -112,9 +106,7 @@ def resolve_nebula_url(
 
 
 def agent_child_env(env: Mapping[str, str] | None = None) -> dict[str, str]:
-    child = dict(os.environ if env is None else env)
-    for key in CONNECTOR_SECRET_ENV_KEYS:
-        child.pop(key, None)
+    child = scrubbed_env(env)
     child["NEBULA_URL"] = resolve_nebula_url(child)
     return child
 

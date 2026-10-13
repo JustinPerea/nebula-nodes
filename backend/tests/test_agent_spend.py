@@ -12,8 +12,8 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from services import agent_spend  # noqa: E402
+from tests.conftest import FORGED_ORIGIN, PERSON  # noqa: E402
 
-PERSON = {"Origin": "http://localhost:5173"}
 PAID = "gpt-image-1-generate"
 FREE = "text-input"
 
@@ -178,7 +178,7 @@ async def every_node_calls_its_provider(*, nodes, run_id=None, **kwargs):
 
 
 @pytest.fixture
-def client(monkeypatch):
+def client(monkeypatch, person):
     import main
 
     monkeypatch.setattr(main.model_pricing, "load_pricing", lambda path=None: PRICES)
@@ -253,7 +253,20 @@ def test_the_persons_runs_are_not_held_to_it(client):
     main.execute_graph.assert_awaited_once()
 
 
-def test_an_agent_with_a_browser_origin_is_still_held_to_it(client):
+def test_a_forged_browser_origin_is_held_to_it(client):
+    import main
+
+    price(None)
+    node_id = add_paid_node(client)
+    response = client.post("/api/graph/run", json={"targetNodeId": node_id}, headers=FORGED_ORIGIN)
+    assert response.status_code == 403 and "no list price" in response.json()["detail"]
+    main.execute_graph.assert_not_awaited()
+    spend = client.get("/api/agent/spend", headers=FORGED_ORIGIN).json()
+    assert spend["limited"] is True and spend["budget"] == "shared"
+    assert client.get("/api/agent/spend", headers=PERSON).json()["limited"] is False
+
+
+def test_an_agent_with_the_person_token_is_still_held_to_it(client):
     price(None)
     node_id = add_paid_node(client)
     response = client.post("/api/graph/run", json={"targetNodeId": node_id},
@@ -293,7 +306,8 @@ def test_canvas_run_endpoints_hold_other_callers_to_it(client, monkeypatch):
     assert one.status_code == 403
 
 
-@pytest.mark.parametrize("headers", [{}, {**PERSON, "X-Nebula-Agent": "Codex"}, {"Authorization": "Agent x"}])
+@pytest.mark.parametrize("headers", [{}, FORGED_ORIGIN, {**PERSON, "X-Nebula-Agent": "Codex"},
+                                     {"Authorization": "Agent x"}])
 def test_only_the_person_can_change_the_threshold(client, headers):
     response = client.put("/api/settings", json={"runCostConfirmUsd": 500}, headers=headers)
     assert response.status_code in (401, 403)  # a bad agent token is turned away before the route
@@ -304,8 +318,10 @@ def test_the_person_can_change_the_threshold_and_bad_values_are_refused(client):
     assert client.put("/api/settings", json={"runCostConfirmUsd": 20}, headers=PERSON).status_code == 200
     assert client.get("/api/settings").json()["runCostConfirmUsd"] == 20
     assert client.put("/api/settings", json={"runCostConfirmUsd": 0}, headers=PERSON).status_code == 400
-    # Other settings still save from anywhere, as before.
-    assert client.put("/api/settings", json={"zoomTelemetryEnabled": True}).status_code == 200
+    # Every setting is the person's now, not only the limits.
+    assert client.put("/api/settings", json={"zoomTelemetryEnabled": True}).status_code == 403
+    assert client.put("/api/settings", json={"zoomTelemetryEnabled": True}, headers=FORGED_ORIGIN).status_code == 403
+    assert client.put("/api/settings", json={"zoomTelemetryEnabled": True}, headers=PERSON).status_code == 200
 
 
 def test_a_session_budget_holds_across_runs_and_renaming_does_not_reset_it(client):

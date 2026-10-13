@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from commons import activation, runtime
+from services import person_session
 from routes.commons import router, store_dep
 
 
@@ -88,13 +89,12 @@ def test_inactive_router_rejects_before_overridden_store(method, path, kwargs, t
     assert not (tmp_path / "never-created").exists()
 
 
-def test_enabled_router_preserves_human_authority_and_does_not_start_worker(monkeypatch, tmp_path):
+def test_enabled_router_preserves_human_authority_and_does_not_start_worker(monkeypatch, tmp_path, fresh_person_session):
     import secrets
     from commons import actors
     monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")
-    monkeypatch.setattr(actors, "ui_session", actors.UISession())
     token = secrets.token_urlsafe(32)
-    actors.ui_session.set(token)
+    person_session.current().set(token)
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)

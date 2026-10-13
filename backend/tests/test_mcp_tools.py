@@ -18,7 +18,6 @@ from models.events import ExecutedEvent
 from nebula_api import NebulaAPI, NebulaAPIError
 from services import agent_spend, node_readiness, output_preview
 
-PERSON = {"Origin": "http://localhost:5173"}
 
 
 class _Krea:
@@ -147,14 +146,14 @@ def test_cancel_run_keeps_what_finished(nebula):
     assert built["idMap"]["+p"] in outcome["outputs"]
 
 
-def test_a_run_over_the_limit_points_at_propose_change(nebula, monkeypatch):
+def test_a_run_over_the_limit_points_at_propose_change(nebula, monkeypatch, person):
     import main
 
     http, _ = nebula
     pricing = {"nodes": {"nano-banana": {"currency": "usd", "rows": [{"match": {}, "price": 5.0}]}}}
     monkeypatch.setattr(main.model_pricing, "load_pricing", lambda path=None: pricing)
     reset = {"runCostConfirmUsd": 1, "agentSpend": {"sessionUsd": None, "models": {}}}
-    http.put("/api/settings", json=reset, headers=PERSON)
+    assert http.put("/api/settings", json=reset, headers=person.headers).status_code == 200
     built = _build()
     with pytest.raises(NebulaAPIError) as refused:
         asyncio.run(mcp_server.run_nodes(built["idMap"]["+img"]))

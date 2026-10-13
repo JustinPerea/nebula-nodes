@@ -60,7 +60,7 @@ async def test_connector_billing_calls_only_plan_and_trial_tools(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_plan_and_trial_routes(monkeypatch):
+async def test_plan_and_trial_routes(monkeypatch, person):
     calls = []
 
     class Connector:
@@ -77,7 +77,12 @@ async def test_plan_and_trial_routes(monkeypatch):
                                  headers={"Origin": "http://127.0.0.1:5173"}) as client:
         assert (await client.get("/api/krea/plans")).json()["plans"][0]["name"] == "Pro"
         assert calls == ["show_plans"]  # loading plans never starts a trial
-        assert (await client.post("/api/krea/trial")).json() == {"url": "https://checkout.stripe.com/c/pay/cs_fixture"}
+        # Starting a trial checkout is the person's click, not an agent's.
+        assert (await client.post("/api/krea/trial")).status_code == 403
+        assert (await client.post("/api/krea/trial", headers={"X-Nebula-Agent": "Codex", **person.headers})).status_code == 403
+        assert calls == ["show_plans"]
+        trial = await client.post("/api/krea/trial", headers=person.headers)
+        assert trial.json() == {"url": "https://checkout.stripe.com/c/pay/cs_fixture"}
         assert (await client.get("/api/krea/trial")).status_code == 405
     assert calls == ["show_plans", "start_free_trial"]
 

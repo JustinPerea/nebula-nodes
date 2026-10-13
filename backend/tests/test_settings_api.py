@@ -11,10 +11,11 @@ from fastapi.testclient import TestClient
 
 import main
 import services.settings as settings
+from tests.conftest import FORGED_ORIGIN, PERSON
 
 
 @pytest.fixture
-def settings_client(tmp_path, monkeypatch):
+def settings_client(tmp_path, monkeypatch, person):
     path = tmp_path / "settings.json"
     initial = {
         "apiKeys": {
@@ -41,7 +42,26 @@ def settings_client(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "is_injected_mode", settings.is_injected_mode)
     clear = Mock()
     monkeypatch.setattr(main, "clear_provider_validation_cache", clear)
-    return TestClient(main.app), path, initial, clear
+    # The person's canvas; refusals for everyone else are tested below.
+    return TestClient(main.app, headers=PERSON), path, initial, clear
+
+
+@pytest.mark.parametrize("headers", [{}, FORGED_ORIGIN, {**PERSON, "X-Nebula-Agent": "Codex"},
+                                     {"X-Nebula-Client": "nebula-cli"}])
+def test_only_the_person_writes_settings_or_removes_keys(settings_client, headers):
+    _client, path, initial, clear = settings_client
+    client = TestClient(main.app)
+    before = path.read_text()
+    for body in ({"outputPath": "/elsewhere"}, {"apiKeys": {"OPENAI_API_KEY": "synthetic-swap"}},
+                 {"routing": {"example": "changed"}}, {"executionMode": "auto"}):
+        response = client.put("/api/settings", json=body, headers=headers)
+        assert response.status_code == 403, (headers, body)
+    removed = client.delete("/api/settings/api-keys/OPENAI_API_KEY", headers=headers)
+    assert removed.status_code == 403
+    assert path.read_text() == before
+    clear.assert_not_called()
+    if headers in ({}, FORGED_ORIGIN):
+        assert removed.json()["code"] == "person_required"
 
 
 def test_remove_provider_persists_and_reopening_returns_only_masked_other_keys(settings_client):
