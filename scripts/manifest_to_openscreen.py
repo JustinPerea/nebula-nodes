@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """manifest_to_openscreen.py — rewrite an OpenScreen project's zoomRegions
-from a Daedalus zoom manifest.
+from a Nebula zoom manifest (Settings > Demo zoom telemetry).
 
 OpenScreen's project file (.openscreen — JSON) contains a zoomRegions array
 of objects with normalized focus coords (cx, cy as 0-1 fractions of frame),
 startMs, endMs, and depth. By default OpenScreen auto-generates these from
 cursor activity. This script REPLACES that array with regions derived from
-our zoom manifest, so the editor renders zoom-on-node-as-Daedalus-builds-it
+our zoom manifest, so the editor renders zoom-on-node-as-the-agent-builds-it
 instead of zoom-on-cursor-where-the-user-pointed.
 
 OpenScreen handles all coordinate alignment internally — we only have to
@@ -18,7 +18,7 @@ Usage:
         --manifest output/zoom-manifest-XXX.json \\
         --recording-started-at 1777255115.232 \\
         --recording-width 2832 --recording-height 1748 \\
-        --output ~/Desktop/recording-XXX-daedalus.openscreen
+        --output ~/Desktop/recording-XXX-zoomed.openscreen
 """
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ def main() -> int:
         end_ms = start_ms + args.hold_ms
         new_regions.append(
             {
-                "id": f"daedalus-{i + 1}",
+                "id": f"nebula-{i + 1}",
                 "startMs": start_ms,
                 "endMs": end_ms,
                 "depth": args.depth,

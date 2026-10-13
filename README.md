@@ -4,7 +4,7 @@ slug: nebula-nodes
 status: active
 tagline: A local AI creation studio. Connect models, media, and editable artwork on one canvas.
 description: A visual node graph for image, video, audio, text, 3D, and world generation, with specialized creative workspaces and optional agent chat. Runs locally using your own provider keys.
-stack: [Python 3.12, FastAPI, React 19, TypeScript, Vite, React Flow, Zustand, WebSockets, Hermes Agent (optional)]
+stack: [Python 3.12, FastAPI, React 19, TypeScript, Vite, React Flow, Zustand, WebSockets]
 features:
   - Bring your own provider keys
   - Typed node graph with streaming previews and subgraph caching
@@ -17,7 +17,7 @@ links:
   github: https://github.com/JustinPerea/nebula-nodes
   lab: https://justinperea.com/lab/nebula-quiver
 visibility: public
-lastUpdated: 2026-10-02
+lastUpdated: 2026-10-13
 ---
 
 <div align="center">
@@ -107,22 +107,12 @@ Prefer a desktop window? See the [Electron setup guide](desktop/README.md). Agen
 | [Model pricing](docs/MODEL-PRICING.md) | Run cost estimates, the cost confirm, and keeping prices current |
 | [Provider guides](docs/api-guides/README.md) | Example pipelines and API coverage |
 | [Desktop app](desktop/README.md) | Launch, local backend, migration, and Keychain |
-| [Daedalus agent](docs/HERMES-SETUP.md) | Hermes and Daedalus setup |
 | [External-agent MCP](docs/MCP-SETUP.md) | Build and run from any MCP client (`find_nodes`, `describe_node`, `edit_canvas`, `run_nodes`, `view_output` with inline previews, spending limits), canvas selection, `look_at_canvas`, agent cursors, `wait_for_canvas_change`, `resolve_pin` and proposals |
 | [Provider contracts](docs/contracts/README.md) | Maintained API contracts and verification |
 | [Contributing](CONTRIBUTING.md) | Development checks and adding nodes |
-
-<details>
-<summary>Watch an agent build a pipeline</summary>
-
-https://github.com/user-attachments/assets/3a83187d-e186-4378-8a36-822b0a4055cb
-
-The optional Daedalus agent builds a creative pipeline from a plain-language prompt. [Download the demo](https://github.com/JustinPerea/nebula-nodes/releases/download/v0.1.0-hackathon/stitched-with-music.mp4).
-
-</details>
 
 ## Contributing and support
 
 [Issues](https://github.com/JustinPerea/nebula-nodes/issues) and pull requests are welcome. Read the [contribution guide](CONTRIBUTING.md) before adding a node or changing a provider integration.
 
-Built with React Flow, FastAPI, and an optional [Hermes Agent](https://github.com/NousResearch/hermes-agent) integration. Licensed under [AGPL-3.0](LICENSE).
+Built with React Flow and FastAPI. Licensed under [AGPL-3.0](LICENSE).

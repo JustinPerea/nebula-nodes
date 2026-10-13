@@ -12,23 +12,23 @@ A single Nebula node — `nous-portal-universal` — that chats with Nous Resear
 - User configures the `nous-portal-universal` node (display name "Nous Portal").
 - User asks about Nous Portal, Hermes, or the Hermes-4 family (`Hermes-4.3-36B`, `Hermes-4-70B`, `Hermes-4-405B`) inside Nebula.
 - User wants a long-context language/reasoning step in a graph — expand a prompt, summarize source text, explain code, draft copy — to feed into image / audio / 3D nodes.
-- User hits a Nous auth error in Nebula ("No Nous Portal credential found…", "token rejected — run `hermes auth`") and needs to know how to fix it.
+- User hits a Nous auth error in Nebula ("No Nous Portal credential found…", "token rejected — run `hermes model`…") and needs to know how to fix it.
 - User asks which Hermes model to pick, or how to get visible chain-of-thought out of the node.
 
 **Do NOT** reach for this node for images, video, audio, or 3D — Nous exposes none of that in Nebula (see Capability boundaries). Route those to FAL, Gemini, Replicate, Runway, or Meshy nodes and use Nous purely as the language/reasoning step.
 
 ## Universal rules
 
-1. **Auth — there is NO env var. Do not look for a `NOUS_API_KEY`.** The node definition's `envKeyName` is `[]`. The handler ignores the `api_keys` dict entirely and instead calls `load_nous_credential()` (in `backend/services/nous_auth.py`), which reads Hermes's OAuth files. It attaches `Authorization: Bearer <agent_key>`, where `agent_key` is a short-lived (~24h) key Hermes mints from the OAuth pair and **auto-refreshes in the background**. Profile lookup order is fixed:
-   1. `~/.hermes/profiles/daedalus/auth.json` (the Daedalus profile — checked first),
-   2. the active profile named in `~/.hermes/active_profile` → `~/.hermes/profiles/<name>/auth.json`,
-   3. the global `~/.hermes/auth.json` as a last resort.
-   Every `credential_pool.nous` entry is considered in profile order. Blank, locally expired, malformed, or wrong-scope entries are skipped so a usable fallback profile can win. JWT-shaped keys must carry `inference:invoke` and remain valid beyond a 60-second safety window; legacy opaque `sk-*` keys retain Hermes metadata-based compatibility. **Setup is a one-time `hermes-daedalus model` OAuth login** — see `HERMES-SETUP.md` and the setup recipe below. If you ever need to tell the user how to authenticate, the answer is *"run `hermes-daedalus model` and pick Nous Portal"*, never *"paste an API key into `.env`"*.
+1. **Auth — there is NO env var. Do not look for a `NOUS_API_KEY`.** The node definition's `envKeyName` is `[]`. The handler ignores the `api_keys` dict entirely and instead calls `load_nous_credential()` (in `backend/services/nous_auth.py`), which reads Hermes's OAuth files. It attaches `Authorization: Bearer <agent_key>`, where `agent_key` is a short-lived (~24h) key Hermes mints from the OAuth pair and **auto-refreshes in the background**. Profile lookup order is fixed (the person's normal Hermes login):
+   1. the active profile named in `~/.hermes/active_profile` → `~/.hermes/profiles/<name>/auth.json`,
+   2. the global `~/.hermes/auth.json`.
+   `HERMES_HOME` moves the whole `~/.hermes` directory and `HERMES_AUTH_FILE` moves the global file; neither is a way to paste a raw key.
+   Every `credential_pool.nous` entry is considered in profile order. Blank, locally expired, malformed, or wrong-scope entries are skipped so a usable fallback profile can win. JWT-shaped keys must carry `inference:invoke` and remain valid beyond a 60-second safety window; legacy opaque `sk-*` keys retain Hermes metadata-based compatibility. **Setup is a one-time `hermes model` OAuth login**: on the computer running Nebula, run `hermes model`, choose Nous Portal, and finish the browser sign-in at portal.nousresearch.com; Hermes writes the credential into the active profile. If you ever need to tell the user how to authenticate, the answer is *"run `hermes model` and pick Nous Portal"*, never *"paste an API key into `.env`"*.
 2. **Base URL is trust-pinned.** Credential-file URLs are untrusted and are accepted only when they resolve to the canonical `https://inference-api.nousresearch.com/v1`; this prevents a persisted profile from redirecting the bearer to another host. An operator-controlled `NOUS_INFERENCE_BASE_URL` may select a different HTTPS, non-loopback, no-userinfo host for staging/tests. The handler calls `<base_url>/chat/completions`; `GET /api/nous/models` uses `<base_url>/models` and binds its 5-minute cache to a non-secret credential identity.
 3. **Execution pattern = stream (SSE), not async-poll.** The node's `executionPattern` is `"stream"`. The handler sends `"stream": true` and uses the shared `stream_execute` runner with `delta_path="choices.0.delta.content"` — i.e. it's **OpenAI-compatible SSE**, parsing `choices[0].delta.content` token-by-token and concatenating into the final `text` output. There is no task ID and no polling. Stream timeout is 60s. Extra headers sent: `Content-Type: application/json` and `X-Title: Nebula Nodes`.
 4. **Status / error codes** (what the user will actually see):
-   - **Not authenticated** → `NousNotAuthenticatedError` surfaced verbatim: *"No Nous Portal credential found in any Hermes profile. Run `hermes-daedalus model` and select Nous Portal…"*. Fix: run that command.
-   - **Token rejected / stale / locally invalid** → the model proxy returns a controlled `401`, while provider health reports the credential as configured but invalid. Fix: re-run `hermes-daedalus model` and select Nous Portal so Hermes refreshes the `agent_key`.
+   - **Not authenticated** → `NousNotAuthenticatedError` surfaced verbatim: *"No Nous Portal credential found in any Hermes profile. Run `hermes model` and select Nous Portal…"*. Fix: run that command.
+   - **Token rejected / stale / locally invalid** → the model proxy returns a controlled `401`, while provider health reports the credential as configured but invalid. Fix: re-run `hermes model` and select Nous Portal so Hermes refreshes the `agent_key`.
    - **No model selected** → `ValueError("No model selected — choose one from the Inspector panel")`. The `model` param is required and starts empty.
    - **Missing prompt** → `ValueError("Messages input is required")` when the `messages` port is empty.
    - Other non-200s from `/models` are passed through with the upstream status + body text.
@@ -91,7 +91,7 @@ All recipes use the real node id `nous-portal-universal`.
 
 - **Node id:** `nous-portal-universal` (one node — the entire provider surface in Nebula). Category: **universal**. `apiProvider`: `nous`. `envKeyName`: `[]`.
 - **Handler:** `backend/handlers/nous_portal.py` → `handle_nous_portal_universal`. It reuses the shared `execution/stream_runner.py` `stream_execute` (OpenAI-compatible SSE).
-- **Auth/support files:** `backend/services/nous_auth.py` (`load_nous_credential`, `NousNotAuthenticatedError`, profile lookup) and `backend/routes/nous_proxy.py` (`GET /api/nous/models`, 5-min cache, fills the model dropdown). **No `.env` involvement.** Setup is documented in `HERMES-SETUP.md` (next to this file).
+- **Auth/support files:** `backend/services/nous_auth.py` (`load_nous_credential`, `NousNotAuthenticatedError`, profile lookup) and `backend/routes/nous_proxy.py` (`GET /api/nous/models`, 5-min cache, fills the model dropdown). **No `.env` involvement.** Setup is the `hermes model` login in Universal rule 1.
 - **Ports:** input `messages` (Text, required) + `images` (Image, optional, multiple); output `text` (Text).
 - **Chaining rules:** the `messages` input accepts any upstream node's Text output (or hand-typed text). The `text` output is plain Text and chains into any node that takes a text/prompt input — image-prompt fields, TTS text inputs, other LLM nodes, display/save nodes. There is no task-id handshake (it's streaming, not async-poll), so nothing downstream needs to wait on a poll.
 - **How outputs render:** tokens stream onto the canvas as they arrive; the completed `text` shows in a text-display / save node like any other Text value. There is no media asset to download.
@@ -122,4 +122,4 @@ Coverage: Nebula fully uses the small public **inference** API (chat completions
 - Hermes Agent — AI providers (Portal model catalog, tool routing): https://hermes-agent.nousresearch.com/docs/integrations/providers
 - Nebula audit guide (do-not-duplicate, source of truth for the gap table): `docs/api-guides/nous.md`
 - Nebula source of truth for what Nebula actually calls: `backend/handlers/nous_portal.py`, `backend/services/nous_auth.py`, `backend/routes/nous_proxy.py`, `backend/data/node_definitions.json` (`nous-portal-universal`)
-- Setup path for the no-env-key auth: `HERMES-SETUP.md` (next to this file)
+- Setup path for the no-env-key auth: Universal rule 1 above (`hermes model`)

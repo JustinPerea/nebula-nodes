@@ -56,7 +56,7 @@ FAL uses different naming for some fields:
 - `num_images`, not `n`
 - `partial_images` is exposed on FAL nodes and defaults to `2`
 
-Keep this distinction visible in UI and handler code so Daedalus does not copy
+Keep this distinction visible in UI and handler code so agents do not copy
 OpenAI-direct params into FAL requests.
 
 ## Not Supported in Nebula
@@ -87,7 +87,7 @@ Re-verified against openai-python SDK type stubs fetched 2026-05-16:
 
 No changes required to gpt-image-2 nodes in this audit cycle.
 
-## Daedalus Guidance
+## Agent Guidance
 
 Before building a `gpt-image-2-*` graph:
 

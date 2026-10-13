@@ -48,6 +48,3 @@ decisions and tradeoffs in `implementation-notes.md` during implementation.
 ## Agent integration
 
 Repo-backed agent skills live in [.agents/skills/](.agents/skills/).
-Daedalus's playbook is [.hermes/skills/daedalus-core/SKILL.md](.hermes/skills/daedalus-core/SKILL.md),
-and its persona contract is [.hermes/profiles/daedalus/SOUL.md](.hermes/profiles/daedalus/SOUL.md).
-See [agent setup](docs/HERMES-SETUP.md) for how these are installed.
