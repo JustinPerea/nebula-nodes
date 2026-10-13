@@ -142,6 +142,7 @@ export function AgentSpendSection() {
           </span>
           <OutsideSelect limits={limits} disabled={pending} onChange={save} />
         </div>
+        <PersonalAgentSpend view={outside.view} />
         <div className="settings-pref">
           <span className="settings-pref__text">
             <label className="settings-pref__title" htmlFor="settings-agent-plan-runs">Krea plan runs</label>
@@ -200,6 +201,30 @@ export function AgentSpendSection() {
       {error && <p className="settings-row__error" role="alert">{error}</p>}
       <ConnectedApps view={outside.view} loadError={outside.error} onChanged={outside.reload} />
     </section>
+  );
+}
+
+/** Each of the person's own agents (Settings > Personal agents) that spent in
+ * the last 24 hours. Read-only: their spending counts inside the outside
+ * budget above (services/agent_spend.py PERSONAL_AGENT_BUDGET), so there is no
+ * separate limit to set. */
+function PersonalAgentSpend({ view }: { view: OutsideSpend | null }) {
+  const rows = (view?.personal ?? []).filter((agent) => agent.spentUsd > 0 || agent.kreaPlanRuns > 0);
+  if (rows.length === 0) return null;
+  return (
+    <>
+      {rows.map((agent) => (
+        <div className="settings-pref" key={agent.id} data-testid="settings-personal-spend-row">
+          <span className="settings-pref__text">
+            <span className="settings-pref__title">{agent.name}</span>
+            <span className="settings-pref__description">
+              {spentUsd(agent.spentUsd)} in the last 24 h
+              {agent.kreaPlanRuns > 0 && `, ${agent.kreaPlanRuns} Krea plan runs`}, inside the budget above
+            </span>
+          </span>
+        </div>
+      ))}
+    </>
   );
 }
 

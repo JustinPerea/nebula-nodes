@@ -830,6 +830,25 @@ describe('Settings — preferences', () => {
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ agentSpend: { sessionUsd: 10, models: {} } }));
     expect(screen.queryByRole('combobox', { name: 'GPT Image 1 per session' })).not.toBeInTheDocument();
   });
+  it('shows a line for each personal agent that spent, inside the outside budget', async () => {
+    getOutsideSpendMock.mockResolvedValue({
+      outside: { spentUsd: 4.5, kreaPlanRuns: 3 },
+      apps: [],
+      personal: [
+        { id: 'claude', name: 'Claude (your setup)', spentUsd: 1.25, kreaPlanRuns: 0 },
+        { id: 'codex', name: 'Codex (your setup)', spentUsd: 0, kreaPlanRuns: 0 },
+        { id: 'fake', name: 'Fake Agent', spentUsd: 0, kreaPlanRuns: 2 },
+      ],
+    });
+    await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1, agentSpend: { sessionUsd: 10, models: {} } });
+    openTab('Preferences');
+    const rows = await screen.findAllByTestId('settings-personal-spend-row');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent('Claude (your setup)');
+    expect(rows[0]).toHaveTextContent('$1.25 in the last 24 h, inside the budget above');
+    expect(rows[1]).toHaveTextContent('$0.00 in the last 24 h, 2 Krea plan runs, inside the budget above');
+    expect(screen.queryByText(/Codex \(your setup\)/)).not.toBeInTheDocument();
+  });
   it('limits the outside agents over 24 hours and Krea plan runs, and shows what they spent', async () => {
     getOutsideSpendMock.mockResolvedValue({ outside: { spentUsd: 3.4, kreaPlanRuns: 2 }, apps: [] });
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1, agentSpend: { sessionUsd: 10, models: {} } });

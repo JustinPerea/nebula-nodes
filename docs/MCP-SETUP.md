@@ -510,8 +510,9 @@ chat panel, [PERSONAL-AGENTS.md](PERSONAL-AGENTS.md)) gets a session token that
 Nebula puts in the `env` of this MCP server's entry in ACP `session/new`, as
 `NEBULA_AGENT_TOKEN`, with `NEBULA_AGENT_NAME` set to the agent's name. The
 token's record names its budget outright: `outside:personal:<agentId>`, inside
-the shared outside budget, with its own line in Settings
-(`GET /api/agent/spend/apps` returns them under `personal`). `/api/agent/spend`
+the shared outside budget, with its own line in Settings once it has spent in
+the last 24 hours (`GET /api/agent/spend/apps` returns every one under
+`personal`). `/api/agent/spend`
 reports `budget: "shared"` for it. The token is revoked when the chat session
 ends. `agent_spend.PERSONAL_AGENT_BUDGET = "chat"` would give each personal
 chat its own session budget instead.

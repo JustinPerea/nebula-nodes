@@ -22,7 +22,7 @@ sequenceDiagram
   N->>A: session/prompt
   A-->>You: text, thoughts, tool calls, plan
   A->>You: permission request: Allow once / Deny card
-  Note over N,A: /clear, switching agent, closing the tab, 30 min idle, a crash or backend shutdown: the process tree is killed and the token revoked
+  Note over N,A: /clear, switching agent, closing the tab, switching it off in Settings, 30 min idle, a crash or backend shutdown: the process tree is killed and the token revoked
 ```
 
 ## The options
@@ -55,7 +55,8 @@ Nebula won't start a personal agent until you accept this:
   billing. Nebula declines the ACP `fs` and `terminal` capabilities, but that only means the agent can't use
   *Nebula* for those. It still has its own.
 - **Nebula only limits its Nebula calls.** Runs it starts through Nebula's tools count against the shared budget for
-  agents outside Nebula's chats (Settings > Preferences > Agent spending), with a line per agent. Per-run limits and
+  agents outside Nebula's chats (Settings > Preferences > Agent spending), with a line for each agent that spent in the
+  last 24 hours. Per-run limits and
   proposals apply as for any outside agent. What the agent spends on its own model is between you and its provider.
 - **Approval cards appear only when the agent asks.** Nebula shows *Allow once* and *Deny*. It never picks "always
   allow" or "always reject", since either would write a rule into the agent's own config. A card with no answer
@@ -72,13 +73,20 @@ Nebula won't start a personal agent until you accept this:
   from the chat socket that started the session.
 - **One session token per chat.** It allows Nebula's output folder plus a private workspace (the agent's working
   directory, not your project) and spends as `outside:personal:<agentId>`. It is revoked when the session ends for any
-  reason: `/clear`, switching agent, closing the chat panel or tab, 30 minutes idle, a crash, a cancel the agent
-  ignores for 10 seconds, or the backend stopping.
+  reason: `/clear`, switching agent, closing the chat panel or tab, 30 minutes idle, a crash (including one while
+  you stop a turn), a cancel the agent ignores for 10 seconds, or the backend stopping.
+- **Settings take effect at once.** Switching an agent off, removing it, or changing a custom agent's command or
+  arguments stops every running session of it on the spot: process tree killed, token revoked. The next send in that
+  chat says so and starts nothing. Renaming or recoloring leaves it running. Each send also re-checks Settings before
+  reusing a running agent.
 - **Where the token lives.** It goes to the agent only inside the `session/new` parameters (over its stdin) and into
   the environment of the `nebula` MCP server the agent starts. It isn't in any argv or file, and the agent's own
   environment doesn't get it. Any program running as your macOS user can still read a process environment (`ps eww`).
-- **Cleanup.** The agent runs in its own process group with a scrubbed environment (no Nebula secrets). On close Nebula
-  kills the whole process tree, including grandchildren. Text and tool output are capped, and the session token is
+- **Cleanup.** The agent runs in its own process group with a scrubbed environment: no Nebula secrets or spending
+  tokens, and none of the provider keys Nebula knows by name (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `FAL_KEY` and the
+  rest of `backend/services/credential_catalog.py`) even if the shell that started Nebula exported them. So Claude Code
+  and Codex use your own login, not a terminal's API key. On close Nebula kills the whole process tree, including
+  grandchildren, and finishes the kill even if whatever asked for the close is itself interrupted. Text and tool output are capped, and the session token is
   replaced with `***` anywhere the agent echoes it.
 
 ## Using it

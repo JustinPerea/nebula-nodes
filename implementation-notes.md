@@ -2751,3 +2751,42 @@ Built from the design above. Where it differs, or decides something the design l
 - **The guardian switch is still pending,** as designed: `_spawn()` is the one place to change once desktop-app merges.
 - **FORjustin.md** is gitignored and lives only in the main checkout, which this workflow may not edit. Lesson for it: "ACP is just JSON-RPC over a pipe. The hard part isn't the protocol, it's every way a session can end. Route all of them through one idempotent `close()` that kills the process group and revokes the token, and test each way with a real subprocess. A mock would hide the grandchild that outlives its parent."
 - **Commit trailers:** commits from the frontend commit onward use only the `Co-Authored-By` line, per a mid-run attribution update from the harness.
+
+## 2026-10-13 — ACP host: review fixes
+
+- **Settings now stop running agents (major).** `personal_agents.launch_key()` reads only the registry (no binary
+  probes), so it is cheap to check on every send. Each session stores the key it started with.
+  `AcpSessionManager.close_stale()` closes every live session whose key no longer matches (switched off, removed, or a
+  custom agent's command or args changed). It runs after every PUT and DELETE on `/api/personal-agents*`, and
+  `personal_turn` re-checks before reusing a host, which also catches registry edits that bypassed the routes. Renaming
+  or recoloring doesn't count as a change. I compare a launch key rather than a revision counter so a rename doesn't
+  kill a session.
+- **Commons:** `is_enabled()` reads an env var fixed at startup, so Commons can't actually switch on while a session
+  is live. The refusal path still calls `close_owned(..., "commons_enabled")` for personal agents, as a cheap backstop.
+- **Why a session ended survives the prune.** The manager remembers `(owner, message)` for the last 64 ended
+  sessions, so a send after a Settings switch-off says "switched off, removed or changed in Settings". Before, it
+  showed the generic message. Only the owning socket gets it.
+- **Provider keys (minor).** I copied `backend/services/credential_catalog.py` byte for byte from desktop-app's
+  c1c652f0, and made the same `main._CREDENTIAL_PROVIDER_ALLOWLIST = CREDENTIAL_PROVIDERS` alias, so the merge
+  stays clean (an identical add on both sides). `_agent_env` drops every catalog name plus NEBULA_AGENT_TOKEN and
+  NEBULA_APP_TOKEN. The catalog's docstring mentions mirror tests that live on desktop-app; they arrive with that merge.
+- **The frontend catalog test read main.py's literal frozenset,** which the alias removes. I pointed it at
+  credential_catalog.py instead. **desktop-app has this same failure right now** (its main.py has the alias, and its
+  frontend/tests/providerCatalog.test.ts still parses main.py), and it needs the same one-line fix.
+- **close() can't be skipped by cancellation (minor).** The teardown runs once, in its own task. `close()` starts it
+  and awaits it through `asyncio.shield`, so cancelling the caller only stops the waiting, and later close() calls
+  (close_all at shutdown) wait on the same task. The token is revoked at the start of teardown, before the slow
+  session/close RPC and the kill. `_close_lock` is gone.
+- **A crash during cancel closes the session (minor).** `cancel_turn` treats `AcpConnectionClosed` as a crash. As a
+  general backstop, `prompt()`'s finally closes the session whenever the connection is dead, instead of going back to
+  "ready". When Nebula itself closed the session mid-turn, the turn ends with the reason (`ended_message`), not
+  "exited (code -9)".
+- **Per-agent spend lines (minor).** I went with the UI over a doc change. `PersonalAgentSpend` in
+  AgentSpendSection shows one read-only row for each personal agent that spent, or used Krea plan runs, in the last 24 h.
+  Agents at $0 are hidden: the backend lists every preset, even ones never switched on, and four $0.00 rows would be
+  noise. I changed the docs from "a line per agent" to "a line for each agent that spent in the last 24 hours".
+- Live check (ports 8142/5262, isolated paths, temp HOME, backend started with a fake ANTHROPIC_API_KEY): the agent
+  saw it as unset. A PUT `enabled=false` left no agent process, and the next send gave the Settings message. The
+  reviewer's crash-during-cancel repro now returns 401 for the session token right after the cancel.
+- Unchanged: the model picker's status line still reads "ready" until the picker refetches the list. That's cosmetic,
+  and the send path is authoritative.
