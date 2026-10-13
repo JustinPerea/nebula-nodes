@@ -206,7 +206,9 @@ checked in `backend/services/person_gate.py`):
     in any of its processes' argv or environment (`ps -E`). Keys and the vault
     key go over the sidecar's stdin after the token
     (`services/launch_secrets.py`); before this check they were in its
-    environment.
+    environment. Provider keys and `NEBULA_APP_TOKEN`/`NEBULA_AGENT_TOKEN`
+    inherited from a launching terminal are dropped from it as well
+    (`sidecar.mjs` `INHERITED_CREDENTIAL_ENV_KEYS`).
 
 The canvas sends it as `X-Nebula-Person` on every write and on
 `GET /api/agent/spend`, in a `{type: "hello"}` frame on `/ws`, and as

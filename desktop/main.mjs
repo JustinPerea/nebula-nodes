@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import {
-  startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT, LAUNCH_SECRET_ENV_KEYS,
+  startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT, SIDECAR_STRIPPED_ENV_KEYS,
 } from './sidecar.mjs';
 import { prepareAppDataEnv, resolveDesktopDataPaths } from './paths.mjs';
 import { createPaperLinkSenderValidator, registerPaperLinkHandler } from './paper-links.mjs';
@@ -1007,8 +1007,9 @@ if (refuseDebugLaunch) {
       // sidecar.mjs reads its health budget from this env; same rule.
       delete sidecarEnv.NEBULA_DESKTOP_HEALTH_TIMEOUT_MS;
       if (overrides.healthTimeoutMs) sidecarEnv.NEBULA_DESKTOP_HEALTH_TIMEOUT_MS = overrides.healthTimeoutMs;
-      // Secrets never ride in the env (startSidecar strips these names too).
-      for (const name of LAUNCH_SECRET_ENV_KEYS) delete sidecarEnv[name];
+      // Secrets never ride in the env, including provider keys and tokens
+      // inherited from a launching terminal (startSidecar strips these too).
+      for (const name of SIDECAR_STRIPPED_ENV_KEYS) delete sidecarEnv[name];
       let connectorEncryptionKey = null;
       try {
         connectorEncryptionKey = await getConnectorEncryptionKey(

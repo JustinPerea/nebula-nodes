@@ -16,6 +16,7 @@ import { createServer } from 'node:net';
 import { statSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ALLOWED_PROVIDERS } from './credentials.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_REPO_ROOT = resolve(__dirname, '..');
@@ -417,6 +418,31 @@ export const LAUNCH_SECRET_ENV_KEYS = Object.freeze([
   'NEBULA_CONNECTOR_ENCRYPTION_KEY',
 ]);
 
+/**
+ * Credentials a launching shell may hold that the sidecar must not inherit.
+ *
+ * - Every provider key name (credentials.mjs ALLOWED_PROVIDERS, the mirror of
+ *   backend/services/credential_catalog.py; a test keeps them equal). Keys
+ *   reach the backend over stdin; one left in its environment is readable
+ *   with `ps -E`, passes on to every agent child (Claude in `-p` mode bills an
+ *   ANTHROPIC_API_KEY ahead of the subscription login), and becomes a silent
+ *   fallback for provider SDKs that read their own variable.
+ * - NEBULA_APP_TOKEN / NEBULA_AGENT_TOKEN: an outside app's spending token
+ *   and an in-app chat turn's token. Present when Nebula.app is started from
+ *   such a shell; the backend must not run as either.
+ */
+export const INHERITED_CREDENTIAL_ENV_KEYS = Object.freeze([
+  ...ALLOWED_PROVIDERS,
+  'NEBULA_APP_TOKEN',
+  'NEBULA_AGENT_TOKEN',
+]);
+
+/** Every name startSidecar removes from the child's environment. */
+export const SIDECAR_STRIPPED_ENV_KEYS = Object.freeze([
+  ...LAUNCH_SECRET_ENV_KEYS,
+  ...INHERITED_CREDENTIAL_ENV_KEYS,
+]);
+
 /** The JSON stdin line for backend/services/launch_secrets.py. */
 export function launchSecretsLine(secrets) {
   const payload = {};
@@ -471,7 +497,7 @@ async function spawnAndAwaitHealth(opts) {
     NEBULA_LAUNCH_SECRETS_STDIN: '1',
     NEBULA_PARENT_WATCH_FD: String(PARENT_WATCH_FD),
   };
-  for (const name of LAUNCH_SECRET_ENV_KEYS) delete childEnv[name];
+  for (const name of SIDECAR_STRIPPED_ENV_KEYS) delete childEnv[name];
   // fd 3 is the parent lifeline: we never write to it, and the kernel closes
   // our end whenever this process exits, even on SIGKILL or a crash. The
   // backend (services/parent_watch.py) sees EOF and shuts itself down.

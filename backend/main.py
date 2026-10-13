@@ -81,6 +81,7 @@ from services.settings import (
     is_injected_mode,
     update_injected_keys,
 )
+from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_spend, app_tokens, model_pricing, node_readiness, output_preview
 from services.cli_graph import CLIGraph
@@ -4350,27 +4351,9 @@ async def update_settings(body: dict[str, Any]) -> dict:
     return {"status": "saved"}
 
 
-# The credential-update allowlist (18 keys; desktop/credentials.mjs mirrors it).
-_CREDENTIAL_PROVIDER_ALLOWLIST = frozenset({
-    "ANTHROPIC_API_KEY",
-    "ELEVENLABS_API_KEY",
-    "FAL_KEY",
-    "GOOGLE_API_KEY",
-    "GOOGLE_VERTEX_CREDENTIALS",
-    "HIGGSFIELD_API_KEY",
-    "IDEOGRAM_API_KEY",
-    "KREA_API_TOKEN",
-    "KREA_USAGE_KEY",
-    "MESHY_API_KEY",
-    "MINIMAX_API_KEY",
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
-    "QUIVER_API_KEY",
-    "REPLICATE_API_TOKEN",
-    "RUNWAY_API_KEY",
-    "XAI_API_KEY",
-    "WORLDLABS_API_KEY",
-})
+# The credential-update allowlist (services/credential_catalog.py; the
+# desktop app's credentials.mjs mirrors it).
+_CREDENTIAL_PROVIDER_ALLOWLIST = CREDENTIAL_PROVIDERS
 
 
 @app.delete("/api/settings/api-keys/{provider}")

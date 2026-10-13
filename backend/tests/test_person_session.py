@@ -185,6 +185,8 @@ def test_devserver_main_builds_a_real_config_for_both_modes(monkeypatch):
 
     monkeypatch.setattr(devserver, "ChangeReload", FakeReload)
     monkeypatch.setenv("NEBULA_URL", "http://127.0.0.1:8000")  # restored after the test
+    for name in devserver.INHERITED_CREDENTIAL_ENV_KEYS:  # main() scrubs these; restore after
+        monkeypatch.delenv(name, raising=False)
     devserver.main(["--port", "8123", "--ui", "http://localhost:5251"])
     (config, target, sockets), = supervised
     # Agent children (and the reload workers that start them) point at this backend, not 8000.
@@ -205,6 +207,47 @@ def test_devserver_main_builds_a_real_config_for_both_modes(monkeypatch):
     assert ran == [False]
     assert printed[1][2]["open_browser"] is True
     assert printed[1][0] != printed[0][0]  # a new token every launch
+
+
+def test_devserver_drops_shell_credentials_before_any_worker_starts(monkeypatch, capsys):
+    import uvicorn
+
+    import devserver
+    from services.credential_catalog import CREDENTIAL_PROVIDERS
+
+    assert devserver.INHERITED_CREDENTIAL_ENV_KEYS == CREDENTIAL_PROVIDERS | {"NEBULA_APP_TOKEN", "NEBULA_AGENT_TOKEN"}
+    for name in devserver.INHERITED_CREDENTIAL_ENV_KEYS:  # restored after the test
+        monkeypatch.setenv(name, f"shell-fixture-{name}")
+    monkeypatch.setenv("ANTHROPIC_DEFAULT_SONNET_MODEL", "kept-fixture")
+    monkeypatch.setattr(devserver, "announce", lambda *a, **kw: None)
+    seen = []
+
+    class FakeReload:
+        def __init__(self, config, target, sockets):
+            # What a reload worker would inherit, captured when the supervisor is built.
+            seen.append(dict(os.environ))
+
+        def run(self):
+            pass
+
+    monkeypatch.setattr(uvicorn.Config, "bind_socket", lambda self: "socket")
+    monkeypatch.setattr(devserver, "ChangeReload", FakeReload)
+    devserver.main(["--port", "8125"])
+    (worker_env,) = seen
+    assert not devserver.INHERITED_CREDENTIAL_ENV_KEYS & set(worker_env)
+    assert "shell-fixture" not in "".join(worker_env.values())
+    assert worker_env["ANTHROPIC_DEFAULT_SONNET_MODEL"] == "kept-fixture"
+    out = capsys.readouterr().out
+    assert "OPENAI_API_KEY" in out and "shell-fixture" not in out  # names only, never values
+
+
+def test_scrub_inherited_credentials_names_only_what_it_removed():
+    import devserver
+
+    env = {"FAL_KEY": "x", "PATH": "/bin", "NEBULA_AGENT_TOKEN": "y"}
+    assert devserver.scrub_inherited_credentials(env) == ["FAL_KEY", "NEBULA_AGENT_TOKEN"]
+    assert env == {"PATH": "/bin"}
+    assert devserver.scrub_inherited_credentials(env) == []
 
 
 def test_devserver_prints_or_opens_the_link_and_never_writes_it_elsewhere(monkeypatch, tmp_path):

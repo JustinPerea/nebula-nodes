@@ -24,8 +24,9 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
 /**
  * The 18 provider keys that may be stored in the credential service.
- * Sourced from backend/services/settings.py provider tuples and
- * library/environment.md allowlist.
+ * Mirrors backend/services/credential_catalog.py CREDENTIAL_PROVIDERS
+ * (desktop/tests/sidecar.test.mjs checks they match). sidecar.mjs also strips
+ * these names from the sidecar's environment.
  */
 export const ALLOWED_PROVIDERS = Object.freeze([
   'ANTHROPIC_API_KEY',

@@ -17,7 +17,7 @@ import { EventEmitter } from 'node:events';
 import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createServer as realCreateServer } from 'node:net';
-import { statSync as realStatSync, writeFileSync, mkdirSync, chmodSync, mkdtempSync, rmSync } from 'node:fs';
+import { statSync as realStatSync, readFileSync, writeFileSync, mkdirSync, chmodSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,9 +40,12 @@ import {
   boundDiagnostics,
   DEFAULT_REPO_ROOT,
   LAUNCH_SECRET_ENV_KEYS,
+  INHERITED_CREDENTIAL_ENV_KEYS,
+  SIDECAR_STRIPPED_ENV_KEYS,
   launchSecretsLine,
   PARENT_WATCH_FD,
 } from '../sidecar.mjs';
+import { ALLOWED_PROVIDERS } from '../credentials.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(__dirname, 'fixtures');
@@ -1368,6 +1371,37 @@ describe('startSidecar — person token', () => {
     for (const value of ['fal-stdin-fixture', 'vault-stdin-fixture', 'env-leak']) assert.equal(visible.includes(value), false, value);
   });
 
+  test('the provider-key list is the backend credential catalog', () => {
+    // backend/services/credential_catalog.py is the single source of the names.
+    const source = readFileSync(join(REPO_ROOT, 'backend', 'services', 'credential_catalog.py'), 'utf8');
+    const block = source.match(/CREDENTIAL_PROVIDERS[^=]*= frozenset\(\{([\s\S]*?)\}\)/);
+    assert.ok(block, 'CREDENTIAL_PROVIDERS literal not found');
+    const backend = [...block[1].matchAll(/"([A-Z0-9_]+)"/g)].map((m) => m[1]).sort();
+    assert.equal(backend.length, 18);
+    assert.deepEqual([...ALLOWED_PROVIDERS].sort(), backend);
+    for (const name of backend) assert.ok(INHERITED_CREDENTIAL_ENV_KEYS.includes(name), name);
+    for (const name of [...LAUNCH_SECRET_ENV_KEYS, ...INHERITED_CREDENTIAL_ENV_KEYS]) {
+      assert.ok(SIDECAR_STRIPPED_ENV_KEYS.includes(name), name);
+    }
+  });
+
+  test('provider keys and app/agent tokens inherited from a terminal never reach the sidecar env', async () => {
+    const env = { PATH: '/usr/bin:/bin', HOME: '/tmp/nebula-home', ANTHROPIC_DEFAULT_SONNET_MODEL: 'kept' };
+    for (const name of ALLOWED_PROVIDERS) env[name] = `shell-leak-${name}`;
+    env.NEBULA_APP_TOKEN = 'shell-leak-app-token';
+    env.NEBULA_AGENT_TOKEN = 'shell-leak-agent-token';
+    const child = childWithStdin();
+    const call = await start(child, { env, personToken: null });
+    for (const name of SIDECAR_STRIPPED_ENV_KEYS) assert.equal(name in call.opts.env, false, name);
+    assert.equal(JSON.stringify(call.opts.env).includes('shell-leak'), false);
+    // Everything else the shell had still reaches the backend.
+    assert.equal(call.opts.env.PATH, '/usr/bin:/bin');
+    assert.equal(call.opts.env.HOME, '/tmp/nebula-home');
+    assert.equal(call.opts.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'kept');
+    // The caller's object is not mutated.
+    assert.equal(env.OPENAI_API_KEY, 'shell-leak-OPENAI_API_KEY');
+  });
+
   test('a launch-secrets line is always exactly one line', () => {
     assert.equal(launchSecretsLine(null), '{}\n');
     const line = launchSecretsLine({ injectedKeys: { GOOGLE_VERTEX_CREDENTIALS: '{\n  "type": "service_account"\n}' } });
@@ -1386,6 +1420,11 @@ describe('startSidecar — person token', () => {
       NEBULA_DESKTOP_MODE: '1',
     };
     for (const name of LAUNCH_SECRET_ENV_KEYS) delete env[name];
+    // A terminal launch: provider keys and tokens in the shell's environment.
+    const shellKey = 'shell-env-' + 'f'.repeat(20);
+    env.OPENAI_API_KEY = shellKey;
+    env.FAL_KEY = shellKey;
+    env.NEBULA_APP_TOKEN = shellKey;
     const falKey = 'fal-stdin-' + 'e'.repeat(20);
     const vaultKey = randomBytes(32).toString('base64url') + '=';
     let handle;
@@ -1409,7 +1448,8 @@ describe('startSidecar — person token', () => {
       // ...and none of the secrets is in the backend's argv or initial environment.
       const visible = execFileSync('ps', ['-E', '-ww', '-o', 'args=', '-p', String(handle.pid)], { encoding: 'utf8' });
       assert.ok(visible.includes('NEBULA_LAUNCH_SECRETS_STDIN=1'), 'ps -E shows the environment');
-      for (const value of [token, falKey, vaultKey]) assert.equal(visible.includes(value), false);
+      for (const value of [token, falKey, vaultKey, shellKey]) assert.equal(visible.includes(value), false);
+      assert.equal(visible.includes('OPENAI_API_KEY='), false);
     } finally {
       if (handle) await stopSidecar(handle);
       rmSync(scratch, { recursive: true, force: true });

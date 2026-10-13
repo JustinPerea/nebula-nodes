@@ -279,7 +279,18 @@ environment: any program running as you can read a process's initial
 environment with `ps -E`, and the desktop pass found a planted key there when
 they did (`NEBULA_INJECTED_KEYS` / `NEBULA_CONNECTOR_ENCRYPTION_KEY`, now
 stripped from the child env). A missing or malformed line fails closed: no
-provider keys and no Krea connection that launch. The backend stores the keys
+provider keys and no Krea connection that launch.
+
+Keys a terminal already had don't get through either. Opening Nebula.app from
+a shell that exports `OPENAI_API_KEY`, `FAL_KEY`, `REPLICATE_API_TOKEN` and so
+on used to pass them into the sidecar's environment. `sidecar.mjs` now drops
+every provider key name (`INHERITED_CREDENTIAL_ENV_KEYS`: `credentials.mjs`
+`ALLOWED_PROVIDERS`, which a test keeps equal to
+`backend/services/credential_catalog.py`) plus `NEBULA_APP_TOKEN` and
+`NEBULA_AGENT_TOKEN`. The Keychain is the only key source in the app. A shell
+key would otherwise sit in `ps -E`, reach every agent child (Claude in `-p`
+mode bills an `ANTHROPIC_API_KEY` ahead of your subscription login), and quietly
+back up a provider SDK that reads its own variable. The backend stores the keys
 in a module-level `_INJECTED_KEYS` dict (memory only, never persisted). The
 `POST /api/credentials/update` endpoint allows in-memory key updates when
 the user changes a key via Settings — no sidecar restart needed. It is
