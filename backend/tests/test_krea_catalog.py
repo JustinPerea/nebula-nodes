@@ -122,3 +122,19 @@ def test_enhance_routes_output_the_media_they_upscale_and_3d_routes_output_meshe
     assert [port["id"] for port in mesh["outputPorts"]] == ["mesh", "meshes", "artifacts", "job"]
     families = {SYNC.route_family(model["endpoint"]) for model in CATALOG["models"].values()}
     assert families == {"image", "video", "audio", "enhance", "3d"}
+
+
+def test_generated_prices_keep_the_kling_multi_shot_guard_and_the_audio_note():
+    """The guard lives in the generator, so a catalog refresh can't drop it."""
+    entries, _ = SYNC.pricing_entries(CATALOG)
+    kling = entries["krea-video-kling-kling-3-0"]
+    assert kling["rows"] and all(row["match"]["multi_prompt"] == "" for row in kling["rows"])
+    assert "multi_prompt" in kling["priceParams"] and "Multi-prompt runs are unpriced" in kling["notes"]
+    assert any(source["url"].startswith("https://kling.ai/") for source in kling["sources"])
+    audio_free = {node_id for node_id, entry in entries.items() if "doesn't vary with generate_audio" in entry["notes"]}
+    assert audio_free == {
+        "krea-video-alibaba-wan-2-5", "krea-video-alibaba-wan-3-0", "krea-video-lightricks-ltx-video-2-5-fast",
+        "krea-video-lightricks-ltx-video-2-5-pro", "krea-video-vidu-q3",
+    }
+    # Where Krea does charge for audio, the price keys on it and there is no such note.
+    assert "generate_audio" in kling["priceParams"]

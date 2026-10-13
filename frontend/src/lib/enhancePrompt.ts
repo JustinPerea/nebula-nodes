@@ -5,6 +5,18 @@ import { apiFetch } from './backend';
  * (uses whichever provider key is configured). Returns the enhanced text.
  * Throws with a user-readable message on failure (no key, provider error).
  */
+/** FastAPI details are a string, or a list of validation errors. */
+function readableDetail(detail: unknown): string {
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => (item && typeof item === 'object' && 'msg' in item ? String((item as { msg: unknown }).msg) : ''))
+      .filter(Boolean);
+    if (messages.length) return messages.join('; ');
+  }
+  return 'Enhance failed.';
+}
+
 export async function enhancePrompt(prompt: string): Promise<string> {
   const res = await apiFetch('/api/enhance-prompt', {
     method: 'POST',
@@ -15,7 +27,7 @@ export async function enhancePrompt(prompt: string): Promise<string> {
     let detail = `Enhance failed (${res.status})`;
     try {
       const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
+      if (body?.detail) detail = readableDetail(body.detail);
     } catch {
       /* keep the status fallback */
     }

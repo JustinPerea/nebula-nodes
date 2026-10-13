@@ -19,6 +19,7 @@ import importlib
 import io
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -57,9 +58,17 @@ ALLOWED_PROVIDERS = {
 def _restore_settings_module(monkeypatch):
     """Reload settings module with a clean env after each test so the
     module-level _INJECTED_KEYS and SETTINGS_PATH are restored."""
+    # Reload with the session's sandbox path (conftest.py), not with the
+    # variable removed: removed, SETTINGS_PATH falls back to the repo's real
+    # settings.json, and every later test in the run reads the person's keys
+    # and writes their settings (PUT /api/settings).
+    session_path = os.environ.get("NEBULA_SETTINGS_PATH")
     yield
     monkeypatch.delenv("NEBULA_INJECTED_KEYS", raising=False)
-    monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
+    if session_path is None:
+        monkeypatch.delenv("NEBULA_SETTINGS_PATH", raising=False)
+    else:
+        monkeypatch.setenv("NEBULA_SETTINGS_PATH", session_path)
     import services.settings as _s
     importlib.reload(_s)
 
@@ -450,7 +459,7 @@ class TestUpdateInjectedKeys:
 class TestCredentialUpdateEndpoint:
     """VAL-INJECT-006: POST /api/credentials/update updates in-memory keys."""
 
-    def test_post_credentials_update_adds_key(self, monkeypatch, tmp_path):
+    def test_post_credentials_update_adds_key(self, monkeypatch, tmp_path, person):
         """POST /api/credentials/update adds a new key to _INJECTED_KEYS."""
         from fastapi.testclient import TestClient
         import services.settings as settings_mod
@@ -464,7 +473,7 @@ class TestCredentialUpdateEndpoint:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
         resp = client.post("/api/credentials/update", json={
             "provider": "FAL_KEY",
             "key": "fal-" + "new-via-endpoint",
@@ -475,7 +484,7 @@ class TestCredentialUpdateEndpoint:
         # Existing key preserved
         assert settings_mod._INJECTED_KEYS["OPENAI_API_KEY"] == "sk-" + "initial"
 
-    def test_post_credentials_update_overwrites_key(self, monkeypatch):
+    def test_post_credentials_update_overwrites_key(self, monkeypatch, person):
         """POST /api/credentials/update overwrites an existing key."""
         from fastapi.testclient import TestClient
         import services.settings as settings_mod
@@ -488,7 +497,7 @@ class TestCredentialUpdateEndpoint:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
         resp = client.post("/api/credentials/update", json={
             "provider": "OPENAI_API_KEY",
             "key": "sk-" + "new-sentinel",
@@ -499,7 +508,7 @@ class TestCredentialUpdateEndpoint:
         # Subsequent get_api_key uses the new key
         assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-" + "new-sentinel"
 
-    def test_post_credentials_update_rejects_unknown_provider(self, monkeypatch):
+    def test_post_credentials_update_rejects_unknown_provider(self, monkeypatch, person):
         """POST /api/credentials/update rejects a provider not in the
         credential allowlist."""
         from fastapi.testclient import TestClient
@@ -513,7 +522,7 @@ class TestCredentialUpdateEndpoint:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
         resp = client.post("/api/credentials/update", json={
             "provider": "UNKNOWN_PROVIDER",
             "key": "some-key",
@@ -522,7 +531,7 @@ class TestCredentialUpdateEndpoint:
         assert resp.status_code == 400
         assert "UNKNOWN_PROVIDER" not in settings_mod._INJECTED_KEYS
 
-    def test_post_credentials_update_missing_fields(self, monkeypatch):
+    def test_post_credentials_update_missing_fields(self, monkeypatch, person):
         """POST /api/credentials/update requires provider and key fields."""
         from fastapi.testclient import TestClient
         import services.settings as settings_mod
@@ -535,18 +544,32 @@ class TestCredentialUpdateEndpoint:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
         resp = client.post("/api/credentials/update", json={
             "provider": "OPENAI_API_KEY",
         })
 
         assert resp.status_code == 422  # FastAPI validation error
 
+    def test_post_credentials_update_is_the_persons(self, monkeypatch, person):
+        """An agent, a script or a forged Origin can't swap or clear injected keys."""
+        from fastapi.testclient import TestClient
+        import services.settings as settings_mod
+        import main as main_mod
+
+        monkeypatch.setattr(settings_mod, "_INJECTED_KEYS", {"OPENAI_API_KEY": "sk-" + "kept"})
+        client = TestClient(main_mod.app)
+        body = {"provider": "OPENAI_API_KEY", "key": ""}
+        for headers in ({}, {"Origin": "http://localhost:5173"}, {"Origin": "file://"},
+                        {**person.headers, "X-Nebula-Agent": "Codex"}):
+            assert client.post("/api/credentials/update", json=body, headers=headers).status_code == 403
+        assert settings_mod._INJECTED_KEYS == {"OPENAI_API_KEY": "sk-" + "kept"}
+
 
 class TestGetSettingsMasking:
     """VAL-INJECT-007: Desktop settings masks injected credentials."""
 
-    def test_get_settings_masks_injected_keys(self, monkeypatch):
+    def test_get_settings_masks_injected_keys(self, monkeypatch, person):
         """GET /api/settings masks injected keys as *** + last 4 chars."""
         from fastapi.testclient import TestClient
         import services.settings as settings_mod
@@ -561,7 +584,7 @@ class TestGetSettingsMasking:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
         resp = client.get("/api/settings")
 
         assert resp.status_code == 200
@@ -572,7 +595,7 @@ class TestGetSettingsMasking:
         # Plaintext key must NOT appear in the response
         assert "sk-" + "1234567890abcdef" not in resp.text
 
-    def test_get_settings_masks_short_injected_key(self, monkeypatch):
+    def test_get_settings_masks_short_injected_key(self, monkeypatch, person):
         """A short injected key (≤4 chars) is masked as just ***."""
         from fastapi.testclient import TestClient
         import services.settings as settings_mod
@@ -587,7 +610,7 @@ class TestGetSettingsMasking:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
         resp = client.get("/api/settings")
 
         assert resp.status_code == 200
@@ -596,7 +619,7 @@ class TestGetSettingsMasking:
         assert masked == "***"
         assert "abc" not in resp.text
 
-    def test_get_settings_no_plaintext_in_desktop_mode(self, monkeypatch):
+    def test_get_settings_no_plaintext_in_desktop_mode(self, monkeypatch, person):
         """The full response text must not contain any plaintext injected key."""
         from fastapi.testclient import TestClient
         import services.settings as settings_mod
@@ -613,7 +636,7 @@ class TestGetSettingsMasking:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
         resp = client.get("/api/settings")
 
         assert resp.status_code == 200
@@ -625,7 +648,7 @@ class TestGetSettingsMasking:
 class TestPutSettingsDesktopGuard:
     """VAL-INJECT-008: Desktop settings PUT cannot overwrite credentials."""
 
-    def test_put_ignores_apikeys_in_desktop_mode(self, monkeypatch, tmp_path):
+    def test_put_ignores_apikeys_in_desktop_mode(self, monkeypatch, tmp_path, person):
         """In desktop mode, PUT /api/settings with apiKeys is ignored."""
         from fastapi.testclient import TestClient
         import services.settings as settings_mod
@@ -648,7 +671,7 @@ class TestPutSettingsDesktopGuard:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
 
         # Verify the key before PUT
         assert settings_mod.get_api_key("OPENAI_API_KEY") == "sk-" + "injected-original"
@@ -668,7 +691,7 @@ class TestPutSettingsDesktopGuard:
         masked = get_resp.json()["apiKeys"]["OPENAI_API_KEY"]
         assert masked == "***inal"  # last 4 of sk-injected-original
 
-    def test_put_allows_non_secret_in_desktop_mode(self, monkeypatch, tmp_path):
+    def test_put_allows_non_secret_in_desktop_mode(self, monkeypatch, tmp_path, person):
         """In desktop mode, non-secret settings still update via PUT."""
         from fastapi.testclient import TestClient
         import services.settings as settings_mod
@@ -692,7 +715,7 @@ class TestPutSettingsDesktopGuard:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
         resp = client.put("/api/settings", json={
             "outputPath": "/new/output",
             "executionMode": "auto",
@@ -706,7 +729,7 @@ class TestPutSettingsDesktopGuard:
         # Injected key still present
         assert loaded["apiKeys"]["OPENAI_API_KEY"] == "sk-" + "injected"
 
-    def test_put_does_not_persist_injected_keys_to_file(self, monkeypatch, tmp_path):
+    def test_put_does_not_persist_injected_keys_to_file(self, monkeypatch, tmp_path, person):
         """In desktop mode, PUT must not write injected keys to the settings
         file — only non-secret settings are persisted."""
         from fastapi.testclient import TestClient
@@ -729,7 +752,7 @@ class TestPutSettingsDesktopGuard:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
         client.put("/api/settings", json={"outputPath": "/new"})
 
         file_content = settings_file.read_text()
@@ -741,7 +764,7 @@ class TestPutSettingsDesktopGuard:
 class TestBrowserModeEndpoints:
     """VAL-INJECT-010: Browser mode masks file-based credentials."""
 
-    def test_browser_get_settings_masks_file_keys(self, monkeypatch, tmp_path):
+    def test_browser_get_settings_masks_file_keys(self, monkeypatch, tmp_path, person):
         """In browser mode, GET /api/settings masks file-based keys."""
         from fastapi.testclient import TestClient
         import services.settings as settings_mod
@@ -764,7 +787,7 @@ class TestBrowserModeEndpoints:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
         resp = client.get("/api/settings")
 
         assert resp.status_code == 200
@@ -773,7 +796,7 @@ class TestBrowserModeEndpoints:
         assert masked == "***2345"
         assert "sk-" + "browser-key-12345" not in resp.text
 
-    def test_browser_put_updates_apikeys(self, monkeypatch, tmp_path):
+    def test_browser_put_updates_apikeys(self, monkeypatch, tmp_path, person):
         """In browser mode, PUT /api/settings can update apiKeys normally."""
         from fastapi.testclient import TestClient
         import services.settings as settings_mod
@@ -795,7 +818,7 @@ class TestBrowserModeEndpoints:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
         resp = client.put("/api/settings", json={
             "apiKeys": {"OPENAI_API_KEY": "sk-" + "new-browser-key"},
         })
@@ -863,7 +886,7 @@ class TestLogRedaction:
         assert "fal-" + "stdout-secret-1111" not in captured.out
         assert "fal-" + "stdout-secret-1111" not in captured.err
 
-    def test_credential_update_endpoint_no_key_in_response(self, monkeypatch):
+    def test_credential_update_endpoint_no_key_in_response(self, monkeypatch, person):
         """POST /api/credentials/update response body does not contain the
         plaintext key."""
         from fastapi.testclient import TestClient
@@ -877,7 +900,7 @@ class TestLogRedaction:
             raising=False,
         )
 
-        client = TestClient(main_mod.app)
+        client = TestClient(main_mod.app, headers=person.headers)
         new_key = "sk-never-in-response-body-7777"
         resp = client.post("/api/credentials/update", json={
             "provider": "OPENAI_API_KEY",

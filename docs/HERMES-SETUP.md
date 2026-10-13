@@ -26,8 +26,8 @@ have:
 
 All three paths land on the same Daedalus runtime. The backend
 (`backend/services/hermes_session.py`) doesn't care which provider Hermes
-is wired to — it just spawns `hermes-daedalus chat …` and streams prose
-+ canvas actions back. Switch any time with `hermes-daedalus model`; the
+is wired to — it just spawns `hermes-daedalus chat …` (limited to Nebula's
+MCP tools, see §6) and streams prose + canvas actions back. Switch any time with `hermes-daedalus model`; the
 chat header reflects the active model live.
 
 Claude remains the default chat agent in nebula-nodes; Daedalus is opt-in
@@ -201,6 +201,10 @@ prompting tips, the quirks of a given provider, and the parameter shapes
 Daedalus needs to reach for when building graphs. Without them installed,
 `skill_view <name>` fails mid-turn and Daedalus has to guess.
 
+Inside Nebula these are reachable only when you run Daedalus from your own
+terminal: in-app turns have no `skills` toolset (see §6), so there Daedalus
+uses `describe_node` and the preloaded `daedalus-core` playbook instead.
+
 Most of these skills ship inside the nebula-nodes repo at
 `.claude/skills/<name>/`. `nano-banana-2` lives in the global Claude Code
 skill library (`~/.claude/skills/nano-banana-2`) and is a symlink there
@@ -235,13 +239,72 @@ the symlink didn't dereference — re-run with `cp -RL`, not plain `cp -R`.
 If you only want a subset (e.g. you never touch 3D), skip the skills you
 won't use. Daedalus will just not try `skill_view meshy` — no crash.
 
-## 6. Install the `nebula` CLI wrapper
+## 6. How Daedalus reaches the canvas
 
-Daedalus drives the canvas via the `nebula` CLI, invoked through Hermes's
-`terminal` tool. The `nebula` command isn't a shell binary by default — it's
-a Python package invoked as `python3 -m nebula`. We install a small wrapper
-at `~/.local/bin/nebula` so the subprocess environment (and your terminal)
-can call `nebula` directly.
+Inside Nebula, Daedalus reaches the canvas only through Nebula's MCP tools.
+You don't configure anything for this: each turn, the backend
+(`backend/services/hermes_session.py`) adds the `nebula` and `nebula_krea`
+MCP servers through a temporary Hermes managed overlay (`HERMES_MANAGED_DIR`;
+your profile's `config.yaml` is never edited) and starts Hermes with:
+
+- `-t nebula,nebula_krea,clarify`: the only toolsets Daedalus gets. No
+  terminal, file, code execution, browser, image/video generation, cron or
+  delegation tools. Hermes runs those as you with no sandbox, so a terminal
+  could edit settings or reach the backend as anyone. `-t` is enforced inside
+  Hermes, not by the OS.
+- a private working directory per chat (under `~/.nebula/agent-workspaces/`),
+  never the repo root, which holds `settings.json` with your keys;
+- the chat's agent token in `NEBULA_AGENT_TOKEN`, which the overlay passes to
+  the Nebula MCP server as `${NEBULA_AGENT_TOKEN}`. The server sends it with
+  every request, so Daedalus's runs count against its own chat budget and the
+  canvas cursor shows "Daedalus".
+
+A turn is refused, with the reason in chat, when:
+
+- an administrator Hermes scope already exists (`HERMES_MANAGED_DIR` set, or
+  `/etc/hermes`), since Nebula must not replace it and Daedalus would have no
+  way to Nebula without the overlay;
+- the Daedalus profile has scheduled Hermes jobs
+  (`~/.hermes/profiles/daedalus/cron/jobs.json`). Jobs run with every Hermes
+  tool, outside Nebula's limits. List and remove them with
+  `hermes-daedalus cron list` and `hermes-daedalus cron remove <id>`;
+- Commons is enabled (Daedalus's private-file boundary isn't verified).
+
+Because the `skills` toolset is off, Daedalus can't call `skill_view` or
+`skill_manage` inside Nebula. The `--skills daedalus-core` preload still
+supplies its playbook, which tells it to use `find_nodes` / `describe_node`
+for model details and to state new learnings in chat.
+
+**Checked live (2026-10-13, Hermes v0.21.6).** A throwaway profile
+(`HERMES_HOME` in a scratch folder, with `daedalus-core` installed and one
+extra MCP server, `probe`, in its `config.yaml`) ran real Daedalus turns
+through an isolated backend's `/ws/chat`, against a scripted local model:
+
+- The model saw only `clarify` and Hermes's tool-search bridge
+  (`tool_search`, `tool_describe`, `tool_call`). Behind the bridge were the 26
+  `mcp__nebula__*` tools, so the bare `nebula` name does reach the MCP server.
+  `nebula_krea` listed no tools because that backend had no Krea connection.
+- `mcp__nebula__get_spend_limits` answered `agent: "Daedalus"`,
+  `budget: "chat"`: Hermes expanded `${NEBULA_AGENT_TOKEN}` and the backend
+  accepted the chat token.
+- `tool_call` refused `terminal` and `read_file`, and didn't know
+  `mcp__probe__probe_ping`: Hermes never started the `probe` server. A direct
+  `terminal` call failed with "Tool 'terminal' does not exist".
+- The system prompt carried the `daedalus-core` playbook, so `--skills`
+  still preloads under `-t`.
+- Hermes ran from the chat's private workspace, and a second turn in the same
+  chat resumed the same Hermes session (`--resume … --no-restore-cwd`) from
+  the same workspace.
+- With a forged token, Hermes's tool list (`cli.py --toolsets
+  nebula,nebula_krea,clarify --list_tools`) showed only `clarify`: the Nebula
+  server exits when the backend won't vouch for its token.
+
+Not checked: Krea's read-only tools through a connected Krea account, and a
+real model choosing tools on its own. A Hermes update can change any of this,
+so re-run the check after updating Hermes.
+
+The `nebula` CLI wrapper below is optional, for driving the canvas from your
+own terminal; in-app Daedalus doesn't use it.
 
 ```bash
 cat > ~/.local/bin/nebula <<'EOF'
@@ -253,18 +316,6 @@ exec python3 -m nebula "$@"
 EOF
 chmod +x ~/.local/bin/nebula
 ```
-
-Verify (with the backend running — see step 8):
-
-```bash
-nebula nodes | head -5
-```
-
-Expected: prints a list of available node types.
-
-**Note:** the wrapper hardcodes the nebula-nodes clone path to
-`~/Documents/Workspace/Projects/nebula_nodes`. Edit the `cd` line in the wrapper if
-you cloned elsewhere. A future version of this guide may use an env var.
 
 ## 7. One-turn smoke test
 
@@ -289,8 +340,8 @@ If you see "hermes-daedalus: command not found," re-run
 Same as before — Hermes integration reuses the existing dev setup.
 
 ```bash
-# Terminal 1
-cd backend && python -m uvicorn main:app --port 8000
+# Terminal 1 (prints the link that opens the canvas as you)
+backend/.venv/bin/python backend/devserver.py --port 8000
 
 # Terminal 2
 cd frontend && npm run dev

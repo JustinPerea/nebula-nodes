@@ -34,36 +34,43 @@ test('trusted renderer requires the normalized configured document, allowing onl
   assert.equal(isTrustedRendererUrl(packaged, ''), false);
 });
 
-function preload(actual, rendererUrl = packaged, isMainFrame = true) {
+function preload(actual, rendererUrl = packaged, isMainFrame = true, invoked = []) {
   let metadata;
   runInNewContext(readFileSync(new URL('../preload.cjs', import.meta.url), 'utf8'), {
     require: () => ({
       contextBridge: { exposeInMainWorld: (_key, value) => { metadata = value; } },
-      ipcRenderer: { invoke: async () => ({ ok: true }) },
+      ipcRenderer: { invoke: async (channel) => { invoked.push(channel); return { ok: true }; } },
     }),
     URL,
     location: { href: actual },
     process: {
       platform: 'darwin', isMainFrame,
-      argv: [`--nebula-renderer-url=${rendererUrl}`, '--nebula-connector-session=fixture-nonce',
-        '--nebula-api-base=http://127.0.0.1:8033'],
+      argv: [`--nebula-renderer-url=${rendererUrl}`, '--nebula-api-base=http://127.0.0.1:8033'],
     },
   });
   return metadata;
 }
 
-test('preload exposes the connector nonce only to the same trusted main-frame document', () => {
+test('preload exposes the person-token bridge only to the same trusted main-frame document', async () => {
   for (const [actual, expected, trusted] of cases) {
     const metadata = preload(actual, expected);
-    assert.equal(metadata.connectorSession, trusted ? 'fixture-nonce' : undefined, actual);
+    assert.equal(typeof metadata.person?.token, trusted ? 'function' : 'undefined', actual);
+    // No token rides in argv or the bridge's static metadata any more.
+    assert.equal(metadata.connectorSession, undefined, actual);
+    assert.equal(JSON.stringify(metadata).includes('fixture'), false, actual);
     assert.equal(metadata.apiBaseUrl, 'http://127.0.0.1:8033');
     assert.equal(typeof metadata.paperLinks.open, 'function');
     assert.equal(typeof metadata.credentials.set, 'function');
     assert.equal(Object.isFrozen(metadata), true);
   }
-  assert.equal(preload(packaged, packaged, false).connectorSession, undefined);
-  assert.equal(preload(packaged, packaged, null).connectorSession, undefined);
-  assert.equal(preload(packaged, '').connectorSession, undefined);
+  assert.equal(preload(packaged, packaged, false).person, undefined);
+  assert.equal(preload(packaged, packaged, null).person, undefined);
+  assert.equal(preload(packaged, '').person, undefined);
+  const invoked = [];
+  const trusted = preload(packaged, packaged, true, invoked);
+  assert.equal(Object.isFrozen(trusted.person), true);
+  await trusted.person.token();
+  assert.deepEqual(invoked, ['person:token']);
 });
 
 test('external URLs reject credentials, custom protocols, control characters and malformed URLs', () => {
@@ -100,13 +107,13 @@ test('main-frame navigation and redirects reject remote and unrelated documents 
   }
 });
 
-test('redirects of non-main frames do not expose the nonce or replace the renderer', () => {
+test('redirects of non-main frames do not expose the person bridge or replace the renderer', () => {
   const { handlers } = navigationFixture();
   let prevented = false;
   handlers.get('will-redirect')({ url: 'https://assets.krea.ai/image.png', isMainFrame: false,
     preventDefault: () => { prevented = true; } });
   assert.equal(prevented, false);
-  assert.equal(preload(packaged, packaged, false).connectorSession, undefined);
+  assert.equal(preload(packaged, packaged, false).person, undefined);
 });
 
 test('new windows are always denied; valid browser links open externally only', async () => {

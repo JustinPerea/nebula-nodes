@@ -11,6 +11,8 @@ vi.mock('../src/lib/backend', async (original) => ({
   backendWebSocketUrl: vi.fn().mockResolvedValue('ws://127.0.0.1/test-chat'),
 }));
 import { ChatPanel } from '../src/components/panels/ChatPanel';
+import { backendWebSocketUrl } from '../src/lib/backend';
+import { PERSON_CONNECTED_EVENT } from '../src/lib/personSession';
 import { resetCommonsSessionForTests } from '../src/lib/commonsApi';
 import { useUIStore } from '../src/store/uiStore';
 const initialUI = useUIStore.getState();
@@ -24,6 +26,11 @@ class ChatSocket extends WebSocket {
     this.onopen?.call(this, new Event('open'));
   }
   send(data: string) { this.sent.push(JSON.parse(data)); }
+  close() {
+    if (this.readyState === WebSocket.CLOSED) return;
+    Object.defineProperty(this, 'readyState', { value: WebSocket.CLOSED, writable: true, configurable: true });
+    this.onclose?.call(this, new CloseEvent('close'));
+  }
   receive(event: unknown) { this.onmessage?.call(this, new MessageEvent('message', { data: JSON.stringify(event) })); }
 }
 beforeEach(() => {
@@ -44,6 +51,10 @@ beforeEach(() => {
   }));
 });
 afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); vi.unstubAllGlobals(); });
+// The mocked chat socket lives at ws://127.0.0.1, so the person link names that backend.
+function connectAsPerson(token: string) {
+  sessionStorage.setItem('nebula.person', JSON.stringify({ token, backend: 'http://127.0.0.1' }));
+}
 async function connected() {
   render(<ChatPanel />);
   await waitFor(() => expect(ChatSocket.instances).toHaveLength(1));
@@ -71,27 +82,78 @@ describe('Commons chat integration', () => {
     expect(socket.sent[0]).toMatchObject({ type: 'send', agent: 'claude', model: 'sonnet', effort: 'medium' });
     expect(socket.sent[0]).not.toHaveProperty('brand');
     expect(socket.sent[0]).not.toHaveProperty('commonsToken');
+    // Not connected as the person: the turn goes out bare and the backend refuses it.
+    expect(socket.sent[0]).not.toHaveProperty('personToken');
     expect(apiMocks.apiFetch).not.toHaveBeenCalled();
+  });
+  it('sends the person token on every turn when this tab is connected as the person', async () => {
+    const token = crypto.randomUUID(); connectAsPerson(token);
+    const socket = await connected();
+    await sendText('Make a simple graph');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    expect(socket.sent[0]).toMatchObject({ type: 'send', personToken: token });
+    expect(socket.sent[0]).not.toHaveProperty('brand');
+  });
+  it('never sends the token to a chat socket on a different backend', async () => {
+    sessionStorage.setItem('nebula.person', JSON.stringify({ token: crypto.randomUUID(), backend: 'http://127.0.0.1:8000' }));
+    const socket = await connected();
+    await sendText('Make a simple graph');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    expect(socket.sent[0]).not.toHaveProperty('personToken');
+  });
+  it('reconnects to the pinned backend when a person link is pasted into the open tab', async () => {
+    // Before the link, discovery settled on the dev proxy; the link pins 127.0.0.1.
+    vi.mocked(backendWebSocketUrl).mockResolvedValueOnce('ws://localhost:5173/ws/chat');
+    const first = await connected();
+    expect(first.url).toBe('ws://localhost:5173/ws/chat');
+    const token = crypto.randomUUID(); connectAsPerson(token);
+    await act(async () => { window.dispatchEvent(new CustomEvent(PERSON_CONNECTED_EVENT)); });
+    await waitFor(() => expect(ChatSocket.instances).toHaveLength(2));
+    const second = ChatSocket.instances[1];
+    expect(second.url).toBe('ws://127.0.0.1/test-chat');
+    await act(async () => second.open());
+    await sendText('Make a simple graph');
+    await waitFor(() => expect(second.sent).toHaveLength(1));
+    expect(second.sent[0]).toMatchObject({ type: 'send', personToken: token });
+    expect(first.sent).toHaveLength(0);
+  });
+  it('keeps a chat socket that is already on the pinned backend when a link arrives', async () => {
+    const token = crypto.randomUUID(); connectAsPerson(token);
+    const socket = await connected();
+    await act(async () => { window.dispatchEvent(new CustomEvent(PERSON_CONNECTED_EVENT)); });
+    await sendText('Make a simple graph');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    expect(ChatSocket.instances).toHaveLength(1);
+    expect(socket.sent[0]).toMatchObject({ personToken: token });
+  });
+  it('raises the person banner when the backend refuses a turn as person_required', async () => {
+    const seen = vi.fn(); window.addEventListener('nebula:person-required', seen);
+    const socket = await connected();
+    await sendText('Make a simple graph');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: 'Only the person can do this' }); socket.receive({ type: 'done' }); });
+    expect(seen).toHaveBeenCalled();
+    window.removeEventListener('nebula:person-required', seen);
   });
   it('includes human session and brand, retains opaque conversation continuation, then starts fresh for a new brand', async () => {
     useUIStore.getState().setCommonsEnabled(true);
-    const token = crypto.randomUUID(); sessionStorage.setItem('nebula.commons.token', token);
+    const token = crypto.randomUUID(); connectAsPerson(token);
     const socket = await connected();
     const brand = screen.getByRole('textbox', { name: 'Chat brand' });
     fireEvent.change(brand, { target: { value: 'Example brand' } });
     await sendText('Look at these references');
     await waitFor(() => expect(socket.sent).toHaveLength(1));
-    expect(socket.sent[0]).toMatchObject({ type: 'send', agent: 'claude', autonomy: 'auto', commonsToken: token, brand: 'Example brand', sessionId: null });
+    expect(socket.sent[0]).toMatchObject({ type: 'send', agent: 'claude', autonomy: 'auto', personToken: token, brand: 'Example brand', sessionId: null });
     expect(brand).toBeDisabled();
     await act(async () => { socket.receive({ type: 'session', sessionId: 'opaque-conversation' }); socket.receive({ type: 'done' }); });
     await sendText('Continue the same review');
     await waitFor(() => expect(socket.sent).toHaveLength(2));
-    expect(socket.sent[1]).toMatchObject({ sessionId: 'opaque-conversation', brand: 'Example brand', commonsToken: token });
+    expect(socket.sent[1]).toMatchObject({ sessionId: 'opaque-conversation', brand: 'Example brand', personToken: token });
     await act(async () => socket.receive({ type: 'done' }));
     fireEvent.change(brand, { target: { value: 'New brand' } });
     await sendText('Start with new references');
     await waitFor(() => expect(socket.sent).toHaveLength(3));
-    expect(socket.sent[2]).toMatchObject({ sessionId: null, brand: 'New brand', commonsToken: token });
+    expect(socket.sent[2]).toMatchObject({ sessionId: null, brand: 'New brand', personToken: token });
     expect(apiMocks.apiFetch).not.toHaveBeenCalled();
   });
   it('shows the native scope restriction and preserves a draft when human authority is missing', async () => {
@@ -108,13 +170,13 @@ describe('Commons chat integration', () => {
   });
   it('sends human scope on an explicit approval continuation', async () => {
     useUIStore.getState().setCommonsEnabled(true);
-    const token = crypto.randomUUID(); sessionStorage.setItem('nebula.commons.token', token);
+    const token = crypto.randomUUID(); connectAsPerson(token);
     const socket = await connected();
     fireEvent.change(screen.getByRole('textbox', { name: 'Chat brand' }), { target: { value: 'Example' } });
     await act(async () => { socket.receive({ type: 'session', sessionId: 'opaque-id' }); socket.receive({ type: 'approval_request', summary: 'Review this plan' }); socket.receive({ type: 'done' }); });
     expect(socket.sent).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(socket.sent).toHaveLength(1));
-    expect(socket.sent[0]).toMatchObject({ message: 'APPROVED: continue', sessionId: 'opaque-id', brand: 'Example', commonsToken: token, model: 'sonnet', effort: null });
+    expect(socket.sent[0]).toMatchObject({ message: 'APPROVED: continue', sessionId: 'opaque-id', brand: 'Example', personToken: token, model: 'sonnet', effort: null });
   });
 });

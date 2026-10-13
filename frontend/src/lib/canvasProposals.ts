@@ -13,6 +13,12 @@ export interface AcceptedProposal {
   proposalId: string;
   idMap: Record<string, string>;
   runNodeIds: string[];
+  /**
+   * The person's approval for exactly the runs listed, at the values just
+   * accepted (services/run_approvals.py). Sent with the run the canvas starts
+   * for runNodeIds; null when the proposal listed no runs.
+   */
+  approvalId: string | null;
   nodes: Node<NodeData>[];
   edges: Edge[];
   updatedNodes: Node<NodeData>[];
@@ -62,6 +68,7 @@ export async function acceptProposal(
     proposalId: body.proposalId ?? id,
     idMap: body.idMap ?? {},
     runNodeIds: Array.isArray(body.runNodeIds) ? body.runNodeIds : [],
+    approvalId: typeof body.approvalId === 'string' && body.approvalId ? body.approvalId : null,
     nodes: Array.isArray(body.nodes) ? body.nodes : [],
     edges: Array.isArray(body.edges) ? body.edges : [],
     updatedNodes: Array.isArray(body.updatedNodes) ? body.updatedNodes : [],
@@ -76,6 +83,19 @@ export async function rejectProposal(id: string, acceptKey: string, reason?: str
   });
   if (!response.ok) {
     throw new ProposalRequestError(response.status, await detailOf(response, `Couldn't reject (${response.status})`));
+  }
+}
+
+/**
+ * Let go of an approved run the canvas won't start (dismissed, or the canvas
+ * declined to start it). Frees the nodes it locked against agent edits. A run
+ * that did start already used it up, so this is then a no-op.
+ */
+export async function releaseApproval(approvalId: string): Promise<void> {
+  try {
+    await apiFetch(`/api/canvas/approvals/${encodeURIComponent(approvalId)}`, { method: 'DELETE' });
+  } catch {
+    /* It expires on its own; a failed release only keeps the locks a while longer. */
   }
 }
 
@@ -212,6 +232,22 @@ export function fullValue(value: unknown): string {
   return JSON.stringify(value) ?? String(value);
 }
 
+/** A Krea node's billing mode is the one internal param a proposal may change
+ * (backend main._refuse_agent_krea_billing_change), so the bar names it plainly. */
+const KREA_BILLING_KEY = '_kreaAuth';
+const KREA_BILLING_VALUES: Record<string, string> = { 'api-token': 'API token balance', mcp: 'Krea plan' };
+
+function changeLine(key: string, to: unknown, from?: unknown, hasFrom = false): ChangeLine {
+  if (key === KREA_BILLING_KEY) {
+    // A node that never set it bills the API token, the default.
+    const name = (value: unknown) => (value === null || value === undefined || value === ''
+      ? KREA_BILLING_VALUES['api-token']
+      : (typeof value === 'string' && KREA_BILLING_VALUES[value]) || fullValue(value));
+    return { key: 'Billed to', to: name(to), ...(hasFrom ? { from: name(from) } : {}) };
+  }
+  return { key, to: fullValue(to), ...(hasFrom ? { from: fullValue(from) } : {}) };
+}
+
 export interface ChangeLine {
   key: string;
   /** Present for a change to an existing node: the value at proposal time. */
@@ -239,7 +275,7 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
       id: node.ref,
       title: `New ${node.name} (${node.ref})`,
       kind: 'new',
-      lines: Object.entries(params).map(([key, value]) => ({ key, to: fullValue(value) })),
+      lines: Object.entries(params).map(([key, value]) => changeLine(key, value)),
     });
   }
   for (const change of view.params) {
@@ -249,7 +285,7 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
       id: change.nodeId,
       title: change.name,
       kind: 'edit',
-      lines: entries.map(([key, diff]) => ({ key, from: fullValue(diff.from), to: fullValue(diff.to) })),
+      lines: entries.map(([key, diff]) => changeLine(key, diff.to, diff.from, true)),
     });
   }
   return groups;

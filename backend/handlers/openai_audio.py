@@ -9,6 +9,7 @@ import httpx
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import get_run_dir
+from execution.missing_credential import MissingCredentialError
 
 OPENAI_AUDIO_BASE = "https://api.openai.com/v1/audio"
 
@@ -28,7 +29,7 @@ async def handle_openai_stt(
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError("OPENAI_API_KEY is required")
+        raise MissingCredentialError("OPENAI_API_KEY is required")
 
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
@@ -88,7 +89,7 @@ async def handle_openai_translate(
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError("OPENAI_API_KEY is required")
+        raise MissingCredentialError("OPENAI_API_KEY is required")
 
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
@@ -141,7 +142,7 @@ async def handle_openai_tts(
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError("OPENAI_API_KEY is required")
+        raise MissingCredentialError("OPENAI_API_KEY is required")
 
     model = node.params.get("model", "tts-1")
     voice = node.params.get("voice", "alloy")

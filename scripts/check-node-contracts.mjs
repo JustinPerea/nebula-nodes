@@ -93,6 +93,7 @@ validateGeneratedReference();
 validatePinnedCorrections();
 validateLocalExecutionCoverage();
 validateLocalExecutionProvider();
+validateProviderVia();
 
 if (errors.length) {
   console.error(`Node contract check failed with ${errors.length} issue(s):`);
@@ -273,6 +274,67 @@ function validateLocalExecutionProvider() {
     const envIsEmpty = (Array.isArray(env) && env.length === 0) || env === '' || env == null;
     if (!envIsEmpty) {
       errors.push(`${nodeId} is a local utility node and must have empty envKeyName (got ${JSON.stringify(env)})`);
+    }
+  }
+}
+
+// A utility node that still calls a provider says how (types/index.ts
+// ProviderVia). Every name in it has to resolve, or readiness, the run
+// estimate and the agent surfaces would read it wrong.
+function validateProviderVia() {
+  const settingsKeys = new Set(Object.keys(settingsExample.apiKeys ?? {}));
+  for (const [nodeId, definition] of Object.entries(definitions)) {
+    const via = definition.providerVia;
+    if (via === undefined) continue;
+    const where = `${nodeId}.providerVia`;
+    if (definition.apiProvider !== 'utility') errors.push(`${where} is only for utility nodes`);
+    if (!via || typeof via !== 'object') {
+      errors.push(`${where} must be an object`);
+      continue;
+    }
+    if (via.kind === 'model') {
+      if (!Array.isArray(via.path) || !via.path.length || !via.path.every((part) => typeof part === 'string')) {
+        errors.push(`${where}.path must be a non-empty list of keys`);
+      } else if (!PARAM_GROUPS.some((group) => (definition[group] ?? []).some((param) => param.key === via.path[0]))) {
+        errors.push(`${where}.path starts at unknown param ${via.path[0]}`);
+      }
+      if (!Array.isArray(via.models) || !via.models.length) errors.push(`${where}.models must list the models it can run`);
+      for (const model of via.models ?? []) {
+        const target = definitions[model];
+        if (!target) {
+          errors.push(`${where}.models names unknown node ${model}`);
+          continue;
+        }
+        if (target.apiProvider === 'utility') errors.push(`${where}.models names utility node ${model}`);
+        const env = Array.isArray(target.envKeyName) ? target.envKeyName : [target.envKeyName];
+        const kreaAuth = (target.params ?? []).some((param) => param.key === '_kreaAuth');
+        if (!env.filter(Boolean).length && !kreaAuth) errors.push(`${where}.models ${model} has no key to check`);
+      }
+      if (!(via.models ?? []).includes(via.default)) errors.push(`${where}.default must be one of its models`);
+      if (!Array.isArray(via.fallbackFor)) errors.push(`${where}.fallbackFor must be a list`);
+    } else if (via.kind === 'param') {
+      const param = PARAM_GROUPS.flatMap((group) => definition[group] ?? []).find((candidate) => candidate.key === via.param);
+      if (!param) {
+        errors.push(`${where}.param names unknown param ${via.param}`);
+        continue;
+      }
+      if (param.type !== 'enum') errors.push(`${where}.param ${via.param} must be an enum`);
+      const values = new Set((param.options ?? []).map((option) => option.value));
+      if (!Array.isArray(via.freeWhen)) errors.push(`${where}.freeWhen must be a list`);
+      for (const value of via.freeWhen ?? []) {
+        if (!values.has(value)) errors.push(`${where}.freeWhen ${value} is not an option of ${via.param}`);
+      }
+      if (![...values].some((value) => !(via.freeWhen ?? []).includes(value))) {
+        errors.push(`${where} has no option that calls a provider`);
+      }
+      if (!Array.isArray(via.anyKey) || !via.anyKey.length) errors.push(`${where}.anyKey must list the keys`);
+      for (const key of via.anyKey ?? []) {
+        if (!settingsKeys.has(key)) errors.push(`${where}.anyKey ${key} is missing from settings.example.json apiKeys`);
+        if (envExample.includes(`${key}=`)) errors.push(`.env.example must not advertise provider credential ${key}`);
+      }
+      if (typeof via.provider !== 'string' || !via.provider) errors.push(`${where}.provider must name what it calls`);
+    } else {
+      errors.push(`${where}.kind must be 'model' or 'param'`);
     }
   }
 }

@@ -11,6 +11,7 @@ from services.output import get_run_dir, save_video_from_url, save_base64_image,
 
 import base64
 import httpx
+from execution.missing_credential import MissingCredentialError
 
 RUNWAY_API_BASE = "https://api.dev.runwayml.com/v1"
 RUNWAY_HEADERS_BASE = {
@@ -58,7 +59,7 @@ async def handle_runway_video(
 ) -> dict[str, Any]:
     api_key = api_keys.get("RUNWAY_API_KEY")
     if not api_key:
-        raise ValueError("RUNWAY_API_KEY is required")
+        raise MissingCredentialError("RUNWAY_API_KEY is required")
 
     model = node.params.get("model", "gen4.5")
     duration = int(node.params.get("duration", 5))
@@ -135,7 +136,7 @@ async def handle_runway_aleph(
 ) -> dict[str, Any]:
     api_key = api_keys.get("RUNWAY_API_KEY")
     if not api_key:
-        raise ValueError("RUNWAY_API_KEY is required")
+        raise MissingCredentialError("RUNWAY_API_KEY is required")
 
     video_input = inputs.get("video")
     if not video_input or not video_input.value:
@@ -202,7 +203,7 @@ async def handle_runway_image(
 ) -> dict[str, Any]:
     api_key = api_keys.get("RUNWAY_API_KEY")
     if not api_key:
-        raise ValueError("RUNWAY_API_KEY is required")
+        raise MissingCredentialError("RUNWAY_API_KEY is required")
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
@@ -269,7 +270,7 @@ async def handle_runway_image_upscale(
 ) -> dict[str, Any]:
     api_key = api_keys.get("RUNWAY_API_KEY")
     if not api_key:
-        raise ValueError("RUNWAY_API_KEY is required")
+        raise MissingCredentialError("RUNWAY_API_KEY is required")
 
     image_input = inputs.get("image")
     if not image_input or not image_input.value:
@@ -328,7 +329,7 @@ async def handle_runway_act_two(
 ) -> dict[str, Any]:
     api_key = api_keys.get("RUNWAY_API_KEY")
     if not api_key:
-        raise ValueError("RUNWAY_API_KEY is required")
+        raise MissingCredentialError("RUNWAY_API_KEY is required")
 
     # Character: image or video
     char_image_input = inputs.get("character_image")
@@ -426,7 +427,7 @@ async def handle_runway_tts(
 ) -> dict[str, Any]:
     api_key = api_keys.get("RUNWAY_API_KEY")
     if not api_key:
-        raise ValueError("RUNWAY_API_KEY is required")
+        raise MissingCredentialError("RUNWAY_API_KEY is required")
 
     prompt_input = inputs.get("text")
     if not prompt_input or not prompt_input.value:
@@ -473,7 +474,7 @@ async def handle_runway_speech_to_speech(
 ) -> dict[str, Any]:
     api_key = api_keys.get("RUNWAY_API_KEY")
     if not api_key:
-        raise ValueError("RUNWAY_API_KEY is required")
+        raise MissingCredentialError("RUNWAY_API_KEY is required")
 
     audio_input = inputs.get("audio")
     video_input = inputs.get("video")
@@ -542,7 +543,7 @@ async def handle_runway_voice_dubbing(
 ) -> dict[str, Any]:
     api_key = api_keys.get("RUNWAY_API_KEY")
     if not api_key:
-        raise ValueError("RUNWAY_API_KEY is required")
+        raise MissingCredentialError("RUNWAY_API_KEY is required")
 
     audio_input = inputs.get("audio")
     if not audio_input or not audio_input.value:

@@ -38,6 +38,28 @@ MEDIA_ROUTES = {"/generate/image/": "Image", "/generate/video/": "Video",
 CATEGORIES = {"Image": "image-gen", "Video": "video-gen", "Audio": "audio-gen",
               "Mesh": "3d-gen"}
 PLURALS = {"Image": "images", "Video": "videos", "Audio": "audios", "Mesh": "meshes"}
+# Price rows that only hold when a request field is left empty. Kling 3.0
+# takes multi_prompt (shots, each with its own duration), and Kling's API
+# reference says "sum of all shot durations must equal the total video
+# duration"; Krea's price list keys on the duration field and doesn't say how
+# a multi-shot run is billed (NOT VERIFIED). So a multi-shot run is unpriced.
+# A multi_prompt that arrives by wire is caught by the wired-port rule
+# (backend services/model_pricing.py).
+PRICE_GUARDS = {
+    "/generate/video/kling/kling-3.0": {
+        "match": {"multi_prompt": ""},
+        "note": "Multi-prompt runs are unpriced: Krea's price list keys on the duration field and doesn't say "
+                "how shot durations are billed.",
+        "source": {"url": "https://kling.ai/document-api/apiReference/model/textToVideo",
+                   "quote": "sum of all shot durations must equal the total video duration"},
+    },
+}
+# Request fields a model takes that Krea's price list leaves out, said
+# outright so an audit doesn't flag them again: Krea does price audio where it
+# charges for it (Veo 3, Kling 3.0 list generateAudio as a dimension).
+UNPRICED_FIELD_NOTES = {
+    "generate_audio": "Krea's price doesn't vary with generate_audio (x-krea-pricing dimensions: {dims}).",
+}
 
 
 def route_family(endpoint):
@@ -254,21 +276,33 @@ def pricing_entries(catalog):
                     return False
             return True
 
+        guard = PRICE_GUARDS.get(model["endpoint"], {})
         rows = [{"match": {"_kreaAuth": "api-token",
-                           **{snake(key): value for key, value in point.get("dimensions", {}).items()}},
+                           **{snake(key): value for key, value in point.get("dimensions", {}).items()},
+                           **guard.get("match", {})},
                  "price": point["amount"]} for point in points if reachable(point)]
         if not rows:
             skipped[node_id] = "no price point matches values the request accepts"
             continue
+        notes = ["API-token runs only. Krea account runs bill workspace compute units, "
+                 "which Krea doesn't publish per option, so they stay unpriced."]
+        if guard.get("note"):
+            notes.append(guard["note"])
+        dimensions = sorted({snake(key) for point in points for key in point.get("dimensions", {})})
+        for field, note in UNPRICED_FIELD_NOTES.items():
+            if field in properties and field not in dimensions:
+                notes.append(note.format(dims=", ".join(dimensions) or "none"))
+        sources = [{"url": catalog["sourceUrl"],
+                    "quote": f"x-krea-pricing on POST {model['endpoint']} "
+                             f"(spec sha256 {catalog['openapiSha256'][:12]})"}]
+        if guard.get("source"):
+            sources.append(guard["source"])
         entries[node_id] = {
             "currency": "usd", "per": "request",
             "priceParams": sorted({key for row in rows for key in row["match"]}),
             "rows": rows,
-            "notes": "API-token runs only. Krea account runs bill workspace compute units, "
-                     "which Krea doesn't publish per option, so they stay unpriced.",
-            "sources": [{"url": catalog["sourceUrl"],
-                         "quote": f"x-krea-pricing on POST {model['endpoint']} "
-                                  f"(spec sha256 {catalog['openapiSha256'][:12]})"}],
+            "notes": " ".join(notes),
+            "sources": sources,
             "checked": catalog["fetchedAt"],
             "generatedBy": PRICING_GENERATOR,
         }

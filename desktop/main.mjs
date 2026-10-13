@@ -2,10 +2,10 @@ import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electro
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
-import { randomBytes } from 'node:crypto';
 import { startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT } from './sidecar.mjs';
 import { prepareAppDataEnv } from './paths.mjs';
 import { createPaperLinkSenderValidator, registerPaperLinkHandler } from './paper-links.mjs';
+import { decidePersonToken, registerPersonTokenHandler } from './person-token.mjs';
 import { registerFolderPickerHandler } from './folder-picker.mjs';
 import { getConnectorEncryptionKey, registerKreaAuthLinkHandler } from './connector-vault.mjs';
 import { installRendererNavigationGuard } from './navigation.mjs';
@@ -69,7 +69,12 @@ const preloadPath = fileURLToPath(new URL('./preload.cjs', import.meta.url));
 
 /** @type {import('./sidecar.mjs').SidecarHandle | null} */
 let sidecarHandle = null;
-const connectorSession = randomBytes(32).toString('hex');
+/** This launch's person token (person-token.mjs). None with a debug port open. */
+const person = decidePersonToken({
+  debugPort,
+  isDevelopment,
+  devOptIn: process.env.NEBULA_DESKTOP_DEV_PERSON,
+});
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
 /** @type {BrowserWindow | null} */
@@ -399,7 +404,6 @@ function createMainWindow(handle, plaintextKeyWarning = []) {
         `--nebula-api-base=${handle.apiBaseUrl}`,
         `--nebula-ws-base=${handle.wsBaseUrl}`,
         `--nebula-plaintext-warning=${JSON.stringify(plaintextKeyWarning)}`,
-        `--nebula-connector-session=${connectorSession}`,
         `--nebula-renderer-url=${rendererUrl}`,
       ],
     },
@@ -684,6 +688,7 @@ if (!acquiredLock) {
       registerPaperLinkHandler(ipcMain, shell, createPaperLinkSenderValidator(rendererUrl, () => mainWindow?.webContents));
       registerKreaAuthLinkHandler(ipcMain, shell, createPaperLinkSenderValidator(rendererUrl, () => mainWindow?.webContents));
       registerFolderPickerHandler(ipcMain, dialog, createPaperLinkSenderValidator(rendererUrl, () => mainWindow?.webContents), () => mainWindow);
+      registerPersonTokenHandler(ipcMain, person, createPaperLinkSenderValidator(rendererUrl, () => mainWindow?.webContents));
 
       // --- One-time migration (VAL-MIG-007..010, VAL-UX-001..006) ---
       //
@@ -719,7 +724,9 @@ if (!acquiredLock) {
       const injectedKeys = await credentialService.decryptAll();
       const sidecarEnv = { ...process.env, ...pathEnvVars };
       sidecarEnv.NEBULA_DESKTOP_MODE = '1';
-      sidecarEnv.NEBULA_CONNECTOR_SESSION = connectorSession;
+      // The person token goes over the sidecar's stdin, never its env.
+      delete sidecarEnv.NEBULA_PERSON_TOKEN;
+      delete sidecarEnv.NEBULA_CONNECTOR_SESSION;
       try {
         sidecarEnv.NEBULA_CONNECTOR_ENCRYPTION_KEY = await getConnectorEncryptionKey(
           join(appDataRoot, 'connector-vault-key.enc'), safeStorage,
@@ -746,7 +753,7 @@ if (!acquiredLock) {
         ? plaintextWarning.providers
         : [];
 
-      sidecarHandle = await startSidecar({ env: sidecarEnv });
+      sidecarHandle = await startSidecar({ env: sidecarEnv, personToken: person.token });
       sidecarStarting = false;
       const handle = sidecarHandle;
       console.log(

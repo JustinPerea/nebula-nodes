@@ -21,8 +21,8 @@ from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
 from services.selection_context import SelectionContextStore
+from tests.conftest import FORGED_ORIGIN, PERSON, PERSON_HELLO
 
-BROWSER = {"Origin": "http://localhost:5173"}
 AGENT = {"X-Nebula-Agent": "Claude Code"}
 CODEX = AgentIdentity(id="codex", name="Codex", color="#5B9DFF", verified=True)
 
@@ -169,32 +169,40 @@ def test_resolve_detach_and_agent_view(tmp_path):
     {"X-Nebula-Agent": "Claude Code"},
     {"X-Nebula-Client": "nebula-cli"},
 ])
-def test_gate_refuses_agent_markers_even_with_a_browser_origin(marker):
+def test_gate_refuses_agent_markers_even_with_the_person_token(person, marker):
     with pytest.raises(PersonGateError) as exc:
-        require_person({**BROWSER, **marker})
-    assert exc.value.status == 403
+        require_person({**PERSON, **marker})
+    assert exc.value.status == 403 and exc.value.code == "agent_refused"
 
 
-def test_gate_needs_a_browser_or_the_desktop_session(monkeypatch):
+def test_gate_needs_this_launchs_person_token(person, monkeypatch):
     monkeypatch.delenv("NEBULA_DESKTOP_MODE", raising=False)
-    monkeypatch.delenv("NEBULA_CONNECTOR_SESSION", raising=False)
-    for headers in ({}, {"Origin": "https://evil.example"}, {"Origin": "null"},
-                    {"X-Nebula-Connector-Session": "s3cret"}):
+    # An Origin proves nothing: a forged browser Origin, file://, null, the
+    # old desktop nonce, or a wrong token are all refused.
+    monkeypatch.setenv("NEBULA_CONNECTOR_SESSION", "s3cret")
+    for headers in ({}, {"Origin": "https://evil.example"}, {"Origin": "null"}, FORGED_ORIGIN,
+                    {"origin": "file://"}, {"X-Nebula-Connector-Session": "s3cret", "Origin": "null"},
+                    {**FORGED_ORIGIN, "X-Nebula-Person": "x" * 43}, {"X-Nebula-Person": ""}):
+        with pytest.raises(PersonGateError) as exc:
+            require_person(headers)
+        assert exc.value.code == "person_required"
+    monkeypatch.setenv("NEBULA_DESKTOP_MODE", "1")
+    with pytest.raises(PersonGateError):
+        require_person({"origin": "file://"})
+    require_person(PERSON)
+    require_person({"x-nebula-person": PERSON["X-Nebula-Person"]})
+
+
+def test_gate_fails_closed_without_a_person_session(fresh_person_session):
+    for headers in (PERSON, FORGED_ORIGIN, {}):
         with pytest.raises(PersonGateError):
             require_person(headers)
-    require_person(BROWSER)
-    require_person({"origin": "file://"})
-    monkeypatch.setenv("NEBULA_DESKTOP_MODE", "1")
-    monkeypatch.setenv("NEBULA_CONNECTOR_SESSION", "s3cret")
-    require_person({"X-Nebula-Connector-Session": "s3cret", "Origin": "null"})
-    with pytest.raises(PersonGateError):
-        require_person({"X-Nebula-Connector-Session": "wrong"})
 
 
 # -- API ----------------------------------------------------------------------
 
 @pytest.fixture
-def api(tmp_path, monkeypatch):
+def api(tmp_path, monkeypatch, person):
     import main as main_module
 
     graph = CLIGraph(persist_path=tmp_path / "state.json")
@@ -227,13 +235,15 @@ def test_person_creates_and_deletes_pins_and_agents_cannot(api):
     client, graph, journal, sent, _store, (active, _other) = api
     node = graph.add_node("text-input", {"value": "hi"}, position={"x": 40, "y": 50})
     for marker in ({"Authorization": "Agent x"}, {"X-Daedalus-Caller": "1"}, AGENT, {"X-Nebula-Client": "nebula-cli"}):
-        refused = client.post("/api/canvas/pins", headers={**BROWSER, **marker}, json={"text": "x", "nodeId": node})
+        refused = client.post("/api/canvas/pins", headers={**PERSON, **marker}, json={"text": "x", "nodeId": node})
         # An unknown agent token is already refused (401) before the route runs.
         assert refused.status_code in {401, 403}
     assert client.post("/api/canvas/pins", json={"text": "x", "nodeId": node}).status_code == 403
+    forged = client.post("/api/canvas/pins", headers=FORGED_ORIGIN, json={"text": "x", "nodeId": node})
+    assert forged.status_code == 403 and forged.json()["code"] == "person_required"
     assert client.get("/api/canvas/pins").json() == {"projectId": active, "pins": []}
 
-    created = client.post("/api/canvas/pins", headers=BROWSER, json={"text": "warmer", "nodeId": node})
+    created = client.post("/api/canvas/pins", headers=PERSON, json={"text": "warmer", "nodeId": node})
     assert created.status_code == 201, created.text
     pin = created.json()["pin"]
     assert pin["anchor"] == {"nodeId": node} and pin["status"] == "open"
@@ -242,8 +252,9 @@ def test_person_creates_and_deletes_pins_and_agents_cannot(api):
 
     assert client.delete(f"/api/canvas/pins/{pin['id']}", headers=AGENT).status_code == 403
     assert client.delete(f"/api/canvas/pins/{pin['id']}").status_code == 403
-    assert client.delete(f"/api/canvas/pins/{pin['id']}", headers=BROWSER).json() == {"status": "deleted"}
-    assert client.delete(f"/api/canvas/pins/{pin['id']}", headers=BROWSER).status_code == 404
+    assert client.delete(f"/api/canvas/pins/{pin['id']}", headers=FORGED_ORIGIN).status_code == 403
+    assert client.delete(f"/api/canvas/pins/{pin['id']}", headers=PERSON).json() == {"status": "deleted"}
+    assert client.delete(f"/api/canvas/pins/{pin['id']}", headers=PERSON).status_code == 404
     assert _pins_messages(sent)[-1]["pins"] == []
 
     events = journal.read(after=0, kinds={"pin"})["events"]
@@ -256,17 +267,17 @@ def test_bad_pin_bodies_are_refused(api):
     node = graph.add_node("text-input", {})
     for body in ({"text": "", "nodeId": node}, {"text": "x"}, {"text": "x", "nodeId": "n99"},
                  {"text": "x" * 281, "nodeId": node}, {"text": "x", "position": {"x": "a", "y": 0}}):
-        response = client.post("/api/canvas/pins", headers=BROWSER, json=body)
+        response = client.post("/api/canvas/pins", headers=PERSON, json=body)
         assert response.status_code in {404, 422}, body
 
 
 def test_agent_resolves_a_pin_and_its_cursor_moves_there(api):
     client, graph, journal, sent, *_ = api
     node = graph.add_node("text-input", {})
-    pin = client.post("/api/canvas/pins", headers=BROWSER, json={"text": "warmer", "nodeId": node}).json()["pin"]
+    pin = client.post("/api/canvas/pins", headers=PERSON, json={"text": "warmer", "nodeId": node}).json()["pin"]
     path = f"/api/canvas/pins/{pin['id']}/resolve"
     assert client.post(path, json={"reply": "done"}).status_code == 400
-    assert client.post(path, headers=BROWSER, json={"reply": "done"}).status_code == 400
+    assert client.post(path, headers=PERSON, json={"reply": "done"}).status_code == 400
     assert client.post(path, headers=AGENT, json={"reply": ""}).status_code == 422
     assert client.post("/api/canvas/pins/pin_nope/resolve", headers=AGENT, json={"reply": "x"}).status_code == 404
 
@@ -285,9 +296,9 @@ def test_agent_resolves_a_pin_and_its_cursor_moves_there(api):
 def test_deleting_a_node_detaches_its_pins_where_it_stood(api):
     client, graph, journal, sent, *_ = api
     node = graph.add_node("text-input", {}, position={"x": 300, "y": 40})
-    pin = client.post("/api/canvas/pins", headers=BROWSER, json={"text": "redo", "nodeId": node}).json()["pin"]
+    pin = client.post("/api/canvas/pins", headers=PERSON, json={"text": "redo", "nodeId": node}).json()["pin"]
     graph.update_positions({node: {"x": 333, "y": 44}})
-    assert client.delete(f"/api/graph/node/{node}", headers=BROWSER).status_code == 200
+    assert client.delete(f"/api/graph/node/{node}", headers=PERSON).status_code == 200
     listed = client.get("/api/canvas/pins").json()["pins"]
     assert listed[0]["id"] == pin["id"]
     assert listed[0]["anchor"] == {"x": 333.0, "y": 44.0} and listed[0]["detached"] is True
@@ -301,8 +312,8 @@ def test_import_and_clear_detach_pins_whose_nodes_are_gone(api):
     keep = graph.add_node("text-input", {})
     gone = graph.add_node("text-input", {}, position={"x": 5, "y": 5})
     for node in (keep, gone):
-        client.post("/api/canvas/pins", headers=BROWSER, json={"text": f"on {node}", "nodeId": node})
-    imported = client.post("/api/graph/import", headers=BROWSER, json={
+        client.post("/api/canvas/pins", headers=PERSON, json={"text": f"on {node}", "nodeId": node})
+    imported = client.post("/api/graph/import", headers=PERSON, json={
         "nodes": [{"id": keep, "definitionId": "text-input", "params": {}}], "edges": []})
     assert imported.status_code == 200, imported.text
     surviving = set(graph.nodes)
@@ -313,14 +324,14 @@ def test_import_and_clear_detach_pins_whose_nodes_are_gone(api):
             assert pin["anchor"]["nodeId"] in surviving
         else:
             assert pin["detached"] is True and pin["detachedFrom"] == node_id
-    assert client.delete("/api/graph", headers=BROWSER).status_code == 200
+    assert client.delete("/api/graph", headers=PERSON).status_code == 200
     assert all(pin["detached"] for pin in client.get("/api/canvas/pins").json()["pins"])
     assert journal.read(after=0, kinds={"pin.detached"})["events"]
 
 
 def test_pins_follow_the_project_switch(api):
     client, _graph, _journal, sent, store, (active, other) = api
-    client.post("/api/canvas/pins", headers=BROWSER, json={"text": "first project", "position": {"x": 0, "y": 0}})
+    client.post("/api/canvas/pins", headers=PERSON, json={"text": "first project", "position": {"x": 0, "y": 0}})
     revision = store.read()["workspaceRevision"]
     opened = client.post(f"/api/projects/{other}/open", json={"workspaceRevision": revision})
     assert opened.status_code == 200, opened.text
@@ -339,8 +350,8 @@ def test_pins_follow_the_project_switch(api):
 def test_snapshot_lists_pins_and_look_shows_them_before_nodes(api):
     client, graph, *_ = api
     node = graph.add_node("text-input", {})
-    client.post("/api/canvas/pins", headers=BROWSER, json={"text": "warmer", "nodeId": node})
-    client.post("/api/canvas/pins", headers=BROWSER, json={"text": "something here?", "position": {"x": 420, "y": -80}})
+    client.post("/api/canvas/pins", headers=PERSON, json={"text": "warmer", "nodeId": node})
+    client.post("/api/canvas/pins", headers=PERSON, json={"text": "something here?", "position": {"x": 420, "y": -80}})
     snapshot = client.get("/api/canvas/snapshot").json()
     assert [pin["text"] for pin in snapshot["pins"]] == ["something here?", "warmer"]
     text = format_snapshot(snapshot)
@@ -351,36 +362,52 @@ def test_snapshot_lists_pins_and_look_shows_them_before_nodes(api):
 
 def test_websocket_sends_pins_after_graph_sync(api):
     client, graph, *_ = api
-    client.post("/api/canvas/pins", headers=BROWSER, json={"text": "hello", "position": {"x": 1, "y": 1}})
-    with client.websocket_connect("/ws", headers=BROWSER) as ws:
+    client.post("/api/canvas/pins", headers=PERSON, json={"text": "hello", "position": {"x": 1, "y": 1}})
+    with client.websocket_connect("/ws", headers=PERSON) as ws:
         assert ws.receive_json()["type"] == "graphSync"
         message = ws.receive_json()
     assert message["type"] == "canvasPins" and message["pins"][0]["text"] == "hello"
 
 
-def test_browser_sockets_are_tracked_separately(api, monkeypatch):
+def test_only_a_person_hello_makes_a_browser_socket(api, monkeypatch):
     import main as main_module
 
     client, *_ = api
-    seen: list[bool] = []
+    sockets: list = []
     original = main_module.manager.connect
 
     async def spy(websocket):
         await original(websocket)
-        seen.append(main_module.manager.is_browser(websocket))
+        sockets.append(websocket)
+
+    def receive_until_closed_or(ws, kind):
+        message = ws.receive_json()
+        while message["type"] != kind:
+            message = ws.receive_json()
+        return message
 
     monkeypatch.setattr(main_module.manager, "connect", spy)
-    with client.websocket_connect("/ws", headers=BROWSER) as ws:
-        ws.receive_json()
-    with client.websocket_connect("/ws") as ws:
-        ws.receive_json()
+    # A forged Origin, a socket with no hello, and the old desktop query
+    # parameter are not the person; a wrong token gets personRequired.
     monkeypatch.setenv("NEBULA_DESKTOP_MODE", "1")
     monkeypatch.setenv("NEBULA_CONNECTOR_SESSION", "sess")
-    with client.websocket_connect("/ws?connectorSession=sess") as ws:
+    for path, headers in (("/ws", FORGED_ORIGIN), ("/ws", {}), ("/ws?connectorSession=sess", {})):
+        with client.websocket_connect(path, headers=headers) as ws:
+            ws.receive_json()
+            ws.send_json({"type": "hello", "personToken": "wrong"})
+            assert receive_until_closed_or(ws, "personRequired")["type"] == "personRequired"
+            assert not main_module.manager.is_browser(sockets[-1])
+    # An agent-marked handshake never qualifies, even with the token.
+    with client.websocket_connect("/ws", headers={**FORGED_ORIGIN, "X-Nebula-Agent": "Codex"}) as ws:
         ws.receive_json()
-    with client.websocket_connect("/ws?connectorSession=nope") as ws:
+        ws.send_json(PERSON_HELLO)
+        assert receive_until_closed_or(ws, "personRequired")["type"] == "personRequired"
+        assert not main_module.manager.is_browser(sockets[-1])
+    with client.websocket_connect("/ws", headers=FORGED_ORIGIN) as ws:
         ws.receive_json()
-    assert seen == [True, False, True, False]
+        ws.send_json(PERSON_HELLO)
+        assert receive_until_closed_or(ws, "proposalSync")["type"] == "proposalSync"
+        assert main_module.manager.is_browser(sockets[-1])
     assert not main_module.manager.browser_connections
 
 

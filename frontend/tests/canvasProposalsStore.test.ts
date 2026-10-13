@@ -12,7 +12,7 @@ const graph = vi.hoisted(() => ({
     adoptAcceptedProposal: vi.fn(),
   },
 }));
-const api = vi.hoisted(() => ({ acceptProposal: vi.fn(), rejectProposal: vi.fn() }));
+const api = vi.hoisted(() => ({ acceptProposal: vi.fn(), rejectProposal: vi.fn(), releaseApproval: vi.fn() }));
 
 vi.mock('../src/lib/wsClient', () => ({
   wsClient: { subscribe: (handler: (event: unknown) => void) => { ws.handlers.push(handler); return () => {}; } },
@@ -22,6 +22,7 @@ vi.mock('../src/lib/canvasProposals', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/lib/canvasProposals')>()),
   acceptProposal: api.acceptProposal,
   rejectProposal: api.rejectProposal,
+  releaseApproval: api.releaseApproval,
 }));
 
 const { useCanvasProposalsStore, PROPOSAL_EXIT_MS } = await import('../src/store/canvasProposalsStore');
@@ -50,7 +51,7 @@ beforeEach(() => {
   graph.state.nodes = [{ id: 'n1' }, { id: 'n7' }];
   graph.state.edges = [];
   for (const fn of [graph.state.executeNode, graph.state.executeCluster, graph.state.adoptAcceptedProposal,
-    api.acceptProposal, api.rejectProposal]) fn.mockReset();
+    api.acceptProposal, api.rejectProposal, api.releaseApproval]) fn.mockReset();
 });
 afterEach(() => vi.useRealTimers());
 
@@ -110,31 +111,63 @@ describe('canvas proposals store', () => {
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
     useCanvasProposalsStore.getState().moveGhost('p_a', '+up', { x: 900, y: -40 });
     const result = { status: 'accepted', proposalId: 'p_a', idMap: { '+up': 'n7' }, runNodeIds: ['n7'],
-      nodes: [], edges: [], updatedNodes: [] };
+      approvalId: 'ra_a', nodes: [], edges: [], updatedNodes: [] };
     api.acceptProposal.mockResolvedValue(result);
     await useCanvasProposalsStore.getState().accept('p_a');
     expect(api.acceptProposal).toHaveBeenCalledWith('p_a', 'key-a', { '+up': { x: 900, y: -40 } });
     expect(graph.state.adoptAcceptedProposal).toHaveBeenCalledWith(result);
-    expect(graph.state.executeNode).toHaveBeenCalledWith('n7');
+    // The run carries the approval, so the backend can check it is what was accepted.
+    expect(graph.state.executeNode).toHaveBeenCalledWith('n7', { approvalId: 'ra_a' });
+    // Then it is released (a no-op once the run used it), so a run the canvas
+    // declined to start never leaves the nodes locked.
+    expect(api.releaseApproval).toHaveBeenCalledWith('ra_a');
+    expect(api.releaseApproval.mock.invocationCallOrder[0])
+      .toBeGreaterThan(graph.state.executeNode.mock.invocationCallOrder[0]);
     expect(useCanvasProposalsStore.getState().proposals.p_a.closing).toBe('accepted');
   });
 
   it('runs several targets with their inputs, or waits while a run is going', async () => {
     emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
     graph.state.edges = [{ source: 'n1', target: 'n7' }, { source: 'n1', target: 'n8' }];
-    api.acceptProposal.mockResolvedValue({ idMap: {}, runNodeIds: ['n7', 'n8'], nodes: [], edges: [], updatedNodes: [] });
+    api.acceptProposal.mockResolvedValue({ idMap: {}, runNodeIds: ['n7', 'n8'], approvalId: 'ra_a',
+      nodes: [], edges: [], updatedNodes: [] });
     await useCanvasProposalsStore.getState().accept('p_a');
     expect(graph.state.executeCluster).toHaveBeenCalledTimes(1);
     expect([...graph.state.executeCluster.mock.calls[0][0]].sort()).toEqual(['n1', 'n7', 'n8']);
+    expect(graph.state.executeCluster.mock.calls[0][1]).toEqual({ approvalId: 'ra_a' });
 
     emit({ type: 'proposalOpened', proposal: proposal('p_b'), acceptKey: 'key-b' });
     graph.state.isExecuting = true;
-    api.acceptProposal.mockResolvedValue({ idMap: {}, runNodeIds: ['n7'], nodes: [], edges: [], updatedNodes: [] });
+    api.acceptProposal.mockResolvedValue({ idMap: {}, runNodeIds: ['n7'], approvalId: 'ra_b',
+      nodes: [], edges: [], updatedNodes: [] });
     await useCanvasProposalsStore.getState().accept('p_b');
     expect(graph.state.executeNode).not.toHaveBeenCalled();
-    expect(useCanvasProposalsStore.getState().deferredRun).toEqual({ agentName: 'Codex', nodeIds: ['n7'] });
+    expect(useCanvasProposalsStore.getState().deferredRun)
+      .toEqual({ agentName: 'Codex', nodeIds: ['n7'], approvalId: 'ra_b' });
     graph.state.isExecuting = false;
     await useCanvasProposalsStore.getState().runDeferred();
-    expect(graph.state.executeNode).toHaveBeenCalledWith('n7');
+    // The held run still carries the approval from the Accept click.
+    expect(graph.state.executeNode).toHaveBeenCalledWith('n7', { approvalId: 'ra_b' });
+  });
+
+  it('releases the approval when the person dismisses a held run', async () => {
+    emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
+    graph.state.isExecuting = true;
+    api.acceptProposal.mockResolvedValue({ idMap: {}, runNodeIds: ['n7'], approvalId: 'ra_a',
+      nodes: [], edges: [], updatedNodes: [] });
+    await useCanvasProposalsStore.getState().accept('p_a');
+    useCanvasProposalsStore.getState().dismissDeferred();
+    expect(useCanvasProposalsStore.getState().deferredRun).toBeNull();
+    expect(api.releaseApproval).toHaveBeenCalledWith('ra_a');
+    expect(graph.state.executeNode).not.toHaveBeenCalled();
+  });
+
+  it('runs a proposal without listed runs never, and without an approval sends none', async () => {
+    emit({ type: 'proposalOpened', proposal: proposal('p_a'), acceptKey: 'key-a' });
+    api.acceptProposal.mockResolvedValue({ idMap: {}, runNodeIds: [], approvalId: null,
+      nodes: [], edges: [], updatedNodes: [] });
+    await useCanvasProposalsStore.getState().accept('p_a');
+    expect(graph.state.executeNode).not.toHaveBeenCalled();
+    expect(api.releaseApproval).not.toHaveBeenCalled();
   });
 });

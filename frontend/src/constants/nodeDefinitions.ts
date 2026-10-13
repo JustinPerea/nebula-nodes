@@ -1946,6 +1946,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       { key: 'scene', label: 'Scene', type: 'string', required: false, hidden: true },
     ],
+    // Runs its base image model's own handler once per shot. Mirrors
+    // backend handlers/cinema_scene.py (_COMMERCIAL_OK_DEFAULT_BASES,
+    // _DEFAULT_BASE_MODEL, _NONCOMMERCIAL_BASES); a backend test pins them.
+    providerVia: {
+      kind: 'model', path: ['scene', 'base', 'model'],
+      models: ['seedream-4-5', 'nano-banana', 'nano-banana-fal-edit', 'flux-kontext'],
+      default: 'seedream-4-5', fallbackFor: ['flux-1-dev', 'flux.1-dev', 'flux-dev'],
+    },
   },
 
   'character': {
@@ -12705,6 +12713,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       ] },
       { key: 'sample_density', label: 'Sample Density', type: 'integer', required: false, default: 5, min: 2, max: 12, step: 1 },
     ],
+    // Vision LLM mode calls the first vision model with a key set
+    // (backend services/vision_llm.py VISION_PROVIDERS); it has no list price.
+    providerVia: { kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'], anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision' },
   },
   'qc-frame-review': {
     id: 'qc-frame-review', displayName: 'QC Frame Review', category: 'analyzer',
@@ -12721,6 +12732,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { key: 'sample_rate', label: 'Samples Per Second', type: 'float', required: false, default: 1, min: 0.1, max: 4, step: 0.1 },
       { key: 'track_faces', label: 'Track Faces', type: 'boolean', required: false, default: true },
     ],
+    // Vision LLM mode calls the first vision model with a key set
+    // (backend services/vision_llm.py VISION_PROVIDERS); it has no list price.
+    providerVia: { kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'], anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision' },
   },
   'qc-composited-look': {
     id: 'qc-composited-look', displayName: 'QC Composited Look', category: 'analyzer',
@@ -12736,6 +12750,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       ] },
       { key: 'sample_density', label: 'Sample Density', type: 'integer', required: false, default: 5, min: 2, max: 12, step: 1 },
     ],
+    // Vision LLM mode calls the first vision model with a key set
+    // (backend services/vision_llm.py VISION_PROVIDERS); it has no list price.
+    providerVia: { kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'], anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision' },
   },
   'qc-camera-geometry': {
     id: 'qc-camera-geometry', displayName: 'QC Camera Geometry', category: 'analyzer',
@@ -12754,6 +12771,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       ] },
       { key: 'expected_angle', label: 'Expected Angle', type: 'string', required: false, default: '', placeholder: 'e.g. low-angle push-in' },
     ],
+    // Vision LLM mode calls the first vision model with a key set
+    // (backend services/vision_llm.py VISION_PROVIDERS); it has no list price.
+    providerVia: { kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'], anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision' },
   },
 
   'identity-edit': {

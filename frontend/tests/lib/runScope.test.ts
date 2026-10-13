@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import {
-  describeRunScope, runChipLabel, runCostConfirmMessage, runMultipliers, shouldConfirmRunCost, summarizeRunScope,
+  cinemaSceneBase, describeRunScope, runChipLabel, runCostConfirmMessage, runMultipliers, shouldConfirmRunCost,
+  summarizeRunScope,
 } from '../../src/lib/runScope';
 import type { PricingTable } from '../../src/lib/pricing';
 import type { NodeData } from '../../src/types';
@@ -159,5 +160,83 @@ describe('run cost', () => {
     expect(message).toContain('could cost up to $0.20 at list prices');
     expect(message).toContain('• Retouch: $0.01–0.20');
     expect(message).toContain('Not included: input images.');
+  });
+});
+
+describe('cinema scene cost', () => {
+  const scene = (base: string | undefined, shots: number, params: Record<string, unknown> = {}) => priced(
+    'scene', 'cinema-scene',
+    { scene: { aspectRatio: '16:9', base: base ? { model: base, params } : undefined,
+      shots: Array.from({ length: shots }, (_, i) => ({ id: `s${i}`, prompt: 'a lighthouse' })) } },
+    'Lighthouse',
+  );
+
+  it('prices a scene as its base model once per shot, like the backend', () => {
+    const summary = summarizeRunScope([scene('nano-banana', 3, { imageSize: '2K' })], [], { kind: 'graph' }, context);
+    expect(summary.paid).toEqual(['Lighthouse']);
+    expect(summary.cost?.high).toBeCloseTo(0.3);
+    expect(summary.cost?.lines[0].runs).toEqual([3, 3]);
+    expect(runChipLabel(summary)).toBe('~$0.30');
+  });
+
+  it('leaves a scene unpriced when its base has no list price or would be refused', () => {
+    for (const base of [undefined, 'seedream-4-5', 'world-labs-anything']) {
+      const summary = summarizeRunScope([scene(base, 2)], [], { kind: 'graph' }, context);
+      expect(summary.paid).toEqual(['Lighthouse']);
+      expect(summary.cost?.unpriced).toEqual(['Lighthouse']);
+    }
+  });
+
+  it('reads the base the way the cinema handler does', () => {
+    expect(cinemaSceneBase({ scene: { shots: [{}, 'not a shot', {}] } })).toEqual(
+      { model: 'seedream-4-5', params: {}, shots: 2 });
+    expect(cinemaSceneBase({ scene: { base: { model: 'flux-dev' }, shots: [] } })?.model).toBe('seedream-4-5');
+    expect(cinemaSceneBase({ scene: { base: { model: 'Nano-Banana' }, aspectRatio: '9:16', shots: [{}] } })).toEqual(
+      { model: 'nano-banana', params: { aspect_ratio: '9:16' }, shots: 1 });
+    expect(cinemaSceneBase({ scene: 'not a scene' })).toBeNull();
+  });
+});
+
+describe('local nodes that call a provider, and wired price settings', () => {
+  it('counts a vision-llm QC node as paid with no list price, and local modes as free', () => {
+    const qc = (mode: unknown) => priced('qc', 'qc-frame-review', { mode }, 'QC');
+    const vision = summarizeRunScope([qc('vision-llm')], [], { kind: 'graph' }, context);
+    expect(vision.paid).toEqual(['QC']);
+    expect(vision.cost?.unpriced).toEqual(['QC']);
+    expect(runChipLabel(vision)).toBe('1 paid');
+    expect(describeRunScope(vision)).toContain('No list price for QC');
+    for (const mode of ['heuristic', 'opencv']) {
+      const local = summarizeRunScope([qc(mode)], [], { kind: 'graph' }, context);
+      expect(local.paid).toEqual([]);
+      expect(runChipLabel(local)).toBeNull();
+    }
+    // A value the handler would refuse isn't free either.
+    expect(summarizeRunScope([qc('')], [], { kind: 'graph' }, context).paid).toEqual(['QC']);
+  });
+
+  it('leaves a node unpriced when a setting its price reads arrives by wire', () => {
+    const table: PricingTable = { currencies: {}, nodes: { 'krea-video-kling-kling-3-0': {
+      currency: 'usd', per: 'request', rows: [{ match: { _kreaAuth: 'api-token', multi_prompt: '' }, price: 0.42 }],
+    } } };
+    const kling = priced('k', 'krea-video-kling-kling-3-0', { _kreaAuth: 'api-token' }, 'Kling');
+    const shots = priced('t', 'text-input', { value: '[]' });
+    const plain = summarizeRunScope([kling], [], { kind: 'graph' }, { pricing: table, apiKeys: {} });
+    expect(plain.cost?.high).toBeCloseTo(0.42);
+    const wired: Edge[] = [{ id: 'w', source: 't', target: 'k', targetHandle: 'multi_prompt' }];
+    const summary = summarizeRunScope([shots, kling], wired, { kind: 'graph' }, { pricing: table, apiKeys: {} });
+    expect(summary.cost?.unpriced).toEqual(['Kling']);
+    expect(summary.cost?.lines).toEqual([]);
+    // A wire into a port the price doesn't read changes nothing.
+    const other: Edge[] = [{ id: 'w', source: 't', target: 'k', targetHandle: 'prompt' }];
+    expect(summarizeRunScope([shots, kling], other, { kind: 'graph' }, { pricing: table, apiKeys: {} }).cost?.high)
+      .toBeCloseTo(0.42);
+    // A cluster run sends only the edges inside it (graphStore runCluster), so a
+    // wire from outside never arrives and the param is what gets priced, just as
+    // the backend sees it. Inside the cluster, the wire still counts.
+    const outside = summarizeRunScope([shots, kling], wired, { kind: 'cluster', nodeIds: ['k'] }, { pricing: table, apiKeys: {} });
+    expect(outside.cost?.unpriced).toEqual([]);
+    expect(outside.cost?.high).toBeCloseTo(0.42);
+    const inside = summarizeRunScope([shots, kling], wired, { kind: 'cluster', nodeIds: ['t', 'k'] }, { pricing: table, apiKeys: {} });
+    expect(inside.cost?.unpriced).toEqual(['Kling']);
   });
 });

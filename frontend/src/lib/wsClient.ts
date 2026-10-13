@@ -1,4 +1,5 @@
-import { backendWebSocketUrl } from './backend';
+import { backendWebSocketUrl, personTokenForSocket } from './backend';
+import { onPersonConnected, reportPersonRequired } from './personSession';
 import type { PortValue, VariantScope } from '../types';
 import type { ExecutionStatusResult } from './api';
 import type {
@@ -225,6 +226,31 @@ class WebSocketClient {
 
   constructor(path: string) {
     this.path = path;
+    // A person link pasted into this open tab: say hello on the open socket
+    // if it is that backend's, otherwise reconnect to the backend it pins.
+    if (typeof window !== 'undefined') onPersonConnected(() => this.personConnected());
+  }
+
+  private sayHello(socket: WebSocket, url: string): void {
+    void personTokenForSocket(url).then((personToken) => {
+      if (!personToken) {
+        reportPersonRequired();
+        return;
+      }
+      if (this.ws === socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'hello', personToken }));
+      }
+    });
+  }
+
+  private personConnected(): void {
+    const socket = this.ws;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    void personTokenForSocket(socket.url).then((personToken) => {
+      if (this.ws !== socket) return;
+      if (personToken) this.sayHello(socket, socket.url);
+      else socket.close(); // onclose reconnects, now to the pinned backend
+    });
   }
 
   connect(): void {
@@ -238,16 +264,24 @@ class WebSocketClient {
       .then((url) => {
         if (run !== this.connectRun) return;
         this.connecting = false;
-        this.ws = new WebSocket(url);
+        const socket = new WebSocket(url);
+        this.ws = socket;
 
-        this.ws.onopen = () => {
+        socket.onopen = () => {
           this.forceDiscoveryOnReconnect = false;
           console.log('[ws] connected');
+          // Say hello as the person on every (re)connect: only then does this
+          // socket get proposal accept keys. No token, no hello.
+          this.sayHello(socket, url);
         };
 
-        this.ws.onmessage = (event: MessageEvent) => {
+        socket.onmessage = (event: MessageEvent) => {
           try {
-            const parsed = JSON.parse(event.data) as ExecutionEvent;
+            const parsed = JSON.parse(event.data) as ExecutionEvent | { type: 'personRequired' };
+            if (parsed.type === 'personRequired') {
+              reportPersonRequired();
+              return;
+            }
             for (const handler of this.handlers) {
               handler(parsed);
             }
@@ -256,13 +290,13 @@ class WebSocketClient {
           }
         };
 
-        this.ws.onclose = () => {
+        socket.onclose = () => {
           this.forceDiscoveryOnReconnect = true;
           console.log('[ws] disconnected, reconnecting in 3s...');
           this.scheduleReconnect();
         };
 
-        this.ws.onerror = (err) => {
+        socket.onerror = (err) => {
           console.error('[ws] error:', err);
           this.ws?.close();
         };

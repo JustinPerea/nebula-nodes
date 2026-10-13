@@ -10,6 +10,7 @@ from models.events import ExecutionEvent
 from execution.async_poll_runner import AsyncPollConfig, poll_until_terminal, _cancel_async_poll
 from execution.stream_runner import ReplicateStreamOutputMode, stream_execute_replicate
 from services.cancellation import schedule_detached_cancel
+from execution.missing_credential import MissingCredentialError
 
 REPLICATE_API_BASE = "https://api.replicate.com/v1"
 
@@ -136,7 +137,7 @@ async def handle_replicate_universal(
 ) -> dict[str, Any]:
     api_key = api_keys.get("REPLICATE_API_TOKEN")
     if not api_key:
-        raise ValueError("REPLICATE_API_TOKEN is required")
+        raise MissingCredentialError("REPLICATE_API_TOKEN is required")
 
     model_id = node.params.get("model_id", "")
     if not model_id or "/" not in str(model_id):

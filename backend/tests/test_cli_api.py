@@ -4,6 +4,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.conftest import FORGED_ORIGIN, PERSON_TOKEN
+
+
 @pytest.fixture
 def client():
     import sys
@@ -1482,8 +1485,69 @@ class TestProviderCapabilityValidationResponse:
         }
 
 
+@pytest.mark.usefixtures("person")
 class TestChatAgentDispatch:
     """WebSocket /ws/chat accepts an 'agent' field and routes to the right runner."""
+
+    @pytest.mark.parametrize("proof", [{}, {"personToken": "x" * 43}, {"personToken": None},
+                                       {"commonsToken": "wrong"}])
+    @pytest.mark.parametrize("agent", ["claude", "codex", "daedalus"])
+    def test_only_the_person_starts_a_chat(self, client, monkeypatch, proof, agent):
+        """Without this launch's person token a send starts nothing: no runner,
+        no workspace, no minted agent token, so no fresh chat budget."""
+        import main
+        from commons import actors
+        from services.chat_session import AGENT_RUNNERS
+
+        calls, minted = [], []
+
+        async def runner(*args, **kwargs):
+            calls.append(kwargs)
+            yield {"type": "done"}
+
+        monkeypatch.setitem(AGENT_RUNNERS, agent, runner)
+        monkeypatch.setattr(actors.agent_registry, "mint", lambda *a, **k: minted.append(k) or "t")
+        acquire = []
+        monkeypatch.setattr(main.workspace_sessions, "acquire", lambda *a, **k: acquire.append(a))
+        with client.websocket_connect("/ws/chat", headers=FORGED_ORIGIN) as ws:
+            for _ in range(2):
+                ws.send_json({"type": "send", "message": "hi", "agent": agent, **proof})
+                error, done = ws.receive_json(), ws.receive_json()
+                assert error["type"] == "error" and error["code"] == "person_required"
+                assert done["type"] == "done"
+        # No minted token means no chat:<id> budget can exist for these sends.
+        assert calls == [] and minted == [] and acquire == []
+
+    def test_an_agent_marked_socket_cannot_start_a_chat_even_with_the_token(self, client, monkeypatch):
+        from services.chat_session import AGENT_RUNNERS
+
+        calls = []
+
+        async def runner(*args, **kwargs):
+            calls.append(kwargs)
+            yield {"type": "done"}
+
+        monkeypatch.setitem(AGENT_RUNNERS, "claude", runner)
+        with client.websocket_connect("/ws/chat", headers={"X-Nebula-Agent": "Codex"}) as ws:
+            ws.send_json({"type": "send", "message": "hi", "agent": "claude", "personToken": PERSON_TOKEN})
+            assert ws.receive_json()["code"] == "person_required"
+        assert calls == []
+
+    def test_the_person_starts_a_chat_with_either_token_name(self, client, monkeypatch):
+        from services.chat_session import AGENT_RUNNERS
+
+        calls = []
+
+        async def runner(*args, **kwargs):
+            calls.append(kwargs)
+            yield {"type": "done"}
+
+        monkeypatch.setitem(AGENT_RUNNERS, "daedalus", runner)
+        with client.websocket_connect("/ws/chat") as ws:
+            for name in ("personToken", "commonsToken"):
+                ws.send_json({"type": "send", "message": "hi", "agent": "daedalus", name: PERSON_TOKEN})
+                assert ws.receive_json()["type"] == "done"
+        assert len(calls) == 2
 
     def test_dispatch_registers_both_agents(self):
         """The dispatch table exposes claude, codex, and daedalus."""
@@ -1499,7 +1563,7 @@ class TestChatAgentDispatch:
         """Sending a send payload with an unknown agent surfaces an error + done."""
         with client.websocket_connect("/ws/chat") as ws:
             ws.send_json({
-                "type": "send",
+                "type": "send", "personToken": PERSON_TOKEN,
                 "message": "hi",
                 "sessionId": None,
                 "model": "claude-sonnet-4-6",
@@ -1539,7 +1603,7 @@ class TestChatAgentDispatch:
         try:
             with client.websocket_connect("/ws/chat") as ws:
                 ws.send_json({
-                    "type": "send",
+                    "type": "send", "personToken": PERSON_TOKEN,
                     "message": "inspect",
                     "agent": agent,
                     "autonomy": "auto",
@@ -1574,7 +1638,7 @@ class TestChatAgentDispatch:
         try:
             with client.websocket_connect("/ws/chat") as ws:
                 ws.send_json({
-                    "type": "send",
+                    "type": "send", "personToken": PERSON_TOKEN,
                     "message": "work",
                     "agent": "claude",
                     "autonomy": "auto",
@@ -1636,7 +1700,7 @@ class TestChatAgentDispatch:
         try:
             with client.websocket_connect("/ws/chat") as ws:
                 ws.send_json({
-                    "type": "send",
+                    "type": "send", "personToken": PERSON_TOKEN,
                     "message": "first",
                     "agent": "claude",
                     "autonomy": "auto",
@@ -1644,7 +1708,7 @@ class TestChatAgentDispatch:
                 assert ws.receive_json()["text"] == "working"
 
                 ws.send_json({
-                    "type": "send",
+                    "type": "send", "personToken": PERSON_TOKEN,
                     "message": "second",
                     "agent": "claude",
                     "autonomy": "auto",

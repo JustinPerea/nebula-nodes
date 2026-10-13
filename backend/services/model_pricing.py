@@ -29,6 +29,10 @@ node's effective value wins, so list specific rows before general ones. A
 price is a number or a ``[low, high]`` range for settings (like ``auto``) that
 only resolve at run time.
 
+A priced setting that arrives by wire (an input port with the same id as a
+param the entry reads, like Krea Kling 3.0's ``multi_prompt``) is only known
+at run time, so a node with one wired is unpriced (``wired``).
+
 ``frontend/src/lib/pricing.ts`` implements the same estimate; both are tested
 against ``tests/fixtures/pricing_cases.json`` so they cannot drift.
 """
@@ -39,7 +43,7 @@ import math
 import re
 from datetime import date
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 PRICING_PATH = Path(__file__).resolve().parent.parent / "data" / "model_pricing.json"
 CURRENCIES = ("usd", "krea_cu")
@@ -191,19 +195,50 @@ def _matches(values: Mapping[str, Any], match: Mapping[str, Any]) -> bool:
     return all(_as_match_value(values.get(key)) == _as_match_value(want) for key, want in match.items())
 
 
+def priced_keys(entry: Mapping[str, Any]) -> set[str]:
+    """Every setting an entry's price reads: row and extra matches, multiplyBy."""
+    keys = {str(key) for row in entry.get("rows") or [] if isinstance(row, Mapping)
+            for key in (row.get("match") or {})}
+    keys |= {str(key) for extra in entry.get("extras") or [] if isinstance(extra, Mapping)
+             for key in (extra.get("match") or {})}
+    return keys | {str(key) for key in entry.get("multiplyBy") or []}
+
+
+# A plain decimal, as both this file and frontend/src/lib/pricing.ts read it,
+# so "0x10", "1_000" or non-ASCII digits never price on one side only.
+_DECIMAL = re.compile(r"[ \t\n\r]*[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?[ \t\n\r]*")
+
+
+def _multiplier(value: Any) -> float | None:
+    """A positive, finite count or duration; None for anything else."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    if isinstance(value, str) and not _DECIMAL.fullmatch(value):
+        return None
+    amount = float(value)
+    return amount if math.isfinite(amount) and amount > 0 else None
+
+
 def estimate_node(
     entry: Mapping[str, Any] | None,
     definition: Mapping[str, Any],
     params: Mapping[str, Any] | None,
     route_provider: str | None = None,
+    wired: Iterable[str] = (),
 ) -> dict[str, Any] | None:
     """{currency, low, high} for one run of this node, or None if unpriced.
 
     ``route_provider`` is the provider the run will actually bill; when the
-    entry names a different one, the run is unpriced."""
+    entry names a different one, the run is unpriced. ``wired`` are the
+    node's input ports that have an edge into them: a priced setting among
+    them is only known at run time (the wire's value replaces the param), so
+    the run is unpriced. Not just the rows that name it: a more general row
+    or a skipped extra would price it wrong."""
     if not entry:
         return None
     if entry.get("provider") and route_provider and entry["provider"] != route_provider:
+        return None
+    if priced_keys(entry) & {str(port) for port in wired}:
         return None
     values = effective_params(entry, definition, params)
     for row in entry.get("rows") or []:
@@ -219,11 +254,14 @@ def estimate_node(
             bounds = (low, high)
             factor = 1.0
             for key in entry.get("multiplyBy") or []:
-                try:
-                    amount = float(values.get(key))
-                except (TypeError, ValueError):
-                    amount = 1.0
-                factor *= amount if math.isfinite(amount) and amount > 0 else 1.0
+                # Absent (no param, no default) counts once. A value that is
+                # there but unreadable leaves the run unpriced, never one unit.
+                if key not in values:
+                    continue
+                amount = _multiplier(values[key])
+                if amount is None:
+                    return None
+                factor *= amount
             result = {"currency": entry["currency"], "low": bounds[0] * factor, "high": bounds[1] * factor}
             if entry.get("plus"):
                 result["plus"] = str(entry["plus"])
@@ -340,42 +378,124 @@ def run_multipliers(
     return runs
 
 
+def wired_ports(
+    nodes: list[Mapping[str, Any]], edges: Iterable[tuple[str, str, str | None]]
+) -> dict[str, set[str]]:
+    """Each run node's input ports with an edge into them, from (source,
+    target, target handle) edges. The source needn't be in the run: its
+    value still arrives (from outputs it already has)."""
+    ids = {str(node["id"]) for node in nodes}
+    wired: dict[str, set[str]] = {}
+    for _source, target, handle in edges:
+        if str(target) in ids and handle:
+            wired.setdefault(str(target), set()).add(str(handle))
+    return wired
+
+
+CINEMA_SCENE = "cinema-scene"
+
+
+def is_local(definition: Mapping[str, Any], params: Mapping[str, Any] | None = None) -> bool:
+    """A node that runs here and bills nobody, with these params (default:
+    its defaults). ``utility`` alone isn't enough: a ``providerVia`` node
+    calls a provider (services/node_readiness.py)."""
+    from services import node_readiness
+
+    if definition.get("apiProvider") != "utility":
+        return False
+    via = node_readiness.provider_via(definition)
+    if via is None:
+        return True
+    return via.get("kind") == "param" and not node_readiness.param_calls_provider(definition, params or {})
+
+
+def cinema_scene_base(params: Mapping[str, Any]) -> tuple[str, dict[str, Any], int] | None:
+    """The paid model a cinema-scene node calls once per shot, the params it
+    sends, and how many shots it runs; None when the scene can't be read.
+
+    cinema-scene is a utility node that calls its base image model through
+    that model's own handler (handlers/cinema_scene.py), so it is priced as
+    that model, once per shot. This uses the handler's own base guard and
+    request builder, so the price follows what the handler actually calls."""
+    from handlers.cinema_scene import _build_base_node, _guard_base_model
+
+    scene = params.get("scene")
+    if not isinstance(scene, dict) or not isinstance(scene.get("base") or {}, dict):
+        return None
+    base = scene.get("base") or {}
+    try:
+        model = _guard_base_model(base)
+        node, _ = _build_base_node(model, "", [], str(scene.get("aspectRatio") or "16:9"),
+                                   dict(base.get("params") or {}), "price")
+    except (ValueError, TypeError):
+        return None
+    shots = sum(1 for shot in scene.get("shots") or [] if isinstance(shot, dict))
+    return model, dict(node.params), shots
+
+
 def estimate_run(
     items: list[Mapping[str, Any]],
     pricing: Mapping[str, Any],
     definitions: Mapping[str, Mapping[str, Any]],
     api_keys: Mapping[str, Any],
     multipliers: Mapping[str, tuple[int, int]] | None = None,
+    wired: Mapping[str, Iterable[str]] | None = None,
 ) -> dict[str, Any]:
     """USD estimate for a set of nodes, each {id, definitionId, params, name}.
 
-    ``priced`` maps node id to {low, high}; paid nodes without a list price go
-    in ``unpriced``, Krea-account runs in ``plan``. ``low``/``high`` are None
-    when nothing is priced."""
+    ``wired`` maps a node id to its input ports that have an edge into them
+    (``wired_ports``); a priced setting that arrives by wire leaves the node
+    unpriced. A utility node whose ``providerVia`` param picks provider work
+    (vision-llm QC) has no list price, so it is unpriced too.
+
+    ``priced`` maps node id to {low, high, model}, ``model`` being the
+    definition billed (a cinema scene's base model); paid nodes without a list
+    price go in ``unpriced``, Krea-account runs in ``plan``. ``planRuns`` maps
+    each of those to {model, runs}: how many runs it bills to the Krea plan
+    (batch runs times a cinema scene's shots). ``low``/``high`` are None when
+    nothing is priced."""
     nodes_pricing = pricing.get("nodes") or {}
     low = high = 0.0
     priced: dict[str, dict[str, float]] = {}
     unpriced: list[str] = []
     plan: list[str] = []
+    plan_runs: dict[str, dict[str, Any]] = {}
     plus: list[str] = []
     for item in items:
         node_id = str(item["id"])
         definition = definitions.get(str(item.get("definitionId") or "")) or {}
+        params = item.get("params") or {}
+        calls = 1
+        if definition and str(item.get("definitionId")) == CINEMA_SCENE:
+            nested = cinema_scene_base(params)
+            if nested is None or not definitions.get(nested[0]):
+                unpriced.append(node_id)
+                continue
+            billed, params, calls = nested
+            definition = definitions[billed]
+            ports: Iterable[str] = ()  # the scene's ports aren't its base model's params
+        else:
+            ports = (wired or {}).get(node_id, ())
+        if definition and definition.get("apiProvider") == "utility" and not is_local(definition, params):
+            unpriced.append(node_id)
+            continue
         if not definition or definition.get("apiProvider") == "utility":
             continue
-        params = item.get("params") or {}
         if uses_krea_account(definition, params):
             plan.append(node_id)
+            plan_runs[node_id] = {"model": str(definition.get("id") or item.get("definitionId") or ""),
+                                  "runs": (multipliers or {}).get(node_id, (1, 1))[1] * calls}
             continue
         estimate = estimate_node(
             nodes_pricing.get(definition.get("id") or item.get("definitionId")),
-            definition, params, route_provider(definition, api_keys),
+            definition, params, route_provider(definition, api_keys), ports,
         )
         if estimate is None or estimate["currency"] != "usd":
             unpriced.append(node_id)
             continue
         run_low, run_high = (multipliers or {}).get(node_id, (1, 1))
-        line = {"low": estimate["low"] * run_low, "high": estimate["high"] * run_high}
+        line = {"low": estimate["low"] * run_low * calls, "high": estimate["high"] * run_high * calls,
+                "model": str(definition.get("id") or item.get("definitionId") or "")}
         priced[node_id] = line
         low += line["low"]
         high += line["high"]
@@ -388,5 +508,6 @@ def estimate_run(
         "priced": priced,
         "unpriced": unpriced,
         "plan": plan,
+        "planRuns": plan_runs,
         "plus": plus,
     }

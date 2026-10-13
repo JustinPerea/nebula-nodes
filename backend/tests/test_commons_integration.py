@@ -6,18 +6,17 @@ from fastapi.testclient import TestClient
 
 import main
 from commons import actors, runtime
-from services import chat_session
+from services import chat_session, person_session
 from services.agent_workspaces import WorkspaceSessions
 
 
 @pytest.fixture
-def isolated_app(tmp_path, monkeypatch):
+def isolated_app(tmp_path, monkeypatch, fresh_person_session):
     monkeypatch.setenv("NEBULA_COMMONS_ROOT", str(tmp_path / "private-library"))
     monkeypatch.delenv("NEBULA_COMMONS_ENABLED", raising=False)
     monkeypatch.setattr(main, "_STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(main, "workspace_sessions", WorkspaceSessions())
     monkeypatch.setattr(actors, "agent_registry", actors.AgentRegistry())
-    monkeypatch.setattr(actors, "ui_session", actors.UISession())
     runtime.reset_for_tests()
     yield tmp_path
     runtime.reset_for_tests()
@@ -31,9 +30,6 @@ def receive_done(ws):
 
 
 def test_default_off_capability_startup_and_routes_do_not_initialize_library(isolated_app, monkeypatch):
-    from commons import ui_auth
-    initialize = Mock(side_effect=AssertionError("must not initialize human authority"))
-    monkeypatch.setattr(ui_auth, "initialize_ui_session", initialize)
     store = Mock(side_effect=AssertionError("must not open library"))
     monkeypatch.setattr(runtime, "get_store", store)
     with TestClient(main.app) as client:
@@ -41,10 +37,11 @@ def test_default_off_capability_startup_and_routes_do_not_initialize_library(iso
         assert client.get("/api/commons/status").status_code == 404
         assert client.post("/api/commons/search", json={}).status_code == 404
         assert client.get("/api/agent/context").status_code == 401
-    initialize.assert_not_called()
     store.assert_not_called()
     assert not (isolated_app / "private-library").exists()
-    assert not actors.ui_session.is_set
+    # The person session is every launch's, not Commons': startup always sets
+    # it (here with no terminal, so nobody learned the token).
+    assert person_session.current().is_set
 
 
 def test_enabled_websocket_requires_human_authority_before_runner_or_workspace(isolated_app, monkeypatch):
@@ -57,7 +54,7 @@ def test_enabled_websocket_requires_human_authority_before_runner_or_workspace(i
     with TestClient(main.app).websocket_connect("/ws/chat") as ws:
         ws.send_json({"type": "send", "message": "Use private references", "agent": "claude", "brand": "other"})
         events = receive_done(ws)
-    assert events[0]["type"] == "error" and "UI session" in events[0]["message"]
+    assert events[0]["type"] == "error" and events[0]["code"] == "person_required"
     assert not called
     assert not (isolated_app / "state").exists()
     assert not (isolated_app / "private-library").exists()
@@ -66,7 +63,7 @@ def test_enabled_websocket_requires_human_authority_before_runner_or_workspace(i
 def test_enabled_turn_binds_resume_and_revokes_child_capability(isolated_app, monkeypatch):
     monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")
     human_token = "h" * 43
-    actors.ui_session.set(human_token)
+    person_session.current().set(human_token)
     calls = []
     async def runner(message, session_id, model, autonomy, **kwargs):
         calls.append((session_id, autonomy, kwargs))
@@ -93,22 +90,57 @@ def test_enabled_turn_binds_resume_and_revokes_child_capability(isolated_app, mo
     assert not (isolated_app / "private-library").exists()
 
 
-def test_default_off_daedalus_preserves_current_dispatch_contract(isolated_app, monkeypatch):
+def test_default_off_daedalus_runs_in_a_private_workspace_with_a_chat_token(isolated_app, monkeypatch):
+    # Daedalus reaches Nebula only through its MCP tools now, so it gets the
+    # same private workspace and minted chat token as Claude and Codex.
+    human_token = "h" * 43
+    person_session.current().set(human_token)
     seen = []
     async def runner(message, session_id, model, autonomy, **kwargs):
+        record = actors.agent_registry.lookup(kwargs["agent_token"])
+        assert record["workspace"] == kwargs["workdir"] and record["runner"] == "daedalus"
+        assert record["session"] is not None
+        assert kwargs["agent_token"] != human_token
         seen.append((session_id, autonomy, kwargs))
         yield {"type": "session", "sessionId": "existing-daedalus-id"}
         yield {"type": "done"}
     monkeypatch.setitem(chat_session.AGENT_RUNNERS, "daedalus", runner)
     with TestClient(main.app).websocket_connect("/ws/chat") as ws:
-        ws.send_json({"type": "send", "message": "Hello", "agent": "daedalus", "sessionId": "old-id", "autonomy": "step", "provider": "nous"})
+        payload = {"type": "send", "message": "Hello", "agent": "daedalus", "autonomy": "step",
+                   "provider": "nous", "personToken": human_token}
+        ws.send_json(payload)
         events = receive_done(ws)
-    assert len(seen) == 1 and seen[0][:2] == ("old-id", "step")
-    assert seen[0][2]["provider"] == "nous"
-    assert "CURRENT CANVAS SELECTION" in seen[0][2]["selection_context"]
-    assert set(seen[0][2]) == {"provider", "selection_context"}
-    assert next(e for e in events if e["type"] == "session")["sessionId"] == "existing-daedalus-id"
-    assert not (isolated_app / "state").exists()
+        opaque = next(e for e in events if e["type"] == "session")["sessionId"]
+        assert opaque != "existing-daedalus-id"
+        ws.send_json({**payload, "sessionId": opaque})
+        events2 = receive_done(ws)
+        assert not [e for e in events2 if e["type"] == "error"]
+    assert [call[:2] for call in seen] == [(None, "step"), ("existing-daedalus-id", "step")]
+    options = seen[0][2]
+    assert options["provider"] == "nous"
+    assert "CURRENT CANVAS SELECTION" in options["selection_context"]
+    assert options["workdir"] == seen[1][2]["workdir"]
+    for _, _, kwargs in seen:
+        assert actors.agent_registry.lookup(kwargs["agent_token"]) is None
+    assert not (isolated_app / "private-library").exists()
+
+
+def test_daedalus_cannot_resume_a_raw_provider_session(isolated_app, monkeypatch):
+    # Chats from before workspace isolation named Hermes' own session id.
+    # Accepting one would resume outside any workspace, so it is refused.
+    human_token = "h" * 43
+    person_session.current().set(human_token)
+    called = []
+    async def runner(*args, **kwargs):
+        called.append(kwargs)
+        yield {"type": "done"}
+    monkeypatch.setitem(chat_session.AGENT_RUNNERS, "daedalus", runner)
+    with TestClient(main.app).websocket_connect("/ws/chat") as ws:
+        ws.send_json({"type": "send", "message": "Hello", "agent": "daedalus", "sessionId": "old-id",
+                      "personToken": human_token})
+        events = receive_done(ws)
+    assert not called
+    assert any(e["type"] == "error" and "/clear" in e["message"] for e in events)
 
 
 def test_expired_agent_context_fails_without_file_access(isolated_app):
@@ -119,7 +151,7 @@ def test_expired_agent_context_fails_without_file_access(isolated_app):
 def test_enabled_daedalus_rejects_before_even_a_registered_runner(isolated_app, monkeypatch):
     monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")
     human_token = "h" * 43
-    actors.ui_session.set(human_token)
+    person_session.current().set(human_token)
     called = []
     async def runner(*args, **kwargs):
         called.append(kwargs)

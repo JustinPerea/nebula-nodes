@@ -9,13 +9,13 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from commons import actors, runtime
+from services import person_session
 
 
 @pytest.fixture()
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, fresh_person_session):
     monkeypatch.setenv("NEBULA_COMMONS_ROOT", str(tmp_path / "commons"))
     runtime.reset_for_tests()
-    monkeypatch.setattr(actors, "ui_session", actors.UISession())
     from main import app
 
     yield TestClient(app)
@@ -30,7 +30,7 @@ def png(seed=1) -> bytes:
 
 def human(client) -> dict:
     token = secrets.token_urlsafe(32)
-    actors.ui_session.set(token)
+    person_session.current().set(token)
     return {"Authorization": f"Bearer {token}"}
 
 

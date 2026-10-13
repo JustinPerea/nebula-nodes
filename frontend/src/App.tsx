@@ -17,6 +17,7 @@ import { CommandPalette } from './components/CommandPalette';
 import { OnboardingOverlay } from './components/onboarding/OnboardingOverlay';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { BackendConnectionStatus } from './components/BackendConnectionStatus';
+import { PersonRequiredBanner } from './components/PersonRequiredBanner';
 import { ProviderRecoveryStatus } from './components/ProviderRecoveryStatus';
 import { startWorkingBadge } from './lib/jobNotifications';
 import { getSettings } from './lib/api';
@@ -262,6 +263,7 @@ export default function App() {
   return (
     <ReactFlowProvider>
       <BackendConnectionStatus />
+      <PersonRequiredBanner />
       <ProviderRecoveryStatus />
       <ProjectCoordinator />
       {!isHome && <GraphFileActions />}

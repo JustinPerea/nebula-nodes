@@ -146,7 +146,26 @@ export interface ModelNodeDefinition {
    *  A list means any of them, tried in order (Veo: Vertex, then Gemini API). */
   directKeyName?: string | string[];
   docUrl?: string;
+  /** A local (utility) node that still calls a provider. `utility` only means
+   *  "no top-level key"; this says what the node really needs. Readiness, the
+   *  missing-key badge, the run estimate and the agent surfaces all read it
+   *  (lib/nodeKeys.ts, backend services/node_readiness.py). */
+  providerVia?: ProviderVia;
 }
+
+/** How a utility node reaches a provider.
+ *  - `model`: it runs another node's handler, picked by the value at `path`
+ *    (cinema-scene's scene.base.model). Keys come from that model's own
+ *    definition. `models` is the allowlist, `default` what an empty value
+ *    runs, `fallbackFor` the values that also run the default. The backend
+ *    handler's own constants stay the security boundary; a parity test pins
+ *    this list to them.
+ *  - `param`: one param picks local or provider work. Only the values in
+ *    `freeWhen` run locally; any other value (including an empty or unknown
+ *    one) needs one of `anyKey` and has no list price. */
+export type ProviderVia =
+  | { kind: 'model'; path: string[]; models: string[]; default: string; fallbackFor: string[] }
+  | { kind: 'param'; param: string; freeWhen: string[]; anyKey: string[]; provider: string };
 
 /** A single shot within a cinema-scene storyboard. Each shot carries its own
  *  prompt and (optionally) overrides the shared palette/look, and produces one

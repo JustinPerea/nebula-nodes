@@ -69,7 +69,7 @@ Key selectors: agent tabs `.chat-panel__agent-btn`, input `.chat-panel textarea`
   npm --prefix frontend run dev -- --port 5188 --strictPort   # background; then NEBULA_URL=http://localhost:5188
   ```
   The dev server is long-running — run it in the background, and note it gets recycled on session resume (restart it).
-- **Backend on `:8000`** must be up for real chat status (`uvicorn main:app --port 8000`). Graph/chat *visuals* only need the frontend + the stores, but the live `Codex · ChatGPT` status needs the backend.
+- **Backend on `:8000`** must be up for real chat status (`backend/.venv/bin/python backend/devserver.py --port 8000`; open the link it prints so chats and Settings work). Graph/chat *visuals* only need the frontend + the stores, but the live `Codex · ChatGPT` status needs the backend.
 - **Render fidelity:** Puppeteer headless renders the app's own fonts (loaded by the app), so captures match across Playwright/Puppeteer. Capture at the video resolution (1920×1080).
 - **"Compose freely" is allowed.** Components don't have to behave like the live app — you can place a chat icon where you want, fake the agent state, etc. The bar is that it *looks* like the real product and reads clearly.
 

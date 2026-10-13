@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree.",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them.",
   "definitions": {
     "img": {
       "id": "img",
@@ -130,6 +130,40 @@
               "value": "fast"
             }
           ]
+        }
+      ]
+    },
+    "shots": {
+      "id": "shots",
+      "apiProvider": "fal",
+      "params": [
+        {
+          "key": "model",
+          "default": "standard",
+          "options": [
+            {
+              "value": "standard"
+            },
+            {
+              "value": "pro"
+            }
+          ]
+        },
+        {
+          "key": "duration",
+          "default": "5"
+        },
+        {
+          "key": "multi_prompt",
+          "default": ""
+        }
+      ],
+      "inputPorts": [
+        {
+          "id": "prompt"
+        },
+        {
+          "id": "multi_prompt"
         }
       ]
     }
@@ -311,6 +345,36 @@
           }
         ],
         "checked": "2026-10-10"
+      },
+      "shots": {
+        "currency": "usd",
+        "per": "second",
+        "multiplyBy": [
+          "duration"
+        ],
+        "rows": [
+          {
+            "match": {
+              "model": "standard",
+              "multi_prompt": ""
+            },
+            "price": 0.1
+          },
+          {
+            "match": {
+              "model": "pro",
+              "multi_prompt": ""
+            },
+            "price": 0.2
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/shots",
+            "quote": "$0.10 per second"
+          }
+        ],
+        "checked": "2026-10-12"
       }
     }
   },
@@ -379,6 +443,73 @@
         "currency": "usd",
         "low": 0.8,
         "high": 0.8
+      }
+    },
+    {
+      "name": "an unreadable multiplier is unpriced",
+      "nodeId": "vid",
+      "params": {
+        "model": "fast",
+        "duration": "abc"
+      },
+      "expected": null
+    },
+    {
+      "name": "a zero multiplier is unpriced",
+      "nodeId": "img",
+      "params": {
+        "quality": "high",
+        "n": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "a negative multiplier is unpriced",
+      "nodeId": "vid",
+      "params": {
+        "model": "fast",
+        "duration": -4
+      },
+      "expected": null
+    },
+    {
+      "name": "a true/false multiplier is unpriced",
+      "nodeId": "img",
+      "params": {
+        "quality": "high",
+        "n": true
+      },
+      "expected": null
+    },
+    {
+      "name": "a hex multiplier is unpriced",
+      "nodeId": "img",
+      "params": {
+        "quality": "high",
+        "n": "0x10"
+      },
+      "expected": null
+    },
+    {
+      "name": "an underscored multiplier is unpriced",
+      "nodeId": "img",
+      "params": {
+        "quality": "high",
+        "n": "1_000"
+      },
+      "expected": null
+    },
+    {
+      "name": "a padded decimal multiplier multiplies",
+      "nodeId": "img",
+      "params": {
+        "quality": "high",
+        "n": " 3 "
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.501,
+        "high": 0.501
       }
     },
     {
@@ -488,6 +619,62 @@
         "currency": "usd",
         "low": 0.96,
         "high": 0.96
+      }
+    },
+    {
+      "name": "a priced setting left empty matches",
+      "nodeId": "shots",
+      "params": {
+        "multi_prompt": ""
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.5,
+        "high": 0.5
+      }
+    },
+    {
+      "name": "a priced setting the rows don't cover is unpriced",
+      "nodeId": "shots",
+      "params": {
+        "model": "pro",
+        "multi_prompt": "[{\"prompt\":\"a\",\"duration\":10}]"
+      },
+      "expected": null
+    },
+    {
+      "name": "a priced setting that arrives by wire is unpriced",
+      "nodeId": "shots",
+      "params": {},
+      "wired": [
+        "multi_prompt"
+      ],
+      "expected": null
+    },
+    {
+      "name": "a wired multiplier is unpriced",
+      "nodeId": "img",
+      "params": {
+        "quality": "low"
+      },
+      "wired": [
+        "n"
+      ],
+      "expected": null
+    },
+    {
+      "name": "a wired port the price doesn't read changes nothing",
+      "nodeId": "shots",
+      "params": {
+        "model": "pro"
+      },
+      "wired": [
+        "prompt"
+      ],
+      "expected": {
+        "currency": "usd",
+        "low": 1.0,
+        "high": 1.0
       }
     }
   ]

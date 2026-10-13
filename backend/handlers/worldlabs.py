@@ -29,6 +29,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import get_run_dir, resolve_output_ref
 from services.provider_start_guard import AMBIGUITY_MESSAGE
+from execution.missing_credential import MissingCredentialError
 
 logger = logging.getLogger(__name__)
 
@@ -1426,7 +1427,7 @@ async def handle_worldlabs_environment(
 ) -> dict[str, Any]:
     api_key = api_keys.get("WORLDLABS_API_KEY")
     if not api_key:
-        raise ValueError("WORLDLABS_API_KEY is required")
+        raise MissingCredentialError("WORLDLABS_API_KEY is required")
     headers = _api_headers(api_key)
     resume_operation_id = _optional_recovery_id(
         node, "resume_operation_id", "World Labs resume operation ID"
@@ -1589,7 +1590,7 @@ async def handle_worldlabs_export(
 ) -> dict[str, Any]:
     api_key = api_keys.get("WORLDLABS_API_KEY")
     if not api_key:
-        raise ValueError("WORLDLABS_API_KEY is required")
+        raise MissingCredentialError("WORLDLABS_API_KEY is required")
     _world_value, world_id = _validated_world_input(inputs)
     resume_operation_id = _optional_recovery_id(
         node, "resume_operation_id", "World Labs resume export operation ID"

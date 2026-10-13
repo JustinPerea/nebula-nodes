@@ -269,6 +269,17 @@ describe('provider readiness without generation', () => {
     expect(params.scene.shots[0].imageUrl).toBe('/kept.png');
   });
 
+  it('reads a QC node as local in heuristic mode and as a vision-model key in vision-llm mode', () => {
+    const qc = NODE_DEFINITIONS['qc-frame-review'];
+    expect(modelReadiness(qc, { mode: 'heuristic' }, credentials(), health())).toMatchObject({ label: 'No API key required' });
+    const keyless = modelReadiness(qc, { mode: 'vision-llm' }, credentials(), health());
+    expect(keyless).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'ANTHROPIC_API_KEY' } });
+    expect(keyless.detail).toContain('no list price');
+    // The handler uses the first key that is set, so readiness checks that one.
+    const openai = modelReadiness(qc, { mode: 'vision-llm' }, credentials({ apiKeys: { OPENAI_API_KEY: TOKEN } }), health());
+    expect(openai.setupTarget).toEqual({ kind: 'api-key', key: 'OPENAI_API_KEY' });
+  });
+
   it('explains Paper and local-input prerequisites without an API setup target or a ready promise', () => {
     const paper = modelReadiness(NODE_DEFINITIONS['paper-source'], {}, credentials(), health());
     expect(paper).toMatchObject({ label: 'Paper link required', tone: 'neutral' });

@@ -52,6 +52,46 @@ a {
   pointer-events: none;
 }
 
+.person-required {
+  position: fixed;
+  z-index: 10000;
+  bottom: 16px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: min(92vw, 620px);
+  transform: translateX(-50%);
+  padding: 8px 8px 8px 14px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgb(0 0 0 / 45%);
+  background: rgb(32 16 13 / 96%);
+  color: #ffb49f;
+  font-size: 12px;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+}
+
+.person-required__dismiss {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.person-required__dismiss:hover {
+  background: rgb(255 255 255 / 8%);
+}
+
 .provider-recovery-status {
   position: fixed;
   z-index: 10001;

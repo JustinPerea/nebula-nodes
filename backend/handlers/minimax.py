@@ -10,6 +10,7 @@ import httpx
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
 from services.output import get_run_dir, image_to_data_uri, save_video_from_url
+from execution.missing_credential import MissingCredentialError
 
 MINIMAX_API_BASE = "https://api.minimaxi.com"
 
@@ -44,7 +45,7 @@ async def handle_minimax_video(
 
     api_key = api_keys.get("MINIMAX_API_KEY")
     if not api_key:
-        raise ValueError("MINIMAX_API_KEY is required")
+        raise MissingCredentialError("MINIMAX_API_KEY is required")
 
     # Determine variant from connected inputs.
     # Port ids in the registry: T2V="prompt", I2V="first_frame_image", S2V="subject_reference".

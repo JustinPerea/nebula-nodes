@@ -18,7 +18,8 @@ CASES = json.loads((Path(__file__).parent / "fixtures" / "pricing_cases.json").r
 def test_estimate_matches_shared_cases(case):
     entry = CASES["pricing"]["nodes"].get(case["nodeId"])
     definition = CASES["definitions"].get(case["nodeId"], {})
-    result = model_pricing.estimate_node(entry, definition, case["params"], case.get("routeProvider"))
+    result = model_pricing.estimate_node(entry, definition, case["params"], case.get("routeProvider"),
+                                         case.get("wired", []))
     expected = case["expected"]
     if expected is None:
         assert result is None
@@ -118,7 +119,91 @@ def test_estimate_run_sums_priced_nodes_and_names_the_rest():
     ]
     result = model_pricing.estimate_run(items, pricing, definitions, {}, {"a": (2, 2)})
     assert result["low"] == pytest.approx(0.11) and result["high"] == pytest.approx(0.3)
-    assert result["priced"]["a"] == {"low": pytest.approx(0.1), "high": pytest.approx(0.1)}
+    assert result["priced"]["a"] == {"low": pytest.approx(0.1), "high": pytest.approx(0.1), "model": "nano-banana"}
     assert result["unpriced"] == ["c"] and result["plan"] == ["k"] and result["plus"] == ["input images"]
     nothing = model_pricing.estimate_run([items[2]], pricing, definitions, {})
     assert nothing["low"] is None and nothing["high"] is None and nothing["unpriced"] == ["c"]
+
+
+# -- settings the rows can't see -----------------------------------------------
+
+KLING_SHOTS = '[{"prompt": "a", "duration": "10"}]'
+
+
+def test_kling_v3_multi_shot_runs_are_unpriced():
+    """Kling bills shots that must sum to the duration, but neither fal nor
+    Kling says what a mismatched sum costs, so only single-prompt runs are priced."""
+    kling = NodeRegistry().get_all()["kling-v3"]
+    entry = model_pricing.load_pricing()["nodes"]["kling-v3"]
+    base = {"model": "standard", "generate_audio": True, "duration": "5"}
+    assert model_pricing.estimate_node(entry, kling, {**base, "multi_prompt": KLING_SHOTS}) is None
+    assert model_pricing.estimate_node(entry, kling, {**base, "multi_prompt": "   "}) is None
+    single = model_pricing.estimate_node(entry, kling, {**base, "multi_prompt": ""})
+    assert single["low"] == pytest.approx(0.63) and single["high"] == pytest.approx(0.63)
+    assert model_pricing.estimate_node(entry, kling, base)["high"] == pytest.approx(0.63)
+    assert model_pricing.estimate_node(entry, kling, {**base, "model": "pro"})["high"] == pytest.approx(0.84)
+
+
+def test_krea_kling_multi_shot_runs_are_unpriced_by_param_or_by_wire():
+    definitions = NodeRegistry().get_all()
+    pricing = model_pricing.load_pricing()
+    node_id = "krea-video-kling-kling-3-0"
+    entry = pricing["nodes"][node_id]
+    params = {"mode": "std", "generate_audio": False, "duration": 5}
+    assert model_pricing.estimate_node(entry, definitions[node_id], params)["high"] == pytest.approx(0.42)
+    shots = {**params, "multi_prompt": '[{"prompt": "a", "duration": 10}]'}
+    assert model_pricing.estimate_node(entry, definitions[node_id], shots) is None
+    # The handler copies a wired value over the param, so an empty param proves nothing.
+    item = {"id": "k", "definitionId": node_id, "params": params}
+    wired = model_pricing.wired_ports([item], [("text", "k", "multi_prompt"), ("img", "k", "start_image")])
+    assert wired == {"k": {"multi_prompt", "start_image"}}
+    result = model_pricing.estimate_run([item], pricing, definitions, {}, None, wired)
+    assert result["unpriced"] == ["k"] and result["priced"] == {}
+    plain = model_pricing.estimate_run([item], pricing, definitions, {}, None, {"k": {"start_image"}})
+    assert plain["priced"]["k"]["high"] == pytest.approx(0.42)
+    # Every generated Kling 3.0 row carries the guard, so a catalog refresh keeps it.
+    assert all(row["match"].get("multi_prompt") == "" for row in entry["rows"])
+
+
+@pytest.mark.parametrize("node_id", [
+    "krea-video-alibaba-wan-2-5", "krea-video-alibaba-wan-3-0", "krea-video-lightricks-ltx-video-2-5-fast",
+    "krea-video-lightricks-ltx-video-2-5-pro", "krea-video-vidu-q3",
+])
+def test_krea_charges_nothing_extra_for_audio_on_these_models(node_id):
+    """Krea's price list for these keys on resolution and duration only; it does
+    list audio where it charges for it (Veo 3, Kling 3.0)."""
+    definition = NodeRegistry().get_all()[node_id]
+    entry = model_pricing.load_pricing()["nodes"][node_id]
+    assert "generate_audio" not in model_pricing.priced_keys(entry)
+    assert "doesn't vary with generate_audio" in entry["notes"]
+    for row in entry["rows"]:
+        settings = {key: value for key, value in row["match"].items()}
+        with_audio = model_pricing.estimate_node(entry, definition, {**settings, "generate_audio": True})
+        without = model_pricing.estimate_node(entry, definition, {**settings, "generate_audio": False})
+        assert with_audio == without and with_audio is not None
+
+
+# -- local nodes that call a provider ------------------------------------------
+
+@pytest.mark.parametrize(("params", "priced_as"), [
+    ({}, None), ({"mode": "heuristic"}, None), ({"mode": "opencv"}, None),
+    ({"mode": "vision-llm"}, "unpriced"), ({"mode": ""}, "unpriced"), ({"mode": None}, "unpriced"),
+    ({"mode": "bogus"}, "unpriced"),
+])
+def test_vision_llm_qc_runs_are_unpriced_and_local_modes_free(params, priced_as):
+    definitions = NodeRegistry().get_all()
+    for node_id in ("qc-loop-safety", "qc-frame-review", "qc-composited-look", "qc-camera-geometry"):
+        item = {"id": "q", "definitionId": node_id, "params": params}
+        result = model_pricing.estimate_run([item], model_pricing.load_pricing(), definitions,
+                                            {"ANTHROPIC_API_KEY": "set"})
+        assert result["priced"] == {} and result["plan"] == []
+        assert result["unpriced"] == (["q"] if priced_as else [])
+
+
+def test_is_local_means_no_provider_call():
+    definitions = NodeRegistry().get_all()
+    assert model_pricing.is_local(definitions["text-input"])
+    assert not model_pricing.is_local(definitions["cinema-scene"])
+    assert model_pricing.is_local(definitions["qc-loop-safety"])
+    assert not model_pricing.is_local(definitions["qc-loop-safety"], {"mode": "vision-llm"})
+    assert not model_pricing.is_local(definitions["nano-banana"])

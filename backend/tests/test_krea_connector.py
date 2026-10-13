@@ -21,6 +21,7 @@ from fastapi import FastAPI
 
 import routes.krea_connector as routes
 import services.krea_connector as service
+from services.person_gate import PersonGateError, person_gate_error
 
 
 ACCESS = "synthetic-access-secret"
@@ -455,7 +456,7 @@ async def test_remote_browser_origins_cannot_read_or_mutate_connection(connector
 
 
 @pytest.mark.asyncio
-async def test_http_routes_use_real_connector_protocol_and_never_generate(connector):
+async def test_http_routes_use_real_connector_protocol_and_never_generate(connector, person):
     app = FastAPI()
     app.include_router(routes.router)
     seed(connector)
@@ -464,14 +465,39 @@ async def test_http_routes_use_real_connector_protocol_and_never_generate(connec
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://nebula.test",
                                      headers={"Origin": "http://127.0.0.1:5173"}) as client:
             assert (await client.get("/api/krea/connection")).json()["status"] == "connected"
-            assert (await client.post("/api/krea/connection/check")).json()["status"] == "connected"
+            assert (await client.post("/api/krea/connection/check", headers=person.headers)).json()["status"] == "connected"
             response = await client.get("/api/krea/tools")
             assert [tool["name"] for tool in response.json()["tools"]] == ["list_models", "get_model_schema"]
             response = await client.post("/api/krea/tools/call", json={"name": "get_model_schema", "arguments": {"model": "image/krea/krea-2/medium"}})
             assert response.status_code == 200 and response.json()["structuredContent"] == {"models": []}
             assert (await client.post("/api/krea/tools/call", json={"name": "generate", "arguments": {}})).status_code == 400
-            assert (await client.delete("/api/krea/connection")).json() == {"status": "disconnected"}
+            assert (await client.delete("/api/krea/connection", headers=person.headers)).json() == {"status": "disconnected"}
         assert methods.count("tools/call") == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("headers", [{}, {"Origin": "http://127.0.0.1:5173"}, {"X-Nebula-Agent": "Codex"},
+                                     {"X-Nebula-Agent": "Codex", "X-Nebula-Person": "PERSON"}])
+async def test_only_the_person_connects_checks_or_drops_the_krea_account(connector, person, headers):
+    headers = {k: (person.token if v == "PERSON" else v) for k, v in headers.items()}
+    app = FastAPI()
+    app.add_exception_handler(PersonGateError, person_gate_error)  # as main does
+    app.include_router(routes.router)
+    seed(connector)
+    with respx.mock(assert_all_called=False) as router:
+        protocol(router)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://nebula.test") as client:
+            for method, path in [("POST", "/api/krea/connection/connect"), ("POST", "/api/krea/connection/check"),
+                                 ("DELETE", "/api/krea/connection"), ("POST", "/api/krea/trial")]:
+                refused = await client.request(method, path, headers=headers)
+                assert refused.status_code == 403, (method, path)
+                # The same shape as every person-only route, so the canvas's banner shows.
+                agent = "X-Nebula-Agent" in headers
+                assert refused.json()["code"] == ("agent_refused" if agent else "person_required"), (method, path)
+            # Status and read-only discovery stay open to local agents.
+            assert (await client.get("/api/krea/connection", headers=headers)).status_code == 200
+            assert (await client.get("/api/krea/tools", headers=headers)).status_code == 200
+        assert connector.status()["status"] == "connected"
 
 
 @pytest.mark.asyncio
@@ -500,28 +526,30 @@ async def test_session_preserves_exceptions_from_handler_body(connector, failure
 @pytest.mark.asyncio
 @pytest.mark.parametrize("desktop,peer,expected", [(True, "127.0.0.1", 200), (False, "127.0.0.1", 403),
     (True, "10.0.0.8", 403), (True, "::1", 200)])
-async def test_desktop_null_origin_requires_desktop_and_loopback_peer(connector, monkeypatch, desktop, peer, expected):
+async def test_desktop_null_origin_requires_desktop_and_loopback_peer(connector, monkeypatch, person, desktop, peer, expected):
     monkeypatch.setenv("NEBULA_DESKTOP_MODE", "1" if desktop else "0")
-    monkeypatch.setenv("NEBULA_CONNECTOR_SESSION", "synthetic-desktop-session")
     app = FastAPI()
     app.include_router(routes.router)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=(peer, 123)), base_url="http://nebula.test") as client:
-        response = await client.get("/api/krea/connection", headers={"Origin": "null",
-            "X-Nebula-Connector-Session": "synthetic-desktop-session"})
+        response = await client.get("/api/krea/connection", headers={"Origin": "null", "X-Nebula-Person": person.token})
     assert response.status_code == expected
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("nonce", ["missing", "wrong", "no-environment"])
-async def test_null_origin_requires_private_nonce_for_every_connector_route(connector, monkeypatch, nonce):
+@pytest.mark.parametrize("proof", ["missing", "wrong", "old-desktop-nonce", "no-session"])
+async def test_null_origin_requires_the_person_token_for_every_connector_route(connector, monkeypatch, person, proof):
     monkeypatch.setenv("NEBULA_DESKTOP_MODE", "1")
-    if nonce == "no-environment":
-        monkeypatch.delenv("NEBULA_CONNECTOR_SESSION", raising=False)
-    else:
-        monkeypatch.setenv("NEBULA_CONNECTOR_SESSION", "synthetic-desktop-session")
+    # The old per-launch nonce no longer proves anything.
+    monkeypatch.setenv("NEBULA_CONNECTOR_SESSION", "synthetic-desktop-session")
     headers = {"Origin": "null"}
-    if nonce != "missing":
-        headers["X-Nebula-Connector-Session"] = "synthetic-wrong-session"
+    if proof == "wrong":
+        headers["X-Nebula-Person"] = "synthetic-wrong-session"
+    elif proof == "old-desktop-nonce":
+        headers["X-Nebula-Connector-Session"] = "synthetic-desktop-session"
+    elif proof == "no-session":
+        from services import person_session
+        monkeypatch.setattr(person_session, "_session", person_session.PersonSession())
+        headers["X-Nebula-Person"] = person.token
     app = FastAPI()
     app.include_router(routes.router)
     with respx.mock(assert_all_called=False) as router:
@@ -531,7 +559,7 @@ async def test_null_origin_requires_private_nonce_for_every_connector_route(conn
                                  ("GET", "/api/krea/tools"), ("POST", "/api/krea/tools/call")]:
                 response = await client.request(method, path, headers=headers, json={"name": "list_models", "arguments": {}})
                 assert response.status_code == 403
-                assert "synthetic-" not in response.text
+                assert "synthetic-" not in response.text and person.token not in response.text
         assert not router.calls
 
 
@@ -594,3 +622,18 @@ def test_browser_vault_refuses_symlinked_or_shared_key(tmp_path, monkeypatch):
     target.chmod(0o600)
     key.symlink_to(target)
     assert service.KreaConnector(directory).status()["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_a_session_with_no_connection_stops_before_krea_as_a_missing_credential(connector):
+    """The not-connected check runs before any request, so an agent's plan run
+    that stops there gets its count back (the engine marks MissingCredentialError)."""
+    from execution.missing_credential import MissingCredentialError
+
+    with respx.mock(assert_all_called=False) as router:
+        krea = router.route(host="api.krea.ai")
+        with pytest.raises(MissingCredentialError, match="Connect your Krea account first") as raised:
+            async with connector.session():
+                pass
+    assert isinstance(raised.value, service.ConnectorError)
+    assert not krea.called

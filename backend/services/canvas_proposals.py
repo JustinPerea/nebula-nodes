@@ -182,7 +182,7 @@ def _handle(raw: Any, label: str) -> str:
     return raw
 
 
-def _params(raw: Any, label: str) -> dict[str, Any]:
+def _params(raw: Any, label: str, internal_ok: frozenset[str] = frozenset()) -> dict[str, Any]:
     if raw is None:
         return {}
     if not isinstance(raw, dict):
@@ -191,13 +191,17 @@ def _params(raw: Any, label: str) -> dict[str, Any]:
         if not isinstance(key, str) or not key:
             raise ProposalError(422, f"{label} keys must be text")
         # Underscore keys are the editor's own bookkeeping (_previewUrl, ...).
-        if key.startswith("_"):
+        if key.startswith("_") and key not in internal_ok:
             raise ProposalError(422, f"{label}.{key[:40]} is internal and can't be proposed")
     return dict(raw)
 
 
-def parse_spec(body: Any) -> ProposalSpec:
-    """Shape-check and sanitise a proposal body. Graph validation happens in main."""
+def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset()) -> ProposalSpec:
+    """Shape-check and sanitise a proposal body. Graph validation happens in main.
+
+    `internal_ok` names underscore params a caller may set anyway: proposals
+    and direct edits name `_kreaAuth`, the Krea billing choice. Only a
+    proposal may change it; direct edits from agents that would are refused."""
     if not isinstance(body, dict):
         raise ProposalError(422, "the proposal must be a JSON object")
     unknown = sorted(set(body) - _ALLOWED_KEYS)
@@ -223,7 +227,7 @@ def parse_spec(body: Any) -> ProposalSpec:
         nodes.append(ProposedNode(
             ref=ref,
             definition_id=definition_id,
-            params=_params(raw.get("params"), f"nodes[{index}].params"),
+            params=_params(raw.get("params"), f"nodes[{index}].params", internal_ok),
             position=_point(position, f"nodes[{index}].position") if position is not None else None,
         ))
 
@@ -249,7 +253,7 @@ def parse_spec(body: Any) -> ProposalSpec:
         if node_id in seen_nodes:
             raise ProposalError(400, f"params lists {node_id} twice; merge the changes")
         seen_nodes.add(node_id)
-        params = _params(raw.get("params"), f"params[{index}].params")
+        params = _params(raw.get("params"), f"params[{index}].params", internal_ok)
         if not params:
             raise ProposalError(422, f"params[{index}].params must set at least one key")
         changes.append(ParamChange(node_id=node_id, params=params))
@@ -283,9 +287,29 @@ def clean_positions(raw: Any, refs: Iterable[str]) -> dict[str, dict[str, float]
 
 # -- cost (never a number) ----------------------------------------------------
 
-def cost_for(definition: Mapping[str, Any] | None) -> dict[str, Any]:
-    """`free` for local utility nodes, else `paid` with the provider. No prices exist."""
+def cost_for(
+    definition: Mapping[str, Any] | None,
+    params: Mapping[str, Any] | None = None,
+    definitions: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """`free` for local utility nodes, else `paid` with the provider. No prices exist.
+
+    A cinema scene is a utility node that calls its base image model once per
+    shot, so it is paid, by that model's provider. A utility node whose
+    ``providerVia`` param picks provider work (a QC node in vision-llm mode)
+    is paid too, by whichever vision model has a key set."""
+    from services import model_pricing, node_readiness
+
+    if (definition or {}).get("id") == model_pricing.CINEMA_SCENE:
+        nested = model_pricing.cinema_scene_base(params or {})
+        base = (definitions or {}).get(nested[0]) if nested else None
+        provider = str((base or {}).get("apiProvider") or "") or None
+        return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}, per shot"}
     provider = str((definition or {}).get("apiProvider") or "") or None
+    if provider == "utility" and not model_pricing.is_local(definition or {}, params or {}):
+        via = node_readiness.provider_via(definition or {}) or {}
+        what = str(via.get("provider") or "provider")
+        return {"kind": "paid", "provider": what, "label": f"paid · {what} model, no list price"}
     if provider == "utility":
         return {"kind": "free", "provider": None, "label": "free · runs locally"}
     return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}"}
@@ -405,6 +429,9 @@ class Proposal:
     cost: dict[str, Any]
     # What the existing nodes looked like at submit time, for the view.
     existing: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # What the listed runs would start, per node (new nodes by ref), at submit
+    # time. Accept refuses when the live graph would run anything else.
+    run_fingerprint: dict[str, str] = field(default_factory=dict)
     status: str = OPEN
     reason: str | None = None
     # Only ever sent to browser sockets; never in view(), REST, journal or logs.
@@ -471,6 +498,7 @@ class ProposalBook:
         positions: dict[str, dict[str, float]],
         cost: dict[str, Any],
         existing: dict[str, dict[str, Any]] | None = None,
+        run_fingerprint: dict[str, str] | None = None,
     ) -> Proposal:
         """Build and open a proposal (enforcing the open caps)."""
         now = self._clock()
@@ -484,6 +512,7 @@ class ProposalBook:
             expires_at=now + PROPOSAL_TTL_SECONDS,
             cost=cost,
             existing=copy.deepcopy(existing or {}),
+            run_fingerprint=dict(run_fingerprint or {}),
         )
         self.open(proposal)
         return proposal
@@ -581,7 +610,7 @@ class ProposalBook:
                 "category": str(definition.get("category") or ""),
                 "params": safe_value(node.params, key="params"),
                 "position": dict(proposal.positions.get(node.ref) or node.position or {"x": 0.0, "y": 0.0}),
-                "cost": cost_for(definition),
+                "cost": cost_for(definition, node.params, definitions if isinstance(definitions, dict) else None),
                 "runs": node.ref in spec.run,
                 "willRun": node.ref in node_costs,
                 "ports": _ports_for(node.ref, definition, spec.edges),

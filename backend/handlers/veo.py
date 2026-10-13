@@ -19,6 +19,7 @@ from services.cancellation import schedule_detached_cancel
 from services.google_vertex import VERTEX_REGION, access_token, model_url
 from services.output import get_run_dir
 from services.public_url import fetch_public_media
+from execution.missing_credential import MissingCredentialError
 
 VEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -129,7 +130,7 @@ async def handle_veo(
     vertex_credentials = api_keys.get("GOOGLE_VERTEX_CREDENTIALS")
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not vertex_credentials and not api_key:
-        raise ValueError("Veo needs GOOGLE_VERTEX_CREDENTIALS (Vertex AI) or GOOGLE_API_KEY")
+        raise MissingCredentialError("Veo needs GOOGLE_VERTEX_CREDENTIALS (Vertex AI) or GOOGLE_API_KEY")
 
     prompt_input = inputs.get("prompt")
     prompt_text = str(prompt_input.value) if prompt_input and prompt_input.value else ""
@@ -516,7 +517,7 @@ async def handle_veo_flf_vertex(
     (``aspect_ratio``, ``"8s"``, ``generate_audio``), so they're mapped here."""
     credentials = api_keys.get("GOOGLE_VERTEX_CREDENTIALS")
     if not credentials:
-        raise ValueError("GOOGLE_VERTEX_CREDENTIALS is required")
+        raise MissingCredentialError("GOOGLE_VERTEX_CREDENTIALS is required")
     first, last = inputs.get("image"), inputs.get("end_image")
     if not (first and first.value and last and last.value):
         raise ValueError("Veo First-Last Frame needs both a first and a last frame")

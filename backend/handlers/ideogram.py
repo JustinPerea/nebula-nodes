@@ -37,6 +37,7 @@ from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import get_run_dir, save_base64_image
+from execution.missing_credential import MissingCredentialError
 
 IDEOGRAM_API_BASE = "https://api.ideogram.ai"
 
@@ -81,7 +82,7 @@ _MIME_BY_SUFFIX = {
 def _require_key(api_keys: dict[str, str]) -> str:
     api_key = api_keys.get("IDEOGRAM_API_KEY")
     if not api_key:
-        raise ValueError("IDEOGRAM_API_KEY is required")
+        raise MissingCredentialError("IDEOGRAM_API_KEY is required")
     return api_key
 
 

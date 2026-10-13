@@ -1,0 +1,246 @@
+"""Can a node run here, and if not, what's missing? One rule for every agent surface.
+
+Mirrors the canvas (frontend/src/lib/nodeKeys.ts, behind kreaConnection.ts
+nodeKeyStatus). Used by `nebula context` and GET /api/agent/nodes (the MCP
+server's find_nodes and describe_node).
+
+`apiProvider: utility` only means a node has no top-level key. A utility node
+that still calls a provider says how in its definition's ``providerVia``:
+
+- ``kind: model``: it runs another node's handler (cinema-scene runs its base
+  image model, scene.base.model). It needs that model's key. It can run when
+  any of its models can; ``detail`` says which.
+- ``kind: param``: one param picks local or provider work (the QC nodes' mode).
+  It is FREE at its defaults when the default runs locally; ``detail`` and
+  ``keys_needed`` name the keys the other values need.
+"""
+from __future__ import annotations
+
+from typing import Any, Iterable, Mapping
+
+# How a node runs here. None means it can't yet; missing() says why.
+KEY = "key"          # a configured API key (or a direct-route key)
+FREE = "free"        # runs locally, no key
+KREA = "krea"        # on the signed-in Krea account (workspace compute)
+NOUS = "nous"        # a local Nous (Hermes) sign-in, which Nebula doesn't check up front
+
+# Where every agent surface sends the person to set a key.
+_WHERE = "in Settings > Providers"
+
+
+def _keys(value: Any) -> list[str]:
+    return [k for k in (value if isinstance(value, list) else [value]) if k]
+
+
+def krea_modes(definition: Mapping[str, Any]) -> list[str]:
+    """The Krea billing modes a node offers ("api-token", "mcp"), or [] for non-Krea nodes."""
+    for param in definition.get("params") or []:
+        if param.get("key") == "_kreaAuth":
+            return [str(option.get("value") if isinstance(option, Mapping) else option)
+                    for option in param.get("options") or []]
+    return []
+
+
+def provider_via(definition: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    via = definition.get("providerVia")
+    return via if isinstance(via, Mapping) else None
+
+
+def _param_default(definition: Mapping[str, Any], key: str) -> Any:
+    for group in ("params", "sharedParams", "directParams", "falParams"):
+        for param in definition.get(group) or []:
+            if isinstance(param, Mapping) and param.get("key") == key:
+                return param.get("default")
+    return None
+
+
+def param_calls_provider(definition: Mapping[str, Any], params: Mapping[str, Any] | None) -> bool:
+    """For a ``kind: param`` node: whether these params pick the provider work.
+
+    Matches what the handler runs: an absent param means the definition's
+    default (the handler's own default); any present value that isn't exactly
+    one of ``freeWhen``, including '' and None, counts as calling the
+    provider. Fail closed: such a value is refused by the handler anyway."""
+    via = provider_via(definition) or {}
+    key = str(via.get("param") or "")
+    free = [value for value in via.get("freeWhen") or [] if isinstance(value, str)]
+    given = params or {}
+    value = given[key] if key in given else _param_default(definition, key)
+    return not (isinstance(value, str) and value in free)
+
+
+def model_choice(definition: Mapping[str, Any], params: Mapping[str, Any] | None) -> str | None:
+    """For a ``kind: model`` node: the model these params run, normalized the way
+    cinema's handler guard does it (empty or a fallback value runs the default),
+    or None when the value can't be read or isn't one of its models."""
+    via = provider_via(definition) or {}
+    path = [str(part) for part in via.get("path") or []]
+    node: Any = params or {}
+    for depth, part in enumerate(path):
+        if not isinstance(node, Mapping):
+            return None
+        node = node.get(part)
+        # As the handler reads it (`params.get("scene") or {}`): an empty or
+        # missing level reads as empty, so a fresh node runs the default; a
+        # level that is there but not an object can't be read.
+        if depth < len(path) - 1 and not node:
+            node = {}
+    if not path:
+        return None
+    chosen = str(node or "").strip().lower()
+    if not chosen or chosen in {str(v).lower() for v in via.get("fallbackFor") or []}:
+        chosen = str(via.get("default") or "")
+    return chosen if chosen in [str(m) for m in via.get("models") or []] else None
+
+
+def keys_needed(
+    definition: Mapping[str, Any], params: Mapping[str, Any] | None,
+    definitions: Mapping[str, Mapping[str, Any]] | None,
+) -> list[Mapping[str, Any]] | None:
+    """What one node, with these params, needs to run: a list of definitions
+    whose keys it uses (the node itself, or the model a ``kind: model`` node
+    runs, or a stand-in carrying a ``kind: param`` node's keys); [] when it
+    runs locally; None when it can't be read (fail closed)."""
+    via = provider_via(definition)
+    if via is None:
+        local = (definition.get("apiProvider") == "utility" and not krea_modes(definition)
+                 and not _keys(definition.get("envKeyName")) + _keys(definition.get("directKeyName")))
+        return [] if local else [definition]
+    if via.get("kind") == "param":
+        if not param_calls_provider(definition, params):
+            return []
+        return [{"id": definition.get("id"), "apiProvider": via.get("provider"),
+                 "envKeyName": _keys(via.get("anyKey"))}]
+    if via.get("kind") == "model":
+        chosen = model_choice(definition, params)
+        target = (definitions or {}).get(chosen or "")
+        return [target] if target else None
+    return None
+
+
+def _plain_access(definition: Mapping[str, Any], configured: set[str], krea_signed_in: bool) -> str | None:
+    if definition.get("apiProvider") == "nous":
+        return NOUS
+    modes = krea_modes(definition)
+    keys = _keys(definition.get("envKeyName")) + _keys(definition.get("directKeyName"))
+    if modes == ["mcp"]:
+        return KREA if krea_signed_in else None
+    if any(key in configured for key in keys):
+        return KEY
+    if "mcp" in modes and krea_signed_in:
+        return KREA
+    return FREE if not keys and not modes else None
+
+
+def node_access(
+    definition: Mapping[str, Any], configured_keys: Iterable[str], krea_signed_in: bool,
+    definitions: Mapping[str, Mapping[str, Any]] | None = None,
+) -> str | None:
+    """How a node can run here (KEY, FREE, KREA, NOUS), or None.
+
+    A ``kind: model`` node runs the way the best of its models can (KEY over
+    KREA), never FREE; without ``definitions`` to look them up it is None. A
+    ``kind: param`` node answers for its defaults (detail() has the rest)."""
+    configured = set(configured_keys)
+    via = provider_via(definition)
+    if via is None:
+        return _plain_access(definition, configured, krea_signed_in)
+    if via.get("kind") == "param":
+        if not param_calls_provider(definition, {}):
+            return FREE
+        return KEY if any(key in configured for key in _keys(via.get("anyKey"))) else None
+    if via.get("kind") == "model" and definitions is not None:
+        options = [_plain_access(definitions[m], configured, krea_signed_in)
+                   for m in via.get("models") or [] if m in definitions]
+        for best in (KEY, KREA, NOUS):
+            if best in options:
+                return best
+    return None
+
+
+def missing(
+    definition: Mapping[str, Any], krea_signed_in: bool,
+    definitions: Mapping[str, Mapping[str, Any]] | None = None,
+) -> str:
+    """What the person would need to set up, for a node node_access says can't run."""
+    via = provider_via(definition)
+    if via is not None and via.get("kind") == "param":
+        options = " or ".join(dict.fromkeys(_keys(via.get("anyKey"))))
+        return f"needs {options} {_WHERE}"
+    if via is not None and via.get("kind") == "model":
+        by_key: dict[str, list[str]] = {}
+        for model in via.get("models") or []:
+            target = (definitions or {}).get(model)
+            if not target:
+                continue
+            need = " or ".join(dict.fromkeys(_keys(target.get("envKeyName")) + _keys(target.get("directKeyName"))))
+            label = f"{model} default" if model == via.get("default") else str(model)
+            by_key.setdefault(need or "a Krea sign-in", []).append(label)
+        if not by_key:
+            return f"needs setup {_WHERE}"
+        options = " or ".join(f"{need} ({', '.join(models)})" for need, models in by_key.items())
+        return f"needs {options} {_WHERE}"
+    keys = _keys(definition.get("envKeyName")) + _keys(definition.get("directKeyName"))
+    modes = krea_modes(definition)
+    if modes == ["mcp"] or ("mcp" in modes and not krea_signed_in and not keys):
+        return "needs the Krea account signed in (Settings > Providers)"
+    if keys:
+        options = " or ".join(dict.fromkeys(keys))
+        also = " (or a Krea sign-in)" if "mcp" in modes else ""
+        return f"needs {options} {_WHERE}{also}"
+    return f"needs setup {_WHERE}"
+
+
+def detail(
+    definition: Mapping[str, Any], configured_keys: Iterable[str], krea_signed_in: bool,
+    definitions: Mapping[str, Mapping[str, Any]] | None,
+) -> dict[str, Any] | None:
+    """Readiness per option of a ``providerVia`` node, or None for other nodes.
+
+    {"param": ..., "default": ..., "options": {value: runsWith or None},
+     "note": ..., "missing": ...}"""
+    via = provider_via(definition)
+    if via is None:
+        return None
+    configured = set(configured_keys)
+    if via.get("kind") == "param":
+        key = str(via.get("param") or "")
+        values = [option.get("value") if isinstance(option, Mapping) else option
+                  for group in ("params", "sharedParams") for param in definition.get(group) or []
+                  if isinstance(param, Mapping) and param.get("key") == key
+                  for option in param.get("options") or []]
+        keyed = any(k in configured for k in _keys(via.get("anyKey")))
+        free = set(via.get("freeWhen") or [])
+        options = {str(value): FREE if value in free else (KEY if keyed else None) for value in values}
+        paid = [value for value in options if value not in free]
+        result: dict[str, Any] = {
+            "param": key, "default": _param_default(definition, key), "options": options,
+            "note": (f"{key}={'/'.join(paid)} calls a {via.get('provider') or 'provider'} model with the first of "
+                     f"{', '.join(_keys(via.get('anyKey')))} that is set; Nebula has no list price for it, so agent "
+                     "runs in that mode must be proposed (propose_change) whenever a spending limit is set."),
+        }
+        if not keyed:
+            result["missing"] = {value: missing(definition, krea_signed_in, definitions) for value in paid}
+        return result
+    if via.get("kind") == "model":
+        path = ".".join(str(part) for part in via.get("path") or [])
+        default = str(via.get("default") or "")
+        options: dict[str, str | None] = {}
+        for model in via.get("models") or []:
+            target = (definitions or {}).get(model)
+            options[str(model)] = _plain_access(target, configured, krea_signed_in) if target else None
+        result = {"param": path, "default": default, "options": options}
+        ready = [model for model, access in options.items() if access]
+        if options.get(default) is None and ready:
+            target = (definitions or {}).get(default) or {}
+            needs = " or ".join(dict.fromkeys(_keys(target.get("envKeyName")))) or "setup"
+            result["note"] = (f"default {default} needs {needs}; set {path} to "
+                              f"{' or '.join(ready)} to run with the keys set here.")
+        elif not ready:
+            result["missing"] = missing(definition, krea_signed_in, definitions)
+        return result
+    return None
+
+
+def configured_keys(settings: Mapping[str, Any]) -> set[str]:
+    return {key for key, value in (settings.get("apiKeys") or {}).items() if value}

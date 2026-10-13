@@ -77,16 +77,41 @@ function matches(values: Record<string, unknown>, match: Record<string, unknown>
   return Object.entries(match ?? {}).every(([key, want]) => asMatchValue(values[key]) === asMatchValue(want));
 }
 
+/** Every setting an entry's price reads: row and extra matches, multiplyBy. */
+export function pricedKeys(entry: PriceEntry): Set<string> {
+  const keys = new Set<string>(entry.multiplyBy ?? []);
+  for (const row of [...(entry.rows ?? []), ...(entry.extras ?? [])]) {
+    for (const key of Object.keys(row.match ?? {})) keys.add(key);
+  }
+  return keys;
+}
+
+// A plain decimal, as both this file and backend/services/model_pricing.py
+// read it, so "0x10", "1_000" or non-ASCII digits never price on one side only.
+const DECIMAL = /^[ \t\n\r]*[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?[ \t\n\r]*$/;
+
+/** A positive, finite count or duration; null for anything else. */
+function multiplier(value: unknown): number | null {
+  if (typeof value === 'string' && !DECIMAL.test(value)) return null;
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
 /** One run of this node, or null when it's unpriced (no entry, no matching
- * row, or the run bills a different provider than the entry prices). */
+ * row, the run bills a different provider than the entry prices, or a
+ * setting the price reads arrives by wire, so it's only known at run time). */
 export function estimateNode(
   entry: PriceEntry | undefined,
   definition: Partial<ModelNodeDefinition>,
   params: Record<string, unknown> | undefined,
   routeProvider?: string | null,
+  wired: Iterable<string> = [],
 ): NodeEstimate | null {
   if (!entry) return null;
   if (entry.provider && routeProvider && entry.provider !== routeProvider) return null;
+  const priced = pricedKeys(entry);
+  for (const port of wired) if (priced.has(port)) return null;
   const values = effectiveParams(entry, definition, params);
   const row = (entry.rows ?? []).find((candidate) => matches(values, candidate.match));
   if (!row) return null;
@@ -102,8 +127,12 @@ export function estimateNode(
   }
   let factor = 1;
   for (const key of entry.multiplyBy ?? []) {
-    const amount = Number(values[key]);
-    factor *= Number.isFinite(amount) && amount > 0 ? amount : 1;
+    // Absent (no param, no default) counts once. A value that is there but
+    // unreadable leaves the run unpriced, never one unit.
+    if (values[key] === undefined) continue;
+    const amount = multiplier(values[key]);
+    if (amount === null) return null;
+    factor *= amount;
   }
   const result: NodeEstimate = { currency: entry.currency, low: low * factor, high: high * factor };
   if (entry.plus) result.plus = String(entry.plus);

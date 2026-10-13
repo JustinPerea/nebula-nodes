@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+# The readiness rule lives with the backend so the CLI and MCP server agree.
+from services.node_readiness import detail, krea_modes, node_access, provider_via  # noqa: F401 (node_access is re-exported)
+
 
 def format_node_table(nodes: list[dict[str, Any]]) -> str:
     """Format nodes as an aligned table grouped by category."""
@@ -213,34 +216,6 @@ def format_selection(selection: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _keys(value: Any) -> list[str]:
-    return [k for k in (value if isinstance(value, list) else [value]) if k]
-
-
-def _krea_mode_options(node: dict[str, Any]) -> list[str]:
-    for param in node.get("params") or []:
-        if param.get("key") == "_kreaAuth":
-            return [str(option.get("value")) for option in param.get("options") or []]
-    return []
-
-
-def node_access(node: dict[str, Any], configured_keys: set[str], krea_signed_in: bool) -> str | None:
-    """How a node can run here: "key", "free", "krea" (Krea sign-in) or "nous";
-    None when it needs a key or sign-in that isn't set up. Mirrors the canvas
-    (frontend/src/lib/kreaConnection.ts nodeKeyStatus)."""
-    if node.get("apiProvider") == "nous":
-        return "nous"
-    krea_modes = _krea_mode_options(node)
-    keys = _keys(node.get("envKeyName")) + _keys(node.get("directKeyName"))
-    if krea_modes == ["mcp"]:
-        return "krea" if krea_signed_in else None
-    if any(key in configured_keys for key in keys):
-        return "key"
-    if "mcp" in krea_modes and krea_signed_in:
-        return "krea"
-    return "free" if not keys and not krea_modes else None
-
-
 def format_context(
     settings: dict[str, Any], nodes: list[dict[str, Any]], krea_status: str | None = None,
 ) -> str:
@@ -249,23 +224,33 @@ def format_context(
     configured_keys = {k for k, v in api_keys.items() if v}
     krea_signed_in = krea_status == "connected"
 
+    definitions = {n["id"]: n for n in nodes}
     by_cat: dict[str, list[str]] = {}
     access_count: dict[str, int] = {}
     krea_both: list[str] = []
+    keyed_modes: list[str] = []   # free at defaults, a provider call in another mode
+    base_notes: list[str] = []    # a node whose default model can't run but another can
     for n in nodes:
-        access = node_access(n, configured_keys, krea_signed_in)
+        access = node_access(n, configured_keys, krea_signed_in, definitions)
         if access is None:
             continue
         access_count[access] = access_count.get(access, 0) + 1
-        if access == "krea" and _krea_mode_options(n) != ["mcp"]:
+        if access == "krea" and krea_modes(n) != ["mcp"]:
             krea_both.append(n["id"])
         mark = {"krea": "*", "nous": "^"}.get(access, "")
+        via = provider_via(n)
+        if via and via.get("kind") == "param" and access == "free":
+            mark = "+"
+            keyed_modes.append(n["id"])
+        options = detail(n, configured_keys, krea_signed_in, definitions) if via else None
+        if via and via.get("kind") == "model" and options and options.get("note"):
+            base_notes.append(f"{n['id']}: {options['note']}")
         by_cat.setdefault(n.get("category", "other"), []).append(n["id"] + mark)
 
     cat_names = {
         "image-gen": "Image", "video-gen": "Video", "text-gen": "Text/Chat",
         "audio-gen": "Audio", "3d-gen": "3D", "transform": "Transform",
-        "analyzer": "Analyzer", "utility": "Utility (free)", "universal": "Universal",
+        "analyzer": "Analyzer", "utility": "Utility", "universal": "Universal",
         "cinematic": "Cinema", "character": "Character",
     }
 
@@ -297,9 +282,23 @@ def format_context(
     if access_count.get("krea"):
         lines.append("* runs on the signed-in Krea account (workspace compute).")
         if krea_both:
-            lines.append("  Those that also take a token default to it: create them with --param _kreaAuth=mcp.")
+            lines.append("  Those that also take a token default to it. Moving one to the Krea plan is the person's")
+            lines.append("  call: `nebula propose` the _kreaAuth=mcp change; direct edits of it are refused.")
     if access_count.get("nous"):
         lines.append("^ needs a local Nous (Hermes) sign-in; not checked here.")
+    legends: list[str] = []
+    for node_id in keyed_modes:
+        via = provider_via(definitions[node_id]) or {}
+        keys = [str(key) for key in via.get("anyKey") or []]
+        legend = (f"+ free at its defaults; {via.get('param')} other than {'/'.join(via.get('freeWhen') or [])} calls a "
+                  f"{via.get('provider')} model with {' or '.join(keys)}"
+                  f"{' (set here)' if any(key in configured_keys for key in keys) else ''}. No list price, "
+                  "so under a spending limit that takes a proposal.")
+        if legend not in legends:
+            legends.append(legend)
+    lines.extend(legends)
+    for note in base_notes:
+        lines.append(note)
     lines.append("Ids above go to `nebula create <id>`; `nebula info <id>` shows ports and params.")
     lines.append("Port types: Text, Image, Video, Audio, Mesh, Array, SVG, Any")
     lines.append("Connections must match types (Any connects to anything).")
@@ -397,7 +396,8 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
         screen = ""
         if node.get("onScreen") is False:
             screen = " off-screen"
-        lines.append(f"  {node.get('id', '?'):<6}{node.get('name', '?')} [{node.get('state', '?')}] {where}{screen}")
+        model = f" ({node['model']})" if node.get("model") else ""
+        lines.append(f"  {node.get('id', '?'):<6}{node.get('name', '?')}{model} [{node.get('state', '?')}] {where}{screen}")
         params = {k: v for k, v in (node.get("params") or {}).items() if v not in (None, "", {}, [])}
         if params:
             lines.append(f"        params: {_brief(params, 110)}")

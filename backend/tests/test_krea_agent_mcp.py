@@ -25,6 +25,9 @@ def test_backend_url_tracks_sidecar_and_uvicorn_preview():
     assert config.resolve_nebula_url({}, ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8033"]) == "http://127.0.0.1:8033"
     assert config.resolve_nebula_url({}, ["uvicorn", "main:app", "--host=::", "--port=8033"]) == "http://[::1]:8033"
     assert config.resolve_nebula_url({}, ["pytest", "--port", "9999"]) == config.DEFAULT_NEBULA_URL
+    # A devserver.py reload worker inherits its parent's argv.
+    assert config.resolve_nebula_url({}, ["backend/devserver.py", "--port", "8131"]) == "http://127.0.0.1:8131"
+    assert config.resolve_nebula_url({}, ["devserver.py"]) == "http://127.0.0.1:8000"
 
 
 def test_child_environment_keeps_agent_auth_and_removes_connector_secrets():
@@ -40,13 +43,15 @@ def test_child_environment_keeps_agent_auth_and_removes_connector_secrets():
     assert all(key not in child for key in config.CONNECTOR_SECRET_ENV_KEYS)
 
 
-def test_child_environment_drops_the_desktop_canvas_session():
-    # The launch nonce is what lets a request count as the person's canvas
+def test_child_environment_drops_the_person_token_and_the_old_desktop_nonce():
+    # The person token is what lets a request count as the person
     # (person_gate). An agent that inherited it could accept its own proposals.
     child = config.agent_child_env({
         "NEBULA_DESKTOP_MODE": "1",
+        "NEBULA_PERSON_TOKEN": "person-token-fixture",
         "NEBULA_CONNECTOR_SESSION": "launch-nonce-fixture",
     })
+    assert "NEBULA_PERSON_TOKEN" not in child
     assert "NEBULA_CONNECTOR_SESSION" not in child
     assert child["NEBULA_DESKTOP_MODE"] == "1"
 
@@ -79,7 +84,11 @@ def test_hermes_overlay_only_adds_mcp_leaf_preserves_profile_and_cleans_up(tmp_p
         path = Path(env["HERMES_MANAGED_DIR"]) / "config.yaml"
         managed = json.loads(path.read_text())
         assert set(managed) == {"mcp_servers"}
-        assert list(managed["mcp_servers"]) == [config.SERVER_NAME]
+        assert sorted(managed["mcp_servers"]) == [config.NEBULA_SERVER_NAME, config.SERVER_NAME]
+        nebula = managed["mcp_servers"][config.NEBULA_SERVER_NAME]
+        assert nebula["args"] == [str(config.NEBULA_MCP_PATH), "--url", "http://127.0.0.1:8033"]
+        # Hermes expands the token from its own env; the file never holds it.
+        assert nebula["env"] == {"NEBULA_AGENT_TOKEN": "${NEBULA_AGENT_TOKEN}", "NEBULA_URL": "http://127.0.0.1:8033"}
         assert env["HERMES_HOME"] == str(profile)
         assert user_path.read_bytes() == before
         # Hermes's canonical loader deep-merges this one leaf over the user

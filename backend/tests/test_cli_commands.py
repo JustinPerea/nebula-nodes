@@ -96,7 +96,9 @@ def test_spend_shows_the_limits_an_agent_works_under(cli, capsys):
     client, _ = cli
     spend.run(client)
     out = capsys.readouterr().out
-    assert "Per run:" in out and "This session:" in out
+    # The CLI here has no chat token, so it shares the outside agents' 24-hour budget.
+    assert "Per run:" in out and "All agents outside Nebula chats, last 24 hours" in out
+    assert "This session:" not in out and "Krea plan runs:" in out
 
 
 DEFINITIONS = [
@@ -129,5 +131,25 @@ def test_context_counts_free_and_krea_nodes_and_lists_ids():
     assert text.startswith("Nebula Nodes — 5 of 6 nodes can run here")
     assert "1 with your keys, 1 free, 2 on the Krea account, 1 with a Nous sign-in" in text
     assert "gpt-image-1-generate" in text and "krea-files*" in text
-    assert "--param _kreaAuth=mcp" in text
+    assert "--param _kreaAuth=mcp" not in text
+    assert "`nebula propose` the _kreaAuth=mcp change" in text
     assert "Krea account: signed in" in text
+
+
+def test_context_says_what_local_provider_nodes_need():
+    import json
+    from pathlib import Path
+
+    nodes = list(json.loads((Path(__file__).resolve().parent.parent / "data" / "node_definitions.json").read_text()).values())
+    nothing = format_context({"apiKeys": {}}, nodes)
+    listed = " ".join(line for line in nothing.splitlines() if line.startswith(("Cinema:", "Analyzer:")))
+    assert "cinema-scene" not in listed  # its base models all need a key
+    assert "qc-frame-review+" in listed
+    assert "+ free at its defaults; mode other than heuristic/opencv calls a vision model with " \
+           "ANTHROPIC_API_KEY or OPENAI_API_KEY or GOOGLE_API_KEY. No list price" in nothing
+    assert "Utility (free)" not in nothing
+
+    google = format_context({"apiKeys": {"GOOGLE_API_KEY": "g"}}, nodes)
+    assert "cinema-scene" in google and "(set here)" in google
+    assert "cinema-scene: default seedream-4-5 needs FAL_KEY; set scene.base.model to nano-banana" in google
+    assert "cinema-scene: default" not in format_context({"apiKeys": {"FAL_KEY": "f"}}, nodes)

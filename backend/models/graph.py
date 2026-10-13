@@ -37,6 +37,8 @@ class ExecuteRequest(BaseModel):
     edges: list[GraphEdge]
     run_id: str | None = Field(None, alias="runId")
     preserve_graph_params: bool = Field(False, alias="preserveGraphParams")
+    # The run the person approved by accepting a proposal (services/run_approvals.py).
+    approval_id: str | None = Field(None, alias="approvalId", max_length=64)
 
     model_config = {"populate_by_name": True}
 
@@ -47,6 +49,8 @@ class ExecuteNodeRequest(BaseModel):
     target_node_id: str = Field(alias="targetNodeId")
     run_id: str | None = Field(None, alias="runId")
     preserve_graph_params: bool = Field(False, alias="preserveGraphParams")
+    # The run the person approved by accepting a proposal (services/run_approvals.py).
+    approval_id: str | None = Field(None, alias="approvalId", max_length=64)
 
     model_config = {"populate_by_name": True}
 

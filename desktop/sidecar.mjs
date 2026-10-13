@@ -256,6 +256,9 @@ function isPortCollision(text) {
  * @param {Record<string,string>} [options.env] — environment for the child
  * @param {string} [options.repoRoot] — repository root path
  * @param {number} [options.healthTimeoutMs] — override health timeout
+ * @param {string | null} [options.personToken] — this launch's person token,
+ *   written to the child's stdin (never argv or env). Null: the backend gets
+ *   an empty line and runs with no person session (fail closed).
  * @returns {Promise<SidecarHandle>}
  * @throws {SidecarError}
  */
@@ -278,6 +281,7 @@ export async function startSidecar(options = {}) {
   }
 
   const env = options.env ?? process.env;
+  const personToken = typeof options.personToken === 'string' ? options.personToken : null;
   const repoRoot = options.repoRoot ?? DEFAULT_REPO_ROOT;
   const backendDir = join(repoRoot, 'backend');
   const healthTimeoutMs =
@@ -326,6 +330,7 @@ export async function startSidecar(options = {}) {
         healthTimeoutMs,
         env,
         python: pythonPath,
+        personToken,
       });
       result.attempts = totalAttempts;
       return result;
@@ -395,6 +400,19 @@ function killIfNeeded(child) {
   }
 }
 
+/** Hand the person token to the backend over stdin, then close it. */
+function writePersonToken(child, personToken) {
+  const stdin = child?.stdin;
+  if (!stdin || typeof stdin.end !== 'function') return;
+  // A child that died before reading closes the pipe: not our error to raise.
+  if (typeof stdin.on === 'function') stdin.on('error', () => {});
+  try {
+    stdin.end(personToken ? `${personToken}\n` : '\n');
+  } catch {
+    // already gone
+  }
+}
+
 async function spawnAndAwaitHealth(opts) {
   const {
     spawnFn,
@@ -407,13 +425,17 @@ async function spawnAndAwaitHealth(opts) {
     healthTimeoutMs,
     env,
     python,
+    personToken = null,
   } = opts;
 
+  const childEnv = { ...env, NEBULA_URL: `http://127.0.0.1:${port}`, NEBULA_PERSON_TOKEN_STDIN: '1' };
+  delete childEnv.NEBULA_PERSON_TOKEN;
   const child = spawnFn(argv[0], argv.slice(1), {
     cwd,
-    env: { ...env, NEBULA_URL: `http://127.0.0.1:${port}` },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    env: childEnv,
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
+  writePersonToken(child, personToken);
 
   const diagBuf = new DiagnosticBuffer();
 

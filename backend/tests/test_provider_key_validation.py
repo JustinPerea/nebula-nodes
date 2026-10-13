@@ -670,7 +670,7 @@ def test_endpoint_caches_results_between_calls(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_settings_save_clears_provider_validation_cache(monkeypatch):
+def test_settings_save_clears_provider_validation_cache(monkeypatch, person):
     """PUT /api/settings must drop the provider-validation cache so the next
     GET /api/health/providers revalidates instead of serving stale status
     for up to the 5-minute TTL after an API key change."""
@@ -685,7 +685,7 @@ def test_settings_save_clears_provider_validation_cache(monkeypatch):
     saved: list[dict] = []
     monkeypatch.setattr(main_module, "save_settings", lambda s: saved.append(s))
 
-    client = TestClient(main_module.app)
+    client = TestClient(main_module.app, headers=person.headers)
 
     # Populate the cache via the health endpoint (one FAL HTTP call).
     first = client.get("/api/health/providers").json()

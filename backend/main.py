@@ -13,6 +13,7 @@ import copy
 import difflib
 import hashlib
 import json
+import logging
 import math
 import os
 import random
@@ -24,13 +25,14 @@ import tempfile
 import time as _time_module
 import unicodedata
 import zipfile
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from contextlib import ExitStack, aclosing, contextmanager, nullcontext
 from contextvars import ContextVar
+from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, BinaryIO, Mapping
+from typing import Any, BinaryIO, Callable, Iterable, Mapping
 from urllib.parse import quote, unquote_to_bytes, urlsplit
 
 from uuid import uuid4
@@ -69,6 +71,7 @@ from models.events import (
 )
 from execution.engine import execute_graph, validate_graph, topological_sort, get_subgraph, CycleError
 from execution.sync_runner import get_handler_registry
+from execution import provider_calls
 from services.settings import (
     load_settings,
     save_settings,
@@ -79,7 +82,7 @@ from services.settings import (
     update_injected_keys,
 )
 from services.node_registry import NodeRegistry
-from services import agent_spend, model_pricing
+from services import agent_spend, app_tokens, model_pricing, node_readiness, output_preview
 from services.cli_graph import CLIGraph
 from services.retired_nodes import migrate_node, retired_message
 from services.project_store import (
@@ -95,6 +98,7 @@ from services.port_contracts import (
     validate_edge_contracts,
 )
 from services.file_access import ProtectedPathError, require_allowed_path, validate_file_references
+from services.qc_common import extract_frames
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT, resolve_output_ref, portable_output_ref, ManifestError, find_output_record, read_manifest
 from services.image_input import is_remote_or_data_uri
 from services.cache import ExecutionCache
@@ -130,13 +134,17 @@ from services.canvas_events import (
     parse_kinds,
 )
 from services.canvas_pins import CanvasPins, PinError, pin_summary
+from services import person_session
+from services.child_env import scrubbed_env
 from services.person_gate import (
+    PERSON_HEADER,
     PersonGateError,
-    desktop_session_matches,
     has_agent_marker,
-    is_browser_request,
+    is_person,
+    person_gate_error,
     require_person,
 )
+from services.canvas_edits import INTERNAL_OK as KREA_BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_proposals import (
     MAX_REASON,
     Proposal,
@@ -150,7 +158,9 @@ from services.canvas_proposals import (
     place_new_nodes,
     summarize_cost,
 )
-from services.local_guard import origin_allowed
+from services.local_guard import host_allowed
+from services import run_approvals as approvals
+from services.run_approvals import RunApprovals
 from services.zoom_manifest import init_manifest, append_entry
 from services.project_context import get_current_project
 from routes.openrouter_proxy import router as openrouter_router
@@ -161,6 +171,7 @@ from routes.quiver_proxy import router as quiver_router
 from routes.video_edit_preview import router as video_edit_preview_router
 from routes.render_exports import router as render_exports_router
 from routes.krea_connector import router as krea_connector_router
+from services.krea_connector import get_connector as _krea_connector
 from routes.commons import router as commons_router
 from commons import actors as commons_actors
 from services.ffmpeg import ffprobe_video
@@ -512,32 +523,42 @@ app.add_middleware(RequestHeadersContext)
 app.add_middleware(LocalRequestGuard)
 
 
+_DESKTOP_RENDERER_ORIGINS = frozenset({"null", "file://"})
+_DESKTOP_CORS_HEADERS = ", ".join((
+    "Content-Type", "Authorization", "X-Nebula-Person", "X-Nebula-Workspace-Revision", "X-Nebula-Proposal-Key",
+))
+
+
 @app.middleware("http")
-async def krea_desktop_cors(request: Request, call_next):
-    # A packaged Electron file has an opaque origin. Limit this exception to
-    # the private sidecar's connector API; browser mode keeps normal CORS.
-    desktop_krea = (
+async def desktop_renderer_cors(request: Request, call_next):
+    # The packaged Electron renderer is a file: page, so its Origin is opaque
+    # ("null", or "file://") and the CORS regex above never matches it. In
+    # desktop mode, answer its preflights, and let it read responses only for
+    # requests that carry this launch's person token: a website can also send
+    # "Origin: null" (sandboxed iframe), but it can't know the token.
+    origin = request.headers.get("origin")
+    desktop = (
         os.environ.get("NEBULA_DESKTOP_MODE") == "1"
-        and request.url.path.startswith("/api/krea/")
-        and request.headers.get("origin") == "null"
+        and origin in _DESKTOP_RENDERER_ORIGINS
+        and host_allowed(request.headers.get("host"))
         and request.client is not None
         and request.client.host in {"127.0.0.1", "::1"}
-        and bool(os.environ.get("NEBULA_CONNECTOR_SESSION"))
-        and (request.method == "OPTIONS" or secrets.compare_digest(
-            request.headers.get("x-nebula-connector-session", "").encode(),
-            os.environ["NEBULA_CONNECTOR_SESSION"].encode(),
-        ))
     )
-    if desktop_krea and request.method == "OPTIONS":
+    if desktop and request.method == "OPTIONS":
         response = Response(status_code=204)
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Nebula-Connector-Session"
-    else:
-        response = await call_next(request)
-    if desktop_krea:
-        response.headers["Access-Control-Allow-Origin"] = "null"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = _DESKTOP_CORS_HEADERS
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+        return response
+    response = await call_next(request)
+    if desktop and person_session.verify(request.headers.get(PERSON_HEADER)):
+        response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Vary"] = "Origin"
     return response
+
+
+app.add_exception_handler(PersonGateError, person_gate_error)
 
 
 app.include_router(krea_connector_router)
@@ -1653,54 +1674,237 @@ def _end_node_ids(nodes: list[GraphNode], edges: list[GraphEdge]) -> list[str]:
 
 
 def _is_person_request() -> bool:
-    """The person's canvas, not an agent, the CLI or curl (see services/person_gate.py)."""
-    headers = current_request_headers()
-    return not has_agent_marker(headers) and is_browser_request(headers)
+    """The person: no agent marker and this launch's person token (see
+    services/person_gate.py). Not an agent, the CLI, curl, or a forged Origin."""
+    return is_person(current_request_headers())
 
 
-_SPEND_LAUNCH = uuid4().hex[:12]
 agent_spend_ledger = agent_spend.SpendLedger(_STATE_DIR / "agent-spend.json")
+# Tokens the person made for outside apps (Settings > Agent spending).
+app_token_store = app_tokens.AppTokens(_STATE_DIR / "app-tokens.json")
+app_tokens.install(app_token_store)
 
 
 def _spend_session(headers: Mapping[str, str] | None) -> tuple[str, str]:
     """Which running total a non-person request counts against: (key, label).
 
-    Only a token Nebula minted for an in-app chat (Claude, Codex) names its
-    own budget. Names and headers are set by the caller, so everything else
-    (Hermes, outside agents, scripts) shares one budget per backend launch:
-    a caller can't start a fresh budget by renaming itself."""
+    A token Nebula minted for an in-app chat (Claude, Codex, Daedalus) names
+    that chat's own budget, and a token the person made for an outside app
+    names that app's line. Names and headers are set by the caller, so
+    everything else (outside agents, scripts) shares one budget that doesn't
+    change with a restart: a caller can't start a fresh budget by renaming
+    itself or relaunching Nebula."""
     lower = {k.lower(): v for k, v in (headers or {}).items()}
     auth = lower.get("authorization", "")
     if auth.lower().startswith("agent "):
-        record = commons_actors.agent_registry.lookup(auth[6:].strip())
+        token = auth[6:].strip()
+        record = commons_actors.agent_registry.lookup(token)
         if record is not None and record.get("session"):
             identity = identify_agent(headers)
             return f"chat:{record['session']}", identity.name if identity else "Agent"
-    return f"unverified:{_SPEND_LAUNCH}", "Agents without a Nebula chat token"
+        connected = app_tokens.lookup(token)
+        if connected is not None:
+            return f"{agent_spend.APP_PREFIX}{connected['id']}", connected["name"]
+    return agent_spend.OUTSIDE_SHARED, agent_spend.OUTSIDE_LABEL
 
 
-def _require_run_spend_approval(run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], **kwargs: Any) -> None:
-    """The spend check for a run already noted for its actor: a refusal forgets the note."""
+def _spend_budgets(key: str, settings: Mapping[str, Any]) -> list[agent_spend.Budget]:
+    """The budgets a run counted against ``key`` is checked against."""
+    caps = agent_spend.caps_from_settings(settings)
+    spent = agent_spend_ledger.spent(key)
+    if not agent_spend.is_outside(key):
+        return agent_spend.session_budgets(key, spent, caps)
+    connected = app_token_store.get(key[len(agent_spend.APP_PREFIX):]) if key.startswith(agent_spend.APP_PREFIX) else None
+    return agent_spend.session_budgets(
+        key, spent, caps, outside_spent=agent_spend_ledger.spent_outside(),
+        app_name=connected["name"] if connected else None,
+        app_daily_usd=connected["dailyUsd"] if connected else None)
+
+
+@dataclass
+class _SpendHold:
+    """What an agent run was counted at, per node, so a node that turns out to
+    have spent nothing can be given back (see _release_unspent_hold). ``at``
+    is when it was counted: an outside budget's give-back lands then."""
+    key: str
+    per_node: dict[str, tuple[str, float]]
+    plan_nodes: dict[str, tuple[str, int]]
+    at: float | None
+
+    def take(self, node_ids: Iterable[str] | None = None) -> tuple[dict[str, float], dict[str, int]]:
+        """Remove these nodes' shares (all of them with None) and total them per model."""
+        ids = list(self.per_node) + [i for i in self.plan_nodes if i not in self.per_node] if node_ids is None else list(node_ids)
+        by_model: dict[str, float] = {}
+        plan: dict[str, int] = {}
+        for node_id in ids:
+            share = self.per_node.pop(node_id, None)
+            if share is not None:
+                by_model[share[0]] = by_model.get(share[0], 0.0) + share[1]
+            runs = self.plan_nodes.pop(node_id, None)
+            if runs is not None:
+                plan[runs[0]] = plan.get(runs[0], 0) + runs[1]
+        return by_model, plan
+
+    def give_back(self, by_model: Mapping[str, float], plan: Mapping[str, int]) -> None:
+        if by_model or plan:
+            agent_spend_ledger.refund(self.key, by_model, plan, at=self.at)
+
+
+_spend_holds: OrderedDict[str, _SpendHold] = OrderedDict()
+_MAX_SPEND_HOLDS = 500
+
+
+def _release_unspent_hold(event: Any, run_id: str | None) -> None:
+    """Give back a node's share of its run's count when it stopped at its own
+    key check (no provider request, so nothing spent). Never fails the run."""
     try:
-        _require_spend_approval(nodes, edges, **kwargs)
+        if not (isinstance(event, ErrorEvent) and event.missing_credential and run_id):
+            return
+        hold = _spend_holds.get(run_id)
+        if hold is None:
+            return
+        hold.give_back(*hold.take([event.node_id]))
+    except Exception:  # noqa: BLE001 - bookkeeping must not break a run
+        pass
+
+
+def _return_hold(run_id: str) -> None:
+    """Give back everything a run was counted at, for a request refused after
+    the spend check but before the run started (it can't have cost anything)."""
+    provider_calls.take(run_id)
+    hold = _spend_holds.pop(run_id, None)
+    if hold is None:
+        return
+    try:
+        hold.give_back(*hold.take())
+    except Exception:  # noqa: BLE001 - bookkeeping must not mask the refusal
+        pass
+
+
+def _settle_hold(run_id: str) -> None:
+    """At the end of a run, give back the share of every counted node that
+    never reached its handler (cache hit, upstream failure, stopped first):
+    it made no provider request. Untracked runs keep their whole count."""
+    hold = _spend_holds.pop(run_id, None)
+    called = provider_calls.take(run_id)
+    if hold is None or called is None:
+        return
+    unspent = [node_id for node_id in {**hold.per_node, **hold.plan_nodes} if node_id not in called]
+    try:
+        hold.give_back(*hold.take(unspent))
+    except Exception:  # noqa: BLE001 - bookkeeping must not break a run
+        pass
+
+
+def _require_run_spend_approval(
+    run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, approval_id: str | None = None, **kwargs: Any,
+) -> None:
+    """The approval and spend checks for a run already noted for its actor: a
+    refusal forgets the note."""
+    try:
+        _check_run_approval(approval_id, nodes, edges)
+        _require_spend_approval(nodes, edges, run_id=run_id, **kwargs)
     except HTTPException:
         canvas_events.forget_run(run_id)
         raise
 
 
+# What the person's Accept clicks approved, waiting for the canvas to run it.
+# See services/run_approvals.py.
+run_approvals = RunApprovals()
+
+
+def _approval_shape(graph: CLIGraph, run_ids: list[str]) -> dict[str, list[Any]]:
+    return approvals.shape(graph.nodes, graph.edges, approvals.run_scope(graph.edges, run_ids))
+
+
+def _check_run_approval(approval_id: str | None, nodes: list[GraphNode], edges: list[GraphEdge]) -> None:
+    """A run that says it is the one the person approved on Accept must be
+    exactly that run: the person's, the approved nodes and wires, and the
+    live graph still holding the approved values. It uses the approval up."""
+    if approval_id is None:
+        return
+    if not _is_person_request():
+        raise HTTPException(status_code=403, detail=(
+            "Only the person's canvas starts a run they approved. Agents run through "
+            "/api/graph/run, inside the spending limits."))
+    approval = run_approvals.take(approval_id)
+    if approval is None:
+        raise HTTPException(status_code=409, detail=(
+            "This approved run expired or was already started, so nothing ran. "
+            "Look over the nodes, then click Run on them yourself."))
+    requested_nodes = {node.id: {"definitionId": node.definition_id} for node in nodes}
+    requested_edges = [
+        {"source": edge.source, "sourceHandle": edge.source_handle,
+         "target": edge.target, "targetHandle": edge.target_handle}
+        for edge in edges
+    ]
+    requested = approvals.shape(requested_nodes, requested_edges, requested_nodes)
+    live = approvals.fingerprint(cli_graph.nodes, cli_graph.edges, approval.run_node_ids)
+    changed = set(approvals.changed_nodes(approval.fingerprint, live))
+    changed.update(key for key in set(requested) | set(approval.shape) if requested.get(key) != approval.shape.get(key))
+    if changed:
+        names = sorted(changed, key=_node_order)
+        raise HTTPException(status_code=409, detail=(
+            f"{_listed(names, 4)} changed since you accepted {approval.agent_name}'s proposal, so nothing ran. "
+            "Look over the nodes, then click Run on them yourself."))
+
+
+def _refuse_agent_change_to_approved_runs(candidate: CLIGraph) -> None:
+    """409 when an edit that isn't the person's would change a run the person
+    approved on Accept and the canvas hasn't started yet: params, deletes and
+    wires into it all count. The person's own edits always pass."""
+    waiting = run_approvals.open_list()
+    if not waiting or _is_person_request():
+        return
+    for approval in waiting:
+        now = approvals.fingerprint(candidate.nodes, candidate.edges, approval.run_node_ids)
+        changed = sorted(approvals.changed_nodes(approval.fingerprint, now), key=_node_order)
+        if changed:
+            raise HTTPException(status_code=409, detail=(
+                f"{_listed(changed, 4)} {'is' if len(changed) == 1 else 'are'} in a run the person approved "
+                f"from {approval.agent_name}'s proposal {approval.proposal_id}, and it hasn't started yet. "
+                "Leave it until that run starts, or propose the change instead."))
+
+
+def _guard_approved_runs(change: Callable[[CLIGraph], Any]) -> None:
+    """Try a direct edit on a copy of the graph, then apply the check above.
+
+    A copy that refuses the edit means the real edit will refuse it in its
+    own words. If it somehow didn't, the run itself still checks the live
+    graph against what was approved (see _check_run_approval)."""
+    if not run_approvals.open_list() or _is_person_request():
+        return
+    probe = cli_graph.clone()
+    try:
+        change(probe)
+    except Exception:  # noqa: BLE001 - the real edit reports its own error
+        return
+    _refuse_agent_change_to_approved_runs(probe)
+
+
 def _require_spend_approval(
-    nodes: list[GraphNode], edges: list[GraphEdge], *, how_to_ask: str | None = None,
-    run_ids: list[str] | None = None,
+    nodes: list[GraphNode], edges: list[GraphEdge], *, settings: Mapping[str, Any], how_to_ask: str | None = None,
+    run_ids: list[str] | None = None, run_id: str | None = None, passes: int = 1, on_canvas: bool = True,
 ) -> None:
     """Refuse a run that isn't the person's when it breaks a spending limit, and
     count it against the caller's session when it doesn't.
 
+    ``settings`` is the snapshot the caller read for this run: its ``apiKeys``
+    are the ones the run receives, so the provider route priced here (a
+    dual-route node, or which vision model QC calls) is the one it bills.
+    Re-reading settings here could price a different route than the run uses.
+
     The person's own runs pass (the canvas asks them itself). Anything else
-    is held to the limits in Settings; see services/agent_spend.py."""
+    is held to the limits in Settings; see services/agent_spend.py. It also
+    can't bill a Krea node differently from the canvas (``on_canvas`` False:
+    nodes that only exist for this run, like /api/quick's, which start on the
+    API token): run routes take params in the request, so the billing-mode
+    check on edits alone wouldn't hold."""
     headers = current_request_headers()
     if _is_person_request():
         return
-    settings = load_settings()
+    _refuse_agent_krea_billing_in_run(nodes, on_canvas=on_canvas)
     ask = how_to_ask or agent_spend.propose_hint(run_ids or [])
     try:
         pricing = model_pricing.load_pricing()
@@ -1711,13 +1915,41 @@ def _require_spend_approval(
     key, label = _spend_session(headers)
     decision = agent_spend.decide(
         [{"id": n.id, "definitionId": n.definition_id, "params": n.params} for n in nodes],
-        [(e.source, e.target) for e in edges],
+        [(e.source, e.target, e.target_handle) for e in edges],
         settings=settings, pricing=pricing, definitions=node_registry.get_all(),
-        spent=agent_spend_ledger.spent(key), how_to_ask=ask,
+        budgets=_spend_budgets(key, settings), how_to_ask=ask, passes=passes,
     )
     if decision.refusal:
         raise HTTPException(status_code=403, detail=decision.refusal)
-    agent_spend_ledger.record(key, label, decision.charge)
+    at = agent_spend_ledger.record(key, label, decision.charge, decision.plan_charge)
+    if run_id is not None and (decision.per_node or decision.plan_per_node):
+        _place_hold(run_id, key, dict(decision.per_node), dict(decision.plan_per_node), at=at)
+
+
+def _refuse_agent_krea_billing_in_run(nodes: list[GraphNode], *, on_canvas: bool = True) -> None:
+    """403 when a run that isn't the person's bills a dual-mode Krea node
+    other than the way the canvas node it names does. A node that isn't on
+    the canvas, or is there as another definition, starts on the default
+    (the API token)."""
+    changes = []
+    for node in nodes:
+        live = cli_graph.nodes.get(node.id) if on_canvas else None
+        before = live.get("params") or {} if live and live.get("definitionId") == node.definition_id else None
+        changes.append((node.id if on_canvas else node.definition_id, node.definition_id, before, node.params))
+    _refuse_agent_krea_billing_change(changes)
+
+
+def _place_hold(run_id: str, key: str, per_node: dict[str, tuple[str, float]],
+                plan_nodes: dict[str, tuple[str, int]] | None = None, *, at: float | None = None) -> None:
+    """Remember what a run was counted at, per node, and start recording which
+    nodes call their provider. A hold dropped to keep the table bounded takes
+    its record with it, so that run keeps its whole count."""
+    _spend_holds[run_id] = _SpendHold(key, per_node, dict(plan_nodes or {}), at)
+    _spend_holds.move_to_end(run_id)
+    while len(_spend_holds) > _MAX_SPEND_HOLDS:
+        dropped, _ = _spend_holds.popitem(last=False)
+        provider_calls.take(dropped)
+    provider_calls.begin(run_id)
 
 
 @app.post("/api/outputs/archive")
@@ -1852,14 +2084,17 @@ app.include_router(commons_router)
 
 
 @app.on_event("startup")
+async def _person_startup() -> None:
+    """Set this launch's person token before serving (services/person_session.py)."""
+    person_session.initialize()
+
+
+@app.on_event("startup")
 async def _commons_startup() -> None:
-    """Initialize human authority before serving, then scan linked folders."""
+    """Scan linked folders. Human authority is the person session, set above."""
     from commons.activation import is_enabled
     if not is_enabled():
         return
-    from commons.ui_auth import initialize_ui_session
-
-    initialize_ui_session(commons_actors.ui_session)
     if os.environ.get("NEBULA_COMMONS_NO_STARTUP_SCAN") == "1":
         return
     from commons import folders as commons_folders, records as commons_records, review as commons_review, runtime as commons_runtime
@@ -2068,21 +2303,11 @@ async def convert_to_glb(path: str) -> Any:
 
 # ---------- WebSocket connection manager ----------
 
-def _websocket_is_browser(websocket: WebSocket) -> bool:
-    """True for the person's canvas: an allowed browser Origin, or the desktop session.
-
-    Browsers always send Origin on a WebSocket handshake; the CLI and MCP
-    don't. The packaged desktop renderer may send `Origin: null`, so in
-    desktop mode the per-launch connector session (query param) counts too.
-    Browser-only messages (proposal accept keys) go only to these sockets.
-    """
+def _websocket_has_agent_marker(websocket: WebSocket) -> bool:
     try:
-        if desktop_session_matches(websocket.query_params.get("connectorSession")):
-            return True
-        origin = websocket.headers.get("origin")
-    except Exception:  # noqa: BLE001 - a malformed handshake is simply not a browser
-        return False
-    return origin is not None and origin_allowed(origin)
+        return has_agent_marker(websocket.headers)
+    except Exception:  # noqa: BLE001 - a malformed handshake is never the person
+        return True
 
 
 class ConnectionManager:
@@ -2093,8 +2318,17 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self.active_connections.append(websocket)
-        if _websocket_is_browser(websocket):
+
+    def promote(self, websocket: WebSocket, person_token: object) -> bool:
+        """Mark a socket as the person's canvas after a valid hello frame.
+
+        The hello carries this launch's person token; a handshake with an agent
+        marker never qualifies. Only these sockets get proposal accept keys."""
+        if _websocket_has_agent_marker(websocket) or not person_session.verify(person_token):
+            return False
+        if websocket in self.active_connections:
             self.browser_connections.add(websocket)
+        return True
 
     def is_browser(self, websocket: WebSocket) -> bool:
         return websocket in self.browser_connections
@@ -2242,8 +2476,22 @@ def _validation_response(errors: list[ValidationErrorDetail]) -> dict[str, Any]:
 
 # ---------- WebSocket endpoint ----------
 
+def _proposal_sync_message() -> dict[str, Any]:
+    return {
+        "type": "proposalSync",
+        "proposals": [
+            {**_proposal_view(p), "acceptKey": p.accept_key,
+             "personValues": canvas_proposals.person_values(p)}
+            for p in canvas_proposals.open_list()
+        ],
+    }
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
+    """Canvas events. Every socket gets the graph, pins and broadcasts (the CLI
+    and MCP listen here too). Proposal accept keys go only to a socket that
+    sent {type: "hello", personToken} with this launch's person token."""
     await manager.connect(websocket)
     try:
         # Events emitted while a browser is disconnected are not replayed.
@@ -2252,18 +2500,24 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         export = await export_graph_for_frontend()
         await websocket.send_text(json.dumps({"type": "graphSync", **export}))
         await websocket.send_text(json.dumps(_pins_message()))
-        if manager.is_browser(websocket):
-            # Accept keys travel only to the person's canvas sockets.
-            await websocket.send_text(json.dumps({
-                "type": "proposalSync",
-                "proposals": [
-                    {**_proposal_view(p), "acceptKey": p.accept_key,
-                     "personValues": canvas_proposals.person_values(p)}
-                    for p in canvas_proposals.open_list()
-                ],
-            }))
         while True:
-            await websocket.receive_text()
+            raw = await websocket.receive_text()
+            if manager.is_browser(websocket):
+                continue
+            try:
+                frame = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(frame, dict) or frame.get("type") != "hello":
+                continue
+            if manager.promote(websocket, frame.get("personToken")):
+                # Accept keys travel only to the person's canvas sockets.
+                await websocket.send_text(json.dumps(_proposal_sync_message()))
+            else:
+                await websocket.send_text(json.dumps({
+                    "type": "personRequired",
+                    "message": "This tab isn't connected as you, so it can't accept or reject proposals.",
+                }))
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
@@ -2278,7 +2532,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
         type: "send",
         message: str,
         sessionId: str|null (opaque Claude/Codex conversation ID),
-        commonsToken: str (human UI token, required only with Commons enabled),
+        personToken: str (this launch's person token, required on every send;
+            the old name commonsToken is still read),
         brand: str|null (Commons-enabled Claude/Codex turns),
         model: str|null,
         effort: str|null (model-specific effort, Claude/Codex),
@@ -2292,6 +2547,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
     from services.chat_models import ChatModelSelectionError, validate_chat_model_selection
 
     await websocket.accept()
+    chat_marked_as_agent = _websocket_has_agent_marker(websocket)
     server_host, server_port = websocket.scope.get("server") or ("127.0.0.1", 8000)
     backend_url = f"http://{server_host}:{server_port}"
     current_task: asyncio.Task[None] | None = None
@@ -2377,7 +2633,10 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 else:
                     model = str(model) if model else ""
                 runner_kwargs = {"provider": provider, "selection_context": turn_selection_context}
-                if agent in {"claude", "codex"}:
+                # Every in-app agent runs from a private workspace with a minted
+                # turn token: it names the chat's own spending budget and is how
+                # its Nebula MCP server proves which chat it belongs to.
+                if agent in {"claude", "codex", "daedalus"}:
                     workspace_session = workspace_sessions.acquire(_STATE_DIR, agent, brand, session_id)
                     workdir = workspace_session.workspace
                     read_grants = agent_read_grants(output_root=OUTPUT_ROOT, workdir=workdir,
@@ -2536,14 +2795,22 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 })
                 continue
 
+            # Only the person starts chats: every send carries this launch's
+            # person token (commonsToken is the old name), checked before any
+            # workspace or agent token exists. Without it, an agent could
+            # start turns of its own, each with a fresh chat budget.
+            human_token = payload.get("personToken")
+            if human_token is None:
+                human_token = payload.get("commonsToken")
+            if chat_marked_as_agent or not person_session.verify(human_token):
+                await send_event({"type": "error", "code": "person_required", "message": (
+                    "Only the person can start a chat, from a Nebula canvas connected as them. Open the "
+                    "link the backend printed at launch (backend/devserver.py, or restart it with --open)."
+                ), "source": "system"})
+                await send_event({"type": "done", "source": "system"})
+                continue
             from commons.activation import is_enabled
             commons_enabled = is_enabled()
-            if commons_enabled:
-                human_token = payload.get("commonsToken")
-                if not isinstance(human_token, str) or not commons_actors.ui_session.verify(human_token):
-                    await send_event({"type": "error", "message": "No current UI session: use the Commons dev link before starting a private reference turn.", "source": "system"})
-                    await send_event({"type": "done", "source": "system"})
-                    continue
             user_message = payload.get("message", "")
             if not isinstance(user_message, str):
                 await send_event({"type": "error", "message": "message must be text.", "source": "system"})
@@ -2641,16 +2908,285 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
     agent can plan before it runs anything. The person's canvas isn't limited."""
     settings = load_settings()
     caps = agent_spend.caps_from_settings(settings)
+    limits = {"perRunUsd": agent_spend.threshold_from_settings(settings), **caps}
     if _is_person_request():
-        return {"limited": False, "limits": {"perRunUsd": agent_spend.threshold_from_settings(settings), **caps}}
+        return {"limited": False, "limits": limits}
     key, label = _spend_session(request.headers)
-    spent = agent_spend_ledger.spent(key)
-    return {
-        "limited": True,
-        "agent": label,
-        "limits": {"perRunUsd": agent_spend.threshold_from_settings(settings), **caps},
-        "spent": {"totalUsd": round(spent.total, 4), "models": spent.models},
+
+    def view(spent: agent_spend.Spent) -> dict[str, Any]:
+        return {"totalUsd": round(spent.total, 4), "models": spent.models, "kreaPlanRuns": spent.plan_runs}
+
+    # "chat": this in-app chat's own budget. "shared": the one budget every
+    # agent without a Nebula chat or app token shares, over the last 24 hours.
+    # "app": an outside app's own line, which also counts inside "shared".
+    budget = "chat" if not agent_spend.is_outside(key) else "app" if key.startswith(agent_spend.APP_PREFIX) else "shared"
+    result: dict[str, Any] = {"limited": True, "agent": label, "budget": budget, "limits": limits,
+                              "spent": view(agent_spend_ledger.spent(key))}
+    if budget != "chat":
+        result["window"] = "24h"
+        result["outsideSpent"] = view(agent_spend_ledger.spent_outside())
+    if budget == "app":
+        connected = app_token_store.get(key[len(agent_spend.APP_PREFIX):])
+        result["limits"] = {**limits, "appDailyUsd": connected["dailyUsd"] if connected else None}
+    return result
+
+
+def _outside_view() -> dict[str, Any]:
+    """The outside agents' last 24 hours and each connected app's share, for Settings."""
+    outside = agent_spend_ledger.spent_outside()
+    apps = []
+    for connected in app_token_store.list():
+        spent = agent_spend_ledger.spent(f"{agent_spend.APP_PREFIX}{connected['id']}")
+        apps.append({**connected, "spentUsd": round(spent.total, 4), "kreaPlanRuns": spent.plan_runs})
+    return {"outside": {"spentUsd": round(outside.total, 4), "kreaPlanRuns": outside.plan_runs}, "apps": apps}
+
+
+@app.get("/api/agent/spend/apps")
+async def list_agent_apps() -> dict[str, Any]:
+    """Settings > Agent spending: what the outside agents spent and the apps with tokens. The person's only."""
+    require_person(current_request_headers())
+    return _outside_view()
+
+
+@app.post("/api/agent/spend/apps")
+async def create_agent_app(body: dict[str, Any]) -> dict[str, Any]:
+    """Make a token for an outside app. The token is in this response only;
+    Nebula keeps a hash of it. The person's only."""
+    require_person(current_request_headers())
+    try:
+        app_view, token = app_token_store.create(body.get("name"), body.get("dailyUsd"))
+    except app_tokens.AppTokenError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"app": {**app_view, "spentUsd": 0.0, "kreaPlanRuns": 0}, "token": token}
+
+
+@app.put("/api/agent/spend/apps/{app_id}")
+async def update_agent_app(app_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Change an app's daily limit (null: only the shared outside budget). The person's only."""
+    require_person(current_request_headers())
+    if set(body) != {"dailyUsd"}:
+        raise HTTPException(status_code=400, detail="Send {dailyUsd}: a positive number of USD, or null")
+    try:
+        app_view = app_token_store.set_limit(app_id, body["dailyUsd"]) if app_tokens.valid_id(app_id) else None
+    except app_tokens.AppTokenError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if app_view is None:
+        raise HTTPException(status_code=404, detail="No connected app with that id")
+    return {"app": app_view}
+
+
+@app.delete("/api/agent/spend/apps/{app_id}")
+async def revoke_agent_app(app_id: str) -> dict[str, Any]:
+    """Revoke an app's token: its requests are refused from now on. What it
+    spent stays counted in the outside budget. The person's only."""
+    require_person(current_request_headers())
+    if not (app_tokens.valid_id(app_id) and app_token_store.revoke(app_id)):
+        raise HTTPException(status_code=404, detail="No connected app with that id")
+    return {"status": "revoked"}
+
+
+def _short(text: Any, limit: int = 140) -> str:
+    flat = " ".join(str(text or "").split())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+
+
+def _cinema_price_note() -> str:
+    via = node_readiness.provider_via(node_registry.get(model_pricing.CINEMA_SCENE) or {}) or {}
+    try:
+        priced = model_pricing.load_pricing().get("nodes") or {}
+    except (OSError, ValueError):
+        priced = {}
+    unpriced = sorted(base for base in via.get("models") or [] if base not in priced)
+    note = (f"Calls its base model (scene.base.model, default {via.get('default')}) once per shot, and is "
+            "priced and limited as that model: shots x its list price.")
+    if unpriced:
+        note += f" {', '.join(unpriced)} have no list price, so agent runs with them must be proposed (propose_change)."
+    return note
+
+
+def _keyed_mode_hint(definition: Mapping[str, Any]) -> str | None:
+    """find_nodes' short form of a param-picked provider call (vision-llm QC)."""
+    via = node_readiness.provider_via(definition)
+    if not via or via.get("kind") != "param":
+        return None
+    free = set(via.get("freeWhen") or [])
+    paid = [option.get("value") for param in definition.get("params") or [] if param.get("key") == via.get("param")
+            for option in param.get("options") or [] if isinstance(option, dict) and option.get("value") not in free]
+    return (f"{via.get('param')}={'/'.join(str(v) for v in paid)} needs {' or '.join(via.get('anyKey') or [])} "
+            "and has no list price")
+
+
+@app.get("/api/agent/nodes")
+async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool = True, limit: int = 20) -> dict[str, Any]:
+    """Node types an agent can use, best matches first: whether each can run
+    here (and if not, what's missing) and its list price at default settings.
+
+    Every word of `query` must appear in the id, name or description."""
+    settings = load_settings()
+    keys = node_readiness.configured_keys(settings)
+    try:
+        krea_signed_in = _krea_connector().status().get("status") == "connected"
+    except Exception:  # noqa: BLE001 - an unreadable Krea vault just means not signed in
+        krea_signed_in = False
+    try:
+        pricing = model_pricing.load_pricing().get("nodes") or {}
+    except (OSError, ValueError):
+        pricing = {}
+    words = [word for word in query.lower().split() if word]
+    limit = max(1, min(int(limit), 100))
+    rows: list[tuple[tuple[int, int, str], dict[str, Any]]] = []
+    definitions = node_registry.get_all()
+    for definition in definitions.values():
+        if category and definition.get("category") != category:
+            continue
+        name = str(definition.get("displayName") or definition["id"])
+        haystack = f"{definition['id']} {name} {definition.get('description') or ''}".lower()
+        if any(word not in haystack for word in words):
+            continue
+        access = node_readiness.node_access(definition, keys, krea_signed_in, definitions)
+        if ready_only and access is None:
+            continue
+        row: dict[str, Any] = {
+            "id": definition["id"], "name": name, "category": definition.get("category"),
+            "runsWith": access,
+        }
+        if definition.get("description"):
+            row["description"] = _short(definition["description"])
+        if access is None:
+            row["missing"] = node_readiness.missing(definition, krea_signed_in, definitions)
+        hint = _keyed_mode_hint(definition)
+        if hint:
+            row["needsKeyFor"] = hint  # free at its defaults; describe_node has the detail
+        if definition["id"] == model_pricing.CINEMA_SCENE:
+            row["price"] = None  # its base model's price, once per shot (describe_node)
+        elif model_pricing.is_local(definition):
+            row["price"] = "free"
+        elif definition.get("apiProvider") == "utility":
+            row["price"] = None
+        else:
+            estimate = model_pricing.estimate_node(
+                pricing.get(definition["id"]), definition, {},
+                model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
+            row["price"] = ({"usd": [round(estimate["low"], 4), round(estimate["high"], 4)]}
+                            if estimate and estimate.get("currency") == "usd" else None)
+        # Ready first; then exact id, id prefix, name hits; then by name.
+        idq = " ".join(words)
+        rank = 0 if definition["id"] == idq else 1 if idq and definition["id"].startswith(idq) else \
+            2 if idq and idq in name.lower() else 3
+        rows.append(((0 if access else 1, rank, name.lower()), row))
+    rows.sort(key=lambda pair: pair[0])
+    return {"total": len(rows), "nodes": [row for _, row in rows[:limit]],
+            "krea": "signed in" if krea_signed_in else "not signed in"}
+
+
+def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
+    brief: dict[str, Any] = {"key": param["key"], "type": param.get("type")}
+    for field in ("default", "min", "max", "required"):
+        if param.get(field) not in (None, False):
+            brief[field] = param[field]
+    options = [option.get("value") for option in param.get("options") or [] if isinstance(option, dict)]
+    if options:
+        brief["options"] = options[:40] + (["…"] if len(options) > 40 else [])
+    if param.get("visibleWhen"):
+        brief["onlyWhen"] = param["visibleWhen"]
+    return brief
+
+
+@app.get("/api/agent/nodes/{definition_id}")
+async def agent_describe_node(definition_id: str) -> dict[str, Any]:
+    """One node type, in what an agent needs to wire and set it: ports, params
+    (options, defaults, ranges), whether it can run here, and its list prices."""
+    definition = node_registry.get(definition_id)
+    if definition is None:
+        hint = ", ".join(_suggest_node_ids(definition_id, list(node_registry.get_all())))
+        raise HTTPException(status_code=404, detail=f"No node type '{definition_id}'." + (
+            f" Close matches: {hint}." if hint else " find_nodes lists them."))
+    settings = load_settings()
+    try:
+        krea_signed_in = _krea_connector().status().get("status") == "connected"
+    except Exception:  # noqa: BLE001
+        krea_signed_in = False
+    keys = node_readiness.configured_keys(settings)
+    definitions = node_registry.get_all()
+    access = node_readiness.node_access(definition, keys, krea_signed_in, definitions)
+    ports = lambda key: [  # noqa: E731
+        {"id": port["id"], "type": port.get("dataType"), **({"required": True} if port.get("required") else {}),
+         **({"multiple": True} if port.get("multiple") else {})}
+        for port in definition.get(key) or []
+    ]
+    result: dict[str, Any] = {
+        "id": definition["id"],
+        "name": definition.get("displayName") or definition["id"],
+        "category": definition.get("category"),
+        "runsWith": access,
+        "inputs": ports("inputPorts"),
+        "outputs": ports("outputPorts"),
     }
+    if definition.get("description"):
+        result["description"] = definition["description"]
+    shown = lambda key: [_brief_param(param) for param in definition.get(key) or []  # noqa: E731
+                         if not str(param.get("key", "")).startswith("_") and not param.get("hidden")]
+    result["params"] = shown("params") + shown("sharedParams")
+    if definition.get("directParams") or definition.get("falParams"):
+        # Dual-route nodes take different extra params on each route.
+        direct = node_readiness._keys(definition.get("directKeyName"))
+        result["route"] = "direct" if any(k in keys for k in direct) else "fal" if access else None
+        result["paramsDirect"] = shown("directParams")
+        result["paramsFal"] = shown("falParams")
+    if access is None:
+        result["missing"] = node_readiness.missing(definition, krea_signed_in, definitions)
+    options = node_readiness.detail(definition, keys, krea_signed_in, definitions)
+    if options:
+        result["runsWithOptions"] = options
+    modes = node_readiness.krea_modes(definition)
+    if modes:
+        result["kreaModes"] = modes
+        if len(modes) > 1:
+            result["kreaNote"] = ("Billing mode is the person's choice, and new nodes start on the API token. "
+                                  'To bill the signed-in Krea plan instead, propose {"_kreaAuth": "mcp"} with '
+                                  "propose_change; direct edits of _kreaAuth are refused.")
+    if definition["id"] == model_pricing.CINEMA_SCENE:
+        result["price"] = None
+        result["priceNote"] = _cinema_price_note()
+    elif model_pricing.is_local(definition):
+        result["price"] = "free"
+        if options and options.get("note"):
+            # Free at its defaults; the other values of that param are not.
+            result["priceNote"] = f"Free at its defaults. {options['note']}"
+    elif definition.get("apiProvider") == "utility":
+        result["price"] = None
+        result["priceNote"] = (options or {}).get("note") or (
+            "Calls a provider with no list price; agent runs of it must be proposed (propose_change).")
+    else:
+        try:
+            entry = (model_pricing.load_pricing().get("nodes") or {}).get(definition["id"])
+        except (OSError, ValueError):
+            entry = None
+        if not entry:
+            result["price"] = None
+            if modes == ["mcp"]:
+                result["priceNote"] = ("Billed to the signed-in Krea plan. Agent runs count against the Krea plan-run "
+                                       "limit set in Nebula Settings.")
+            elif modes:
+                result["priceNote"] = ("On the API token it has no list price, so agent runs of it must be proposed "
+                                       "(propose_change). Switched to the Krea plan (the person's call), agent runs "
+                                       "count against the Krea plan-run limit set in Nebula Settings.")
+            else:
+                result["priceNote"] = "No list price; agent runs of it must be proposed (propose_change)."
+        else:
+            estimate = model_pricing.estimate_node(
+                entry, definition, {}, model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
+            rows = [{**row.get("match", {}), "usd": row.get("price")} for row in entry.get("rows") or []]
+            result["price"] = {
+                "per": entry.get("per"),
+                "dependsOn": entry.get("priceParams") or [],
+                "atDefaultsUsd": ([round(estimate["low"], 4), round(estimate["high"], 4)]
+                                  if estimate and estimate.get("currency") == "usd" else None),
+                "rows": rows[:40],
+            }
+            if entry.get("price") is not None and not rows:
+                result["price"]["usd"] = entry.get("price")
+    return result
 
 
 @app.get("/api/health")
@@ -2961,7 +3497,7 @@ async def _journal_detached_pins(pins: list[dict[str, Any]], reason: str) -> Non
         )
 
 
-def _pin_http_error(exc: PinError | PersonGateError) -> HTTPException:
+def _pin_http_error(exc: PinError) -> HTTPException:
     return HTTPException(status_code=exc.status, detail=exc.detail)
 
 
@@ -2980,15 +3516,15 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
 
     Body: {text, nodeId} or {text, position: {x, y}}.
     """
+    require_person(current_request_headers())
     try:
-        require_person(current_request_headers())
         pin = canvas_pins.add(
             body.get("text"),
             node_id=body.get("nodeId"),
             position=body.get("position"),
             graph_nodes=cli_graph.nodes,
         )
-    except (PersonGateError, PinError) as exc:
+    except PinError as exc:
         raise _pin_http_error(exc) from exc
     await _broadcast_pins()
     anchor = pin.get("anchor") or {}
@@ -3004,10 +3540,10 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
 @app.delete("/api/canvas/pins/{pin_id}")
 async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
     """Delete a note. Only the person can do this."""
+    require_person(current_request_headers())
     try:
-        require_person(current_request_headers())
         pin = canvas_pins.remove(pin_id)
-    except (PersonGateError, PinError) as exc:
+    except PinError as exc:
         raise _pin_http_error(exc) from exc
     await _broadcast_pins()
     _journal(
@@ -3056,7 +3592,7 @@ _SYSTEM_ACTOR: dict[str, Any] = {"kind": "system"}
 _PERSON_ACTOR: dict[str, Any] = {"kind": "person"}
 
 
-def _proposal_http_error(exc: ProposalError | PersonGateError) -> HTTPException:
+def _proposal_http_error(exc: ProposalError) -> HTTPException:
     return HTTPException(status_code=exc.status, detail=exc.detail)
 
 
@@ -3112,6 +3648,8 @@ def _stage_proposal(
     spec: ProposalSpec,
     *,
     positions: dict[str, dict[str, float]] | None = None,
+    base: CLIGraph | None = None,
+    what: str = "a proposal",
 ) -> tuple[CLIGraph, dict[str, str], list[str], list[str]]:
     """Stage a proposal on a clone of the live graph with the cluster validators.
 
@@ -3119,8 +3657,10 @@ def _stage_proposal(
     HTTPException from the same validators create/connect/update use, so a
     proposal that would fail as direct edits fails here, before anything is
     committed. Missing referenced nodes raise 409 (the canvas moved on).
+    `base` stages onto an already-staged candidate instead (direct edits
+    remove nodes first); `what` names the change in refusals.
     """
-    candidate = cli_graph.clone()
+    candidate = base if base is not None else cli_graph.clone()
     for node_id in sorted(spec.references):
         if node_id not in candidate.nodes:
             raise HTTPException(status_code=409, detail=f"{node_id} is no longer on the canvas")
@@ -3129,9 +3669,9 @@ def _stage_proposal(
         node = candidate.nodes[change.node_id]
         definition_id = str(node.get("definitionId") or "")
         if definition_id == "cinema-scene" and "scene" in change.params:
-            raise HTTPException(status_code=400, detail="Cinema scenes can't be changed by a proposal; edit them in Cinema")
+            raise HTTPException(status_code=400, detail=f"Cinema scenes can't be changed by {what}; edit them in Cinema")
         if uses_durable_recovery(definition_id, provider="worldlabs"):
-            raise HTTPException(status_code=400, detail="World Labs nodes can't be changed by a proposal; propose a new node instead")
+            raise HTTPException(status_code=400, detail=f"World Labs nodes can't be changed by {what}; add a new node instead")
         _validate_params(definition_id, change.params)
         candidate.update_params(change.node_id, _coerce_params(definition_id, change.params))
     raw_nodes = [
@@ -3154,6 +3694,13 @@ def _stage_proposal(
             raise HTTPException(status_code=400, detail=f"run names '{item[:30]}', which is not on the canvas or in the proposal")
         run_ids.append(refs[item])
     return candidate, id_map, edge_ids, run_ids
+
+
+def _proposal_run_fingerprint(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str]) -> dict[str, str]:
+    """What the proposal's runs would start on this staged graph, with new
+    nodes named by their refs (their ids differ each time it is staged)."""
+    ref_for = {new_id: ref for ref, new_id in id_map.items()}
+    return approvals.fingerprint(candidate.nodes, candidate.edges, run_ids, name=lambda node_id: ref_for.get(node_id, node_id))
 
 
 def _outputs_available(outputs: Any) -> bool:
@@ -3199,12 +3746,12 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
         estimate = _estimate_proposal_run(items, graph_nodes, graph_edges, definitions)
         for node_id in chosen:
             definition = definitions.get(str(candidate.nodes[node_id].get("definitionId") or ""), {})
-            price = (estimate or {}).get("priced", {}).get(node_id)
+            line = (estimate or {}).get("priced", {}).get(node_id)
             entries.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
-                **cost_for(definition),
-                "price": price,
+                **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions),
+                "price": {"low": line["low"], "high": line["high"]} if line else None,
             })
         if estimate:
             estimate = {
@@ -3233,7 +3780,9 @@ def _estimate_proposal_run(
          for n in graph_nodes],
         [(str(e.get("source")), str(e.get("target"))) for e in graph_edges],
     )
-    return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers)
+    wired = model_pricing.wired_ports(
+        items, [(str(e.get("source")), str(e.get("target")), e.get("targetHandle")) for e in graph_edges])
+    return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired)
 
 
 def _node_order(node_id: str) -> tuple[int, str]:
@@ -3272,15 +3821,22 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     headers = current_request_headers()
     identity = identify_agent(headers)
     if identity is None:
-        if is_browser_request(headers):
+        if is_person(headers):
             raise HTTPException(status_code=403, detail="The person doesn't need to propose; edit directly")
         raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
     await _sweep_proposals()
     _validate_graph_ingress_complexity(body)
     try:
-        spec = parse_spec(body)
+        # A proposal is where an agent asks to change a Krea node's billing
+        # (_kreaAuth): direct edits refuse that (_refuse_agent_krea_billing_change).
+        spec = parse_spec(body, internal_ok=KREA_BILLING_PARAMS)
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
+    for node in spec.nodes:
+        _check_krea_auth(node.definition_id, node.params, node.ref)
+    for change in spec.params:
+        current = cli_graph.nodes.get(change.node_id) or {}
+        _check_krea_auth(str(current.get("definitionId") or ""), change.params, change.node_id)
     try:
         candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec)
     except HTTPException as exc:
@@ -3290,6 +3846,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     known, visible_area = _proposal_layout_hints()
     positions = place_new_nodes(spec, known, visible_area)
     cost = _proposal_cost(candidate, id_map, run_ids)
+    run_fingerprint = _proposal_run_fingerprint(candidate, id_map, run_ids)
     existing = {
         node_id: {
             "name": f"{_node_label(node_id)} ({node_id})",
@@ -3305,6 +3862,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
             positions=positions,
             cost=cost,
             existing=existing,
+            run_fingerprint=run_fingerprint,
         )
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
@@ -3406,15 +3964,13 @@ async def withdraw_canvas_proposal(proposal_id: str) -> dict[str, Any]:
 async def _decidable_proposal(proposal_id: str) -> Proposal:
     """The person-only checks shared by accept and reject, in order.
 
-    1. No agent markers and a browser (or the desktop session).
-    2. The per-proposal accept key, which only browser sockets ever received.
+    1. No agent markers and this launch's person token.
+    2. The per-proposal accept key, which only sockets that said hello with
+       the person token ever received.
     3. Still open, and for the project that is open now.
     """
     headers = current_request_headers()
-    try:
-        require_person(headers)
-    except PersonGateError as exc:
-        raise _proposal_http_error(exc) from exc
+    require_person(headers)
     lower = {k.lower(): v for k, v in (headers or {}).items()}
     supplied = lower.get(_PROPOSAL_KEY_HEADER) or ""
     proposal = canvas_proposals.get(proposal_id)
@@ -3443,6 +3999,17 @@ def _refuse_overwriting_later_edits(proposal: Proposal) -> None:
         stale.extend(f"{change.node_id}.{key}" for key in change.params if now.get(key) != before.get(key))
     if stale:
         raise HTTPException(status_code=409, detail=f"{_listed(stale, 4)} changed after it was proposed")
+
+
+def _refuse_changed_runs(proposal: Proposal, candidate: CLIGraph, id_map: dict[str, str], run_ids: list[str]) -> None:
+    """409 when what the proposal's runs would start has changed since it was
+    proposed: a node's settings, its wires in, or a node gone. The person is
+    deciding on the runs and cost the proposal showed, not on newer values."""
+    now = _proposal_run_fingerprint(candidate, id_map, run_ids)
+    changed = approvals.changed_nodes(proposal.run_fingerprint, now)
+    if changed:
+        raise HTTPException(status_code=409, detail=(
+            f"what it runs changed after it was proposed ({_listed(sorted(changed, key=_node_order), 4)})"))
 
 
 def _ensure_still_decidable(proposal: Proposal) -> None:
@@ -3493,6 +4060,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         try:
             _refuse_overwriting_later_edits(proposal)
             candidate, id_map, edge_ids, run_ids = _stage_proposal(proposal.spec, positions=positions)
+            _refuse_changed_runs(proposal, candidate, id_map, run_ids)
         except HTTPException as exc:
             # cli_graph is only replaced at commit, so nothing changed.
             staging_error = exc
@@ -3518,6 +4086,15 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         # Unreachable while the stretch above stays await-free. If it ever
         # happens the graph is already committed, so still sync the canvas.
         pass
+    # Still before any await: from here no agent edit can change what the
+    # canvas is about to run, and the run must match it value for value.
+    approval = run_approvals.grant(
+        proposal_id=proposal.id,
+        agent_name=proposal.agent.name,
+        run_node_ids=run_ids,
+        fingerprint=approvals.fingerprint(cli_graph.nodes, cli_graph.edges, run_ids),
+        shape=_approval_shape(cli_graph, run_ids),
+    ) if run_ids else None
     await _broadcast_graph_sync()
     publish_action(f"Accepted {proposal.agent.name}'s proposal ({len(id_map)} nodes)")
     person = dict(_PERSON_ACTOR)
@@ -3565,6 +4142,8 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         "proposalId": proposal.id,
         "idMap": id_map,
         "runNodeIds": run_ids,
+        # Only the person's canvas gets this; it sends it with the run it starts.
+        "approvalId": approval.id if approval is not None else None,
         **_rf_created(list(id_map.values()), edge_ids),
         "updatedNodes": updated,
     }
@@ -3585,6 +4164,14 @@ async def reject_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     canvas_proposals.close(proposal.id, "rejected", reason=reason)
     await _announce_closed_proposals([proposal], actor=dict(_PERSON_ACTOR))
     return {"status": "rejected", "proposalId": proposal.id}
+
+
+@app.delete("/api/canvas/approvals/{approval_id}")
+async def release_run_approval(approval_id: str) -> dict[str, Any]:
+    """The person let go of a run they approved on Accept (dismissed the held
+    run, or the canvas didn't start it). The nodes it locked are free again."""
+    require_person(current_request_headers())
+    return {"status": "released" if run_approvals.drop(approval_id) else "not_found"}
 
 
 @app.get("/api/project")
@@ -3633,6 +4220,9 @@ async def get_agent_models(agent: str, refresh: bool = False) -> dict[str, Any]:
 
 @app.post("/api/agents/codex/login/chatgpt")
 async def start_codex_chatgpt_login(request: Request) -> dict[str, Any]:
+    """Sign Codex in to ChatGPT. It runs `codex logout` first, which clears the
+    person's stored Codex credentials, so only the person may start it."""
+    require_person(current_request_headers())
     from services.codex_session import start_codex_chatgpt_login as start_login
 
     payload: dict[str, Any] = {}
@@ -3688,6 +4278,9 @@ async def get_settings() -> dict:
 
 @app.put("/api/settings")
 async def update_settings(body: dict[str, Any]) -> dict:
+    # Settings are the person's: keys, output paths, routing and the limits
+    # that hold agents back. Agents only ever read them (GET).
+    require_person(current_request_headers())
     if "kreaConnectionMode" in body and body["kreaConnectionMode"] not in ("api-token", "mcp"):
         raise HTTPException(400, "Krea connection mode must be api-token or mcp")
     if "zoomTelemetryEnabled" in body and not isinstance(body["zoomTelemetryEnabled"], bool):
@@ -3700,11 +4293,6 @@ async def update_settings(body: dict[str, Any]) -> dict:
                 body[agent_spend.CAPS_KEY] = agent_spend.validate_caps(body[agent_spend.CAPS_KEY], node_registry.get_all())
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
-        # Spending limits hold agents back, so only the person sets them.
-        try:
-            require_person(current_request_headers())
-        except PersonGateError as exc:
-            raise HTTPException(exc.status, exc.detail) from exc
     # Desktop mode: credentials are managed via the Keychain credential IPC
     # and POST /api/credentials/update — never via this endpoint. Ignore any
     # apiKeys in the request body so a compromised renderer cannot overwrite
@@ -3775,6 +4363,7 @@ async def remove_settings_api_key(provider: str) -> dict:
     Credential values and Krea MCP OAuth state never enter the response. The
     desktop credential bridge remains responsible for injected credentials.
     """
+    require_person(current_request_headers())
     if provider not in _CREDENTIAL_PROVIDER_ALLOWLIST:
         raise HTTPException(400, "Unknown credential provider")
     if is_injected_mode():
@@ -3792,10 +4381,11 @@ async def remove_settings_api_key(provider: str) -> dict:
 async def credentials_update(body: dict[str, Any]) -> dict:
     """Update an in-memory injected credential without sidecar restart.
 
-    Called by Electron main when the user changes a provider key via the
-    Settings panel credential IPC. Loopback-only (same security boundary as
-    all other endpoints). Never persists to disk.
+    Called by the desktop Settings panel after it stores a provider key
+    through the credential IPC. Person-only: an agent that could call this
+    could swap or clear the person's injected keys. Never persists to disk.
     """
+    require_person(current_request_headers())
     provider = body.get("provider")
     key = body.get("key")
 
@@ -3826,9 +4416,10 @@ def _execution_is_cancelling(run_id: str) -> bool:
 
 async def _finalize_cancelled_execution(
     nodes: list[GraphNode], run_id: str, *, preserve_graph_params: bool = False,
+    submitted: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> None:
     """Sync late live-run params, preserve replay canvas params, then emit Stop."""
-    if not preserve_graph_params and _sync_params_to_cli_graph(nodes):
+    if not preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted):
         await _broadcast_graph_sync()
     await manager.broadcast(GraphCancelledEvent(run_id=run_id))
     _journal(
@@ -4113,6 +4704,7 @@ async def execute(request: ExecuteRequest) -> dict:
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
+    submitted = _submitted_params(nodes)
     _validate_cinema_base_models(nodes)
 
     errors = validate_graph(nodes, request.edges, api_keys)
@@ -4138,11 +4730,15 @@ async def execute(request: ExecuteRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"Graph contains a cycle: {exc}")
 
     # After validation, so a graph that can't run reports why, not its cost.
-    _require_run_spend_approval(run_id, nodes, request.edges,
-                                run_ids=_end_node_ids(nodes, request.edges))
+    _require_run_spend_approval(run_id, nodes, request.edges, approval_id=request.approval_id,
+                                run_ids=_end_node_ids(nodes, request.edges), settings=settings)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
-    _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=nodes)
+    try:
+        _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=nodes)
+    except BaseException:
+        _return_hold(run_id)
+        raise
 
     async def _run() -> None:
         import traceback, sys
@@ -4164,7 +4760,7 @@ async def execute(request: ExecuteRequest) -> dict:
             # authoritative terminal state.
             if _execution_is_cancelling(run_id):
                 raise asyncio.CancelledError
-            if not request.preserve_graph_params and _sync_params_to_cli_graph(nodes):
+            if not request.preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted):
                 # ExecutedEvent carries outputs, but handlers such as
                 # video-edit also enrich params. Without a final graphSync the
                 # backend persisted those edits while the live Canvas stayed
@@ -4172,11 +4768,13 @@ async def execute(request: ExecuteRequest) -> dict:
                 await _broadcast_graph_sync()
             print("[exec] _run completed successfully", file=sys.stderr, flush=True)
         except asyncio.CancelledError:
-            await _finalize_cancelled_execution(nodes, run_id, preserve_graph_params=request.preserve_graph_params)
+            await _finalize_cancelled_execution(nodes, run_id, preserve_graph_params=request.preserve_graph_params,
+                                                submitted=submitted)
             raise
         except Exception as e:
             if _execution_is_cancelling(run_id):
-                await _finalize_cancelled_execution(nodes, run_id, preserve_graph_params=request.preserve_graph_params)
+                await _finalize_cancelled_execution(nodes, run_id, preserve_graph_params=request.preserve_graph_params,
+                                                submitted=submitted)
                 raise asyncio.CancelledError from e
             print(f"[exec] _run FAILED: {e}", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
@@ -4186,6 +4784,7 @@ async def execute(request: ExecuteRequest) -> dict:
             # settles. The lease therefore belongs to the task, not the HTTP
             # acknowledgement, and releases only after the task is terminal.
             await _release_paid_worldlabs_starts(run_id)
+            _settle_hold(run_id)
 
     task: asyncio.Task[None] | None = None
     run_coroutine = _run()
@@ -4199,6 +4798,7 @@ async def execute(request: ExecuteRequest) -> dict:
         else:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ExecutionCancellationCapacityError as exc:
         if task is None:
@@ -4206,6 +4806,7 @@ async def execute(request: ExecuteRequest) -> dict:
         else:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         if task is None:
@@ -4214,6 +4815,7 @@ async def execute(request: ExecuteRequest) -> dict:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
         if task is None:
@@ -4240,6 +4842,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
     nodes = _normalize_execute_nodes(request.nodes)
+    submitted = _submitted_params(nodes)
 
     # Compute the subgraph: target node + all its ancestors
     sub_nodes, sub_edges = get_subgraph(
@@ -4277,10 +4880,15 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         raise HTTPException(status_code=400, detail=f"Subgraph contains a cycle: {exc}")
 
     # After validation, so a graph that can't run reports why, not its cost.
-    _require_run_spend_approval(run_id, sub_nodes, sub_edges, run_ids=[request.target_node_id])
+    _require_run_spend_approval(run_id, sub_nodes, sub_edges, approval_id=request.approval_id,
+                                run_ids=[request.target_node_id], settings=settings)
 
     handler_registry = get_handler_registry(emit=_emit_and_sync)
-    _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    try:
+        _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    except BaseException:
+        _return_hold(run_id)
+        raise
 
     async def _run() -> None:
         import traceback
@@ -4296,19 +4904,22 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
             )
             if _execution_is_cancelling(run_id):
                 raise asyncio.CancelledError
-            if not request.preserve_graph_params and _sync_params_to_cli_graph(sub_nodes):
+            if not request.preserve_graph_params and _sync_params_to_cli_graph(sub_nodes, submitted=submitted):
                 await _broadcast_graph_sync()
         except asyncio.CancelledError:
-            await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params)
+            await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params,
+                                                submitted=submitted)
             raise
         except Exception as exc:
             if _execution_is_cancelling(run_id):
-                await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params)
+                await _finalize_cancelled_execution(sub_nodes, run_id, preserve_graph_params=request.preserve_graph_params,
+                                                submitted=submitted)
                 raise asyncio.CancelledError from exc
             traceback.print_exc()
             raise
         finally:
             await _release_paid_worldlabs_starts(run_id)
+            _settle_hold(run_id)
 
     try:
         task = asyncio.create_task(_run())
@@ -4317,15 +4928,18 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     except ExecutionCancelledBeforeStartError as exc:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ExecutionCancellationCapacityError as exc:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
         await _release_paid_worldlabs_starts(run_id)
@@ -4754,9 +5368,6 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run '{run_id}' already exists")
-    # Priced as the whole scene: an upper bound for one shot.
-    spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
-    _require_spend_approval(spend_nodes, spend_edges, run_ids=[request.node_id])
     canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
     settings = load_settings()
     api_keys = settings.get("apiKeys", {})
@@ -4826,6 +5437,14 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     shot_port = f"shot_{request.shot_id}"
     count = request.variations or 1
 
+    # Priced as the whole scene: an upper bound for one shot. Variations run
+    # the whole subgraph again with the cache off, once per variation, so
+    # each one counts in full. Checked after validation, so a request that
+    # can't run doesn't count.
+    spend_nodes, spend_edges = get_subgraph(request.nodes, request.edges, request.node_id)
+    _require_run_spend_approval(run_id, spend_nodes, spend_edges, run_ids=[request.node_id], passes=count,
+                                settings=settings)
+
     # A per-shot run does not acquire the frontend's Canvas-wide ``isExecuting``
     # gate, so sibling work remains available. It does register its background
     # Task below for strong ownership, Stop/status, and pre-first-turn cleanup,
@@ -4833,7 +5452,11 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     # execution surface. Otherwise an exact recovery deletion can race a World
     # ancestor that is still polling, then admit a stale blank payload as a
     # fresh paid start.
-    _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    try:
+        _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    except BaseException:
+        _return_hold(run_id)
+        raise
 
     async def _run() -> None:
         import traceback
@@ -4905,6 +5528,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                 await _broadcast_graph_sync()
             finally:
                 await _release_paid_worldlabs_starts(run_id)
+                _settle_hold(run_id)
 
     task: asyncio.Task[None] | None = None
     run_coroutine = _run()
@@ -4923,6 +5547,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         else:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ExecutionCancellationCapacityError as exc:
         if task is None:
@@ -4930,6 +5555,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         else:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         if task is None:
@@ -4938,6 +5564,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
         if task is None:
@@ -5053,6 +5680,8 @@ async def _broadcast_graph_sync(*, graph_replaced: bool = False, reason: str = "
         await _broadcast_pins()
         await _journal_detached_pins(detached, "the canvas was replaced")
         # Proposals point at node ids that just restarted: none of them still fit.
+        # Nor do runs approved on Accept that haven't started.
+        run_approvals.clear()
         await _announce_closed_proposals(canvas_proposals.invalidate_all("the canvas was replaced"))
     return export
 
@@ -5180,6 +5809,7 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         return
 
     run_id = event.run_id or execution_run_id.get()
+    _release_unspent_hold(event, run_id)
     record = execution_runs.get(run_id) if run_id else None
     if record is not None and record.status in {"cancelling", "cancelled"}:
         return
@@ -5269,16 +5899,27 @@ def _sync_provider_recovery_to_cli_graph(
     return True, durability_warning, safety_hold_changed
 
 
-def _sync_params_to_cli_graph(nodes: list[GraphNode]) -> bool:
+def _sync_params_to_cli_graph(
+    nodes: list[GraphNode], *, submitted: Mapping[str, Mapping[str, Any]] | None = None,
+) -> bool:
     """Mirror handler-mutated params from in-memory GraphNode instances back
     to cli_graph. Pydantic deep-copies params at model_validate time, so any
     handler that enriches node.params (e.g. video-edit seeding clips +
     sourceDuration after probing) needs an explicit sync — otherwise the
     next /api/graph/export sees the pre-execution state and the canvas
-    reverts to whatever the user last set manually."""
+    reverts to whatever the user last set manually.
+
+    Only a canvas node of the same definition is written. ``submitted`` is
+    for a run whose params came from a request that isn't the person's
+    (``_submitted_params``): the params as that request sent them. Then
+    only what the run itself changed is copied, never ``_kreaAuth``, so a
+    request can't edit the canvas by running a node with the canvas node's
+    id; edits go through the edit routes and their checks."""
     persisted = False
     for node in nodes:
         current = cli_graph.nodes.get(node.id, {})
+        if current and current.get("definitionId") != node.definition_id:
+            continue
         if node.definition_id == "cinema-scene":
             # Whole-scene execution mutates only shot.output. The request's
             # authored scene and variation history are snapshots: copying
@@ -5324,15 +5965,31 @@ def _sync_params_to_cli_graph(nodes: list[GraphNode]) -> bool:
             pinned = node.params.get("_paperSource", {})
             if live.get("id") == pinned.get("id") and live.get("sequence", 0) >= pinned.get("sequence", 0):
                 continue
-        if (
-            node.id in cli_graph.nodes
-            and cli_graph.nodes[node.id].get("params") != node.params
-        ):
-            cli_graph.nodes[node.id]["params"] = copy.deepcopy(node.params)
+        if node.id not in cli_graph.nodes:
+            continue
+        params = node.params
+        if submitted is not None:
+            sent = submitted.get(node.id) or {}
+            params = {
+                key: value for key, value in (cli_graph.nodes[node.id].get("params") or {}).items()
+                if key == "_kreaAuth" or key not in sent or key in node.params
+            }
+            params.update({key: value for key, value in node.params.items()
+                           if key != "_kreaAuth" and (key not in sent or sent[key] != value)})
+        if cli_graph.nodes[node.id].get("params") != params:
+            cli_graph.nodes[node.id]["params"] = copy.deepcopy(params)
             persisted = True
     if persisted:
         cli_graph._maybe_persist()
     return persisted
+
+
+def _submitted_params(nodes: list[GraphNode]) -> dict[str, dict[str, Any]] | None:
+    """The params a run request sent, for ``_sync_params_to_cli_graph``; None
+    for the person's own runs, whose params are theirs to keep."""
+    if _is_person_request():
+        return None
+    return {node.id: copy.deepcopy(node.params) for node in nodes}
 
 
 def _validate_connect_handles(
@@ -5613,6 +6270,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
     position = body.get("position")
     _validate_params(definition_id, params)
     params = _coerce_params(definition_id, params)
+    _refuse_agent_krea_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
         _graph_worldlabs_recovery_checkpoints(
             [{"id": "new-node", "definitionId": definition_id, "params": params}]
@@ -5647,6 +6305,9 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         body.get("target", ""),
         body.get("targetHandle", ""),
     )
+    _guard_approved_runs(lambda probe: probe.connect(
+        body["source"], body["sourceHandle"], body["target"], body["targetHandle"],
+    ))
     try:
         edge = cli_graph.connect(
             body["source"], body["sourceHandle"],
@@ -5706,6 +6367,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
                 raise HTTPException(status_code=400, detail=f"connect.{key} must be a non-empty string")
     _validate_params(definition_id, params)
     params = _coerce_params(definition_id, params)
+    _refuse_agent_krea_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
         _graph_worldlabs_recovery_checkpoints(
             [{"id": "new-node", "definitionId": definition_id, "params": params}]
@@ -5756,6 +6418,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
                 # failure; the caller requested a pair, not a standalone node.
                 raise HTTPException(status_code=400, detail=f"Cannot connect this node: {exc}") from exc
 
+        _refuse_agent_change_to_approved_runs(candidate)
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[short_id]],
@@ -5974,6 +6637,9 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             raise HTTPException(status_code=400, detail="params must be an object")
         _validate_params(node.get("definitionId", ""), params)
         params = _coerce_params(node.get("definitionId", ""), params)
+        _refuse_agent_krea_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
+                                            {**params_before, **params})])
+        _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
         if node.get("definitionId") == "cinema-scene" and "scene" in params:
             # Studio/Inspector PUTs carry authoring snapshots captured before
             # a generation or promotion may have installed fresher media.
@@ -6158,6 +6824,7 @@ async def clear_graph() -> dict:
     with _paid_graph_mutation("clear the canvas"):
         _reject_graph_replacement_during_paid_start("clear the canvas")
         cli_graph.clear()
+        run_approvals.clear()
     agent_presence.forget_graph()
     await _broadcast_graph_sync()
     publish_action("Cleared the canvas")
@@ -6281,6 +6948,37 @@ async def acknowledge_provider_start_ambiguity(
     }
 
 
+def _ensure_node_deletable(node_id: str, node: dict[str, Any]) -> None:
+    """Refuse (409) to delete a node that still carries World Labs paid state.
+
+    Call inside _paid_graph_mutation so no paid start can land in between.
+    """
+    try:
+        active = provider_start_guard.has_active_node(node_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    held = any(
+        record.get("nodeId") == node_id for record in provider_start_guard.list()
+    )
+    recovered = any(
+        record.get("nodeId") == node_id
+        for record in provider_recovery_store.list()
+    )
+    params = node.get("params") or {}
+    live_checkpoint = has_recovery_identity(
+        str(node.get("definitionId") or ""), params
+    )
+    if active or held or recovered or live_checkpoint:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot delete {node_id}: it has unresolved World Labs paid state. "
+                "Check Marble, then resolve its exact recovery/ambiguity record "
+                "first."
+            ),
+        )
+
+
 @app.delete("/api/graph/node/{node_id}")
 async def delete_graph_node(node_id: str) -> dict:
     """Remove a node and any edges touching it from cli_graph."""
@@ -6289,30 +6987,8 @@ async def delete_graph_node(node_id: str) -> dict:
         node = cli_graph.nodes.get(node_id)
         if node is None:
             raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
-        try:
-            active = provider_start_guard.has_active_node(node_id)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        held = any(
-            record.get("nodeId") == node_id for record in provider_start_guard.list()
-        )
-        recovered = any(
-            record.get("nodeId") == node_id
-            for record in provider_recovery_store.list()
-        )
-        params = node.get("params") or {}
-        live_checkpoint = has_recovery_identity(
-            str(node.get("definitionId") or ""), params
-        )
-        if active or held or recovered or live_checkpoint:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Cannot delete a node with unresolved World Labs paid state. "
-                    "Check Marble, then resolve its exact recovery/ambiguity record "
-                    "first."
-                ),
-            )
+        _ensure_node_deletable(node_id, node)
+        _guard_approved_runs(lambda probe: probe.remove_node(node_id))
         label = _node_label(node_id)
         removed_definition = str(node.get("definitionId") or "")
         removed_position = copy.deepcopy(node.get("position"))
@@ -6343,6 +7019,233 @@ async def delete_graph_node(node_id: str) -> dict:
     return {"status": "deleted", "id": node_id}
 
 
+def _krea_billing(definition_id: str, params: Mapping[str, Any]) -> str | None:
+    """How a Krea node that offers both API-token and plan billing bills with
+    these params; None for every other node (account-only nodes have no
+    choice to change)."""
+    definition = node_registry.get(definition_id) or {}
+    modes = node_readiness.krea_modes(definition)
+    if len(modes) < 2:
+        return None
+    param = next((p for p in definition.get("params") or [] if p.get("key") == "_kreaAuth"), {})
+    return str(params.get("_kreaAuth") or param.get("default") or "api-token")
+
+
+KREA_BILLING_REFUSAL = (
+    "Changing how a Krea node is billed (_kreaAuth: the API token's balance or the signed-in Krea "
+    "plan) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the "
+    "change instead with propose_change (`nebula propose`); the person accepts it on the canvas."
+)
+
+
+def _refuse_agent_krea_billing_change(changes: Iterable[tuple[str, str, Mapping[str, Any] | None, Mapping[str, Any]]]) -> None:
+    """403 when an edit that isn't the person's would change a Krea node's
+    billing mode. ``changes`` are (label, definitionId, params before or None
+    for a new node, params after). A new node counts as changed when it
+    starts on a mode other than the node's default (the API token). The
+    person's own edits and accepted proposals always pass."""
+    if _is_person_request():
+        return
+    switched = []
+    for label, definition_id, before, after in changes:
+        mode = _krea_billing(definition_id, after)
+        if mode is not None and mode != _krea_billing(definition_id, before or {}):
+            switched.append(label)
+    if switched:
+        raise HTTPException(status_code=403, detail=f"{_listed(switched, 4)}: {KREA_BILLING_REFUSAL}")
+
+
+def _check_krea_auth(definition_id: str, params: dict[str, Any], label: str) -> None:
+    """Direct edits may set `_kreaAuth`; only to a billing mode the node offers."""
+    if "_kreaAuth" not in params:
+        return
+    modes = node_readiness.krea_modes(node_registry.get(definition_id) or {})
+    if params["_kreaAuth"] not in modes:
+        offered = f"one of {', '.join(modes)}" if modes else "left out (it isn't a Krea node)"
+        raise HTTPException(status_code=400, detail=f"_kreaAuth on {label} must be {offered}")
+
+
+@app.post("/api/graph/apply")
+async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
+    """An agent edits the canvas directly: everything in the body, or nothing.
+
+    Body: the proposal shape (nodes with +refs, edges, params) plus
+    rename {id|ref: name}, move {id|ref: {x, y}}, remove [id] and unwire
+    [{source, sourceHandle, target, targetHandle}]. Staged on a copy of the
+    graph in that order (unwire, remove, add and change, rename, move) with
+    the validators single edits use, then committed at once. Never runs
+    anything; runs go through /api/graph/run and its spending limits.
+    """
+    headers = current_request_headers()
+    identity = identify_agent(headers)
+    if identity is None:
+        if is_person(headers):
+            raise HTTPException(status_code=403, detail="This route is for agents; the canvas edits directly")
+        raise HTTPException(status_code=400, detail="Name yourself with NEBULA_AGENT_NAME or --as")
+    _validate_graph_ingress_complexity(body)
+    try:
+        spec: EditSpec = parse_edit(body)
+    except ProposalError as exc:
+        raise _proposal_http_error(exc) from exc
+    additions = spec.additions
+    for node in additions.nodes:
+        _check_krea_auth(node.definition_id, node.params, node.ref)
+    for change in additions.params:
+        current = cli_graph.nodes.get(change.node_id) or {}
+        _check_krea_auth(str(current.get("definitionId") or ""), change.params, change.node_id)
+    _refuse_agent_krea_billing_change(
+        [(node.ref, node.definition_id, None, node.params) for node in additions.nodes]
+        + [(change.node_id, str((cli_graph.nodes.get(change.node_id) or {}).get("definitionId") or ""),
+            (cli_graph.nodes.get(change.node_id) or {}).get("params") or {},
+            {**((cli_graph.nodes.get(change.node_id) or {}).get("params") or {}), **change.params})
+           for change in additions.params])
+
+    positions: dict[str, dict[str, float]] = {}
+    if additions.nodes:
+        known, visible_area = _proposal_layout_hints()
+        positions = place_new_nodes(additions, known, visible_area)
+    positions.update({ref: point for ref, point in spec.move.items() if ref.startswith("+")})
+    shown = _display_positions(list(cli_graph.nodes.values()))
+    params_before = {
+        change.node_id: copy.deepcopy((cli_graph.nodes.get(change.node_id) or {}).get("params") or {})
+        for change in additions.params
+    }
+    labels_before = {key: _node_label(key) for key in spec.rename if not key.startswith("+")}
+
+    removed: list[dict[str, Any]] = []
+    with _paid_graph_mutation("edit the canvas"):
+        candidate = cli_graph.clone()
+        for edge in spec.unwire:
+            if not candidate.remove_edge(edge.source, edge.source_handle, edge.target, edge.target_handle):
+                raise HTTPException(status_code=404, detail=(
+                    f"There's no wire {edge.source}.{edge.source_handle} → {edge.target}.{edge.target_handle}; "
+                    "look_at_canvas lists the current wires."))
+        for node_id in spec.remove:
+            node = candidate.nodes.get(node_id)
+            if node is None:
+                raise HTTPException(status_code=404, detail=f"{node_id} is not on the canvas")
+            _ensure_node_deletable(node_id, node)
+            removed.append({
+                "id": node_id,
+                "name": _node_label(node_id),
+                "definitionId": str(node.get("definitionId") or ""),
+                "position": copy.deepcopy(node.get("position")),
+            })
+            candidate.remove_node(node_id)
+        id_map: dict[str, str] = {}
+        edge_ids: list[str] = []
+        if additions.nodes or additions.edges or additions.params:
+            try:
+                candidate, id_map, edge_ids, _ = _stage_proposal(
+                    additions, positions=positions, base=candidate, what="an edit"
+                )
+            except HTTPException as exc:
+                # A missing node means the agent's view is stale.
+                raise HTTPException(status_code=404 if exc.status_code == 409 else exc.status_code,
+                                    detail=exc.detail) from exc
+        for key, raw in spec.rename.items():
+            node_id = id_map.get(key, key)
+            node = candidate.nodes.get(node_id)
+            if node is None:
+                raise HTTPException(status_code=404, detail=f"{node_id} is not on the canvas")
+            candidate.set_label(node_id, _custom_node_label(raw, str(node.get("definitionId") or "")))
+        moves = {key: point for key, point in spec.move.items() if not key.startswith("+")}
+        missing = [node_id for node_id in moves if node_id not in candidate.nodes]
+        if missing:
+            raise HTTPException(status_code=404, detail=f"{missing[0]} is not on the canvas")
+        if moves:
+            candidate.update_positions(moves)
+        touched = sorted(set(id_map.values()) | set(params_before))
+        _refuse_agent_change_to_approved_runs(candidate)
+        _commit_graph_candidate_with_recoveries(
+            candidate,
+            [candidate.nodes[node_id] for node_id in touched],
+            source="agent-edit",
+        )
+
+    await _broadcast_graph_sync()
+    note = f" ({additions.note})" if additions.note != "edit" else ""
+    for edge in spec.unwire:
+        _journal_edge("edge.removed", edge.as_dict())
+    for gone in removed:
+        _journal(
+            "node.removed",
+            node_id=gone["id"],
+            data={"name": gone["name"], "definitionId": gone["definitionId"]},
+            summary=f"removed {gone['name']} ({gone['id']}){note}",
+        )
+        try:
+            detached = canvas_pins.detach_node(gone["id"], gone["position"])
+        except (PinError, ProjectStoreError):
+            detached = []
+        await _journal_detached_pins(detached, f"{gone['name']} was deleted")
+        await _announce_closed_proposals(
+            canvas_proposals.invalidate_referencing(gone["id"], f"{gone['name']} ({gone['id']}) was deleted")
+        )
+        agent_presence.forget_node(gone["id"])
+    _journal_cluster(list(id_map.values()), edge_ids, note=note)
+    changed: list[str] = []
+    for node_id, before in params_before.items():
+        changes = param_changes(before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
+        if changes:
+            changed.append(node_id)
+            _journal(
+                "node.params",
+                node_id=node_id,
+                data=changes,
+                summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id}){note}",
+            )
+    renamed: dict[str, str] = {}
+    for key in spec.rename:
+        node_id = id_map.get(key, key)
+        renamed[node_id] = _node_label(node_id)
+        if key in labels_before and labels_before[key] != renamed[node_id]:
+            _journal(
+                "node.renamed",
+                node_id=node_id,
+                data={"from": labels_before[key], "to": renamed[node_id]},
+                summary=f"renamed {labels_before[key]} ({node_id}) to {renamed[node_id]}",
+            )
+    moved = [node_id for node_id, point in moves.items() if _moved_far_enough(shown.get(node_id), point)]
+    if moved:
+        _journal(
+            "node.moved",
+            node_id=moved[0] if len(moved) == 1 else None,
+            data={"nodeIds": moved[:50], "count": len(moved)},
+            summary=f"moved {_listed(moved)}",
+        )
+
+    added = list(id_map.values())
+    parts = [
+        f"added {len(added)}" if added else "",
+        f"wired {len(edge_ids)}" if edge_ids else "",
+        f"changed {len(changed)}" if changed else "",
+        f"renamed {len(renamed)}" if renamed else "",
+        f"moved {len(moves)}" if moves else "",
+        f"removed {len(removed)}" if removed else "",
+        f"unwired {len(spec.unwire)}" if spec.unwire else "",
+    ]
+    summary = ", ".join(part for part in parts if part) or "no change"
+    publish_action(f"{identity.name} edited the canvas: {summary}")
+    focus = next(iter(added), None) or next(iter(changed or list(renamed) or list(moves)), None)
+    if focus is not None and focus in cli_graph.nodes:
+        await _show_agent({"nodeId": focus}, say=additions.note if note else summary)
+    wanted = set(edge_ids)
+    return {
+        "status": "applied",
+        "summary": summary,
+        "idMap": id_map,
+        "added": [{"id": node_id, "definitionId": cli_graph.nodes[node_id].get("definitionId"),
+                   "name": _node_label(node_id)} for node_id in added],
+        "wired": [{"id": edge["id"], **_edge_data(edge)} for edge in cli_graph.edges if edge.get("id") in wanted],
+        "changed": changed,
+        "renamed": renamed,
+        "moved": list(moves),
+        "removed": [gone["id"] for gone in removed],
+        "unwired": [edge.as_dict() for edge in spec.unwire],
+    }
+
+
 @app.get("/api/graph/node/{node_id}/path")
 async def get_node_image_path(node_id: str) -> dict:
     """Resolve a node's primary image file to an absolute local path.
@@ -6370,6 +7273,71 @@ async def get_node_image_path(node_id: str) -> dict:
             detail=f"Image for node '{node_id}' is not local (external URL)",
         )
     return {"path": str(local_path.resolve())}
+
+
+_PREVIEWABLE = ("Image", "Video")
+_PREVIEW_PORT_ORDER = ("image", "video", "images", "frames")
+
+
+def _preview_port(node_id: str, outputs: dict[str, Any], port: str | None) -> tuple[str, dict[str, Any]]:
+    if port is not None:
+        entry = outputs.get(port)
+        if not isinstance(entry, dict):
+            have = ", ".join(sorted(outputs)) or "none yet"
+            raise HTTPException(status_code=404, detail=f"{node_id} has no output '{port}' (outputs: {have}).")
+        return port, entry
+    candidates = [(name, entry) for name, entry in outputs.items()
+                  if isinstance(entry, dict) and entry.get("value") not in (None, "", [])]
+    if not candidates:
+        raise HTTPException(status_code=404, detail=f"{node_id} has no output yet. Run it first.")
+    candidates.sort(key=lambda item: (item[1].get("type") not in _PREVIEWABLE,
+                                      _PREVIEW_PORT_ORDER.index(item[0]) if item[0] in _PREVIEW_PORT_ORDER else 99))
+    return candidates[0]
+
+
+def _preview_path(value: Any, node_id: str, port: str) -> Path:
+    path = _output_path_from_ref(value) if isinstance(value, str) else None
+    if path is None:
+        raise HTTPException(status_code=415, detail=(
+            f"{node_id}:{port} isn't a file in Nebula's outputs (an external URL or a value), so there's "
+            "nothing to preview here."))
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"The file for {node_id}:{port} is missing from disk.")
+    return path
+
+
+@app.get("/api/graph/node/{node_id}/preview")
+async def preview_node_output(node_id: str, port: str | None = None, size: str = "medium") -> Response:
+    """A small image of a node's output for an agent to look at: an image
+    downscaled, a video as three frames, an image list as up to four tiles.
+    Only files in Nebula's outputs are read; external URLs are never fetched."""
+    node = cli_graph.nodes.get(node_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+    if size not in output_preview.SIZES:
+        raise HTTPException(status_code=400, detail=f"size must be one of {', '.join(output_preview.SIZES)}")
+    name, entry = _preview_port(node_id, node.get("outputs") or {}, port)
+    kind, value = entry.get("type"), entry.get("value")
+    if kind not in _PREVIEWABLE and not (isinstance(value, list) and value):
+        raise HTTPException(status_code=415, detail=(
+            f"{node_id}:{name} is {kind or 'data'}, not an image or video; its value is in the run "
+            "result and look_at_canvas."))
+    try:
+        if kind == "Video":
+            path = _preview_path(value, node_id, name)
+            with tempfile.TemporaryDirectory(prefix="nebula-preview-") as work:
+                frames = await extract_frames(path, (0.1, 0.5, 0.9), Path(work))
+                data, mime = await asyncio.to_thread(output_preview.contact_sheet, frames, size)
+        elif isinstance(value, list):
+            paths = [_preview_path(item, node_id, name) for item in value[:4]]
+            data, mime = await asyncio.to_thread(output_preview.contact_sheet, paths, size)
+        else:
+            data, mime = await asyncio.to_thread(output_preview.image_preview, _preview_path(value, node_id, name), size)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001 - unreadable media is the caller's answer, not a 500
+        raise HTTPException(status_code=422, detail=f"Couldn't preview {node_id}:{name}: {exc}") from exc
+    return Response(content=data, media_type=mime, headers={"X-Nebula-Preview-Port": name})
 
 
 def _resolve_primary_image_url(node: dict[str, Any]) -> str | None:
@@ -6418,6 +7386,9 @@ def _url_to_output_path(value: str) -> Path | None:
 async def delete_graph_edge(body: dict[str, Any]) -> dict:
     """Remove the edge matching source/sourceHandle/target/targetHandle."""
     _check_workspace_revision()
+    _guard_approved_runs(lambda probe: probe.remove_edge(
+        body.get("source", ""), body.get("sourceHandle", ""), body.get("target", ""), body.get("targetHandle", ""),
+    ))
     removed = cli_graph.remove_edge(
         body.get("source", ""),
         body.get("sourceHandle", ""),
@@ -6656,6 +7627,9 @@ async def import_graph(body: dict[str, Any]) -> dict:
         reference_key="id",
         include_outputs=True,
     )
+    _refuse_agent_krea_billing_change(
+        (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), None,
+         candidate.nodes[node_id].get("params") or {}) for node_id in id_map.values())
     _stage_graph_edges(candidate, raw_edges, id_map)
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
@@ -6756,7 +7730,11 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
             reference_key="tempId",
             include_outputs=False,
         )
+        _refuse_agent_krea_billing_change(
+            (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), None,
+             candidate.nodes[node_id].get("params") or {}) for node_id in id_map.values())
         created_edge_ids = _stage_graph_edges(candidate, raw_edges, id_map)
+        _refuse_agent_change_to_approved_runs(candidate)
         _commit_graph_candidate_with_recoveries(
             candidate,
             [candidate.nodes[node_id] for node_id in id_map.values()],
@@ -7026,6 +8004,32 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
     return result, candidate
 
 
+def _snapshot_nodes(snapshot: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """A saved RF snapshot's nodes as {id: {definitionId, params}}."""
+    nodes: dict[str, dict[str, Any]] = {}
+    for node in snapshot.get("nodes") or []:
+        data = node.get("data") if isinstance(node, dict) else None
+        if isinstance(data, dict) and isinstance(node.get("id"), str):
+            params = data.get("params")
+            nodes[node["id"]] = {"definitionId": data.get("definitionId"), "params": params if isinstance(params, dict) else {}}
+    return nodes
+
+
+def _refuse_agent_krea_billing_in_project(candidate: CLIGraph, *before: Mapping[str, Mapping[str, Any]]) -> None:
+    """A project snapshot from a request that isn't the person's can't change
+    how a Krea node bills: opening the project later loads it onto the canvas.
+    ``before`` holds what each node was, by id, most current first (the live
+    canvas, then the project as saved); a node in none of them, or there as
+    another definition, starts on the default (the API token)."""
+    changes = []
+    for node_id, node in candidate.nodes.items():
+        definition_id = str(node.get("definitionId") or "")
+        prior = next((known.get("params") or {} for graph in before
+                      if (known := graph.get(node_id)) and known.get("definitionId") == definition_id), None)
+        changes.append((node_id, definition_id, prior, node.get("params") or {}))
+    _refuse_agent_krea_billing_change(changes)
+
+
 def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> bool:
     """Overlay CLI changes while retaining frontend-only data and run recipes."""
     previous = project["snapshot"]
@@ -7163,6 +8167,9 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
             return {"project": public_project(existing), "workspaceRevision": catalog["workspaceRevision"]}
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in source["snapshot"]["nodes"]}
         snapshot, candidate = _stage_project_snapshot(body.get("snapshot"), historical=historical)
+        _refuse_agent_krea_billing_in_project(
+            candidate, *([cli_graph.nodes] if catalog["activeProjectId"] == source["id"] else []),
+            _snapshot_nodes(source["snapshot"]))
         try:
             project = make_project(body.get("name", f"{source['name'][:100]} (recovered)"), snapshot)
         except ValueError as exc:
@@ -7238,7 +8245,9 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
                 raise HTTPException(status_code=409, detail="Only the currently open project can autosave its canvas")
             historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
             historical.update({node_id: node["definitionId"] for node_id, node in cli_graph.nodes.items()})
-            project["snapshot"], _ = _stage_project_snapshot(body["snapshot"], historical=historical)
+            staged, candidate = _stage_project_snapshot(body["snapshot"], historical=historical)
+            _refuse_agent_krea_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
+            project["snapshot"] = staged
             project["_backendNodeIds"] = sorted(set(cli_graph.nodes) & {node["id"] for node in project["snapshot"]["nodes"]})
             project["_backendEdgeIds"] = sorted({edge["id"] for edge in cli_graph.edges} & {edge["id"] for edge in project["snapshot"]["edges"]})
             project["_nodeCounter"] = cli_graph._counter
@@ -7493,14 +8502,14 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         sub_edges = [GraphEdge.model_validate(e) for e in edges_list]
 
     _validate_cinema_base_models(sub_nodes)
-    _require_spend_approval(sub_nodes, sub_edges,
-                            run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
-
     wait = body.get("wait") if body else None
     if wait is not None and (isinstance(wait, bool) or not isinstance(wait, (int, float)) or wait < 0):
         raise HTTPException(status_code=400, detail="wait must be a number of seconds")
 
+    # Checked last: a request refused for anything else must not count.
     run_id = str(uuid4())
+    _require_spend_approval(sub_nodes, sub_edges, run_id=run_id, settings=settings,
+                            run_ids=[target] if target else _end_node_ids(sub_nodes, sub_edges))
     canvas_events.note_run(run_id, actor_for_headers(current_request_headers()))
     publish_action(
         f"Running {target}..." if target else f"Running {len(sub_nodes)} node(s)..."
@@ -7518,6 +8527,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
+        _return_hold(run_id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     _watch_for_cross_process_stop(run_id, task)
     _cli_runs.start(run_id, task, target, outcome)
@@ -7534,6 +8544,7 @@ async def _execute_cli_run(
     async def collect_events(event: ExecutionEvent) -> None:
         # This path keeps per-node events to itself (it returns results in
         # the response), so journal them here for watchers.
+        _release_unspent_hold(event, run_id)
         _journal_execution_event(event, run_id)
         if isinstance(event, (ProviderRecoveryEvent, ProviderStartAmbiguousEvent)):
             await _emit_and_sync(event)
@@ -7547,7 +8558,11 @@ async def _execute_cli_run(
 
     handler_registry = get_handler_registry(emit=collect_events)
     start = _time_module.time()
-    _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    try:
+        _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
+    except BaseException:
+        _return_hold(run_id)
+        raise
     try:
         await execute_graph(
             nodes=sub_nodes,
@@ -7571,6 +8586,7 @@ async def _execute_cli_run(
         raise
     finally:
         await _release_paid_worldlabs_starts(run_id)
+        _settle_hold(run_id)
         canvas_events.forget_run(run_id)
     duration = _time_module.time() - start
 
@@ -7865,7 +8881,8 @@ async def quick_execute(body: dict[str, Any]) -> dict:
         outputs={},
     ))
     # A quick run has no canvas node to propose, so point at one.
-    _require_spend_approval(temp_nodes, temp_edges, how_to_ask=(
+    quick_run = f"quick-{uuid4().hex}"
+    _require_spend_approval(temp_nodes, temp_edges, run_id=quick_run, on_canvas=False, settings=settings, how_to_ask=(
         f"Add it to the canvas instead (`nebula create {definition_id}`), then propose the run: "
         "`nebula propose --note \"<why>\" --run <node id>` (MCP: propose_change). "
         "The person accepts on the canvas, and the canvas runs it."
@@ -7879,6 +8896,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
             results[event.node_id] = event.outputs
         elif isinstance(event, ErrorEvent):
             errors[event.node_id] = event.error
+            _release_unspent_hold(event, quick_run)
 
     handler_registry = get_handler_registry(emit=collect_events)
     # Temp multi-image input nodes are executed by this request-scoped handler —
@@ -7887,14 +8905,18 @@ async def quick_execute(body: dict[str, Any]) -> dict:
 
     import time
     start = time.time()
-    await execute_graph(
-        nodes=temp_nodes,
-        edges=temp_edges,
-        api_keys=api_keys,
-        handler_registry=handler_registry,
-        emit=collect_events,
-        cache=execution_cache,
-    )
+    try:
+        await execute_graph(
+            nodes=temp_nodes,
+            edges=temp_edges,
+            api_keys=api_keys,
+            handler_registry=handler_registry,
+            emit=collect_events,
+            cache=execution_cache,
+            run_id=quick_run,
+        )
+    finally:
+        _settle_hold(quick_run)
     duration = time.time() - start
 
     if "_quick_main" in errors:
@@ -7929,22 +8951,72 @@ class EnhancePromptRequest(BaseModel):
     prompt: str
 
 
+# Generous for a Create prompt (the enhancer writes one paragraph back), and a
+# bound on what one call can send to a paid provider.
+ENHANCE_PROMPT_MAX_CHARS = 4000
+# A person clicks Enhance now and then. Anything faster is a loop, and with a
+# fall-through over three providers each call can cost up to three requests.
+ENHANCE_RATE_LIMIT = 20
+ENHANCE_RATE_WINDOW_S = 60.0
+_enhance_calls: deque[float] = deque()
+_enhance_log = logging.getLogger("nebula.enhance_prompt")
+
+
+def _admit_enhance_call() -> None:
+    """Count one Enhance call, or 429 when the last minute already had the limit."""
+    now = _time_module.monotonic()
+    while _enhance_calls and now - _enhance_calls[0] > ENHANCE_RATE_WINDOW_S:
+        _enhance_calls.popleft()
+    if len(_enhance_calls) >= ENHANCE_RATE_LIMIT:
+        _enhance_log.warning("enhance-prompt refused: %d calls in the last %.0fs",
+                             len(_enhance_calls), ENHANCE_RATE_WINDOW_S)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Enhance was used {ENHANCE_RATE_LIMIT} times in the last minute. Wait a moment and try again.",
+        )
+    _enhance_calls.append(now)
+
+
 @app.post("/api/enhance-prompt")
 async def enhance_prompt_route(body: EnhancePromptRequest) -> dict[str, str]:
-    """One-shot LLM rewrite of a Create prompt, using the first configured provider."""
+    """One-shot LLM rewrite of a Create prompt, using the first configured provider.
+
+    Person-only: it calls an LLM with the person's keys and has no list price,
+    so it can't be held to the agent spending limits. Agents rewrite prompts
+    themselves, or add a text node, whose run is held to the limits. The gate
+    runs before anything else, so a refused caller learns nothing about which
+    keys exist. Every call is logged (provider, prompt length, outcome) and
+    rate-limited, so use that gets past the gate still shows up."""
+    try:
+        require_person(current_request_headers())
+    except PersonGateError as exc:
+        exc.detail = (f"{exc.detail} Prompt enhancement is the person's Create button. Rewrite the prompt "
+                      "yourself, or add a text node (claude-chat, gpt-4o-chat, gemini-chat) to the graph; "
+                      "running it is held to the spending limits.")
+        raise
     prompt = (body.prompt or "").strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt is empty.")
+    if len(prompt) > ENHANCE_PROMPT_MAX_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Prompt is too long for Enhance ({len(prompt)} characters; the limit is {ENHANCE_PROMPT_MAX_CHARS}).",
+        )
+    _admit_enhance_call()
     api_keys = load_settings().get("apiKeys", {})
     try:
-        return await enhance_prompt(prompt, api_keys)
+        result = await enhance_prompt(prompt, api_keys)
     except NoEnhanceProviderError:
+        _enhance_log.info("enhance-prompt: chars=%d outcome=no_key", len(prompt))
         raise HTTPException(
             status_code=400,
             detail="No LLM API key configured (OpenAI, Anthropic, or Google). Add one in Settings.",
         )
     except EnhanceProviderError as exc:
+        _enhance_log.info("enhance-prompt: chars=%d outcome=provider_error", len(prompt))
         raise HTTPException(status_code=502, detail=str(exc))
+    _enhance_log.info("enhance-prompt: provider=%s chars=%d outcome=ok", result.get("provider"), len(prompt))
+    return result
 
 
 class CharacterCreate(BaseModel):
@@ -8349,6 +9421,7 @@ async def reveal_in_finder(body: dict[str, Any]) -> dict:
         *cmd,
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
+        env=scrubbed_env(),
     )
     return {"status": "ok"}
 

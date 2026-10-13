@@ -2909,7 +2909,8 @@
         "hidden": true
       }
     ],
-    "capabilityNote": "Camera Rig adds prompt guidance. Reference Set sends ordered images with role guidance. Neither provides a native camera or reference-strength control."
+    "capabilityNote": "Camera Rig adds prompt guidance. Reference Set sends ordered images with role guidance. Neither provides a native camera or reference-strength control.",
+    "providerVia": { "kind": "model", "path": ["scene", "base", "model"], "models": ["seedream-4-5", "nano-banana", "nano-banana-fal-edit", "flux-kontext"], "default": "seedream-4-5", "fallbackFor": ["flux-1-dev", "flux.1-dev", "flux-dev"] }
   },
   "character": {
     "id": "character",
@@ -20301,7 +20302,8 @@
         ]
       },
       { "key": "sample_density", "label": "Sample Density", "type": "integer", "required": false, "default": 5, "min": 2, "max": 12, "step": 1 }
-    ]
+    ],
+    "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision" }
   },
   "qc-frame-review": {
     "id": "qc-frame-review",
@@ -20330,7 +20332,8 @@
       },
       { "key": "sample_rate", "label": "Samples Per Second", "type": "float", "required": false, "default": 1.0, "min": 0.1, "max": 4.0, "step": 0.1 },
       { "key": "track_faces", "label": "Track Faces", "type": "boolean", "required": false, "default": true }
-    ]
+    ],
+    "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision" }
   },
   "qc-composited-look": {
     "id": "qc-composited-look",
@@ -20358,7 +20361,8 @@
         ]
       },
       { "key": "sample_density", "label": "Sample Density", "type": "integer", "required": false, "default": 5, "min": 2, "max": 12, "step": 1 }
-    ]
+    ],
+    "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision" }
   },
   "qc-camera-geometry": {
     "id": "qc-camera-geometry",
@@ -20387,7 +20391,8 @@
         ]
       },
       { "key": "expected_angle", "label": "Expected Angle", "type": "string", "required": false, "default": "", "placeholder": "e.g. low-angle push-in" }
-    ]
+    ],
+    "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision" }
   },
   "worldlabs-environment": {
     "id": "worldlabs-environment",

@@ -11,6 +11,7 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
+from execution.missing_credential import MissingCredentialError
 
 
 def _log(msg: str) -> None:
@@ -50,7 +51,7 @@ async def handle_higgsfield(
 ) -> dict[str, Any]:
     api_key = api_keys.get("HIGGSFIELD_API_KEY")
     if not api_key:
-        raise ValueError("HIGGSFIELD_API_KEY is required")
+        raise MissingCredentialError("HIGGSFIELD_API_KEY is required")
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:

@@ -45,6 +45,25 @@ os.environ.pop("NEBULA_COMMONS_ENABLED", None)
 import pytest  # noqa: E402
 
 
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item, nextitem):
+    """Fail the test that leaves services.settings pointing anywhere but the
+    sandbox file above, checked after all of its fixtures (and monkeypatch)
+    have been undone. Tests that reload the module (test_settings_path.py,
+    test_credential_injection.py) once restored it by removing the variable,
+    which falls back to the repo's real settings.json: every later test then
+    read the person's keys and wrote their settings."""
+    yield
+    import sys
+
+    module = sys.modules.get("services.settings")
+    if module is not None and Path(module.SETTINGS_PATH) != _TEST_SETTINGS_PATH:
+        raise AssertionError(
+            f"services.settings.SETTINGS_PATH is {module.SETTINGS_PATH} after {item.nodeid}; "
+            f"restore it to {_TEST_SETTINGS_PATH} (reload with NEBULA_SETTINGS_PATH set)"
+        )
+
+
 @pytest.fixture(autouse=True)
 def isolated_commons_opt_in(request, monkeypatch):
     """Only the dedicated synthetic Commons tests opt into store access."""
@@ -70,4 +89,45 @@ def spending_limits_off(monkeypatch):
 
     monkeypatch.setattr(agent_spend, "threshold_from_settings", lambda settings: None)
     monkeypatch.setattr(agent_spend, "caps_from_settings",
-                        lambda settings: {"sessionUsd": None, "models": {}})
+                        lambda settings: {"sessionUsd": None, "outsideDailyUsd": None, "kreaPlanRuns": None,
+                                          "models": {}})
+
+
+# The person's launch token in tests (services/person_session.py). The
+# `person` fixture installs it; without that fixture it verifies as nothing.
+PERSON_TOKEN = "test-person-token-" + "0" * 25
+# What the person's canvas sends. A real browser also sends Origin, which
+# proves nothing on its own: FORGED_ORIGIN is what any local program can send.
+PERSON = {"Origin": "http://localhost:5173", "X-Nebula-Person": PERSON_TOKEN}
+FORGED_ORIGIN = {"Origin": "http://localhost:5173"}
+PERSON_HELLO = {"type": "hello", "personToken": PERSON_TOKEN}
+
+
+class PersonFixture:
+    """This test's person: the launch token and the headers the canvas sends."""
+
+    def __init__(self, token: str) -> None:
+        self.token = token
+        self.headers = {"Origin": "http://localhost:5173", "X-Nebula-Person": token}
+        self.hello = {"type": "hello", "personToken": token}
+
+
+@pytest.fixture
+def fresh_person_session(monkeypatch):
+    """Swap in an empty person session (services/person_session.py), the one
+    object the person gate, /ws, /ws/chat and Commons all read."""
+    from services import person_session
+
+    session = person_session.PersonSession()
+    monkeypatch.setattr(person_session, "_session", session)
+    monkeypatch.setattr(person_session, "_provided", None)
+    return session
+
+
+@pytest.fixture
+def person(fresh_person_session) -> PersonFixture:
+    """A person session holding PERSON_TOKEN. Send ``PERSON`` (or
+    ``person.headers``) where the canvas would, and keep forged-Origin cases
+    (FORGED_ORIGIN) as negatives."""
+    fresh_person_session.set(PERSON_TOKEN)
+    return PersonFixture(PERSON_TOKEN)

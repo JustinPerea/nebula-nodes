@@ -14,6 +14,8 @@ from typing import Any, Sequence
 import httpx
 from PIL import Image, ImageOps
 
+from execution.missing_credential import MissingCredentialError
+
 VISION_TIMEOUT_SECONDS = 45.0
 MAX_VISION_IMAGES = 13  # 12 sampled frames plus one optional reference image.
 MAX_VISION_IMAGE_EDGE = 768
@@ -22,8 +24,9 @@ MAX_VISION_IMAGE_EDGE = 768
 MAX_VISION_BASE64_CHARS = 16 * 1024 * 1024
 
 
-class NoVisionProviderError(ValueError):
-    pass
+class NoVisionProviderError(MissingCredentialError):
+    """No vision key is set. Raised before any request, so the run's hold for
+    the node is given back like any other missing key (still a ValueError)."""
 
 
 class VisionProviderError(RuntimeError):

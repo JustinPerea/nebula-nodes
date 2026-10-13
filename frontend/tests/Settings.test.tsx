@@ -16,6 +16,10 @@ const disconnectKreaMock = vi.fn();
 const getKreaPlansMock = vi.fn();
 const startKreaTrialMock = vi.fn();
 const providerApiFetchMock = vi.fn();
+const getOutsideSpendMock = vi.fn();
+const createConnectedAppMock = vi.fn();
+const setConnectedAppLimitMock = vi.fn();
+const revokeConnectedAppMock = vi.fn();
 
 vi.mock('../src/lib/backend', async (original) => ({
   ...await original<typeof import('../src/lib/backend')>(),
@@ -27,6 +31,10 @@ vi.mock('../src/lib/api', () => ({
   updateSettings: (...args: unknown[]) => updateSettingsMock(...args),
   updateCredential: (...args: unknown[]) => updateCredentialMock(...args),
   deleteSettingsApiKey: (...args: unknown[]) => deleteSettingsApiKeyMock(...args),
+  getOutsideSpend: (...args: unknown[]) => getOutsideSpendMock(...args),
+  createConnectedApp: (...args: unknown[]) => createConnectedAppMock(...args),
+  setConnectedAppLimit: (...args: unknown[]) => setConnectedAppLimitMock(...args),
+  revokeConnectedApp: (...args: unknown[]) => revokeConnectedAppMock(...args),
 }));
 
 vi.mock('../src/lib/kreaConnection', async (importOriginal) => ({
@@ -74,6 +82,10 @@ beforeEach(() => {
   updateSettingsMock.mockReset().mockResolvedValue({ status: 'ok' });
   updateCredentialMock.mockReset().mockResolvedValue({ status: 'updated' });
   deleteSettingsApiKeyMock.mockReset().mockResolvedValue({ status: 'removed' });
+  getOutsideSpendMock.mockReset().mockResolvedValue({ outside: { spentUsd: 0, kreaPlanRuns: 0 }, apps: [] });
+  createConnectedAppMock.mockReset();
+  setConnectedAppLimitMock.mockReset();
+  revokeConnectedAppMock.mockReset().mockResolvedValue({ status: 'revoked' });
   getKreaConnectionMock.mockReset().mockResolvedValue({ status: 'disconnected' });
   connectKreaMock.mockReset().mockResolvedValue({ status: 'connecting', authorizationUrl: KREA_URL });
   checkKreaConnectionMock.mockReset().mockResolvedValue({ status: 'connected', tools: ['list_models'] });
@@ -809,6 +821,95 @@ describe('Settings — preferences', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove the limits for GPT Image 1' }));
     await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({ agentSpend: { sessionUsd: 10, models: {} } }));
     expect(screen.queryByRole('combobox', { name: 'GPT Image 1 per session' })).not.toBeInTheDocument();
+  });
+  it('limits the outside agents over 24 hours and Krea plan runs, and shows what they spent', async () => {
+    getOutsideSpendMock.mockResolvedValue({ outside: { spentUsd: 3.4, kreaPlanRuns: 2 }, apps: [] });
+    await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1, agentSpend: { sessionUsd: 10, models: {} } });
+    openTab('Preferences');
+    expect(screen.getByText(/Shared by every agent that isn.t a Nebula chat: Claude Desktop, terminal tools, scripts/))
+      .toBeInTheDocument();
+    expect(screen.getByText(/restarting Nebula doesn.t reset it/)).toBeInTheDocument();
+    expect(await screen.findByTestId('settings-agent-outside-spent')).toHaveTextContent('$3.40 in the last 24 h, 2 Krea plan runs');
+    const outside = screen.getByRole('combobox', { name: 'Agents outside Nebula chats' });
+    // Unset, it follows the per-session budget.
+    expect(outside).toHaveValue('session');
+    expect(within(outside).getByRole('option', { name: 'Same as a chat ($10)' })).toBeInTheDocument();
+    fireEvent.change(outside, { target: { value: '5' } });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
+      agentSpend: { sessionUsd: 10, outsideDailyUsd: 5, models: {} },
+    }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Agents outside Nebula chats' }), { target: { value: 'session' } });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
+      agentSpend: { sessionUsd: 10, models: {} },
+    }));
+
+    expect(screen.getByText(/Only you can move a node between your API balance and your Krea plan; agents/)).toBeInTheDocument();
+    // Unset, plan runs are held to the default, never to no limit.
+    const planRuns = screen.getByRole('combobox', { name: 'Krea plan runs' });
+    expect(planRuns).toHaveValue('default');
+    expect(within(planRuns).getByRole('option', { name: '10 (default)' })).toBeInTheDocument();
+    fireEvent.change(planRuns, { target: { value: '25' } });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
+      agentSpend: { sessionUsd: 10, kreaPlanRuns: 25, models: {} },
+    }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Krea plan runs' }), { target: { value: '0' } });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
+      agentSpend: { sessionUsd: 10, kreaPlanRuns: 0, models: {} },
+    }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Krea plan runs' }), { target: { value: 'none' } });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
+      agentSpend: { sessionUsd: 10, kreaPlanRuns: null, models: {} },
+    }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Krea plan runs' }), { target: { value: 'default' } });
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenLastCalledWith({
+      agentSpend: { sessionUsd: 10, models: {} },
+    }));
+  });
+
+  it('creates an app token, shows it once, and lists, limits and revokes connected apps', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const app = { id: 'a1b2c3d4e5f6', name: 'Claude Desktop', dailyUsd: 5, createdAt: 1, spentUsd: 0.4, kreaPlanRuns: 0 };
+    createConnectedAppMock.mockResolvedValue({ app, token: 'nebula_app_secret' });
+    setConnectedAppLimitMock.mockResolvedValue({ app: { ...app, dailyUsd: 10 } });
+    await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1, agentSpend: { sessionUsd: 10, models: {} } });
+    openTab('Preferences');
+    expect(screen.getByText(/Put the token in the app.s Nebula MCP server config as/)).toBeInTheDocument();
+    const create = screen.getByRole('button', { name: 'Create token' });
+    expect(create).toBeDisabled();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Add an app' }), { target: { value: ' Claude Desktop ' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'New app daily limit' }), { target: { value: '5' } });
+    getOutsideSpendMock.mockResolvedValue({ outside: { spentUsd: 0.4, kreaPlanRuns: 0 }, apps: [app] });
+    fireEvent.click(create);
+    await waitFor(() => expect(createConnectedAppMock).toHaveBeenCalledWith('Claude Desktop', 5));
+    const token = await screen.findByRole('textbox', { name: 'Token for Claude Desktop' });
+    expect(token).toHaveValue('nebula_app_secret');
+    expect(screen.getByText(/can.t show it again/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('nebula_app_secret'));
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+
+    const row = await screen.findByTestId('settings-app-row');
+    expect(row).toHaveTextContent('Claude Desktop');
+    expect(row).toHaveTextContent('$0.40 in the last 24 h');
+    fireEvent.change(within(row).getByRole('combobox', { name: 'Claude Desktop daily limit' }), { target: { value: '10' } });
+    await waitFor(() => expect(setConnectedAppLimitMock).toHaveBeenCalledWith('a1b2c3d4e5f6', 10));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('textbox', { name: 'Token for Claude Desktop' })).not.toBeInTheDocument();
+    fireEvent.click(within(row).getByRole('button', { name: 'Revoke the token for Claude Desktop' }));
+    expect(revokeConnectedAppMock).not.toHaveBeenCalled();
+    getOutsideSpendMock.mockResolvedValue({ outside: { spentUsd: 0.4, kreaPlanRuns: 0 }, apps: [] });
+    fireEvent.click(within(row).getByRole('button', { name: 'Revoke Claude Desktop' }));
+    await waitFor(() => expect(revokeConnectedAppMock).toHaveBeenCalledWith('a1b2c3d4e5f6'));
+    await waitFor(() => expect(screen.queryByTestId('settings-app-row')).not.toBeInTheDocument());
+  });
+
+  it('says why the connected apps could not load', async () => {
+    getOutsideSpendMock.mockRejectedValue(new Error('Only the person can do this from the Nebula canvas.'));
+    await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1 });
+    openTab('Preferences');
+    expect(await screen.findByText('Only the person can do this from the Nebula canvas.')).toBeInTheDocument();
   });
 });
 

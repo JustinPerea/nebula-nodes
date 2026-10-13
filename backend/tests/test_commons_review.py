@@ -5,6 +5,7 @@ import json
 import pytest
 from commons import evaluation, review
 from commons.reader import ReaderResult, MODEL_ID
+from services import person_session
 from tests.test_commons_evaluation import store, source  # noqa: F401
 
 
@@ -88,7 +89,7 @@ async def test_missing_palette_roles_are_failed_not_invented(store, source, monk
 
 
 @pytest.mark.asyncio
-async def test_review_api_requires_human_and_records_only_explicit_acceptance(store, source, monkeypatch):
+async def test_review_api_requires_human_and_records_only_explicit_acceptance(store, source, monkeypatch, fresh_person_session):
     import secrets
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -100,8 +101,7 @@ async def test_review_api_requires_human_and_records_only_explicit_acceptance(st
         return ReaderResult(output(palette), None, MODEL_ID, 1)
     monkeypatch.setattr(review, 'read_image', reader)
     app = FastAPI(); app.include_router(router); app.dependency_overrides[store_dep] = lambda: store
-    monkeypatch.setattr(actors, 'ui_session', actors.UISession())
-    token = secrets.token_urlsafe(32); actors.ui_session.set(token)
+    token = secrets.token_urlsafe(32); person_session.current().set(token)
     client = TestClient(app); headers = {'Authorization': f'Bearer {token}'}
     for method, path, body in [('GET', '', None), ('POST', '/items/0/propose', {}), ('PUT', '/items/0', {'revision':0,'labels':{}})]:
         assert client.request(method, '/api/commons/review' + path, json=body).status_code == 403

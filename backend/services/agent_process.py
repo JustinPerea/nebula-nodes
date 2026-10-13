@@ -14,6 +14,8 @@ import signal
 import subprocess
 from typing import Any
 
+from services.child_env import scrubbed_env
+
 
 _POSIX_DISCOVERY_ROUNDS = 20
 _POSIX_STABLE_ROUNDS = 2
@@ -72,6 +74,7 @@ async def terminate_agent_process_tree(proc: Any) -> None:
                 "/F",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
+                env=scrubbed_env(),
             )
             await tree_killer.wait()
         except (FileNotFoundError, ProcessLookupError):
@@ -96,6 +99,7 @@ async def _read_posix_process_table() -> dict[int, tuple[int, str]]:
         "pid=,ppid=,stat=",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env=scrubbed_env(),
     )
     stdout, stderr = await snapshot.communicate()
     if snapshot.returncode != 0:

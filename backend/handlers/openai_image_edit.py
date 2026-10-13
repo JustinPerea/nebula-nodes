@@ -8,6 +8,7 @@ import httpx
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import get_run_dir, save_base64_image
+from execution.missing_credential import MissingCredentialError
 
 OPENAI_IMAGE_EDIT_URL = "https://api.openai.com/v1/images/edits"
 
@@ -36,7 +37,7 @@ async def handle_openai_image_edit(
 
     api_key = api_keys.get("OPENAI_API_KEY")
     if not api_key:
-        raise ValueError("OPENAI_API_KEY is required")
+        raise MissingCredentialError("OPENAI_API_KEY is required")
 
     # --- resolve image bytes ---
     image_bytes = _resolve_image_bytes(image_input.value)

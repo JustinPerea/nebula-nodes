@@ -28,6 +28,7 @@ from services.quiver_client import (
     QuiverRateLimitError,
     QuiverServerError,
 )
+from execution.missing_credential import MissingCredentialError
 
 
 _OUTPUTS_URL_PREFIX = "/api/outputs/"
@@ -218,7 +219,7 @@ async def handle_quiver_arrow_generate(
     """
     api_key = api_keys.get("QUIVER_API_KEY")
     if not api_key:
-        raise ValueError("QUIVER_API_KEY is required")
+        raise MissingCredentialError("QUIVER_API_KEY is required")
 
     prompt_input = inputs.get("prompt")
     if not prompt_input or not prompt_input.value:
@@ -265,7 +266,7 @@ async def handle_quiver_arrow_vectorize(
     """
     api_key = api_keys.get("QUIVER_API_KEY")
     if not api_key:
-        raise ValueError("QUIVER_API_KEY is required")
+        raise MissingCredentialError("QUIVER_API_KEY is required")
 
     image_input = inputs.get("image")
     if not image_input or not image_input.value:

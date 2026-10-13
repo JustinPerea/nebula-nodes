@@ -97,6 +97,17 @@ _KREA_AUTH_PARAM = {"key": "_kreaAuth", "label": "Krea connection", "type": "enu
                     "options": [{"value": "api-token", "label": "API token · API balance"},
                                 {"value": "mcp", "label": "Krea account · workspace compute"}],
                     "default": "api-token"}
+# Pricing and readiness (2026-10-13): cinema-scene declares the base models its
+# handler calls (handlers/cinema_scene.py _guard_base_model), so readiness,
+# pricing and the spend check read them. Exact value; test_node_readiness.py
+# pins it to the handler constants.
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS = {
+    "cinema-scene": {"providerVia": {
+        "kind": "model", "path": ["scene", "base", "model"],
+        "models": ["seedream-4-5", "nano-banana", "nano-banana-fal-edit", "flux-kontext"],
+        "default": "seedream-4-5", "fallbackFor": ["flux-1-dev", "flux.1-dev", "flux-dev"],
+    }},
+}
 APPROVED_LEADING_PARAM_ADDITIONS = {
     "krea-2-generate": _KREA_AUTH_PARAM,
     "krea-style-search": _KREA_AUTH_PARAM,
@@ -205,6 +216,7 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
     capability_note = APPROVED_CAPABILITY_NOTE_ADDITIONS.get(node_id)
     if capability_note is not None:
         _remove_approved_fields(normalized, {"capabilityNote": capability_note})
+    _remove_approved_fields(normalized, APPROVED_TOP_LEVEL_FIELD_ADDITIONS.get(node_id, {}))
     for param_key, additions in APPROVED_PARAM_FIELD_ADDITIONS.get(node_id, {}).items():
         _remove_approved_fields(_sole_entry(normalized["params"], "key", param_key), additions)
     for param_key, (baseline_label, current_label) in APPROVED_PARAM_LABEL_CHANGES.get(node_id, {}).items():

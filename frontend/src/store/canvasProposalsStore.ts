@@ -10,6 +10,7 @@ import {
   acceptProposal,
   ProposalRequestError,
   rejectProposal,
+  releaseApproval,
   withAncestors,
 } from '../lib/canvasProposals';
 import type { Point } from '../lib/agentCursorMotion';
@@ -36,6 +37,8 @@ export interface ProposalEntry {
 export interface DeferredRun {
   agentName: string;
   nodeIds: string[];
+  /** The Accept click's approval for exactly these runs; the run carries it. */
+  approvalId: string | null;
 }
 
 interface CanvasProposalsState {
@@ -103,15 +106,26 @@ function cancelExit(id: string): void {
   exitTimers.delete(id);
 }
 
-/** Run accepted nodes through the canvas's normal guarded run path. */
-async function runNodes(nodeIds: string[]): Promise<void> {
+/**
+ * Run accepted nodes through the canvas's normal guarded run path, carrying
+ * the Accept click's approval. The backend starts the run only if it is still
+ * exactly what was accepted. Afterwards the approval is released: a run that
+ * started already used it up, and one the canvas declined to start (a cost
+ * confirm said no, say) must not keep the nodes locked against agent edits.
+ */
+async function runNodes(nodeIds: string[], approvalId: string | null): Promise<void> {
   const graph = useGraphStore.getState();
-  if (nodeIds.length === 1) {
-    await graph.executeNode(nodeIds[0]);
-    return;
+  const options = approvalId ? { approvalId } : undefined;
+  try {
+    if (nodeIds.length === 1) {
+      await graph.executeNode(nodeIds[0], options);
+    } else {
+      // executeCluster runs exactly the nodes it is given, so include what feeds them.
+      await graph.executeCluster(withAncestors(nodeIds, graph.edges), options);
+    }
+  } finally {
+    if (approvalId) await releaseApproval(approvalId);
   }
-  // executeCluster runs exactly the nodes it is given, so include what feeds them.
-  await graph.executeCluster(withAncestors(nodeIds, graph.edges));
 }
 
 export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) => ({
@@ -196,10 +210,10 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
       get().close({ proposalId: id, status: 'accepted' });
       if (result.runNodeIds.length > 0) {
         if (useGraphStore.getState().isExecuting) {
-          set({ deferredRun: { agentName: entry.view.agent.name, nodeIds: result.runNodeIds } });
+          set({ deferredRun: { agentName: entry.view.agent.name, nodeIds: result.runNodeIds, approvalId: result.approvalId } });
         } else {
-          // The Accept click is the person's approval for these runs.
-          await runNodes(result.runNodeIds);
+          // The Accept click is the person's approval for these runs, at these values.
+          await runNodes(result.runNodeIds, result.approvalId);
         }
       }
     } catch (error) {
@@ -235,10 +249,17 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     const live = new Set(useGraphStore.getState().nodes.map((node) => node.id));
     const nodeIds = deferred.nodeIds.filter((nodeId) => live.has(nodeId));
     set({ deferredRun: null });
-    if (nodeIds.length > 0) await runNodes(nodeIds);
+    // A node deleted since Accept makes this a different run; the backend
+    // refuses it as changed, and the person can run what is left by hand.
+    if (nodeIds.length > 0) await runNodes(nodeIds, deferred.approvalId);
+    else if (deferred.approvalId) await releaseApproval(deferred.approvalId);
   },
 
-  dismissDeferred: () => set({ deferredRun: null }),
+  dismissDeferred: () => {
+    const deferred = get().deferredRun;
+    set({ deferredRun: null });
+    if (deferred?.approvalId) void releaseApproval(deferred.approvalId);
+  },
 }));
 
 wsClient.subscribe((event) => {

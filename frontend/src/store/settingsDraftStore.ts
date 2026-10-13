@@ -10,6 +10,12 @@ export interface ModelSpendLimit {
 
 export interface AgentSpendLimits {
   sessionUsd: number | null;
+  /** What every agent outside Nebula's chats may spend together over the last
+   * 24 hours. Left out (undefined): the same as sessionUsd. Null: no limit. */
+  outsideDailyUsd?: number | null;
+  /** Runs one chat, or the outside agents in 24 hours, may bill to the Krea plan. Left out
+   * (undefined): DEFAULT_PLAN_RUNS. 0: every plan run asks. Null: no limit. */
+  kreaPlanRuns?: number | null;
   /** Keyed by node definition id. */
   models: Record<string, ModelSpendLimit>;
 }
@@ -88,11 +94,17 @@ export function readSettingsDraft(settings: Record<string, unknown>): SettingsDr
   };
 }
 
+/** Plan runs until the person picks a limit (agent_spend.DEFAULT_PLAN_RUNS). */
+export const DEFAULT_PLAN_RUNS = 10;
+/** The most plan runs the backend accepts (agent_spend.MAX_PLAN_RUNS). */
+export const MAX_PLAN_RUNS = 100_000;
+
 function readLimit(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-/** Anything unreadable counts as no limit, as on the backend. */
+/** Anything unreadable counts as no limit, as on the backend, except the outside
+ * budget and Krea plan runs, which fail closed the way the backend reads them. */
 export function readAgentSpend(value: unknown): AgentSpendLimits {
   const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const models: Record<string, ModelSpendLimit> = {};
@@ -104,7 +116,20 @@ export function readAgentSpend(value: unknown): AgentSpendLimits {
     const limit = { perRunUsd: readLimit(entry.perRunUsd), sessionUsd: readLimit(entry.sessionUsd) };
     if (limit.perRunUsd !== null || limit.sessionUsd !== null) models[id] = limit;
   }
-  return { sessionUsd: readLimit(raw.sessionUsd), models };
+  const limits: AgentSpendLimits = { sessionUsd: readLimit(raw.sessionUsd), models };
+  // Unset is the default; an unreadable value is 0 (every plan run asks), as on
+  // the backend, so it is never shown as, or saved back as, no limit.
+  if ('kreaPlanRuns' in raw) {
+    const planRuns = raw.kreaPlanRuns;
+    limits.kreaPlanRuns = planRuns === null ? null
+      : typeof planRuns === 'number' && Number.isInteger(planRuns) && planRuns >= 0 && planRuns <= MAX_PLAN_RUNS ? planRuns : 0;
+  }
+  // Only a saved value overrides the per-session amount; an unreadable one
+  // falls back to it, as on the backend (never to no limit).
+  if ('outsideDailyUsd' in raw && (raw.outsideDailyUsd === null || readLimit(raw.outsideDailyUsd) !== null)) {
+    limits.outsideDailyUsd = readLimit(raw.outsideDailyUsd);
+  }
+  return limits;
 }
 
 /** True while any key or field is still being written. */

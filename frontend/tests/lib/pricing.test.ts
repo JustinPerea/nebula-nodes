@@ -12,6 +12,7 @@ type Fixture = {
     nodeId: string;
     params?: Record<string, unknown>;
     routeProvider?: string;
+    wired?: string[];
     expected: { currency: string; low: number; high: number; plus?: string } | null;
   }>;
 };
@@ -26,6 +27,7 @@ describe('estimateNode (cases shared with the backend)', () => {
         fixture.definitions[testCase.nodeId] ?? {},
         testCase.params,
         testCase.routeProvider,
+        testCase.wired,
       );
       if (testCase.expected === null) {
         expect(result).toBeNull();

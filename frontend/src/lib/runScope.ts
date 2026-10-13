@@ -4,6 +4,7 @@ import type { NodeData } from '../types';
 import { batchSizeCap, parseBatchItems } from './batch';
 import { usesKreaAccount } from './kreaConnection';
 import { runRouteProvider } from './modelDiscovery';
+import { cinemaSceneBase, isLocalRun } from './nodeKeys';
 import { estimateNode, formatUsd, formatUsdRange, type PricingTable } from './pricing';
 
 /** What a run would cost, from the curated list prices. Only USD is summed. */
@@ -94,10 +95,32 @@ export function runMultipliers(nodes: Node<NodeData>[], edges: Edge[]): Map<stri
   return runs;
 }
 
+// cinema-scene is a local node that calls its base image model's handler once
+// per shot (backend handlers/cinema_scene.py), so it is priced as that model
+// times its shots. Its allowlist is the definition's providerVia (nodeKeys.ts).
+export { cinemaSceneBase } from './nodeKeys';
+
+/** Each run node's input ports that have an edge into them. A priced setting
+ * that arrives by wire is only known at run time (pricing.estimateNode).
+ * Mirrors wired_ports in backend services/model_pricing.py over the edges the
+ * run sends: only edges whose source also runs, since a cluster run sends just
+ * the edges inside it (graphStore runCluster) and a wire from outside never
+ * reaches the backend. Graph and node scopes already hold every source. */
+export function wiredPorts(nodes: Node<NodeData>[], edges: Edge[]): Map<string, Set<string>> {
+  const ids = new Set(nodes.map((node) => node.id));
+  const wired = new Map<string, Set<string>>();
+  for (const edge of edges) {
+    if (!ids.has(edge.source) || !ids.has(edge.target) || !edge.targetHandle) continue;
+    wired.set(edge.target, new Set([...(wired.get(edge.target) ?? []), edge.targetHandle]));
+  }
+  return wired;
+}
+
 /**
  * Mirrors the stores' run scopes so Run buttons can say what they will do:
  * the whole graph; one target plus every node feeding it; or an explicit
- * cluster. A node is paid when its provider is anything but local tools.
+ * cluster. A node is paid when it calls a provider: any non-utility node, and
+ * a utility node whose providerVia says it does with these params.
  * With a cost context, it also estimates the run from the price table.
  */
 export function summarizeRunScope(
@@ -133,26 +156,51 @@ export function summarizeRunScope(
   // Fan-out within what actually runs: a node scope already holds every
   // upstream Batch, and a cluster run sends only its own nodes and edges.
   const multipliers = pricing ? runMultipliers(included, edges) : null;
+  const wired = wiredPorts(included, edges);
   for (const node of included) {
-    const definition = node.data?.definitionId ? NODE_DEFINITIONS[node.data.definitionId] : undefined;
-    if (!definition || definition.apiProvider === 'utility') continue;
-    const name = node.data.label || definition.displayName;
+    let definition = node.data?.definitionId ? NODE_DEFINITIONS[node.data.definitionId] : undefined;
+    let params = (node.data?.params ?? {}) as Record<string, unknown>;
+    let calls = 1;
+    let noPrice = false;
+    let ports: Iterable<string> = wired.get(node.id) ?? [];
+    const name = node.data?.label || definition?.displayName || node.id;
+    if (!definition || isLocalRun(definition, params)) continue;
+    if (definition.providerVia?.kind === 'model') {
+      const nested = cinemaSceneBase(params, definition);
+      if (nested && NODE_DEFINITIONS[nested.model]) {
+        definition = NODE_DEFINITIONS[nested.model];
+        params = nested.params;
+        calls = nested.shots;
+        ports = []; // the scene's ports aren't its base model's params
+      } else {
+        noPrice = true;
+      }
+    } else if (definition.apiProvider === 'utility') {
+      // A local node whose providerVia param picks provider work (vision-llm
+      // QC): it calls a vision model, and Nebula has no list price for it.
+      noPrice = true;
+    }
     paid.push(name);
     if (!pricing || !multipliers) continue;
-    const params = (node.data.params ?? {}) as Record<string, unknown>;
+    if (noPrice) {
+      cost.unpriced.push(name);
+      continue;
+    }
     if (usesKreaAccount(definition, params)) {
       cost.plan.push(name);
       continue;
     }
     const estimate = estimateNode(
       pricing.nodes[definition.id], definition, params,
-      runRouteProvider(definition, costContext.apiKeys),
+      runRouteProvider(definition, costContext.apiKeys), ports,
     );
     if (!estimate || estimate.currency !== 'usd') {
       cost.unpriced.push(name);
       continue;
     }
-    const runs = multipliers.get(node.id) ?? [1, 1];
+    const [fewest, most] = multipliers.get(node.id) ?? [1, 1];
+    // A cinema scene's base model runs once per shot.
+    const runs: [number, number] = [fewest * calls, most * calls];
     const line = { name, low: estimate.low * runs[0], high: estimate.high * runs[1], runs };
     cost.lines.push(line);
     cost.low += line.low;

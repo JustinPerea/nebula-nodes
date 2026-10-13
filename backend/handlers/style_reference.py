@@ -30,6 +30,7 @@ from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import OUTPUT_ROOT
+from execution.missing_credential import MissingCredentialError
 
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -187,7 +188,7 @@ async def handle_style_reference(
     system_prompt = _STYLE_PROMPTS.get(focus, _STYLE_PROMPTS["all"])
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not api_key:
-        raise ValueError(
+        raise MissingCredentialError(
             "GOOGLE_API_KEY required for Auto mode. Switch the Mode param to Manual or "
             "Image only to use this node without a Gemini call."
         )

@@ -96,7 +96,8 @@ describe('ProposalBar', () => {
     open(proposal('p_a'));
     useCanvasProposalsStore.getState().moveGhost('p_a', '+up', { x: 900, y: -40 });
     net.apiFetch.mockResolvedValue(respond(200, {
-      status: 'accepted', proposalId: 'p_a', idMap: { '+up': 'n7' }, runNodeIds: ['n7'], nodes: [{ id: 'n7' }], edges: [], updatedNodes: [],
+      status: 'accepted', proposalId: 'p_a', idMap: { '+up': 'n7' }, runNodeIds: ['n7'], approvalId: 'ra_a',
+      nodes: [{ id: 'n7' }], edges: [], updatedNodes: [],
     }));
     render(<ProposalBar />);
     await act(async () => {
@@ -107,7 +108,10 @@ describe('ProposalBar', () => {
     expect((init.headers as Record<string, string>)['X-Nebula-Proposal-Key']).toBe('key-a');
     expect(JSON.parse(init.body as string)).toEqual({ positions: { '+up': { x: 900, y: -40 } } });
     expect(graph.state.adoptAcceptedProposal).toHaveBeenCalledWith(expect.objectContaining({ nodes: [{ id: 'n7' }] }));
-    expect(graph.state.executeNode).toHaveBeenCalledWith('n7');
+    expect(graph.state.executeNode).toHaveBeenCalledWith('n7', { approvalId: 'ra_a' });
+    // Released after the run call (a no-op once the run used it up).
+    expect(net.apiFetch.mock.calls[1][0]).toBe('/api/canvas/approvals/ra_a');
+    expect(net.apiFetch.mock.calls[1][1]).toEqual({ method: 'DELETE' });
   });
 
   it('runs several targets as a cluster with their inputs', async () => {

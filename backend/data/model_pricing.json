@@ -1452,34 +1452,39 @@
       "per": "second",
       "priceParams": [
         "model",
-        "generate_audio"
+        "generate_audio",
+        "multi_prompt"
       ],
       "rows": [
         {
           "match": {
             "model": "standard",
-            "generate_audio": false
+            "generate_audio": false,
+            "multi_prompt": ""
           },
           "price": 0.084
         },
         {
           "match": {
             "model": "standard",
-            "generate_audio": true
+            "generate_audio": true,
+            "multi_prompt": ""
           },
           "price": 0.126
         },
         {
           "match": {
             "model": "pro",
-            "generate_audio": false
+            "generate_audio": false,
+            "multi_prompt": ""
           },
           "price": 0.112
         },
         {
           "match": {
             "model": "pro",
-            "generate_audio": true
+            "generate_audio": true,
+            "multi_prompt": ""
           },
           "price": 0.168
         }
@@ -1487,7 +1492,7 @@
       "multiplyBy": [
         "duration"
       ],
-      "notes": "fal list price per generated second (text-to-video route the handler always uses). With multi-prompt shots the billed length may follow the shots rather than the duration setting.",
+      "notes": "fal list price per generated second (text-to-video route the handler always uses). Multi-prompt runs are unpriced: Kling requires the shot durations to sum to the total, but neither fal nor Kling says whether a mismatched sum is rejected or billed by the shots. Voice control ($0.154/s) is not reachable from this node's schema.",
       "sources": [
         {
           "url": "https://fal.ai/models/fal-ai/kling-video/v3/standard/text-to-video",
@@ -1496,9 +1501,13 @@
         {
           "url": "https://fal.ai/models/fal-ai/kling-video/v3/pro/text-to-video",
           "quote": "For every second of video you generated, you will be charged $0.112 (audio off) or $0.168 (audio on)"
+        },
+        {
+          "url": "https://kling.ai/document-api/apiReference/model/textToVideo",
+          "quote": "sum of all shot durations must equal the total video duration"
         }
       ],
-      "checked": "2026-10-10"
+      "checked": "2026-10-12"
     },
     "krea-3d-hyper3d-rodin-2-5": {
       "currency": "usd",
@@ -2277,7 +2286,7 @@
           "price": 1.5
         }
       ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea's price doesn't vary with generate_audio (x-krea-pricing dimensions: duration, resolution).",
       "sources": [
         {
           "url": "https://api.krea.ai/openapi.json",
@@ -2993,7 +3002,7 @@
           "price": 9
         }
       ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea's price doesn't vary with generate_audio (x-krea-pricing dimensions: duration, resolution).",
       "sources": [
         {
           "url": "https://api.krea.ai/openapi.json",
@@ -3680,7 +3689,8 @@
         "_kreaAuth",
         "duration",
         "generate_audio",
-        "mode"
+        "mode",
+        "multi_prompt"
       ],
       "rows": [
         {
@@ -3688,7 +3698,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 3
+            "duration": 3,
+            "multi_prompt": ""
           },
           "price": 0.252
         },
@@ -3697,7 +3708,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 3
+            "duration": 3,
+            "multi_prompt": ""
           },
           "price": 0.336
         },
@@ -3706,7 +3718,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 4
+            "duration": 4,
+            "multi_prompt": ""
           },
           "price": 0.336
         },
@@ -3715,7 +3728,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 3
+            "duration": 3,
+            "multi_prompt": ""
           },
           "price": 0.378
         },
@@ -3724,7 +3738,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 5
+            "duration": 5,
+            "multi_prompt": ""
           },
           "price": 0.42
         },
@@ -3733,7 +3748,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 4
+            "duration": 4,
+            "multi_prompt": ""
           },
           "price": 0.448
         },
@@ -3742,7 +3758,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 3
+            "duration": 3,
+            "multi_prompt": ""
           },
           "price": 0.504
         },
@@ -3751,7 +3768,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 6
+            "duration": 6,
+            "multi_prompt": ""
           },
           "price": 0.504
         },
@@ -3760,7 +3778,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 4
+            "duration": 4,
+            "multi_prompt": ""
           },
           "price": 0.504
         },
@@ -3769,7 +3788,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 5
+            "duration": 5,
+            "multi_prompt": ""
           },
           "price": 0.56
         },
@@ -3778,7 +3798,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 7
+            "duration": 7,
+            "multi_prompt": ""
           },
           "price": 0.588
         },
@@ -3787,7 +3808,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 5
+            "duration": 5,
+            "multi_prompt": ""
           },
           "price": 0.63
         },
@@ -3796,7 +3818,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 6
+            "duration": 6,
+            "multi_prompt": ""
           },
           "price": 0.672
         },
@@ -3805,7 +3828,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 4
+            "duration": 4,
+            "multi_prompt": ""
           },
           "price": 0.672
         },
@@ -3814,7 +3838,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 8
+            "duration": 8,
+            "multi_prompt": ""
           },
           "price": 0.672
         },
@@ -3823,7 +3848,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 9
+            "duration": 9,
+            "multi_prompt": ""
           },
           "price": 0.756
         },
@@ -3832,7 +3858,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 6
+            "duration": 6,
+            "multi_prompt": ""
           },
           "price": 0.756
         },
@@ -3841,7 +3868,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 7
+            "duration": 7,
+            "multi_prompt": ""
           },
           "price": 0.784
         },
@@ -3850,7 +3878,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 5
+            "duration": 5,
+            "multi_prompt": ""
           },
           "price": 0.84
         },
@@ -3859,7 +3888,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 10
+            "duration": 10,
+            "multi_prompt": ""
           },
           "price": 0.84
         },
@@ -3868,7 +3898,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 7
+            "duration": 7,
+            "multi_prompt": ""
           },
           "price": 0.882
         },
@@ -3877,7 +3908,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 8
+            "duration": 8,
+            "multi_prompt": ""
           },
           "price": 0.896
         },
@@ -3886,7 +3918,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 11
+            "duration": 11,
+            "multi_prompt": ""
           },
           "price": 0.924
         },
@@ -3895,7 +3928,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 9
+            "duration": 9,
+            "multi_prompt": ""
           },
           "price": 1.008
         },
@@ -3904,7 +3938,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 6
+            "duration": 6,
+            "multi_prompt": ""
           },
           "price": 1.008
         },
@@ -3913,7 +3948,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 12
+            "duration": 12,
+            "multi_prompt": ""
           },
           "price": 1.008
         },
@@ -3922,7 +3958,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 8
+            "duration": 8,
+            "multi_prompt": ""
           },
           "price": 1.008
         },
@@ -3931,7 +3968,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 13
+            "duration": 13,
+            "multi_prompt": ""
           },
           "price": 1.092
         },
@@ -3940,7 +3978,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 10
+            "duration": 10,
+            "multi_prompt": ""
           },
           "price": 1.12
         },
@@ -3949,7 +3988,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 9
+            "duration": 9,
+            "multi_prompt": ""
           },
           "price": 1.134
         },
@@ -3958,7 +3998,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 7
+            "duration": 7,
+            "multi_prompt": ""
           },
           "price": 1.176
         },
@@ -3967,7 +4008,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 14
+            "duration": 14,
+            "multi_prompt": ""
           },
           "price": 1.176
         },
@@ -3976,7 +4018,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 11
+            "duration": 11,
+            "multi_prompt": ""
           },
           "price": 1.232
         },
@@ -3985,7 +4028,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 3
+            "duration": 3,
+            "multi_prompt": ""
           },
           "price": 1.26
         },
@@ -3994,7 +4038,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 3
+            "duration": 3,
+            "multi_prompt": ""
           },
           "price": 1.26
         },
@@ -4003,7 +4048,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": false,
-            "duration": 15
+            "duration": 15,
+            "multi_prompt": ""
           },
           "price": 1.26
         },
@@ -4012,7 +4058,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 10
+            "duration": 10,
+            "multi_prompt": ""
           },
           "price": 1.26
         },
@@ -4021,7 +4068,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 12
+            "duration": 12,
+            "multi_prompt": ""
           },
           "price": 1.344
         },
@@ -4030,7 +4078,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 8
+            "duration": 8,
+            "multi_prompt": ""
           },
           "price": 1.344
         },
@@ -4039,7 +4088,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 11
+            "duration": 11,
+            "multi_prompt": ""
           },
           "price": 1.386
         },
@@ -4048,7 +4098,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 13
+            "duration": 13,
+            "multi_prompt": ""
           },
           "price": 1.456
         },
@@ -4057,7 +4108,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 9
+            "duration": 9,
+            "multi_prompt": ""
           },
           "price": 1.512
         },
@@ -4066,7 +4118,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 12
+            "duration": 12,
+            "multi_prompt": ""
           },
           "price": 1.512
         },
@@ -4075,7 +4128,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 14
+            "duration": 14,
+            "multi_prompt": ""
           },
           "price": 1.568
         },
@@ -4084,7 +4138,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 13
+            "duration": 13,
+            "multi_prompt": ""
           },
           "price": 1.638
         },
@@ -4093,7 +4148,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 4
+            "duration": 4,
+            "multi_prompt": ""
           },
           "price": 1.68
         },
@@ -4102,7 +4158,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 4
+            "duration": 4,
+            "multi_prompt": ""
           },
           "price": 1.68
         },
@@ -4111,7 +4168,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": false,
-            "duration": 15
+            "duration": 15,
+            "multi_prompt": ""
           },
           "price": 1.68
         },
@@ -4120,7 +4178,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 10
+            "duration": 10,
+            "multi_prompt": ""
           },
           "price": 1.68
         },
@@ -4129,7 +4188,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 14
+            "duration": 14,
+            "multi_prompt": ""
           },
           "price": 1.764
         },
@@ -4138,7 +4198,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 11
+            "duration": 11,
+            "multi_prompt": ""
           },
           "price": 1.848
         },
@@ -4147,7 +4208,8 @@
             "_kreaAuth": "api-token",
             "mode": "std",
             "generate_audio": true,
-            "duration": 15
+            "duration": 15,
+            "multi_prompt": ""
           },
           "price": 1.89
         },
@@ -4156,7 +4218,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 12
+            "duration": 12,
+            "multi_prompt": ""
           },
           "price": 2.016
         },
@@ -4165,7 +4228,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 5
+            "duration": 5,
+            "multi_prompt": ""
           },
           "price": 2.1
         },
@@ -4174,7 +4238,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 5
+            "duration": 5,
+            "multi_prompt": ""
           },
           "price": 2.1
         },
@@ -4183,7 +4248,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 13
+            "duration": 13,
+            "multi_prompt": ""
           },
           "price": 2.184
         },
@@ -4192,7 +4258,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 14
+            "duration": 14,
+            "multi_prompt": ""
           },
           "price": 2.352
         },
@@ -4201,7 +4268,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 6
+            "duration": 6,
+            "multi_prompt": ""
           },
           "price": 2.52
         },
@@ -4210,7 +4278,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 6
+            "duration": 6,
+            "multi_prompt": ""
           },
           "price": 2.52
         },
@@ -4219,7 +4288,8 @@
             "_kreaAuth": "api-token",
             "mode": "pro",
             "generate_audio": true,
-            "duration": 15
+            "duration": 15,
+            "multi_prompt": ""
           },
           "price": 2.52
         },
@@ -4228,7 +4298,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 7
+            "duration": 7,
+            "multi_prompt": ""
           },
           "price": 2.94
         },
@@ -4237,7 +4308,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 7
+            "duration": 7,
+            "multi_prompt": ""
           },
           "price": 2.94
         },
@@ -4246,7 +4318,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 8
+            "duration": 8,
+            "multi_prompt": ""
           },
           "price": 3.36
         },
@@ -4255,7 +4328,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 8
+            "duration": 8,
+            "multi_prompt": ""
           },
           "price": 3.36
         },
@@ -4264,7 +4338,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 9
+            "duration": 9,
+            "multi_prompt": ""
           },
           "price": 3.78
         },
@@ -4273,7 +4348,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 9
+            "duration": 9,
+            "multi_prompt": ""
           },
           "price": 3.78
         },
@@ -4282,7 +4358,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 10
+            "duration": 10,
+            "multi_prompt": ""
           },
           "price": 4.2
         },
@@ -4291,7 +4368,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 10
+            "duration": 10,
+            "multi_prompt": ""
           },
           "price": 4.2
         },
@@ -4300,7 +4378,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 11
+            "duration": 11,
+            "multi_prompt": ""
           },
           "price": 4.62
         },
@@ -4309,7 +4388,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 11
+            "duration": 11,
+            "multi_prompt": ""
           },
           "price": 4.62
         },
@@ -4318,7 +4398,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 12
+            "duration": 12,
+            "multi_prompt": ""
           },
           "price": 5.04
         },
@@ -4327,7 +4408,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 12
+            "duration": 12,
+            "multi_prompt": ""
           },
           "price": 5.04
         },
@@ -4336,7 +4418,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 13
+            "duration": 13,
+            "multi_prompt": ""
           },
           "price": 5.46
         },
@@ -4345,7 +4428,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 13
+            "duration": 13,
+            "multi_prompt": ""
           },
           "price": 5.46
         },
@@ -4354,7 +4438,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 14
+            "duration": 14,
+            "multi_prompt": ""
           },
           "price": 5.88
         },
@@ -4363,7 +4448,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 14
+            "duration": 14,
+            "multi_prompt": ""
           },
           "price": 5.88
         },
@@ -4372,7 +4458,8 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": false,
-            "duration": 15
+            "duration": 15,
+            "multi_prompt": ""
           },
           "price": 6.3
         },
@@ -4381,16 +4468,21 @@
             "_kreaAuth": "api-token",
             "mode": "4k",
             "generate_audio": true,
-            "duration": 15
+            "duration": 15,
+            "multi_prompt": ""
           },
           "price": 6.3
         }
       ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Multi-prompt runs are unpriced: Krea's price list keys on the duration field and doesn't say how shot durations are billed.",
       "sources": [
         {
           "url": "https://api.krea.ai/openapi.json",
           "quote": "x-krea-pricing on POST /generate/video/kling/kling-3.0 (spec sha256 9d5dd91a9e81)"
+        },
+        {
+          "url": "https://kling.ai/document-api/apiReference/model/textToVideo",
+          "quote": "sum of all shot durations must equal the total video duration"
         }
       ],
       "checked": "2026-10-10",
@@ -4662,7 +4754,7 @@
           "price": 6
         }
       ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea's price doesn't vary with generate_audio (x-krea-pricing dimensions: duration, resolution).",
       "sources": [
         {
           "url": "https://api.krea.ai/openapi.json",
@@ -4730,7 +4822,7 @@
           "price": 1.7
         }
       ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea's price doesn't vary with generate_audio (x-krea-pricing dimensions: duration, resolution).",
       "sources": [
         {
           "url": "https://api.krea.ai/openapi.json",
@@ -5825,7 +5917,7 @@
           "price": 2.464
         }
       ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea's price doesn't vary with generate_audio (x-krea-pricing dimensions: duration, resolution).",
       "sources": [
         {
           "url": "https://api.krea.ai/openapi.json",

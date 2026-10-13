@@ -1,4 +1,7 @@
 import { apiFetch } from './backend';
+import {
+  forgetPersonCredential, personToken, refreshPersonCredential, resetPersonSessionForTests,
+} from './personSession';
 import type {
   AssetDetail, Collection, CommonsStatus, FilterState, FolderLink, Region, Role, SearchRow,
 } from './commonsTypes';
@@ -7,31 +10,22 @@ let session: Promise<string> | null = null;
 
 export function resetCommonsSessionForTests(): void {
   session = null;
+  resetPersonSessionForTests();
 }
 
 const SESSION_MESSAGE = 'no UI session: use a fresh Commons dev link from the backend terminal';
 
+// Commons' human is the person: the same per-launch token (personSession.ts).
 async function resolveToken(): Promise<string> {
-  const desktop = await window.nebulaDesktop?.commons?.uiToken();
-  if (desktop) return desktop;
-  const hash = new URLSearchParams(window.location.hash.slice(1));
-  const fromLink = hash.get('commons-token');
-  if (fromLink) {
-    window.sessionStorage.setItem('nebula.commons.token', fromLink);
-    hash.delete('commons-token');
-    const remaining = hash.toString();
-    window.history.replaceState(window.history.state, '',
-      window.location.pathname + window.location.search + (remaining ? `#${remaining}` : ''));
-    return fromLink;
-  }
-  const stored = window.sessionStorage.getItem('nebula.commons.token');
-  if (stored) return stored;
+  const token = await personToken();
+  if (token) return token;
   throw new Error(SESSION_MESSAGE);
 }
 
 export async function resolveCommonsToken(): Promise<string> {
   // A fresh terminal link supersedes a cached expired backend session.
-  if (new URLSearchParams(window.location.hash.slice(1)).has('commons-token')) session = null;
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  if (hash.has('nebula-person') || hash.has('commons-token')) session = null;
   if (!session) {
     session = resolveToken();
     session.catch(() => { session = null; });
@@ -48,15 +42,17 @@ async function send(path: string, init: RequestInit): Promise<Response> {
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response = await send(path, init);
   if (response.status === 401) {
-    // The UI session lives in backend memory; a backend restart forgets it. Re-resolve authority once.
+    // The person token lives in backend memory; a restarted backend has a new
+    // one. Re-resolve authority once (a new link, or the desktop shell's token).
     session = null;
+    refreshPersonCredential();
     response = await send(path, init);
   }
   if (response.status === 401) {
     // Stop browser polling from repeatedly sending a token forgotten by a
     // restarted backend. A new terminal link restores explicit authority.
     session = null;
-    window.sessionStorage.removeItem('nebula.commons.token');
+    forgetPersonCredential();
     throw new Error(SESSION_MESSAGE);
   }
   if (!response.ok) {

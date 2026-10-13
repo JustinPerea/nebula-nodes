@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from services.child_env import scrubbed_env
 from services.file_access import require_allowed_path
 
 
@@ -115,6 +116,7 @@ async def ffprobe_video(source: Path | str) -> ProbeResult:
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env=scrubbed_env(),
     )
     try:
         stdout, stderr = await asyncio.wait_for(
@@ -174,6 +176,7 @@ async def run_ffmpeg(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env=scrubbed_env(),
     )
 
     stderr_buf: list[bytes] = []

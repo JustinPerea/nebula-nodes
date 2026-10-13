@@ -402,3 +402,28 @@ async def test_progress_scope_is_task_local_and_serializes_beside_scalar_outputs
     assert serialized["outputs"] == {"text": {"type": "Text", "value": "blue"}}
     assert ProgressEvent(node_id="ordinary", value=0).variant is None
     assert execution_variant.get() is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fails_at, expected", [(0, True), (1, False)])
+async def test_a_credential_stop_after_an_earlier_item_reached_the_provider_keeps_the_count(fails_at, expected):
+    """A batch item that stops at a credential check (e.g. Krea disconnected
+    mid-run) marks the node missing_credential only when no earlier item of
+    the node reached its handler; otherwise an item that already called the
+    provider would be given back by the spending limits."""
+    from execution.missing_credential import MissingCredentialError
+
+    calls = 0
+
+    async def handler(node_, inputs, keys):
+        nonlocal calls
+        calls += 1
+        if calls - 1 == fails_at:
+            raise MissingCredentialError("Connect your Krea account first")
+        return {"text": {"type": "Text", "value": "ok"}}
+
+    nodes = [batch(["red", "blue", "green"]), node("sink", "combine-text")]
+    events = await run(nodes, [edge("batch", "sink", target="text1")], {"combine-text": handler})
+    errors = [event for event in events if event.type == "error" and event.node_id == "sink"]
+    assert len(errors) == 1
+    assert errors[0].missing_credential is expected

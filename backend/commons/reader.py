@@ -19,6 +19,7 @@ from typing import Any
 
 from commons.records import validate_box
 from commons.search import AXES
+from services.child_env import scrubbed_env
 
 PROMPT_VERSION = "reader-1"
 MODEL_ID = "claude-opus-5-5"
@@ -110,7 +111,7 @@ def build_command(system_prompt: str, schema: dict, model: str = MODEL_ID) -> li
 
 
 def child_env() -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items()
+    env = {k: v for k, v in scrubbed_env().items()
            if not k.startswith("ANTHROPIC_DEFAULT_") and k != "NEBULA_AGENT_TOKEN"}
     env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
     return env

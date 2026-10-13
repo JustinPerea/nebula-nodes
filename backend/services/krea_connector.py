@@ -21,6 +21,7 @@ from jsonschema import Draft202012Validator
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
+from execution.missing_credential import MissingCredentialError
 from services.krea_agent_mcp import KREA_READONLY_TOOLS as READONLY_TOOLS
 
 SERVER = "https://api.krea.ai/mcp"
@@ -35,6 +36,12 @@ CONSENT_TTL = 300
 
 class ConnectorError(RuntimeError):
     """Only fixed, user-safe messages may cross the HTTP boundary."""
+
+
+class KreaNotConnectedError(ConnectorError, MissingCredentialError):
+    """No saved Krea connection. Raised only by the check at the start of a
+    session, before any request to Krea, so a plan run that stops here
+    reached no provider and the agent spending limits give its count back."""
 
 
 class Vault:
@@ -333,7 +340,7 @@ class KreaConnector:
         async with self._lock:
             saved = self.vault.read() if self.vault else None
             if not saved or not saved.get("tokens"):
-                raise ConnectorError("Connect your Krea account first")
+                raise KreaNotConnectedError("Connect your Krea account first")
             revision = saved.get("connection_revision")
             if not isinstance(revision, str) or not revision:
                 raise ConnectorError("Stored Krea connection is invalid; reconnect")

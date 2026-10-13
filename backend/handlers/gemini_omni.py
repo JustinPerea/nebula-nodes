@@ -16,6 +16,7 @@ from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 from services.public_url import fetch_public_media
 from services.provider_capabilities import enforce_gemini_omni_capabilities
+from execution.missing_credential import MissingCredentialError
 
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 FILES_URL = "https://generativelanguage.googleapis.com/v1beta/files"
@@ -190,7 +191,7 @@ async def handle_gemini_omni(
 ) -> dict[str, Any]:
     api_key = api_keys.get("GOOGLE_API_KEY")
     if not api_key:
-        raise ValueError("GOOGLE_API_KEY is required")
+        raise MissingCredentialError("GOOGLE_API_KEY is required")
 
     prompt_input = inputs.get("prompt")
     prompt_text = str(prompt_input.value).strip() if prompt_input and prompt_input.value else ""

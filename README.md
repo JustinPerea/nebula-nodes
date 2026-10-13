@@ -63,7 +63,8 @@ Requires Paper Desktop running on the same computer as the Nebula backend, signe
 - **Keep your work** with saved JSON graphs, local media outputs, and run history.
 - **Build with an agent** using your local Claude Code or Codex login. Choose the model and thinking effort in Chat. [Chat setup](docs/CHAT-SETUP.md).
 - **Watch agents work live.** Each agent that edits the canvas gets its own named cursor that glides to the node it touches, pulls wires port to port and narrates in one line. Agents read the canvas with `nebula look` instead of taking screenshots, and `nebula watch` tells them when you change something. Pin a short note to a node ("warmer", "redo this one") and agents see it in `nebula look` and answer it on the pin. Before a paid run or a bigger change, agents can propose it instead: you see ghost nodes and dashed wires, drag them where you want, and Accept or Reject. [Agent cursors](docs/MCP-SETUP.md#agent-cursors-nebula-look-and-nebula-watch), [pins](docs/MCP-SETUP.md#pins), [proposals](docs/MCP-SETUP.md#proposals).
-- **Set what agents may spend.** In Settings > Preferences, cap an agent run, a whole chat session, or one model per run and per session. Over a limit, or for a node with no list price, the agent has to propose the run and you decide. Your own runs are never capped. [Spending limits](docs/MCP-SETUP.md#spending-limits).
+- **Work in Nebula from any MCP client.** Claude Desktop, Cursor, Claude Code or Codex can find models, build a graph in one all-or-nothing edit, run it and see the results inline, under the same spending limits as the CLI. [Building and running over MCP](docs/MCP-SETUP.md#building-and-running-over-mcp).
+- **Set what agents may spend.** In Settings > Preferences, cap an agent run, a whole chat session, what every agent outside Nebula's chats spends together over 24 hours (restarts don't reset it), runs billed to your Krea plan (10 until you pick a number), or one model per run and per session. Give an outside app like Claude Desktop its own token to see and cap its share. Over a limit, or for a node with no list price (a Video QC node in vision-llm mode, a multi-shot Kling run), the agent has to propose the run and you decide. Your own runs are never capped. [Spending limits](docs/MCP-SETUP.md#spending-limits).
 
 ## Quickstart
 
@@ -79,8 +80,10 @@ cd nebula-nodes
 ```bash
 python3.12 -m venv backend/.venv
 backend/.venv/bin/python -m pip install -r backend/requirements.txt
-backend/.venv/bin/python -m uvicorn main:app --app-dir backend --reload --reload-dir backend --host 127.0.0.1 --port 8000
+backend/.venv/bin/python backend/devserver.py --port 8000
 ```
+
+It prints a link like `http://localhost:5173/#nebula-person=…&backend=http://127.0.0.1:8000` (add `--open` to open it in your browser instead). That link connects the canvas as you: only a tab opened from it can change Settings, keys and connections, accept agent proposals and start agent chats. The token lasts until the backend stops, and survives code reloads. A tab opened without it still works for building and running, with those actions locked. Agents that reach Nebula only through its MCP server, CLI or API don't get the token, so they stay held to the spending limits. That covers the in-app agents: Claude, Codex (its shell has no network; it reaches Nebula through the Nebula MCP server) and Daedalus (limited to Nebula's MCP tools). Anything with its own unsandboxed shell can still read the token from your browser's storage (see [docs/MCP-SETUP.md](docs/MCP-SETUP.md#who-counts-as-the-person) and [In-app agents use this server](docs/MCP-SETUP.md#in-app-agents-use-this-server)).
 
 **Terminal 2 — frontend**, from the repository root:
 
@@ -89,7 +92,7 @@ npm --prefix frontend ci
 npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173
 ```
 
-Open **[127.0.0.1:5173](http://127.0.0.1:5173)**, then add the provider keys you need in **Settings** (the gear at the top right of Projects, or the bottom of the left rail inside a project). Provider usage is billed to your accounts. Browser mode stores keys in the gitignored, plaintext `settings.json`; the macOS desktop app uses Keychain encryption.
+Open the link from Terminal 1, then add the provider keys you need in **Settings** (the gear at the top right of Projects, or the bottom of the left rail inside a project). Provider usage is billed to your accounts. Browser mode stores keys in the gitignored, plaintext `settings.json`; the macOS desktop app uses Keychain encryption.
 
 Try a **Text Input → GPT Image 2 → Preview** graph and hit **Run**. Generated files go to `output/` by default; change the location in **Settings → Storage**.
 
@@ -105,7 +108,7 @@ Prefer a desktop window? See the [Electron setup guide](desktop/README.md). Agen
 | [Provider guides](docs/api-guides/README.md) | Example pipelines and API coverage |
 | [Desktop app](desktop/README.md) | Launch, local backend, migration, and Keychain |
 | [Daedalus agent](docs/HERMES-SETUP.md) | Hermes and Daedalus setup |
-| [External-agent MCP](docs/MCP-SETUP.md) | Canvas selection, `look_at_canvas`, agent cursors, `wait_for_canvas_change`, `resolve_pin` and proposals (`propose_change`, `get_proposal`, `withdraw_proposal`) |
+| [External-agent MCP](docs/MCP-SETUP.md) | Build and run from any MCP client (`find_nodes`, `describe_node`, `edit_canvas`, `run_nodes`, `view_output` with inline previews, spending limits), canvas selection, `look_at_canvas`, agent cursors, `wait_for_canvas_change`, `resolve_pin` and proposals |
 | [Provider contracts](docs/contracts/README.md) | Maintained API contracts and verification |
 | [Contributing](CONTRIBUTING.md) | Development checks and adding nodes |
 

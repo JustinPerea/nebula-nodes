@@ -1,4 +1,5 @@
 import { getProjectContext } from './projectContext';
+import { browserPersonCredential, personCredential, reportPersonRequired } from './personSession';
 
 const DEFAULT_BACKEND_PORT = 8000;
 const DEFAULT_BACKEND_PORTS = [8000, 8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009, 8010];
@@ -6,7 +7,7 @@ const DISCOVERY_TIMEOUT_MS = 650;
 const STORAGE_KEY = 'nebula:backendBaseUrl';
 const TRANSIENT_PROXY_STATUSES = new Set([500, 502, 503, 504]);
 
-type BackendSource = 'explicit' | 'test' | 'discovered' | 'injected';
+type BackendSource = 'explicit' | 'test' | 'discovered' | 'injected' | 'person';
 
 let cachedBaseUrl: string | null = null;
 let cachedSource: BackendSource | null = null;
@@ -22,6 +23,14 @@ let discoveryPromise: Promise<string> | null = null;
   if (injected) {
     cachedBaseUrl = injected;
     cachedSource = 'injected';
+  } else {
+    // A tab connected as the person is pinned to the backend that issued its
+    // token, before anything else can discover a different one.
+    const person = browserPersonCredential();
+    if (person) {
+      cachedBaseUrl = person.backend;
+      cachedSource = 'person';
+    }
   }
 }
 
@@ -193,6 +202,15 @@ export async function getBackendBaseUrl(options: { force?: boolean } = {}): Prom
     return injected;
   }
 
+  // The person's token belongs to one backend: pin it, with no port discovery
+  // or stored fallback, so the token can never reach another process.
+  const person = browserPersonCredential();
+  if (person) {
+    cachedBaseUrl = person.backend;
+    cachedSource = 'person';
+    return person.backend;
+  }
+
   if (!options.force && cachedBaseUrl != null) return cachedBaseUrl;
   if (!options.force && discoveryPromise) return discoveryPromise;
 
@@ -206,6 +224,20 @@ export async function getBackendBaseUrl(options: { force?: boolean } = {}): Prom
     });
 
   return discoveryPromise;
+}
+
+/** The person token for a socket opened by backendWebSocketUrl(), or null.
+ * Given only when the socket's backend is the one that issued the token. */
+export async function personTokenForSocket(socketUrl: string): Promise<string | null> {
+  const person = await personCredential();
+  if (!person) return null;
+  try {
+    const url = new URL(socketUrl);
+    const origin = `${url.protocol === 'wss:' ? 'https:' : 'http:'}//${url.host}`;
+    return origin === person.backend ? person.token : null;
+  } catch {
+    return null;
+  }
 }
 
 export function getCachedBackendBaseUrl(): string | null {
@@ -224,25 +256,28 @@ function shouldRetryWithDiscovery(baseUrl: string, response?: Response): boolean
   // No rediscovery when the Electron bridge is present — the injected
   // endpoint is authoritative and failed reads must not probe other backends.
   if (getInjectedApiBaseUrl() || cachedSource === 'injected') return false;
-  if (cachedSource === 'explicit' || cachedSource === 'test') return false;
+  if (cachedSource === 'explicit' || cachedSource === 'test' || cachedSource === 'person') return false;
   if (!response) return true;
   return baseUrl === '' && TRANSIENT_PROXY_STATUSES.has(response.status);
 }
 
-// Routes that need proof the request came from the person's canvas. In the
-// packaged app the renderer's Origin can be `null`, so the per-launch
-// connector session stands in for it. Pins and proposals are person-only;
-// runs from anyone else are held to the spending limits.
-const CONNECTOR_SESSION_PREFIXES = [
-  '/api/krea/', '/api/canvas/pins', '/api/canvas/proposals',
-  '/api/execute', '/api/cinema/generate-shot',
-];
-// Only the person may change spending limits; reading settings needs no proof.
-const CONNECTOR_SESSION_WRITES = ['/api/settings'];
+// Reads that need the person token: the agent spend view (the person isn't
+// limited) and the Krea connector (an opaque desktop origin must prove it is
+// the person). Every write carries it. Other reads don't, so a plain GET never
+// carries the secret. The packaged app sends it on every request to its own
+// sidecar, whose opaque file: origin can only read replies that carry it.
+const PERSON_READ_PREFIXES = ['/api/agent/spend', '/api/krea/'];
 
-function needsConnectorSession(path: string, method: string): boolean {
-  return CONNECTOR_SESSION_PREFIXES.some((prefix) => path.startsWith(prefix))
-    || (method !== 'GET' && method !== 'HEAD' && CONNECTOR_SESSION_WRITES.some((prefix) => path.startsWith(prefix)));
+function wantsPersonHeader(path: string, method: string): boolean {
+  if (getInjectedApiBaseUrl()) return true;
+  return (method !== 'GET' && method !== 'HEAD') || PERSON_READ_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+function notePersonRequired(response: Response): void {
+  if (response.status !== 403 || typeof response.clone !== 'function') return;
+  void response.clone().json()
+    .then((body: { code?: unknown } | null) => { if (body?.code === 'person_required') reportPersonRequired(); })
+    .catch(() => { /* not JSON: not a person-gate refusal */ });
 }
 
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
@@ -257,11 +292,14 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
     headers.set('X-Nebula-Workspace-Revision', project.revision);
     requestInit = { ...init, headers };
   }
-  const connectorSession = window.nebulaDesktop?.connectorSession;
-  if (getInjectedApiBaseUrl() && connectorSession && needsConnectorSession(path, method)) {
-    const headers = new Headers(requestInit?.headers);
-    headers.set('X-Nebula-Connector-Session', connectorSession);
-    requestInit = { ...requestInit, headers };
+  if (wantsPersonHeader(path, method)) {
+    const person = await personCredential();
+    // Only to the exact backend that issued the token.
+    if (person && person.backend === baseUrl) {
+      const headers = new Headers(requestInit?.headers);
+      headers.set('X-Nebula-Person', person.token);
+      requestInit = { ...requestInit, headers };
+    }
   }
   const send = (url: string) => (requestInit === undefined ? fetch(url) : fetch(url, requestInit));
   // Replaying a mutation against another discovered backend is not a retry: it
@@ -272,6 +310,7 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
 
   try {
     const response = await send(requestUrl);
+    notePersonRequired(response);
     if (mayReplayAfterDiscovery && shouldRetryWithDiscovery(baseUrl, response)) {
       const retryBaseUrl = await getBackendBaseUrl({ force: true });
       if (retryBaseUrl !== baseUrl) {
@@ -296,14 +335,9 @@ export async function backendWebSocketUrl(
   // that reconnect constructs the byte-identical injected URL.
   const injectedWs = getInjectedWsBaseUrl();
   if (injectedWs) {
-    const url = joinBackendPath(injectedWs, path);
-    // The canvas socket proves it is the person's renderer with the launch
-    // session (its handshake Origin may be `null`), so browser-only messages
-    // reach it. Other sockets don't need it.
-    const session = window.nebulaDesktop?.connectorSession;
-    return path === '/ws' && typeof session === 'string' && session
-      ? `${url}?connectorSession=${encodeURIComponent(session)}`
-      : url;
+    // The person proves itself inside the socket (the /ws hello frame and each
+    // /ws/chat send), never in the URL, which servers log.
+    return joinBackendPath(injectedWs, path);
   }
 
   const baseUrl = await getBackendBaseUrl({ force: options.forceDiscovery });

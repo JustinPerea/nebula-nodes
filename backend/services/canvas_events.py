@@ -34,7 +34,7 @@ from collections import OrderedDict, deque
 from typing import Any, Callable, Mapping
 
 from services.agent_presence import AgentIdentity, identify
-from services.local_guard import origin_allowed
+from services.person_gate import is_person
 from services.selection_context import _safe_value as safe_value
 
 MAX_EVENTS = 500
@@ -92,15 +92,15 @@ def actor_for_identity(identity: AgentIdentity) -> dict[str, Any]:
 
 
 def actor_for_headers(headers: Mapping[str, str] | None) -> dict[str, Any]:
-    """Who sent this request: a named agent, the person's browser, or nobody we know."""
+    """Who sent this request: a named agent, the person, or nobody we know.
+
+    The person is the launch's person token (services/person_gate.py), not
+    an Origin header: any local program can write one, and the journal must
+    not credit an agent's edit to the person."""
     identity = identify(headers)
     if identity is not None:
         return actor_for_identity(identity)
-    lower = {k.lower(): v for k, v in (headers or {}).items()}
-    origin = lower.get("origin")
-    # local_guard treats a missing Origin as allowed (non-browser clients),
-    # so check for its presence first: only a browser sends one.
-    if origin is not None and origin_allowed(origin):
+    if is_person(headers):
         return dict(PERSON)
     return dict(ANONYMOUS)
 

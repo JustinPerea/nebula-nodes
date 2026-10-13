@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import asyncio
 import io
 import json
@@ -30,9 +31,10 @@ from services.execution_runs import ExecutionRunRegistry
 from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
+from services.run_approvals import APPROVAL_TTL_SECONDS, RunApprovals
 from services.selection_context import SelectionContextStore
+from tests.conftest import FORGED_ORIGIN, PERSON, PERSON_HELLO
 
-BROWSER = {"Origin": "http://localhost:5173"}
 CLAUDE = {"X-Nebula-Agent": "Claude Code"}
 CODEX = {"X-Nebula-Agent": "Codex"}
 KEY = "X-Nebula-Proposal-Key"
@@ -47,7 +49,7 @@ class Clock:
 
 
 @pytest.fixture
-def api(tmp_path, monkeypatch):
+def api(tmp_path, monkeypatch, person):
     import main as main_module
 
     graph = CLIGraph(persist_path=tmp_path / "state.json")
@@ -73,6 +75,8 @@ def api(tmp_path, monkeypatch):
     monkeypatch.setattr(main_module, "project_store", store)
     monkeypatch.setattr(main_module, "canvas_pins", CanvasPins(lambda: main_module.project_store))
     monkeypatch.setattr(main_module, "canvas_proposals", book)
+    approvals = RunApprovals(clock)
+    monkeypatch.setattr(main_module, "run_approvals", approvals)
     monkeypatch.setattr(main_module, "agent_presence", AgentPresence())
     monkeypatch.setattr(main_module, "selection_context", SelectionContextStore())
     monkeypatch.setattr(main_module, "canvas_events", journal)
@@ -91,6 +95,7 @@ def api(tmp_path, monkeypatch):
     ctx.main = main_module
     ctx.graph = graph
     ctx.book = book
+    ctx.approvals = approvals
     ctx.clock = clock
     ctx.journal = journal
     ctx.sent = sent
@@ -157,6 +162,15 @@ def test_parse_spec_shapes_refs_and_caps():
 def test_cost_never_has_numbers():
     assert cost_for({"apiProvider": "utility"}) == {"kind": "free", "provider": None, "label": "free · runs locally"}
     assert cost_for({"apiProvider": "fal"}) == {"kind": "paid", "provider": "fal", "label": "paid · fal"}
+    # A local node whose mode calls a vision model is paid, with no list price.
+    import json
+    from pathlib import Path
+    qc = json.loads((Path(__file__).resolve().parent.parent / "data" / "node_definitions.json").read_text())["qc-frame-review"]
+    assert cost_for(qc, {"mode": "vision-llm"}) == {
+        "kind": "paid", "provider": "vision", "label": "paid · vision model, no list price"}
+    assert cost_for(qc, {"mode": ""})["kind"] == "paid"
+    assert cost_for(qc, {"mode": "heuristic"}) == cost_for(qc, {}) == {
+        "kind": "free", "provider": None, "label": "free · runs locally"}
 
 
 def test_new_nodes_land_right_of_the_rightmost_referenced_node():
@@ -188,8 +202,10 @@ def test_new_nodes_land_right_of_the_rightmost_referenced_node():
 def test_only_named_agents_propose(api):
     api.graph.add_node("text-input", {"value": "a cat"})
     assert _propose(api, _upscale_body(), headers={}).status_code == 400
-    refused = _propose(api, _upscale_body(), headers=BROWSER)
+    refused = _propose(api, _upscale_body(), headers=PERSON)
     assert refused.status_code == 403 and "edit directly" in refused.json()["detail"]
+    # A forged Origin is not the person; it still has to name itself.
+    assert _propose(api, _upscale_body(), headers=FORGED_ORIGIN).status_code == 400
 
 
 def test_a_proposal_is_validated_like_direct_edits_and_changes_nothing(api):
@@ -270,6 +286,33 @@ def test_cost_counts_paid_free_and_ancestors_without_outputs(api):
     assert cached["upTo"] is False and [node["ref"] for node in cached["nodes"]] == ["+img"]
 
 
+def test_a_vision_llm_qc_run_is_paid_and_unpriced_on_the_card_and_in_the_view(api):
+    body = {"note": "check the loop", "nodes": [{"ref": "+qc", "definitionId": "qc-loop-safety",
+                                                  "params": {"mode": "vision-llm"}}], "run": ["+qc"]}
+    view = _propose(api, body).json()["proposal"]
+    assert view["nodes"][0]["cost"]["kind"] == "paid"
+    cost = view["cost"]
+    assert cost["paidRuns"] == 1 and cost["nodes"][0]["kind"] == "paid" and cost["nodes"][0]["price"] is None
+    local = _propose(api, {**body, "nodes": [{**body["nodes"][0], "params": {"mode": "heuristic"}}]}).json()
+    assert local["proposal"]["cost"]["paidRuns"] == 0
+    assert local["proposal"]["nodes"][0]["cost"]["kind"] == "free"
+
+
+def test_a_wired_krea_kling_multi_prompt_leaves_the_estimate_open(api):
+    n1 = api.graph.add_node("text-input", {"value": '[{"prompt": "a", "duration": 10}]'})
+    n1_out = {"text": {"type": "Text", "value": "x"}}
+    api.graph.nodes[n1]["outputs"] = n1_out
+    body = {"note": "multi-shot", "nodes": [{"ref": "+k", "definitionId": "krea-video-kling-kling-3-0",
+                                              "params": {"prompt": "a", "mode": "std", "duration": 5}}],
+            "edges": [{"source": n1, "sourceHandle": "text", "target": "+k", "targetHandle": "multi_prompt"}],
+            "run": ["+k"]}
+    cost = _propose(api, body).json()["proposal"]["cost"]
+    assert cost["estimate"] is None or "+k" in cost["estimate"]["unpriced"]
+    assert {node["ref"]: node["price"] for node in cost["nodes"]}["+k"] is None
+    unwired = _propose(api, {**body, "edges": []}).json()["proposal"]["cost"]
+    assert {node["ref"]: node["price"] for node in unwired["nodes"]}["+k"] == {"low": 0.42, "high": 0.42}
+
+
 def test_open_limits_and_expiry(api):
     n1 = api.graph.add_node("text-input", {"value": "a cat"})
     for _ in range(MAX_OPEN_PER_AGENT):
@@ -294,15 +337,15 @@ def test_deleting_a_referenced_node_import_and_clear_invalidate(api):
     n2 = api.graph.add_node("text-input", {"value": "a dog"})
     first = _propose(api, _upscale_body(n1)).json()["proposal"]["id"]
     second = _propose(api, _upscale_body(n2)).json()["proposal"]["id"]
-    assert api.client.delete(f"/api/graph/node/{n1}", headers=BROWSER).status_code == 200
+    assert api.client.delete(f"/api/graph/node/{n1}", headers=PERSON).status_code == 200
     assert api.book.get(first).status == "invalidated" and "was deleted" in api.book.get(first).reason
     assert api.book.get(second).status == "open"
-    assert api.client.delete("/api/graph", headers=BROWSER).status_code == 200
+    assert api.client.delete("/api/graph", headers=PERSON).status_code == 200
     assert api.book.get(second).status == "invalidated" and "cleared" in api.book.get(second).reason
 
     n3 = api.graph.add_node("text-input", {"value": "again"})
     third = _propose(api, _upscale_body(n3)).json()["proposal"]["id"]
-    imported = api.client.post("/api/graph/import", headers=BROWSER, json={"nodes": [], "edges": []})
+    imported = api.client.post("/api/graph/import", headers=PERSON, json={"nodes": [], "edges": []})
     assert imported.status_code == 200, imported.text
     assert api.book.get(third).status == "invalidated" and "replaced" in api.book.get(third).reason
     kinds = [e["kind"] for e in api.journal.read(after=0, limit=100)["events"]]
@@ -333,22 +376,30 @@ def test_accept_key_is_absent_from_every_agent_surface(api):
     assert snapshot["proposals"][0]["id"] == proposal_id
 
 
-def test_websocket_sync_sends_keys_only_to_browser_sockets(api):
+def test_websocket_sync_sends_keys_only_after_a_person_hello(api):
     n1 = api.graph.add_node("text-input", {"value": "a cat"})
     proposal_id = _propose(api, _upscale_body(n1)).json()["proposal"]["id"]
     key = _key(api, proposal_id)
-    with api.client.websocket_connect("/ws", headers=BROWSER) as ws:
-        messages = [ws.receive_json() for _ in range(3)]
+    with api.client.websocket_connect("/ws", headers=FORGED_ORIGIN) as ws:
+        messages = [ws.receive_json() for _ in range(2)]
+        ws.send_json(PERSON_HELLO)
+        messages.append(ws.receive_json())
     assert [m["type"] for m in messages] == ["graphSync", "canvasPins", "proposalSync"]
     assert messages[2]["proposals"][0]["id"] == proposal_id
     assert messages[2]["proposals"][0]["acceptKey"] == key
 
-    seen: list[dict] = []
-    with api.client.websocket_connect("/ws") as ws:
-        seen.append(ws.receive_json())
-        seen.append(ws.receive_json())
-    assert [m["type"] for m in seen] == ["graphSync", "canvasPins"]
-    assert key not in json.dumps(seen)
+    # A forged Origin, no hello, or a wrong token never get the key.
+    for headers, hello in ((FORGED_ORIGIN, None), ({}, None), (FORGED_ORIGIN, {"type": "hello", "personToken": "x" * 43})):
+        seen: list[dict] = []
+        with api.client.websocket_connect("/ws", headers=headers) as ws:
+            seen.append(ws.receive_json())
+            seen.append(ws.receive_json())
+            if hello is not None:
+                ws.send_json(hello)
+                seen.append(ws.receive_json())
+        assert [m["type"] for m in seen][:2] == ["graphSync", "canvasPins"]
+        assert "proposalSync" not in [m["type"] for m in seen]
+        assert key not in json.dumps(seen)
 
 
 def test_real_broadcast_browser_reaches_browser_sockets_only(api, monkeypatch):
@@ -381,33 +432,58 @@ def test_accept_and_reject_security_matrix(api):
     url = f"/api/canvas/proposals/{proposal_id}"
     for action in ("accept", "reject"):
         for marker in ({"Authorization": "Agent bogus"}, {"X-Daedalus-Caller": "1"}, CLAUDE, {"X-Nebula-Client": "nebula-cli"}):
-            refused = api.client.post(f"{url}/{action}", headers={**BROWSER, **marker, KEY: key}, json={})
+            refused = api.client.post(f"{url}/{action}", headers={**PERSON, **marker, KEY: key}, json={})
             # An unknown agent token is refused (401) before the route runs.
             assert refused.status_code in {401, 403}, (action, marker)
         assert api.client.post(f"{url}/{action}", headers={KEY: key}, json={}).status_code == 403
-        assert api.client.post(f"{url}/{action}", headers=BROWSER, json={}).status_code == 403
-        assert api.client.post(f"{url}/{action}", headers={**BROWSER, KEY: "wrong"}, json={}).status_code == 403
+        # A forged Origin with the right key is not the person.
+        assert api.client.post(f"{url}/{action}", headers={**FORGED_ORIGIN, KEY: key}, json={}).status_code == 403
+        assert api.client.post(f"{url}/{action}", headers=PERSON, json={}).status_code == 403
+        assert api.client.post(f"{url}/{action}", headers={**PERSON, KEY: "wrong"}, json={}).status_code == 403
     assert api.book.get(proposal_id).status == "open"
     assert len(api.graph.nodes) == 1
 
-    accepted = api.client.post(f"{url}/accept", headers={**BROWSER, KEY: key}, json={})
+    accepted = api.client.post(f"{url}/accept", headers={**PERSON, KEY: key}, json={})
     assert accepted.status_code == 200, accepted.text
-    again = api.client.post(f"{url}/accept", headers={**BROWSER, KEY: key}, json={})
+    again = api.client.post(f"{url}/accept", headers={**PERSON, KEY: key}, json={})
     assert again.status_code == 409 and "accepted" in again.json()["detail"]
 
 
-def test_desktop_session_header_stands_in_for_origin(api, monkeypatch):
+def test_the_person_token_works_without_an_origin_and_the_old_nonce_does_not(api, monkeypatch):
+    # The packaged renderer's Origin is opaque; the person token is the proof.
     monkeypatch.setenv("NEBULA_DESKTOP_MODE", "1")
     monkeypatch.setenv("NEBULA_CONNECTOR_SESSION", "sess-123")
     n1 = api.graph.add_node("text-input", {"value": "a cat"})
     proposal_id = _propose(api, _upscale_body(n1)).json()["proposal"]["id"]
     key = _key(api, proposal_id)
-    wrong = api.client.post(f"/api/canvas/proposals/{proposal_id}/reject",
-                            headers={"X-Nebula-Connector-Session": "nope", KEY: key}, json={})
-    assert wrong.status_code == 403
+    old = api.client.post(f"/api/canvas/proposals/{proposal_id}/reject",
+                          headers={"X-Nebula-Connector-Session": "sess-123", KEY: key}, json={})
+    assert old.status_code == 403
     ok = api.client.post(f"/api/canvas/proposals/{proposal_id}/reject",
-                         headers={"X-Nebula-Connector-Session": "sess-123", KEY: key}, json={"reason": "not now"})
+                         headers={"X-Nebula-Person": PERSON["X-Nebula-Person"], KEY: key}, json={"reason": "not now"})
     assert ok.status_code == 200 and api.book.get(proposal_id).reason == "not now"
+
+
+def test_a_krea_billing_switch_goes_through_a_proposal(api):
+    """Direct edits can't change _kreaAuth (tests/test_graph_apply.py); a
+    proposal can ask, and the person's Accept applies it."""
+    node_id = api.graph.add_node("krea-2-generate", {"_kreaAuth": "api-token"})
+    bad = _propose(api, {"note": "Bill it to the plan", "params": [{"nodeId": node_id, "params": {"_kreaAuth": "free"}}]})
+    assert bad.status_code == 400 and "api-token, mcp" in bad.json()["detail"]
+    body = {"note": "Bill it to the plan", "params": [{"nodeId": node_id, "params": {"_kreaAuth": "mcp"}}],
+            "nodes": [{"ref": "+k", "definitionId": "krea-2-generate", "params": {"_kreaAuth": "mcp"}}]}
+    created = _propose(api, body)
+    assert created.status_code == 201, created.text
+    assert api.graph.nodes[node_id]["params"]["_kreaAuth"] == "api-token"
+    proposal_id = created.json()["proposal"]["id"]
+    accepted = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                               headers={**PERSON, KEY: _key(api, proposal_id)}, json={})
+    assert accepted.status_code == 200, accepted.text
+    assert api.graph.nodes[node_id]["params"]["_kreaAuth"] == "mcp"
+    assert api.graph.nodes[accepted.json()["idMap"]["+k"]]["params"]["_kreaAuth"] == "mcp"
+    # Other underscore params still can't be proposed.
+    internal = _propose(api, {"note": "x", "params": [{"nodeId": node_id, "params": {"_previewUrl": "x"}}]})
+    assert internal.status_code == 422
 
 
 def test_accept_applies_everything_with_dragged_positions_and_never_runs(api, monkeypatch):
@@ -430,7 +506,7 @@ def test_accept_applies_everything_with_dragged_positions_and_never_runs(api, mo
     api.sent.clear()
     response = api.client.post(
         f"/api/canvas/proposals/{proposal_id}/accept",
-        headers={**BROWSER, KEY: key},
+        headers={**PERSON, KEY: key},
         json={"positions": {"+img": {"x": 900, "y": -40}}},
     )
     assert response.status_code == 200, response.text
@@ -473,11 +549,11 @@ def test_accept_is_all_or_nothing(api):
     proposal_id = _propose(api, body).json()["proposal"]["id"]
     key = _key(api, proposal_id)
     # Meanwhile the person wires something else into that single input.
-    wired = api.client.post("/api/graph/connect", headers=BROWSER,
+    wired = api.client.post("/api/graph/connect", headers=PERSON,
                             json={"source": n3, "sourceHandle": "text", "target": n2, "targetHandle": "prompt"})
     assert wired.status_code == 200, wired.text
     before = json.dumps(api.graph.get_state(), sort_keys=True)
-    response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept", headers={**BROWSER, KEY: key}, json={})
+    response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept", headers={**PERSON, KEY: key}, json={})
     assert response.status_code == 409 and "no longer fits" in response.json()["detail"]
     assert json.dumps(api.graph.get_state(), sort_keys=True) == before
     assert api.book.get(proposal_id).status == "invalidated"
@@ -510,10 +586,221 @@ def test_accept_refuses_to_overwrite_a_later_edit(api):
     proposal_id = _propose(api, body).json()["proposal"]["id"]
     key = _key(api, proposal_id)
     api.graph.update_params(n1, {"value": "person's"})  # the person edits it meanwhile
-    response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept", headers={**BROWSER, KEY: key}, json={})
+    response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept", headers={**PERSON, KEY: key}, json={})
     assert response.status_code == 409 and f"{n1}.value changed" in response.json()["detail"]
     assert api.graph.nodes[n1]["params"]["value"] == "person's"
     assert api.book.get(proposal_id).status == "invalidated"
+
+
+# -- what Accept approved is what runs ---------------------------------------------
+
+CHEAP = {"model": "gemini-3.1-flash-lite-image"}
+DEAR = {"model": "gemini-3-pro-image", "imageSize": "4K"}
+
+
+@pytest.fixture
+def runs(api, monkeypatch):
+    """The canvas's run path without providers: records what would have run."""
+    started: list[list[str]] = []
+
+    async def fake_execute_graph(*, nodes, **kwargs):
+        started.append(sorted(node.id for node in nodes))
+
+    monkeypatch.setattr(api.main, "execute_graph", fake_execute_graph)
+    monkeypatch.setattr(api.main, "validate_graph", lambda *args, **kwargs: [])
+    return started
+
+
+def _accept_cheap_image(api) -> tuple[str, str, dict]:
+    """Claude proposes a cheap image from n1's prompt; the person accepts it."""
+    n1 = api.graph.add_node("text-input", {"value": "a cat"}, position={"x": 0, "y": 0})
+    body = {
+        "note": "cheap image",
+        "nodes": [{"ref": "+img", "definitionId": "nano-banana", "params": dict(CHEAP)}],
+        "edges": [{"source": n1, "sourceHandle": "text", "target": "+img", "targetHandle": "prompt"}],
+        "run": ["+img"],
+    }
+    proposal_id = _propose(api, body).json()["proposal"]["id"]
+    accepted = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                               headers={**PERSON, KEY: _key(api, proposal_id)}, json={})
+    assert accepted.status_code == 200, accepted.text
+    result = accepted.json()
+    return n1, result["runNodeIds"][0], result
+
+
+def _graph_state(api) -> dict:
+    return {"nodes": copy.deepcopy(api.graph.nodes), "edges": copy.deepcopy(api.graph.edges)}
+
+
+def _canvas_run(api, target: str, approval_id: str | None, headers=PERSON, *, graph=None):
+    """What the canvas sends for one node: its whole graph, the target, the approval."""
+    state = graph or _graph_state(api)
+    nodes = [{"id": node_id, "definitionId": node["definitionId"], "params": node.get("params") or {}, "outputs": {}}
+             for node_id, node in state["nodes"].items()]
+    edges = [{"id": edge["id"], "source": edge["source"], "sourceHandle": edge["sourceHandle"],
+              "target": edge["target"], "targetHandle": edge["targetHandle"]} for edge in state["edges"]]
+    body = {"nodes": nodes, "edges": edges, "targetNodeId": target}
+    if approval_id is not None:
+        body["approvalId"] = approval_id
+    return api.client.post("/api/execute-node", headers=headers, json=body)
+
+
+def test_accept_returns_an_approval_only_the_canvas_sees(api):
+    n1, new_img, result = _accept_cheap_image(api)
+    approval_id = result["approvalId"]
+    assert isinstance(approval_id, str) and len(approval_id) > 20
+    assert approval_id not in json.dumps(api.sent) and approval_id not in json.dumps(api.browser)
+    assert approval_id not in json.dumps(api.journal.read(after=0, limit=100))
+    assert approval_id not in json.dumps(api.client.get("/api/canvas/proposals", headers=CLAUDE).json())
+    # A proposal with no runs approves no run.
+    other = api.graph.add_node("text-input", {"value": "old"})
+    body = {"note": "Retitle", "params": [{"nodeId": other, "params": {"value": "new"}}]}
+    proposal_id = _propose(api, body).json()["proposal"]["id"]
+    plain = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                            headers={**PERSON, KEY: _key(api, proposal_id)}, json={})
+    assert plain.status_code == 200 and plain.json()["approvalId"] is None
+
+
+def test_an_agent_cannot_change_an_approved_run_before_the_canvas_starts_it(api, runs):
+    """The scratch scenario from review: Claude swaps the model and size after Accept."""
+    n1, new_img, result = _accept_cheap_image(api)
+    edge = next(e for e in api.graph.edges if e["target"] == new_img)
+    refused = [
+        api.client.put(f"/api/graph/node/{new_img}", headers=CLAUDE, json={"params": DEAR}),
+        api.client.put(f"/api/graph/node/{n1}", headers=CLAUDE, json={"params": {"value": "a 4K poster"}}),
+        api.client.request("DELETE", "/api/graph/edge", headers=CLAUDE, json={
+            "source": edge["source"], "sourceHandle": edge["sourceHandle"],
+            "target": edge["target"], "targetHandle": edge["targetHandle"]}),
+        api.client.delete(f"/api/graph/node/{n1}", headers=CLAUDE),
+        api.client.post("/api/graph/apply", headers=CLAUDE, json={
+            "note": "bigger", "params": [{"nodeId": new_img, "params": DEAR}]}),
+        api.client.post("/api/graph/apply", headers=CLAUDE, json={
+            "note": "a reference", "nodes": [{"ref": "+p", "definitionId": "image-input"}],
+            "edges": [{"source": "+p", "sourceHandle": "image", "target": new_img, "targetHandle": "images"}]}),
+        # A forged browser Origin is not the person either.
+        api.client.put(f"/api/graph/node/{new_img}", headers=FORGED_ORIGIN, json={"params": DEAR}),
+    ]
+    for response in refused:
+        assert response.status_code == 409, response.text
+        assert "in a run the person approved" in response.json()["detail"]
+    assert api.graph.nodes[new_img]["params"] == CHEAP
+    assert api.graph.nodes[n1]["params"]["value"] == "a cat"
+    assert len(api.graph.edges) == 1
+    # Edits outside the run set still go through.
+    other = api.graph.add_node("text-input", {"value": "elsewhere"})
+    assert api.client.put(f"/api/graph/node/{other}", headers=CLAUDE,
+                          json={"params": {"value": "fine"}}).status_code == 200
+    # The canvas's run is exactly what was approved.
+    started = _canvas_run(api, new_img, result["approvalId"])
+    assert started.status_code == 200, started.text
+    assert runs == [sorted([n1, new_img])]
+    # Once it started, the locks lift (that run already has its values).
+    assert api.client.put(f"/api/graph/node/{new_img}", headers=CLAUDE, json={"params": DEAR}).status_code == 200
+
+
+def test_a_run_that_changed_since_accept_is_refused(api, runs):
+    n1, new_img, result = _accept_cheap_image(api)
+    # However it got there (here: written straight into the graph), the live
+    # value no longer matches what the person accepted.
+    api.graph.update_params(new_img, DEAR)
+    refused = _canvas_run(api, new_img, result["approvalId"])
+    assert refused.status_code == 409
+    assert f"{new_img} changed since you accepted Claude Code's proposal" in refused.json()["detail"]
+    assert runs == []
+    # The approval is used up: no retry with it, and the locks are gone.
+    again = _canvas_run(api, new_img, result["approvalId"])
+    assert again.status_code == 409 and "expired or was already started" in again.json()["detail"]
+    assert runs == []
+
+
+def test_the_run_must_start_exactly_the_approved_nodes(api, runs):
+    n1, new_img, result = _accept_cheap_image(api)
+    extra = _graph_state(api)
+    extra["nodes"]["n99"] = {"definitionId": "image-input", "params": {}}
+    extra["edges"].append({"id": "e99", "source": "n99", "sourceHandle": "image",
+                           "target": new_img, "targetHandle": "images"})
+    refused = _canvas_run(api, new_img, result["approvalId"], graph=extra)
+    assert refused.status_code == 409 and "changed since you accepted" in refused.json()["detail"]
+    assert runs == []
+
+
+def test_only_the_person_can_use_or_release_an_approval(api, runs):
+    n1, new_img, result = _accept_cheap_image(api)
+    approval_id = result["approvalId"]
+    for headers in (CLAUDE, FORGED_ORIGIN, {**PERSON, **CLAUDE}):
+        used = _canvas_run(api, new_img, approval_id, headers=headers)
+        assert used.status_code == 403, used.text
+        released = api.client.delete(f"/api/canvas/approvals/{approval_id}", headers=headers)
+        assert released.status_code == 403
+    assert runs == []
+    # Still waiting, still locked.
+    assert api.client.put(f"/api/graph/node/{new_img}", headers=CLAUDE, json={"params": DEAR}).status_code == 409
+    released = api.client.delete(f"/api/canvas/approvals/{approval_id}", headers=PERSON)
+    assert released.json() == {"status": "released"}
+    assert api.client.put(f"/api/graph/node/{new_img}", headers=CLAUDE, json={"params": DEAR}).status_code == 200
+    gone = _canvas_run(api, new_img, approval_id)
+    assert gone.status_code == 409 and runs == []
+
+
+def test_the_person_can_still_edit_and_an_approval_expires(api, runs):
+    n1, new_img, result = _accept_cheap_image(api)
+    edited = api.client.put(f"/api/graph/node/{n1}", headers=PERSON, json={"params": {"value": "a dog"}})
+    assert edited.status_code == 200
+    api.clock.now += APPROVAL_TTL_SECONDS + 1
+    assert api.client.put(f"/api/graph/node/{new_img}", headers=CLAUDE, json={"params": DEAR}).status_code == 200
+    expired = _canvas_run(api, new_img, result["approvalId"])
+    assert expired.status_code == 409 and "expired" in expired.json()["detail"]
+    assert runs == []
+
+
+def test_replacing_or_clearing_the_canvas_drops_approvals(api):
+    _n1, _img, _result = _accept_cheap_image(api)
+    assert api.approvals.open_list()
+    assert api.client.delete("/api/graph", headers=PERSON).status_code == 200
+    assert api.approvals.open_list() == []
+
+
+def test_a_run_of_several_approved_nodes_goes_through_execute(api, runs):
+    n1 = api.graph.add_node("text-input", {"value": "a cat"})
+    body = {
+        "note": "two images",
+        "nodes": [{"ref": "+a", "definitionId": "nano-banana", "params": dict(CHEAP)},
+                  {"ref": "+b", "definitionId": "nano-banana", "params": dict(CHEAP)}],
+        "edges": [{"source": n1, "sourceHandle": "text", "target": "+a", "targetHandle": "prompt"},
+                  {"source": n1, "sourceHandle": "text", "target": "+b", "targetHandle": "prompt"}],
+        "run": ["+a", "+b"],
+    }
+    proposal_id = _propose(api, body).json()["proposal"]["id"]
+    result = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
+                             headers={**PERSON, KEY: _key(api, proposal_id)}, json={}).json()
+    state = _graph_state(api)
+    request = {
+        "nodes": [{"id": node_id, "definitionId": node["definitionId"], "params": node["params"], "outputs": {}}
+                  for node_id, node in state["nodes"].items()],
+        "edges": [{"id": e["id"], "source": e["source"], "sourceHandle": e["sourceHandle"],
+                   "target": e["target"], "targetHandle": e["targetHandle"]} for e in state["edges"]],
+        "approvalId": result["approvalId"],
+    }
+    started = api.client.post("/api/execute", headers=PERSON, json=request)
+    assert started.status_code == 200, started.text
+    assert runs == [sorted([n1, *result["runNodeIds"]])]
+
+
+def test_accept_refuses_when_what_it_runs_changed_after_it_was_proposed(api):
+    """Before Accept too: the card showed the runs and cost at proposal time."""
+    n1 = api.graph.add_node("text-input", {"value": "a cat"})
+    n2 = api.graph.add_node("nano-banana", dict(CHEAP))
+    api.graph.connect(n1, "text", n2, "prompt")
+    body = {"note": "run the cheap one", "run": [n2]}
+    proposal_id = _propose(api, body).json()["proposal"]["id"]
+    key = _key(api, proposal_id)
+    # No approval exists yet, so this edit lands; Accept must notice it.
+    assert api.client.put(f"/api/graph/node/{n2}", headers=CLAUDE, json={"params": DEAR}).status_code == 200
+    response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept", headers={**PERSON, KEY: key}, json={})
+    assert response.status_code == 409
+    assert f"what it runs changed after it was proposed ({n2})" in response.json()["detail"]
+    assert api.book.get(proposal_id).status == "invalidated"
+    assert api.approvals.open_list() == []
 
 
 @pytest.mark.parametrize("route", ["accept", "reject"])
@@ -532,7 +819,7 @@ def test_decision_rechecks_after_reading_the_body(api, monkeypatch, route):
     monkeypatch.setattr(api.main, "_proposal_body", body_then_withdraw)
     before = json.dumps(api.graph.get_state(), sort_keys=True)
     response = api.client.post(f"/api/canvas/proposals/{proposal_id}/{route}",
-                               headers={**BROWSER, KEY: key}, json={})
+                               headers={**PERSON, KEY: key}, json={})
     assert response.status_code == 409 and "already withdrawn" in response.json()["detail"]
     assert json.dumps(api.graph.get_state(), sort_keys=True) == before
     assert api.book.get(proposal_id).status == "withdrawn"
@@ -544,7 +831,7 @@ def test_accept_rejects_bad_positions(api):
     key = _key(api, proposal_id)
     for positions in ({"+nope": {"x": 1, "y": 1}}, {"+img": {"x": 1e8, "y": 0}}, {"+img": {"x": "1", "y": 0}}):
         response = api.client.post(f"/api/canvas/proposals/{proposal_id}/accept",
-                                   headers={**BROWSER, KEY: key}, json={"positions": positions})
+                                   headers={**PERSON, KEY: key}, json={"positions": positions})
         assert response.status_code == 422, positions
     assert api.book.get(proposal_id).status == "open" and len(api.graph.nodes) == 1
 
@@ -572,7 +859,7 @@ def test_waiting_for_a_decision_returns_when_the_person_rejects(api):
             async def later():
                 await asyncio.sleep(0.1)
                 return await http.post(f"/api/canvas/proposals/{proposal_id}/reject",
-                                       headers={**BROWSER, KEY: key}, json={"reason": "too pricey"})
+                                       headers={**PERSON, KEY: key}, json={"reason": "too pricey"})
 
             task = asyncio.create_task(later())
             waited = await http.get(f"/api/canvas/proposals/{proposal_id}?wait=5", headers=CLAUDE)
@@ -771,3 +1058,14 @@ def test_mcp_propose_and_wait_send_named_requests(monkeypatch):
     assert all(call["timeout"] >= call["params"]["wait"] for call in gets)
     assert not any(name in dir(mcp_server) for name in ("accept_proposal", "reject_proposal"))
     assert "agents cannot accept" in mcp_server.mcp.instructions
+
+
+def test_a_cinema_scene_is_paid_by_its_base_model():
+    from services.canvas_proposals import cost_for
+
+    definitions = {"nano-banana": {"id": "nano-banana", "apiProvider": "google"}}
+    scene = {"id": "cinema-scene", "apiProvider": "utility"}
+    params = {"scene": {"base": {"model": "nano-banana"}, "shots": [{"id": "a"}]}}
+    assert cost_for(scene, params, definitions) == {
+        "kind": "paid", "provider": "google", "label": "paid · google, per shot"}
+    assert cost_for(scene, {"scene": "unreadable"}, definitions)["kind"] == "paid"
