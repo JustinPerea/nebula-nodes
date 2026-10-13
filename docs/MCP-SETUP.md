@@ -188,6 +188,27 @@ checked in `backend/services/person_gate.py`):
   `NEBULA_DESKTOP_DEBUG_PORT` set there is no token at all, so person-only
   actions stay locked and the window says why.
 
+  Checked in the packaged app (2026-10-13; Electron 44, validation bundle,
+  isolated profile; `desktop/README.md` and `implementation-notes.md` have
+  the method):
+  - The renderer's page origin is `file://`. Its HTTP requests carry **no**
+    `Origin` header and send no CORS preflight, and it reads responses
+    without `Access-Control-Allow-Origin`, so CORS plays no part; the token is
+    the only gate. Its `/ws` handshake sends `Origin: file://`, which
+    `services/local_guard.py` allows.
+  - With the token: `PUT /api/settings` 200 (403 without), `GET
+    /api/agent/spend` answers `limited: false` (`limited: true` without), the
+    `/ws` hello gets `proposalSync` (a wrong token gets `personRequired`), and
+    the Krea connection status reads `disconnected` while check and disconnect
+    answer 200 (403 `person_required` without). The smoke run
+    (`npm run test:smoke`, isolated profiles) repeats all of these.
+  - While the app runs, no process has `nebula-connector-session` in its argv,
+    and neither the person token nor any provider key or the Krea vault key is
+    in any of its processes' argv or environment (`ps -E`). Keys and the vault
+    key go over the sidecar's stdin after the token
+    (`services/launch_secrets.py`); before this check they were in its
+    environment.
+
 The canvas sends it as `X-Nebula-Person` on every write and on
 `GET /api/agent/spend`, in a `{type: "hello"}` frame on `/ws`, and as
 `personToken` on every `/ws/chat` send. A request is the person's only when it
@@ -228,7 +249,9 @@ Every process the backend starts (agents, the Commons reader, ffmpeg, the
 Remotion renderer, git, `open`, `ps`, `sips`, `brctl`) gets the backend's
 environment minus `NEBULA_PERSON_TOKEN`, `NEBULA_CONNECTOR_ENCRYPTION_KEY`,
 `NEBULA_INJECTED_KEYS`, `NEBULA_CONNECTOR_SESSION` and `NEBULA_APP_TOKEN`
-(`services/child_env.py`).
+(`services/child_env.py`). The desktop app no longer sets
+the vault key or the injected keys in the backend's environment at all; the
+scrub catches a hand-started backend that does.
 
 Remaining risk, plainly: a program running as you with its own unsandboxed
 shell can still read the token (the backend's memory, Chrome's on-disk Session

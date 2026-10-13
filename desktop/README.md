@@ -232,9 +232,17 @@ API keys are encrypted at rest via macOS Keychain using Electron's
 Encrypted blobs are stored as `v1:<base64>` strings in `credentials.json`.
 
 The desktop app is the credential authority. On sidecar startup, Electron
-decrypts keys from the Keychain and passes them to the backend via
-`NEBULA_INJECTED_KEYS` (a JSON dict). The backend stores them in a
-module-level `_INJECTED_KEYS` dict (memory only, never persisted). The
+decrypts keys from the Keychain and writes them to the sidecar's stdin as one
+JSON line right after the person token, together with the Krea connector
+vault key (`{"injectedKeys": {...}, "connectorEncryptionKey": "..."}`,
+`NEBULA_LAUNCH_SECRETS_STDIN=1`; `sidecar.mjs` `launchSecretsLine`,
+`backend/services/launch_secrets.py`). They never go in the sidecar's
+environment: any program running as you can read a process's initial
+environment with `ps -E`, and the desktop pass found a planted key there when
+they did (`NEBULA_INJECTED_KEYS` / `NEBULA_CONNECTOR_ENCRYPTION_KEY`, now
+stripped from the child env). A missing or malformed line fails closed: no
+provider keys and no Krea connection that launch. The backend stores the keys
+in a module-level `_INJECTED_KEYS` dict (memory only, never persisted). The
 `POST /api/credentials/update` endpoint allows in-memory key updates when
 the user changes a key via Settings — no sidecar restart needed. It is
 person-only, like `PUT /api/settings`: it needs this launch's person token.
@@ -323,8 +331,12 @@ that the injected `apiBaseUrl`/`wsBaseUrl` are on a dynamic non-8000 port,
 isolated profile (`NEBULA_DESKTOP_USER_DATA_DIR`) it also saves a setting the
 way the Settings panel does (person token over IPC, then `PUT /api/settings`
 with `X-Nebula-Person`) and checks that the same save without the token is
-refused; with a debug port open there is no token, so that check reports
-`skipped`. It never writes settings in a real profile. `NEBULA_DESKTOP_SMOKE=1`
+refused. In the same profiles it checks the other person paths from the
+packaged page: `GET /api/agent/spend` (`limited: false` only with the token),
+the `/ws` hello (`proposalSync` with the token, `personRequired` with a wrong
+one), and the Krea connector's status, check and disconnect (200 with the
+token, 403 `person_required` without; none of them reaches Krea). With a
+debug port open there is no token, so those checks report `skipped`. It never writes settings in a real profile. `NEBULA_DESKTOP_SMOKE=1`
 works the same against a validation Nebula.app binary. It exits 0
 on success and emits `NEBULA_DESKTOP_SMOKE {"passed":true,...}` to stdout.
 
@@ -396,7 +408,7 @@ No child process or listening port remains after any failure path.
 ## Tests
 
 ```bash
-cd desktop && npm test            # 324 Node lifecycle, credential, migration, packaging and integration tests
+cd desktop && npm test            # 336 Node lifecycle, credential, migration, packaging and integration tests
 cd desktop && npm run test:smoke  # end-to-end dynamic endpoint + bridge surface smoke
 ```
 
@@ -432,7 +444,7 @@ required live checks:
 
 ```bash
 # Programmatic gate — all must exit zero
-cd desktop && npm test                          # 324 Node lifecycle, credential, migration, packaging and integration tests
+cd desktop && npm test                          # 336 Node lifecycle, credential, migration, packaging and integration tests
 cd desktop && npm audit                         # 0 vulnerabilities
 cd frontend && npm test                         # 777 Vitest tests
 cd frontend && npm run lint                     # ESLint + style guards
