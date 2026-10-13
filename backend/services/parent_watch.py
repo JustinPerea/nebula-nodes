@@ -12,6 +12,12 @@ process SIGTERM so uvicorn shuts down normally, and hard-exits after a grace
 period if that hangs.
 
 Without the variable (browser dev, tests, the CLI) nothing is watched.
+
+The variable describes this process's own fd table, so it must not reach any
+process the backend starts: start_from_env removes it from os.environ once
+read, and services/child_env.py strips it too. A child that inherited it and
+started its own FastAPI app (an in-app agent running pytest or a dev backend)
+would otherwise watch an unrelated fd 3 and SIGTERM itself.
 """
 from __future__ import annotations
 
@@ -67,6 +73,11 @@ def start(fd: int, on_parent_gone: Callable[[], None] = _shut_down) -> threading
     except OSError:
         log.warning("%s=%d is not an open file descriptor; not watching the parent", WATCH_FD_ENV, fd)
         return None
+    try:
+        # Only this process watches it; children never get a copy.
+        os.set_inheritable(fd, False)
+    except OSError:
+        pass
 
     def run() -> None:
         wait_for_eof(fd)
@@ -80,10 +91,14 @@ def start(fd: int, on_parent_gone: Callable[[], None] = _shut_down) -> threading
 def start_from_env(env: Mapping[str, str] | None = None) -> threading.Thread | None:
     """Start the watchdog once per process when the desktop app asked for it."""
     global _started
-    source = os.environ if env is None else env
-    fd = parse_fd(source.get(WATCH_FD_ENV))
+    if env is None:
+        # Read it once and drop it, so no child inherits it (module docstring).
+        raw = os.environ.pop(WATCH_FD_ENV, None)
+    else:
+        raw = env.get(WATCH_FD_ENV)
+    fd = parse_fd(raw)
     if fd is None:
-        if source.get(WATCH_FD_ENV):
+        if raw:
             log.warning("Ignoring malformed %s", WATCH_FD_ENV)
         return None
     with _lock:
