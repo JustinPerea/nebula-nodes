@@ -11,6 +11,14 @@ cd frontend && npm run build:desktop
 cd ../desktop && npm run start
 ```
 
+`build:desktop` writes the packaged renderer to `frontend/dist-desktop/`, built
+with relative asset URLs so it resolves over `file://`. It has its own folder
+because the web build (`npm run build`, absolute `/assets/...` URLs) used to
+overwrite it in `frontend/dist/`, and the window then loaded an empty `#root`.
+If `dist-desktop/index.html` is missing, the window says so and names the
+command, before any sidecar starts. The build's budget check also refuses a
+desktop bundle with root-absolute asset URLs.
+
 Electron acquires the single-instance lock, starts one uvicorn sidecar on an
 OS-assigned loopback port, waits for confirmed Nebula health, injects the
 immutable API/WS endpoints through the sandboxed preload bridge, and then
@@ -184,7 +192,7 @@ on success and emits `NEBULA_DESKTOP_SMOKE {"passed":true,...}` to stdout.
 | `NEBULA_DESKTOP_PYTHON` | Explicit Python executable for the sidecar. Defaults to `backend/.venv/bin/python`. |
 | `NEBULA_DESKTOP_HEALTH_TIMEOUT_MS` | Test-only shorter health timeout. Production default is 60 s. |
 | `NEBULA_DESKTOP_DEBUG_PORT` | Loopback CDP port for Electron validation. |
-| `NEBULA_DESKTOP_USER_DATA_DIR` | Test-only isolated user-data directory. |
+| `NEBULA_DESKTOP_USER_DATA_DIR` | Test-only isolated profile. Electron's user data, the app data root (`<dir>/Nebula Nodes/`) and the migration sources (`<dir>/legacy/`, normally absent) all stay inside it, so an isolated launch never reads the repo's `settings.json` or `~/.nebula` and never writes to `~/Library/Application Support`. It also turns on Chromium's mock keychain, so safeStorage never touches the login keychain. |
 | `NEBULA_DESKTOP_APP_ID` | Test-only isolated application identity for concurrent validators. Must be paired with `NEBULA_DESKTOP_USER_DATA_DIR`. |
 | `NEBULA_DESKTOP_SMOKE` | Set to `1` to run the end-to-end smoke test (exits 0/1). |
 | `VITE_DEV_SERVER_URL` | Set to the Vite dev server URL for development mode (used by `npm run start:dev`). |
@@ -217,7 +225,8 @@ No child process or listening port remains after any failure path.
 | "NEBULA_DESKTOP_PYTHON is invalid" | Override path does not exist or is not executable | Set `NEBULA_DESKTOP_PYTHON` to a valid Python executable, or unset it to use `backend/.venv/bin/python`. |
 | "Sidecar failed to start" with exit code | Python exits before health (import error, missing dependency) | Check the stderr tail in the failure surface; run `backend/.venv/bin/python -c "import fastapi, uvicorn"` to verify the venv. |
 | Health timeout after 60 s | Cold startup exceeds budget or backend import hangs | First cold import can take ~40 s. If it exceeds 60 s, check for `PYTHONPATH` contamination or missing dependencies. |
-| Blank window | Renderer build is stale or missing | Run `cd frontend && npm run build:desktop` to rebuild the packaged renderer. |
+| "The desktop renderer is not built" | `frontend/dist-desktop/` is missing | Run `cd frontend && npm run build:desktop`. |
+| Blank window | Renderer build is stale | Run `cd frontend && npm run build:desktop` to rebuild the packaged renderer. |
 | Port already in use | A previous sidecar did not shut down cleanly | Check `lsof -nP -iTCP -sTCP:LISTEN` for orphaned uvicorn processes and kill them by PID. |
 | Migration failed | Disk full, permission error, or safeStorage unavailable | Check the error message in the migration overlay. Click Retry after resolving the cause. If safeStorage is unavailable, ensure the Keychain is accessible (System Settings > Privacy & Security). |
 | Plaintext key warning after migration | User manually edited App Support `settings.json` and added API keys | Remove the keys from `settings.json` and re-enter them through the Settings panel so they are encrypted via Keychain. |
@@ -227,9 +236,19 @@ No child process or listening port remains after any failure path.
 ## Tests
 
 ```bash
-cd desktop && npm test            # 227 Node lifecycle + credential + migration + integration tests
+cd desktop && npm test            # 300 Node lifecycle + credential + migration + integration tests
 cd desktop && npm run test:smoke  # end-to-end dynamic endpoint + bridge surface smoke
 ```
+
+The integration and resilience files launch the real Electron binary against a
+real sidecar (they skip if `frontend/dist-desktop/` is not built). Every launch
+uses its own `NEBULA_DESKTOP_USER_DATA_DIR` under `os.tmpdir()` and its own
+`NEBULA_DESKTOP_APP_ID`; set `TMPDIR` to keep those profiles somewhere
+specific. Process checks compare against a snapshot of `uvicorn main:app`
+PIDs taken before each test, so a dev backend on port 8000 (or another
+worktree's) doesn't fail them, and the quit-during-startup test polls for its
+fixture child instead of sleeping a fixed time (a fresh profile shows the
+migration overlay first).
 
 The Node test suite covers: runtime override and fallback, ephemeral port
 allocation and collision retry, spawn argv/cwd, health and WebSocket readiness
@@ -249,7 +268,7 @@ required live checks:
 
 ```bash
 # Programmatic gate — all must exit zero
-cd desktop && npm test                          # 227 Node lifecycle + credential + migration + integration tests
+cd desktop && npm test                          # 300 Node lifecycle + credential + migration + integration tests
 cd desktop && npm audit                         # 0 vulnerabilities
 cd frontend && npm test                         # 777 Vitest tests
 cd frontend && npm run lint                     # ESLint + style guards

@@ -26,7 +26,7 @@ const REPO_ROOT = resolve(__dirname, '..', '..');
 const DESKTOP_DIR = join(REPO_ROOT, 'desktop');
 const ELECTRON = join(DESKTOP_DIR, 'node_modules', '.bin', 'electron');
 const FIXTURES = join(__dirname, 'fixtures');
-const DIST_INDEX = join(REPO_ROOT, 'frontend', 'dist', 'index.html');
+const DIST_INDEX = join(REPO_ROOT, 'frontend', 'dist-desktop', 'index.html');
 
 const tempDirs = [];
 
@@ -123,17 +123,33 @@ function isPidAlive(pid) {
   }
 }
 
-/** Count uvicorn child processes. */
-function countUvicornChildren() {
-  try {
-    const out = execSync('pgrep -f "uvicorn main:app" 2>/dev/null || true', {
-      encoding: 'utf8',
-      timeout: 3000,
-    });
-    return out.trim().split('\n').filter(Boolean).length;
-  } catch {
-    return 0;
-  }
+/** PIDs of processes whose command line matches `pattern` (pgrep -f). */
+function pgrepPids(pattern) {
+  const out = execSync(`pgrep -f ${JSON.stringify(pattern)} 2>/dev/null || true`, {
+    encoding: 'utf8',
+    timeout: 3000,
+  });
+  return new Set(out.trim().split('\n').filter(Boolean).map((pid) => parseInt(pid, 10)));
+}
+
+/**
+ * Every uvicorn backend on this machine. The person's own dev server
+ * (`uvicorn main:app --port 8000`) and other worktrees match too, so tests
+ * compare against a snapshot taken before they launch anything instead of
+ * expecting a machine-wide count of zero.
+ */
+function uvicornPids() {
+  return pgrepPids('uvicorn main:app');
+}
+
+/** uvicorn PIDs that exist now but did not exist in `before`. */
+function newUvicornPids(before) {
+  return [...uvicornPids()].filter((pid) => !before.has(pid));
+}
+
+/** Process name used for each launch: a fresh, test-only Electron identity. */
+function testAppId(label) {
+  return `nebula-res-${process.pid}-${Date.now()}-${label}`;
 }
 
 /** Kill a process by PID if alive. */
@@ -155,9 +171,11 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
   // VAL-ELECTRON-006: Single-instance lock — second launch focuses existing
   // window and starts no second sidecar.
   // -------------------------------------------------------------------------
-  test('second launch with same identity exits without starting a second sidecar', { timeout: 180_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist not built' }, async () => {
+  test('second launch with same identity exits without starting a second sidecar', { timeout: 180_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
     const userData = mkTemp();
+    const appId = testAppId('single');
     const debugPortBase = 47000 + Math.floor(Math.random() * 1000);
+    const uvicornBefore = uvicornPids();
 
     // Launch first instance (non-smoke, will stay running).
     const firstChild = spawn(ELECTRON, ['.'], {
@@ -165,6 +183,7 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
       env: {
         ...process.env,
         NEBULA_DESKTOP_USER_DATA_DIR: userData,
+        NEBULA_DESKTOP_APP_ID: appId,
         NEBULA_DESKTOP_DEBUG_PORT: String(debugPortBase),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -189,13 +208,14 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
       assert.ok(firstPid, 'First instance should have started a sidecar');
       assert.ok(firstPort, 'First instance should have logged a sidecar port');
 
-      // Count children before second launch.
-      const childrenBefore = countUvicornChildren();
-      assert.ok(childrenBefore >= 1, `Expected at least 1 uvicorn child, got ${childrenBefore}`);
+      // The first instance's sidecar is the only backend this test started.
+      const childrenBefore = newUvicornPids(uvicornBefore);
+      assert.deepEqual(childrenBefore, [firstPid], `Expected only the first sidecar, got ${childrenBefore}`);
 
       // Launch second instance with the same identity.
       const secondResult = await runElectron({
         NEBULA_DESKTOP_USER_DATA_DIR: userData,
+        NEBULA_DESKTOP_APP_ID: appId,
       }, 15_000);
 
       // The second instance should exit (deferred to the first) — it should
@@ -206,8 +226,9 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
       );
 
       // Verify no second sidecar was started.
-      const childrenAfter = countUvicornChildren();
-      assert.equal(
+      assert.equal(parseSidecarPid(secondResult.stdout), null, 'Second instance should not log a sidecar');
+      const childrenAfter = newUvicornPids(uvicornBefore);
+      assert.deepEqual(
         childrenAfter,
         childrenBefore,
         `Second launch should not start another sidecar (before: ${childrenBefore}, after: ${childrenAfter})`,
@@ -222,19 +243,22 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
       try { firstChild.kill('SIGKILL'); } catch { /* already gone */ }
     }
 
-    // Verify no orphan listener.
+    // Verify no orphan listener or sidecar.
     assertNoListener(firstPort);
+    assert.equal(isPidAlive(firstPid), false, `First sidecar ${firstPid} should be gone`);
+    assert.deepEqual(newUvicornPids(uvicornBefore), [], 'No sidecar started by this test should remain');
   });
 
   // -------------------------------------------------------------------------
   // VAL-CROSS-002: Two isolated instances — distinct identities, sidecars,
   // ports, and app data.
   // -------------------------------------------------------------------------
-  test('two isolated instances run independent sidecars on distinct ports', { timeout: 240_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist not built' }, async () => {
+  test('two isolated instances run independent sidecars on distinct ports', { timeout: 240_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
     const userDataA = mkTemp();
     const userDataB = mkTemp();
-    const appIdA = `nebula-iso-${Date.now()}-a`;
-    const appIdB = `nebula-iso-${Date.now()}-b`;
+    const appIdA = testAppId('iso-a');
+    const appIdB = testAppId('iso-b');
+    const uvicornBefore = uvicornPids();
 
     // Run first isolated instance.
     const resultA = await runElectron({
@@ -271,17 +295,28 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
     assertNoListener(portA);
     assertNoListener(portB);
 
-    // No uvicorn children should remain.
-    const remaining = countUvicornChildren();
-    assert.equal(remaining, 0, `No uvicorn children should remain, got ${remaining}`);
+    // Both sidecars are gone and no backend started by this test remains.
+    const pidA = parseSidecarPid(resultA.stdout);
+    const pidB = parseSidecarPid(resultB.stdout);
+    assert.ok(pidA && pidB && pidA !== pidB, `Each instance should log its own sidecar (${pidA}, ${pidB})`);
+    assert.equal(isPidAlive(pidA), false, `Sidecar A ${pidA} should be gone`);
+    assert.equal(isPidAlive(pidB), false, `Sidecar B ${pidB} should be gone`);
+    const remaining = newUvicornPids(uvicornBefore);
+    assert.deepEqual(remaining, [], `No uvicorn children should remain, got ${remaining}`);
+
+    // Each instance kept its app data inside its own profile.
+    assert.ok(existsSync(join(userDataA, 'Nebula Nodes', 'state')), 'Instance A app data should be in its profile');
+    assert.ok(existsSync(join(userDataB, 'Nebula Nodes', 'state')), 'Instance B app data should be in its profile');
   });
 
   // -------------------------------------------------------------------------
   // VAL-ELECTRON-009: Quit during cold startup cleans up without loading
   // the workspace.
   // -------------------------------------------------------------------------
-  test('quit during cold startup leaves no child process or listener', { timeout: 30_000 }, async () => {
+  test('quit during cold startup leaves no child process or listener', { timeout: 45_000 }, async () => {
     const userData = mkTemp();
+    const uvicornBefore = uvicornPids();
+    const fixture = join(FIXTURES, 'never-healthy.mjs');
 
     // Launch with never-healthy fixture so startup doesn't complete.
     // Use a short health timeout so the startup promise rejects quickly
@@ -292,7 +327,8 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
         ...process.env,
         NEBULA_DESKTOP_SMOKE: '1',
         NEBULA_DESKTOP_USER_DATA_DIR: userData,
-        NEBULA_DESKTOP_PYTHON: join(FIXTURES, 'never-healthy.mjs'),
+        NEBULA_DESKTOP_APP_ID: testAppId('quit'),
+        NEBULA_DESKTOP_PYTHON: fixture,
         NEBULA_DESKTOP_HEALTH_TIMEOUT_MS: '5000',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -303,18 +339,17 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
     child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
 
-    // Wait a moment for the sidecar child to be spawned (before health).
-    await new Promise((r) => setTimeout(r, 2000));
-
-    // Verify a child was spawned by checking for never-healthy fixture processes.
+    // Wait for the sidecar child to be spawned (before health). A fresh
+    // profile first shows the one-time migration overlay, so poll instead of
+    // guessing a delay. Match this repo's fixture path only, so other
+    // checkouts running the same suite can't satisfy or fail this check.
     let childCount = 0;
-    try {
-      const out = execSync('pgrep -f "never-healthy" 2>/dev/null || true', {
-        encoding: 'utf8',
-        timeout: 3000,
-      });
-      childCount = out.trim().split('\n').filter(Boolean).length;
-    } catch { /* pgrep failed */ }
+    const spawnDeadline = Date.now() + 10_000;
+    while (Date.now() < spawnDeadline) {
+      childCount = pgrepPids(fixture).size;
+      if (childCount >= 1) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
     assert.ok(childCount >= 1, `Sidecar child should be running before quit, got ${childCount}`);
 
     // Send SIGTERM to the Electron process (simulates Cmd+Q / before-quit).
@@ -341,18 +376,12 @@ describe('Electron resilience — single-instance, isolation, and quit-during-st
     await new Promise((r) => setTimeout(r, 2000));
 
     // No fixture child should remain.
-    try {
-      const out = execSync('pgrep -f "never-healthy" 2>/dev/null || true', {
-        encoding: 'utf8',
-        timeout: 3000,
-      });
-      const remaining = out.trim().split('\n').filter(Boolean).length;
-      assert.equal(remaining, 0, `No never-healthy child should remain, got ${remaining}`);
-    } catch { /* pgrep failed — assume clean */ }
+    const remaining = pgrepPids(fixture).size;
+    assert.equal(remaining, 0, `No never-healthy child should remain, got ${remaining}`);
 
     // No uvicorn children should remain.
-    const uvicornRemaining = countUvicornChildren();
-    assert.equal(uvicornRemaining, 0, `No uvicorn children should remain, got ${uvicornRemaining}`);
+    const uvicornRemaining = newUvicornPids(uvicornBefore);
+    assert.deepEqual(uvicornRemaining, [], `No uvicorn children should remain, got ${uvicornRemaining}`);
 
     // The workspace should never have been loaded — no NEBULA_DESKTOP_SMOKE
     // passed line should appear.

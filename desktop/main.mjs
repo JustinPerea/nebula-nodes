@@ -1,9 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { startSidecar, stopSidecar, SidecarError, DEFAULT_REPO_ROOT } from './sidecar.mjs';
-import { prepareAppDataEnv } from './paths.mjs';
+import { prepareAppDataEnv, resolveDesktopDataPaths } from './paths.mjs';
 import { createPaperLinkSenderValidator, registerPaperLinkHandler } from './paper-links.mjs';
 import { decidePersonToken, registerPersonTokenHandler } from './person-token.mjs';
 import { registerFolderPickerHandler } from './folder-picker.mjs';
@@ -54,13 +55,25 @@ if (appId) {
 const userDataDir = process.env.NEBULA_DESKTOP_USER_DATA_DIR;
 if (userDataDir) {
   app.setPath('userData', userDataDir);
+  // An isolated profile must not read or write the person's login keychain.
+  // safeStorage names its key "<app name> Safe Storage"; with a fresh
+  // NEBULA_DESKTOP_APP_ID every validator run left one more item behind.
+  // Chromium's mock keychain keeps the key in memory for this process.
+  app.commandLine.appendSwitch('use-mock-keychain');
 }
+
+/** App data root and migration sources; all inside userDataDir when isolated. */
+const dataPaths = resolveDesktopDataPaths({
+  userDataDir,
+  home: homedir(),
+  repoRoot: DEFAULT_REPO_ROOT,
+});
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const isSmokeTest = process.env.NEBULA_DESKTOP_SMOKE === '1';
 const rendererUrl = isDevelopment
   ? process.env.VITE_DEV_SERVER_URL
-  : new URL('../frontend/dist/index.html', import.meta.url).toString();
+  : new URL('../frontend/dist-desktop/index.html', import.meta.url).toString();
 const preloadPath = fileURLToPath(new URL('./preload.cjs', import.meta.url));
 
 // ---------------------------------------------------------------------------
@@ -519,6 +532,16 @@ function runSmokeTest(handle) {
               resolve({ connected: false, reason: 'error' });
             };
           }),
+          // React mounts after the load event; wait for it, bounded, rather
+          // than sampling #root once at did-finish-load.
+          new Promise((resolve) => {
+            const deadline = Date.now() + 15000;
+            const check = () => {
+              if (document.querySelector('#root')?.children.length || Date.now() > deadline) resolve();
+              else window.setTimeout(check, 50);
+            };
+            check();
+          }),
         ]).then(([health, websocket]) => {
           const c = window.nebulaDesktop && window.nebulaDesktop.credentials;
           const m = window.nebulaDesktop && window.nebulaDesktop.migration;
@@ -603,6 +626,7 @@ function runSmokeTest(handle) {
       })}`);
 
       clearTimeout(smokeTimeout);
+      isCleaningUp = true; // this stop is ours, not a mid-session crash
       await stopSidecar(handle).catch(() => {});
       sidecarHandle = null;
       app.exit(passed ? 0 : 1);
@@ -661,10 +685,10 @@ if (!acquiredLock) {
       // spawning the sidecar. The env vars are merged into the child
       // process environment so the backend resolves state, output,
       // characters, moodboards, presets, and settings to
-      // ~/Library/Application Support/Nebula Nodes/.
+      // ~/Library/Application Support/Nebula Nodes/ (or <userDataDir>/Nebula Nodes/ when isolated).
       // In browser/dev mode (no Electron), none of these are set —
       // the backend uses its default paths.
-      const { root: appDataRoot, envVars: pathEnvVars } = prepareAppDataEnv();
+      const { root: appDataRoot, envVars: pathEnvVars } = prepareAppDataEnv({ root: dataPaths.appDataRoot });
 
       // Register credential IPC handlers before the renderer loads.
       //
@@ -704,9 +728,9 @@ if (!acquiredLock) {
       if (isMigrationNeeded(migrationStatePath)) {
         const migrationOptions = {
           appDataRoot,
-          legacySettingsPath: join(DEFAULT_REPO_ROOT, 'settings.json'),
-          legacyNebulaDir: join(homedir(), '.nebula'),
-          legacyOutputDir: join(DEFAULT_REPO_ROOT, 'output'),
+          legacySettingsPath: dataPaths.legacy.settingsPath,
+          legacyNebulaDir: dataPaths.legacy.nebulaDir,
+          legacyOutputDir: dataPaths.legacy.outputDir,
           safeStorage,
         };
         await runMigrationWithOverlay(
@@ -752,6 +776,15 @@ if (!acquiredLock) {
       plaintextProviders = plaintextWarning.hasPlaintext
         ? plaintextWarning.providers
         : [];
+
+      // A missing packaged renderer would load as a blank window after a
+      // full sidecar cold start. Say what to run instead, before spawning.
+      if (!isDevelopment && !existsSync(fileURLToPath(rendererUrl))) {
+        throw new Error(
+          `The desktop renderer is not built: ${fileURLToPath(rendererUrl)}\n` +
+          'Run `cd frontend && npm run build:desktop`, then start the app again.',
+        );
+      }
 
       sidecarHandle = await startSidecar({ env: sidecarEnv, personToken: person.token });
       sidecarStarting = false;

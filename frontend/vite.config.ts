@@ -45,6 +45,11 @@ export default defineConfig({
     },
   },
   build: {
+    // The desktop renderer gets its own folder. Sharing dist/ meant any web
+    // `npm run build` replaced the relative-URL desktop bundle with one whose
+    // absolute /assets/... URLs resolve to file:///assets/... under Electron,
+    // so the window loaded an empty #root.
+    outDir: process.env.NEBULA_DESKTOP_BUILD === '1' ? 'dist-desktop' : 'dist',
     // Three.js ships as one indivisible ~717 kB module, but it is only fetched
     // by lazy 3D workspaces. Track the initial entry with a stricter dedicated
     // budget instead of treating this deferred module as startup payload.

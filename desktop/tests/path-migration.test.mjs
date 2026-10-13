@@ -28,6 +28,7 @@ import {
   ensureAppDataDirs,
   buildSidecarEnvVars,
   prepareAppDataEnv,
+  resolveDesktopDataPaths,
 } from '../paths.mjs';
 
 const tempDirs = [];
@@ -365,6 +366,45 @@ describe('Browser/dev mode unchanged (VAL-MIG-011)', () => {
         before[name],
         `${name} should not be set on process.env by prepareAppDataEnv`,
       );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveDesktopDataPaths — isolated launches never touch the person's data
+// ---------------------------------------------------------------------------
+
+describe('resolveDesktopDataPaths', () => {
+  test('normal launch uses App Support and the legacy repo/home sources', () => {
+    const paths = resolveDesktopDataPaths({ home: '/Users/p', repoRoot: '/repo' });
+    assert.equal(paths.isolated, false);
+    assert.equal(paths.appDataRoot, '/Users/p/Library/Application Support/Nebula Nodes');
+    assert.deepEqual(paths.legacy, {
+      settingsPath: '/repo/settings.json',
+      nebulaDir: '/Users/p/.nebula',
+      outputDir: '/repo/output',
+    });
+  });
+
+  test('isolated launch keeps app data and migration sources inside userDataDir', () => {
+    const paths = resolveDesktopDataPaths({ userDataDir: '/tmp/iso', home: '/Users/p', repoRoot: '/repo' });
+    assert.equal(paths.isolated, true);
+    assert.equal(paths.appDataRoot, '/tmp/iso/Nebula Nodes');
+    for (const value of [paths.appDataRoot, ...Object.values(paths.legacy)]) {
+      assert.ok(value.startsWith('/tmp/iso/'), `${value} should stay inside the isolated profile`);
+      assert.ok(!value.startsWith('/Users/p'), `${value} must not point at the real home`);
+      assert.ok(!value.startsWith('/repo'), `${value} must not point at the repo settings/output`);
+    }
+  });
+
+  test('prepareAppDataEnv honours an explicit isolated root', () => {
+    const base = mkTemp();
+    const root = join(base, 'Nebula Nodes');
+    const result = prepareAppDataEnv({ root, home: '/nonexistent-real-home' });
+    assert.equal(result.root, root);
+    assert.ok(existsSync(join(root, 'state')));
+    for (const value of Object.values(result.envVars)) {
+      assert.ok(value.startsWith(root), `${value} should point inside the isolated root`);
     }
   });
 });
