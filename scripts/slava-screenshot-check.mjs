@@ -255,7 +255,7 @@ async function setupSlavaScene(cdp) {
             definitionId: 'gpt-image-2-generate',
             params: { size: '1024x1024' },
             state: 'complete',
-            outputs: { image: { type: 'Image', value: '/hermes/hermes-figure.jpeg' } },
+            outputs: { image: { type: 'Image', value: '/og-card.svg' } },
           },
         },
         {
@@ -393,18 +393,21 @@ async function runAppearanceSmokeChecks(cdp) {
     window.__nebulaUIStore.getState().togglePanel('chat');
   });
   await waitForRuntime(cdp, 'document.querySelector(".chat-panel__agent-selector")');
-  await clickElementByText(cdp, '.chat-panel__agent-selector button', 'Daedalus');
-  const daedalus = await evaluate(cdp, () => ({
-    selected: document.querySelector('.chat-panel')?.getAttribute('data-chat-agent') === 'daedalus',
+  const agentButtons = await evaluate(cdp, () => [...document.querySelectorAll('.chat-panel__agent-selector button')]
+    .map((button) => button.textContent?.trim() ?? ''));
+  assertSlavaCheck(agentButtons.length === 2 && agentButtons.some((text) => text.includes('Claude'))
+    && agentButtons.some((text) => text.includes('Codex')), 'chat offers only Claude and Codex');
+  await clickElementByText(cdp, '.chat-panel__agent-selector button', 'Codex');
+  const codex = await evaluate(cdp, () => ({
+    selected: document.querySelector('.chat-panel')?.getAttribute('data-chat-agent') === 'codex',
     slavaBody: document.body.classList.contains('app-slava-restraint'),
     hermesBody: document.body.classList.contains('app-hermes'),
     tone: !!document.querySelector('.chat-panel__tone-toggle'),
     bloom: !!document.querySelector('.hermes-bloom-portal'),
-    autonomy: !!document.querySelector('.chat-panel__autonomy-toggle'),
     model: !!document.querySelector('.chat-panel__model-trigger'),
   }));
-  assertSlavaCheck(daedalus.selected && daedalus.slavaBody && !daedalus.hermesBody, 'selecting Daedalus keeps the supported appearance');
-  assertSlavaCheck(!daedalus.tone && !daedalus.bloom && daedalus.autonomy && daedalus.model, 'Daedalus retains model and autonomy controls without theme controls');
+  assertSlavaCheck(codex.selected && codex.slavaBody && !codex.hermesBody, 'selecting Codex keeps the supported appearance');
+  assertSlavaCheck(!codex.tone && !codex.bloom && codex.model, 'Codex retains model controls without theme controls');
   await clickElementByText(cdp, '.chat-panel__agent-selector button', 'Claude');
   await evaluate(cdp, () => window.__nebulaUIStore.getState().togglePanel('chat'));
   debugStep('smoke: supported appearance complete');
@@ -466,7 +469,7 @@ async function runSlavaChatCoverage(cdp) {
     window.__nebulaChat.setNotice(null);
     window.__nebulaChat.setBusy(false);
     window.__nebulaChat.pushUser('Use this image as reference and make the next variation calmer.', {
-      images: [{ nodeId: 'n3', thumbUrl: '/hermes/hermes-figure.jpeg' }],
+      images: [{ nodeId: 'n3', thumbUrl: '/og-card.svg' }],
     });
     window.__nebulaChat.pushAssistant('I will keep the image reference attached, reduce the contrast, and preserve the main silhouette.');
   });
@@ -504,7 +507,7 @@ async function runSlavaChatCoverage(cdp) {
     window.__nebulaChat.clear();
     window.__nebulaChat.setBusy(false);
     window.__nebulaChat.pushUser('Try another take with @n3.', {
-      images: [{ nodeId: 'n3', thumbUrl: '/hermes/hermes-figure.jpeg' }],
+      images: [{ nodeId: 'n3', thumbUrl: '/og-card.svg' }],
     });
     window.__nebulaChat.pushAssistantSystem('Backend returned 502 while starting the stream.', { tone: 'error' });
     window.__nebulaChat.setInput('Use @n3 and this second reference');
@@ -514,13 +517,13 @@ async function runSlavaChatCoverage(cdp) {
         id: 'chip-ready',
         status: 'ready',
         nodeId: 'n3',
-        thumbUrl: '/hermes/hermes-figure.jpeg',
+        thumbUrl: '/og-card.svg',
         label: 'Reference image',
       },
       {
         id: 'chip-uploading',
         status: 'uploading',
-        thumbUrl: '/hermes/hermes-figure.jpeg',
+        thumbUrl: '/og-card.svg',
         label: 'Uploading reference',
       },
       {
@@ -618,11 +621,11 @@ async function runSlavaInspectorCoverage(cdp) {
         label: 'Reference Image',
         definitionId: 'image-input',
         params: {
-          filePath: '/hermes/hermes-figure.jpeg',
-          _previewUrl: '/hermes/hermes-figure.jpeg',
+          filePath: '/og-card.svg',
+          _previewUrl: '/og-card.svg',
         },
         state: 'complete',
-        outputs: { image: { type: 'Image', value: '/hermes/hermes-figure.jpeg' } },
+        outputs: { image: { type: 'Image', value: '/og-card.svg' } },
       },
     };
     graph.setState({
@@ -1358,7 +1361,7 @@ async function runSlavaInteractionChecks(cdp) {
 
   await evaluate(cdp, () => {
     window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', {
-      detail: { source: 'hermes', message: 'planning next graph action' },
+      detail: { source: 'codex', message: 'planning next graph action' },
     }));
     window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', {
       detail: { source: 'system', message: 'checkpoint recorded' },
@@ -1368,13 +1371,13 @@ async function runSlavaInteractionChecks(cdp) {
   const agentLogEventAssertions = await evaluate(cdp, () => ({
     entryCount: document.querySelectorAll('.agent-log__entry').length,
     markerCount: document.querySelectorAll('.agent-log__entry-marker').length,
-    hermesEntry: !!document.querySelector('.agent-log__entry--hermes'),
+    codexEntry: !!document.querySelector('.agent-log__entry--codex'),
     systemEntry: !!document.querySelector('.agent-log__entry--system'),
     statusText: document.querySelector('.agent-log__status')?.textContent?.trim() ?? '',
   }));
   assertSlavaCheck(agentLogEventAssertions.entryCount >= 2, 'agent log renders telemetry event rows');
   assertSlavaCheck(agentLogEventAssertions.markerCount >= 2, 'agent log event rows render source markers');
-  assertSlavaCheck(agentLogEventAssertions.hermesEntry, 'agent log renders Hermes source event');
+  assertSlavaCheck(agentLogEventAssertions.codexEntry, 'agent log renders Codex source event');
   assertSlavaCheck(agentLogEventAssertions.systemEntry, 'agent log renders system source event');
   assertSlavaCheck(agentLogEventAssertions.statusText === 'system', 'agent log header reflects latest source status');
 
@@ -1391,12 +1394,12 @@ async function runSlavaInteractionChecks(cdp) {
   });
   await waitForRuntime(cdp, '!document.querySelector(".panel--settings")');
 
-  debugStep('interaction: daedalus mode switch');
-  await clickElementByText(cdp, '.chat-panel__agent-selector button', 'Daedalus');
+  debugStep('interaction: codex mode switch');
+  await clickElementByText(cdp, '.chat-panel__agent-selector button', 'Codex');
   await waitForRuntime(cdp, `
-    document.querySelector(".chat-panel--agent-daedalus")
+    document.querySelector(".chat-panel--agent-codex")
   `);
-  const daedalusModeAssertions = await evaluate(cdp, () => ({
+  const codexModeAssertions = await evaluate(cdp, () => ({
     storeSkin: window.__nebulaUIStore.getState().skin,
     storedSkin: window.localStorage.getItem('nebula:skin'),
     slavaBody: document.body.classList.contains('app-slava-restraint'),
@@ -1406,15 +1409,14 @@ async function runSlavaInteractionChecks(cdp) {
     ].some((className) => document.body.classList.contains(className)),
     toneControl: !!document.querySelector('.chat-panel__tone-toggle'),
     bloomPortal: !!document.querySelector('.hermes-bloom-portal'),
-    autonomyControl: !!document.querySelector('.chat-panel__autonomy-toggle'),
     modelControl: !!document.querySelector('.chat-panel__model-trigger'),
     agent: document.querySelector('.chat-panel')?.getAttribute('data-chat-agent') ?? '',
   }));
-  assertSlavaCheck(daedalusModeAssertions.storeSkin === 'slava-restraint' && daedalusModeAssertions.storedSkin === 'slava-restraint', 'Daedalus agent switch keeps the supported saved appearance');
-  assertSlavaCheck(daedalusModeAssertions.slavaBody && !daedalusModeAssertions.legacyAppearance, 'Daedalus agent switch keeps Slava without obsolete theme or transition classes');
-  assertSlavaCheck(!daedalusModeAssertions.toneControl && !daedalusModeAssertions.bloomPortal, 'Daedalus agent switch has no obsolete tone controls or bloom portal');
-  assertSlavaCheck(daedalusModeAssertions.autonomyControl && daedalusModeAssertions.modelControl, 'Daedalus agent switch retains autonomy and model controls');
-  assertSlavaCheck(daedalusModeAssertions.agent === 'daedalus', 'Daedalus agent switch updates chat agent state');
+  assertSlavaCheck(codexModeAssertions.storeSkin === 'slava-restraint' && codexModeAssertions.storedSkin === 'slava-restraint', 'Codex agent switch keeps the supported saved appearance');
+  assertSlavaCheck(codexModeAssertions.slavaBody && !codexModeAssertions.legacyAppearance, 'Codex agent switch keeps Slava without obsolete theme or transition classes');
+  assertSlavaCheck(!codexModeAssertions.toneControl && !codexModeAssertions.bloomPortal, 'Codex agent switch has no obsolete tone controls or bloom portal');
+  assertSlavaCheck(codexModeAssertions.modelControl, 'Codex agent switch retains model controls');
+  assertSlavaCheck(codexModeAssertions.agent === 'codex', 'Codex agent switch updates chat agent state');
 
   await clickElementByText(cdp, '.chat-panel__agent-selector button', 'Claude');
   await waitForRuntime(cdp, `

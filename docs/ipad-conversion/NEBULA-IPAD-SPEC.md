@@ -6,6 +6,11 @@ target: iPadOS 27+ native app
 reference: web repo (frontend/ + backend/)
 ---
 
+> **Note (2026-10-13):** Daedalus, the Hermes-driven in-app agent, was removed
+> from the web app. The `.hermes/` profile and `daedalus-core` skill this spec
+> cites as port sources now live only in git history (last present at commit
+> 84b6d899). The rest of this draft is unchanged.
+
 # Nebula iPad — Master Conversion Spec
 
 Planning document for a **native iPad app** version of Nebula Nodes. Captures architecture decisions, contract-first conversion strategy, agent pipeline logic, competitive positioning, and iOS 27 Siri AI / Foundation Models agent integration.

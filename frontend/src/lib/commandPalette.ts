@@ -55,7 +55,7 @@ export function buildCommands(ctx: PaletteContext): PaletteCommand[] {
     { id: 'action:save', title: 'Save graph', group: 'Actions', keywords: 'export json download', enabled: ctx.canSave, perform: ctx.save },
     { id: 'action:load', title: 'Load graph', group: 'Actions', keywords: 'open import json', enabled: ctx.canLoad, perform: ctx.load },
     { id: 'action:fit', title: 'Fit view', group: 'Actions', keywords: 'zoom center frame fit', perform: ctx.fitView },
-    { id: 'agent:ask', title: 'Ask the agent…', subtitle: 'Describe what to build', group: 'Agent', keywords: 'daedalus chat ai prompt generate', perform: ctx.startAgentQuery },
+    { id: 'agent:ask', title: 'Ask the agent…', subtitle: 'Describe what to build', group: 'Agent', keywords: 'chat ai prompt generate', perform: ctx.startAgentQuery },
     { id: 'view:create', title: 'Open Creator Studio', group: 'View', keywords: 'create generate studio prompt', perform: ctx.enterCreateView },
     { id: 'view:shortcuts', title: 'Keyboard shortcuts', group: 'View', keywords: 'keys hotkeys help cheat sheet',
       perform: () => window.dispatchEvent(new CustomEvent(SHORTCUTS_OPEN_EVENT)) },

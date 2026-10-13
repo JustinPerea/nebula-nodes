@@ -431,7 +431,7 @@ def test_accept_and_reject_security_matrix(api):
     key = _key(api, proposal_id)
     url = f"/api/canvas/proposals/{proposal_id}"
     for action in ("accept", "reject"):
-        for marker in ({"Authorization": "Agent bogus"}, {"X-Daedalus-Caller": "1"}, CLAUDE, {"X-Nebula-Client": "nebula-cli"}):
+        for marker in ({"Authorization": "Agent bogus"}, CLAUDE, {"X-Nebula-Client": "nebula-cli"}):
             refused = api.client.post(f"{url}/{action}", headers={**PERSON, **marker, KEY: key}, json={})
             # An unknown agent token is refused (401) before the route runs.
             assert refused.status_code in {401, 403}, (action, marker)

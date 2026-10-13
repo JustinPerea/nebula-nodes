@@ -11,8 +11,7 @@ Identity comes only from request headers, in this order:
 1. ``Authorization: Agent <token>``: a token minted for an in-app chat runner
    (verified, named after the runner), or one the person made for an outside
    app (verified, named as the person named it; services/app_tokens.py).
-2. ``X-Daedalus-Caller``: set by the Daedalus runtime's CLI.
-3. ``X-Nebula-Agent: <name>``: a self-reported name for outside agents.
+2. ``X-Nebula-Agent: <name>``: a self-reported name for outside agents.
 Requests with none of these (the browser's own requests) never move a cursor.
 
 Everything here is ephemeral and in memory: cursors expire after
@@ -44,7 +43,6 @@ NODE_STATES = ("idle", "queued", "executing", "complete", "error")
 _KNOWN_AGENTS = {
     "claude": ("Claude", "#E8825A"),
     "codex": ("Codex", "#5B9DFF"),
-    "daedalus": ("Daedalus", "#B583FF"),
 }
 _EXTERNAL_COLORS = ("#3FC1A5", "#F2C14E", "#FF6B9A", "#7AD3FF", "#C3E86B", "#FF9F43")
 _NAME_ALLOWED = re.compile(r"[^A-Za-z0-9 ._()\-·]")
@@ -154,9 +152,6 @@ def identify(
             name = clean_agent_name(str(app.get("name") or "")) or "App"
             return AgentIdentity(id=f"app:{app['id']}", name=name, color=_external_color(f"app-{app['id']}"),
                                  verified=True)
-    if lower.get("x-daedalus-caller"):
-        name, color = _KNOWN_AGENTS["daedalus"]
-        return AgentIdentity(id="daedalus", name=name, color=color, verified=True)
     raw = lower.get("x-nebula-agent")
     if raw:
         name = clean_agent_name(raw)

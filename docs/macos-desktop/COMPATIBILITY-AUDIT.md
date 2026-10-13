@@ -17,7 +17,7 @@ must replace or preserve.
 | CSP and workers | Browser build policy, Spark/Lottie runtime-codegen guards | Packaged CSP plus equivalent worker/asset loading tests | 1 |
 | Python dependencies | Local Python 3.12 environment | Bundle and codesign a tested Python runtime and all native dependencies | 0, 4 |
 | ffmpeg/ffprobe | Assumed on developer PATH | Bundle approved binaries or detect and clearly report managed prerequisites | 0, 4 |
-| Agent subprocesses | Codex, Claude, and Hermes rely on local CLI/auth state | Preserve as optional macOS capabilities with explicit availability checks | 3, 5 |
+| Agent subprocesses | Codex and Claude rely on local CLI/auth state; the Nous Portal node reads the local Hermes login | Preserve as optional macOS capabilities with explicit availability checks | 3, 5 |
 | Three/Spark viewers | Chromium/WebGL behavior | Test packaged Electron GPU, worker, and file-URL policies | 1, 5 |
 | Remotion | Node and browser runtime tooling | Package renderer dependencies and validate render subprocess paths | 4, 5 |
 | Diagnostics | Developer terminal logs | Redacted app logs, startup failure UI, and exportable support bundle | 3 |

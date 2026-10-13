@@ -36,7 +36,7 @@ export function NousRow({ summary }: { summary: string }) {
         {open && (
           <div id="settings-row-nous" className="settings-row__manage">
             <p className="settings-hint">
-              On the computer running Nebula, run <code className="settings-mono">hermes-daedalus model</code> and choose Nous Portal.
+              On the computer running Nebula, run <code className="settings-mono">hermes model</code> and choose Nous Portal.
               It signs in through Hermes in your browser; there's no key to paste.
             </p>
             <p className="settings-hint">Then use Check connections. Checking never starts a generation.</p>

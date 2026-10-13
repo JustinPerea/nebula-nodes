@@ -58,7 +58,7 @@ class TestNodeEndpoints:
         definition id but is the natural way to reach for the family) should
         return 404 with a 'Did you mean:' list of the actual variants.
 
-        This removes a friction point Daedalus hit in live dogfood — he ran
+        This removes a friction point an agent hit in live dogfood — it ran
         `nebula info gpt-image-2`, got a hard "not found", then had to
         `nebula nodes | grep gpt` to discover the real ids. One round-trip
         instead of three.
@@ -626,136 +626,28 @@ class TestParamCoercion:
         assert node["params"]["target_polycount"] == 45000
 
 
-class TestRunGraphIterationGuard:
-    """SKILL.md §1.5 says Daedalus must ADD a new node to iterate, never re-run
-    an existing populated one in place. We enforce this at the backend so a
-    §1.5 violation fails loudly instead of silently clobbering iteration
-    history. The guard is gated on the X-Daedalus-Caller header so a human
-    clicking Run in the frontend (or any other API consumer) is unaffected."""
+class TestRemovedDaedalusGuard:
+    """Daedalus once had a §1.5 guard: with its X-Daedalus-Caller header, a
+    populated node could not be re-run or retuned in place. Daedalus was
+    removed on 2026-10-13, so the header now means nothing and a populated
+    node can be re-run or retuned like any other."""
 
-    DAEDALUS_HEADERS = {"X-Daedalus-Caller": "1"}
+    HEADERS = {"X-Daedalus-Caller": "1"}
 
-    def _make_and_populate(self, client, node_id: str = "n1"):
-        """Create a node and fake an execution result so outputs look 'populated'."""
-        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
-        import sys
-        from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    def _populate(self, client, definition_id: str, port: str, node_id: str = "n1"):
+        client.post("/api/graph/node", json={"definitionId": definition_id, "params": {}})
         from main import cli_graph
-        cli_graph.nodes[node_id]["outputs"] = {"text": {"type": "String", "value": "stale"}}
+        cli_graph.nodes[node_id]["outputs"] = {port: {"type": "Any", "value": "stale"}}
 
-    def test_run_on_populated_node_blocked_for_daedalus(self, client):
-        """Daedalus-called /api/graph/run targeting a node that already has
-        outputs gets 400 with the §1.5 reminder — forces him to ADD a new
-        node instead of clobbering iteration history."""
-        self._make_and_populate(client, "n1")
-        resp = client.post(
-            "/api/graph/run",
-            json={"targetNodeId": "n1"},
-            headers=self.DAEDALUS_HEADERS,
-        )
-        assert resp.status_code == 400
-        detail = resp.json()["detail"]
-        assert "n1" in detail
-        assert "1.5" in detail or "add a new node" in detail.lower()
-
-    def test_run_on_empty_node_allowed_for_daedalus(self, client):
-        """Running a node that has no outputs yet is fine — that's the normal
-        first execution path."""
-        client.post("/api/graph/node", json={"definitionId": "text-input", "params": {}})
-        resp = client.post(
-            "/api/graph/run",
-            json={"targetNodeId": "n1"},
-            headers=self.DAEDALUS_HEADERS,
-        )
-        # 200 on execution; guard isn't triggered because outputs are empty
+    def test_run_on_populated_node_is_not_blocked_by_the_old_header(self, client):
+        self._populate(client, "text-input", "text")
+        resp = client.post("/api/graph/run", json={"targetNodeId": "n1"}, headers=self.HEADERS)
         assert resp.status_code == 200
 
-    def test_run_on_populated_node_allowed_for_human(self, client):
-        """Without the X-Daedalus-Caller header (frontend user, curl, etc.),
-        the guard doesn't fire — people can re-run a node in place if they
-        want to."""
-        self._make_and_populate(client, "n1")
-        resp = client.post(
-            "/api/graph/run",
-            json={"targetNodeId": "n1"},
-            # no headers — human caller
-        )
-        # 200 on execution; no guard
-        assert resp.status_code == 200
-
-    def test_run_whole_graph_allowed_for_daedalus(self, client):
-        """Guard only fires when Daedalus targets a specific populated node.
-        A whole-graph run (no targetNodeId) is always allowed — that's the
-        batch-execution path."""
-        self._make_and_populate(client, "n1")
-        resp = client.post(
-            "/api/graph/run",
-            json={},  # no targetNodeId
-            headers=self.DAEDALUS_HEADERS,
-        )
-        assert resp.status_code == 200
-
-
-class TestSetParamsIterationGuard:
-    """SKILL.md §1.5 also forbids `nebula set` as an iteration mechanism: once
-    a node has outputs, mutating its params clobbers the craft log just as
-    surely as re-running the same node would. Without this guard, Daedalus
-    could route around the run-target guard via `set` + a follow-up
-    `run-all` (cache-bypassed because params changed). Same X-Daedalus-Caller
-    gate as the run guard so humans can still tweak params freely."""
-
-    DAEDALUS_HEADERS = {"X-Daedalus-Caller": "1"}
-
-    def _make_and_populate(self, client, node_id: str = "n1"):
-        # Mirrors the existing test_update_coerces_params shape (line 294)
-        # so we know the PUT body is valid and won't 400 on schema grounds.
-        client.post("/api/graph/node", json={
-            "definitionId": "meshy-multi-image-to-3d", "params": {}
-        })
-        import sys
-        from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        from main import cli_graph
-        cli_graph.nodes[node_id]["outputs"] = {"mesh": {"type": "Any", "value": "stale"}}
-
-    def test_set_on_populated_node_blocked_for_daedalus(self, client):
-        """Daedalus PUT /api/graph/node/n1 with new params, where n1 already
-        has outputs → 400 with the §1.5 reminder. Forces him to ADD a new
-        node instead of mutating the existing one."""
-        self._make_and_populate(client, "n1")
-        resp = client.put(
-            "/api/graph/node/n1",
-            json={"params": {"target_polycount": 60000}},
-            headers=self.DAEDALUS_HEADERS,
-        )
-        assert resp.status_code == 400
-        detail = resp.json()["detail"]
-        assert "n1" in detail
-        assert "1.5" in detail or "add a new node" in detail.lower()
-
-    def test_set_on_empty_node_allowed_for_daedalus(self, client):
-        """Pre-first-run config is the normal path — Daedalus creates a node
-        and dials params before executing it. Outputs are still empty here."""
-        client.post("/api/graph/node", json={
-            "definitionId": "meshy-multi-image-to-3d", "params": {}
-        })
-        resp = client.put(
-            "/api/graph/node/n1",
-            json={"params": {"target_polycount": 50000}},
-            headers=self.DAEDALUS_HEADERS,
-        )
-        assert resp.status_code == 200
-
-    def test_set_on_populated_node_allowed_for_human(self, client):
-        """Human users (frontend Inspector edits, curl, etc.) keep the freedom
-        to retune in place. Guard only disciplines Daedalus."""
-        self._make_and_populate(client, "n1")
-        resp = client.put(
-            "/api/graph/node/n1",
-            json={"params": {"target_polycount": 60000}},
-            # no X-Daedalus-Caller header
-        )
+    def test_set_on_populated_node_is_not_blocked_by_the_old_header(self, client):
+        self._populate(client, "meshy-multi-image-to-3d", "mesh")
+        resp = client.put("/api/graph/node/n1", json={"params": {"target_polycount": 60000}},
+                          headers=self.HEADERS)
         assert resp.status_code == 200
 
 
@@ -1491,7 +1383,7 @@ class TestChatAgentDispatch:
 
     @pytest.mark.parametrize("proof", [{}, {"personToken": "x" * 43}, {"personToken": None},
                                        {"commonsToken": "wrong"}])
-    @pytest.mark.parametrize("agent", ["claude", "codex", "daedalus"])
+    @pytest.mark.parametrize("agent", ["claude", "codex"])
     def test_only_the_person_starts_a_chat(self, client, monkeypatch, proof, agent):
         """Without this launch's person token a send starts nothing: no runner,
         no workspace, no minted agent token, so no fresh chat budget."""
@@ -1542,22 +1434,22 @@ class TestChatAgentDispatch:
             calls.append(kwargs)
             yield {"type": "done"}
 
-        monkeypatch.setitem(AGENT_RUNNERS, "daedalus", runner)
+        monkeypatch.setitem(AGENT_RUNNERS, "codex", runner)
         with client.websocket_connect("/ws/chat") as ws:
             for name in ("personToken", "commonsToken"):
-                ws.send_json({"type": "send", "message": "hi", "agent": "daedalus", name: PERSON_TOKEN})
+                ws.send_json({"type": "send", "message": "hi", "agent": "codex", name: PERSON_TOKEN})
                 assert ws.receive_json()["type"] == "done"
         assert len(calls) == 2
 
     def test_dispatch_registers_both_agents(self):
-        """The dispatch table exposes claude, codex, and daedalus."""
+        """The dispatch table exposes claude and codex; Daedalus was removed."""
         import sys
         from pathlib import Path
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from services.chat_session import AGENT_RUNNERS
         assert "claude" in AGENT_RUNNERS
         assert "codex" in AGENT_RUNNERS
-        assert "daedalus" in AGENT_RUNNERS
+        assert "daedalus" not in AGENT_RUNNERS
 
     def test_unknown_agent_returns_error_event(self, client):
         """Sending a send payload with an unknown agent surfaces an error + done."""
@@ -1578,9 +1470,9 @@ class TestChatAgentDispatch:
             second = ws.receive_json()
             assert second["type"] == "done"
 
-    @pytest.mark.parametrize("agent", ["claude", "codex", "daedalus"])
+    @pytest.mark.parametrize("agent", ["claude", "codex"])
     def test_agent_and_graph_events_have_truthful_source(self, client, agent):
-        """The Agent Log must never relabel Claude/Codex activity as Hermes."""
+        """The Agent Log must never relabel Claude/Codex activity as another agent."""
         import asyncio
         from services.chat_actions import publish_action
         from services.chat_session import AGENT_RUNNERS
@@ -1595,7 +1487,7 @@ class TestChatAgentDispatch:
                 "tool": "shell",
                 "input": {"command": "nebula graph"},
                 # A runner cannot relabel itself as a different agent.
-                "source": "hermes",
+                "source": "other-agent",
             }
             await asyncio.Future()
 

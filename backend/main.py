@@ -1694,7 +1694,7 @@ app_tokens.install(app_token_store)
 def _spend_session(headers: Mapping[str, str] | None) -> tuple[str, str]:
     """Which running total a non-person request counts against: (key, label).
 
-    A token Nebula minted for an in-app chat (Claude, Codex, Daedalus) names
+    A token Nebula minted for an in-app chat (Claude or Codex) names
     that chat's own budget, and a token the person made for an outside app
     names that app's line. Names and headers are set by the caller, so
     everything else (outside agents, scripts) shares one budget that doesn't
@@ -2554,8 +2554,8 @@ async def chat_websocket(websocket: WebSocket) -> None:
         brand: str|null (Commons-enabled Claude/Codex turns),
         model: str|null,
         effort: str|null (model-specific effort, Claude/Codex),
-        agent: "claude" | "daedalus" | "codex" (default "claude"),
-        autonomy: "auto" | "step" (default "auto", daedalus-only)
+        agent: "claude" | "codex" (default "claude"),
+        autonomy: accepted for old clients and ignored by both runners
     }
     Server sends events matching AGENT_RUNNERS' event contract.
     """
@@ -2578,7 +2578,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
             await websocket.send_text(json.dumps(event))
 
     def _event_source(agent: str) -> str:
-        return agent if agent in {"claude", "codex", "daedalus"} else "system"
+        return agent if agent in {"claude", "codex"} else "system"
 
     async def stream_response(
         message: str,
@@ -2653,7 +2653,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 # Every in-app agent runs from a private workspace with a minted
                 # turn token: it names the chat's own spending budget and is how
                 # its Nebula MCP server proves which chat it belongs to.
-                if agent in {"claude", "codex", "daedalus"}:
+                if agent in {"claude", "codex"}:
                     workspace_session = workspace_sessions.acquire(_STATE_DIR, agent, brand, session_id)
                     workdir = workspace_session.workspace
                     read_grants = agent_read_grants(output_root=OUTPUT_ROOT, workdir=workdir,
@@ -2840,13 +2840,13 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 await send_event({"type": "done", "source": "system"})
                 continue
             if commons_enabled and agent not in {"claude", "codex"}:
-                await send_event({"type": "error", "message": "Commons private reference turns support Claude and Codex; disable Commons to use Daedalus.", "source": "system"})
+                await send_event({"type": "error", "message": "Commons private reference turns support Claude and Codex.", "source": "system"})
                 await send_event({"type": "done", "source": "system"})
                 continue
             model_raw = payload.get("model")
             autonomy = payload.get("autonomy") or "auto"
-            # Optional per-turn provider override (e.g. "nous" / "openrouter").
-            # When omitted, the runner falls back to its default provider.
+            # No in-app agent takes a provider override (Claude and Codex use
+            # their own CLI's provider); any `provider` field is refused below.
             provider_raw = payload.get("provider")
             provider = str(provider_raw) if provider_raw else None
             selected_ids_raw = payload.get("selectedNodeIds")
@@ -2867,9 +2867,9 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 continue
 
             effort = payload.get("effort")
-            if agent in {"claude", "codex"} and provider_raw is not None:
-                await send_event({"type": "error", "code": "provider_invalid", "message": "Claude and Codex use their local official CLI provider; provider overrides are only available for Daedalus.", "source": agent})
-                await send_event({"type": "done", "source": agent})
+            if provider_raw is not None:
+                await send_event({"type": "error", "code": "provider_invalid", "message": "Claude and Codex use their local official CLI provider; provider overrides aren't available.", "source": _event_source(agent)})
+                await send_event({"type": "done", "source": _event_source(agent)})
                 continue
 
             current_finished = asyncio.Event()
@@ -3374,7 +3374,7 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
 
     Body: {target: {nodeId, handle?} | {x, y}, from?: same shape,
     action?: move|click|drag|look, say?: text}. The caller must identify
-    itself (agent token, Daedalus header, or X-Nebula-Agent).
+    itself (agent token or X-Nebula-Agent).
     """
     identity = identify_agent(current_request_headers())
     if identity is None:
@@ -6629,25 +6629,6 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
             raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
         params_before = copy.deepcopy(node.get("params") or {})
 
-        # §1.5 guard (mirrors /api/graph/run): when called BY Daedalus, refuse to
-        # mutate params on a node that already has outputs. Without this, Daedalus
-        # could route around the run-target guard via `nebula set` + `run-all`
-        # (cache-bypassed because params changed). The X-Daedalus-Caller header
-        # gate keeps frontend Inspector edits and curl/tests unaffected.
-        if request.headers.get("x-daedalus-caller"):
-            existing_outputs = node.get("outputs")
-            if isinstance(existing_outputs, dict) and len(existing_outputs) > 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Node '{node_id}' already has output. Per SKILL.md §1.5, "
-                        "add a new node instead of mutating params on this one — the "
-                        "canvas should keep every iteration visible as craft history. "
-                        "Use `nebula create <definition_id>` to start the next cut, "
-                        "wire it from the corrected upstream, then `nebula run` it."
-                    ),
-                )
-
         raw_params = body.get("params", {})
         params = {} if raw_params is None else raw_params
         if not isinstance(params, dict):
@@ -8471,14 +8452,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     Without ``wait`` the request waits for it, as it always has. With ``wait``
     (seconds) it returns ``{"status": "running", "runId"}`` if the run is still
     going then; GET /api/graph/runs/{runId} reports it later. Agents use this so
-    a long video run doesn't outlast their tool's time limit.
-
-    §1.5 guard: when called BY Daedalus (header X-Daedalus-Caller set) and
-    TARGETING a specific node that already has outputs, block with 400 and
-    point him at the rule. Iteration must ADD a new node — re-running the
-    same node in place overwrites the craft log we want on the canvas. The
-    header gate lets humans (frontend Run button, curl, tests) keep the
-    rerun-in-place affordance; only the agent is disciplined here."""
+    a long video run doesn't outlast their tool's time limit."""
     _check_workspace_revision()
     _capture_execution_workspace()
     if not cli_graph.nodes:
@@ -8490,21 +8464,6 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     nodes_list, edges_list = cli_graph.to_execute_format()
 
     target = body.get("targetNodeId") if body else None
-
-    if target and request.headers.get("x-daedalus-caller"):
-        existing_outputs = cli_graph.nodes.get(target, {}).get("outputs")
-        if isinstance(existing_outputs, dict) and len(existing_outputs) > 0:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Node '{target}' already has output. Per SKILL.md §1.5, "
-                    "add a new node instead of re-running in place — the canvas "
-                    "should keep every iteration visible as craft history. "
-                    "Use `nebula create <definition-id>` to create the next cut, "
-                    "wire it from the corrected upstream, then `nebula run` the "
-                    "new node id."
-                ),
-            )
 
     if target:
         sub_nodes, sub_edges = get_subgraph(

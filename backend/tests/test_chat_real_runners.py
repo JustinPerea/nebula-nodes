@@ -2,7 +2,7 @@
 
 Other chat tests swap in fake runners that accept **kwargs, so they can't see
 the keywords main passes drift from a runner's signature (that drift once broke
-every Daedalus turn). These keep the real runner and fake only the process it
+every turn of one agent). These keep the real runner and fake only the process it
 spawns, then check what it was spawned with.
 """
 from __future__ import annotations
@@ -15,15 +15,32 @@ import pytest
 
 import main
 from commons import actors
-from services import codex_session, hermes_session, krea_agent_mcp
+from services import codex_session
 from services.agent_profiles import CODEX_ALLOWED_FEATURES, CODEX_DISABLED_FEATURES
 from tests.conftest import PERSON_TOKEN
 from tests.test_chat_isolation_lifecycle import QueueSocket
 from tests.test_commons_integration import isolated_app  # noqa: F401
-from tests.test_hermes_session import _readline_chunks, _verbose_bytes
 
 
 pytestmark = pytest.mark.usefixtures("person")
+
+
+def _readline_chunks(data: bytes) -> list[bytes]:
+    """Split bytes into stdout.readline()-style chunks for AsyncMock side_effect.
+
+    Each chunk is one line with trailing `\\n` preserved; the final chunk is
+    `b''` signalling EOF, the way a real subprocess's readline() ends.
+    """
+    chunks: list[bytes] = []
+    start = 0
+    for i in range(len(data)):
+        if data[i:i + 1] == b"\n":
+            chunks.append(data[start:i + 1])
+            start = i + 1
+    if start < len(data):
+        chunks.append(data[start:])
+    chunks.append(b"")
+    return chunks
 
 
 def _stream_proc(stdout: bytes) -> AsyncMock:
@@ -79,8 +96,6 @@ def _capture_turn_spawn(monkeypatch, module, stdout: bytes, extra=None):
             "actor": actors.agent_registry.lookup(token) if token else None,
             # Which budget the turn's runs count against while it runs.
             "spendKey": main._spend_session({"Authorization": f"Agent {token}"})[0] if token else None,
-            "overlay": (Path(env["HERMES_MANAGED_DIR"]) / "config.yaml").read_text()
-            if env.get("HERMES_MANAGED_DIR") else None,
         })
         return _stream_proc(stdout)
     monkeypatch.setattr(module.asyncio, "create_subprocess_exec", create)
@@ -95,34 +110,11 @@ def _assert_turn_spawn(spawned, events, agent):
     spawn = spawned[0]
     actor = spawn["actor"]
     assert actor is not None and actor["runner"] == agent
-    # Every in-app chat, Daedalus included, has its own budget, not the outside agents' shared one.
+    # Every in-app chat has its own budget, not the outside agents' shared one.
     assert actor["session"] and spawn["spendKey"] == f"chat:{actor['session']}"
     assert Path(spawn["cwd"]).resolve() == actor["workspace"]
     assert spawn["env"]["NEBULA_URL"]
     return spawn
-
-
-@pytest.mark.asyncio
-async def test_daedalus_turn_spawns_hermes_with_only_nebula_tools(isolated_app, monkeypatch):
-    profile = isolated_app / "daedalus-profile"
-    monkeypatch.setattr(hermes_session, "PROFILE_HOME", profile)
-    monkeypatch.setattr(hermes_session, "LOG_PATH", profile / "logs" / "agent.log")
-    monkeypatch.setattr(krea_agent_mcp, "HERMES_SYSTEM_MANAGED_DIR", isolated_app / "no-policy")
-    spawned = _capture_turn_spawn(monkeypatch, hermes_session, _verbose_bytes(prose_boxes=[["hello"]]))
-
-    events = await _one_turn("daedalus")
-
-    spawn = _assert_turn_spawn(spawned, events, "daedalus")
-    args = spawn["args"]
-    assert args[0] == hermes_session.HERMES_BIN
-    assert args[args.index("-t") + 1] == "nebula,nebula_krea,clarify"
-    assert args.count("-t") == 1 and "--toolsets" not in args
-    # The overlay names the token by reference; the value only rides in env.
-    assert "${NEBULA_AGENT_TOKEN}" in spawn["overlay"]
-    assert spawn["env"]["NEBULA_AGENT_TOKEN"] not in spawn["overlay"]
-    assert spawn["env"]["NEBULA_AGENT_TOKEN"] not in " ".join(args)
-    # The turn's authority ends with the turn.
-    assert actors.agent_registry.lookup(spawn["env"]["NEBULA_AGENT_TOKEN"]) is None
 
 
 @pytest.mark.asyncio

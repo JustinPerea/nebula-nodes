@@ -834,7 +834,6 @@ body.app-slava-restraint .chat-panel__title {
 }
 
 body.app-slava-restraint .chat-panel__agent-selector,
-body.app-slava-restraint .chat-panel__autonomy-toggle,
 body.app-slava-restraint .chat-panel__tone-toggle {
   display: inline-flex;
   gap: 3px;
@@ -847,8 +846,6 @@ body.app-slava-restraint .chat-panel__tone-toggle {
 
 body.app-slava-restraint .chat-panel__agent-btn,
 body.app-slava-restraint .chat-panel__agent-btn--active,
-body.app-slava-restraint .chat-panel__autonomy-btn,
-body.app-slava-restraint .chat-panel__autonomy-btn--active,
 body.app-slava-restraint .chat-panel__tone-btn,
 body.app-slava-restraint .chat-panel__tone-btn--active {
   min-height: var(--sr-control-h-sm);
@@ -870,14 +867,12 @@ body.app-slava-restraint .chat-panel__tone-btn--active {
 }
 
 body.app-slava-restraint .chat-panel__agent-btn:hover,
-body.app-slava-restraint .chat-panel__autonomy-btn:hover,
 body.app-slava-restraint .chat-panel__tone-btn:hover {
   color: var(--sr-ink);
   background: var(--sr-surface-control-hover);
 }
 
 body.app-slava-restraint .chat-panel__agent-btn--active,
-body.app-slava-restraint .chat-panel__autonomy-btn--active,
 body.app-slava-restraint .chat-panel__tone-btn--active {
   border-color: var(--sr-edge-strong);
   background: var(--sr-surface-control-active);
@@ -887,8 +882,6 @@ body.app-slava-restraint .chat-panel__tone-btn--active {
 
 body.app-slava-restraint .chat-panel__agent-btn:focus-visible,
 body.app-slava-restraint .chat-panel__agent-btn--active:focus-visible,
-body.app-slava-restraint .chat-panel__autonomy-btn:focus-visible,
-body.app-slava-restraint .chat-panel__autonomy-btn--active:focus-visible,
 body.app-slava-restraint .chat-panel__tone-btn:focus-visible,
 body.app-slava-restraint .chat-panel__tone-btn--active:focus-visible,
 body.app-slava-restraint .chat-panel__model-trigger:focus-visible,
@@ -896,7 +889,6 @@ body.app-slava-restraint .chat-panel__model-search:focus-visible,
 body.app-slava-restraint .chat-panel__model-row:focus-visible,
 body.app-slava-restraint .chat-panel__textarea:focus-visible,
 body.app-slava-restraint .chat-panel__send:focus-visible,
-body.app-slava-restraint .chat-panel__approval-btn:focus-visible,
 body.app-slava-restraint .chat__codeblock-apply:focus-visible,
 body.app-slava-restraint .chat__tool-header:focus-visible {
   outline: var(--sr-focus-outline);
@@ -1339,31 +1331,6 @@ body.app-slava-restraint .chat-panel__notice {
   background: var(--sr-danger-soft);
   color: var(--sr-danger);
   font-size: var(--sr-type-label);
-}
-
-body.app-slava-restraint .chat-panel__approval {
-  border: 1px solid var(--sr-accent-border);
-  border-radius: var(--sr-radius-control-lg);
-  background: var(--sr-danger-soft);
-  color: var(--sr-ink);
-}
-
-body.app-slava-restraint .chat-panel__approval-btn {
-  min-height: 32px;
-  border: 1px solid transparent;
-  border-radius: var(--sr-radius-control);
-  font-family: var(--sr-ui);
-}
-
-body.app-slava-restraint .chat-panel__approval-btn--approve {
-  background: var(--sr-accent);
-  color: var(--sr-on-accent);
-}
-
-body.app-slava-restraint .chat-panel__approval-btn--reject {
-  border-color: var(--sr-edge-strong);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--sr-ink);
 }
 
 body.app-slava-restraint .chat-panel__thinking {
@@ -2623,10 +2590,6 @@ body.app-slava-restraint .agent-log__entry:last-child {
 
 body.app-slava-restraint .agent-log__entry--graph {
   --agent-log-source-color: var(--sr-success);
-}
-
-body.app-slava-restraint .agent-log__entry--hermes {
-  --agent-log-source-color: var(--sr-accent);
 }
 
 body.app-slava-restraint .agent-log__entry--system {

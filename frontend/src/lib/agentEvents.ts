@@ -2,16 +2,12 @@ export type AgentEventSource =
   | 'graph'
   | 'claude'
   | 'codex'
-  | 'daedalus'
-  | 'hermes'
   | 'system';
 
 const AGENT_EVENT_SOURCES = new Set<AgentEventSource>([
   'graph',
   'claude',
   'codex',
-  'daedalus',
-  'hermes',
   'system',
 ]);
 

@@ -19,15 +19,15 @@ def enable_human(monkeypatch):
     return token
 
 
-def test_enabled_daedalus_is_rejected_before_unscoped_runner(isolated_app, monkeypatch):
+def test_enabled_other_agent_is_rejected_before_unscoped_runner(isolated_app, monkeypatch):
     human = enable_human(monkeypatch)
     calls = []
     async def unscoped_runner(*args, **kwargs):
         calls.append(kwargs)
         yield {"type": "done"}
-    monkeypatch.setitem(chat_session.AGENT_RUNNERS, "daedalus", unscoped_runner)
+    monkeypatch.setitem(chat_session.AGENT_RUNNERS, "other-agent", unscoped_runner)
     with TestClient(main.app).websocket_connect("/ws/chat") as ws:
-        ws.send_json({"type": "send", "message": "Read private references", "agent": "daedalus", "commonsToken": human})
+        ws.send_json({"type": "send", "message": "Read private references", "agent": "other-agent", "commonsToken": human})
         events = receive_done(ws)
     assert calls == []
     assert any(e["type"] == "error" and ("supported" in e["message"] or "Claude" in e["message"] or "scoped" in e["message"]) for e in events)
@@ -86,7 +86,7 @@ def test_websocket_resume_cannot_change_bound_brand_or_runner(isolated_app, monk
 
 @pytest.mark.parametrize("second", [
     {"agent": "claude"},
-    {"agent": "daedalus", "commonsToken": "h" * 43},
+    {"agent": "other-agent", "commonsToken": "h" * 43},
 ])
 def test_invalid_second_send_cannot_finish_an_active_turn(isolated_app, monkeypatch, second):
     human = enable_human(monkeypatch)

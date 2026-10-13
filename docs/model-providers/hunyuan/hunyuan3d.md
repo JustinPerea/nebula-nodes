@@ -111,7 +111,7 @@ inputs.
   now rejects longer prompts before queue submission and reports both the
   limit and received character count.
 
-## Daedalus Workflow
+## Agent Workflow
 
 Before building a Hunyuan3D graph:
 

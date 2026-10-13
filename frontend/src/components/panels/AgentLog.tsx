@@ -223,7 +223,7 @@ export function AgentLog() {
 
   // Subscribe to nebula:agent-log-entry events so any component can stream
   // entries into this log without coupling. ChatPanel dispatches these
-  // for Daedalus thinking lines so they live here instead of in chat.
+  // for agent thinking lines so they live here instead of in chat.
   useEffect(() => {
     function handleEntry(e: Event) {
       const detail = (e as CustomEvent).detail as

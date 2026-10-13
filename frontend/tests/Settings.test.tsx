@@ -518,7 +518,7 @@ describe('Settings — setup links from nodes', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in to Krea' })).toHaveFocus());
     } else {
       await waitFor(() => expect(screen.getByRole('button', { name: 'Done' })).toHaveFocus());
-      expect(screen.getByText('hermes-daedalus model')).toBeInTheDocument();
+      expect(screen.getByText('hermes model')).toBeInTheDocument();
     }
     expect(connectKreaMock).not.toHaveBeenCalled();
     expect(checkKreaConnectionMock).not.toHaveBeenCalled();

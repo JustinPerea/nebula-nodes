@@ -2379,8 +2379,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'universal',
     apiProvider: 'nous',
     apiEndpoint: 'https://inference-api.nousresearch.com/v1/chat/completions',
-    // No env-key field — auth is OAuth, stored in ~/.hermes/auth.json after
-    // `hermes auth`. The backend reads it; the frontend doesn't need a key.
+    // No env-key field — auth is OAuth, stored by Hermes (active profile, then
+    // ~/.hermes/auth.json) after `hermes model`. The backend reads it; the frontend doesn't need a key.
     envKeyName: [],
     executionPattern: 'stream',
     inputPorts: [

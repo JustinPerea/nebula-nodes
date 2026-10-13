@@ -165,7 +165,6 @@ def test_resolve_detach_and_agent_view(tmp_path):
 
 @pytest.mark.parametrize("marker", [
     {"Authorization": "Agent whatever"},
-    {"X-Daedalus-Caller": "1"},
     {"X-Nebula-Agent": "Claude Code"},
     {"X-Nebula-Client": "nebula-cli"},
 ])
@@ -234,7 +233,7 @@ def _pins_messages(sent):
 def test_person_creates_and_deletes_pins_and_agents_cannot(api):
     client, graph, journal, sent, _store, (active, _other) = api
     node = graph.add_node("text-input", {"value": "hi"}, position={"x": 40, "y": 50})
-    for marker in ({"Authorization": "Agent x"}, {"X-Daedalus-Caller": "1"}, AGENT, {"X-Nebula-Client": "nebula-cli"}):
+    for marker in ({"Authorization": "Agent x"}, AGENT, {"X-Nebula-Client": "nebula-cli"}):
         refused = client.post("/api/canvas/pins", headers={**PERSON, **marker}, json={"text": "x", "nodeId": node})
         # An unknown agent token is already refused (401) before the route runs.
         assert refused.status_code in {401, 403}

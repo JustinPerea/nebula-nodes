@@ -353,10 +353,10 @@ export function Canvas() {
   const reactFlow = useReactFlow();
   const { fitView, screenToFlowPosition, zoomIn, zoomOut, zoomTo } = reactFlow;
 
-  // Dev-only window bridge for the Puppeteer driver. Exposes React Flow
-  // viewport controls (setViewport / getViewport) so demo runs can zoom out
-  // the canvas in-app, separate from the post-process camera zoom in
-  // apply-zoom.mjs. Also exposes setNodePosition for choreographed node
+  // Dev-only window bridge for scripted UI capture (the nebula-nodes-visuals
+  // skill's capture template). Exposes React Flow viewport controls
+  // (setViewport / getViewport) so capture runs can frame the canvas in-app.
+  // Also exposes setNodePosition for choreographed node
   // moves between recording beats.
   useEffect(() => {
     if (typeof window === 'undefined' || !import.meta.env?.DEV) return;

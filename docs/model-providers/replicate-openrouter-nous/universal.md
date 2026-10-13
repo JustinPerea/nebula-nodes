@@ -170,11 +170,12 @@ HTTP/2 402
 ```
 
 The `Authorization: Bearer <agent_key>` credential is managed by Hermes:
-- User authenticates once via `hermes-daedalus model` (browser OAuth flow)
-- Hermes writes credentials to `~/.hermes/profiles/daedalus/auth.json`
+- User authenticates once via `hermes model`, choosing Nous Portal (browser OAuth flow)
+- Hermes writes credentials to the active profile's `auth.json`
+  (`~/.hermes/profiles/<active>/auth.json`, or `~/.hermes/auth.json`)
 - The `agent_key` field is a short-lived key (~24h) that Hermes refreshes
 - `load_nous_credential()` in `nous_auth.py` reads this file with profile
-  fallback logic: daedalus profile → active profile → global auth.json
+  fallback logic: active profile → global auth.json
 
 The `apiEndpoint` in `node_definitions.json` is documentation-only. The handler
 constructs the actual URL from `cred.base_url` at runtime, which allows Hermes
@@ -185,7 +186,7 @@ to point at staging, enterprise, or other inference endpoints as configured.
 No bugs found. The handler:
 - Correctly raises `RuntimeError` (wrapping `NousNotAuthenticatedError`) when no
   Hermes credential exists, with a message directing users to run
-  `hermes-daedalus model`
+  `hermes model`
 - Uses `Bearer {cred.access_token}` where `access_token` is the `agent_key`
 - Sets `delta_path="choices.0.delta.content"` — correct for OpenAI-compatible SSE
 - Handles multimodal image inputs via `_image_to_content_block` (URL, data URI,

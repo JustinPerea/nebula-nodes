@@ -8,16 +8,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from services.chat_session import AGENT_RUNNERS, claude_login_status, run_claude
 from services.codex_session import run_codex
-from services.hermes_session import run_hermes
 
 
 def test_dispatch_registers_chat_agents():
     assert "claude" in AGENT_RUNNERS
     assert "codex" in AGENT_RUNNERS
-    assert "daedalus" in AGENT_RUNNERS
     assert AGENT_RUNNERS["claude"] is run_claude
     assert AGENT_RUNNERS["codex"] is run_codex
-    assert AGENT_RUNNERS["daedalus"] is run_hermes
+    # Daedalus (the Hermes runner) was removed on 2026-10-13.
+    assert set(AGENT_RUNNERS) == {"claude", "codex"}
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 """Codex runtime — wraps `codex exec --json` and normalizes JSONL events.
 
-Yields dicts with the same event contract as run_claude/run_hermes:
+Yields dicts with the same event contract as run_claude:
   - session       — {sessionId}
   - text          — {text}
   - tool_use      — {toolUseId, tool, input}

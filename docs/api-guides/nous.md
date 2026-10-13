@@ -27,17 +27,17 @@ Output: a single `text` port (Text). The node streams tokens as they arrive.
 
 **Where it appears.** Open the node palette and look under the **Universal** category (alongside the OpenRouter and Replicate universal nodes). Drag **Nous Portal** onto the canvas. In the Inspector panel on the right, the **Model** dropdown loads your available Hermes models live (the backend proxies Nous's model list, cached ~5 min). Pick a model, then tune Temperature and Max Tokens.
 
-**Auth setup — there is NO `.env` key for this provider.** Unlike every other provider, Nous Portal does **not** read an API key from `.env`. Authentication is handled by **Hermes** via OAuth, and the credential is read from `~/.hermes/auth.json` (per-profile). To set it up:
+**Auth setup — there is NO `.env` key for this provider.** Unlike every other provider, Nous Portal does **not** read an API key from `.env`. Authentication is handled by **Hermes** via OAuth, and the credential is read from your normal Hermes login. To set it up:
 
 1. Install Hermes if you haven't, then run the OAuth login:
    ```bash
-   hermes-daedalus model      # opens a browser, log in / subscribe at portal.nousresearch.com
+   hermes model      # choose Nous Portal; opens a browser, log in / subscribe at portal.nousresearch.com
    ```
-   (Nebula's canvas node looks at the **daedalus** profile first, then your active profile, then the global `~/.hermes/auth.json`.)
-2. Hermes writes the credential — including a short-lived `agent_key` it auto-refreshes (~24h) — into `~/.hermes/profiles/daedalus/auth.json`. Nebula reads that file at run time and attaches `Authorization: Bearer <agent_key>`.
-3. If you ever see *"No Nous Portal credential found…"* or *"token rejected — run `hermes auth`"*, re-run the command above to refresh.
+   (Nebula's canvas node looks at your active Hermes profile first, then the global `~/.hermes/auth.json`.)
+2. Hermes writes the credential — including a short-lived `agent_key` it auto-refreshes (~24h) — into the active profile's `auth.json`. Nebula reads that file at run time and attaches `Authorization: Bearer <agent_key>`.
+3. If you ever see *"No Nous Portal credential found…"* or *"token rejected — run `hermes model`…"*, re-run the command above to refresh.
 
-So the one-line version: **there is no key to paste into `.env`; run `hermes-daedalus model` once and Nebula picks up the credential automatically.**
+So the one-line version: **there is no key to paste into `.env`; run `hermes model` once and Nebula picks up the credential automatically.**
 
 **Example recipes (real node IDs):**
 
@@ -73,11 +73,11 @@ Notable unused capabilities: the legacy `POST /completions` endpoint; native **r
 
 ## Agent skill coverage
 
-**A complete skill exists** at `.claude/skills/nous/SKILL.md` (plus `HERMES-SETUP.md`; new 2026-06-04). It covers the **1** Nous Portal (Hermes) node, giving an agent the node contract, the unusual no-`.env`-key auth model, model guidance, reasoning usage, capability boundaries, and pipeline patterns.
+**A complete skill exists** at `.claude/skills/nous/SKILL.md` (new 2026-06-04). It covers the **1** Nous Portal (Hermes) node, giving an agent the node contract, the unusual no-`.env`-key auth model, model guidance, reasoning usage, capability boundaries, and pipeline patterns.
 
 What it covers:
 - **The node contract** — ID `nous-portal-universal`, required `messages` (Text) input, optional `images` input, params `model` / `temperature` / `max_tokens`, single `text` output, streaming execution.
-- **The unusual auth model** — there is **no `.env` key**; credentials come from `~/.hermes/auth.json` via `hermes-daedalus model` (OAuth). The skill tells an agent to run that command (not look for an API key) and how to interpret "not authenticated" / "token rejected" and re-auth.
+- **The unusual auth model** — there is **no `.env` key**; credentials come from the Hermes login (active profile, then `~/.hermes/auth.json`) via `hermes model` (OAuth). The skill tells an agent to run that command (not look for an API key) and how to interpret "not authenticated" / "token rejected" and re-auth.
 - **Model choice guidance** — the three Hermes models (`Hermes-4.3-36B`, `Hermes-4-70B`, `Hermes-4-405B`, 128k context) and when to pick the 405B vs. the smaller two.
 - **Reasoning usage** — the deep-thinking system prompt and `<think>` prefill trick, and that reasoning lands inline in the `text` output.
 - **Capability boundaries & pipeline patterns** — text-only (image input best-effort/undocumented; no tools/JSON/Tool Gateway), so route image/audio/3D/search to other provider nodes and use Nous as the language/reasoning step (a "prompt factory" or summarizer feeding FAL/Gemini/Meshy/TTS nodes).
