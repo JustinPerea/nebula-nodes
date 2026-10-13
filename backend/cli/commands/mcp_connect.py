@@ -229,8 +229,10 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         _print_setup(setup)
         return 0
 
+    # The CLI runs the client's command itself, so nothing lands in shell history.
     for warning in setup["warnings"]:
-        print(f"! {warning}")
+        if "shell history" not in warning:
+            print(f"! {warning}")
     entry = agent_connect.server_entry(paths, args.url, token)
     if client.kind == "command":
         argv = (agent_connect.claude_code_add_argv(entry) if client.id == "claude-code"
@@ -238,6 +240,13 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         if shutil.which(argv[0]) is None:
             print(f"error: `{argv[0]}` isn't on PATH. Run this yourself once it is:", file=sys.stderr)
             print(setup["snippet"])
+            return 1
+        # `codex mcp add` silently replaces a server with the same name, so
+        # look first: an existing nebula entry is left for the person to remove.
+        existing = runner([argv[0], "mcp", "get", SERVER_NAME], capture_output=True, text=True)
+        if existing.returncode == 0:
+            print(f"error: {client.label} already has a server named nebula. Run `nebula mcp disconnect {client.id}` "
+                  "first if you want to replace it.", file=sys.stderr)
             return 1
         print(f"Running: {_mask(setup['snippet'], token)}")
         if not _confirm(f"Add Nebula to {client.label}?", args.yes, ask):
@@ -299,7 +308,10 @@ def run_disconnect(args: Any, *, home: Path | None = None, ask: Callable[[str], 
             print(revoke)
             return 0
         after = merged(before, None)
-        print(diff(path, before, after, None))
+        old_env = (before["mcpServers"][SERVER_NAME] or {}).get("env") if isinstance(
+            before["mcpServers"][SERVER_NAME], dict) else None
+        old_token = old_env.get("NEBULA_APP_TOKEN") if isinstance(old_env, dict) else None
+        print(diff(path, before, after, old_token if isinstance(old_token, str) else None))
         if not _confirm(f"Write {path}?", args.yes, ask):
             return 1
         backup = write_private(path, after)

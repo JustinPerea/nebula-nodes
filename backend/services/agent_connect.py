@@ -123,7 +123,23 @@ def _q(value: str) -> str:
 
 
 def _shell(argv: list[str]) -> str:
-    return " ".join(shlex.quote(part) for part in argv)
+    """One command, broken with backslashes so it reads in a narrow panel and
+    still runs as one: the program and its subcommand words, then each option
+    with its value, then each word after ``--``, and any long word, on its own line."""
+    groups: list[list[str]] = []
+    after_separator = False
+    for part in argv:
+        quoted = shlex.quote(part)
+        last = groups[-1] if groups else None
+        joins = last is not None and not after_separator and not part.startswith("-") and (
+            (last[0].startswith("-") and len(last) == 1)  # an option's value, however long
+            or ((len(groups) == 1 or last[0].startswith("-")) and len(quoted) <= 60))
+        if joins:
+            last.append(quoted)
+        else:
+            groups.append([quoted])
+        after_separator = after_separator or part == "--"
+    return " \\\n  ".join(" ".join(group) for group in groups)
 
 
 def json_entry(client_id: str, entry: dict[str, Any]) -> dict[str, Any]:
@@ -212,7 +228,7 @@ def render(client_id: str, *, paths: CheckoutPaths, url: str, token: str, app_na
                  "command above as environment variables if the form offers them.",
                  "openclaw mcp doctor will flag the token as a literal env value; that is expected."]
         alternative = {"format": "text", "where": "Settings > MCP > Stdio command",
-                       "snippet": _shell([entry["command"], *entry["args"]])}
+                       "snippet": " ".join(shlex.quote(part) for part in [entry["command"], *entry["args"]])}
     elif c.id == "claude-desktop":
         main = {"format": "json", "where": c.stored_in,
                 "snippet": _json({"mcpServers": {SERVER_NAME: json_entry(c.id, entry)}})}

@@ -41,7 +41,7 @@ GOLDEN = {
       NEBULA_APP_TOKEN: "nebula_app_TESTTOKEN"
     trust: untrusted
 ''',
-    "openclaw": ("openclaw mcp set nebula '{\"command\": \"/repo/backend/.venv/bin/python\", \"args\": "
+    "openclaw": ("openclaw mcp set nebula \\\n  '{\"command\": \"/repo/backend/.venv/bin/python\", \"args\": "
                  "[\"/repo/backend/mcp_server.py\"], \"env\": {\"NEBULA_URL\": \"http://127.0.0.1:8000\", "
                  "\"NEBULA_APP_TOKEN\": \"nebula_app_TESTTOKEN\"}}'"),
     "claude-desktop": '''{
@@ -73,11 +73,20 @@ GOLDEN = {
     }
   }
 }''',
-    "claude-code": ("claude mcp add --scope user --env NEBULA_URL=http://127.0.0.1:8000 "
-                    "--env NEBULA_APP_TOKEN=nebula_app_TESTTOKEN --transport stdio nebula -- "
-                    "/repo/backend/.venv/bin/python /repo/backend/mcp_server.py"),
-    "codex": ("codex mcp add nebula --env NEBULA_URL=http://127.0.0.1:8000 --env NEBULA_APP_TOKEN=nebula_app_TESTTOKEN "
-              "-- /repo/backend/.venv/bin/python /repo/backend/mcp_server.py"),
+    "claude-code": """claude mcp add \\
+  --scope user \\
+  --env NEBULA_URL=http://127.0.0.1:8000 \\
+  --env NEBULA_APP_TOKEN=nebula_app_TESTTOKEN \\
+  --transport stdio nebula \\
+  -- \\
+  /repo/backend/.venv/bin/python \\
+  /repo/backend/mcp_server.py""",
+    "codex": """codex mcp add nebula \\
+  --env NEBULA_URL=http://127.0.0.1:8000 \\
+  --env NEBULA_APP_TOKEN=nebula_app_TESTTOKEN \\
+  -- \\
+  /repo/backend/.venv/bin/python \\
+  /repo/backend/mcp_server.py""",
     "other": '''{
   "mcpServers": {
     "nebula": {
@@ -130,11 +139,17 @@ def test_snippets_parse_in_their_own_format():
     assert hermes["command"] == PATHS.python and hermes["args"] == [PATHS.server]
 
 
-def test_shell_snippets_quote_paths_with_spaces():
+@pytest.mark.parametrize("client_id", ["claude-code", "codex", "openclaw"])
+def test_shell_snippets_run_as_the_exact_argv(client_id):
+    """Pasted into a shell (paths with spaces and all), the command is the argv the CLI would run."""
     spaced = agent_connect.CheckoutPaths(python="/My Repo/backend/.venv/bin/python",
                                          server="/My Repo/backend/mcp_server.py")
-    snippet = agent_connect.render("claude-code", paths=spaced, url=URL, token=TOKEN, app_name="x")["snippet"]
-    assert "'/My Repo/backend/.venv/bin/python' '/My Repo/backend/mcp_server.py'" in snippet
+    snippet = agent_connect.render(client_id, paths=spaced, url=URL, token=TOKEN, app_name="x")["snippet"]
+    entry = agent_connect.server_entry(spaced, URL, TOKEN)
+    expected = {"claude-code": agent_connect.claude_code_add_argv(entry), "codex": agent_connect.codex_add_argv(entry),
+                "openclaw": ["openclaw", "mcp", "set", "nebula", json.dumps(entry)]}[client_id]
+    done = subprocess.run(["/bin/sh", "-c", "printf '%s\\n' " + snippet], capture_output=True, text=True, check=True)
+    assert done.stdout.splitlines() == expected
 
 
 def test_the_warning_names_the_daily_limit():
@@ -179,7 +194,7 @@ def mode(path: Path) -> int:
 
 
 @pytest.mark.parametrize("client_id", ["cursor", "claude-desktop"])
-def test_connect_merges_one_entry_with_a_backup_and_0600(tmp_path, cli_env, client_id):
+def test_connect_merges_one_entry_with_a_backup_and_0600(tmp_path, cli_env, client_id, capsys):
     path = mcp_connect.config_path(client_id, tmp_path)
     assert str(path).startswith(str(tmp_path))
     path.parent.mkdir(parents=True)
@@ -204,8 +219,10 @@ def test_connect_merges_one_entry_with_a_backup_and_0600(tmp_path, cli_env, clie
     assert mcp_connect.run_connect(args(client_id), home=tmp_path) == 0
     assert len(list(path.parent.glob(f"{path.name}.nebula-backup-*"))) == 1
 
-    # Disconnect removes only Nebula's entry.
+    # Disconnect removes only Nebula's entry, and its diff masks the token too.
+    capsys.readouterr()
     assert mcp_connect.run_disconnect(args(client_id), home=tmp_path) == 0
+    assert TOKEN not in capsys.readouterr().out
     data = json.loads(path.read_text())
     assert "nebula" not in data["mcpServers"] and data["mcpServers"]["github"] == original["mcpServers"]["github"]
     assert data["globalShortcut"] == "Ctrl+Space" and mode(path) == 0o600
@@ -245,11 +262,14 @@ def test_connect_uses_the_clients_own_command(tmp_path, cli_env, monkeypatch):
 
     def runner(argv, **kwargs):
         calls.append((argv, kwargs))
-        return subprocess.CompletedProcess(argv, 0, "", "")
+        # `mcp get nebula` fails: no server by that name yet.
+        return subprocess.CompletedProcess(argv, 1 if argv[1:3] == ["mcp", "get"] else 0, "", "")
 
     assert mcp_connect.run_connect(args("claude-code"), home=tmp_path, runner=runner) == 0
     assert mcp_connect.run_connect(args("codex"), home=tmp_path, runner=runner) == 0
-    (claude_argv, claude_kwargs), (codex_argv, _) = calls
+    assert [argv for argv, _ in calls if argv[2] == "get"] == [["claude", "mcp", "get", "nebula"],
+                                                                ["codex", "mcp", "get", "nebula"]]
+    (claude_argv, claude_kwargs), (codex_argv, _) = [call for call in calls if call[0][2] == "add"]
     assert claude_argv[:5] == ["claude", "mcp", "add", "--scope", "user"] and "shell" not in claude_kwargs
     assert f"NEBULA_APP_TOKEN={TOKEN}" in claude_argv and claude_argv[claude_argv.index("--") - 1] == "nebula"
     assert codex_argv[:4] == ["codex", "mcp", "add", "nebula"] and f"NEBULA_APP_TOKEN={TOKEN}" in codex_argv
@@ -263,11 +283,26 @@ def test_a_refused_client_command_is_reported_without_the_token(tmp_path, cli_en
     monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: f"/usr/bin/{name}")
 
     def runner(argv, **kwargs):
+        if argv[2] == "get":
+            return subprocess.CompletedProcess(argv, 1, "", "")
         return subprocess.CompletedProcess(argv, 1, "", f"MCP server nebula already exists ({TOKEN})")
 
     assert mcp_connect.run_connect(args("claude-code"), home=tmp_path, runner=runner) == 1
     err = capsys.readouterr().err
     assert "nebula mcp disconnect claude-code" in err and TOKEN not in err
+
+
+def test_an_existing_nebula_server_is_never_replaced(tmp_path, cli_env, monkeypatch, capsys):
+    monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: f"/usr/bin/{name}")
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, "nebula: someone else's", "")
+
+    assert mcp_connect.run_connect(args("codex"), home=tmp_path, runner=runner) == 1
+    assert calls == [["codex", "mcp", "get", "nebula"]]
+    assert "nebula mcp disconnect codex" in capsys.readouterr().err
 
 
 def test_manual_clients_only_print(tmp_path, cli_env, capsys):
