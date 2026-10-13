@@ -9,6 +9,10 @@ with ``Authorization: Agent <token>`` then count against ``outside:app:<id>``:
 the app's own optional daily limit, and still the shared outside budget too,
 so a token never adds headroom.
 
+The person's own agents in the chat panel (services/personal_agents.py)
+don't use app tokens: each chat session gets a token Nebula mints, which
+counts as ``outside:personal:<agentId>`` inside the same outside budget.
+
 Only a SHA-256 of each token is stored (``app-tokens.json`` in the state
 directory); the token itself is shown once, when it is made. Tokens are 256
 random bits, so a plain hash is enough: there is nothing to guess.

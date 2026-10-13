@@ -11,3 +11,7 @@ The picker remembers model and effort choices for each provider. If a saved choi
 Codex Chat uses ChatGPT login; an API-key login is identified separately and requires switching to ChatGPT. Claude Code keeps its built-in authentication choices. An API key in its environment can take precedence over subscription login, so check the shown authentication mode. See [Claude authentication](https://code.claude.com/docs/en/authentication) and [Claude Code hosting conditions](https://code.claude.com/docs/en/legal-and-compliance).
 
 This is a local CLI integration. Subscription availability remains governed by each provider’s terms; the model picker is not a hosted subscription gateway. Codex discovery uses the experimental read-only [app-server catalog](https://learn.chatgpt.com/docs/app-server); an unsupported or outdated CLI produces an explicit catalog error.
+
+## Personal agents
+
+The chat picker can also list **your own** agents: Claude Code, Codex or Gemini with your full setup (hooks, MCP servers, memory), or any Agent Client Protocol agent you add. Switch them on in Settings > Preferences > Personal agents. They pick their own model, so the model and effort controls are hidden for them, and they aren't sandboxed. Nebula shows a one-time notice before the first one starts. See [PERSONAL-AGENTS.md](PERSONAL-AGENTS.md).

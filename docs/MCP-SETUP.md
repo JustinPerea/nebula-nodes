@@ -503,6 +503,19 @@ How it works (`backend/services/agent_spend.py`):
 its session has used. `budget` is `chat`, `shared` or `app`; outside callers
 also get `outsideSpent`, the shared 24-hour total.
 
+### Personal agents' session tokens
+
+A personal agent (your own Claude Code, Codex, Gemini or custom ACP agent in the
+chat panel, [PERSONAL-AGENTS.md](PERSONAL-AGENTS.md)) gets a session token that
+Nebula puts in the `env` of this MCP server's entry in ACP `session/new`, as
+`NEBULA_AGENT_TOKEN`, with `NEBULA_AGENT_NAME` set to the agent's name. The
+token's record names its budget outright: `outside:personal:<agentId>`, inside
+the shared outside budget, with its own line in Settings
+(`GET /api/agent/spend/apps` returns them under `personal`). `/api/agent/spend`
+reports `budget: "shared"` for it. The token is revoked when the chat session
+ends. `agent_spend.PERSONAL_AGENT_BUDGET = "chat"` would give each personal
+chat its own session budget instead.
+
 ### Connected apps
 
 An outside agent can't prove who it is, so by default every one of them shares

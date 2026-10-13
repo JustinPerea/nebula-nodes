@@ -16,7 +16,8 @@ Steps (dicts, run in order):
   {"chunk": text} {"thought": text} {"plan": [entries]}
   {"tool_call": {...}} {"tool_update": {...}}   session/update payloads
   {"permission": {"options": "all"|"no_reject"|"reject_only", "toolCall": {...}},
-   "cancelAfter": seconds}  request permission; the outcome is echoed as a chunk
+   "cancelAfter": seconds, "echo": false}  request permission; the outcome is
+                            echoed as a chunk unless echo is false
   {"fs_read": path}         call fs/read_text_file; the error code is echoed
   {"echo_env": NAME}        chunk with the env var's value or "unset"
   {"sleep": seconds}
@@ -111,6 +112,8 @@ def run_turn(rid: int, session_id: str, steps: list) -> None:
                 "sessionId": session_id, "toolCall": spec.get("toolCall", {"toolCallId": "call_1"}),
                 "options": OPTIONS[spec.get("options", "all")]}, then_cancel_after=step.get("cancelAfter"))
             log({"permissionReply": reply})
+            if step.get("echo") is False:
+                continue
             if "error" in reply:
                 text = f"permission:error:{reply['error'].get('code')}"
             else:
