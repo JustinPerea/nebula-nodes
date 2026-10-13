@@ -90,25 +90,57 @@ def test_enabled_turn_binds_resume_and_revokes_child_capability(isolated_app, mo
     assert not (isolated_app / "private-library").exists()
 
 
-def test_default_off_daedalus_preserves_current_dispatch_contract(isolated_app, monkeypatch):
+def test_default_off_daedalus_runs_in_a_private_workspace_with_a_chat_token(isolated_app, monkeypatch):
+    # Daedalus reaches Nebula only through its MCP tools now, so it gets the
+    # same private workspace and minted chat token as Claude and Codex.
     human_token = "h" * 43
     person_session.current().set(human_token)
     seen = []
     async def runner(message, session_id, model, autonomy, **kwargs):
+        record = actors.agent_registry.lookup(kwargs["agent_token"])
+        assert record["workspace"] == kwargs["workdir"] and record["runner"] == "daedalus"
+        assert record["session"] is not None
+        assert kwargs["agent_token"] != human_token
         seen.append((session_id, autonomy, kwargs))
         yield {"type": "session", "sessionId": "existing-daedalus-id"}
         yield {"type": "done"}
     monkeypatch.setitem(chat_session.AGENT_RUNNERS, "daedalus", runner)
     with TestClient(main.app).websocket_connect("/ws/chat") as ws:
-        ws.send_json({"type": "send", "message": "Hello", "agent": "daedalus", "sessionId": "old-id", "autonomy": "step",
-                      "provider": "nous", "personToken": human_token})
+        payload = {"type": "send", "message": "Hello", "agent": "daedalus", "autonomy": "step",
+                   "provider": "nous", "personToken": human_token}
+        ws.send_json(payload)
         events = receive_done(ws)
-    assert len(seen) == 1 and seen[0][:2] == ("old-id", "step")
-    assert seen[0][2]["provider"] == "nous"
-    assert "CURRENT CANVAS SELECTION" in seen[0][2]["selection_context"]
-    assert set(seen[0][2]) == {"provider", "selection_context"}
-    assert next(e for e in events if e["type"] == "session")["sessionId"] == "existing-daedalus-id"
-    assert not (isolated_app / "state").exists()
+        opaque = next(e for e in events if e["type"] == "session")["sessionId"]
+        assert opaque != "existing-daedalus-id"
+        ws.send_json({**payload, "sessionId": opaque})
+        events2 = receive_done(ws)
+        assert not [e for e in events2 if e["type"] == "error"]
+    assert [call[:2] for call in seen] == [(None, "step"), ("existing-daedalus-id", "step")]
+    options = seen[0][2]
+    assert options["provider"] == "nous"
+    assert "CURRENT CANVAS SELECTION" in options["selection_context"]
+    assert options["workdir"] == seen[1][2]["workdir"]
+    for _, _, kwargs in seen:
+        assert actors.agent_registry.lookup(kwargs["agent_token"]) is None
+    assert not (isolated_app / "private-library").exists()
+
+
+def test_daedalus_cannot_resume_a_raw_provider_session(isolated_app, monkeypatch):
+    # Chats from before workspace isolation named Hermes' own session id.
+    # Accepting one would resume outside any workspace, so it is refused.
+    human_token = "h" * 43
+    person_session.current().set(human_token)
+    called = []
+    async def runner(*args, **kwargs):
+        called.append(kwargs)
+        yield {"type": "done"}
+    monkeypatch.setitem(chat_session.AGENT_RUNNERS, "daedalus", runner)
+    with TestClient(main.app).websocket_connect("/ws/chat") as ws:
+        ws.send_json({"type": "send", "message": "Hello", "agent": "daedalus", "sessionId": "old-id",
+                      "personToken": human_token})
+        events = receive_done(ws)
+    assert not called
+    assert any(e["type"] == "error" and "/clear" in e["message"] for e in events)
 
 
 def test_expired_agent_context_fails_without_file_access(isolated_app):

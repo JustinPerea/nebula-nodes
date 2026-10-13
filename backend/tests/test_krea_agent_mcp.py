@@ -84,7 +84,11 @@ def test_hermes_overlay_only_adds_mcp_leaf_preserves_profile_and_cleans_up(tmp_p
         path = Path(env["HERMES_MANAGED_DIR"]) / "config.yaml"
         managed = json.loads(path.read_text())
         assert set(managed) == {"mcp_servers"}
-        assert list(managed["mcp_servers"]) == [config.SERVER_NAME]
+        assert sorted(managed["mcp_servers"]) == [config.NEBULA_SERVER_NAME, config.SERVER_NAME]
+        nebula = managed["mcp_servers"][config.NEBULA_SERVER_NAME]
+        assert nebula["args"] == [str(config.NEBULA_MCP_PATH), "--url", "http://127.0.0.1:8033"]
+        # Hermes expands the token from its own env; the file never holds it.
+        assert nebula["env"] == {"NEBULA_AGENT_TOKEN": "${NEBULA_AGENT_TOKEN}", "NEBULA_URL": "http://127.0.0.1:8033"}
         assert env["HERMES_HOME"] == str(profile)
         assert user_path.read_bytes() == before
         # Hermes's canonical loader deep-merges this one leaf over the user

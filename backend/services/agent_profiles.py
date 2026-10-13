@@ -7,15 +7,21 @@ user MCP server (Gmail, Calendar, FLORA …), every user sub-agent (including
 Fable), 300+ user skills and Claude auto-memory shared with dev sessions.
 
 What a clean profile allows:
-  - Nebula's own tools: the `nebula` CLI (via Bash) plus file reads inside
-    the output root and the agent's own workdir (its cwd). Never the state
-    dir: it holds the Commons store, whose pixels agents must fetch through
-    the scoped, quarantine-checked API (`agent_read_grants`).
+  - Nebula's own tools: the Nebula MCP server (every agent), the `nebula`
+    CLI via Bash (Claude only; Codex's shell has no network), plus file reads
+    inside the output root and the agent's own workdir (its cwd). Never the
+    state dir: it holds the Commons store, whose pixels agents must fetch
+    through the scoped, quarantine-checked API (`agent_read_grants`).
   - A private session working directory with no secrets (`agent_workspace`). The repo
     root holds `settings.json` (plaintext API keys) and `.env`, so agents
     never run there, and those files are also denied by absolute path.
-  - Only Nebula's ephemeral, read-only Krea discovery MCP bridge. User MCP
-    configuration is ignored; account credentials stay in the backend.
+  - Only Nebula's own per-turn MCP servers (`nebula` and the read-only Krea
+    discovery bridge). User MCP configuration is ignored; account credentials
+    stay in the backend.
+  - Codex: no shell network, and only reviewed Codex features (browser and
+    computer use, hooks, plugins, apps and the like are off, and a preflight
+    refuses the turn if anything unreviewed is on). Its MCP servers run
+    outside the sandbox, which is how it still reaches Nebula.
   - User/project/local settings are ignored, slash-command skills disabled,
     and auto-memory off. Private file grants exclude the repo and user config.
   - Explicit permissions instead of `--dangerously-skip-permissions`.
@@ -34,6 +40,9 @@ import os
 import tomllib
 from pathlib import Path
 from typing import Any
+
+from services.krea_agent_mcp import KREA_READONLY_TOOLS, NEBULA_MCP_TOOLS, NEBULA_SERVER_NAME
+from services.krea_agent_mcp import SERVER_NAME as KREA_SERVER_NAME
 
 
 # Legacy/direct runner normalization. Picker choices are validated against
@@ -55,13 +64,54 @@ CLEAN_MCP_SERVERS: dict[str, dict[str, Any]] = {}
 # Built-in Claude tools the clean profile exposes. Bash is required for the
 # `nebula` CLI; the permission rules below narrow it to that one command.
 CLAUDE_TOOLS = ("Bash", "Read", "Glob", "Grep")
-CLAUDE_ALLOW_RULES = ("Bash(nebula)", "Bash(nebula *)", "Read", "Glob", "Grep",
-                     "mcp__nebula_krea__list_models", "mcp__nebula_krea__get_model_schema")
+# MCP tools by exact name, never a server wildcard: a tool added to a server
+# stays denied until it is listed (and NEBULA_MCP_TOOLS is checked against
+# the server in tests).
+CLAUDE_MCP_ALLOW_RULES = (
+    *(f"mcp__{NEBULA_SERVER_NAME}__{tool}" for tool in NEBULA_MCP_TOOLS),
+    *(f"mcp__{KREA_SERVER_NAME}__{tool}" for tool in sorted(KREA_READONLY_TOOLS)),
+)
+CLAUDE_ALLOW_RULES = ("Bash(nebula)", "Bash(nebula *)", "Read", "Glob", "Grep", *CLAUDE_MCP_ALLOW_RULES)
 # Always denied, even if an allow rule would match: nothing an agent runs may
-# forge a design-memory approval.
-CLAUDE_DENY_RULES = ("Bash(dm approve*)",)
+# forge a design-memory approval. `ps` would otherwise run unprompted as a
+# read-only command and list other processes (another chat's token sits in its
+# environment, which `ps eww` prints).
+CLAUDE_DENY_RULES = ("Bash(dm approve*)", "Bash(ps)", "Bash(ps *)")
+
+# Codex features (codex-cli 0.160.0 names) Nebula's Codex agent may run with.
+# Reviewed: local tool plumbing, image handling and request transport. Anything
+# else that is on, including a feature a newer Codex adds, refuses the turn
+# (codex_session.codex_feature_preflight); features at stage "removed" do
+# nothing and are ignored. code_mode_host is how newer models (gpt-6.1-sol)
+# call every tool; with it off they can't call any. Checked live: the
+# JavaScript it runs has no fetch, require or Deno, and no request from it
+# reached the backend, so tools still go through the sandboxed shell and MCP.
+CODEX_ALLOWED_FEATURES = frozenset({
+    "shell_tool", "unified_exec", "unified_exec_tty", "shell_snapshot", "view_image",
+    "content_item_kinds", "compaction_image_budget", "enable_request_compression", "fast_mode",
+    "guardian_approval", "guardian_reuse_parent_compaction", "mentions_v2", "sleep_tool",
+    "system_proxy_fallback", "unbounded_connection_retries", "write_stdin_approval",
+    "image_generation", "code_mode_host",
+})
+# Turned off explicitly. Each can start a process outside the sandbox, reach the
+# network or the person's screen and browser, load code or config the agent
+# could write, or reach the user's own agent setup: hooks run commands,
+# plugins and skill dependencies install MCP servers, apps are remote
+# connectors, browser/computer use drive a real browser (which sends a real
+# Origin) or the screen, the daemon can serve a turn from a process started
+# with the user's own config. `--strict-config` turns a renamed name into an error.
+CODEX_DISABLED_FEATURES = (
+    "memories", "hooks", "plugins", "remote_plugin", "plugin_sharing", "apps",
+    "skill_mcp_dependency_install", "workspace_dependencies",
+    "computer_use", "browser_use", "browser_use_external", "browser_use_full_cdp_access",
+    "in_app_browser", "in_app_chat", "in_app_dictation", "in_app_local_automation", "in_app_updates",
+    "daemon_auto_start", "multi_agent", "realtime_conversation", "tool_suggest", "skill_search",
+    "worktrees", "goals", "auth_elicitation", "tool_call_mcp_elicitation",
+)
 
 CODEX_CONFIG_PATH = Path.home() / ".codex" / "config.toml"
+# Where Codex looks for project config, hooks and skills inside a workspace.
+CODEX_PROJECT_CONFIG_DIRS = (".codex", ".agents")
 
 
 def normalize_effort(raw: Any) -> str:
@@ -209,10 +259,43 @@ def dir_deny_rules(directories: list[Path]) -> list[str]:
 
 
 def clean_mcp_servers(backend_url: str | None = None) -> dict[str, dict[str, Any]]:
-    """Build the one allowed local bridge without merging arbitrary user MCPs."""
-    from services.krea_agent_mcp import SERVER_NAME, krea_server_config
+    """Nebula's own per-turn servers, without merging arbitrary user MCPs.
 
-    return {SERVER_NAME: krea_server_config(backend_url)}
+    The Nebula server's `env` names the token instead of holding it; Claude
+    Code expands `${NEBULA_AGENT_TOKEN}` from its own environment. Codex gets
+    the same servers through `codex_mcp_server_args`, which passes the names
+    with `env_vars` instead.
+    """
+    from services.krea_agent_mcp import krea_server_config, nebula_server_config, nebula_server_env_refs
+
+    return {
+        NEBULA_SERVER_NAME: {**nebula_server_config(backend_url), "env": nebula_server_env_refs(backend_url)},
+        KREA_SERVER_NAME: krea_server_config(backend_url),
+    }
+
+
+def codex_mcp_server_args(backend_url: str | None = None) -> list[str]:
+    """`-c mcp_servers.*` for Codex. Codex gives stdio servers a filtered
+    environment; `env_vars` lets the token and URL through by name."""
+    from services.krea_agent_mcp import (
+        CODEX_NEBULA_TOOL_TIMEOUT_SEC, NEBULA_MCP_ENV_VARS, krea_server_config, nebula_server_config,
+    )
+
+    args: list[str] = []
+    for name, config in ((NEBULA_SERVER_NAME, nebula_server_config(backend_url)),
+                         (KREA_SERVER_NAME, krea_server_config(backend_url))):
+        args += ["-c", f"mcp_servers.{name}.command={json.dumps(config['command'])}",
+                 "-c", f"mcp_servers.{name}.args={json.dumps(config['args'])}"]
+    # The same exact-name list as Claude's allow rules: only listed tools are
+    # exposed, and each runs without a prompt (nobody is there to answer one,
+    # and approval_policy "never" otherwise refuses run_nodes, which is
+    # marked open-world). Nebula's own spending limits and proposals still apply.
+    approvals = ", ".join(f'{tool} = {{approval_mode = "approve"}}' for tool in NEBULA_MCP_TOOLS)
+    args += ["-c", f"mcp_servers.{NEBULA_SERVER_NAME}.env_vars={json.dumps(list(NEBULA_MCP_ENV_VARS))}",
+             "-c", f"mcp_servers.{NEBULA_SERVER_NAME}.tool_timeout_sec={CODEX_NEBULA_TOOL_TIMEOUT_SEC}",
+             "-c", f"mcp_servers.{NEBULA_SERVER_NAME}.enabled_tools={json.dumps(list(NEBULA_MCP_TOOLS))}",
+             "-c", f"mcp_servers.{NEBULA_SERVER_NAME}.tools={{{approvals}}}"]
+    return args
 
 
 def claude_profile_args(
@@ -221,7 +304,7 @@ def claude_profile_args(
     secret_paths: list[Path] | None = None,
     deny_read_dirs: list[Path] | None = None,
     backend_url: str | None = None,
-    include_krea: bool = False,
+    with_servers: bool = False,
 ) -> list[str]:
     """CLI flags that launch `claude -p` from the clean profile.
 
@@ -254,7 +337,7 @@ def claude_profile_args(
         # project slash-command skills into this private chat profile.
         "--disable-slash-commands",
         "--strict-mcp-config",
-        "--mcp-config", json.dumps({"mcpServers": clean_mcp_servers(backend_url) if include_krea else {}}),
+        "--mcp-config", json.dumps({"mcpServers": clean_mcp_servers(backend_url) if with_servers else {}}),
         "--settings", json.dumps(settings),
         "--tools", ",".join(CLAUDE_TOOLS),
         "--permission-mode", "dontAsk",
@@ -291,16 +374,17 @@ def codex_profile_args(*, effort: str | None) -> list[str]:
 
     `--ignore-user-config` skips ~/.codex/config.toml (its MCP servers,
     memories and hooks) while auth still comes from CODEX_HOME, so the
-    ChatGPT subscription login keeps working. Memories are also disabled
-    explicitly in case a future default turns them on.
+    ChatGPT subscription login keeps working. CODEX_DISABLED_FEATURES are
+    turned off explicitly, since most are on by default.
     """
     args = [
         "--ignore-user-config",
         "--ignore-rules",
         # Agents run from `agent_workspace`, which isn't a git repo.
         "--skip-git-repo-check",
-        "--disable", "memories",
     ]
+    for feature in CODEX_DISABLED_FEATURES:
+        args.extend(["--disable", feature])
     if effort is not None:
         args.extend(["-c", f'model_reasoning_effort={json.dumps(effort)}'])
     return args
@@ -312,6 +396,17 @@ def codex_filesystem_args(*, workdir: Path, deny_paths: list[Path]) -> list[str]
     Never combine these flags with --sandbox or sandbox_mode: those legacy
     settings override named profiles. The clean config and strict parsing
     must fail rather than silently falling back to broad reads.
+
+    The shell has no network: Codex reaches Nebula only through its MCP
+    servers, which run outside the sandbox and carry the turn's agent token.
+    With network on, a shell could call the backend with headers of its own
+    choosing, or with the person's token read from the browser's storage on
+    disk. The workspace's `.codex` and `.agents` stay unwritable, so a turn
+    can't plant project config, hooks or skills for the next turn of the same
+    chat. (Checked live with codex-cli 0.160.0: a planted `.codex/config.toml`
+    MCP server and hooks file never start under `--ignore-user-config`, which
+    skips project layers too; with user config loaded the same MCP server did
+    start, even with the project's trust_level set to "untrusted".)
     """
     from services.agent_workspaces import workspace_deny_roots
 
@@ -329,6 +424,9 @@ def codex_filesystem_args(*, workdir: Path, deny_paths: list[Path]) -> list[str]
     # parent also covers sessions created after this subprocess starts.
     if workspace_roots and workdir.resolve().is_relative_to(workspace_roots[0].resolve()):
         filesystem[str(workdir.resolve())] = "write"
+    for name in CODEX_PROJECT_CONFIG_DIRS:
+        for base in (workdir.absolute(), workdir.resolve()):
+            filesystem[str(base / name)] = "deny"
     entries = ", ".join(f'{json.dumps(path, ensure_ascii=False)} = "{access}"'
                         for path, access in filesystem.items())
     return [
@@ -336,5 +434,5 @@ def codex_filesystem_args(*, workdir: Path, deny_paths: list[Path]) -> list[str]
         "-c", 'default_permissions="nebula-agent"',
         "-c", 'permissions.nebula-agent.extends=":workspace"',
         "-c", f"permissions.nebula-agent.filesystem={{{entries}}}",
-        "-c", "permissions.nebula-agent.network.enabled=true",
+        "-c", "permissions.nebula-agent.network.enabled=false",
     ]

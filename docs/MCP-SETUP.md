@@ -88,7 +88,7 @@ request:
 
 | Request carries | Cursor name | Notes |
 |---|---|---|
-| `Authorization: Agent <token>` (in-app Claude/Codex chats) | Claude, Codex | Verified by the token registry |
+| `Authorization: Agent <token>` (in-app chats, from their Nebula MCP server or CLI) | Claude, Codex, Daedalus | Verified by the token registry |
 | `X-Daedalus-Caller` | Daedalus | Set by the Daedalus runtime |
 | `X-Nebula-Agent: <name>` | that name | Self-reported; set `NEBULA_AGENT_NAME` for the CLI |
 | none of these (the browser itself) | no cursor | Your own clicks never spawn one |
@@ -226,12 +226,11 @@ environment minus `NEBULA_PERSON_TOKEN`, `NEBULA_CONNECTOR_ENCRYPTION_KEY`,
 
 Remaining risk, plainly: a program running as you with its own unsandboxed
 shell can still read the token (the backend's memory, Chrome's on-disk Session
-Storage and History). The token binds in-app Claude and any client that
-reaches Nebula only through its MCP server, CLI or API. In-app Codex and
-Hermes are bound only once their shells have no network (Codex reaching Nebula
-through the Nebula MCP server alone, Hermes limited to MCP tools); until that
-lands they can read the token like any other local program. It is not a
-sandbox against hostile local code.
+Storage and History). The token binds the in-app agents (Claude; Codex, whose
+shell has no network; Daedalus, limited to MCP tools; see "In-app agents use
+this server") and any client that reaches Nebula only through its MCP server,
+CLI or API. It does not bind an outside agent with its own shell and network.
+It is not a sandbox against hostile local code.
 
 ### Pins
 
@@ -370,10 +369,10 @@ Who can accept: only the person, enforced in three layers.
    the snapshot, the journal or MCP results.
 3. There is no accept command in the CLI or MCP server.
 
-In-app agents (Claude, Codex, Hermes) are never handed the person token: it
-is in no environment, argv or file the backend gives them. (Codex and Hermes
-can still read it from the browser's storage while their shells have network;
-see "Who counts as the person".)
+In-app agents (Claude, Codex, Daedalus) are never handed the person token: it
+is in no environment, argv or file the backend gives them. Codex can read the
+browser's storage on disk but its shell has no network to use it with, and
+Daedalus has no file or terminal tools (see "In-app agents use this server").
 
 Before the click, the bar's "See what Accept writes" list shows every value
 Accept will write: new nodes' params and `from → to` for changed params, in
@@ -434,8 +433,8 @@ How it works (`backend/services/agent_spend.py`):
   A node whose handler was called stays counted, even if it failed. The
   limit is still checked on the whole estimate first, since which key a
   handler finds and what the cache skips are only known by running. Only
-  the in-app Claude and Codex chats get their own session budget, from the
-  agent token Nebula mints for each chat. Everything else (Hermes, outside
+  the in-app Claude, Codex and Daedalus chats get their own session budget,
+  from the agent token Nebula mints for each chat. Everything else (outside
   agents, scripts) shares one budget until the backend restarts, because a
   name or header is the caller's to set and renaming would reset the budget.
   Totals are kept in `~/.nebula/agent-spend.json`.
@@ -465,7 +464,7 @@ is for agents only (the canvas edits through its own routes).
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
 it gets the same spending check and the same long-run handling. It waits 45
 seconds by default because Codex gives each tool call 60 seconds unless
-configured otherwise; `get_run` waits again (up to 300). Finished image and
+configured otherwise (in-app Codex gets 150); `get_run` waits again (up to 300). Finished image and
 video outputs come back as small previews from
 `GET /api/graph/node/{id}/preview`, which reads only files in Nebula's output
 folder (external URLs are never fetched), downscales images to 512, 1024 or
@@ -475,6 +474,47 @@ result at 25,000 tokens.
 `GET /api/agent/nodes` and `GET /api/agent/nodes/{id}` back `find_nodes` and
 `describe_node`. Both use `services/node_readiness.py`, the same rule
 `nebula context` uses, so the CLI and the MCP server agree on what can run.
+
+### In-app agents use this server
+
+The chat panel's agents reach Nebula through this same MCP server, started by
+their own CLI for each turn (`services/agent_profiles.py`,
+`services/krea_agent_mcp.py`). Each turn has a token Nebula minted for that
+chat (`Authorization: Agent`), which names the chat's own spending budget and
+its private workspace. The token reaches the server by environment variable
+name only, never in argv or a file:
+
+| Agent | How the server is registered | Other Nebula access |
+|---|---|---|
+| Claude | `--mcp-config` with `env: {"NEBULA_AGENT_TOKEN": "${NEBULA_AGENT_TOKEN}"}`, which Claude Code expands from its own environment. Every tool is allowed by exact name (`mcp__nebula__look_at_canvas`, ...); a test compares the list with the server's registered tools. | The `nebula` CLI through Bash, for projects, save/load, keys and `commons fetch`. `ps` is denied. |
+| Codex | `-c mcp_servers.nebula.*` with `env_vars = ["NEBULA_AGENT_TOKEN", "NEBULA_URL"]` (Codex gives stdio servers a filtered environment), `tool_timeout_sec = 150`, and the same exact tool list as `enabled_tools`, each with `approval_mode = "approve"` (with `approval_policy = "never"`, Codex otherwise refuses tools marked open-world, such as `run_nodes`). | None. Its shell has no network (`permissions.nebula-agent.network.enabled=false`), so `nebula`, curl and pip can't reach anything; MCP servers run outside that sandbox. |
+| Daedalus (Hermes) | Nebula's managed overlay (`HERMES_MANAGED_DIR`) adds `nebula` and `nebula_krea` with `env: {"NEBULA_AGENT_TOKEN": "${NEBULA_AGENT_TOKEN}"}`. | None. It runs with `-t nebula,nebula_krea,clarify`: no terminal, file, code, browser, generation, cron or delegation tools. |
+
+- With a token, the server asks `GET /api/agent/context` for the turn's
+  workspace once at start and confines local paths to it (as the CLI does);
+  if that fails it exits, and the agent has no Nebula tools.
+- Codex also runs with only reviewed features. `CODEX_DISABLED_FEATURES`
+  turns off hooks, plugins, apps, skill MCP installs, browser and computer use,
+  the in-app features, the daemon and the like. `code_mode_host` stays on:
+  newer models (gpt-6.1-sol) call every tool through it. Checked live, its
+  JavaScript has no `fetch`, `require` or `Deno`, and nothing from it reached
+  the backend. Before every turn
+  `codex features list` runs with the turn's exact `-c`/`--disable` flags (and
+  an empty `CODEX_HOME`, standing in for `--ignore-user-config`, which that
+  command doesn't take); any feature that is on and not in
+  `CODEX_ALLOWED_FEATURES`, a turned-off name Codex no longer lists, or a
+  failed check refuses the turn. A Codex update can therefore stop in-app
+  Codex until the lists are reviewed; the error says which features.
+- Codex's workspace keeps `.codex` and `.agents` unwritable, so a turn can't
+  leave project config, hooks or skills for its next turn. Checked live with
+  codex-cli 0.160.0: a planted `.codex/config.toml` MCP server and hooks file
+  never start under `--ignore-user-config`.
+- Daedalus runs from its own private workspace, not the repo root. A turn is
+  refused if the overlay can't be added (an administrator Hermes scope
+  exists), or while the Daedalus profile has scheduled Hermes jobs, which
+  would run with every Hermes tool; remove them with
+  `hermes-daedalus cron remove <id>`. `-t` is enforced inside Hermes, not by
+  the OS.
 
 ### Long runs and graph edits from the CLI
 

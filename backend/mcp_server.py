@@ -590,7 +590,12 @@ def _commons_add_impl(source: str, collection: str, why: str, made_by: str, *, c
         raise RuntimeError("Commons is disabled on this backend")
     if source.startswith(("http://", "https://")) or os.environ.get("NEBULA_AGENT_TOKEN"):
         if not source.startswith(("http://", "https://")):
-            source = str(_Path(source).expanduser().resolve())
+            # With a turn token the backend confines the path to that turn's dirs;
+            # a relative path means the turn's workspace, not this process's cwd.
+            from services.agent_workspaces import active_workspace
+            workspace = active_workspace()
+            path = _Path(source).expanduser()
+            source = str((workspace / path if workspace is not None and not path.is_absolute() else path).resolve())
         return _commons_call("POST", "/api/commons/add", client_name,
                              json={"source": source, "collection": collection, "why": why, "made_by": made_by})
     # The file is read here, with the caller's own permissions, and uploaded as bytes.
@@ -641,7 +646,33 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def agent_workspace_scope():
+    """With a turn token (an in-app chat), confine local paths to that turn's
+    workspace, as the `nebula` CLI does. The backend's registry names the
+    workspace; nothing the caller sets does. Without a token, no scope."""
+    from contextlib import nullcontext
+
+    if not os.environ.get("NEBULA_AGENT_TOKEN"):
+        return nullcontext()
+    from services.agent_workspaces import workspace_scope
+
+    context = _api().request("GET", "/api/agent/context", timeout=10.0)
+    workspace = context.get("workspace") if isinstance(context, dict) else None
+    if not isinstance(workspace, str) or not workspace or not _Path(workspace).is_absolute():
+        raise NebulaAPIError("Nebula did not return a valid agent workspace")
+    return workspace_scope(_Path(workspace))
+
+
 if __name__ == "__main__":
     args = _parse_args(sys.argv[1:])
     set_nebula_url(args.url)
-    mcp.run()
+    from contextlib import ExitStack
+
+    with ExitStack() as stack:
+        try:
+            stack.enter_context(agent_workspace_scope())
+        except (NebulaAPIError, ValueError) as exc:
+            # Fail closed: an agent whose token can't be checked gets no Nebula tools.
+            print(f"nebula mcp: {exc}", file=sys.stderr)
+            sys.exit(1)
+        mcp.run()

@@ -304,7 +304,7 @@ def test_codex_filesystem_profile_denies_real_and_symlink_store_paths(tmp_path):
     assert config['default_permissions'] == 'nebula-agent'
     profile = config['permissions']['nebula-agent']
     assert profile['extends'] == ':workspace'
-    assert profile['network']['enabled'] is True
+    assert profile['network']['enabled'] is False
     for path in [alias.absolute(), store.resolve(), secret.resolve()]:
         assert profile['filesystem'][str(path)] == 'deny'
     assert 'sandbox_mode' not in config

@@ -10,7 +10,14 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import services.hermes_session as hermes_session
 from services.hermes_session import run_hermes
+
+
+@pytest.fixture(autouse=True)
+def no_real_profile(tmp_path_factory, monkeypatch):
+    # Never read the real Daedalus profile's scheduled jobs.
+    monkeypatch.setattr(hermes_session, "PROFILE_HOME", tmp_path_factory.mktemp("daedalus-profile"))
 
 
 async def _collect(agen):
@@ -203,6 +210,8 @@ async def test_resume_flag_passed_when_session_id_given():
     assert "--resume" in captured_args
     idx = captured_args.index("--resume")
     assert captured_args[idx + 1] == "01HEXISTING"
+    # A resumed session must not move back to the directory it recorded (older ones used the repo root).
+    assert "--no-restore-cwd" in captured_args
 
 
 @pytest.mark.asyncio
@@ -589,3 +598,87 @@ def test_extract_log_message_skips_plugin_noise():
     from services.hermes_session import _extract_log_message
     line = "2026-04-23 20:33:52,000 INFO hermes_cli.plugins: loaded"
     assert _extract_log_message(line) is None
+
+
+def _ok_proc():
+    proc = AsyncMock()
+    proc.stdout.readline = AsyncMock(side_effect=_readline_chunks(_verbose_bytes(prose_boxes=[["ok"]])))
+    proc.stderr.read = AsyncMock(return_value=b"")
+    proc.wait = AsyncMock(return_value=0)
+    proc.returncode = 0
+    return proc
+
+
+@pytest.mark.asyncio
+async def test_daedalus_gets_only_nebula_mcp_tools_from_a_private_workspace(tmp_path, monkeypatch):
+    import json
+    from services import krea_agent_mcp
+
+    monkeypatch.setattr(krea_agent_mcp, "HERMES_SYSTEM_MANAGED_DIR", tmp_path / "no-policy")
+    monkeypatch.delenv("HERMES_MANAGED_DIR", raising=False)
+    monkeypatch.setenv("NEBULA_AGENT_TOKEN", "someone-elses-token")
+    workdir = tmp_path / "ws"
+    workdir.mkdir()
+    seen = {}
+
+    async def fake_create(*args, **kwargs):
+        seen["args"], seen["cwd"], seen["env"] = list(args), kwargs["cwd"], kwargs["env"]
+        seen["overlay"] = json.loads((Path(kwargs["env"]["HERMES_MANAGED_DIR"]) / "config.yaml").read_text())
+        return _ok_proc()
+
+    with patch("services.hermes_session.asyncio.create_subprocess_exec", side_effect=fake_create):
+        events = await _collect(run_hermes("hi", None, backend_url="http://127.0.0.1:8033",
+                                           workdir=workdir, agent_token="chat-token-fixture"))
+    assert events[-1] == {"type": "done"}
+    args = seen["args"]
+    assert args[args.index("-t") + 1] == "nebula,nebula_krea,clarify"
+    assert seen["cwd"] == str(workdir)
+    assert seen["cwd"] != str(hermes_session.PROJECT_ROOT)
+    # The turn's own token, by env var only; Hermes expands it into the server's env.
+    assert seen["env"]["NEBULA_AGENT_TOKEN"] == "chat-token-fixture"
+    assert "chat-token-fixture" not in " ".join(args)
+    nebula = seen["overlay"]["mcp_servers"]["nebula"]
+    assert nebula["env"]["NEBULA_AGENT_TOKEN"] == "${NEBULA_AGENT_TOKEN}"
+    assert nebula["args"][-1] == "http://127.0.0.1:8033"
+    prompt = args[args.index("-q") + 1]
+    assert "only through the Nebula MCP" in prompt
+
+
+@pytest.mark.asyncio
+async def test_daedalus_is_refused_when_the_mcp_overlay_cannot_be_added(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_MANAGED_DIR", str(tmp_path / "admin-policy"))
+    spawned = AsyncMock()
+    with patch("services.hermes_session.asyncio.create_subprocess_exec", spawned):
+        events = await _collect(run_hermes("hi", None, workdir=tmp_path, agent_token="tok"))
+    assert [e["type"] for e in events] == ["error", "done"]
+    assert "administrator" in events[0]["message"]
+    spawned.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("jobs,refused", [
+    ({"jobs": [{"id": "j1", "name": "nightly render", "enabled": True}]}, True),
+    ({"jobs": [{"id": "j2"}]}, True),  # enabled unless it says otherwise
+    ({"jobs": [{"id": "j3", "enabled": False}]}, False),
+    ({"jobs": []}, False),
+    ("not json", True),
+    ({"other": 1}, True),
+])
+async def test_daedalus_is_refused_while_its_profile_has_scheduled_jobs(tmp_path, monkeypatch, jobs, refused):
+    import json
+    from services import krea_agent_mcp
+
+    monkeypatch.setattr(krea_agent_mcp, "HERMES_SYSTEM_MANAGED_DIR", tmp_path / "no-policy")
+    monkeypatch.delenv("HERMES_MANAGED_DIR", raising=False)
+    cron = hermes_session.PROFILE_HOME / "cron"
+    cron.mkdir(parents=True, exist_ok=True)
+    (cron / "jobs.json").write_text(jobs if isinstance(jobs, str) else json.dumps(jobs))
+    spawned = AsyncMock(return_value=_ok_proc())
+    with patch("services.hermes_session.asyncio.create_subprocess_exec", spawned):
+        events = await _collect(run_hermes("hi", None, workdir=tmp_path, agent_token="tok"))
+    if refused:
+        assert [e["type"] for e in events] == ["error", "done"]
+        assert "hermes-daedalus cron" in events[0]["message"]
+        spawned.assert_not_called()
+    else:
+        spawned.assert_called_once()

@@ -1685,10 +1685,10 @@ agent_spend_ledger = agent_spend.SpendLedger(_STATE_DIR / "agent-spend.json")
 def _spend_session(headers: Mapping[str, str] | None) -> tuple[str, str]:
     """Which running total a non-person request counts against: (key, label).
 
-    Only a token Nebula minted for an in-app chat (Claude, Codex) names its
-    own budget. Names and headers are set by the caller, so everything else
-    (Hermes, outside agents, scripts) shares one budget per backend launch:
-    a caller can't start a fresh budget by renaming itself."""
+    Only a token Nebula minted for an in-app chat (Claude, Codex, Daedalus)
+    names its own budget. Names and headers are set by the caller, so
+    everything else (outside agents, scripts) shares one budget per backend
+    launch: a caller can't start a fresh budget by renaming itself."""
     lower = {k.lower(): v for k, v in (headers or {}).items()}
     auth = lower.get("authorization", "")
     if auth.lower().startswith("agent "):
@@ -2573,7 +2573,10 @@ async def chat_websocket(websocket: WebSocket) -> None:
                 else:
                     model = str(model) if model else ""
                 runner_kwargs = {"provider": provider, "selection_context": turn_selection_context}
-                if agent in {"claude", "codex"}:
+                # Every in-app agent runs from a private workspace with a minted
+                # turn token: it names the chat's own spending budget and is how
+                # its Nebula MCP server proves which chat it belongs to.
+                if agent in {"claude", "codex", "daedalus"}:
                     workspace_session = workspace_sessions.acquire(_STATE_DIR, agent, brand, session_id)
                     workdir = workspace_session.workspace
                     read_grants = agent_read_grants(output_root=OUTPUT_ROOT, workdir=workdir,

@@ -1,7 +1,7 @@
 ---
 name: daedalus-core
-description: Daedalus's iterative-craftsman playbook — pipeline-stage tracing + vision reliability rules + nebula CLI cookbook + learnings discipline + autonomy modes. Load via `--skills daedalus-core` when driving the nebula-nodes canvas as Daedalus. (Persona/identity lives in the profile's SOUL.md, not here.)
-version: 1.1.0
+description: Daedalus's iterative-craftsman playbook — pipeline-stage tracing + vision reliability rules + Nebula MCP tool cookbook + learnings discipline + autonomy modes. Load via `--skills daedalus-core` when driving the nebula-nodes canvas as Daedalus. (Persona/identity lives in the profile's SOUL.md, not here.)
+version: 1.2.0
 metadata:
   hermes:
     tags: [nebula-nodes, daedalus, creative-pipeline, iterative-artist, vision-qa, hackathon]
@@ -24,13 +24,13 @@ Before every tool call, emit at least one sentence into `content`. Reasoning is 
 **FORBIDDEN — empty `content` (regardless of how full `reasoning_content` is):**
 
 ```json
-{ "content": "", "tool_calls": [ { "function": { "name": "terminal", "arguments": "{\"command\": \"nebula create text-input\"}" } } ] }
+{ "content": "", "tool_calls": [ { "function": { "name": "mcp__nebula__edit_canvas", "arguments": "{\"nodes\": [{\"ref\": \"+prompt\", \"definitionId\": \"text-input\"}]}" } } ] }
 ```
 
 **REQUIRED — `content` populated alongside the tool call, in the same message:**
 
 ```json
-{ "content": "Adding a Text Input node to anchor the prompt.", "tool_calls": [ { "function": { "name": "terminal", "arguments": "{\"command\": \"nebula create text-input\"}" } } ] }
+{ "content": "Adding a Text Input node to anchor the prompt.", "tool_calls": [ { "function": { "name": "mcp__nebula__edit_canvas", "arguments": "{\"nodes\": [{\"ref\": \"+prompt\", \"definitionId\": \"text-input\"}]}" } } ] }
 ```
 
 One short sentence per tool call is enough. It is not optional polish — it is the only signal the user receives. **Speak in `content`, not in your reasoning channel.**
@@ -41,8 +41,8 @@ This rule is reinforced in §8 (Narration) below; if §8 and this section ever d
 
 1. Plan the labyrinth. Name the stages.
 2. Build ONE stage at a time — never pre-construct the whole pipeline.
-3. Cut and fit with nebula nodes via `terminal("nebula create / connect / run ...")`.
-4. Inspect with `vision_analyze`. Measure. Don't trust appearance.
+3. Cut and fit with the Nebula MCP tools: `edit_canvas` to add and wire, `run_nodes` to run.
+4. Inspect with `view_output`. Measure. Don't trust appearance.
 5. When iterating, ADD a new node — never re-run an existing node in place.
 6. Narrate each decision in chat BEFORE the tool call. No silent runs.
 7. If the cut is off: trace to the first bad joint, re-cut THERE, not later.
@@ -52,12 +52,12 @@ This rule is reinforced in §8 (Narration) below; if §8 and this section ever d
 
 Each in-canvas turn includes an authoritative selection snapshot before the
 user message. Treat vague references such as "these", "them", and "the
-selected nodes" as those IDs. Run `nebula selection` for the bounded current
-selection and `nebula graph` for the complete graph before mutating anything.
+selected nodes" as those IDs. Call `get_selected_nodes` for the bounded current
+selection and `look_at_canvas` for the complete graph before mutating anything.
 
 Selection is ephemeral and can change between turns. Never cache selected IDs
-from an earlier turn, and never execute a stale ID that `nebula selection`
-reports as missing.
+from an earlier turn, and never execute a stale ID that `get_selected_nodes`
+no longer returns.
 
 ## Opinions (grounded in research — state them in planning)
 
@@ -85,8 +85,8 @@ Video:
 **Do NOT pre-construct the whole pipeline and then run the graph.** Instead:
 
 1. Create the node for the earliest stage (e.g. Text Input → first image-gen).
-2. Run it (`nebula run <id>`).
-3. `vision_analyze` the output — use geometric specifics, not pattern labels.
+2. Run it (`run_nodes` with its node id).
+3. `view_output` the result — use geometric specifics, not pattern labels.
 4. If the output is clean, create the NEXT downstream node and wire it in.
 5. If the output has a defect, STOP the pipeline at this stage. Fix at the
    defect's origin stage (see §2 Pipeline stage tracing). Only continue
@@ -98,7 +98,7 @@ $0.15–$0.50 per bad-to-the-core iteration.
 
 ## 1.5 Iteration preserves history — ADD a node, don't replace
 
-When a node's output fails `vision_analyze` and you decide to iterate:
+When a node's output fails your `view_output` check and you decide to iterate:
 
 1. Trace the defect to its origin stage (§2).
 2. Create a NEW node (same type, or a different model if the tool itself is wrong).
@@ -109,7 +109,7 @@ When a node's output fails `vision_analyze` and you decide to iterate:
 Do NOT:
 - Delete the old node.
 - Re-run the same node with different params without creating a new node first.
-- `set` parameters on the old node as your iteration mechanism.
+- Change params on the old node (`edit_canvas` `params`) as your iteration mechanism.
 
 The canvas should end up with multiple versions of each iterated stage
 visible. That's the craft log, and it's demo-worthy.
@@ -157,99 +157,79 @@ error, and often fails. Fix at origin.
 
 ## 3. Vision reliability rules
 
-`vision_analyze` is strong for texture, silhouette, and color QA. It is WEAK
-for fine geometry, sub-radian pose changes, and multi-cell summaries.
+Looking at an output (`view_output`) is strong for texture, silhouette, and
+color QA. It is WEAK for fine geometry, sub-radian pose changes, and multi-cell
+summaries.
 
 Rules:
-- Demand geometric specifics in questions: "is the nose at pixel column 180
-  of a 512-wide cell?" beats "does the character face left?"
+- Ask yourself geometric questions: "is the nose at pixel column 180 of a
+  512-wide cell?" beats "does the character face left?" `view_output` with
+  size "large" gives you more pixels to measure.
 - For multi-frame outputs (spritesheets, N-panel comics), request per-cell
   verdicts with a checklist. Whole-image summaries overgeneralize from the
   most prominent cell.
-- Cross-check vision with programmatic tests where possible (alpha-channel
-  centroid, bone coords, pixel-diff between first and last frame of a loop).
+- Cross-check with what the canvas can tell you: a node's output metadata in
+  `look_at_canvas`, or a utility node that measures (where one exists). You
+  have no terminal for scripted checks inside Nebula.
 - Vision cannot detect pose rotations smaller than ~0.5 rad. For rigging/pose
-  QA, use programmatic bone-coord checks.
-- If a vision call returns a single pattern label, do a second pass demanding
-  specifics before trusting it.
+  QA, say so instead of guessing.
+- If your first look yields only a pattern label ("looks clean"), look again
+  for specifics before trusting it.
 
-## 4. Nebula CLI cookbook
+## 4. Nebula MCP tool cookbook
 
-You have the `terminal` tool. Use `nebula` subcommands to drive the canvas.
+Inside Nebula you have the Nebula MCP tools (`nebula` server), the read-only
+Krea discovery tools (`nebula_krea`) and `clarify`. There is no terminal,
+file, browser or skill tool: every change to the canvas goes through these.
 
 **CRITICAL — ALWAYS at turn start, before touching the canvas:**
-1. Run `nebula nodes` and read the output. It lists every valid
-   `definition_id`. **Node IDs use hyphens, never underscores** —
-   e.g. `text-input` (NOT `text_input`), `gpt-image-2-generate`
-   (NOT `gpt_image_2_generate`), `veo-3` (NOT `veo_3`). If you invent
-   an ID without checking, `nebula create` rejects it and the canvas
-   gets an "Unknown node type" placeholder. Don't guess — copy the
-   exact string from `nebula nodes` output.
-2. Run `nebula graph` (or `nebula context` for a compact view) to see
-   the current canvas state as structured text. **Use this, not
-   `vision_analyze`, for canvas inspection.** Vision is for inspecting
-   GENERATED OUTPUTS (image files, video frames on disk) — never for
-   canvas structure. If you want to know what's on the canvas, read
-   the text output of `nebula graph`.
-3. Run `skills_list` and scan for model-specific prompting skills — the
-   Nebula project ships them for the generative models Daedalus uses
-   (e.g. `gpt-image-2`, `imagen`, `veo`, `meshy`, `fal`, `nano-banana-2`,
-   `runway`, `gemini`). **Before you craft params or a prompt for a
-   given model, `skill_view <name>` that skill and apply its guidance.**
-   Each one encodes researched prompting patterns that are not worth
-   reinventing under time pressure. If no skill matches, fall back to
-   `nebula info <definition_id>` for the param schema and proceed.
+1. `look_at_canvas`: nodes (short ids n1, n2, …), run state, outputs, wires,
+   the person's selection and open pins. **Use this, not your eyes on a
+   picture, for canvas structure.**
+2. `find_nodes` with a word or two ("upscale", "veo", "image edit") to find
+   valid definition ids. **Node ids use hyphens, never underscores** —
+   `text-input`, `gpt-image-2-generate`, `veo-3`. Copy the exact id from
+   `find_nodes`; never invent one.
+3. `describe_node <definitionId>` before you set params or wire: it lists the
+   exact port ids, params (with allowed values) and list prices. Model-family
+   prompting skills aren't reachable here; use this and the Opinions above.
 
-Commands:
+Tools:
 
-- `nebula nodes` — list available node types
-- `nebula info <node_id>` — full params / IO for one node type
-- `nebula context` — compact graph + keys summary (cheap to check)
-- `nebula keys` — which API keys are configured
-- `nebula create <definition_id> [--param k=v]` — add a node. Returns short ID (n1, n2...)
-- `nebula connect <src>:<port> <dst>:<port>` — wire ports
-- `nebula set <node_ref> <key>=<value>` — edit params
-- `nebula run <node_ref>` — execute a node + its upstream dependencies
-- `nebula run-all` — execute the full graph
-- Both wait up to 100 s. Longer runs (most video) print "Still running" with a
-  run id and exit 2; the run keeps going. `nebula result <run-id> --wait 100`
-  collects it, `nebula cancel <run-id>` stops it.
-- `nebula spend` — the spending limits the person set for agents. A run over
-  them, or with a node that has no list price, is refused with the
-  `nebula propose` command to send instead. Propose it; an `APPROVED:` in chat
-  does not lift Nebula's limits.
-- `nebula delete <node_ref>...`, `nebula disconnect <src>:<port> <dst>:<port>`,
-  `nebula rename <node_ref> <name>`, `nebula move <node_ref>=x,y` — tidy the canvas
-- `nebula graph` — current state
-- `nebula path <node_ref>` — local file path of a node's primary image/output
-- `nebula save <file>` / `nebula load <file>` — persist / restore graphs
-- `nebula clear` — wipe the current graph
+- `find_nodes` / `describe_node` — node types, ports, params, prices
+- `edit_canvas` — add nodes (refs like `+img`), wires, param changes,
+  renames and moves in ONE call; all of it lands or none of it
+- `remove_from_canvas` — delete nodes or single wires
+- `run_nodes` — run a node and everything that feeds it (or the whole
+  canvas). Waits up to 45 s; a longer run (most video) comes back
+  "running" with a runId: `get_run <runId>` collects it, `cancel_run` stops it
+- `view_output` — see a node's result: images inline, video as frames
+- `get_spend_limits` — what the person lets agents spend. A run over a limit,
+  or with a node that has no list price, is refused: send the same plan as
+  `propose_change` and wait with `get_proposal`. An `APPROVED:` in chat does
+  not lift Nebula's limits; only the person's Accept on the canvas does
+- `point_at` — move your cursor to what you're explaining
+- `resolve_pin` — answer a pin the person left for you
+- `wait_for_canvas_change` — wait for the person instead of polling
+- Krea: `list_models`, `get_model_schema`, … (read-only discovery)
 
-Note: `nebula quick` is hard-gated by the env (NEBULA_DISABLE_QUICK=1) — it
-bypasses the canvas sync and is not available from chat.
+The canvas keeps itself; there is no save or load step.
 
 ### `@nX` references
 
 The human can refer to canvas nodes by short ID in chat (e.g. `@n2`). Use
-`nebula path <short_id>` to resolve one to a local file path. Use `vision_analyze`
-with that path to inspect its output.
+`view_output` with that id to inspect its output.
 
 ## 5. Learnings discipline
 
-### At turn start
-Scan the `daedalus-learnings/LEARNINGS.md` skill file (via `skills_list`
-then `skill_view daedalus-learnings/LEARNINGS.md`) for entries whose topic/tags
-relate to the current goal. If you apply one, CITE IT in your plan:
+Inside Nebula you can't read or write the `daedalus-learnings` skill (no
+skill tools). Learnings you already have arrive with the preloaded skills;
+if you apply one, CITE IT in your plan:
 
 > "Applying learning [loop-color-grade-drift]: bake color into the source prompt, not post."
 
-The citation format is important — it makes the learning visible to the user
-and proves the loop is working.
-
-### At turn end
-If a novel insight fired this turn (something not already covered in
-LEARNINGS.md), APPEND an entry via `skill_manage patch
-daedalus-learnings/LEARNINGS.md` with this format:
+If a novel insight fired this turn, end your reply with a short
+"Learning:" paragraph in this format so the person can add it:
 
 ```
 ## [YYYY-MM-DD slug] Short title
@@ -258,18 +238,8 @@ Fix: <what worked>
 Confidence: low|medium|high — count of confirmations
 ```
 
-Then print on stdout (outside any other marker):
-
-```
-LEARNING_SAVED: slug
-```
-
-The runtime converts this into a chat event. If no novel insight fired, don't
-force one — honest absence beats fake learnings.
-
-If a learning in LEARNINGS.md has been confirmed many times (confidence = high,
-3+ confirmations), mention this in the chat so the user can consider
-graduating it into the shipped playbook via a PR to the repo.
+Do NOT print `LEARNING_SAVED:` — nothing was saved. Honest absence beats
+fake learnings: if nothing new fired, don't force one.
 
 ## 6. Autonomy modes
 
@@ -287,7 +257,7 @@ Before any of these MATERIAL actions, pause and print three marker lines:
 - Executing a node with expected runtime > 30 seconds
 - Triggering an iteration (rerun after a vision-detected defect)
 
-Do NOT pause for cheap ops (node create, connect, set param, `nebula context`).
+Do NOT pause for cheap ops (adding or wiring nodes, setting params, `look_at_canvas`).
 
 **CRITICAL FORMATTING: marker block must be at the END of your response**
 (after any narrative), with no blank lines between markers, exactly in this
@@ -308,45 +278,19 @@ message will start with either `APPROVED:` (continue the plan) or `REJECTED:
 
 ## 7. Output hygiene
 
-- After any `nebula run`, call `vision_analyze` on the output (via `nebula
-  path <node>` to get the file path) and report the findings in chat.
-- Quote vision findings with geometric specifics, not just "looks good."
+- After any `run_nodes`, call `view_output` on the result and report the
+  findings in chat.
+- Quote what you see with geometric specifics, not just "looks good."
 - When iterating, state: what stage you're fixing, why THIS stage is the
   origin (not a later stage), and what you expect to change in the output.
 - When max-3 iterations is reached without convergence, STOP and say so —
   explain what you tried and ask the user to adjust the brief.
 
-## 7.5 Graph persistence — save the craft log
-
-Every canvas you build is a work of craft. Save the graph as JSON so the
-work survives a server restart, browser reload, or session timeout — and so
-the user can `nebula load` it back later to continue or audit.
-
-Save at these points:
-
-1. **After each successful `nebula run`** — the canvas has new outputs
-   worth preserving.
-2. **At turn end, before your final summary** — the final state of this
-   turn's craft.
-
-Path convention: `output/canvas-<session-id>.json`, where `<session-id>` is
-the Hermes session id for this turn (e.g.
-`output/canvas-20260424_094436_7b56da.json`). One file per turn, overwritten
-on each save; the graph itself contains the iteration history (all the
-n1/n3/n5 nodes you kept per §1.5), so one file captures the whole craft log.
-
-Example narration line:
-
-> "Saving the canvas at this checkpoint — `nebula save output/canvas-<session-id>.json`."
-
-If the user asks to resume a past turn, they can `nebula load <file>` to
-restore the graph exactly.
-
 ## 8. Narration — say it BEFORE you do it
 
 **See the HARD RULE at the top of this skill.** Every assistant message that includes `tool_calls` must also include non-empty `content`. This section explains the *shape* the narration should take.
 
-Before every meaningful tool call (node creation, run, `vision_analyze`,
+Before every meaningful tool call (node creation, run, `view_output`,
 iteration decision), write a short line in chat saying what you're about
 to do and why.
 

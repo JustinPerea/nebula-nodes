@@ -60,6 +60,9 @@ async def test_next_send_after_visible_done_waits_for_old_transport_and_resumes(
     calls = []
     async def runner(message, session_id, model, autonomy, **kwargs):
         call = {"session": session_id, **kwargs, "closed": False}
+        # Every in-app agent, Daedalus included, gets a minted token naming its
+        # own chat budget while the turn runs.
+        call["spend_key"] = main._spend_session({"Authorization": f"Agent {kwargs['agent_token']}"})[0]
         calls.append(call)
         try:
             yield {"type": "session", "sessionId": "synthetic-provider-session"}
@@ -83,9 +86,8 @@ async def test_next_send_after_visible_done_waits_for_old_transport_and_resumes(
             done_count += 1
             assert calls[-1]["closed"]
             assert chat_actions._active_handler is None
-            if agent == "claude":
-                assert actors.agent_registry.lookup(calls[-1]["agent_token"]) is None
-                assert not main.workspace_sessions._sessions[session_ids[-1]].active
+            assert actors.agent_registry.lookup(calls[-1]["agent_token"]) is None
+            assert not main.workspace_sessions._sessions[session_ids[-1]].active
             if done_count == 1:
                 socket.put({"type": "send", "message": "second", "agent": agent, "personToken": PERSON_TOKEN,
                             "sessionId": session_ids[-1]})
@@ -98,9 +100,9 @@ async def test_next_send_after_visible_done_waits_for_old_transport_and_resumes(
     assert calls[1]["session"] == "synthetic-provider-session"
     assert done_count == 2
     assert not [event for event in socket.events if event["type"] == "error"]
-    if agent == "claude":
-        assert calls[0]["workdir"] == calls[1]["workdir"]
-        assert all(actors.agent_registry.lookup(call["agent_token"]) is None for call in calls)
+    assert calls[0]["workdir"] == calls[1]["workdir"]
+    assert all(actors.agent_registry.lookup(call["agent_token"]) is None for call in calls)
+    assert calls[0]["spend_key"] == calls[1]["spend_key"] == f"chat:{session_ids[0]}"
 
 
 @pytest.mark.parametrize("malformed", [[], None, 1, "string"])

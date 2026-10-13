@@ -1,5 +1,38 @@
 # Implementation Notes
 
+## 2026-10-12 — In-app agents reach Nebula through its MCP server (PR 2 of 3, and person-gate PR B)
+
+Branch `mcp-tools`. Justin's calls: Codex's shell has no network and reaches Nebula only through the Nebula MCP server; Daedalus gets MCP tools only (`-t nebula,nebula_krea,clarify`) from a private workspace and a minted chat token; agents propose any `_kreaAuth` change.
+
+**What each agent gets**
+
+- **Claude:** `clean_mcp_servers` registers `nebula` and `nebula_krea` under `--strict-mcp-config`. The allow-list names every Nebula tool exactly (`mcp__nebula__<tool>`, no wildcards). `NEBULA_MCP_TOOLS` is the list, and `test_agent_mcp_registration.py` compares it to `mcp._tool_manager`, so a new tool can't be called in-app until someone lists it. The token is not in argv: the MCP config holds `${NEBULA_AGENT_TOKEN}` and Claude fills it from the child env. Claude's shell still reaches the backend, so it keeps the CLI for what the tools lack (projects, save/load, keys, `commons fetch`).
+- **Codex:** `-c mcp_servers.nebula.*` with `env_vars = ["NEBULA_AGENT_TOKEN","NEBULA_URL"]` and `tool_timeout_sec = 150`. `permissions.nebula-agent.network.enabled = false`. Writes to `<ws>/.codex` and `<ws>/.agents` are denied. The primer (`CODEX_SYSTEM_PRIMER`) says the shell has no network and names no CLI commands.
+- **Daedalus:** the managed overlay now holds both servers; `-t` limits Hermes to them plus `clarify`; it runs from `agent_workspace()` (or the chat's workspace) with `--no-restore-cwd` on resume; `/ws/chat` gives it a workspace session and a minted token like the others.
+- **The MCP server applies the turn's workspace.** With a token, `mcp_server.py` asks `/api/agent/context` for the workspace and runs inside `workspace_scope`. A missing or relative workspace exits the server rather than running unscoped. `commons_add` resolves relative paths there.
+
+**Decisions not in the ask**
+
+- **`code_mode_host` stays on (departs from the review's `--disable` list).** The first live Codex turn failed: "code-mode host is disabled". The model on this machine (gpt-6.1-sol) routes every tool call, MCP included, through the code-mode host. Probed live with it on: `typeof fetch`, `require` and `Deno` were all `undefined` in its JS, and the backend log showed no probe request. It is in `CODEX_ALLOWED_FEATURES` with that note. Everything else the review named is disabled explicitly.
+- **Feature allowlist, checked every turn.** `codex_feature_preflight` runs `codex features list` with exactly the turn's `-c/--enable/--disable` flags, from the turn's workspace, with an empty `CODEX_HOME` (the command refuses `--ignore-user-config` and `--strict-config`) and without the token in its env. Any enabled feature outside `CODEX_ALLOWED_FEATURES`, a disabled name Codex no longer lists, a nonzero exit, a timeout (20 s) or an unreadable listing refuses the turn. A Codex update that adds a default-on feature will block turns until someone reviews it. That is the intent.
+- **Codex tools are approved by exact list.** `run_nodes` failed live with "MCP tool call requires approval, but approval policy is never" (it is open-world). `enabled_tools` lists the 22 tools and each gets `approval_mode = "approve"`. No server-wide default.
+- **No `trust_level` override.** I tried `-c projects."<ws>".trust_level="untrusted"`; live, with user config loaded, a planted `.codex/config.toml` MCP server still started. Removed. What actually keeps project config out: `--ignore-user-config` (checked live: without it the planted server started; with it, nothing planted started) plus the `.codex`/`.agents` write-deny so a turn can't plant one.
+- **Krea allow rules widened** from two tools to every `KREA_READONLY_TOOLS` entry, so the allow-list matches what the Krea server exposes read-only.
+- **Daedalus cron jobs are refused, not cleared.** `scheduled_jobs_refusal` reads `~/.hermes/profiles/daedalus/cron/jobs.json`; any enabled job, or a file it can't read, refuses the turn with the `hermes-daedalus cron list/remove` commands. Deleting someone's jobs silently is a human call.
+- **Overlay failure refuses the turn.** It used to be a "thinking" note and the turn ran without Nebula's tools. Now it is an error.
+- **Daedalus with Commons on is still refused**, token or not (scoped Commons access for Hermes is unverified).
+- **Old Daedalus chats can't resume.** They named Hermes' raw session id; `/ws/chat` now refuses ids it didn't issue ("Start a new chat with /clear"), as it already did for Claude and Codex. `test_commons_integration.py` and `test_commons_runner_integration.py` encoded the old pass-through and the old "Daedalus refuses a token" rule; both were rewritten to the new contract, keeping the refusal cases.
+- **Primers split.** `NEBULA_MCP_PRIMER` is shared; Claude adds `CLAUDE_CLI_PRIMER`, Codex adds `CODEX_SHELL_PRIMER`. `backend/commons/skill.md` and `.hermes/skills/daedalus-core/SKILL.md` (1.2.0) lead with the MCP tools.
+
+**Gaps and surprises**
+
+- **The MCP tools lack save/load, projects, keys and `commons fetch`.** Codex can't do those in-app now. Daedalus's skill no longer saves projects.
+- **Hermes is not live-tested.** No `daedalus` profile exists on this machine. Unverified: whether `--skills daedalus-core` still preloads under `-t`, and whether Hermes maps the bare `nebula` toolset name to the MCP server. The args are unit-tested; `docs/HERMES-SETUP.md` says so.
+- **Not tested:** a planted skill that declares an MCP dependency (`skill_mcp_dependency_install` is disabled and `.agents` is write-denied, but no live probe).
+- **MCP stdio servers run outside Codex's sandbox.** That is why the server gets the token and the shell doesn't need network.
+
+**Verification:** targeted files green (codex_session + agent_mcp_registration 33, hermes_session 26, chat_isolation_lifecycle + cli_api 158, commons integration 7 + 12). Backend 196/196 files, frontend 198 files / 2138 tests, `tsc` clean, desktop unit tests (connector-vault, credential-service, folder-picker, migration, navigation, paper-links, path-migration, person-token, sidecar) pass; the Electron launch suites (integration, resilience) were not run. Live on isolated backend 8132: a Claude turn and a Codex turn each called `get_spend_limits` (budget "chat", agent named), `edit_canvas` and `run_nodes` on free nodes; the canvas cursor showed the chat agent. In the Codex turn, `curl` to the backend exited 7 and `nebula spend` couldn't connect; the backend log had no shell requests. Sandbox probe (`codex sandbox -P nebula-agent`): loopback curl rc 7, `.codex`/`.agents` mkdir denied, workspace writes allowed. No paid runs.
+
 ## 2026-10-12 — MCP tools: build, run and see results from any MCP client (PR 1 of 3)
 
 Branch `mcp-tools`. Justin chose: the MCP server serves outside clients and the in-app agents; tool shape and setup "whatever gives the best results". Plan: three PRs (tools, in-app wiring, `nebula mcp connect`). This is the first.

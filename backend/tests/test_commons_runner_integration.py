@@ -29,7 +29,7 @@ def _value(args, flag):
 
 @pytest.mark.parametrize("enabled", [False, True])
 @pytest.mark.asyncio
-async def test_claude_private_profile_keeps_only_krea_and_never_opens_store(tmp_path, monkeypatch, enabled):
+async def test_claude_private_profile_registers_nebula_and_krea_and_never_opens_store(tmp_path, monkeypatch, enabled):
     monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1" if enabled else "0")
     monkeypatch.setenv("NEBULA_STATE_DIR", str(tmp_path / "state"))
     monkeypatch.setenv("NEBULA_URL", "http://127.0.0.1:8000")
@@ -58,11 +58,16 @@ async def test_claude_private_profile_keeps_only_krea_and_never_opens_store(tmp_
     assert "--disable-slash-commands" in args
     assert "--dangerously-skip-permissions" not in args
     servers = json.loads(_value(args, "--mcp-config"))["mcpServers"]
-    assert set(servers) == {"nebula_krea"}
+    assert set(servers) == {"nebula", "nebula_krea"}
     assert servers["nebula_krea"]["args"][-1] == "http://127.0.0.1:54321"
+    assert servers["nebula"]["args"][-2:] == ["--url", "http://127.0.0.1:54321"]
+    # The MCP config names the token; Claude fills it in from the child env.
+    assert servers["nebula"]["env"]["NEBULA_AGENT_TOKEN"] == "${NEBULA_AGENT_TOKEN}"
+    assert "bound-identity" not in " ".join(args)
     settings = json.loads(_value(args, "--settings"))
     assert "mcp__nebula_krea__list_models" in settings["permissions"]["allow"]
     assert "mcp__nebula_krea__get_model_schema" in settings["permissions"]["allow"]
+    assert "mcp__nebula__edit_canvas" in settings["permissions"]["allow"]
     assert any(str(tmp_path / "state" / "krea") in rule for rule in settings["permissions"]["deny"])
     assert _value(args, "--resume") == "provider-a"
     prompt = _value(args, "--append-system-prompt")
@@ -89,7 +94,9 @@ async def test_codex_private_profile_preserves_mcp_events_and_billing(tmp_path, 
         b'{"type":"item.completed","item":{"type":"mcp_tool_call","id":"tool-a","status":"completed","result":{"content":[{"type":"text","text":"models"}]}}}\n',
     ])
     spawn = AsyncMock(return_value=proc)
+    preflight = AsyncMock(return_value=None)
     with patch("services.codex_session._require_codex_chatgpt_login", AsyncMock(return_value=None)), \
+         patch("services.codex_session.codex_feature_preflight", preflight), \
          patch("services.codex_session.asyncio.create_subprocess_exec", spawn), \
          patch("commons.runtime.get_store", side_effect=AssertionError("profile must not open store")):
         events = [event async for event in codex_session.run_codex(
@@ -104,8 +111,13 @@ async def test_codex_private_profile_preserves_mcp_events_and_billing(tmp_path, 
     assert _value(args, "--model") == "gpt-test"
     assert args[-3:] == ("resume", "provider-codex", "-")
     config = tomllib.loads("\n".join(value for flag, value in zip(args, args[1:]) if flag == "-c"))
-    assert set(config["mcp_servers"]) == {"nebula_krea"}
+    assert set(config["mcp_servers"]) == {"nebula", "nebula_krea"}
     assert config["mcp_servers"]["nebula_krea"]["args"][-1] == "http://127.0.0.1:54321"
+    assert config["mcp_servers"]["nebula"]["env_vars"] == ["NEBULA_AGENT_TOKEN", "NEBULA_URL"]
+    assert "bound-codex" not in " ".join(args)
+    assert config["permissions"]["nebula-agent"]["network"]["enabled"] is False
+    # The feature check ran once, from the turn's workspace, before the turn.
+    assert preflight.await_count == 1 and preflight.await_args.args[1] == workspace
     filesystem = config["permissions"]["nebula-agent"]["filesystem"]
     assert filesystem[str(workspace)] == "write"
     assert filesystem[str(tmp_path / "state" / "krea")] == "deny"
@@ -118,10 +130,12 @@ async def test_codex_private_profile_preserves_mcp_events_and_billing(tmp_path, 
     assert events[-1] == {"type": "done"}
 
 
-@pytest.mark.parametrize("flag,token", [("1", None), ("0", "bound-token")])
+# Daedalus with Commons off gets a chat token now (tests/test_hermes_session.py);
+# with Commons on it stays refused, token or not.
+@pytest.mark.parametrize("token", [None, "bound-token"])
 @pytest.mark.asyncio
-async def test_daedalus_refuses_unverified_scoped_access_before_process(monkeypatch, flag, token):
-    monkeypatch.setenv("NEBULA_COMMONS_ENABLED", flag)
+async def test_daedalus_refuses_unverified_scoped_access_before_process(monkeypatch, token):
+    monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")
     spawn = AsyncMock()
     with patch("services.hermes_session.asyncio.create_subprocess_exec", spawn), \
          patch("services.hermes_session.prepare_hermes_mcp", Mock()) as overlay:

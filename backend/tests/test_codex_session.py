@@ -20,9 +20,15 @@ from services.codex_session import (
 
 
 @pytest.fixture(autouse=True)
-def reset_codex_login_state(monkeypatch):
+def reset_codex_login_state(monkeypatch, request):
     # Fake CLI tests must never inspect the real user's Codex preferences.
     monkeypatch.setattr(codex_session, "codex_default_model", lambda: None)
+    if not request.node.name.startswith("test_preflight"):
+        # Turn tests fake the `codex exec` process; the feature preflight has
+        # tests of its own below (named test_preflight_*).
+        async def reviewed(args, workdir):
+            return None
+        monkeypatch.setattr(codex_session, "codex_feature_preflight", reviewed)
     codex_session._codex_login_task = None
     codex_session._codex_login_state.clear()
     codex_session._codex_login_state.update({
@@ -260,7 +266,127 @@ def test_codex_mcp_config_is_per_invocation_and_preserves_skills(monkeypatch):
     prompt = codex_session._build_prompt("Krea models")
     assert "Repo-backed Nebula skills" in prompt
     assert "list_models and get_model_schema" in prompt
-    assert "_kreaAuth mcp" in prompt
+    # Switching a node's Krea billing is the person's call.
+    assert "`_kreaAuth` change as a proposal" in prompt
+
+
+def test_codex_reaches_nebula_through_its_mcp_server_with_the_token_by_name(monkeypatch):
+    import tomllib
+
+    monkeypatch.setenv("NEBULA_URL", "http://127.0.0.1:8033")
+    monkeypatch.setenv("NEBULA_AGENT_TOKEN", "turn-token-fixture")
+    args = codex_session._codex_base_args(None)
+    overrides = tomllib.loads("\n".join(v for f, v in zip(args, args[1:]) if f == "-c"))
+    server = overrides["mcp_servers"]["nebula"]
+    assert server["args"][0].endswith("backend/mcp_server.py")
+    assert server["args"][1:] == ["--url", "http://127.0.0.1:8033"]
+    assert server["env_vars"] == ["NEBULA_AGENT_TOKEN", "NEBULA_URL"]
+    assert server["tool_timeout_sec"] == 150
+    assert "env" not in server
+    # Exactly the listed tools, each approved up front (approval_policy is "never").
+    from services.krea_agent_mcp import NEBULA_MCP_TOOLS
+    assert server["enabled_tools"] == list(NEBULA_MCP_TOOLS)
+    assert server["tools"] == {tool: {"approval_mode": "approve"} for tool in NEBULA_MCP_TOOLS}
+    assert "turn-token-fixture" not in " ".join(args)
+    # The shell can't reach Nebula: no network, so the primer names the tools, not the CLI.
+    assert overrides["permissions"]["nebula-agent"]["network"]["enabled"] is False
+    prompt = codex_session._build_prompt("make an image")
+    assert "mcp__nebula__" in prompt and "edit_canvas" in prompt and "run_nodes" in prompt
+    assert "no network access" in prompt
+    for cli in ("nebula create", "nebula run", "nebula graph", "nebula nodes", "nebula info", "nebula path"):
+        assert cli not in prompt
+
+
+@pytest.mark.asyncio
+async def test_codex_turn_is_refused_when_the_feature_preflight_refuses(monkeypatch, tmp_path):
+    async def refuse(args, workdir):
+        assert "--disable" in args and workdir == tmp_path
+        return "Codex has features on that Nebula hasn't reviewed (browser_use)"
+    monkeypatch.setattr(codex_session, "codex_feature_preflight", refuse)
+    monkeypatch.setattr(codex_session, "_require_codex_chatgpt_login", AsyncMock(return_value=None))
+    spawned = AsyncMock()
+    monkeypatch.setattr(codex_session.asyncio, "create_subprocess_exec", spawned)
+    monkeypatch.setattr(codex_session, "_codex_base_args", lambda *a, **k: ["codex", "exec", "--disable", "hooks"])
+    events = await _collect(run_codex("hi", None, workdir=tmp_path, agent_token="tok"))
+    assert events == [{"type": "error", "message": "Codex has features on that Nebula hasn't reviewed (browser_use)"},
+                      {"type": "done"}]
+    spawned.assert_not_called()
+
+
+_LISTING = """\
+apps                                     stable             false
+browser_use                              stable             {browser}
+hooks                                    stable             false
+item_ids                                 removed            true
+shell_tool                               stable             true
+{extra}
+"""
+
+
+def _listing(browser="false", extra=""):
+    from services.agent_profiles import CODEX_DISABLED_FEATURES
+    lines = _LISTING.format(browser=browser, extra=extra)
+    known = {line.split()[0] for line in lines.splitlines() if line.strip()}
+    return lines + "".join(f"{name:<40} stable             false\n"
+                           for name in CODEX_DISABLED_FEATURES if name not in known)
+
+
+def test_preflight_listing_allows_only_reviewed_features():
+    assert codex_session.unreviewed_codex_features(_listing()) == []
+    # A disabled feature that is still on, and one a newer Codex added, both refuse.
+    assert codex_session.unreviewed_codex_features(_listing(browser="true")) == ["browser_use"]
+    assert codex_session.unreviewed_codex_features(
+        _listing(extra="shiny_new_tool                           stable             true")) == ["shiny_new_tool"]
+    # Removed features do nothing, whatever their flag says.
+    assert "item_ids" not in codex_session.unreviewed_codex_features(_listing())
+    # A name Nebula turns off that Codex no longer lists may have been renamed.
+    trimmed = "\n".join(line for line in _listing().splitlines() if not line.startswith("hooks "))
+    assert codex_session.unreviewed_codex_features(trimmed) == ["hooks (no longer listed)"]
+    assert codex_session.unreviewed_codex_features("Error: something") is None
+
+
+def test_preflight_runs_features_list_with_exactly_the_turns_config_flags(tmp_path):
+    args = codex_session._codex_base_args("gpt-x", "high", None, "http://127.0.0.1:8033")
+    command = codex_session.codex_features_args(args)
+    assert command[:3] == [codex_session.CODEX_BIN, "features", "list"]
+    rest = command[3:]
+    expected = []
+    for flag, value in zip(args, args[1:]):
+        if flag in ("-c", "--enable", "--disable"):
+            expected += [flag, value]
+    assert rest == expected
+    assert "exec" not in rest and "--model" not in rest and "--strict-config" not in rest
+
+
+@pytest.mark.asyncio
+async def test_preflight_fails_closed(monkeypatch, tmp_path):
+    seen = {}
+
+    def proc(rc, out=b"", err=b""):
+        p = MagicMock()
+        p.returncode = rc
+        p.communicate = AsyncMock(return_value=(out, err))
+        return p
+
+    async def create(*args, **kwargs):
+        seen["args"], seen["env"], seen["cwd"] = args, kwargs["env"], kwargs["cwd"]
+        return seen["proc"]
+
+    monkeypatch.setattr(codex_session.asyncio, "create_subprocess_exec", create)
+    monkeypatch.setenv("NEBULA_AGENT_TOKEN", "turn-token-fixture")
+    args = ["codex", "exec", "--disable", "hooks"]
+    seen["proc"] = proc(0, _listing().encode())
+    assert await codex_session.codex_feature_preflight(args, tmp_path) is None
+    # User config is skipped the way exec's --ignore-user-config skips it.
+    assert seen["env"]["CODEX_HOME"] != str(Path.home() / ".codex")
+    assert "NEBULA_AGENT_TOKEN" not in seen["env"]
+    assert seen["cwd"] == str(tmp_path)
+    seen["proc"] = proc(0, _listing(browser="true").encode())
+    assert "browser_use" in await codex_session.codex_feature_preflight(args, tmp_path)
+    seen["proc"] = proc(1, b"", b"Error: Unknown feature flag: hooks")
+    assert "Unknown feature flag" in await codex_session.codex_feature_preflight(args, tmp_path)
+    seen["proc"] = proc(0, b"nothing useful")
+    assert "Couldn't read" in await codex_session.codex_feature_preflight(args, tmp_path)
 
 
 @pytest.mark.asyncio

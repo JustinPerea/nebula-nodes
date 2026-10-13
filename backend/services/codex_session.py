@@ -25,9 +25,10 @@ from services.agent_process import (
 )
 from services.krea_agent_mcp import agent_child_env
 from services.agent_profiles import (
-    DEFAULT_EFFORT, GrantOverlapsProtectedDir, agent_workspace, agent_workspace_env,
-    clean_mcp_servers, codex_default_model, codex_filesystem_args, codex_profile_args,
-    default_secret_paths, normalize_effort, protected_agent_dirs,
+    CODEX_ALLOWED_FEATURES, CODEX_DISABLED_FEATURES, DEFAULT_EFFORT, GrantOverlapsProtectedDir,
+    agent_workspace, agent_workspace_env, codex_default_model, codex_filesystem_args,
+    codex_mcp_server_args, codex_profile_args, default_secret_paths, normalize_effort,
+    protected_agent_dirs,
 )
 
 
@@ -303,8 +304,8 @@ def _build_skill_bootstrap(message: str) -> str:
     if not skills:
         return (
             "Repo-backed Nebula skills: no `.agents/skills/*/SKILL.md` files "
-            "were found. Fall back to `docs/model-providers/`, `nebula nodes`, "
-            "and live vendor docs for exact model/API details."
+            "were found. Fall back to `docs/model-providers/`, the find_nodes "
+            "and describe_node tools, and live vendor docs for exact model/API details."
         )
 
     lines = [
@@ -324,8 +325,8 @@ def _build_skill_bootstrap(message: str) -> str:
         "1. Match the user's request to the skill list.",
         "2. Read the relevant `SKILL.md` and linked files before creating or "
         "editing graph nodes.",
-        "3. For exact node IDs and current params, verify with `nebula nodes`, "
-        "`nebula info <node-id>`, or the tracked docs under `docs/model-providers/`.",
+        "3. For exact node IDs and current params, verify with find_nodes and "
+        "describe_node, or the tracked docs under `docs/model-providers/`.",
         "4. If a vendor fact may be stale, verify against the canonical vendor "
         "docs before presenting it as current.",
         "",
@@ -363,7 +364,7 @@ def _build_skill_bootstrap(message: str) -> str:
 def _build_prompt(message: str, selection_context: str | None = None) -> str:
     # Import lazily to avoid a module-load cycle: chat_session imports this
     # module when it builds AGENT_RUNNERS.
-    from services.chat_session import NEBULA_SYSTEM_PRIMER
+    from services.chat_session import CODEX_SYSTEM_PRIMER
 
     skill_bootstrap = _build_skill_bootstrap(message)
     live_context = f"\n\n{selection_context}" if selection_context else ""
@@ -372,7 +373,7 @@ def _build_prompt(message: str, selection_context: str | None = None) -> str:
         from commons.skill import COMMONS_SKILL
         live_context = f"\n\n{COMMONS_SKILL}{live_context}"
     return (
-        f"{NEBULA_SYSTEM_PRIMER}{live_context}\n\n"
+        f"{CODEX_SYSTEM_PRIMER}{live_context}\n\n"
         f"{skill_bootstrap}\n\n"
         "You are the Codex agent selected in Nebula's chat panel. Follow the "
         "Nebula workflow above and keep chat responses concise; the canvas is "
@@ -409,10 +410,94 @@ def _codex_base_args(model: str | None, effort: str | None = DEFAULT_EFFORT,
     # Codex; let the user's Codex config/account pick the active Codex model.
     if model and not model.startswith("claude-"):
         args.extend(["--model", model])
-    for server_name, config in clean_mcp_servers(backend_url).items():
-        args.extend(["-c", f"mcp_servers.{server_name}.command={json.dumps(config['command'])}",
-                     "-c", f"mcp_servers.{server_name}.args={json.dumps(config['args'])}"])
+    args.extend(codex_mcp_server_args(backend_url))
     return args
+
+
+# The flags of a `codex exec` command line that set its configuration. All
+# take a value. (`codex features` rejects --strict-config; it refuses unknown
+# feature names on its own, as `exec --strict-config` does.)
+_CONFIG_FLAGS = frozenset({"-c", "--config", "--enable", "--disable"})
+PREFLIGHT_TIMEOUT_SECONDS = 20
+
+
+def codex_features_args(exec_args: list[str]) -> list[str]:
+    """`codex features list` with exactly the configuration flags of `exec_args`."""
+    picked: list[str] = []
+    index = 0
+    while index < len(exec_args):
+        if exec_args[index] in _CONFIG_FLAGS:
+            picked += exec_args[index:index + 2]
+            index += 2
+        else:
+            index += 1
+    return [CODEX_BIN, "features", "list", *picked]
+
+
+def unreviewed_codex_features(listing: str) -> list[str] | None:
+    """Enabled features outside CODEX_ALLOWED_FEATURES, or None when the
+    listing can't be read. A disabled feature Codex no longer lists counts as
+    unreviewed too: its replacement may be on under a new name."""
+    enabled: list[str] = []
+    known: set[str] = set()
+    for line in listing.splitlines():
+        parts = line.split()
+        if len(parts) < 3 or parts[-1] not in ("true", "false"):
+            continue
+        name, stage, state = parts[0], " ".join(parts[1:-1]), parts[-1]
+        known.add(name)
+        if state == "true" and stage != "removed" and name not in CODEX_ALLOWED_FEATURES:
+            enabled.append(name)
+    if not known:
+        return None
+    missing = [f"{name} (no longer listed)" for name in CODEX_DISABLED_FEATURES if name not in known]
+    return sorted(enabled) + missing
+
+
+async def codex_feature_preflight(exec_args: list[str], workdir: Path) -> str | None:
+    """Refuse the turn (return why) unless Codex, configured exactly as this
+    turn will be, has only reviewed features on.
+
+    `codex features list` takes the same -c/--enable/--disable flags but not
+    `--ignore-user-config`, so it runs with an empty CODEX_HOME,
+    which loads no user config either. It runs from the turn's workspace, so
+    any project layer Codex would load there counts too. Fails closed: a
+    refused flag, a timeout or an unreadable listing all refuse the turn.
+    """
+    import tempfile
+
+    command = codex_features_args(exec_args)
+    with tempfile.TemporaryDirectory(prefix="nebula-codex-preflight-") as home:
+        env = {**agent_child_env(), "CODEX_HOME": home, "NO_COLOR": "1"}
+        env.pop("NEBULA_AGENT_TOKEN", None)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.DEVNULL, cwd=str(workdir), env=env,
+                **agent_process_group_options(),
+            )
+        except FileNotFoundError:
+            return "`codex` binary not found in PATH"
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), PREFLIGHT_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            return "Codex's feature check didn't finish, so the turn was not started."
+        finally:
+            if proc.returncode is None:
+                await terminate_agent_process_tree(proc)
+    if proc.returncode != 0:
+        detail = stderr.decode("utf-8", errors="replace").strip()[-400:]
+        return ("This Codex version refused Nebula's agent settings, so the turn was not started"
+                f"{': ' + detail if detail else '.'} Update the reviewed feature list in "
+                "services/agent_profiles.py for this Codex version.")
+    unreviewed = unreviewed_codex_features(stdout.decode("utf-8", errors="replace"))
+    if unreviewed is None:
+        return "Couldn't read Codex's feature list, so the turn was not started."
+    if unreviewed:
+        return ("Codex has features on that Nebula hasn't reviewed for its agent ("
+                + ", ".join(unreviewed) + "), so the turn was not started. Review them and add each "
+                "to CODEX_ALLOWED_FEATURES or CODEX_DISABLED_FEATURES in services/agent_profiles.py.")
+    return None
 
 
 def _codex_exec_env(backend_url: str | None = None, agent_token: str | None = None) -> dict[str, str]:
@@ -572,6 +657,11 @@ async def run_codex(
         args = _codex_base_args(effective_model, effective_effort, agent_cwd, backend_url)
     except GrantOverlapsProtectedDir as exc:
         yield {"type": "error", "message": str(exc)}
+        yield {"type": "done"}
+        return
+    refusal = await codex_feature_preflight(args, agent_cwd)
+    if refusal:
+        yield {"type": "error", "message": refusal}
         yield {"type": "done"}
         return
     if session_id:

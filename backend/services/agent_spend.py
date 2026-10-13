@@ -5,6 +5,8 @@ The person sets these in Settings > Preferences:
 - ``runCostConfirmUsd``: the per-run threshold. Their own Run button asks
   them at or over it, and agents are held to it too.
 - ``agentSpend.sessionUsd``: what one agent chat session may spend in total.
+  Each in-app chat (Claude, Codex or Daedalus) is its own session: the turn
+  token its Nebula MCP server sends names the chat (``main._spend_session``).
 - ``agentSpend.models[<definitionId>]``: per-model limits, ``perRunUsd`` (it
   replaces the general per-run threshold for that model) and ``sessionUsd``.
 

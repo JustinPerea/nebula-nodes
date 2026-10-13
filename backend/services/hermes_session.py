@@ -14,6 +14,7 @@ Yields dicts with a `type` field:
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -30,7 +31,10 @@ from services.chat_actions import (
     seconds_since_activity,
 )
 from services.hermes_verbose_parser import HermesVerboseParser
-from services.krea_agent_mcp import KREA_MCP_PRIMER, agent_child_env, prepare_hermes_mcp
+from services.agent_profiles import agent_workspace, agent_workspace_env
+from services.krea_agent_mcp import (
+    KREA_MCP_PRIMER, NEBULA_SERVER_NAME, SERVER_NAME as KREA_SERVER_NAME, agent_child_env, prepare_hermes_mcp,
+)
 from services.narrator import narrate_actions
 
 # Fire a heartbeat only when nothing user-visible has happened for this long.
@@ -49,11 +53,23 @@ DEFAULT_MODEL = "moonshotai/kimi-k2.6"
 # verbatim to `hermes chat --model`.
 DEFAULT_PROVIDER = "nous"
 DEFAULT_SKILLS = "daedalus-core"
+# The only Hermes toolsets Daedalus gets in Nebula: the Nebula and Krea MCP
+# servers (by name; Hermes maps a bare server name to its tools and starts
+# only the MCP servers named here) and `clarify`. No terminal, file,
+# code_execution, browser, image/video generation, cron or delegation: Hermes
+# runs those as the user with no sandbox, and a terminal could reach the
+# backend with headers of its own choosing. `-t` is enforced inside Hermes,
+# not by the OS, so the MCP servers are the only way to Nebula it offers.
+DAEDALUS_TOOLSETS = f"{NEBULA_SERVER_NAME},{KREA_SERVER_NAME},clarify"
+
+# The Daedalus profile's home (`hermes -p daedalus`). Its cron jobs run under
+# the Hermes scheduler with the profile's own toolsets, outside this limit.
+PROFILE_HOME = Path.home() / ".hermes" / "profiles" / "daedalus"
 
 # Path to the Daedalus profile's agent log. We tail this in parallel with the
 # subprocess so users see "thinking…" progress updates during multi-minute
 # Kimi-powered turns (hermes -Q is non-streaming — stdout only arrives at end).
-LOG_PATH = Path.home() / ".hermes" / "profiles" / "daedalus" / "logs" / "agent.log"
+LOG_PATH = PROFILE_HOME / "logs" / "agent.log"
 
 # We invoke Hermes through the `hermes-daedalus` profile-alias wrapper instead
 # of plain `hermes`. Hermes has no `--profile` flag on `chat`, so the only way
@@ -183,6 +199,44 @@ async def _tail_log(
             pass
 
 
+def scheduled_jobs_refusal(profile_home: Path | None = None) -> str | None:
+    """Why the turn must not start while the profile has scheduled jobs, or None.
+
+    A job an earlier, unrestricted Daedalus session scheduled runs with the
+    profile's full toolsets, so it would keep working outside Nebula's limits.
+    Nebula refuses rather than deleting the person's jobs. Unreadable job
+    storage refuses too.
+    """
+    jobs_file = (profile_home or PROFILE_HOME) / "cron" / "jobs.json"
+    if not jobs_file.exists():
+        return None
+    try:
+        data = json.loads(jobs_file.read_text(encoding="utf-8"))
+        jobs = data.get("jobs") if isinstance(data, dict) else None
+        if not isinstance(jobs, list):
+            raise ValueError("no job list")
+    except (OSError, ValueError) as exc:
+        return (f"Daedalus can't run: its scheduled-job file ({jobs_file}) can't be read ({exc}). "
+                "Check it with `hermes-daedalus cron list`.")
+    active = [job for job in jobs if not (isinstance(job, dict) and job.get("enabled") is False)]
+    if not active:
+        return None
+    names = ", ".join(str(job.get("name") or job.get("id") or "?") if isinstance(job, dict) else "?"
+                      for job in active[:5])
+    return (f"Daedalus can't run while its Hermes profile has scheduled jobs ({names}): they run "
+            "with every Hermes tool, outside Nebula's limits. Remove them with "
+            "`hermes-daedalus cron list` and `hermes-daedalus cron remove <id>`, then try again.")
+
+
+DAEDALUS_MCP_PRIMER = (
+    "NEBULA TOOLS IN THIS SESSION. You reach Nebula only through the Nebula MCP "
+    "tools (look_at_canvas, find_nodes, describe_node, edit_canvas, run_nodes, "
+    "get_run, view_output, propose_change, get_spend_limits, ...); there is no "
+    "terminal, file or browser tool here. Use view_output to inspect a result "
+    "(images come back inline, video as frames)."
+)
+
+
 async def run_hermes(
     message: str,
     session_id: str | None,
@@ -204,7 +258,7 @@ async def run_hermes(
     `Session: <id>` from the footer that prints at the end of the turn.
     """
     from commons.activation import is_enabled
-    if is_enabled() or agent_token:
+    if is_enabled():
         yield {"type": "error", "message": (
             "Daedalus cannot run while Commons is enabled because its private "
             "file access boundary has not been verified. Choose Claude or Codex "
@@ -212,9 +266,15 @@ async def run_hermes(
         )}
         yield {"type": "done"}
         return
-    # Keep the existing normal Daedalus profile/skills/autonomy contract. Do not
-    # pretend that accepting private-workspace keywords enforces a native sandbox.
-    del effort, extra_dirs, workdir
+    refusal = scheduled_jobs_refusal()
+    if refusal:
+        yield {"type": "error", "message": refusal}
+        yield {"type": "done"}
+        return
+    # Hermes has no OS sandbox of its own here; the boundary is its toolsets
+    # (DAEDALUS_TOOLSETS) plus a private working directory without secrets.
+    del effort, extra_dirs
+    agent_cwd = workdir or agent_workspace()
     # Model handoff: the frontend chat panel sends a single `model` field,
     # but its meaning depends on the active agent. For Daedalus turns (the
     # only path that hits this function), we want whatever Nous-Portal model
@@ -234,15 +294,17 @@ async def run_hermes(
         if selection_context
         else message
     )
-    turn_message = f"{KREA_MCP_PRIMER}\n\n{turn_message}"
+    turn_message = f"{DAEDALUS_MCP_PRIMER}\n\n{KREA_MCP_PRIMER}\n\n{turn_message}"
     args = [
         HERMES_BIN, "chat", "-q", turn_message,
         "--provider", effective_provider,
         "--model", model,
         "--skills", DEFAULT_SKILLS,
+        "-t", DAEDALUS_TOOLSETS,
     ]
     if session_id:
-        args.extend(["--resume", session_id])
+        # Stay in this chat's workspace; an older session recorded the repo root.
+        args.extend(["--resume", session_id, "--no-restore-cwd"])
 
     env = {
         **agent_child_env(),
@@ -256,11 +318,18 @@ async def run_hermes(
         "PYTHONUNBUFFERED": "1",
     }
     env.pop("NEBULA_AGENT_TOKEN", None)
+    env.update(agent_workspace_env(agent_cwd))
     if backend_url:
         env["NEBULA_URL"] = backend_url
+    if agent_token:
+        # Hermes expands ${NEBULA_AGENT_TOKEN} into the Nebula MCP server's env.
+        env["NEBULA_AGENT_TOKEN"] = agent_token
     mcp_overlay = prepare_hermes_mcp(env)
     if mcp_overlay.limitation:
-        yield {"type": "thinking", "text": mcp_overlay.limitation}
+        # Without the overlay Daedalus would have no way to Nebula at all.
+        yield {"type": "error", "message": mcp_overlay.limitation}
+        yield {"type": "done"}
+        return
 
     # Capture the log's current size BEFORE spawn so the tailer only surfaces
     # lines from *this* turn, not stale entries from previous runs.
@@ -276,7 +345,7 @@ async def run_hermes(
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=str(PROJECT_ROOT),
+            cwd=str(agent_cwd),
             env=env,
             limit=64 * 1024 * 1024,
             **agent_process_group_options(),
