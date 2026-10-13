@@ -81,6 +81,7 @@ from services.settings import (
     is_injected_mode,
     update_injected_keys,
 )
+from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_spend, app_tokens, model_pricing, node_readiness, output_preview
 from services.cli_graph import CLIGraph
@@ -531,11 +532,17 @@ _DESKTOP_CORS_HEADERS = ", ".join((
 
 @app.middleware("http")
 async def desktop_renderer_cors(request: Request, call_next):
-    # The packaged Electron renderer is a file: page, so its Origin is opaque
-    # ("null", or "file://") and the CORS regex above never matches it. In
-    # desktop mode, answer its preflights, and let it read responses only for
-    # requests that carry this launch's person token: a website can also send
-    # "Origin: null" (sandboxed iframe), but it can't know the token.
+    # The packaged Electron renderer is a file: page. Checked live in the
+    # desktop pass (2026-10-13, Electron 44, GrantFileProtocolExtraPrivileges
+    # on): its fetches carry no Origin header and send no preflight, and it
+    # reads responses without Access-Control-Allow-Origin, so this branch
+    # isn't reached from Nebula.app today. Its /ws handshake carries
+    # "Origin: file://" (local_guard allows that). The branch stays for a
+    # renderer that does send an opaque Origin ("null" or "file://", e.g. if
+    # that fuse is turned off): in desktop mode, answer its preflights, and
+    # let it read responses only for requests that carry this launch's person
+    # token: a website can also send "Origin: null" (sandboxed iframe), but it
+    # can't know the token.
     origin = request.headers.get("origin")
     desktop = (
         os.environ.get("NEBULA_DESKTOP_MODE") == "1"
@@ -2085,8 +2092,19 @@ app.include_router(commons_router)
 
 @app.on_event("startup")
 async def _person_startup() -> None:
-    """Set this launch's person token before serving (services/person_session.py)."""
+    """Set this launch's person token before serving (services/person_session.py),
+    then read the desktop's provider keys and Krea vault key from the next
+    stdin line (services/launch_secrets.py)."""
     person_session.initialize()
+    from services import launch_secrets
+    launch_secrets.initialize()
+
+
+@app.on_event("startup")
+async def _parent_watch_startup() -> None:
+    """Desktop sidecar: exit if Electron dies without stopping us (services/parent_watch.py)."""
+    from services import parent_watch
+    parent_watch.start_from_env()
 
 
 @app.on_event("startup")
@@ -4333,27 +4351,9 @@ async def update_settings(body: dict[str, Any]) -> dict:
     return {"status": "saved"}
 
 
-# The credential-update allowlist (18 keys; desktop/credentials.mjs mirrors it).
-_CREDENTIAL_PROVIDER_ALLOWLIST = frozenset({
-    "ANTHROPIC_API_KEY",
-    "ELEVENLABS_API_KEY",
-    "FAL_KEY",
-    "GOOGLE_API_KEY",
-    "GOOGLE_VERTEX_CREDENTIALS",
-    "HIGGSFIELD_API_KEY",
-    "IDEOGRAM_API_KEY",
-    "KREA_API_TOKEN",
-    "KREA_USAGE_KEY",
-    "MESHY_API_KEY",
-    "MINIMAX_API_KEY",
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
-    "QUIVER_API_KEY",
-    "REPLICATE_API_TOKEN",
-    "RUNWAY_API_KEY",
-    "XAI_API_KEY",
-    "WORLDLABS_API_KEY",
-})
+# The credential-update allowlist (services/credential_catalog.py; the
+# desktop app's credentials.mjs mirrors it).
+_CREDENTIAL_PROVIDER_ALLOWLIST = CREDENTIAL_PROVIDERS
 
 
 @app.delete("/api/settings/api-keys/{provider}")

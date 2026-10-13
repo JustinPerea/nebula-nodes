@@ -19,6 +19,7 @@ from typing import Any
 
 from commons.records import validate_box
 from commons.search import AXES
+from services.agent_process import spawn_agent_process, terminate_agent_process_tree
 from services.child_env import scrubbed_env
 
 PROMPT_VERSION = "reader-1"
@@ -134,7 +135,7 @@ def build_message(png: bytes, palette: list[dict], fewshots: list[dict]) -> dict
 
 
 async def read_image(png: bytes, palette: list[dict], fewshots: list[dict], *, vocab, timeout: float = 300,
-                     spawn=asyncio.create_subprocess_exec) -> ReaderResult:
+                     spawn=spawn_agent_process) -> ReaderResult:
     started = time.monotonic()
     cmd = build_command(SYSTEM_PROMPT, analysis_schema(vocab, len(palette)))
     payload = (json.dumps(build_message(png, palette, fewshots)) + "\n").encode()
@@ -147,7 +148,12 @@ async def read_image(png: bytes, palette: list[dict], fewshots: list[dict], *, v
         try:
             out, err = await asyncio.wait_for(proc.communicate(payload), timeout=timeout)
         except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
-            _kill(proc)  # never leave a model call running after we stop waiting for it
+            # Never leave a model call running after we stop waiting for it.
+            # claude runs in its own session (spawn_agent_process), so kill
+            # its whole tree: a group kill aimed at the backend can't reach
+            # its children any more, and the guardian forgets the pid once
+            # the leader is reaped.
+            await _kill(proc)
             if isinstance(exc, asyncio.CancelledError):
                 raise
             return ReaderResult(None, None, None, int((time.monotonic() - started) * 1000), [], "reader timed out")
@@ -178,11 +184,18 @@ async def read_image(png: bytes, palette: list[dict], fewshots: list[dict], *, v
     return ReaderResult(result["structured_output"], raw, model, ms, types, None)
 
 
-def _kill(proc) -> None:
+async def _kill(proc) -> None:
     try:
-        proc.kill()
-    except (ProcessLookupError, AttributeError):
-        pass
+        # Shielded: on cancellation the caller re-raises right after, and the
+        # tree kill must still finish.
+        await asyncio.shield(terminate_agent_process_tree(proc))
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        try:
+            proc.kill()
+        except (ProcessLookupError, AttributeError):
+            pass
 
 
 def _is_number(value: Any) -> bool:

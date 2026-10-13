@@ -50,7 +50,10 @@ class Vault:
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self._owned(directory, directory=True)
         self.path = directory / "oauth.enc"
-        key = os.environ.get("NEBULA_CONNECTOR_ENCRYPTION_KEY")
+        # Desktop: Electron sends it over stdin (services/launch_secrets.py).
+        # The env var stays for tests and hand-started backends.
+        from services import launch_secrets
+        key = launch_secrets.connector_encryption_key() or os.environ.get("NEBULA_CONNECTOR_ENCRYPTION_KEY")
         if not key:
             if os.environ.get("NEBULA_DESKTOP_MODE") == "1":
                 raise ConnectorError("Desktop connector encryption is unavailable")

@@ -14,6 +14,17 @@ reload supervisor (this process) keeps it in memory and hands it to each
 worker inside the pickled server object multiprocessing sends over its pipe;
 the worker gives it to person_session before the app is imported.
 
+Provider keys come from Settings only (services/settings.py never falls back
+to the environment), so this strips every provider credential name
+(services/credential_catalog.py) and the NEBULA_APP_TOKEN /
+NEBULA_AGENT_TOKEN spending tokens from its own environment before any reload
+worker starts. Otherwise a terminal's OPENAI_API_KEY or ANTHROPIC_API_KEY
+would reach every agent child the backend starts (Claude in -p mode bills an
+API key ahead of the subscription login) and act as a hidden fallback for
+provider SDKs that read their own variable, so a key missing from Settings
+would work in browser dev and fail in the desktop app. The desktop sidecar
+strips the same names (desktop/sidecar.mjs).
+
 Residual, stated plainly: a program running as you with an unsandboxed shell
 can still read the token (this process's memory, Chrome's on-disk Session
 Storage and History). The person token stops agents that reach Nebula only
@@ -26,6 +37,7 @@ import os
 import sys
 import webbrowser
 from pathlib import Path
+from typing import MutableMapping
 
 import uvicorn
 from uvicorn.supervisors import ChangeReload
@@ -35,6 +47,20 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from services import person_session  # noqa: E402
+from services.credential_catalog import CREDENTIAL_PROVIDERS  # noqa: E402
+
+# Never inherited by the dev backend: keys come from Settings, and the backend
+# must not run as an outside app or an in-app chat turn.
+INHERITED_CREDENTIAL_ENV_KEYS = frozenset(CREDENTIAL_PROVIDERS | {"NEBULA_APP_TOKEN", "NEBULA_AGENT_TOKEN"})
+
+
+def scrub_inherited_credentials(environ: MutableMapping[str, str]) -> list[str]:
+    """Remove INHERITED_CREDENTIAL_ENV_KEYS from ``environ`` in place.
+    Returns the removed names (never their values), sorted."""
+    removed = sorted(name for name in INHERITED_CREDENTIAL_ENV_KEYS if name in environ)
+    for name in removed:
+        del environ[name]
+    return removed
 
 
 class PersonServer(uvicorn.Server):
@@ -93,6 +119,11 @@ def main(argv: list[str] | None = None) -> None:
     # reload workers inherit it; without it they would fall back to port 8000,
     # which may be a different Nebula.
     os.environ["NEBULA_URL"] = backend_origin
+    # Before any worker exists: reload workers copy this process's environment.
+    removed = scrub_inherited_credentials(os.environ)
+    if removed:
+        print(f"Nebula: ignoring {', '.join(removed)} from this shell; "
+              "provider keys come from Settings.", flush=True)
     token = person_session.new_token()
     # uvicorn.Config has no app_dir: BACKEND_DIR is on sys.path (above), and
     # each reload worker re-runs this module's top level, so it is there too.

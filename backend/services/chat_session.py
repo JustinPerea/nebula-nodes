@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 from services.agent_process import (
-    agent_process_group_options,
+    spawn_agent_process,
     terminate_agent_process_tree,
 )
 from services.krea_agent_mcp import KREA_MCP_PRIMER, agent_child_env
@@ -287,14 +287,13 @@ async def run_claude(
         # (e.g. Read on a big source file) — if a single event is larger than
         # the limit, readline() raises LimitOverrunError and the whole stream
         # dies mid-response. Bump to 64MB to handle any realistic tool output.
-        proc = await asyncio.create_subprocess_exec(
+        proc = await spawn_agent_process(
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(agent_cwd),
             env=env,
             limit=64 * 1024 * 1024,
-            **agent_process_group_options(),
         )
     except FileNotFoundError:
         yield {"type": "error", "message": "`claude` binary not found in PATH"}

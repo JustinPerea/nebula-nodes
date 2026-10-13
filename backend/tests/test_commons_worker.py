@@ -190,6 +190,65 @@ async def test_read_image_refuses_unexpected_tools():
     assert res.error and "tools" in res.error
 
 
+@pytest.mark.asyncio
+@pytest.mark.skipif(__import__("os").name != "posix", reason="POSIX process groups")
+async def test_read_image_timeout_kills_the_whole_claude_tree():
+    # claude runs in its own session, so a leader-only kill would orphan its
+    # children where no group kill aimed at the backend can reach them.
+    import asyncio
+    import os
+    import sys
+    import time
+
+    from services.agent_process import spawn_agent_process
+
+    fake = (
+        "import subprocess, sys, time\n"
+        "c = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+        "sys.stderr.write(str(c.pid) + '\\n'); sys.stderr.flush()\n"
+        "time.sleep(60)\n"
+    )
+    started = {}
+
+    async def spawn(*cmd, **kwargs):
+        proc = await spawn_agent_process(sys.executable, "-c", fake, **kwargs)
+        started["proc"] = proc
+        return proc
+
+    def alive(pid):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        import subprocess
+        stat = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+        return bool(stat) and not stat.startswith("Z")
+
+    child = None
+    try:
+        # Read the child's pid from the leader's stderr before the timeout.
+        async def spawn_and_note(*cmd, **kwargs):
+            proc = await spawn(*cmd, **kwargs)
+            started["child"] = int((await proc.stderr.readline()).decode())
+            return proc
+
+        res = await reader.read_image(b"png", [], [], vocab=load_vocabulary(), timeout=0.5, spawn=spawn_and_note)
+        child = started["child"]
+        assert res.error == "reader timed out"
+        assert started["proc"].returncode is not None
+        deadline = time.monotonic() + 5
+        while alive(child) and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+        assert not alive(child), "the reader's timeout left claude's child running"
+    finally:
+        for pid in (child, getattr(started.get("proc"), "pid", None)):
+            if pid:
+                try:
+                    os.kill(pid, 9)
+                except ProcessLookupError:
+                    pass
+
+
 def test_validate_rejects_wrong_shapes_as_invalid():
     vocab = load_vocabulary()
     for mutate in (lambda o: o.update(axes=[1, 2]), lambda o: o.update(keywords="grain"),

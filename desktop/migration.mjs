@@ -475,7 +475,7 @@ export async function runMigration(options) {
  *
  * Convenience wrapper around credentialService.decryptAll() that reads
  * the credentials store and returns a plain key-value dict of decrypted
- * API keys. Used by main.mjs to build NEBULA_INJECTED_KEYS.
+ * API keys. Used by main.mjs for the sidecar's stdin launch-secrets line.
  *
  * @param {string} credentialsPath
  * @param {object} safeStorage

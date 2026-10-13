@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 from services.agent_process import (
-    agent_process_group_options,
+    spawn_agent_process,
     terminate_agent_process_tree,
 )
 from services.krea_agent_mcp import agent_child_env
@@ -471,10 +471,9 @@ async def codex_feature_preflight(exec_args: list[str], workdir: Path) -> str | 
         env = {**agent_child_env(), "CODEX_HOME": home, "NO_COLOR": "1"}
         env.pop("NEBULA_AGENT_TOKEN", None)
         try:
-            proc = await asyncio.create_subprocess_exec(
+            proc = await spawn_agent_process(
                 *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                 stdin=asyncio.subprocess.DEVNULL, cwd=str(workdir), env=env,
-                **agent_process_group_options(),
             )
         except FileNotFoundError:
             return "`codex` binary not found in PATH"
@@ -673,7 +672,7 @@ async def run_codex(
     prompt = _build_prompt(message, selection_context)
 
     try:
-        proc = await asyncio.create_subprocess_exec(
+        proc = await spawn_agent_process(
             *args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
@@ -681,7 +680,6 @@ async def run_codex(
             cwd=str(agent_cwd),
             env=env,
             limit=64 * 1024 * 1024,
-            **agent_process_group_options(),
         )
     except FileNotFoundError:
         yield {"type": "error", "message": "`codex` binary not found in PATH"}
@@ -739,7 +737,7 @@ async def run_codex(
 async def codex_login_status() -> dict[str, Any]:
     """Return the local Codex CLI authentication status."""
     try:
-        proc = await asyncio.create_subprocess_exec(
+        proc = await spawn_agent_process(
             CODEX_BIN,
             "login",
             "status",
@@ -747,7 +745,6 @@ async def codex_login_status() -> dict[str, Any]:
             stderr=asyncio.subprocess.PIPE,
             cwd=str(PROJECT_ROOT),
             env=agent_child_env(),
-            **agent_process_group_options(),
         )
     except FileNotFoundError:
         return {

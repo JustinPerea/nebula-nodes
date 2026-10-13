@@ -28,7 +28,7 @@ const REPO_ROOT = resolve(__dirname, '..', '..');
 const DESKTOP_DIR = join(REPO_ROOT, 'desktop');
 const ELECTRON = join(DESKTOP_DIR, 'node_modules', '.bin', 'electron');
 const FIXTURES = join(__dirname, 'fixtures');
-const DIST_INDEX = join(REPO_ROOT, 'frontend', 'dist', 'index.html');
+const DIST_INDEX = join(REPO_ROOT, 'frontend', 'dist-desktop', 'index.html');
 
 const tempDirs = [];
 
@@ -107,11 +107,13 @@ describe('Electron integration — managed sidecar startup', () => {
     }
   });
 
-  test('smoke run proves dynamic endpoint injection on a non-8000 port', { timeout: 120_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist not built' }, async () => {
+  test('smoke run proves dynamic endpoint injection on a non-8000 port', { timeout: 120_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
     const userData = mkTemp();
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
       NEBULA_DESKTOP_USER_DATA_DIR: userData,
+      NEBULA_DESKTOP_TEST: '1',
+      NEBULA_DESKTOP_APP_ID: `nebula-int-${process.pid}-${Date.now()}`,
     }, 120_000);
 
     assert.equal(result.timedOut, false, 'Electron did not exit within 120s');
@@ -150,11 +152,13 @@ describe('Electron integration — managed sidecar startup', () => {
     assertNoListener(apiPort);
   });
 
-  test('invalid Python override surfaces a visible failure with no orphan', { timeout: 30_000 }, async () => {
+  test('invalid Python override surfaces a visible failure with no orphan', { timeout: 30_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
     const userData = mkTemp();
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
       NEBULA_DESKTOP_USER_DATA_DIR: userData,
+      NEBULA_DESKTOP_TEST: '1',
+      NEBULA_DESKTOP_APP_ID: `nebula-int-${process.pid}-${Date.now()}`,
       NEBULA_DESKTOP_PYTHON: '/nonexistent/path/to/python',
     }, 30_000);
 
@@ -175,6 +179,8 @@ describe('Electron integration — managed sidecar startup', () => {
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
       NEBULA_DESKTOP_USER_DATA_DIR: userData,
+      NEBULA_DESKTOP_TEST: '1',
+      NEBULA_DESKTOP_APP_ID: `nebula-int-${process.pid}-${Date.now()}`,
       NEBULA_DESKTOP_PYTHON: join(FIXTURES, 'exit-with-code.mjs'),
       FIXTURE_EXIT_CODE: '7',
       FIXTURE_STDERR: 'DISTINCTIVE_EARLY_EXIT_MARKER',
@@ -194,11 +200,13 @@ describe('Electron integration — managed sidecar startup', () => {
     assert.notEqual(result.exitCode, 0);
   });
 
-  test('health timeout terminates child and surfaces timeout failure', { timeout: 30_000 }, async () => {
+  test('health timeout terminates child and surfaces timeout failure', { timeout: 30_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
     const userData = mkTemp();
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
       NEBULA_DESKTOP_USER_DATA_DIR: userData,
+      NEBULA_DESKTOP_TEST: '1',
+      NEBULA_DESKTOP_APP_ID: `nebula-int-${process.pid}-${Date.now()}`,
       NEBULA_DESKTOP_PYTHON: join(FIXTURES, 'never-healthy.mjs'),
       NEBULA_DESKTOP_HEALTH_TIMEOUT_MS: '3000',
     }, 30_000);

@@ -14,9 +14,10 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createServer as realCreateServer } from 'node:net';
-import { statSync as realStatSync, writeFileSync, mkdirSync, chmodSync, mkdtempSync, rmSync } from 'node:fs';
+import { statSync as realStatSync, readFileSync, writeFileSync, mkdirSync, chmodSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,7 +39,13 @@ import {
   sanitizeText,
   boundDiagnostics,
   DEFAULT_REPO_ROOT,
+  LAUNCH_SECRET_ENV_KEYS,
+  INHERITED_CREDENTIAL_ENV_KEYS,
+  SIDECAR_STRIPPED_ENV_KEYS,
+  launchSecretsLine,
+  PARENT_WATCH_FD,
 } from '../sidecar.mjs';
+import { ALLOWED_PROVIDERS } from '../credentials.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(__dirname, 'fixtures');
@@ -1327,10 +1334,12 @@ describe('startSidecar — person token', () => {
     const token = 'A'.repeat(43);
     const child = childWithStdin();
     const call = await start(child, { env: { NEBULA_PERSON_TOKEN: 'leaked', PATH: '/usr/bin' }, personToken: token });
-    assert.deepEqual(child.stdin.written, [`${token}\n`]);
+    assert.deepEqual(child.stdin.written, [`${token}\n{}\n`]);
     assert.equal(child.stdin.ended, true);
-    assert.deepEqual(call.opts.stdio, ['pipe', 'pipe', 'pipe']);
+    assert.deepEqual(call.opts.stdio, ['pipe', 'pipe', 'pipe', 'pipe']);
     assert.equal(call.opts.env.NEBULA_PERSON_TOKEN_STDIN, '1');
+    assert.equal(call.opts.env.NEBULA_LAUNCH_SECRETS_STDIN, '1');
+    assert.equal(call.opts.env.NEBULA_PARENT_WATCH_FD, '3');
     assert.equal('NEBULA_PERSON_TOKEN' in call.opts.env, false);
     assert.equal(JSON.stringify([call.cmd, call.args, call.opts.env]).includes(token), false);
   });
@@ -1338,9 +1347,66 @@ describe('startSidecar — person token', () => {
   test('without a token the backend gets an empty line and runs with no person (fail closed)', async () => {
     const child = childWithStdin();
     const call = await start(child, { env: {}, personToken: null });
-    assert.deepEqual(child.stdin.written, ['\n']);
+    assert.deepEqual(child.stdin.written, ['\n{}\n']);
     assert.equal(child.stdin.ended, true);
     assert.equal(call.opts.env.NEBULA_PERSON_TOKEN_STDIN, '1');
+  });
+
+  test('provider keys and the vault key go over stdin after the token, never env or argv', async () => {
+    const token = 'D'.repeat(43);
+    const secrets = { injectedKeys: { FAL_KEY: 'fal-stdin-fixture', OPENAI_API_KEY: '' }, connectorEncryptionKey: 'vault-stdin-fixture' };
+    const child = childWithStdin();
+    const call = await start(child, {
+      env: { NEBULA_INJECTED_KEYS: '{"FAL_KEY":"env-leak"}', NEBULA_CONNECTOR_ENCRYPTION_KEY: 'env-leak', NEBULA_CONNECTOR_SESSION: 'env-leak' },
+      personToken: token,
+      launchSecrets: secrets,
+    });
+    const [written] = child.stdin.written;
+    const [first, second, rest] = written.split('\n');
+    assert.equal(first, token);
+    assert.deepEqual(JSON.parse(second), { injectedKeys: { FAL_KEY: 'fal-stdin-fixture' }, connectorEncryptionKey: 'vault-stdin-fixture' });
+    assert.equal(rest, '');
+    for (const name of LAUNCH_SECRET_ENV_KEYS) assert.equal(name in call.opts.env, false, name);
+    const visible = JSON.stringify([call.cmd, call.args, call.opts.env]);
+    for (const value of ['fal-stdin-fixture', 'vault-stdin-fixture', 'env-leak']) assert.equal(visible.includes(value), false, value);
+  });
+
+  test('the provider-key list is the backend credential catalog', () => {
+    // backend/services/credential_catalog.py is the single source of the names.
+    const source = readFileSync(join(REPO_ROOT, 'backend', 'services', 'credential_catalog.py'), 'utf8');
+    const block = source.match(/CREDENTIAL_PROVIDERS[^=]*= frozenset\(\{([\s\S]*?)\}\)/);
+    assert.ok(block, 'CREDENTIAL_PROVIDERS literal not found');
+    const backend = [...block[1].matchAll(/"([A-Z0-9_]+)"/g)].map((m) => m[1]).sort();
+    assert.equal(backend.length, 18);
+    assert.deepEqual([...ALLOWED_PROVIDERS].sort(), backend);
+    for (const name of backend) assert.ok(INHERITED_CREDENTIAL_ENV_KEYS.includes(name), name);
+    for (const name of [...LAUNCH_SECRET_ENV_KEYS, ...INHERITED_CREDENTIAL_ENV_KEYS]) {
+      assert.ok(SIDECAR_STRIPPED_ENV_KEYS.includes(name), name);
+    }
+  });
+
+  test('provider keys and app/agent tokens inherited from a terminal never reach the sidecar env', async () => {
+    const env = { PATH: '/usr/bin:/bin', HOME: '/tmp/nebula-home', ANTHROPIC_DEFAULT_SONNET_MODEL: 'kept' };
+    for (const name of ALLOWED_PROVIDERS) env[name] = `shell-leak-${name}`;
+    env.NEBULA_APP_TOKEN = 'shell-leak-app-token';
+    env.NEBULA_AGENT_TOKEN = 'shell-leak-agent-token';
+    const child = childWithStdin();
+    const call = await start(child, { env, personToken: null });
+    for (const name of SIDECAR_STRIPPED_ENV_KEYS) assert.equal(name in call.opts.env, false, name);
+    assert.equal(JSON.stringify(call.opts.env).includes('shell-leak'), false);
+    // Everything else the shell had still reaches the backend.
+    assert.equal(call.opts.env.PATH, '/usr/bin:/bin');
+    assert.equal(call.opts.env.HOME, '/tmp/nebula-home');
+    assert.equal(call.opts.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'kept');
+    // The caller's object is not mutated.
+    assert.equal(env.OPENAI_API_KEY, 'shell-leak-OPENAI_API_KEY');
+  });
+
+  test('a launch-secrets line is always exactly one line', () => {
+    assert.equal(launchSecretsLine(null), '{}\n');
+    const line = launchSecretsLine({ injectedKeys: { GOOGLE_VERTEX_CREDENTIALS: '{\n  "type": "service_account"\n}' } });
+    assert.equal(line.indexOf('\n'), line.length - 1);
+    assert.deepEqual(JSON.parse(line).injectedKeys.GOOGLE_VERTEX_CREDENTIALS, '{\n  "type": "service_account"\n}');
   });
 
   test('a real backend reads the stdin token: only it unlocks a person-only route', async () => {
@@ -1351,18 +1417,107 @@ describe('startSidecar — person token', () => {
       NEBULA_SETTINGS_PATH: join(scratch, 'settings.json'),
       NEBULA_STATE_DIR: join(scratch, 'state'),
       NEBULA_OUTPUT_ROOT: join(scratch, 'output'),
+      NEBULA_DESKTOP_MODE: '1',
     };
+    for (const name of LAUNCH_SECRET_ENV_KEYS) delete env[name];
+    // A terminal launch: provider keys and tokens in the shell's environment.
+    const shellKey = 'shell-env-' + 'f'.repeat(20);
+    env.OPENAI_API_KEY = shellKey;
+    env.FAL_KEY = shellKey;
+    env.NEBULA_APP_TOKEN = shellKey;
+    const falKey = 'fal-stdin-' + 'e'.repeat(20);
+    const vaultKey = randomBytes(32).toString('base64url') + '=';
     let handle;
     try {
-      handle = await startSidecar({ env, repoRoot: REPO_ROOT, personToken: token });
+      handle = await startSidecar({
+        env, repoRoot: REPO_ROOT, personToken: token,
+        launchSecrets: { injectedKeys: { FAL_KEY: falKey }, connectorEncryptionKey: vaultKey },
+      });
       const put = (headers) => fetch(`${handle.apiBaseUrl}/api/settings`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers }, body: '{}',
       });
       assert.equal((await put({ Origin: 'http://localhost:5173' })).status, 403);
       assert.equal((await put({ 'X-Nebula-Person': 'C'.repeat(43) })).status, 403);
       assert.equal((await put({ 'X-Nebula-Person': token })).status, 200);
+      // The stdin keys arrived: the provider key is configured, and the
+      // desktop-mode Krea vault opened (without a key it reports "error").
+      const settings = await (await fetch(`${handle.apiBaseUrl}/api/settings`)).json();
+      assert.equal(settings.apiKeys.FAL_KEY, '***' + falKey.slice(-4));
+      const krea = await (await fetch(`${handle.apiBaseUrl}/api/krea/connection`)).json();
+      assert.equal(krea.status, 'disconnected');
+      // ...and none of the secrets is in the backend's argv or initial environment.
+      const visible = execFileSync('ps', ['-E', '-ww', '-o', 'args=', '-p', String(handle.pid)], { encoding: 'utf8' });
+      assert.ok(visible.includes('NEBULA_LAUNCH_SECRETS_STDIN=1'), 'ps -E shows the environment');
+      for (const value of [token, falKey, vaultKey, shellKey]) assert.equal(visible.includes(value), false);
+      assert.equal(visible.includes('OPENAI_API_KEY='), false);
     } finally {
       if (handle) await stopSidecar(handle);
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Parent lifeline: a force-killed Electron must not leave the backend behind
+// ---------------------------------------------------------------------------
+
+describe('parent lifeline', () => {
+  const isAlive = (pid) => {
+    try { process.kill(pid, 0); return true; } catch { return false; }
+  };
+
+  test('the backend watches fd 3', () => {
+    assert.equal(PARENT_WATCH_FD, 3);
+  });
+
+  test('a real backend exits within seconds when its launcher is SIGKILLed', async () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'nebula-lifeline-'));
+    const parentScript = join(scratch, 'parent.mjs');
+    const sidecarUrl = new URL('../sidecar.mjs', import.meta.url).href;
+    writeFileSync(parentScript, `
+      import { startSidecar } from ${JSON.stringify(sidecarUrl)};
+      const handle = await startSidecar({ repoRoot: ${JSON.stringify(REPO_ROOT)}, personToken: null });
+      console.log('LIFELINE ' + JSON.stringify({ pid: handle.pid, port: handle.port }));
+      setInterval(() => {}, 1000);
+    `);
+    const env = { ...process.env };
+    for (const name of ['NEBULA_INJECTED_KEYS', 'NEBULA_PERSON_TOKEN', 'NEBULA_DESKTOP_PYTHON']) delete env[name];
+    Object.assign(env, {
+      NEBULA_SETTINGS_PATH: join(scratch, 'settings.json'),
+      NEBULA_STATE_DIR: join(scratch, 'state'),
+      NEBULA_OUTPUT_ROOT: join(scratch, 'output'),
+      NEBULA_CHARACTER_ROOT: join(scratch, 'characters'),
+      NEBULA_MOODBOARD_ROOT: join(scratch, 'moodboards'),
+      NEBULA_PRESET_ROOT: join(scratch, 'presets'),
+      NEBULA_DESKTOP_MODE: '1',
+    });
+
+    const { spawn } = await import('node:child_process');
+    const parent = spawn(process.execPath, [parentScript], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let info = null;
+    try {
+      info = await new Promise((resolveP, rejectP) => {
+        let out = '';
+        const timer = setTimeout(() => rejectP(new Error(`no sidecar within 90s: ${out}`)), 90_000);
+        parent.stdout.on('data', (chunk) => {
+          out += chunk;
+          const line = out.split('\n').find((l) => l.startsWith('LIFELINE '));
+          if (line) { clearTimeout(timer); resolveP(JSON.parse(line.slice(9))); }
+        });
+        parent.on('exit', (code) => { clearTimeout(timer); rejectP(new Error(`launcher exited ${code}: ${out}`)); });
+      });
+      assert.equal(isAlive(info.pid), true);
+
+      parent.kill('SIGKILL');
+      const deadline = Date.now() + 10_000;
+      while (isAlive(info.pid) && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      assert.equal(isAlive(info.pid), false, 'backend outlived its SIGKILLed launcher by 10 s');
+      await assert.rejects(fetch(`http://127.0.0.1:${info.port}/api/health`));
+    } finally {
+      try { parent.kill('SIGKILL'); } catch { /* gone */ }
+      if (info && isAlive(info.pid)) process.kill(info.pid, 'SIGKILL');
       rmSync(scratch, { recursive: true, force: true });
     }
   });

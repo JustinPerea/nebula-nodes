@@ -60,6 +60,49 @@ export function computeAppDataRoot(options = {}) {
   return join(home, 'Library', 'Application Support', APP_DATA_DIR_NAME);
 }
 
+/**
+ * Where this launch keeps its data, and where the one-time migration reads
+ * legacy data from.
+ *
+ * A normal launch uses ~/Library/Application Support/Nebula Nodes/ and
+ * migrates from the repo's settings.json, ~/.nebula and <repo>/output.
+ *
+ * An isolated launch (NEBULA_DESKTOP_USER_DATA_DIR set, which tests and
+ * validators use) keeps everything inside that directory: its app data root
+ * is <userDataDir>/Nebula Nodes and its legacy sources are
+ * <userDataDir>/legacy/... (normally absent, so nothing is migrated). Without
+ * this, an "isolated" launch wrote state, connector keys and migration
+ * markers into the person's real App Support and read the repo's real
+ * settings.json (API keys) into a throwaway profile.
+ *
+ * @param {{ userDataDir?: string, home?: string, repoRoot: string }} options
+ * @returns {{ isolated: boolean, appDataRoot: string, legacy: { settingsPath: string, nebulaDir: string, outputDir: string } }}
+ */
+export function resolveDesktopDataPaths({ userDataDir, home, repoRoot }) {
+  if (userDataDir) {
+    const legacyRoot = join(userDataDir, 'legacy');
+    return {
+      isolated: true,
+      appDataRoot: join(userDataDir, APP_DATA_DIR_NAME),
+      legacy: {
+        settingsPath: join(legacyRoot, 'settings.json'),
+        nebulaDir: join(legacyRoot, '.nebula'),
+        outputDir: join(legacyRoot, 'output'),
+      },
+    };
+  }
+  const realHome = home ?? homedir();
+  return {
+    isolated: false,
+    appDataRoot: computeAppDataRoot({ home: realHome }),
+    legacy: {
+      settingsPath: join(repoRoot, 'settings.json'),
+      nebulaDir: join(realHome, '.nebula'),
+      outputDir: join(repoRoot, 'output'),
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Directory tree creation
 // ---------------------------------------------------------------------------
@@ -124,11 +167,12 @@ export function buildSidecarEnvVars(root) {
  * BEFORE the env vars are returned, ensuring the sidecar finds all
  * directories on first access.
  *
- * @param {{home?: string, mkdirSync?: typeof mkdirSync}} [options]
+ * @param {{home?: string, root?: string, mkdirSync?: typeof mkdirSync}} [options]
+ *   `root` overrides the computed App Support root (isolated launches).
  * @returns {{root: string, envVars: Record<string, string>}}
  */
 export function prepareAppDataEnv(options = {}) {
-  const root = computeAppDataRoot({ home: options.home });
+  const root = options.root ?? computeAppDataRoot({ home: options.home });
   ensureAppDataDirs(root, { mkdirSync: options.mkdirSync });
   const envVars = buildSidecarEnvVars(root);
   return { root, envVars };

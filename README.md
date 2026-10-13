@@ -92,11 +92,17 @@ npm --prefix frontend ci
 npm --prefix frontend run dev -- --host 127.0.0.1 --port 5173
 ```
 
-Open the link from Terminal 1, then add the provider keys you need in **Settings** (the gear at the top right of Projects, or the bottom of the left rail inside a project). Provider usage is billed to your accounts. Browser mode stores keys in the gitignored, plaintext `settings.json`; the macOS desktop app uses Keychain encryption.
+Open the link from Terminal 1, then add the provider keys you need in **Settings** (the gear at the top right of Projects, or the bottom of the left rail inside a project). Provider usage is billed to your accounts. Browser mode stores keys in the gitignored, plaintext `settings.json`; the macOS desktop app uses Keychain encryption. Neither reads keys from your shell: `devserver.py` and the app both drop provider key variables like `OPENAI_API_KEY` from the backend's environment, and `devserver.py` prints the names it ignored.
 
 Try a **Text Input → GPT Image 2 → Preview** graph and hit **Run**. Generated files go to `output/` by default; change the location in **Settings → Storage**.
 
-Prefer a desktop window? See the [Electron setup guide](desktop/README.md). Agent chat and Paper are optional; configure them when you need them.
+**Prefer an app?** On an Apple silicon Mac, build Nebula.app once and open it from Applications or the Dock; it starts the backend itself and stops it when you quit:
+
+```bash
+cd desktop && npm install && npm run package && npm run install-app
+```
+
+It runs this checkout (so `git pull` updates it; rebuild the renderer with `cd frontend && npm run build:desktop` after frontend changes) and keeps its own data in `~/Library/Application Support/Nebula Nodes/`. The first launch copies your browser-dev data and API keys there (copy only, nothing is deleted), but only when that folder has no `migration-state.json` yet. If an earlier desktop run already left one, the copy is skipped: the app opens with that older data and asks for your API keys again, so add them in **Settings** (they go to the Keychain). To start fresh from browser dev instead, quit Nebula and move `~/Library/Application Support/Nebula Nodes` aside (rename it, say to `Nebula Nodes.old`; don't delete it), then open Nebula again. After the first launch the app and browser dev have separate projects, outputs and settings. The two terminals above stay the way to develop. Details, signing and Gatekeeper notes: [desktop/README.md](desktop/README.md#nebulaapp-everyday-use). Agent chat and Paper are optional; configure them when you need them.
 
 ## Documentation
 
@@ -106,7 +112,7 @@ Prefer a desktop window? See the [Electron setup guide](desktop/README.md). Agen
 | [Node catalog](docs/MODEL_REFERENCE.md) | Nodes, parameters, ports, and endpoints |
 | [Model pricing](docs/MODEL-PRICING.md) | Run cost estimates, the cost confirm, and keeping prices current |
 | [Provider guides](docs/api-guides/README.md) | Example pipelines and API coverage |
-| [Desktop app](desktop/README.md) | Launch, local backend, migration, and Keychain |
+| [Desktop app](desktop/README.md) | Nebula.app, launch, local backend, migration, and Keychain |
 | [External-agent MCP](docs/MCP-SETUP.md) | Build and run from any MCP client (`find_nodes`, `describe_node`, `edit_canvas`, `run_nodes`, `view_output` with inline previews, spending limits), canvas selection, `look_at_canvas`, agent cursors, `wait_for_canvas_change`, `resolve_pin` and proposals |
 | [Provider contracts](docs/contracts/README.md) | Maintained API contracts and verification |
 | [Contributing](CONTRIBUTING.md) | Development checks and adding nodes |

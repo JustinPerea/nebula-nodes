@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import os
 import time
@@ -23,9 +24,12 @@ SETTINGS_PATH = Path(
 # ---------------------------------------------------------------------------
 #
 # When Electron launches the sidecar it decrypts API keys from the Keychain
-# and passes them via the NEBULA_INJECTED_KEYS env var as a JSON dict. The
-# backend stores them in this module-level dict (memory only — never persisted
-# to disk). load_settings() merges them into the apiKeys field, giving them
+# and sends them over the sidecar's stdin (services/launch_secrets.py calls
+# set_injected_keys at startup). The NEBULA_INJECTED_KEYS env var (a JSON
+# dict) is still read here for tests and hand-started backends; Electron no
+# longer uses it, because a process's environment is readable with `ps -E`.
+# The backend stores them in this module-level dict (memory only — never
+# persisted to disk). load_settings() merges them into the apiKeys field, giving them
 # precedence over any file-based values. Browser/dev mode (no env var) leaves
 # this dict empty and the backend reads keys from settings.json as before.
 
@@ -45,6 +49,13 @@ if _raw_injected:
 def is_injected_mode() -> bool:
     """Return True when credential injection (desktop mode) is active."""
     return bool(_INJECTED_KEYS)
+
+
+def set_injected_keys(keys: dict[str, str]) -> None:
+    """Replace the injected keys (the desktop launch-secrets line). Memory only."""
+    global _INJECTED_KEYS
+    _INJECTED_KEYS = {str(k): str(v) for k, v in keys.items() if v}
+    clear_provider_validation_cache()
 
 
 def update_injected_keys(provider: str, key: str) -> None:
@@ -76,11 +87,24 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 
 
 def load_settings() -> dict[str, Any]:
+    """The saved settings, with a default for every key the file leaves out.
+
+    A partial ``settings.json`` (a hand-written ``{}``, or one written before
+    a setting existed) used to come back without ``apiKeys``, and the
+    Settings panel then showed "Settings couldn't load". Values in the file
+    always win; loading never writes the file.
+    """
+    # Deep copy: callers mutate the nested dicts (apiKeys, routing), which
+    # must never change DEFAULT_SETTINGS itself.
+    settings = copy.deepcopy(DEFAULT_SETTINGS)
     if SETTINGS_PATH.exists():
         with open(SETTINGS_PATH, "r") as f:
-            settings = json.load(f)
-    else:
-        settings = dict(DEFAULT_SETTINGS)
+            saved = json.load(f)
+        if isinstance(saved, dict):
+            settings.update(saved)
+        else:
+            # Not a JSON object: returned as before, nothing to merge into.
+            settings = saved
 
     # Desktop mode: injected keys replace file-based apiKeys entirely.
     # Non-secret settings from the file (routing, outputPath, etc.) remain.
