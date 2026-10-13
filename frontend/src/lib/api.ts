@@ -257,6 +257,8 @@ export interface OutsideSpend {
   /** Every agent outside Nebula's chats, apps included, over the last 24 hours. */
   outside: { spentUsd: number; kreaPlanRuns: number };
   apps: ConnectedApp[];
+  /** The person's own agents (outside:personal:<id>), each also inside `outside`. */
+  personal?: Array<{ id: string; name: string; spentUsd: number; kreaPlanRuns: number }>;
 }
 
 async function agentAppsCall<T>(path: string, init: RequestInit | undefined, what: string): Promise<T> {
@@ -350,6 +352,63 @@ export async function fetchNousModels(): Promise<{ models: NousModel[]; count: n
 }
 
 export type ChatProvider = 'claude' | 'codex';
+/** What the chat panel can talk to: Nebula's own Claude/Codex runners, or one
+ * of the person's own agents over ACP (backend services/acp_session.py). */
+export type ChatAgentId = ChatProvider | `personal:${string}`;
+
+export function isPersonalAgent(agent: string): agent is `personal:${string}` {
+  return agent.startsWith('personal:');
+}
+
+export type PersonalAgentStatus = 'ready' | 'not_installed' | 'needs_node' | 'needs_setup' | 'disabled';
+
+/** One of the person's own agents (backend services/personal_agents.py). */
+export interface PersonalAgent {
+  id: string;
+  kind: 'preset' | 'custom';
+  displayName: string;
+  color: string;
+  enabled: boolean;
+  command: string;
+  args: string[];
+  status: PersonalAgentStatus;
+  resolvedPath: string | null;
+  note: string;
+  startable: boolean;
+}
+
+export interface PersonalAgentList {
+  warningAcknowledged: boolean;
+  agents: PersonalAgent[];
+}
+
+export function fetchPersonalAgents(): Promise<PersonalAgentList> {
+  return agentAppsCall('/api/personal-agents', undefined, 'Loading personal agents');
+}
+
+export function acknowledgePersonalAgentWarning(): Promise<{ warningAcknowledgedAt: string }> {
+  return agentAppsCall('/api/personal-agents/acknowledge-warning', { method: 'POST' }, 'Saving your answer');
+}
+
+export function updatePersonalAgent(
+  id: string, changes: Partial<Pick<PersonalAgent, 'enabled' | 'displayName' | 'color' | 'command' | 'args'>>,
+): Promise<{ agent: PersonalAgent }> {
+  return agentAppsCall(`/api/personal-agents/${encodeURIComponent(id)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes),
+  }, 'Saving the agent');
+}
+
+export function createPersonalAgent(agent: {
+  id: string; displayName?: string; color?: string; command: string; args?: string[];
+}): Promise<{ agent: PersonalAgent }> {
+  return agentAppsCall('/api/personal-agents', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(agent),
+  }, 'Adding the agent');
+}
+
+export function deletePersonalAgent(id: string): Promise<{ ok: boolean }> {
+  return agentAppsCall(`/api/personal-agents/${encodeURIComponent(id)}`, { method: 'DELETE' }, 'Removing the agent');
+}
 
 export function chatAuthUsesProviderBilling(mode: string | null): boolean {
   return /api|bearer|bedrock|vertex|foundry/i.test(mode || '');

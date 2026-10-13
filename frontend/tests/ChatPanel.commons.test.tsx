@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-const apiMocks = vi.hoisted(() => ({ fetchClaudeStatus: vi.fn(), fetchCodexStatus: vi.fn(), fetchChatModels: vi.fn(), apiFetch: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({ fetchClaudeStatus: vi.fn(), fetchCodexStatus: vi.fn(), fetchChatModels: vi.fn(), fetchPersonalAgents: vi.fn(), apiFetch: vi.fn() }));
 vi.mock('../src/lib/api', async (original) => ({
   ...await original<typeof import('../src/lib/api')>(),
   fetchClaudeStatus: apiMocks.fetchClaudeStatus, fetchCodexStatus: apiMocks.fetchCodexStatus, fetchChatModels: apiMocks.fetchChatModels,
+  fetchPersonalAgents: apiMocks.fetchPersonalAgents,
 }));
 vi.mock('../src/lib/backend', async (original) => ({
   ...await original<typeof import('../src/lib/backend')>(), apiFetch: apiMocks.apiFetch,
@@ -39,6 +40,7 @@ beforeEach(() => {
   useUIStore.setState(initialUI, true);
   useUIStore.setState((state) => ({ panels: { ...state.panels, chat: { ...state.panels.chat, visible: true } } }));
   apiMocks.fetchClaudeStatus.mockResolvedValue({ installed: true, loggedIn: true });
+  apiMocks.fetchPersonalAgents.mockResolvedValue({ warningAcknowledged: false, agents: [] });
   apiMocks.fetchCodexStatus.mockResolvedValue({ installed: true, loggedIn: true, mode: 'chatgpt' });
   apiMocks.fetchChatModels.mockImplementation(async (agent: string) => ({
     agent, status: 'ready', auth: { mode: agent === 'claude' ? 'claudeai' : 'chatgpt' },

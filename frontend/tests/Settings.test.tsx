@@ -20,6 +20,10 @@ const getOutsideSpendMock = vi.fn();
 const createConnectedAppMock = vi.fn();
 const setConnectedAppLimitMock = vi.fn();
 const revokeConnectedAppMock = vi.fn();
+const fetchPersonalAgentsMock = vi.fn(async () => ({ warningAcknowledged: false, agents: [] }));
+const updatePersonalAgentMock = vi.fn();
+const createPersonalAgentMock = vi.fn();
+const deletePersonalAgentMock = vi.fn();
 
 vi.mock('../src/lib/backend', async (original) => ({
   ...await original<typeof import('../src/lib/backend')>(),
@@ -35,6 +39,10 @@ vi.mock('../src/lib/api', () => ({
   createConnectedApp: (...args: unknown[]) => createConnectedAppMock(...args),
   setConnectedAppLimit: (...args: unknown[]) => setConnectedAppLimitMock(...args),
   revokeConnectedApp: (...args: unknown[]) => revokeConnectedAppMock(...args),
+  fetchPersonalAgents: (...args: unknown[]) => fetchPersonalAgentsMock(...args),
+  updatePersonalAgent: (...args: unknown[]) => updatePersonalAgentMock(...args),
+  createPersonalAgent: (...args: unknown[]) => createPersonalAgentMock(...args),
+  deletePersonalAgent: (...args: unknown[]) => deletePersonalAgentMock(...args),
 }));
 
 vi.mock('../src/lib/kreaConnection', async (importOriginal) => ({

@@ -2,6 +2,7 @@ import { saveRunCostConfirm } from '../../../lib/settingsWrites';
 import { useSettingsDraftStore } from '../../../store/settingsDraftStore';
 import { RUN_COST_CONFIRM_CHOICES, useUIStore } from '../../../store/uiStore';
 import { AgentSpendSection } from './AgentSpendSection';
+import { PersonalAgentsSection } from './PersonalAgentsSection';
 import { SwitchRow } from './Switch';
 
 function usd(value: number) {
@@ -62,6 +63,8 @@ export function PreferencesTab() {
       </section>
 
       <AgentSpendSection />
+
+      <PersonalAgentsSection />
 
       <section aria-labelledby="settings-canvas-heading">
         <div className="settings-label"><h3 id="settings-canvas-heading">Canvas</h3></div>

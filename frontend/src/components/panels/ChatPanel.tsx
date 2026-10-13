@@ -12,6 +12,11 @@ import {
   fetchChatModels,
   chatAuthUsesProviderBilling,
   startCodexChatGPTLogin,
+  fetchPersonalAgents,
+  acknowledgePersonalAgentWarning,
+  isPersonalAgent,
+  type ChatAgentId,
+  type PersonalAgentList,
   type ClaudeStatus,
   type CodexChatGPTLoginState,
   type CodexStatus,
@@ -19,6 +24,10 @@ import {
   type ChatProvider,
 } from '../../lib/api';
 import { ChatModelPicker } from './ChatModelPicker';
+import { PermissionCard, type PermissionRequestPart, type PermissionStatus } from './PermissionCard';
+import { PersonalAgentWarning } from './PersonalAgentWarning';
+import { PERSONAL_AGENTS_CHANGED_EVENT } from './settings/PersonalAgentsSection';
+import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
 import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
@@ -31,8 +40,10 @@ import {
   type ChatCancellationState,
 } from '../../lib/chatCancellation';
 
-type ChatAgent = ChatProvider;
+type ChatAgent = ChatAgentId;
 type ModelSelection = { model: string | null; effort: string | null };
+const NO_MODEL: ModelSelection = { model: null, effort: null };
+const PERSONAL_AGENT_RE = /^personal:[a-z0-9-]{1,32}$/;
 type ChatSelection = { agent: ChatAgent; claude: ModelSelection; codex: ModelSelection };
 const CHAT_SELECTION_KEY = 'nebula:chat-selection';
 
@@ -49,7 +60,9 @@ function loadChatSelection(): ChatSelection {
         effort: typeof row.effort === 'string' && row.effort.length <= 32 ? row.effort : null,
       };
     };
-    return { agent: saved.agent === 'codex' ? 'codex' : 'claude', claude: pick(saved.claude), codex: pick(saved.codex) };
+    const agent: ChatAgent = saved.agent === 'codex' ? 'codex'
+      : typeof saved.agent === 'string' && PERSONAL_AGENT_RE.test(saved.agent) ? saved.agent as ChatAgent : 'claude';
+    return { agent, claude: pick(saved.claude), codex: pick(saved.codex) };
   } catch { return empty; }
 }
 
@@ -99,7 +112,19 @@ type SystemLine = {
   tone?: 'neutral' | 'error' | 'success';
 };
 
-type MessagePart = TextChunk | ToolCall | SystemLine;
+type ThoughtChunk = {
+  kind: 'thought';
+  text: string;
+};
+
+type PlanPart = {
+  kind: 'plan';
+  entries: Array<{ content: string; priority: string; status: string }>;
+};
+
+type MessagePart = TextChunk | ToolCall | SystemLine | ThoughtChunk | PlanPart | PermissionRequestPart;
+
+const PERMISSION_OUTCOMES = new Set(['allowed', 'denied', 'timed_out', 'cancelled']);
 
 type ChatMessage =
   | {
@@ -221,7 +246,11 @@ function formatToolInput(input: unknown): string {
   }
 }
 
-function AssistantBubble({ message }: { message: Extract<ChatMessage, { role: 'assistant' }> }) {
+function AssistantBubble({ message, agentName, onPermission }: {
+  message: Extract<ChatMessage, { role: 'assistant' }>;
+  agentName: string;
+  onPermission: (requestId: string, decision: 'allow' | 'deny') => void;
+}) {
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
 
   const applyToTarget = (content: string) => {
@@ -270,6 +299,26 @@ function AssistantBubble({ message }: { message: Extract<ChatMessage, { role: 'a
               )}
             </div>
           );
+        }
+        if (part.kind === 'thought') {
+          return (
+            <details key={idx} className="chat__thought" data-chat-part="thought">
+              <summary>Thinking</summary>
+              <p className="chat__thought-body">{part.text}</p>
+            </details>
+          );
+        }
+        if (part.kind === 'plan') {
+          return (
+            <ol key={idx} className="chat__plan" aria-label="Plan" data-chat-part="plan">
+              {part.entries.map((entry, i) => (
+                <li key={i} data-plan-status={entry.status} data-plan-priority={entry.priority}>{entry.content}</li>
+              ))}
+            </ol>
+          );
+        }
+        if (part.kind === 'permission') {
+          return <PermissionCard key={part.requestId} part={part} agentName={agentName} onDecision={onPermission} />;
         }
         if (part.kind === 'system') {
           const tone = part.tone ?? 'neutral';
@@ -371,18 +420,29 @@ export function ChatPanel() {
   const [input, setInput] = useState('');
   const [selection, setSelection] = useState<ChatSelection>(loadChatSelection);
   const agent = selection.agent;
+  const personal = isPersonalAgent(agent);
+  // Nebula's own runners have a model catalog; a personal agent picks its own model.
+  const providerAgent: ChatProvider | null = personal ? null : agent as ChatProvider;
+  const providerSelection = providerAgent ? selection[providerAgent] : NO_MODEL;
+  const [personalAgents, setPersonalAgents] = useState<PersonalAgentList | null>(null);
+  const [warningFor, setWarningFor] = useState<string | null>(null);
+  const personalAgent = personal
+    ? personalAgents?.agents.find((item) => `personal:${item.id}` === agent && item.status === 'ready') ?? null : null;
+  const agentDisplayName = personalAgent?.displayName ?? (agent === 'codex' ? 'Codex' : agent === 'claude' ? 'Claude' : 'Your agent');
   const [modelCatalog, setModelCatalog] = useState<ChatModelCatalog | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [catalogRefresh, setCatalogRefresh] = useState(0);
   const activeCatalog = modelCatalog?.agent === agent ? modelCatalog : null;
-  const model = selection[agent].model ?? activeCatalog?.models.find((item) => item.isDefault)?.id ?? null;
-  const effort = selection[agent].effort;
+  const model = personal ? null : providerSelection.model ?? activeCatalog?.models.find((item) => item.isDefault)?.id ?? null;
+  const effort = providerSelection.effort;
   const selectedModel = activeCatalog?.models.find((item) => item.id === model);
-  const selectionIssue = activeCatalog?.status !== 'ready'
+  const selectionIssue = personal
+    ? personalAgents && !personalAgent ? 'This agent is off or unavailable. Choose another in the picker.' : null
+    : activeCatalog?.status !== 'ready'
     ? 'Load the available models before sending.'
     : !selectedModel
-      ? selection[agent].model === null
+      ? providerSelection.model === null
         ? 'Choose an available model to continue.'
         : 'Your saved model is no longer available. Choose a model to continue.'
       : effort !== null && !selectedModel.supportedEfforts.some((item) => item.id === effort)
@@ -428,11 +488,25 @@ export function ChatPanel() {
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
+    const load = () => {
+      fetchPersonalAgents()
+        .then((list) => { if (!cancelled) setPersonalAgents(list); })
+        .catch(() => { if (!cancelled) setPersonalAgents((current) => current ?? { warningAcknowledged: false, agents: [] }); });
+    };
+    load();
+    window.addEventListener(PERSONAL_AGENTS_CHANGED_EVENT, load);
+    return () => { cancelled = true; window.removeEventListener(PERSONAL_AGENTS_CHANGED_EVENT, load); };
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible || !providerAgent) return;
+    const catalogAgent = providerAgent;
+    let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
       setCatalogLoading(true);
       setCatalogError(null);
-      fetchChatModels(agent, catalogRefresh > 0)
+      fetchChatModels(catalogAgent, catalogRefresh > 0)
         .then((catalog) => { if (!cancelled) setModelCatalog(catalog); })
         .catch((error: unknown) => {
           if (!cancelled) {
@@ -443,22 +517,22 @@ export function ChatPanel() {
         .finally(() => { if (!cancelled) setCatalogLoading(false); });
     });
     return () => { cancelled = true; };
-  }, [agent, visible, catalogRefresh, claudeStatus?.loggedIn, codexStatus?.loggedIn, codexStatus?.mode]);
+  }, [providerAgent, visible, catalogRefresh, claudeStatus?.loggedIn, codexStatus?.loggedIn, codexStatus?.mode]);
 
   const handleModelChange = useCallback((next: string) => {
-    if (busy || authorityPendingRef.current || !activeCatalog?.models.some((item) => item.id === next)) return;
+    if (!providerAgent || busy || authorityPendingRef.current || !activeCatalog?.models.some((item) => item.id === next)) return;
     const nextModel = activeCatalog.models.find((item) => item.id === next)!;
-    setSelection((current) => ({ ...current, [agent]: {
+    setSelection((current) => ({ ...current, [providerAgent]: {
       model: next,
-      effort: current[agent].effort !== null && nextModel.supportedEfforts.some((item) => item.id === current[agent].effort)
-        ? current[agent].effort : null,
+      effort: current[providerAgent].effort !== null && nextModel.supportedEfforts.some((item) => item.id === current[providerAgent].effort)
+        ? current[providerAgent].effort : null,
     } }));
-  }, [agent, activeCatalog, busy]);
+  }, [providerAgent, activeCatalog, busy]);
 
   const handleEffortChange = useCallback((next: string | null) => {
-    if (busy || authorityPendingRef.current || (next !== null && !selectedModel?.supportedEfforts.some((item) => item.id === next))) return;
-    setSelection((current) => ({ ...current, [agent]: { ...current[agent], effort: next } }));
-  }, [agent, selectedModel, busy]);
+    if (!providerAgent || busy || authorityPendingRef.current || (next !== null && !selectedModel?.supportedEfforts.some((item) => item.id === next))) return;
+    setSelection((current) => ({ ...current, [providerAgent]: { ...current[providerAgent], effort: next } }));
+  }, [providerAgent, selectedModel, busy]);
 
   useEffect(() => {
     if (agent !== 'claude') return;
@@ -672,15 +746,22 @@ export function ChatPanel() {
 
   // Switch the active agent. Each agent has its own session thread, so we
   // clear sessionId on change — the next turn starts fresh on the new agent.
+  // Set once wsRef exists (below): tells the backend to end a personal
+  // agent's session, which kills its process tree and revokes its token.
+  const closePersonalSessionRef = useRef<(id: string) => void>(() => {});
+
   const handleAgentChange = useCallback(
     (next: ChatAgent) => {
       if (next === agent || busy || authorityPendingRef.current) return;
 
+      if (personal && sessionId) closePersonalSessionRef.current(sessionId);
       setSelection((current) => ({ ...current, agent: next }));
       setSessionId(null);
-      setNotice(`Next message starts a new ${next === 'claude' ? 'Claude Code' : 'Codex'} conversation. Earlier messages stay here.`);
+      const nextName = next === 'claude' ? 'Claude Code' : next === 'codex' ? 'Codex'
+        : personalAgents?.agents.find((item) => `personal:${item.id}` === next)?.displayName ?? 'your agent';
+      setNotice(`Next message starts a new ${nextName} conversation. Earlier messages stay here.`);
     },
-    [agent, busy],
+    [agent, busy, personal, sessionId, personalAgents],
   );
 
   const changeBrand = useCallback((next: string) => {
@@ -693,6 +774,16 @@ export function ChatPanel() {
   }, [brand, busy]);
 
   const wsRef = useRef<WebSocket | null>(null);
+  useEffect(() => {
+    closePersonalSessionRef.current = (id: string) => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      void personTokenForSocket(ws.url).then((personToken) => {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ type: 'close_session', sessionId: id, ...(personToken ? { personToken } : {}) }));
+      });
+    };
+  }, []);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const busyRef = useRef(false);
   useEffect(() => {
@@ -930,6 +1021,65 @@ export function ChatPanel() {
             });
             return;
           }
+          if (type === 'thought') {
+            const text = String(event.text ?? '');
+            upsertAssistant((msg) => {
+              const parts = [...msg.parts];
+              const last = parts[parts.length - 1];
+              if (last && last.kind === 'thought') parts[parts.length - 1] = { kind: 'thought', text: last.text + text };
+              else parts.push({ kind: 'thought', text });
+              return { ...msg, parts };
+            });
+            return;
+          }
+          if (type === 'plan') {
+            const entries = Array.isArray(event.entries) ? (event.entries as Array<Record<string, unknown>>).map((entry) => ({
+              content: String(entry.content ?? ''), priority: String(entry.priority ?? 'medium'), status: String(entry.status ?? 'pending'),
+            })) : [];
+            // A plan update replaces the whole plan.
+            upsertAssistant((msg) => {
+              const index = msg.parts.findIndex((part) => part.kind === 'plan');
+              const parts = [...msg.parts];
+              if (index >= 0) parts[index] = { kind: 'plan', entries };
+              else parts.push({ kind: 'plan', entries });
+              return { ...msg, parts };
+            });
+            return;
+          }
+          if (type === 'permission_request') {
+            const part: PermissionRequestPart = {
+              kind: 'permission',
+              requestId: String(event.requestId ?? ''),
+              title: String(event.title ?? 'The agent wants to use a tool'),
+              toolKind: String(event.kind ?? 'other'),
+              input: event.input,
+              canAllow: Boolean(event.canAllow),
+              timeoutSeconds: Number(event.timeoutSeconds) > 0 ? Number(event.timeoutSeconds) : 120,
+              receivedAt: Date.now(),
+              status: 'pending',
+            };
+            upsertAssistant((msg) => ({ ...msg, parts: [...msg.parts, part] }));
+            return;
+          }
+          if (type === 'permission_resolved') {
+            const requestId = String(event.requestId ?? '');
+            const outcome = String(event.outcome ?? '');
+            if (!PERMISSION_OUTCOMES.has(outcome)) return;
+            upsertAssistant((msg) => ({
+              ...msg,
+              parts: msg.parts.map((part) => part.kind === 'permission' && part.requestId === requestId
+                ? { ...part, status: outcome as PermissionStatus } : part),
+            }));
+            return;
+          }
+          if (type === 'system') {
+            const text = String(event.text ?? '');
+            if (text) upsertAssistant((msg) => ({ ...msg, parts: [...msg.parts, { kind: 'system', text }] }));
+            return;
+          }
+          if (type === 'session_closed') {
+            return;
+          }
           if (type === 'tool_use') {
             const toolUseId = String(event.toolUseId ?? '');
             const tool = String(event.tool ?? '');
@@ -961,6 +1111,11 @@ export function ChatPanel() {
           if (type === 'error') {
             const errText = String(event.message ?? 'unknown error');
             if (event.code === 'person_required') reportPersonRequired();
+            // The personal agent stopped (crash, idle timeout, closed): the next send starts a new one.
+            if (event.code === 'personal_session_ended') setSessionId(null);
+            if (event.code === 'personal_agent_warning_required') {
+              setPersonalAgents((current) => current ? { ...current, warningAcknowledged: false } : current);
+            }
             if (['model_unsupported', 'effort_unsupported', 'model_required', 'auth_required'].includes(String(event.code))) {
               setCatalogRefresh((value) => value + 1);
             }
@@ -1241,6 +1396,7 @@ export function ChatPanel() {
       return;
     }
     if (raw === '/clear') {
+      if (personal && sessionId) closePersonalSessionRef.current(sessionId);
       setSessionId(null);
       // Also wipe cli_graph on the backend so Claude starts with a clean canvas,
       // not whatever nodes accumulated from prior sessions. graphSync handles the
@@ -1261,7 +1417,11 @@ export function ChatPanel() {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (busyRef.current || authorityPendingRef.current) return;
-    if (catalogLoading || selectionIssue) { setNotice(selectionIssue || 'Models are loading.'); return; }
+    if (personal) {
+      if (selectionIssue) { setNotice(selectionIssue); return; }
+      // The one-time notice comes before Nebula starts any personal agent.
+      if (!personalAgents?.warningAcknowledged) { setWarningFor(agent); return; }
+    } else if (catalogLoading || selectionIssue) { setNotice(selectionIssue || 'Models are loading.'); return; }
     // Every turn carries the person token (the backend starts none without it).
     let authority: Awaited<ReturnType<typeof chatAuthority>> = {};
     authorityPendingRef.current = true;
@@ -1302,12 +1462,13 @@ export function ChatPanel() {
           .map((node) => node.id),
         sessionId,
         ...authority,
-        model,
-        effort,
+        ...(personal ? {} : { model, effort }),
         agent,
       }),
     );
   }, [
+    personal,
+    personalAgents,
     input,
     model,
     effort,
@@ -1328,6 +1489,35 @@ export function ChatPanel() {
   useEffect(() => {
     sendRef.current = send;
   }, [send]);
+
+  const answerPermission = useCallback((requestId: string, decision: 'allow' | 'deny') => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    upsertAssistant((msg) => ({
+      ...msg,
+      parts: msg.parts.map((part) => part.kind === 'permission' && part.requestId === requestId && part.status === 'pending'
+        ? { ...part, status: 'sent' } : part),
+    }));
+    void personTokenForSocket(ws.url).then((personToken) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: 'permission', requestId, decision, ...(personToken ? { personToken } : {}) }));
+    });
+  }, [upsertAssistant]);
+
+  // After the person accepts the notice, send what they typed once the
+  // acknowledged state has rendered (send reads it).
+  const sendAfterWarningRef = useRef(false);
+  const acceptWarning = useCallback(async () => {
+    await acknowledgePersonalAgentWarning();
+    sendAfterWarningRef.current = true;
+    setPersonalAgents((current) => current ? { ...current, warningAcknowledged: true } : current);
+    setWarningFor(null);
+  }, []);
+  useEffect(() => {
+    if (!sendAfterWarningRef.current || !personalAgents?.warningAcknowledged) return;
+    sendAfterWarningRef.current = false;
+    sendRef.current();
+  }, [personalAgents?.warningAcknowledged, send]);
 
   const cancel = useCallback(() => {
     const ws = wsRef.current;
@@ -1557,7 +1747,7 @@ export function ChatPanel() {
       ref={chatPanelRef}
       role="dialog"
       aria-label="Chat"
-      className={`chat-panel chat-panel--agent-${agent}${isFreePositioned ? ' chat-panel--free' : ''}${exiting ? ' chat-panel--exiting' : ''}`}
+      className={`chat-panel chat-panel--agent-${personal ? 'personal' : agent}${isFreePositioned ? ' chat-panel--free' : ''}${exiting ? ' chat-panel--exiting' : ''}`}
       style={panelStyle}
       onMouseDown={startPanelDrag}
       data-chat-agent={agent}
@@ -1581,7 +1771,7 @@ export function ChatPanel() {
         <div>
           <div className="chat-panel__title">Chat</div>
           <ChatModelPicker
-            agent={agent} model={selection[agent].model} effort={effort}
+            agent={agent} personalAgents={personalAgents?.agents ?? []} model={providerSelection.model} effort={effort}
             catalog={activeCatalog} loading={catalogLoading} error={catalogError}
             disabled={busy || authorizing}
             onAgentChange={handleAgentChange} onModelChange={handleModelChange}
@@ -1595,9 +1785,16 @@ export function ChatPanel() {
           </label>}
           {commonsEnabled && <p className="chat-panel__scope-hint">Private reference chats: Claude or Codex.</p>}
           <div className="chat-panel__meta" onMouseDown={(e) => e.stopPropagation()}>
-            <span title={agent === 'claude' ? claudeStatus?.message || claudeStatusError || undefined : codexStatus?.message || codexStatusError || undefined}>
-              {agent === 'claude' ? claudeStatusLabel : codexStatusLabel}
-            </span>
+            {personal ? (
+              <span data-chat-personal-agent={personalAgent?.id ?? ''}>
+                <span className="chat-panel__personal-dot" style={{ background: personalAgent?.color ?? '#888' }} aria-hidden="true" />
+                {agentDisplayName} · your agent
+              </span>
+            ) : (
+              <span title={agent === 'claude' ? claudeStatus?.message || claudeStatusError || undefined : codexStatus?.message || codexStatusError || undefined}>
+                {agent === 'claude' ? claudeStatusLabel : codexStatusLabel}
+              </span>
+            )}
             <span> · {status}</span>
             {sessionId && (
               <span className="chat-panel__session" title={sessionId}>
@@ -1664,10 +1861,13 @@ export function ChatPanel() {
           }
           // Thinking events are routed to the Agent Log, not rendered in chat.
           if (m.role === 'thinking') return null;
-          return <AssistantBubble key={m.id} message={m} />;
+          return <AssistantBubble key={m.id} message={m} agentName={agentDisplayName} onPermission={answerPermission} />;
         })}
       </div>
 
+      {warningFor && (
+        <PersonalAgentWarning agentName={agentDisplayName} onAccept={acceptWarning} onCancel={() => setWarningFor(null)} />
+      )}
       <div className="chat-panel__input">
         {agentConnectHint && (
           <details
@@ -1954,7 +2154,7 @@ export function ChatPanel() {
               aria-label="Send message"
               title={selectionIssue || (catalogLoading ? 'Models are loading.' : 'Send message')}
               disabled={
-                !connected || authorizing || catalogLoading || Boolean(selectionIssue) ||
+                !connected || authorizing || (!personal && catalogLoading) || Boolean(selectionIssue) ||
                 !input.trim() ||
                 pendingImages.some((p) => p.status === 'uploading')
               }

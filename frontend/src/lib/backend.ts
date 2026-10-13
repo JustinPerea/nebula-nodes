@@ -266,7 +266,7 @@ function shouldRetryWithDiscovery(baseUrl: string, response?: Response): boolean
 // the person). Every write carries it. Other reads don't, so a plain GET never
 // carries the secret. The packaged app sends it on every request to its own
 // sidecar, whose opaque file: origin can only read replies that carry it.
-const PERSON_READ_PREFIXES = ['/api/agent/spend', '/api/krea/'];
+const PERSON_READ_PREFIXES = ['/api/agent/spend', '/api/krea/', '/api/personal-agents'];
 
 function wantsPersonHeader(path: string, method: string): boolean {
   if (getInjectedApiBaseUrl()) return true;
