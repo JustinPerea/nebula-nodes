@@ -553,3 +553,56 @@ async def test_gemini_embeddings_output_dimensionality_camelcase():
     body = mock_client_instance.post.call_args.kwargs.get("json") or mock_client_instance.post.call_args[1].get("json")
     assert "output_dimensionality" not in body, "snake_case key is wrong; API requires camelCase outputDimensionality"
     assert body.get("outputDimensionality") == 768
+
+
+def _tts_client(inline_data):
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"candidates": [{"content": {"parts": [{"inlineData": inline_data}]}}]}
+    client = AsyncMock()
+    client.post.return_value = mock_resp
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    return client
+
+
+@pytest.mark.asyncio
+async def test_gemini_3_8_tts_wav_is_saved_as_is(tmp_path):
+    """3.8 TTS returns a whole WAV file; wrapping it again would put a header inside the audio."""
+    import io, wave
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(24000); wf.writeframes(b"\x01\x00" * 10)
+    wav = buf.getvalue()
+    client = _tts_client({"mimeType": "audio/wav", "data": base64.b64encode(wav).decode()})
+
+    with patch("handlers.google_gemini.httpx.AsyncClient", return_value=client), \
+            patch("handlers.google_gemini.get_run_dir", return_value=tmp_path):
+        result = await handle_gemini_tts(
+            _make_tts_node({"voiceName": "Kore"}),
+            {"text": PortValueDict(type="Text", value="Hello")},
+            {"GOOGLE_API_KEY": "test-key"},
+        )
+
+    assert Path(result["audio"]["value"]).read_bytes() == wav
+    url = client.post.call_args.args[0]
+    assert url.endswith("/gemini-3.8-flash-tts:generateContent"), "the default is 3.8 Flash TTS"
+
+
+@pytest.mark.asyncio
+async def test_gemini_legacy_tts_pcm_gets_a_header_at_its_rate(tmp_path):
+    import wave
+    pcm = b"\x01\x00" * 8
+    client = _tts_client({"mimeType": "audio/L16;codec=pcm;rate=16000", "data": base64.b64encode(pcm).decode()})
+
+    with patch("handlers.google_gemini.httpx.AsyncClient", return_value=client), \
+            patch("handlers.google_gemini.get_run_dir", return_value=tmp_path):
+        result = await handle_gemini_tts(
+            _make_tts_node(),
+            {"text": PortValueDict(type="Text", value="Hello")},
+            {"GOOGLE_API_KEY": "test-key"},
+        )
+
+    with wave.open(result["audio"]["value"], "rb") as wf:
+        assert wf.getframerate() == 16000
+        assert wf.readframes(8) == pcm

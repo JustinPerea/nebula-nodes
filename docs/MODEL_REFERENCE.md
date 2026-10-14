@@ -4235,7 +4235,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gemini-2.5-flash-preview-tts | Gemini 3.1 Flash TTS (preview), 2.5 Flash TTS, 2.5 Pro TTS |
+| Model | enum | gemini-3.8-flash-tts | Gemini 3.1 Flash TTS (preview, shuts down Nov 17, 2026), 2.5 Flash TTS (shuts down Nov 17, 2026), 2.5 Pro TTS (shuts down Nov 17, 2026), 3.8 Flash TTS, 3.8 Flash-Lite TTS |
 | Voice | enum | Kore | Zephyr — Bright, Puck — Upbeat, Charon — Informative, Kore — Firm, Fenrir — Excitable, Leda — Youthful, Orus — Firm, Aoede — Breezy, … |
 
 ---

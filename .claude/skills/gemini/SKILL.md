@@ -30,7 +30,7 @@ Nebula exposes Google's generative stack as **7 nodes**, all keyed on one `GOOGL
    - **Nano Banana / Veo have no transparent-background mode.** Ask for "white background" in the prompt for stickers/cutouts.
    - **Veo outputs expire on Google's side (~2 days).** Nebula downloads the MP4 to the run folder automatically on completion, so the local copy is yours; don't rely on the remote URI later.
    - **Lyria WAV uses a proto-enum mime.** When `outputFormat=wav` on the Pro model, the handler sends `responseFormat.audio.mimeType = "AUDIO_WAV"` (not the literal `"audio/wav"`, which the API rejects). WAV is Pro-only; the Clip model returns MP3.
-   - **TTS audio is raw PCM.** The model returns 24 kHz / 16-bit / mono PCM; the handler wraps it into a `.wav`. Output is always WAV regardless of model.
+   - **TTS audio format depends on the model.** 3.8 TTS returns a complete WAV (RIFF header), saved as is; 3.1/2.5 returned headerless 24 kHz / 16-bit / mono PCM, which the handler wraps. Output is always WAV. 3.8 reads the text as a verbatim transcript, so an inline direction like "Say cheerfully:" may be spoken.
    - **Embeddings output is text, not a vector type.** The `embedding` port is a JSON-stringified float array (`Text`), and `dimensions` is the count as a string — so downstream nodes receive text you parse yourself.
 
 ## Pick the right node
@@ -43,7 +43,7 @@ One row per Nebula Google node. IDs, ports, and param keys are ground-truth from
 | Nano Banana | `nano-banana` | image-gen · **sync** | `:generateContent` | `prompt` (Text, req), `images` (Image, multi) → `image`, `text` | `gemini-3.1-flash-image` (default, "Nano Banana 2"), `gemini-nano-banana-2.1` ("Nano Banana 2.1", Interactions API), `gemini-3.1-flash-lite-image` ("2 Lite"), `gemini-3-pro-image` ("Pro"), `gemini-2.5-flash-image` ("2.5 Flash") | `aspect_ratio`, `imageSize` (512/1K/2K/4K) |
 | Veo 3.1 | `veo-3` | video-gen · **async-poll** | `:predictLongRunning` → poll (Vertex, then Gemini API, then fal) | `prompt` (Text, req), `image` (First Frame), `last_frame` (Last Frame), `video` (Extend Video) → `video`, `source_uri` | `veo-3.1-generate-001` (default), `veo-3.1-fast-generate-001`, `veo-3.1-lite-generate-001` | `aspectRatio`, `duration`, `resolution`, `personGeneration`, `seed` (direct); `negative_prompt`/`safety_tolerance` (FAL path only) |
 | Lyria 3 | `lyria-3` | audio-gen · **sync** | `:generateContent` | `prompt` (Text, req), `images` (Image, multi) → `audio`, `text` (Lyrics) | `lyria-3-clip-preview` (default, 30 s), `lyria-3-pro-preview` (full song) | `outputFormat` (MP3/WAV — WAV is Pro-only) |
-| Gemini TTS | `gemini-tts` | audio-gen · **sync** | `:generateContent` | `text` (Text, req) → `audio` | `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts` (default), `gemini-2.5-pro-preview-tts` | `voiceName` (30 voices) |
+| Gemini TTS | `gemini-tts` | audio-gen · **sync** | `:generateContent` | `text` (Text, req) → `audio` | `gemini-3.8-flash-tts` (default), `gemini-3.8-flash-lite-tts`; `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts` shut down 2026-11-17 | `voiceName` (30 voices) |
 | Gemini Embeddings | `gemini-embeddings` | utility · **sync** | `:embedContent` | `text` (Text, req) → `embedding`, `dimensions` | `gemini-embedding-001` (default, text), `gemini-embedding-2-preview` (multimodal — reaches API as text only) | `taskType` (8 enums), `outputDimensionality` (768/1536/3072) |
 | Style Reference | `style-reference` | utility · **sync** | `gemini-2.5-flash:generateContent` | **no input port** → `image` (Reference), `style_description` (Style) | fixed `gemini-2.5-flash` | `filePath` (req), `mode`, `manual_description`, `focus`, `strength` |
 
@@ -98,7 +98,7 @@ Displayed as "Veo 3.1". Params split three ways in the def (this is a multi-rout
 - Sends `responseModalities: ["AUDIO","TEXT"]`.
 
 ### `gemini-tts`
-- `model` (enum, default `gemini-2.5-flash-preview-tts`): `gemini-3.1-flash-tts-preview` (added 2026-06-10) · `gemini-2.5-flash-preview-tts` · `gemini-2.5-pro-preview-tts`.
+- `model` (enum, default `gemini-3.8-flash-tts`): `gemini-3.1-flash-tts-preview` · `gemini-2.5-flash-preview-tts` · `gemini-2.5-pro-preview-tts` (all three shut down 2026-11-17) · `gemini-3.8-flash-tts` · `gemini-3.8-flash-lite-tts` (added 2026-10-14). From 2026-11-17 saved nodes move: 2.5 Flash/Pro → 3.8 Flash, 3.1 Flash → 3.8 Flash-Lite (`backend/services/retired_nodes.py`).
 - `voiceName` (enum, default `Kore`) — **30 prebuilt voices**, each labeled with a character: e.g. `Kore` (Firm), `Puck` (Upbeat), `Zephyr` (Bright), `Charon` (Informative), `Fenrir` (Excitable), `Leda` (Youthful), `Aoede` (Breezy), `Enceladus` (Breathy), `Algieba` (Smooth), `Sulafat` (Warm), `Achird` (Friendly), `Gacrux` (Mature) … through `Sadaltager` (Knowledgeable). Pick by the vibe label.
 - Input: `text` (req) — this is the script to speak. Output: `audio` (WAV).
 - Single-speaker only; sends `speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName`.
@@ -157,7 +157,7 @@ Never promise these through the current nodes — they exist in the Google API b
 - **Nano Banana:** image-search grounding and explicit `thinkingLevel` control are not surfaced (text-to-image, edit, and multi-image compose are).
 - **Imagen:** retired by Google (2026-08-17); no Imagen node remains.
 - **Veo:** **reference images (up to 3)** are not exposed; negative prompt only via the FAL route; extension isn't available on FAL.
-- **TTS:** **multi-speaker (2-voice) dialogue** is not surfaced — single-speaker only (the 3.1 Flash TTS preview model joined the enum 2026-06-10).
+- **TTS:** **multi-speaker (2-voice) dialogue** is not surfaced — single-speaker only. `speech_metadata.style` (3.8 delivery direction) is not exposed either.
 - **Lyria:** **Lyria RealTime** (streaming/WebSocket music, weighted-prompt steering) is not exposed — only the batch Clip/Pro models.
 - **Embeddings:** **true multimodal embedding** (image/audio/video/PDF via Embedding 2) only reaches the API as text here.
 - **Operational endpoints — none:** no Live API (realtime voice), no Computer Use, no File Search / managed RAG, no Batch API, no context caching, no token counting.

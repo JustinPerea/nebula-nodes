@@ -173,10 +173,10 @@ Outputs: `audio` (Audio), `text` (Text — lyrics/structure).
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `model` | `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts` | `gemini-2.5-flash-preview-tts` | 3.1 Flash TTS added 2026-05-17. |
+| `model` | `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`, `gemini-3.8-flash-tts`, `gemini-3.8-flash-lite-tts` | `gemini-3.8-flash-tts` | 3.8 Flash/Flash-Lite added 2026-10-14. The other three shut down 2026-11-17; from then saved nodes move 2.5 → 3.8 Flash, 3.1 → 3.8 Flash-Lite. |
 | `voiceName` | named voice (`Kore`, `Zephyr`, `Puck`, `Charon`, `Fenrir`, `Leda`, `Orus`, `Aoede`, `Callirrhoe`, `Autonoe`, `Enceladus`, `Iapetus`, `Umbriel`, `Algieba`, `Despina`, `Erinome`, `Algenib`, `Rasalgethi`, `Laomedeia`, `Achernar`, `Alnilam`, `Schedar`, `Gacrux`, `Pulcherrima`, `Achird`, `Zubenelgenubi`, `Vindemiatrix`, `Sadachbia`, `Sadaltager`, `Sulafat`) | `Kore` | Voices are fixed catalog strings. |
 
-TTS returns raw PCM (24 kHz, 16-bit, mono). Handler wraps in WAV container before saving. Audio bytes at `candidates[0].content.parts[0].inlineData.data`.
+3.8 TTS returns a complete WAV (RIFF header) on unary requests and the handler saves it as is; 3.1/2.5 returned raw PCM (24 kHz, 16-bit, mono), which the handler wraps in a WAV container. 3.8 reads the text as a verbatim transcript, so inline stage directions may be spoken. Audio bytes at `candidates[0].content.parts[0].inlineData.data`.
 
 Inputs: `text` (Text, required).
 Output: `audio` (Audio).
@@ -286,7 +286,7 @@ When choosing a Gemini-family node:
 | Image with legible text or precise layout | `nano-banana` | `gemini-3-pro-image` |
 | Cheapest single-image baseline | `nano-banana` | `gemini-2.5-flash-image` |
 | Character consistency across shots | `nano-banana` | `gemini-3.1-flash-image`, stay within 4 character refs |
-| Voice narration | `gemini-tts` | `gemini-2.5-pro-preview-tts` for fidelity, Flash TTS for cost |
+| Voice narration | `gemini-tts` | `gemini-3.8-flash-tts` for fidelity, `gemini-3.8-flash-lite-tts` for cost |
 | Text or multimodal embeddings | `gemini-embeddings` | `gemini-embedding-001` for text, multimodal option once Nebula switches to stable ID |
 
 Before building a graph:

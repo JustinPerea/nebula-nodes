@@ -243,10 +243,10 @@ async def _capture_google_body(fixture_name: str) -> dict[str, Any]:
             return _post_json(inst)
 
     if fixture_name == "gemini-tts-generate-request.json":
-        pcm_b64 = base64.b64encode(struct.pack("<h", 0)).decode()
+        wav_b64 = base64.b64encode(b"RIFF" + b"\x00" * 40).decode()
         payload = {
             "candidates": [{
-                "content": {"parts": [{"inlineData": {"mimeType": "audio/pcm", "data": pcm_b64}}]},
+                "content": {"parts": [{"inlineData": {"mimeType": "audio/wav", "data": wav_b64}}]},
             }],
         }
         with patch("handlers.google_gemini.httpx.AsyncClient") as MockClient:
@@ -256,7 +256,7 @@ async def _capture_google_body(fixture_name: str) -> dict[str, Any]:
                 GraphNode(
                     id="fixture-tts",
                     definitionId="gemini-tts",
-                    params={"model": "gemini-2.5-flash-preview-tts", "voiceName": "Kore"},
+                    params={"model": "gemini-3.8-flash-tts", "voiceName": "Kore"},
                 ),
                 {"text": PortValueDict(type="Text", value="Hello world")},
                 {"GOOGLE_API_KEY": "test-key"},

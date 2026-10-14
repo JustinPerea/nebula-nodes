@@ -3286,3 +3286,19 @@ deprecations/model pages/image guide, Meshy openapi.yaml and llms.txt, Gemini sp
   text-to-3d, smart-topology on the fal image-to-3d route (model_type is a direct-only param there). Meshy says
   7/7.1/T2 need account entitlement while `latest` (the default) resolves to 7.1; couldn't verify what an
   unentitled account gets without a real call.
+
+### Gemini TTS (gemini-tts)
+
+- Google shuts down all three TTS models the node offered (2.5 Flash, 2.5 Pro, 3.1 Flash previews) on 2026-11-17
+  and names "gemini-3.8-flash-tts or gemini-3.8-flash-lite-tts". Appended both 3.8 options after the existing three
+  (order kept), labelled the old three with the shutdown date, and moved the default (node + handler fallback)
+  from 2.5 Flash to **3.8 Flash TTS**. That default change is deliberate: a new node shouldn't start on a model
+  that dies in a month. It also means a saved node with no stored `model` now runs 3.8 Flash.
+- Date-gated migration from 11-17: 2.5 Flash and 2.5 Pro → 3.8 Flash (the fidelity model; Pro users wanted
+  quality), 3.1 Flash → 3.8 Flash-Lite (Google: "recommended replacement for gemini-3.1-flash-tts-preview").
+- Handler fix that has to ship before people pick 3.8: 3.8 returns a whole WAV file (RIFF header) on unary calls,
+  where 3.1/2.5 returned raw PCM. The old code always wrapped bytes in a new WAV header, which would have put a
+  44-byte header inside the audio. `_write_tts_wav` now writes RIFF / `wav`-mime bytes as is and only wraps raw
+  PCM, taking the rate from the mime type's `rate=`. Request body unchanged (same 30 prebuilt voices).
+- Not done: `speech_metadata.style` (3.8's way to give delivery direction; inline "Say cheerfully:" may now be
+  spoken). That's a new param, not a retirement fix. No pricing rows exist for gemini-tts, so none were added.

@@ -47,9 +47,11 @@ The Gemini API preview ids above shut down on 2026-10-22, and Nebula's `veo-3` n
 
 | ID | Role |
 |---|---|
-| `gemini-3.1-flash-tts-preview` | Low-latency TTS with expressive tags |
-| `gemini-2.5-flash-preview-tts` | Fast controllable TTS |
-| `gemini-2.5-pro-preview-tts` | High-fidelity for podcast/audiobook |
+| `gemini-3.8-flash-tts` | Flagship-fidelity TTS (Nebula default). Text is a verbatim transcript; put delivery in `speech_metadata.style`. Unary output is WAV |
+| `gemini-3.8-flash-lite-tts` | Cheaper, lower-latency 3.8 TTS; Google's recommended replacement for 3.1 Flash TTS |
+| `gemini-3.1-flash-tts-preview` | Shuts down 2026-11-17 (replacement: 3.8 Flash-Lite TTS) |
+| `gemini-2.5-flash-preview-tts` | Shuts down 2026-11-17 (replacement: 3.8 Flash TTS) |
+| `gemini-2.5-pro-preview-tts` | Shuts down 2026-11-17 (replacement: 3.8 Flash TTS) |
 
 ## Embeddings
 

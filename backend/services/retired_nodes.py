@@ -42,6 +42,13 @@ Some nodes stay but lose a model option (``RETIRED_PARAMS``):
   a saved lowpoly node moves to smart-topology. Smart topology makes triangles
   only, at most 15,000 faces, so quad becomes triangle and a larger polycount
   becomes 15,000.
+- The Gemini API shuts down ``gemini-2.5-flash-preview-tts``,
+  ``gemini-2.5-pro-preview-tts`` and ``gemini-3.1-flash-tts-preview`` on
+  2026-11-17 and names "gemini-3.8-flash-tts or gemini-3.8-flash-lite-tts"
+  (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-14).
+  From that date the 2.5 models move to 3.8 Flash TTS and 3.1 Flash moves to
+  3.8 Flash-Lite TTS, which Google calls the "recommended replacement for
+  gemini-3.1-flash-tts-preview". Voices are the same 30.
 
 A migration for a shutdown that is still ahead is date-gated (``_today``):
 until the shutdown the saved value keeps working and stays as it is.
@@ -175,6 +182,13 @@ def _meshy_params(params: dict[str, Any]) -> dict[str, Any]:
             migrated["target_polycount"] = MESHY_SMART_TOPOLOGY_MAX_POLYCOUNT
     return migrated
 
+GEMINI_TTS_PREVIEWS_SHUTDOWN = date(2026, 11, 17)
+_GEMINI_TTS_MODELS = {
+    "gemini-2.5-flash-preview-tts": "gemini-3.8-flash-tts",
+    "gemini-2.5-pro-preview-tts": "gemini-3.8-flash-tts",
+    "gemini-3.1-flash-tts-preview": "gemini-3.8-flash-lite-tts",
+}
+
 RETIRED_PARAMS: dict[str, Any] = {
     "veo-3": _veo_params,
     "gpt-image-1-generate": _model_after(GPT_IMAGE_1_SHUTDOWN, {"gpt-image-1": "gpt-image-2.5-flare"}),
@@ -183,6 +197,7 @@ RETIRED_PARAMS: dict[str, Any] = {
     "meshy-image-to-3d": _meshy_params,
     "meshy-multi-image-to-3d": _meshy_params,
     "meshy-retexture": _meshy_params,
+    "gemini-tts": _model_after(GEMINI_TTS_PREVIEWS_SHUTDOWN, _GEMINI_TTS_MODELS),
 }
 
 

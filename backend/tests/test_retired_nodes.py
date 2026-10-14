@@ -151,3 +151,28 @@ def test_meshy_migration_targets_are_node_options():
         assert "meshy-6" in values["ai_model"] and "meshy-5" not in values["ai_model"]
         if "model_type" in values:
             assert "smart-topology" in values["model_type"]
+
+
+@pytest.mark.parametrize("saved,replacement", [
+    ("gemini-2.5-flash-preview-tts", "gemini-3.8-flash-tts"),
+    ("gemini-2.5-pro-preview-tts", "gemini-3.8-flash-tts"),
+    ("gemini-3.1-flash-tts-preview", "gemini-3.8-flash-lite-tts"),
+])
+def test_gemini_tts_previews_move_to_3_8_from_their_shutdown(saved, replacement):
+    params = {"model": saved, "voiceName": "Charon"}
+    with _on(date(2026, 11, 16)):
+        assert migrate_node("gemini-tts", params)[1] == params, "it still works until 2026-11-17"
+    with _on(date(2026, 11, 17)):
+        assert migrate_node("gemini-tts", params) == ("gemini-tts", {"model": replacement, "voiceName": "Charon"}, None)
+
+
+def test_gemini_tts_replacements_are_offered_and_default():
+    from services.node_registry import NodeRegistry
+
+    model = next(p for p in NodeRegistry().get_all()["gemini-tts"]["params"] if p["key"] == "model")
+    values = [o["value"] for o in model["options"]]
+    assert set(retired_nodes._GEMINI_TTS_MODELS.values()) <= set(values)
+    assert model["default"] == "gemini-3.8-flash-tts"
+    assert values[:3] == [
+        "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts",
+    ], "saved option order is kept"
