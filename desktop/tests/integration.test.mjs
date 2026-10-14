@@ -174,7 +174,7 @@ describe('Electron integration — managed sidecar startup', () => {
     assert.notEqual(result.exitCode, 0, 'Should exit non-zero on invalid Python');
   });
 
-  test('early-exit fixture surfaces failure with exit metadata', { timeout: 30_000 }, async () => {
+  test('early-exit fixture surfaces failure with exit metadata', { timeout: 30_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
     const userData = mkTemp();
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
@@ -190,13 +190,12 @@ describe('Electron integration — managed sidecar startup', () => {
     const smoke = parseSmokeLine(result.stdout);
     assert.ok(smoke, 'NEBULA_DESKTOP_SMOKE JSON line not found');
     assert.equal(smoke.passed, false);
-    // Should contain exit code or early-exit type
-    assert.ok(
-      smoke.error?.exitCode === 7 ||
-      smoke.error?.type === 'early_exit' ||
-      smoke.error?.message?.includes('7'),
-      'Error should contain exit code 7 or early_exit type',
-    );
+    // Without the renderer the app fails before the sidecar starts (that's
+    // why this skips unbuilt), so check the sidecar's own error, not just
+    // any message with a 7 in it: a checkout path can contain one.
+    assert.equal(smoke.error?.type, 'early_exit', `Expected an early_exit error: ${JSON.stringify(smoke.error)}`);
+    assert.equal(smoke.error?.exitCode, 7);
+    assert.ok(smoke.error?.message?.includes('DISTINCTIVE_EARLY_EXIT_MARKER'), 'Error should carry the sidecar stderr');
     assert.notEqual(result.exitCode, 0);
   });
 
