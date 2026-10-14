@@ -593,6 +593,63 @@
         "provider": "krea",
         "key": "KREA_API_TOKEN"
       }
+    },
+    {
+      "name": "xAI key wins over the fal key on Grok Imagine Edit, without output_format",
+      "nodeId": "grok-imagine-image-edit",
+      "params": {},
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "xai",
+        "key": "XAI_API_KEY"
+      },
+      "paramKeys": [
+        "num_images",
+        "resolution"
+      ]
+    },
+    {
+      "name": "xAI key wins over the Krea token on Grok Imagine 2.0 Edit",
+      "nodeId": "krea-image-xai-grok-imagine-2-edit",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "xai",
+        "key": "XAI_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "image_urls",
+        "prompt",
+        "quality",
+        "resolution"
+      ]
+    },
+    {
+      "name": "the Krea plan wins over the xAI key on Grok Imagine 2.0 Edit",
+      "nodeId": "krea-image-xai-grok-imagine-2-edit",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
     }
   ]
 }
