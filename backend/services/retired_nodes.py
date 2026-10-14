@@ -10,6 +10,14 @@ Imagen 4 (all three models) was shut down by Google on 2026-08-17; Google
 names Nano Banana 2.1 as the replacement
 (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-10).
 
+OpenAI shut down the Sora 2 API on 2026-09-24 and says "There is no one-to-one
+replacement API" (https://developers.openai.com/api/docs/models/sora-2,
+checked 2026-10-14); fal's sora-2 endpoints ran on it. Saved Sora 2 nodes
+become Veo 3.1 Fast, the closest maker-direct match: text or first frame to
+video with sound, at the same $0.10/s at 720p that Sora 2 listed. Sora 2 Pro
+becomes Veo 3.1. Veo stops at 8 s, so a longer Sora clip becomes 8 s. The title
+says what happened, and the retirement message names the other choices.
+
 Some nodes stay but lose a model option (``RETIRED_PARAMS``):
 
 - Veo 3.0, 3.0 Fast and 2.0 were shut down on 2026-06-30, so a saved ``veo-3``
@@ -60,6 +68,28 @@ def _from_imagen_4(params: dict[str, Any]) -> dict[str, Any]:
     return migrated
 
 
+SORA_2_LABEL = "Veo 3.1 Fast (was Sora 2)"
+SORA_2_I2V_LABEL = "Veo 3.1 Fast (was Sora 2 Image-to-Video)"
+_SORA_ALTERNATIVES = ("grok-imagine-video", "runway-video")
+
+
+def _from_sora_2(params: dict[str, Any]) -> dict[str, Any]:
+    pro = str(params.get("model") or "").lower() == "pro"
+    migrated: dict[str, Any] = {"model": "veo-3.1-generate-001" if pro else "veo-3.1-fast-generate-001"}
+    if params.get("aspect_ratio") in ("16:9", "9:16"):
+        migrated["aspectRatio"] = params["aspect_ratio"]
+    if params.get("resolution") in ("720p", "1080p"):
+        migrated["resolution"] = params["resolution"]
+    try:
+        seconds = int(str(params.get("duration")).rstrip("s"))
+    except ValueError:
+        seconds = None
+    if seconds is not None:
+        migrated["duration"] = "4" if seconds <= 4 else "6" if seconds <= 6 else "8"
+    migrated.update({k: v for k, v in params.items() if k.startswith("_")})
+    return migrated
+
+
 RETIRED: dict[str, dict[str, Any]] = {
     "imagen-4-generate": {
         "replacement": "nano-banana",
@@ -67,6 +97,22 @@ RETIRED: dict[str, dict[str, Any]] = {
         "displayName": "Imagen 4",
         "params": _from_imagen_4,
         "reason": "Google shut down Imagen 4 on 2026-08-17",
+    },
+    "sora-2": {
+        "replacement": "veo-3",
+        "label": SORA_2_LABEL,
+        "displayName": "Sora 2 (sunsets Sep '26)",
+        "params": _from_sora_2,
+        "reason": "OpenAI shut down the Sora 2 API on 2026-09-24 and names no replacement",
+        "alternatives": _SORA_ALTERNATIVES,
+    },
+    "sora-2-i2v": {
+        "replacement": "veo-3",
+        "label": SORA_2_I2V_LABEL,
+        "displayName": "Sora 2 Image-to-Video",
+        "params": _from_sora_2,
+        "reason": "OpenAI shut down the Sora 2 API on 2026-09-24 and names no replacement",
+        "alternatives": _SORA_ALTERNATIVES,
     },
 }
 
@@ -129,4 +175,8 @@ def retired_message(definition_id: str) -> str | None:
     retired = RETIRED.get(definition_id)
     if retired is None:
         return None
-    return f"'{definition_id}' was retired ({retired['reason']}). Use '{retired['replacement']}' instead."
+    message = f"'{definition_id}' was retired ({retired['reason']}). Use '{retired['replacement']}' instead"
+    alternatives = retired.get("alternatives")
+    if alternatives:
+        message += " (or " + " or ".join(f"'{a}'" for a in alternatives) + ")"
+    return message + "."

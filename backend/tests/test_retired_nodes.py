@@ -68,3 +68,48 @@ def test_gpt_image_replacements_are_offered_and_default(definition_id, default):
     assert values[:3] == ["gpt-image-1", "gpt-image-1.5", "gpt-image-1-mini"], "existing options keep their order"
     assert {"gpt-image-2.5-flare", "gpt-image-2.5-sunburst"} <= set(values)
     assert model["default"] == default
+
+
+def test_saved_sora_2_loads_as_veo_3_1_fast_with_a_title_that_says_so():
+    definition_id, params, label = migrate_node(
+        "sora-2", {"resolution": "1080p", "aspect_ratio": "9:16", "duration": 12, "_editorNote": "x"},
+    )
+    assert definition_id == "veo-3"
+    assert params == {"model": "veo-3.1-fast-generate-001", "aspectRatio": "9:16", "resolution": "1080p",
+                      "duration": "8", "_editorNote": "x"}
+    assert label == retired_nodes.SORA_2_LABEL
+
+
+def test_sora_2_pro_becomes_veo_3_1_and_a_renamed_node_keeps_its_title():
+    _, params, label = migrate_node("sora-2", {"model": "pro", "duration": 4}, "Opening shot")
+    assert params == {"model": "veo-3.1-generate-001", "duration": "4"}
+    assert label == "Opening shot"
+
+
+def test_saved_sora_2_i2v_keeps_only_what_veo_accepts():
+    definition_id, params, label = migrate_node(
+        "sora-2-i2v", {"resolution": "auto", "aspect_ratio": "auto", "duration": 8},
+    )
+    assert definition_id == "veo-3"
+    assert params == {"model": "veo-3.1-fast-generate-001", "duration": "8"}
+    assert label == retired_nodes.SORA_2_I2V_LABEL
+
+
+def test_sora_ports_exist_on_veo_so_saved_edges_keep_working():
+    from services.node_registry import NodeRegistry
+
+    veo = NodeRegistry().get_all()["veo-3"]
+    assert {"prompt", "image"} <= {p["id"] for p in veo["inputPorts"]}
+    assert "video" in {p["id"] for p in veo["outputPorts"]}
+
+
+@pytest.mark.parametrize("definition_id", ["sora-2", "sora-2-i2v"])
+def test_sora_retirement_message_names_the_alternatives(definition_id):
+    from services.node_registry import NodeRegistry
+
+    message = retired_nodes.retired_message(definition_id)
+    assert "2026-09-24" in message
+    for alternative in ("veo-3", "grok-imagine-video", "runway-video"):
+        assert f"'{alternative}'" in message
+        assert alternative in NodeRegistry().get_all()
+    assert definition_id not in NodeRegistry().get_all(), "hidden for new graphs"

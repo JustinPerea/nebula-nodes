@@ -4102,95 +4102,6 @@ async def test_nano_banana_fal_edit_endpoint_and_image_urls():
     assert "model" not in payload
 
 
-# ── sora-2 ────────────────────────────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_sora2_standard_endpoint_injection():
-    """sora-2 with model=standard must inject fal-ai/sora-2/text-to-video."""
-    from execution.sync_runner import get_handler_registry
-    from unittest.mock import MagicMock as MM
-
-    emit = AsyncMock()
-    registry = get_handler_registry(emit=emit)
-    handler = registry["sora-2"]
-
-    mock_submit, mock_status, mock_result = _make_poll_mocks(
-        {"video": {"url": "https://fal.ai/sora2.mp4"}}
-    )
-
-    node = GraphNode(
-        id="test-sora2-std",
-        definitionId="sora-2",
-        params={"model": "standard", "resolution": "720p", "duration": "4", "aspect_ratio": "16:9"},
-    )
-
-    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_submit
-        mock_client.get.side_effect = [mock_status, mock_result]
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        MockClient.return_value = mock_client
-
-        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
-            result = await handler(
-                node,
-                {"prompt": PortValueDict(type="Text", value="A calm ocean")},
-                {"FAL_KEY": "fal_test"},
-            )
-
-    assert result["video"]["type"] == "Video"
-    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
-    assert "sora-2/text-to-video" in url
-    assert "pro" not in url
-
-    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
-    # model param must be popped — not sent to FAL
-    assert "model" not in payload
-    # duration must be string "4"
-    assert payload["duration"] == "4"
-
-
-@pytest.mark.asyncio
-async def test_sora2_pro_endpoint_injection():
-    """sora-2 with model=pro must inject fal-ai/sora-2/text-to-video/pro."""
-    from execution.sync_runner import get_handler_registry
-
-    emit = AsyncMock()
-    registry = get_handler_registry(emit=emit)
-    handler = registry["sora-2"]
-
-    mock_submit, mock_status, mock_result = _make_poll_mocks(
-        {"video": {"url": "https://fal.ai/sora2pro.mp4"}}
-    )
-
-    node = GraphNode(
-        id="test-sora2-pro",
-        definitionId="sora-2",
-        params={"model": "pro", "duration": "8"},
-    )
-
-    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_submit
-        mock_client.get.side_effect = [mock_status, mock_result]
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        MockClient.return_value = mock_client
-
-        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
-            await handler(
-                node,
-                {"prompt": PortValueDict(type="Text", value="A rocket launch")},
-                {"FAL_KEY": "fal_test"},
-            )
-
-    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
-    assert "sora-2/text-to-video/pro" in url
-    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
-    assert "model" not in payload
-
-
 # ── sync-lipsync ──────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -6062,7 +5973,7 @@ async def test_grok_imagine_image_edit_output_parsing():
 
 
 # ---------------------------------------------------------------------------
-# Wave 3 FAL nodes: seedream-4-5 model enum, sora-2-i2v, esrgan-upscale,
+# Wave 3 FAL nodes: seedream-4-5 model enum, esrgan-upscale,
 # flux-2-pro flash model
 # ---------------------------------------------------------------------------
 
@@ -6150,95 +6061,6 @@ async def test_seedream_4_5_default_routes_to_v4_5():
     assert "bytedance/seedream/v4.5/text-to-image" in url
     payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
     assert "model" not in payload
-
-
-# ── sora-2-i2v ──────────────────────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_sora2_i2v_image_prompt_mapping_and_endpoint():
-    """sora-2-i2v maps image → image_url, prompt → prompt, routes to sora-2/image-to-video."""
-    from execution.sync_runner import get_handler_registry
-
-    emit = AsyncMock()
-    registry = get_handler_registry(emit=emit)
-    handler = registry["sora-2-i2v"]
-
-    mock_submit, mock_status, mock_result = _make_poll_mocks(
-        {"video": {"url": "https://fal.ai/sora2_i2v.mp4"}}
-    )
-
-    node = GraphNode(
-        id="test-sora2-i2v",
-        definitionId="sora-2-i2v",
-        params={"duration": 8, "resolution": "720p", "aspect_ratio": "16:9"},
-    )
-
-    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_submit
-        mock_client.get.side_effect = [mock_status, mock_result]
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        MockClient.return_value = mock_client
-
-        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
-            result = await handler(
-                node,
-                {
-                    "prompt": PortValueDict(type="Text", value="a cat playing"),
-                    "image": PortValueDict(type="Image", value="https://example.com/start.png"),
-                },
-                {"FAL_KEY": "fal_test"},
-            )
-
-    assert result["video"]["type"] == "Video"
-    url = mock_client.post.call_args.args[0] if mock_client.post.call_args.args else mock_client.post.call_args[0][0]
-    assert "sora-2/image-to-video" in url
-    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
-    assert payload["image_url"] == "https://example.com/start.png"
-    assert payload["prompt"] == "a cat playing"
-
-
-@pytest.mark.asyncio
-async def test_sora2_i2v_duration_and_resolution_passthrough():
-    """sora-2-i2v forwards duration and resolution params correctly."""
-    from execution.sync_runner import get_handler_registry
-
-    emit = AsyncMock()
-    registry = get_handler_registry(emit=emit)
-    handler = registry["sora-2-i2v"]
-
-    mock_submit, mock_status, mock_result = _make_poll_mocks(
-        {"video": {"url": "https://fal.ai/sora2_i2v_2.mp4"}}
-    )
-
-    node = GraphNode(
-        id="test-sora2-i2v-params",
-        definitionId="sora-2-i2v",
-        params={"duration": 12, "resolution": "720p"},
-    )
-
-    with patch("handlers.fal_universal.httpx.AsyncClient") as MockClient:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_submit
-        mock_client.get.side_effect = [mock_status, mock_result]
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-        MockClient.return_value = mock_client
-
-        with patch("handlers.fal_universal.asyncio.sleep", new_callable=AsyncMock):
-            await handler(
-                node,
-                {
-                    "prompt": PortValueDict(type="Text", value="ocean waves"),
-                    "image": PortValueDict(type="Image", value="https://example.com/sea.png"),
-                },
-                {"FAL_KEY": "fal_test"},
-            )
-
-    payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
-    assert payload["duration"] == 12
-    assert payload["resolution"] == "720p"
 
 
 # ── esrgan-upscale ──────────────────────────────────────────────────────────

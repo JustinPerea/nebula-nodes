@@ -149,7 +149,7 @@ Do not promise these — they aren't wired. (From the audit guide's gap table, `
 - **Audio-in/out chat** (`gpt-4o-audio-preview`) — not wired.
 - **Realtime API** (gpt-realtime, speech-to-speech) — entire family unsupported.
 - **Responses API** (`/v1/responses`) — Nebula uses the older Chat Completions endpoint.
-- **Embeddings / Moderations / Batch / Files / Assistants / Sora video** — out of scope (Sora's Videos API + sora-2/sora-2-pro shut down 2026-09-24 anyway).
+- **Embeddings / Moderations / Batch / Files / Assistants / Sora video** — out of scope (Sora's Videos API + sora-2/sora-2-pro shut down 2026-09-24; Nebula's fal `sora-2` / `sora-2-i2v` nodes were retired and load as `veo-3`).
 
 Coverage: roughly 60% of OpenAI's media-generation surface (images + audio + chat) is exposed; ~30% of the entire OpenAI platform.
 

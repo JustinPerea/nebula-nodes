@@ -3246,3 +3246,20 @@ deprecations/model pages/image guide, Meshy openapi.yaml and llms.txt, Gemini sp
   image; `image` is the first and a new `images` (Array) output port carries all of them as `/api/outputs/` refs
   (the Krea gateway's convention). No pricing entry exists for these nodes; I didn't add one (2.5 is
   token-priced and OpenAI's per-image calculator doesn't cover 2.5).
+
+### Sora 2 (sora-2, sora-2-i2v)
+- Retired with the Imagen pattern (`RETIRED` in retired_nodes): both definitions and their fal handlers (incl. the
+  Standard/Pro endpoint switch) are gone, so they're hidden for new graphs; saved nodes load as **`veo-3` on Veo
+  3.1 Fast**, titled "Veo 3.1 Fast (was Sora 2)" / "(was Sora 2 Image-to-Video)" unless the person renamed them.
+- Why Veo 3.1 Fast: OpenAI says "There is no one-to-one replacement API", so I picked the closest maker-direct
+  node. Veo does text- and first-frame-to-video with sound like Sora 2, its `prompt`/`image`/`video` ports match
+  so saved edges keep working, and Fast's $0.10/s at 720p equals Sora 2's listed $0.10/s. Sora 2 Pro maps to Veo
+  3.1 (Standard). Sora's 12/16/20 s become 8 s (Veo's max); `auto` aspect/resolution fall back to Veo's defaults.
+- The other choices are named where people see them: `retired_message` (API/agent/CLI create attempts) now
+  appends "(or 'grok-imagine-video' or 'runway-video')", and the docs say the same. The canvas only shows the
+  title; there's no per-node notice mechanism to hang a longer message on.
+- Tradeoff: a migrated node runs on Google, not fal, so it needs a Vertex key (or GOOGLE_API_KEY until
+  2026-10-22, or fal if fal's Veo still works). The alternative, keeping a dead Sora node that only errors,
+  would have needed a new "hidden definition" concept across ~25 frontend consumers.
+- Left alone: the fal catalog mirror files `.agents/skills/fal/skills/fal-ai__sora-2__*.md` (they describe fal's
+  catalog, not Nebula nodes), historical research docs, and `docs/flora-gap-matrix.md`'s history entries.
