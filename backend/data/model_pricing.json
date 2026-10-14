@@ -7000,56 +7000,56 @@
       "rows": [
         {
           "match": {
-            "model": "veo-3.1-generate-preview",
+            "model": "veo-3.1-generate-001",
             "resolution": "720p"
           },
           "price": 0.4
         },
         {
           "match": {
-            "model": "veo-3.1-generate-preview",
+            "model": "veo-3.1-generate-001",
             "resolution": "1080p"
           },
           "price": 0.4
         },
         {
           "match": {
-            "model": "veo-3.1-generate-preview",
+            "model": "veo-3.1-generate-001",
             "resolution": "4k"
           },
           "price": 0.6
         },
         {
           "match": {
-            "model": "veo-3.1-fast-generate-preview",
+            "model": "veo-3.1-fast-generate-001",
             "resolution": "720p"
           },
           "price": 0.1
         },
         {
           "match": {
-            "model": "veo-3.1-fast-generate-preview",
+            "model": "veo-3.1-fast-generate-001",
             "resolution": "1080p"
           },
           "price": 0.12
         },
         {
           "match": {
-            "model": "veo-3.1-fast-generate-preview",
+            "model": "veo-3.1-fast-generate-001",
             "resolution": "4k"
           },
           "price": 0.3
         },
         {
           "match": {
-            "model": "veo-3.1-lite-generate-preview",
+            "model": "veo-3.1-lite-generate-001",
             "resolution": "720p"
           },
           "price": 0.05
         },
         {
           "match": {
-            "model": "veo-3.1-lite-generate-preview",
+            "model": "veo-3.1-lite-generate-001",
             "resolution": "1080p"
           },
           "price": 0.08
@@ -7058,8 +7058,20 @@
       "multiplyBy": [
         "duration"
       ],
-      "notes": "Google routes only (Vertex service-account key or GOOGLE_API_KEY); the fal fallback is unpriced. Per second of the node's duration and resolution (defaults 8 s, 720p); audio is always generated, so these are the with-audio prices. Vertex lists the same amounts per \"count\" without saying what a count is; they are read as per second here, the higher reading. An extension renders at 720p whatever the setting. Lite has no 4K. Billed only when the video generates.",
+      "notes": "Google routes only (Vertex service-account key, or GOOGLE_API_KEY until the Gemini API previews end on 2026-10-22); the fal fallback is unpriced. Per second of the node's duration and resolution (defaults 8 s, 720p); audio is always generated, so these are the with-audio prices, which Vertex and the Gemini API list at the same amounts. Vertex lists them per \"count\" without saying what a count is; they are read as per second here, the higher reading. An extension renders at 720p whatever the setting. Lite has no 4K. Billed only when the video generates.",
       "sources": [
+        {
+          "url": "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing",
+          "quote": "Veo 3.1 Video + Audio generation ... 720p, 1080p $0.40 / 1 count 4k $0.60 / 1 count"
+        },
+        {
+          "url": "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing",
+          "quote": "Veo 3.1 Fast Video + Audio generation ... 720p $0.10 / 1 count 1080p $0.12 / 1 count 4k $0.30 / 1 count"
+        },
+        {
+          "url": "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing",
+          "quote": "Veo 3.1 Lite Video + Audio generation ... 720p $0.05 / 1 count 1080p $0.08 / 1 count"
+        },
         {
           "url": "https://ai.google.dev/gemini-api/docs/pricing",
           "quote": "Veo 3.1 Standard video with audio price (default) ... $0.40 (720p and 1080p) $0.60 (4k)"
@@ -7077,7 +7089,179 @@
           "quote": "Free Tier Paid Tier, per second in USD"
         }
       ],
-      "checked": "2026-10-10"
+      "checked": "2026-10-14"
+    },
+    "veo-3-flf": {
+      "currency": "usd",
+      "per": "video",
+      "provider": "google",
+      "priceParams": [
+        "resolution",
+        "generate_audio",
+        "duration"
+      ],
+      "rows": [
+        {
+          "match": {
+            "resolution": "720p",
+            "generate_audio": true,
+            "duration": "4s"
+          },
+          "price": 1.6
+        },
+        {
+          "match": {
+            "resolution": "720p",
+            "generate_audio": true,
+            "duration": "6s"
+          },
+          "price": 2.4
+        },
+        {
+          "match": {
+            "resolution": "720p",
+            "generate_audio": true,
+            "duration": "8s"
+          },
+          "price": 3.2
+        },
+        {
+          "match": {
+            "resolution": "720p",
+            "generate_audio": false,
+            "duration": "4s"
+          },
+          "price": 0.8
+        },
+        {
+          "match": {
+            "resolution": "720p",
+            "generate_audio": false,
+            "duration": "6s"
+          },
+          "price": 1.2
+        },
+        {
+          "match": {
+            "resolution": "720p",
+            "generate_audio": false,
+            "duration": "8s"
+          },
+          "price": 1.6
+        },
+        {
+          "match": {
+            "resolution": "1080p",
+            "generate_audio": true,
+            "duration": "4s"
+          },
+          "price": 1.6
+        },
+        {
+          "match": {
+            "resolution": "1080p",
+            "generate_audio": true,
+            "duration": "6s"
+          },
+          "price": 2.4
+        },
+        {
+          "match": {
+            "resolution": "1080p",
+            "generate_audio": true,
+            "duration": "8s"
+          },
+          "price": 3.2
+        },
+        {
+          "match": {
+            "resolution": "1080p",
+            "generate_audio": false,
+            "duration": "4s"
+          },
+          "price": 0.8
+        },
+        {
+          "match": {
+            "resolution": "1080p",
+            "generate_audio": false,
+            "duration": "6s"
+          },
+          "price": 1.2
+        },
+        {
+          "match": {
+            "resolution": "1080p",
+            "generate_audio": false,
+            "duration": "8s"
+          },
+          "price": 1.6
+        },
+        {
+          "match": {
+            "resolution": "4k",
+            "generate_audio": true,
+            "duration": "4s"
+          },
+          "price": 2.4
+        },
+        {
+          "match": {
+            "resolution": "4k",
+            "generate_audio": true,
+            "duration": "6s"
+          },
+          "price": 3.6
+        },
+        {
+          "match": {
+            "resolution": "4k",
+            "generate_audio": true,
+            "duration": "8s"
+          },
+          "price": 4.8
+        },
+        {
+          "match": {
+            "resolution": "4k",
+            "generate_audio": false,
+            "duration": "4s"
+          },
+          "price": 1.6
+        },
+        {
+          "match": {
+            "resolution": "4k",
+            "generate_audio": false,
+            "duration": "6s"
+          },
+          "price": 2.4
+        },
+        {
+          "match": {
+            "resolution": "4k",
+            "generate_audio": false,
+            "duration": "8s"
+          },
+          "price": 3.2
+        }
+      ],
+      "notes": "Vertex route only (always veo-3.1-generate-001, Veo 3.1 Standard); the fal fallback is unpriced. Vertex lists Veo per \"count\", read as per second (the higher reading, and the Gemini API's unit for the same amounts), times the node's 4, 6 or 8 s; the duration is matched rather than multiplied because the node stores it as \"4s\". Generate Audio off uses the video-only price. Billed only when the video generates.",
+      "sources": [
+        {
+          "url": "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing",
+          "quote": "Veo 3.1 Video + Audio generation ... 720p, 1080p $0.40 / 1 count 4k $0.60 / 1 count"
+        },
+        {
+          "url": "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing",
+          "quote": "Veo 3.1 ... Video generation ... Video 720p, 1080p $0.20 / 1 count 4k $0.40 / 1 count"
+        },
+        {
+          "url": "https://ai.google.dev/gemini-api/docs/pricing",
+          "quote": "Free Tier Paid Tier, per second in USD"
+        }
+      ],
+      "checked": "2026-10-14"
     }
   }
 }

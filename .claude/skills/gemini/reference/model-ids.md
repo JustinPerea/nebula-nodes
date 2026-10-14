@@ -30,7 +30,7 @@ Sourced from https://ai.google.dev/gemini-api/docs/models (fetched 2026-04-16; i
 | `veo-3.1-fast-generate-preview` | ✅ | | up to 3 | ✅ | ✅ |
 | `veo-3.1-lite-generate-preview` | ✅ | | | | ✅ |
 
-The Gemini API preview ids above retire on 2026-10-22. On **Vertex AI** the GA ids are `veo-3.1-generate-001` and `veo-3.1-fast-generate-001` (retire "Nov 17 2026 or later"); `veo-3.1-lite-generate-001` is a preview there.
+The Gemini API preview ids above shut down on 2026-10-22, and Nebula's `veo-3` node now stores the Vertex ids below (saved preview ids migrate). On **Vertex AI** the GA ids are `veo-3.1-generate-001` and `veo-3.1-fast-generate-001` (retire "Nov 17 2026 or later"); `veo-3.1-lite-generate-001` is a preview there.
 
 | ID | Family | Role |
 |---|---|---|

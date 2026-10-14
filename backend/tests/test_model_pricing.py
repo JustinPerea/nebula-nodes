@@ -79,10 +79,23 @@ def test_real_table_prices_veo_by_model_and_resolution():
     default = model_pricing.estimate_node(entry, veo, {}, "google")
     assert default == {"currency": "usd", "low": 3.2, "high": 3.2}, "8 s at 720p on Veo 3.1"
     fast_4k = model_pricing.estimate_node(
-        entry, veo, {"model": "veo-3.1-fast-generate-preview", "resolution": "4k", "duration": "4"}, "google",
+        entry, veo, {"model": "veo-3.1-fast-generate-001", "resolution": "4k", "duration": "4"}, "google",
     )
     assert fast_4k["low"] == pytest.approx(1.2)
     assert model_pricing.estimate_node(entry, veo, {}, "fal") is None
+
+
+def test_real_table_prices_veo_first_last_frame_on_vertex():
+    flf = NodeRegistry().get_all()["veo-3-flf"]
+    entry = model_pricing.load_pricing()["nodes"]["veo-3-flf"]
+    assert model_pricing.route_provider(flf, {"GOOGLE_VERTEX_CREDENTIALS": "{}", "FAL_KEY": "k"}) == "google"
+    default = model_pricing.estimate_node(entry, flf, {}, "google")
+    assert default == {"currency": "usd", "low": 1.6, "high": 1.6}, "4 s at 720p with audio, $0.40/s"
+    silent_4k = model_pricing.estimate_node(
+        entry, flf, {"resolution": "4k", "duration": "8s", "generate_audio": False}, "google",
+    )
+    assert silent_4k["low"] == pytest.approx(3.2), "video only at 4K is $0.40/s"
+    assert model_pricing.estimate_node(entry, flf, {}, "fal") is None
 
 
 def test_run_multipliers_follow_the_nearest_batch_or_iterator():

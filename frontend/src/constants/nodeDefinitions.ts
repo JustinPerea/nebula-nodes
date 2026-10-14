@@ -3368,7 +3368,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     displayName: 'Veo 3.1',
     category: 'video-gen',
     apiProvider: 'google',
-    apiEndpoint: 'veo-3.1-generate-preview',
+    apiEndpoint: 'veo-3.1-generate-001',
     envKeyName: ['GOOGLE_VERTEX_CREDENTIALS', 'GOOGLE_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
     directKeyName: ['GOOGLE_VERTEX_CREDENTIALS', 'GOOGLE_API_KEY'],
@@ -3416,7 +3416,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: '720p', value: '720p' },
           { label: '1080p', value: '1080p' },
-          { label: '4K', value: '4k', visibleWhen: { model: ['veo-3.1-generate-preview', 'veo-3.1-fast-generate-preview'] } },
+          { label: '4K', value: '4k', visibleWhen: { model: ['veo-3.1-generate-001', 'veo-3.1-fast-generate-001'] } },
         ],
       },
       {
@@ -3438,11 +3438,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: false,
-        default: 'veo-3.1-generate-preview',
+        default: 'veo-3.1-generate-001',
         options: [
-          { label: 'Veo 3.1', value: 'veo-3.1-generate-preview' },
-          { label: 'Veo 3.1 Fast', value: 'veo-3.1-fast-generate-preview' },
-          { label: 'Veo 3.1 Lite', value: 'veo-3.1-lite-generate-preview' },
+          { label: 'Veo 3.1', value: 'veo-3.1-generate-001' },
+          { label: 'Veo 3.1 Fast', value: 'veo-3.1-fast-generate-001' },
+          { label: 'Veo 3.1 Lite (preview on Vertex)', value: 'veo-3.1-lite-generate-001' },
         ],
       },
       {

@@ -18,7 +18,7 @@ def _make_node(params=None):
     return GraphNode(
         id="test-veo-1",
         definitionId="veo-3",
-        params=params or {"model": "veo-3.1-generate-preview"},
+        params=params or {"model": "veo-3.1-generate-001"},
     )
 
 
@@ -77,10 +77,13 @@ def _submit_body(mock: _VeoMock) -> dict:
 
 
 def _patches(mock, tmp_path):
+    # The Gemini API route only exists until the previews end (2026-10-22), so
+    # these tests pin the date before it.
     return (
         patch("handlers.veo.httpx.AsyncClient", return_value=mock),
         patch("handlers.veo.asyncio.sleep", new=AsyncMock()),
         patch("handlers.veo.get_run_dir", return_value=tmp_path),
+        patch("handlers.veo.previews_retired", return_value=False),
     )
 
 
@@ -89,10 +92,10 @@ def _patches(mock, tmp_path):
 @pytest.mark.asyncio
 async def test_extension_with_files_uri_sets_video_and_forces_720p(tmp_path):
     mock = _VeoMock()
-    p_httpx, p_sleep, p_dir = _patches(mock, tmp_path)
-    with p_httpx, p_sleep, p_dir:
+    p_httpx, p_sleep, p_dir, p_date = _patches(mock, tmp_path)
+    with p_httpx, p_sleep, p_dir, p_date:
         await handle_veo(
-            _make_node({"model": "veo-3.1-generate-preview", "resolution": "1080p"}),
+            _make_node({"model": "veo-3.1-generate-001", "resolution": "1080p"}),
             {
                 "prompt": PortValueDict(type="Text", value="continue the walk"),
                 "video": PortValueDict(type="Video", value=FILES_URI),
@@ -107,9 +110,9 @@ async def test_extension_with_files_uri_sets_video_and_forces_720p(tmp_path):
 @pytest.mark.asyncio
 async def test_extension_with_non_uri_video_raises(tmp_path):
     """Veo only accepts its own files/... URI; a local/external clip must error with guidance."""
-    with pytest.raises(ValueError, match="[Ss]ource URI|files"):
+    with patch("handlers.veo.previews_retired", return_value=False), pytest.raises(ValueError, match="[Ss]ource URI|files"):
         await handle_veo(
-            _make_node({"model": "veo-3.1-fast-generate-preview"}),
+            _make_node({"model": "veo-3.1-fast-generate-001"}),
             {
                 "prompt": PortValueDict(type="Text", value="continue"),
                 "video": PortValueDict(type="Video", value="/tmp/local_clip.mp4"),
@@ -122,7 +125,7 @@ async def test_extension_with_non_uri_video_raises(tmp_path):
 async def test_extension_rejected_on_lite():
     with pytest.raises(ValueError, match="[Ee]xtension|[Vv]ideo"):
         await handle_veo(
-            _make_node({"model": "veo-3.1-lite-generate-preview"}),
+            _make_node({"model": "veo-3.1-lite-generate-001"}),
             {
                 "prompt": PortValueDict(type="Text", value="x"),
                 "video": PortValueDict(type="Video", value=FILES_URI),
@@ -135,7 +138,7 @@ async def test_extension_rejected_on_lite():
 async def test_extension_mutually_exclusive_with_first_frame():
     with pytest.raises(ValueError, match="combine|first|last"):
         await handle_veo(
-            _make_node({"model": "veo-3.1-generate-preview"}),
+            _make_node({"model": "veo-3.1-generate-001"}),
             {
                 "prompt": PortValueDict(type="Text", value="x"),
                 "video": PortValueDict(type="Video", value=FILES_URI),
@@ -151,10 +154,10 @@ async def test_extension_mutually_exclusive_with_first_frame():
 async def test_returns_source_uri_for_chaining(tmp_path):
     """The handler exposes the generation's Veo files URI so a downstream node can extend it."""
     mock = _VeoMock(video_uri="https://generativelanguage.googleapis.com/v1beta/files/abc:download")
-    p_httpx, p_sleep, p_dir = _patches(mock, tmp_path)
-    with p_httpx, p_sleep, p_dir:
+    p_httpx, p_sleep, p_dir, p_date = _patches(mock, tmp_path)
+    with p_httpx, p_sleep, p_dir, p_date:
         result = await handle_veo(
-            _make_node({"model": "veo-3.1-generate-preview"}),
+            _make_node({"model": "veo-3.1-generate-001"}),
             {"prompt": PortValueDict(type="Text", value="a sunset")},
             {"GOOGLE_API_KEY": "k"},
         )
@@ -171,10 +174,10 @@ async def test_returns_source_uri_for_chaining(tmp_path):
 @pytest.mark.asyncio
 async def test_text_to_video_unchanged(tmp_path):
     mock = _VeoMock()
-    p_httpx, p_sleep, p_dir = _patches(mock, tmp_path)
-    with p_httpx, p_sleep, p_dir:
+    p_httpx, p_sleep, p_dir, p_date = _patches(mock, tmp_path)
+    with p_httpx, p_sleep, p_dir, p_date:
         result = await handle_veo(
-            _make_node({"model": "veo-3.1-generate-preview", "aspectRatio": "16:9"}),
+            _make_node({"model": "veo-3.1-generate-001", "aspectRatio": "16:9"}),
             {"prompt": PortValueDict(type="Text", value="a sunset")},
             {"GOOGLE_API_KEY": "k"},
         )
@@ -187,10 +190,10 @@ async def test_text_to_video_unchanged(tmp_path):
 @pytest.mark.asyncio
 async def test_image_to_video_still_uses_bytesbase64(tmp_path):
     mock = _VeoMock()
-    p_httpx, p_sleep, p_dir = _patches(mock, tmp_path)
-    with p_httpx, p_sleep, p_dir:
+    p_httpx, p_sleep, p_dir, p_date = _patches(mock, tmp_path)
+    with p_httpx, p_sleep, p_dir, p_date:
         await handle_veo(
-            _make_node({"model": "veo-3.1-generate-preview"}),
+            _make_node({"model": "veo-3.1-generate-001"}),
             {
                 "prompt": PortValueDict(type="Text", value="animate"),
                 "image": PortValueDict(type="Image", value=PNG_DATA_URI),
@@ -220,8 +223,8 @@ async def test_cancellation_fires_detached_upstream_cancel(tmp_path):
             raise _asyncio.CancelledError()
 
     mock = _CancellingMock()
-    p_httpx, p_sleep, p_dir = _patches(mock, tmp_path)
-    with p_httpx, p_sleep, p_dir:
+    p_httpx, p_sleep, p_dir, p_date = _patches(mock, tmp_path)
+    with p_httpx, p_sleep, p_dir, p_date:
         with patch("handlers.veo.schedule_detached_cancel") as mock_sched:
             with pytest.raises(_asyncio.CancelledError):
                 await handle_veo(
@@ -294,7 +297,7 @@ async def test_vertex_route_wins_and_maps_to_ga_model(tmp_path):
     a, b, c, d = _vertex_patches(mock, tmp_path)
     with a, b, c, d:
         result = await handle_veo(
-            _make_node({"model": "veo-3.1-generate-preview", "duration": "4", "seed": "7"}),
+            _make_node({"model": "veo-3.1-generate-001", "duration": "4", "seed": "7"}),
             {
                 "prompt": PortValueDict(type="Text", value="a fox"),
                 "image": PortValueDict(type="Image", value=PNG_DATA_URI),
@@ -329,7 +332,7 @@ async def test_vertex_extension_sends_saved_clip_bytes(tmp_path):
     a, b, c, d = _vertex_patches(mock, tmp_path)
     with a, b, c, d, patch("handlers.veo.require_allowed_path", side_effect=lambda p: p):
         await handle_veo(
-            _make_node({"model": "veo-3.1-fast-generate-preview", "resolution": "1080p"}),
+            _make_node({"model": "veo-3.1-fast-generate-001", "resolution": "1080p"}),
             {"prompt": PortValueDict(type="Text", value="go on"), "video": PortValueDict(type="Video", value=str(clip))},
             {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
         )
@@ -359,7 +362,7 @@ async def test_vertex_lite_sends_frames(tmp_path):
     a, b, c, d = _vertex_patches(mock, tmp_path)
     with a, b, c, d:
         await handle_veo(
-            _make_node({"model": "veo-3.1-lite-generate-preview"}),
+            _make_node({"model": "veo-3.1-lite-generate-001"}),
             {"prompt": PortValueDict(type="Text", value="x"), "image": PortValueDict(type="Image", value=PNG_DATA_URI)},
             {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
         )
@@ -415,7 +418,7 @@ def test_fal_route_picks_endpoint_and_renames_params():
     from handlers.veo import fal_veo_route
 
     node = _make_node({
-        "model": "veo-3.1-fast-generate-preview", "aspectRatio": "9:16", "duration": "6",
+        "model": "veo-3.1-fast-generate-001", "aspectRatio": "9:16", "duration": "6",
         "resolution": "1080p", "personGeneration": "allow_all", "seed": 3,
     })
     routed, inputs = fal_veo_route(node, {
@@ -427,16 +430,16 @@ def test_fal_route_picks_endpoint_and_renames_params():
         "image_url": "https://example.com/a.png", "endpoint_id": "fal-ai/veo3.1/fast/image-to-video",
     }
     assert set(inputs) == {"prompt"}
-    assert node.params["model"] == "veo-3.1-fast-generate-preview", "the saved node is not mutated"
+    assert node.params["model"] == "veo-3.1-fast-generate-001", "the saved node is not mutated"
 
-    routed, _ = fal_veo_route(_make_node({"model": "veo-3.1-generate-preview"}), {
+    routed, _ = fal_veo_route(_make_node({"model": "veo-3.1-generate-001"}), {
         "image": PortValueDict(type="Image", value="https://example.com/a.png"),
         "last_frame": PortValueDict(type="Image", value="https://example.com/b.png"),
     })
     assert routed.params["endpoint_id"] == "fal-ai/veo3.1/first-last-frame-to-video"
     assert routed.params["last_frame_url"] == "https://example.com/b.png"
 
-    routed, _ = fal_veo_route(_make_node({"model": "veo-3.1-generate-preview"}), {})
+    routed, _ = fal_veo_route(_make_node({"model": "veo-3.1-generate-001"}), {})
     assert routed.params["endpoint_id"] == "fal-ai/veo3.1"
 
 
@@ -458,16 +461,68 @@ def test_vertex_hint_only_after_previews_end():
 
 
 @pytest.mark.asyncio
-async def test_gemini_submit_error_points_at_vertex_after_previews_end(tmp_path):
-    class _Failing(_VeoMock):
-        async def post(self, url, json=None, headers=None):
-            return _Resp(404, {"error": "model not found"})
+async def test_gemini_route_sends_the_preview_id_for_a_vertex_value(tmp_path):
+    mock = _VeoMock()
+    p_httpx, p_sleep, p_dir, p_date = _patches(mock, tmp_path)
+    with p_httpx, p_sleep, p_dir, p_date:
+        await handle_veo(
+            _make_node({"model": "veo-3.1-fast-generate-001"}),
+            {"prompt": PortValueDict(type="Text", value="x")},
+            {"GOOGLE_API_KEY": "k"},
+        )
+    assert mock.posts[0]["url"].endswith("/veo-3.1-fast-generate-preview:predictLongRunning")
 
-    mock = _Failing()
-    p_httpx, p_sleep, p_dir = _patches(mock, tmp_path)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("saved,vertex", [
+    ("veo-3.1-generate-preview", "veo-3.1-generate-001"),
+    ("veo-3.1-fast-generate-preview", "veo-3.1-fast-generate-001"),
+    ("veo-3.1-lite-generate-preview", "veo-3.1-lite-generate-001"),
+])
+async def test_a_saved_preview_id_still_runs_on_vertex(tmp_path, saved, vertex):
+    mock = _VertexMock()
+    a, b, c, d = _vertex_patches(mock, tmp_path)
+    with a, b, c, d:
+        await handle_veo(
+            _make_node({"model": saved}),
+            {"prompt": PortValueDict(type="Text", value="x")},
+            {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
+        )
+    assert mock.posts[0]["url"].endswith(f"/{vertex}:predictLongRunning")
+
+
+@pytest.mark.asyncio
+async def test_api_key_only_fails_before_any_request_after_previews_end(tmp_path):
+    from execution.missing_credential import MissingCredentialError
+
+    mock = _VeoMock()
+    p_httpx, p_sleep, p_dir, _ = _patches(mock, tmp_path)
     with p_httpx, p_sleep, p_dir, patch("handlers.veo.previews_retired", return_value=True):
-        with pytest.raises(RuntimeError, match="Vertex"):
+        with pytest.raises(MissingCredentialError, match="GOOGLE_VERTEX_CREDENTIALS"):
             await handle_veo(_make_node(), {"prompt": PortValueDict(type="Text", value="x")}, {"GOOGLE_API_KEY": "k"})
+    assert mock.posts == [], "Google is never called once the previews are gone"
+
+
+@pytest.mark.asyncio
+async def test_vertex_still_runs_after_previews_end(tmp_path):
+    mock = _VertexMock()
+    a, b, c, d = _vertex_patches(mock, tmp_path)
+    with a, b, c, d, patch("handlers.veo.previews_retired", return_value=True):
+        await handle_veo(
+            _make_node(), {"prompt": PortValueDict(type="Text", value="x")},
+            {"GOOGLE_VERTEX_CREDENTIALS": "{}", "GOOGLE_API_KEY": "k"},
+        )
+    assert mock.posts[0]["url"].endswith("/veo-3.1-generate-001:predictLongRunning")
+
+
+@pytest.mark.asyncio
+async def test_unknown_veo_model_is_refused():
+    with pytest.raises(ValueError, match="isn't a Veo 3.1 model"):
+        await handle_veo(
+            _make_node({"model": "veo-3.0-generate-001"}),
+            {"prompt": PortValueDict(type="Text", value="x")},
+            {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
+        )
 
 
 @pytest.mark.asyncio
@@ -484,7 +539,7 @@ async def test_vertex_extends_with_lite(tmp_path):
     a, b, c, d = _vertex_patches(mock, tmp_path)
     with a, b, c, d, patch("handlers.veo.require_allowed_path", side_effect=lambda p: p):
         await handle_veo(
-            _make_node({"model": "veo-3.1-lite-generate-preview"}),
+            _make_node({"model": "veo-3.1-lite-generate-001"}),
             {"prompt": PortValueDict(type="Text", value="go on"), "video": PortValueDict(type="Video", value=str(clip))},
             {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
         )
@@ -497,7 +552,7 @@ async def test_vertex_refuses_4k_on_fast(tmp_path):
     a, b, c, d = _vertex_patches(mock, tmp_path)
     with a, b, c, d, pytest.raises(ValueError, match="4K"):
         await handle_veo(
-            _make_node({"model": "veo-3.1-fast-generate-preview", "resolution": "4k"}),
+            _make_node({"model": "veo-3.1-fast-generate-001", "resolution": "4k"}),
             {"prompt": PortValueDict(type="Text", value="x")},
             {"GOOGLE_VERTEX_CREDENTIALS": "{}"},
         )
@@ -529,7 +584,7 @@ async def test_vertex_converts_webp_frames_to_png(tmp_path):
 
 @pytest.mark.asyncio
 async def test_frame_urls_must_be_public(tmp_path):
-    with pytest.raises(RuntimeError, match="will not fetch"):
+    with patch("handlers.veo.previews_retired", return_value=False), pytest.raises(RuntimeError, match="will not fetch"):
         await handle_veo(
             _make_node(),
             {"prompt": PortValueDict(type="Text", value="x"),

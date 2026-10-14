@@ -87,6 +87,7 @@ class _MagicPostResponse:
 class _VeoMock:
     def __init__(self) -> None:
         self.posts: list[dict[str, Any]] = []
+        self.urls: list[str] = []
 
     async def __aenter__(self):
         return self
@@ -96,6 +97,7 @@ class _VeoMock:
 
     async def post(self, url, json=None, headers=None):
         self.posts.append(json)
+        self.urls.append(url)
         return _MagicPostResponse({"name": "operations/abc"})
 
     async def get(self, url, headers=None, timeout=None, follow_redirects=None):
@@ -283,16 +285,20 @@ async def _capture_google_body(fixture_name: str) -> dict[str, Any]:
         run_dir.mkdir(parents=True, exist_ok=True)
         with patch("handlers.veo.httpx.AsyncClient", return_value=mock), patch(
             "handlers.veo.asyncio.sleep", new=AsyncMock()
-        ), patch("handlers.veo.get_run_dir", return_value=run_dir):
+        ), patch("handlers.veo.get_run_dir", return_value=run_dir), patch(
+            # The Gemini API route ends with the previews on 2026-10-22.
+            "handlers.veo.previews_retired", return_value=False
+        ):
             await handle_veo(
                 GraphNode(
                     id="fixture-veo",
                     definitionId="veo-3",
-                    params={"model": "veo-3.1-generate-preview", "aspectRatio": "16:9"},
+                    params={"model": "veo-3.1-generate-001", "aspectRatio": "16:9"},
                 ),
                 {"prompt": PortValueDict(type="Text", value="a sunset")},
                 {"GOOGLE_API_KEY": "test-key"},
             )
+        assert mock.urls[0].endswith("/veo-3.1-generate-preview:predictLongRunning")
         return mock.posts[0]
 
     if fixture_name == "veo-3-vertex-request.json":
@@ -309,7 +315,7 @@ async def _capture_google_body(fixture_name: str) -> dict[str, Any]:
                     id="fixture-veo-vertex",
                     definitionId="veo-3",
                     params={
-                        "model": "veo-3.1-fast-generate-preview", "aspectRatio": "9:16",
+                        "model": "veo-3.1-fast-generate-001", "aspectRatio": "9:16",
                         "duration": "6", "resolution": "1080p", "personGeneration": "allow_adult",
                     },
                 ),
@@ -389,7 +395,7 @@ async def _capture_google_body(fixture_name: str) -> dict[str, Any]:
                                 "duration": "8",
                                 "resolution": "720p",
                                 "negative_prompt": "blurry",
-                                "model": "veo-3.1-generate-preview",
+                                "model": "veo-3.1-generate-001",
                             },
                         ),
                         {"prompt": PortValueDict(type="Text", value="a sunset over mountains")},

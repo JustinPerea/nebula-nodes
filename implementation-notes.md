@@ -3195,3 +3195,31 @@ Tradeoffs and surprises:
   the sidecar test that sets all four from a shell (fails with the old list).
 - **Left for later:** the `nebula` CLI's own commands still read only `NEBULA_APP_TOKEN`, not the file. Connect
   only sets up the MCP server, so nothing needs it yet.
+
+## 2026-10-14 — Maker retirements (Veo previews, gpt-image-1, Sora 2, Meshy, Gemini TTS)
+
+Track: keep the existing direct maker routes working past the October–November 2026 shutdowns. Vendor pages
+were re-fetched on 2026-10-14 (Gemini API deprecations, Vertex Veo 3.1 model card and pricing, OpenAI
+deprecations/model pages/image guide, Meshy openapi.yaml and llms.txt, Gemini speech-generation and model pages).
+
+### Veo (veo-3, veo-3-flf)
+- **The node now stores the Vertex IDs** (`veo-3.1-generate-001`, `veo-3.1-fast-generate-001`,
+  `veo-3.1-lite-generate-001`), as enum values, default and `apiEndpoint`. Option order and labels are kept;
+  Lite's label now says it is a preview on Vertex. The Gemini API route translates back to the
+  `-preview` IDs (`GEMINI_API_MODELS` in veo.py) until 2026-10-22.
+- **Saved preview IDs migrate without a date gate.** It's a rename of the same model, and both routes accept
+  either spelling (`canonical_model`), so there was nothing to protect by waiting. The Veo 3.0/2.0 migration
+  now targets the `-001` IDs directly instead of the dying preview IDs.
+- **GOOGLE_API_KEY-only after 2026-10-22:** `handle_veo` raises `MissingCredentialError` naming
+  `GOOGLE_VERTEX_CREDENTIALS` before any request (reused `previews_retired`). Routing is unchanged: a user with
+  both GOOGLE_API_KEY and FAL_KEY still lands on the Google route and gets that message rather than falling
+  through to fal. I kept it that way because fal's Veo 3.1 is believed to run on the same previews (status
+  unverified) and changing `route_provider` would also need the frontend mirror changed. `with_vertex_hint`
+  still decorates fal failures.
+- Tests that exercise the Gemini API route now pin `previews_retired` to False, so they keep passing after
+  2026-10-22 (several would have broken on that date).
+- **veo-3-flf pricing added** (Vertex route, `provider: google`). The node stores duration as "4s", which
+  `multiplyBy` can't read, so the entry is `per: video` with one row per resolution × audio × duration.
+  Vertex lists Veo per "count"; read as per second like the existing veo-3 entry (unit label NOT CONFIRMED).
+- Not done: Vertex `generateAudio` is still always true on veo-3 (Vertex sells video-only at about half price),
+  and reference images on Vertex are still not exposed. Both are feature work, not retirement work.

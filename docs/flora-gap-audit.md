@@ -17,7 +17,7 @@ Audit of what Flora (app.flora.ai, 369 models via MCP `client.models.list`) offe
 | `nano-banana` (Google direct) | Nano Banana 2, 2 Lite, **Nano Banana Pro** (gemini-3-pro-image), 2.5 Flash via model enum |
 | `runway-video` | Gen-4.5, Gen-4 Turbo, Seedance 2.0 (+Fast), Happy Horse 1.0 via model enum |
 | `minimax-t2v/i2v/s2v` | Hailuo 2.3 (+Fast), Hailuo 02 via model enum |
-| `veo-3` | Actually Veo **3.1** (generate-preview endpoint) |
+| `veo-3` | Actually Veo **3.1** (Vertex `veo-3.1-*-001` ids; Gemini API previews end 2026-10-22) |
 | Universal nodes (`fal-universal`, `replicate-universal`, `openrouter-universal`, `nous-portal-universal`) | Can reach most missing models ad hoc, just without typed params/first-class UX |
 
 "Gap" below means: no dedicated node and no enum option; universal-node reachability doesn't count.

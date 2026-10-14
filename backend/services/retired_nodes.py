@@ -10,13 +10,28 @@ Imagen 4 (all three models) was shut down by Google on 2026-08-17; Google
 names Nano Banana 2.1 as the replacement
 (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-10).
 
-Some nodes stay but lose a model option: Veo 3.0, 3.0 Fast and 2.0 were shut
-down on 2026-06-30, so a saved ``veo-3`` node on one of them moves to the
-matching Veo 3.1 model (``RETIRED_PARAMS``).
+Some nodes stay but lose a model option (``RETIRED_PARAMS``):
+
+- Veo 3.0, 3.0 Fast and 2.0 were shut down on 2026-06-30, so a saved ``veo-3``
+  node on one of them moves to the matching Veo 3.1 model.
+- The Gemini API shuts down its Veo 3.1 previews on 2026-10-22 and offers no
+  GA Veo; Vertex AI serves the same models as ``veo-3.1-*-001``
+  (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-14).
+  The node now stores the Vertex IDs, so a saved preview ID is renamed. The
+  model doesn't change, so this rename isn't date-gated.
+
+A migration for a shutdown that is still ahead is date-gated (``_today``):
+until the shutdown the saved value keeps working and stays as it is.
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
+
+
+def _today() -> date:
+    """Today, for date-gated migrations. Tests patch it."""
+    return date.today()
 
 IMAGEN_4_LABEL = "Nano Banana (was Imagen 4)"
 
@@ -51,9 +66,12 @@ RETIRED: dict[str, dict[str, Any]] = {
 
 # Veo 2 offered 5 s, which 3.1 doesn't; 6 s is the nearest without cutting the clip short.
 _VEO_MODELS = {
-    "veo-3.0-generate-001": "veo-3.1-generate-preview",
-    "veo-3.0-fast-generate-001": "veo-3.1-fast-generate-preview",
-    "veo-2.0-generate-001": "veo-3.1-generate-preview",
+    "veo-3.0-generate-001": "veo-3.1-generate-001",
+    "veo-3.0-fast-generate-001": "veo-3.1-fast-generate-001",
+    "veo-2.0-generate-001": "veo-3.1-generate-001",
+    "veo-3.1-generate-preview": "veo-3.1-generate-001",
+    "veo-3.1-fast-generate-preview": "veo-3.1-fast-generate-001",
+    "veo-3.1-lite-generate-preview": "veo-3.1-lite-generate-001",
 }
 
 

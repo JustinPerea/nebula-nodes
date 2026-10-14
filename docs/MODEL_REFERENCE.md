@@ -3772,7 +3772,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **ID** | `veo-3` |
 | **Provider** | Google |
 | **API Key** | GOOGLE_VERTEX_CREDENTIALS, GOOGLE_API_KEY, FAL_KEY |
-| **Endpoint** | `veo-3.1-generate-preview` |
+| **Endpoint** | `veo-3.1-generate-001` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, First Frame (Image), Last Frame (Image), Extend Video (Video) |
 | **Outputs** | Video (Video), Source URI (Video) |
@@ -3799,7 +3799,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | veo-3.1-generate-preview | Veo 3.1, Veo 3.1 Fast, Veo 3.1 Lite |
+| Model | enum | veo-3.1-generate-001 | Veo 3.1, Veo 3.1 Fast, Veo 3.1 Lite (preview on Vertex) |
 | Seed | int | — | — |
 
 ---

@@ -23,7 +23,7 @@ oracle:
 
 # Contract exemplar: Veo 3.1 (`veo-3`)
 
-Template for porting agents. **Async-poll** video via `predictLongRunning`. Three routes, in order: **Vertex AI** (`GOOGLE_VERTEX_CREDENTIALS`, a service-account JSON key) → **Gemini API** (`GOOGLE_API_KEY`; preview models retire 2026-10-22) → **fal** `fal-ai/veo3.1` (`FAL_KEY`). Veo 3.0, 3.0 Fast and 2.0 were removed (shut down 2026-06-30); saved nodes migrate to the matching 3.1 model.
+Template for porting agents. **Async-poll** video via `predictLongRunning`. Three routes, in order: **Vertex AI** (`GOOGLE_VERTEX_CREDENTIALS`, a service-account JSON key) → **Gemini API** (`GOOGLE_API_KEY`; the preview models it needs shut down 2026-10-22, after which a key-only run fails with a Vertex hint before any request) → **fal** `fal-ai/veo3.1` (`FAL_KEY`). Veo 3.0, 3.0 Fast and 2.0 were removed (shut down 2026-06-30); saved nodes migrate to the matching 3.1 model. The `model` enum holds the Vertex ids; saved preview ids migrate to them.
 
 For conversational video (Interactions API), use [gemini-omni-flash.md](./gemini-omni-flash.md) instead.
 
@@ -61,9 +61,9 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 
 | Model | 720p | 1080p | 4K |
 |-------|------|-------|----|
-| Veo 3.1 (`veo-3.1-generate-preview` / Vertex `veo-3.1-generate-001`) | $0.40 | $0.40 | $0.60 |
-| Veo 3.1 Fast (`veo-3.1-fast-generate-preview` / `veo-3.1-fast-generate-001`) | $0.10 | $0.12 | $0.30 (Gemini API only; no 4K on Vertex) |
-| Veo 3.1 Lite (`veo-3.1-lite-generate-preview` / `veo-3.1-lite-generate-001`) | $0.05 | $0.08 | — |
+| Veo 3.1 (Vertex `veo-3.1-generate-001` / Gemini API `veo-3.1-generate-preview`) | $0.40 | $0.40 | $0.60 |
+| Veo 3.1 Fast (`veo-3.1-fast-generate-001` / `veo-3.1-fast-generate-preview`) | $0.10 | $0.12 | $0.30 (Gemini API only; no 4K on Vertex) |
+| Veo 3.1 Lite (`veo-3.1-lite-generate-001` / `veo-3.1-lite-generate-preview`) | $0.05 | $0.08 | — |
 
 **Nebula params that move the bill**
 
@@ -96,7 +96,7 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 | `displayName` | Veo 3.1 |
 | `category` | `video-gen` |
 | `apiProvider` | `google` |
-| `apiEndpoint` | `veo-3.1-generate-preview` |
+| `apiEndpoint` | `veo-3.1-generate-001` |
 | `directKeyName` | `["GOOGLE_VERTEX_CREDENTIALS", "GOOGLE_API_KEY"]` (a list: first key set wins) |
 | `envKeyName` | `["GOOGLE_VERTEX_CREDENTIALS", "GOOGLE_API_KEY", "FAL_KEY"]` |
 | `executionPattern` | `async-poll` |
@@ -129,7 +129,7 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 
 | `key` | `type` | `default` | Values |
 |-------|--------|-----------|--------|
-| `model` | enum | `veo-3.1-generate-preview` | `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview` (Vertex maps these to `veo-3.1-generate-001`, `veo-3.1-fast-generate-001`, `veo-3.1-lite-generate-001`) |
+| `model` | enum | `veo-3.1-generate-001` | `veo-3.1-generate-001`, `veo-3.1-fast-generate-001`, `veo-3.1-lite-generate-001` (Vertex ids; the Gemini API route sends `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview` until 2026-10-22) |
 | `aspectRatio` | enum | `16:9` | `16:9`, `9:16` |
 | `duration` | enum | `8` | `4`, `6`, `8` seconds |
 | `resolution` | enum | `720p` | `720p`, `1080p`, `4k` (Standard and Fast on the Gemini API and fal; Standard only on Vertex) |
@@ -252,6 +252,7 @@ Wire `source_uri` → downstream `video` port for extension (on the Gemini API, 
 | Condition | Behavior |
 |-----------|----------|
 | No Vertex key and no `GOOGLE_API_KEY` (Google route) | `ValueError("Veo needs GOOGLE_VERTEX_CREDENTIALS (Vertex AI) or GOOGLE_API_KEY")` |
+| Only `GOOGLE_API_KEY`, on or after 2026-10-22 | `MissingCredentialError` (before any request) naming `GOOGLE_VERTEX_CREDENTIALS` |
 | Extension + `image` or `last_frame` | `ValueError("Veo video extension cannot be combined with a first or last frame")` |
 | Extension on Lite (Gemini API) | `ValueError("Video extension requires Veo 3.1 or 3.1 Fast …")` |
 | Extension on fal | `ValueError("Extending a clip needs the Google route …")` |
@@ -306,7 +307,7 @@ Assertions on fixture body:
       "id": "n2",
       "definitionId": "veo-3",
       "params": {
-        "model": "veo-3.1-generate-preview",
+        "model": "veo-3.1-generate-001",
         "aspectRatio": "16:9",
         "duration": "8",
         "resolution": "720p"

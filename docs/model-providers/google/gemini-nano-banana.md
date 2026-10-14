@@ -198,7 +198,7 @@ Outputs: `embedding` (Text — JSON array), `dimensions` (Text — integer strin
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `model` | `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview` | `veo-3.1-generate-preview` | Veo 3.0, 3.0 Fast and 2.0 removed (shut down 2026-06-30); saved nodes migrate to the matching 3.1 model. On Vertex these map to `veo-3.1-generate-001`, `veo-3.1-fast-generate-001`, `veo-3.1-lite-generate-001` (Lite: preview; frames are sent and Vertex decides). |
+| `model` | `veo-3.1-generate-001`, `veo-3.1-fast-generate-001`, `veo-3.1-lite-generate-001` | `veo-3.1-generate-001` | Vertex ids (Lite: preview; frames are sent and Vertex decides). The Gemini API route sends `veo-3.1-*-generate-preview` until those shut down on 2026-10-22, then a key-only run fails with a Vertex hint. Veo 3.0, 3.0 Fast and 2.0 removed (shut down 2026-06-30) and saved preview ids migrate to the matching `-001` model. |
 | `aspectRatio` | `16:9`, `9:16` | `16:9` | |
 | `duration` | `4`, `6`, `8` | `8` | Sent as `parameters.durationSeconds`. |
 | `resolution` | `720p`, `1080p`, `4k` | `720p` | 4K on 3.1 and 3.1 Fast, not Lite. On Vertex only 3.1 (Standard) renders 4K; 4K with Fast or Lite is refused. Gemini API extension forces 720p; Vertex extension keeps the chosen resolution. |
