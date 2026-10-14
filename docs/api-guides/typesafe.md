@@ -189,6 +189,10 @@ Input tokens: 312
 
 `frontend/src/lib/jev.ts` parses all of this (`parseJevOutputs`, `parseJevReport`); `backend/services/jev_outputs.py` writes and checks it. Both test against `backend/tests/fixtures/jev_outputs.json`.
 
+## On the canvas
+
+After a run, a Jev node shows its result on the card instead of the plain Text/Image preview: a Pass / Fail / Unsure chip, the question, the answer with its probability, and a meter (yes/no), option bars (choice) or level track (score). Pick Best shows the winner large and every wired candidate with its share, flagged "Close call" below the node's minimum confidence. Box draws the box over the searched image (or says "Not found"), with its confidence or "No confidence reported". The Inspector adds every probability, the model that answered, input tokens and the run's cost (input tokens at $0.042 per million). If the outputs don't parse, the card falls back to the plain previews. Code: `frontend/src/components/nodes/JevResult.tsx`, `frontend/src/components/panels/JevResultDetails.tsx`, `frontend/src/lib/jevView.ts`.
+
 ## Errors
 
 Every message names the fix and never contains the key. TypeSafe's request id is appended when it sends one.

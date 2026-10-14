@@ -30,6 +30,9 @@ import { downloadWorldAsset } from '../../lib/worldDownload';
 import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
+import { JevResultView, type JevResultInputs } from './JevResult';
+import { isJevNode, parseJevOutputs, JEV_BOX, JEV_PICK_BEST } from '../../lib/jev';
+import { jevResultKey, upstreamPortValues } from '../../lib/jevView';
 
 // Trigger a browser download for a URL produced by the backend. We fetch the
 // blob ourselves so the `download` attribute is honoured even across localhost
@@ -184,6 +187,21 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     return null;
   }, [batchPreview.browsing, nodeData.definitionId, id, edges, nodes]);
 
+  // A Jev node with a readable result shows it as a verdict card in place of
+  // the generic Text/Image previews. A malformed result parses to null and
+  // falls back to those previews, so nothing is hidden.
+  const jevResult = useMemo(
+    () => (previewComplete && isJevNode(nodeData.definitionId)
+      ? parseJevOutputs(nodeData.definitionId, previewOutputs) : null),
+    [previewComplete, nodeData.definitionId, previewOutputs],
+  );
+  const jevInputs = useMemo<JevResultInputs | undefined>(() => {
+    if (!jevResult) return undefined;
+    if (nodeData.definitionId === JEV_PICK_BEST) return { candidates: upstreamPortValues(id, 'candidates', nodes, edges) };
+    if (nodeData.definitionId === JEV_BOX) return { image: upstreamPortValues(id, 'image', nodes, edges)[0] ?? null };
+    return undefined;
+  }, [jevResult, nodeData.definitionId, id, nodes, edges]);
+
   if (!definition) return <div className="model-node model-node--error">Unknown node type</div>;
 
   const categoryColor = CATEGORY_COLORS[definition.category] ?? '#424242';
@@ -233,7 +251,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       : null;
   const showCompare = Boolean(compareBefore && compareAfter);
 
-  const isImageSurface = !worldOutput && Boolean(
+  const showJevResult = Boolean(jevResult);
+  const isImageSurface = !showJevResult && !worldOutput && Boolean(
     imageInputPreview
     || finalImageOutput
     || streamingSvgPreview
@@ -248,7 +267,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     && !videoOutput
     && !meshOutput
     && !audioOutput;
-  const isTextSurface = !worldOutput
+  const isTextSurface = !showJevResult
+    && !worldOutput
     && !shouldRenderSpatial
     && (isInlineTextNode || Boolean(displayText && !isInlineTextNode));
   const isWorldSurface = previewComplete && Boolean(worldOutput);
@@ -322,7 +342,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
   return (
     <div
-      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''}${showJevResult ? ' model-node--jev-surface' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
       onClick={() => selectNode(id)}
       style={{ ['--node-category-color' as string]: categoryColor }}
     >
@@ -529,6 +549,15 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
       <NodeRunStatus data={nodeData} definition={definition} />
 
+      {jevResult && (
+        <JevResultView
+          key={jevResultKey(previewOutputs)}
+          result={jevResult}
+          params={nodeData.params}
+          inputs={jevInputs}
+        />
+      )}
+
       {showCompare && compareBefore && compareAfter && (
         <div className="model-node__preview">
           <BeforeAfterSlider
@@ -552,7 +581,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {finalImageOutput && !worldOutput && !imageInputPreview && !isImageCompare && !(isMaskPainter && maskSourcePreview) && (
+      {finalImageOutput && !showJevResult && !worldOutput && !imageInputPreview && !isImageCompare && !(isMaskPainter && maskSourcePreview) && (
         <div className="model-node__preview">
           <img
             src={finalImageOutput}
@@ -626,7 +655,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {previewText && !worldOutput && !shouldRenderSpatial && !isInlineTextNode && (
+      {previewText && !showJevResult && !worldOutput && !shouldRenderSpatial && !isInlineTextNode && (
         <div className="model-node__preview">
           <div className={`model-node__preview-text ${isStreaming ? 'model-node__preview-text--streaming' : ''}`}>
             {previewText.length > 300 ? `${previewText.slice(0, 300)}...` : previewText}
