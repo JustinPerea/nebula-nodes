@@ -1,5 +1,5 @@
 {
-  "about": "Route selection cases shared by backend/services/node_route.py select_route and frontend/src/lib/directRoute.ts selectRoute, against the real node catalog. paramKeys (when given) are the params that route shows and sends, sorted. Each case runs on its 'today' (YYYY-MM-DD), else on defaultToday, so date-gated routes (node_route.DIRECT_RETIRES) don't flip when the calendar does.",
+  "about": "Route selection cases shared by backend/services/node_route.py select_route and frontend/src/lib/directRoute.ts selectRoute, against the real node catalog. paramKeys (when given) are the params that route shows and sends, sorted. wired (when given) are input ports with a value, added to params as with_wired_blockers / withWiredBlockers do before routing. block (when given) is direct_block / directBlock for those params: null, or its reason, param, and detail / on when set. Each case runs on its 'today' (YYYY-MM-DD), else on defaultToday, so date-gated routes (node_route.DIRECT_RETIRES) don't flip when the calendar does.",
   "defaultToday": "2026-10-14",
   "cases": [
     {
@@ -216,6 +216,10 @@
         "kind": "fallback",
         "provider": "fal",
         "key": "FAL_KEY"
+      },
+      "block": {
+        "reason": "requires",
+        "param": "resolution"
       }
     },
     {
@@ -321,7 +325,12 @@
         "resolution",
         "seed",
         "thinking_level"
-      ]
+      ],
+      "block": {
+        "reason": "retired",
+        "param": "model",
+        "on": "2027-03-15"
+      }
     },
     {
       "name": "fal's 2.5 Flash Image alias runs on fal after the shutdown too",
@@ -473,7 +482,8 @@
         "reference_images",
         "resolution",
         "start_image"
-      ]
+      ],
+      "block": null
     },
     {
       "name": "Veo 3.1 Fast at 4K stays on Krea (Vertex renders Fast at 720p and 1080p)",
@@ -490,6 +500,11 @@
         "kind": "fallback",
         "provider": "krea",
         "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "resolution",
+        "detail": "resolution 4K"
       }
     },
     {
@@ -873,6 +888,11 @@
         "kind": "fallback",
         "provider": "fal",
         "key": "FAL_KEY"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "image_size",
+        "detail": "image_size square"
       }
     },
     {
@@ -1185,7 +1205,11 @@
         "seed",
         "style_images",
         "width"
-      ]
+      ],
+      "block": {
+        "reason": "blocked",
+        "param": "style_images"
+      }
     },
     {
       "name": "Krea style images with only an Ideogram key need the Krea token",
@@ -1356,6 +1380,11 @@
         "kind": "fallback",
         "provider": "krea",
         "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "duration",
+        "detail": "duration 8"
       }
     },
     {
@@ -1373,6 +1402,11 @@
         "kind": "fallback",
         "provider": "krea",
         "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "resolution",
+        "detail": "1080p at 10 seconds"
       }
     },
     {
@@ -1761,6 +1795,10 @@
         "kind": "fallback",
         "provider": "fal",
         "key": "FAL_KEY"
+      },
+      "block": {
+        "reason": "blocked",
+        "param": "seed"
       }
     },
     {
@@ -1777,6 +1815,10 @@
         "kind": "fallback",
         "provider": "fal",
         "key": "FAL_KEY"
+      },
+      "block": {
+        "reason": "size",
+        "param": "image_size"
       }
     },
     {
@@ -1863,7 +1905,11 @@
         "seed",
         "style_images",
         "width"
-      ]
+      ],
+      "block": {
+        "reason": "size",
+        "param": "width"
+      }
     },
     {
       "name": "a fractional Krea size stays on Krea",
@@ -2100,6 +2146,11 @@
         "kind": "fallback",
         "provider": "krea",
         "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "duration",
+        "detail": "duration 7.5"
       }
     },
     {
@@ -2195,6 +2246,139 @@
         "kind": "fallback",
         "provider": "fal",
         "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "a fractional duration keeps Grok Imagine on Krea",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "duration": 6.5
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "duration",
+        "detail": "duration 6.5"
+      }
+    },
+    {
+      "name": "a saved edit video and start image keep Grok Imagine on Krea",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "edit_video": "https://example.com/v.mp4",
+        "start_image": "https://example.com/i.png"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "edit_video",
+        "detail": "an edit video with a start image"
+      }
+    },
+    {
+      "name": "a start image alone runs Grok Imagine on xAI",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "start_image": "https://example.com/i.png"
+      },
+      "wired": [
+        "prompt"
+      ],
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "xai",
+        "key": "XAI_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "wired reference images with a saved start image keep Grok Imagine on Krea",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "start_image": "https://example.com/i.png"
+      },
+      "wired": [
+        "reference_images",
+        "prompt"
+      ],
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "start_image",
+        "detail": "a start image with reference images"
+      }
+    },
+    {
+      "name": "wired Krea style images keep Ideogram 3 on Krea",
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "wired": [
+        "style_images"
+      ],
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "blocked",
+        "param": "style_images"
+      }
+    },
+    {
+      "name": "a wired end image keeps Hailuo 2.3 on Krea",
+      "nodeId": "krea-video-minimax-hailuo-2-3",
+      "params": {},
+      "wired": [
+        "start_image",
+        "end_image"
+      ],
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "blocked",
+        "param": "end_image"
       }
     }
   ]

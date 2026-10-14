@@ -7949,6 +7949,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: 'openai/gpt-image-2',
     envKeyName: ['OPENAI_API_KEY', 'FAL_KEY'],
     directKeyName: 'OPENAI_API_KEY',
+    directRoute: { rejects: { image_size: ['square', 'portrait_16_9', 'landscape_16_9'] } },
     executionPattern: 'stream',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -8026,6 +8027,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: 'openai/gpt-image-2/edit',
     envKeyName: ['OPENAI_API_KEY', 'FAL_KEY'],
     directKeyName: 'OPENAI_API_KEY',
+    directRoute: { rejects: { image_size: ['square', 'portrait_16_9', 'landscape_16_9'] } },
     executionPattern: 'stream',
     inputPorts: [
       { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true },
@@ -22639,15 +22641,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "directRoute": {
       "translation": "krea-minimax-hailuo",
       "model": "MiniMax-Hailuo-02",
-      "unsupported": [
-        {
-          "param": "duration",
-          "allowed": [
+      "accepts": {
+        "duration": {
+          "values": [
             6,
             10
-          ],
-          "label": "durations other than 6 or 10 seconds"
-        },
+          ]
+        }
+      },
+      "rejectsWhen": [
         {
           "match": {
             "resolution": "1080p",
@@ -22882,7 +22884,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       "blockedBy": [
         "end_image"
       ],
-      "unsupported": [
+      "rejectsWhen": [
         {
           "match": {
             "resolution": "1080p",
@@ -23117,7 +23119,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       "blockedBy": [
         "end_image"
       ],
-      "unsupported": [
+      "rejectsWhen": [
         {
           "match": {
             "resolution": "1080p",
@@ -25689,7 +25691,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "directRoute": {
       "translation": "krea-veo-vertex",
       "model": "veo-3.1-fast-generate-001",
-      "blockedWhen": {
+      "rejects": {
         "resolution": [
           "4K"
         ]
@@ -30172,6 +30174,36 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       "model": "grok-imagine-video",
       "blockedBy": [
         "start_video"
+      ],
+      "accepts": {
+        "duration": {
+          "integer": true,
+          "min": 1,
+          "max": 15
+        }
+      },
+      "rejectsWhen": [
+        {
+          "match": {
+            "edit_video": "(set)",
+            "start_image": "(set)"
+          },
+          "label": "an edit video with a start image"
+        },
+        {
+          "match": {
+            "edit_video": "(set)",
+            "reference_images": "(set)"
+          },
+          "label": "an edit video with reference images"
+        },
+        {
+          "match": {
+            "start_image": "(set)",
+            "reference_images": "(set)"
+          },
+          "label": "a start image with reference images"
+        }
       ]
     }
   },
@@ -30420,7 +30452,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       "model": "grok-imagine-video-1.5",
       "blockedBy": [
         "start_video"
-      ]
+      ],
+      "accepts": {
+        "duration": {
+          "integer": true,
+          "min": 1,
+          "max": 15
+        }
+      }
     }
   },
   'krea-video-black-forest-labs-flux-3-video': {

@@ -281,7 +281,7 @@ async def test_krea_veo_fast_at_4k_stays_on_krea():
     v.assert_not_called()
     assert gateway.call_args.args[0].params["resolution"] == "4K"
     block = node_route.direct_block(DEFINITIONS["krea-video-google-veo-3-1-fast"], params)
-    assert block == node_route.DirectBlock(node_route.UNSUPPORTED, "resolution")
+    assert block == node_route.DirectBlock(node_route.UNSUPPORTED, "resolution", None, "resolution 4K")
 
 
 @pytest.mark.asyncio

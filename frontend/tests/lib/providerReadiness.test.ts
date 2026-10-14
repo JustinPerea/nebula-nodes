@@ -173,7 +173,7 @@ describe('provider readiness without generation', () => {
     const keys = { GOOGLE_VERTEX_CREDENTIALS: TOKEN, KREA_API_TOKEN: TOKEN };
     const ready = modelReadiness(definition, freeze({ _kreaAuth: 'api-token', resolution: '4K' }), credentials({ apiKeys: keys }), health());
     expect(ready).toMatchObject({ connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
-    expect(ready.detail).toContain("Google Vertex's own API can't run resolution 4K for this model, so it runs on Krea.");
+    expect(ready.detail).toContain("Google Vertex's own API doesn't take resolution 4K, so it runs on Krea. Change resolution to run on Google Vertex.");
     const hd = modelReadiness(definition, freeze({ _kreaAuth: 'api-token', resolution: '1080p' }), credentials({ apiKeys: keys }), health());
     expect(hd).toMatchObject({ setupTarget: { kind: 'api-key', key: 'GOOGLE_VERTEX_CREDENTIALS' } });
     expect(hd.detail).toContain("Runs on Google Vertex's own API");
@@ -187,7 +187,7 @@ describe('provider readiness without generation', () => {
     expect(direct.detail).toContain("Runs on OpenAI's own API with your OpenAI key");
     const ready = modelReadiness(definition, freeze({ image_size: 'square' }), cache, health());
     expect(ready).toMatchObject({ connectionLabel: 'fal.ai API', setupTarget: { kind: 'api-key', key: 'FAL_KEY' } });
-    expect(ready.detail).toContain("This recipe's image_size has no OpenAI equivalent, so it runs on FAL. Pick another image_size to run on OpenAI.");
+    expect(ready.detail).toContain("OpenAI's own API doesn't take image_size square, so it runs on FAL. Change image_size to run on OpenAI.");
   });
 
   it('points a Krea GPT Image 2 recipe with no keys at the OpenAI key, and keeps a sized one on Krea', () => {
@@ -215,7 +215,9 @@ describe('provider readiness without generation', () => {
     const keys = { MINIMAX_API_KEY: TOKEN, KREA_API_TOKEN: TOKEN };
     const ready = modelReadiness(definition, freeze({ duration: 8 }), credentials({ apiKeys: keys }), health());
     expect(ready).toMatchObject({ connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
-    expect(ready.detail).toContain("MiniMax's own API doesn't take durations other than 6 or 10 seconds, so it runs on Krea.");
+    expect(ready.detail).toContain("MiniMax's own API doesn't take duration 8, so it runs on Krea. Change duration to run on MiniMax.");
+    const combo = modelReadiness(definition, freeze({ resolution: '1080p', duration: 10 }), credentials({ apiKeys: keys }), health());
+    expect(combo.detail).toContain("MiniMax's own API doesn't take 1080p at 10 seconds, so it runs on Krea. Change resolution to run on MiniMax.");
     const direct = modelReadiness(definition, freeze({ duration: 6 }), credentials({ apiKeys: keys }), health());
     expect(direct.detail).toContain("Runs on MiniMax's own API with your MiniMax key, billed by MiniMax.");
   });
@@ -241,16 +243,16 @@ describe('provider readiness without generation', () => {
     });
 
   it.each([
-    ['krea-video-bytedance-seedance-2', freeze({ upscale: true }), 'upscale'],
-    ['krea-video-bytedance-seedance-2-5', freeze({ duration: 7.5 }), 'duration'],
-    ['krea-video-bytedance-seedance-1-0-pro', freeze({ aspect_ratio: '9:21' }), 'aspect_ratio'],
-  ])('keeps %s on Krea for a %s value BytePlus doesn\'t take, and says which setting', (id, params, param) => {
+    ['krea-video-bytedance-seedance-2', freeze({ upscale: true }), 'upscale', 'upscale true'],
+    ['krea-video-bytedance-seedance-2-5', freeze({ duration: 7.5 }), 'duration', 'duration 7.5'],
+    ['krea-video-bytedance-seedance-1-0-pro', freeze({ aspect_ratio: '9:21' }), 'aspect_ratio', 'aspect_ratio 9:21'],
+  ])('keeps %s on Krea for a %s value BytePlus doesn\'t take, and says which setting', (id, params, param, detail) => {
     const definition = NODE_DEFINITIONS[id];
     const keys = credentials({ apiKeys: { BYTEPLUS_API_KEY: TOKEN, KREA_API_TOKEN: TOKEN } });
     expect(modelReadiness(definition, freeze({}), keys, health()).connectionLabel).toBe('BytePlus API');
     const kept = modelReadiness(definition, params, keys, health());
     expect(kept.setupTarget).toEqual({ kind: 'api-key', key: 'KREA_API_TOKEN' });
-    expect(kept.detail).toContain(`BytePlus doesn't take this recipe's ${param} setting, so it runs on Krea.`);
+    expect(kept.detail).toContain(`BytePlus's own API doesn't take ${detail}, so it runs on Krea. Change ${param} to run on BytePlus.`);
   });
 
   it('moves Nano Banana (2.5) to fal from Google\'s shutdown date and says so', () => {

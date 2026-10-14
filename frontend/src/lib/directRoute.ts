@@ -53,40 +53,20 @@ export const DIRECT_RETIRES: Readonly<Record<string, DirectRetirement>> = {
   'gpt-image-1-5-edit': { on: GPT_IMAGE_15_SHUTDOWN },
 };
 
-/** Values of a param both routes read that the maker can't render as set
- * (node_route.DIRECT_BLOCKED_VALUES): the run stays on the fal or Krea copy.
- * gpt-image-2's fal presets below OpenAI's 655,360-pixel minimum. */
-const GPT_IMAGE_2_FAL_UNSIZED = ['square', 'portrait_16_9', 'landscape_16_9'];
-export const DIRECT_BLOCKED_VALUES: Readonly<Record<string, Readonly<Record<string, readonly unknown[]>>>> = {
-  'gpt-image-2-fal-generate': { image_size: GPT_IMAGE_2_FAL_UNSIZED },
-  'gpt-image-2-fal-edit': { image_size: GPT_IMAGE_2_FAL_UNSIZED },
-};
-
-/** Why the direct route can't take a run (node_route.direct_block):
- * `requires` a direct param that isn't set (DIRECT_REQUIRES), `blocked` by a
- * copy-only param that is set (directRoute.blockedBy: a Krea copy's explicit
- * width/height) or a value the maker can't render (DIRECT_BLOCKED_VALUES),
- * `unsupported` by a shared param's value the maker can't render
- * (directRoute.blockedWhen: Veo 3.1 Fast at 4K on Vertex), or
- * `retired` by the maker on `on` (DIRECT_RETIRES), `size`: the recipe's size
- * is one the maker can't render exactly (directRoute.size), or `value`: a
- * param's value is one the maker doesn't take (directRoute.accepts). */
+/** Why the direct route can't take a run (node_route.direct_block), checked
+ * in this order: `requires` a direct param that isn't set (DIRECT_REQUIRES),
+ * `blocked` by a copy-only param that is set or wired (directRoute.blockedBy),
+ * `unsupported` by a value or combination the maker doesn't take
+ * (directRoute.accepts / rejects / rejectsWhen), `size` the maker can't render
+ * exactly (directRoute.size), or `retired` by the maker on `on`
+ * (DIRECT_RETIRES). */
 export interface DirectBlock {
-  reason: 'requires' | 'blocked' | 'unsupported' | 'retired' | 'size' | 'value';
+  reason: 'requires' | 'blocked' | 'unsupported' | 'size' | 'retired';
   param: string | null;
   on: string | null;
-  /** `unsupported`: the rule's label ("1080p at 10 seconds"). */
+  /** `unsupported`: what the maker doesn't take, the param and its value
+   * ("resolution 4K") or a rejectsWhen rule's label. */
   detail?: string;
-}
-
-/** A value the maker's API rejects (directRoute.unsupported, node_route._unsupported):
- * `allowed` blocks a set value of `param` outside the list; `match` blocks
- * when every key has that value. */
-export interface UnsupportedRule {
-  param?: string;
-  allowed?: readonly (string | number | boolean)[];
-  match?: Readonly<Record<string, string | number | boolean>>;
-  label?: string;
 }
 
 export type RouteKind = 'local' | 'plan' | 'only' | 'direct' | 'fallback' | 'unset';
@@ -151,13 +131,26 @@ function todayIso(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-/** A blocker that arrives by wire rather than as a saved param (node_route.WIRED). */
+/** A rejectsWhen value that matches a param that is set: saved non-empty, or
+ * wired into its port (node_route.SET). */
+export const SET = '(set)';
+/** A param that arrives by wire rather than saved (node_route.WIRED). */
 export const WIRED = '(wired)';
 
-/** `params` plus a marker for each `directRoute.blockedBy` field that arrives
- * on a wired input port (a Krea copy's style images), so directBlock keeps
- * that run on the copy just as it would for the saved param
- * (node_route.with_wired_blockers). `wired` are the ports with an edge in. */
+/** The params a rule counts as set when they arrive by wire: `blockedBy` and
+ * every rejectsWhen entry matching "(set)" (node_route.wired_rule_params). */
+export function wiredRuleParams(definition: Pick<ModelNodeDefinition, 'directRoute'>): Set<string> {
+  const named = new Set(definition.directRoute?.blockedBy ?? []);
+  for (const rule of definition.directRoute?.rejectsWhen ?? []) {
+    for (const [key, want] of Object.entries(rule.match)) if (want === SET) named.add(key);
+  }
+  return named;
+}
+
+/** `params` plus a WIRED marker for each param a rule reads as set
+ * (wiredRuleParams) that arrives on a wired input port, so directBlock treats
+ * it as the saved param (node_route.with_wired_blockers). `wired` are the
+ * ports with an edge in. */
 export function withWiredBlockers(
   definition: Pick<ModelNodeDefinition, 'directRoute'>,
   params: Record<string, unknown> | undefined,
@@ -165,7 +158,7 @@ export function withWiredBlockers(
 ): Record<string, unknown> {
   const values = { ...(params ?? {}) };
   const ports = new Set(wired);
-  for (const key of definition.directRoute?.blockedBy ?? []) {
+  for (const key of wiredRuleParams(definition)) {
     if (ports.has(key) && !hasValue(values[key])) values[key] = WIRED;
   }
   return values;
@@ -181,23 +174,11 @@ function effectiveValue(definition: ModelNodeDefinition, params: Record<string, 
   return undefined;
 }
 
-/** One spelling for a param value, as pricing compares them (6 == 6.0, true == "true"). */
-function matchValue(value: unknown): string {
+/** One spelling for a param value, as pricing compares them: 6 == 6.0 and
+ * true == "true", but 0 is not false (node_route.match_value). */
+export function matchValue(value: unknown): string {
   if (value === undefined || value === null) return '';
   return String(value);
-}
-
-function unsupportedParam(definition: ModelNodeDefinition, params: Record<string, unknown>, rule: UnsupportedRule): string | null {
-  if (rule.allowed) {
-    const key = rule.param ?? '';
-    const value = effectiveValue(definition, params, key);
-    if (!hasValue(value)) return null;
-    return rule.allowed.map(matchValue).includes(matchValue(value)) ? null : key;
-  }
-  const entries = Object.entries(rule.match ?? {});
-  if (!entries.length) return null;
-  return entries.every(([key, want]) => matchValue(effectiveValue(definition, params, key)) === matchValue(want))
-    ? entries[0][0] : null;
 }
 
 /** A whole-pixel width x height inside the maker's documented limits
@@ -234,10 +215,10 @@ function sizeBlock(definition: ModelNodeDefinition, params: Record<string, unkno
   return null;
 }
 
-/** A set value the maker takes (node_route.value_accepted): one of `values`,
- * and/or a number (`integer`: whole) within `min`..`max`. */
+/** A value the maker takes (one directRoute.accepts rule, node_route.value_accepted):
+ * one of `values`, and/or a number (`integer`: whole) within `min`..`max`. */
 export function valueAccepted(value: unknown, rule: DirectAcceptRule): boolean {
-  if (rule.values && !rule.values.some((allowed) => allowed === value)) return false;
+  if (rule.values && !rule.values.map(matchValue).includes(matchValue(value))) return false;
   if (rule.min !== undefined || rule.max !== undefined || rule.integer !== undefined) {
     if (typeof value !== 'number' || !Number.isFinite(value)) return false;
     if (rule.integer && !Number.isInteger(value)) return false;
@@ -247,32 +228,51 @@ export function valueAccepted(value: unknown, rule: DirectAcceptRule): boolean {
   return true;
 }
 
-/** Why the direct route can't take a run with these params, or null when it can. */
+/** One entry of a rejectsWhen `match` (node_route._matches): "(set)" means
+ * saved non-empty or wired; any other value is compared with the run's value. */
+function matches(definition: ModelNodeDefinition, params: Record<string, unknown>, key: string, want: unknown): boolean {
+  if (want === SET) return hasValue(params[key]);
+  return matchValue(effectiveValue(definition, params, key)) === matchValue(want);
+}
+
+/** `unsupported` from the value rules (node_route._unsupported), read against
+ * the run's values (saved, else the definition default): `accepts` the values
+ * the maker takes, `rejects` values it doesn't, `rejectsWhen` combinations it
+ * doesn't (every entry must match). */
+function unsupportedBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
+  const spec = definition.directRoute;
+  for (const [key, rule] of Object.entries(spec?.accepts ?? {})) {
+    const value = effectiveValue(definition, params, key);
+    if (hasValue(value) && !valueAccepted(value, rule)) {
+      return { reason: 'unsupported', param: key, on: null, detail: `${key} ${matchValue(value)}` };
+    }
+  }
+  for (const [key, refused] of Object.entries(spec?.rejects ?? {})) {
+    const value = effectiveValue(definition, params, key);
+    if (hasValue(value) && refused.map(matchValue).includes(matchValue(value))) {
+      return { reason: 'unsupported', param: key, on: null, detail: `${key} ${matchValue(value)}` };
+    }
+  }
+  for (const rule of spec?.rejectsWhen ?? []) {
+    const entries = Object.entries(rule.match);
+    if (entries.length && entries.every(([key, want]) => matches(definition, params, key, want))) {
+      return { reason: 'unsupported', param: entries[0][0], on: null, detail: rule.label };
+    }
+  }
+  return null;
+}
+
+/** Why the direct route can't take a run with these params, or null when it
+ * can (node_route.direct_block, same rules in the same order). `params` are
+ * the saved params plus the wired ports a rule reads (withWiredBlockers). */
 export function directBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
   const needed = Object.hasOwn(DIRECT_REQUIRES, definition.id) ? DIRECT_REQUIRES[definition.id] : undefined;
   if (needed && !params[needed]) return { reason: 'requires', param: needed, on: null };
   for (const key of definition.directRoute?.blockedBy ?? []) {
     if (hasValue(params[key])) return { reason: 'blocked', param: key, on: null };
   }
-  for (const [key, unsupported] of Object.entries(definition.directRoute?.blockedWhen ?? {})) {
-    if (unsupported.includes(effectiveValue(definition, params, key) as string | number | boolean)) {
-      return { reason: 'unsupported', param: key, on: null };
-    }
-  }
-  const blockedValues = Object.hasOwn(DIRECT_BLOCKED_VALUES, definition.id) ? DIRECT_BLOCKED_VALUES[definition.id] : {};
-  for (const [key, unsupported] of Object.entries(blockedValues)) {
-    if (unsupported.includes(effectiveValue(definition, params, key))) return { reason: 'blocked', param: key, on: null };
-  }
-  for (const rule of definition.directRoute?.unsupported ?? []) {
-    const key = unsupportedParam(definition, params, rule);
-    if (key) return { reason: 'unsupported', param: key, on: null, detail: rule.label ?? key };
-  }
-  const size = sizeBlock(definition, params);
-  if (size) return size;
-  for (const [key, rule] of Object.entries(definition.directRoute?.accepts ?? {})) {
-    const value = effectiveValue(definition, params, key);
-    if (hasValue(value) && !valueAccepted(value, rule)) return { reason: 'value', param: key, on: null };
-  }
+  const block = unsupportedBlock(definition, params) ?? sizeBlock(definition, params);
+  if (block) return block;
   const retires = Object.hasOwn(DIRECT_RETIRES, definition.id) ? DIRECT_RETIRES[definition.id] : undefined;
   if (retires && todayIso() >= retires.on) {
     const value = retires.param ? effectiveValue(definition, params, retires.param) : undefined;

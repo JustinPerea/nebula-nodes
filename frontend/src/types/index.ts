@@ -4,7 +4,6 @@ import type {
   PointCloud, SensorRig, SensorStream, SpatialSessionMetadata, WorldValueV2,
 } from './spatial';
 import type { PaperSourceSnapshot } from '../lib/paperSource';
-import type { UnsupportedRule } from '../lib/directRoute';
 
 export type PortDataType =
   | 'Text'
@@ -150,24 +149,26 @@ export interface ModelNodeDefinition {
    *  'MESHY_API_KEY' or 'GOOGLE_API_KEY'. A list means any of them, tried in
    *  order (Veo: Vertex, then Gemini API). */
   directKeyName?: string | string[];
-  /** A dual-route node's maker-route rules. A generated Krea node
-   *  (scripts/sync-krea-catalog.py DIRECT_ROUTES) names the backend
-   *  translation and the maker's model id; a fal node may carry only the
-   *  rules. `blockedBy` lists copy-only params that keep a run on the copy
-   *  when set (the maker can't honor them), and `size` the maker's documented
-   *  output size limits, and `accepts` the values the maker takes for a
-   *  param (lib/directRoute.ts directBlock). `blockedWhen` maps a shared
-   *  param to values the maker can't render (Veo 3.1 Fast at 4K on Vertex).
-   *  `unsupported` lists values the maker's API rejects (MiniMax: 6 or 10
-   *  seconds only). `setup: 'fallback'`
-   *  points setup at the copy's key when no key is set (BytePlus, which
-   *  doesn't serve the United States and needs each model activated, is not
-   *  the key to suggest first; lib/providerReadiness.ts). */
+  /** A dual-route node's maker-route rules (lib/directRoute.ts directBlock,
+   *  backend services/node_route.py direct_block, one rule set on both). A
+   *  generated Krea node (scripts/sync-krea-catalog.py DIRECT_ROUTES) names
+   *  the backend translation and the maker's model id; a fal node may carry
+   *  only the rules. What keeps a run on the copy:
+   *  - `blockedBy`: copy-only params the maker can't honor, set or wired;
+   *  - `accepts`: the values the maker takes for a param (any other blocks);
+   *  - `rejects`: values of a param the maker doesn't take;
+   *  - `rejectsWhen`: combinations it doesn't take ("(set)" = set or wired);
+   *  - `size`: the maker's documented output size limits.
+   *  A rule never blocks a param's default. `setup: 'fallback'` points setup
+   *  at the copy's key when no key is set (BytePlus, which doesn't serve the
+   *  United States and needs each model activated, is not the key to suggest
+   *  first; lib/providerReadiness.ts). */
   directRoute?: {
-    translation?: string; model?: string; blockedBy?: string[]; size?: DirectSizeLimits; setup?: 'fallback';
+    translation?: string; model?: string; blockedBy?: string[]; setup?: 'fallback';
     accepts?: Record<string, DirectAcceptRule>;
-    blockedWhen?: Record<string, ReadonlyArray<string | number | boolean>>;
-    unsupported?: UnsupportedRule[];
+    rejects?: Record<string, ReadonlyArray<string | number | boolean>>;
+    rejectsWhen?: DirectRejectsWhenRule[];
+    size?: DirectSizeLimits;
   };
   docUrl?: string;
   /** A local (utility) node that still calls a provider. `utility` only means
@@ -184,6 +185,15 @@ export interface DirectAcceptRule {
   min?: number;
   max?: number;
   integer?: boolean;
+}
+
+/** A combination of param values the maker doesn't take
+ * (directRoute.rejectsWhen): it blocks when every `match` entry holds, where
+ * "(set)" means saved non-empty or wired into its port. `label` says what it
+ * is in readiness ("1080p at 10 seconds"). */
+export interface DirectRejectsWhenRule {
+  match: Readonly<Record<string, string | number | boolean>>;
+  label: string;
 }
 
 /** A maker's documented output size rules for its direct route

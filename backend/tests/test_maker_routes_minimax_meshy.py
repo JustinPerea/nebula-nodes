@@ -459,8 +459,7 @@ def test_unsupported_rules_read_defaults_and_saved_values():
     definition = DEFINITIONS["krea-video-minimax-hailuo-02"]
     assert node_route.direct_block(definition, {}) is None  # 768p, 6 s by default
     block = node_route.direct_block(definition, {"duration": 7.5})
-    assert block == node_route.DirectBlock(node_route.UNSUPPORTED, "duration", None,
-                                           "durations other than 6 or 10 seconds")
+    assert block == node_route.DirectBlock(node_route.UNSUPPORTED, "duration", None, "duration 7.5")
     assert node_route.direct_block(definition, {"duration": 10.0}) is None
     assert node_route.direct_block(definition, {"resolution": "1080p", "duration": 10}).detail == "1080p at 10 seconds"
 

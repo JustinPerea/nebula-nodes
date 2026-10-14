@@ -78,27 +78,14 @@ DIRECT_RETIRES: dict[str, dict[str, Any]] = {
     "gpt-image-1-5-edit": {"on": _GPT_IMAGE_15_SHUTDOWN},
 }
 
-# Values of a param both routes read that the maker can't render as set: a run
-# saved with one stays on the fal or Krea copy (reason BLOCKED) instead of
-# silently changing shape. The defaults are never listed (they'd send every new
-# node to the copy). gpt-image-2's fal presets: OpenAI needs "total pixels
-# between 655,360 and 8,294,400", so Square (512x512) and the 16:9 presets
-# (576x1024, 1024x576) have no OpenAI size
-# (https://developers.openai.com/api/docs/guides/image-generation, checked
-# 2026-10-14; execution/maker_routes_openai.py maps the rest exactly).
-_GPT_IMAGE_2_FAL_UNSIZED = ["square", "portrait_16_9", "landscape_16_9"]
-DIRECT_BLOCKED_VALUES: dict[str, dict[str, list[Any]]] = {
-    "gpt-image-2-fal-generate": {"image_size": _GPT_IMAGE_2_FAL_UNSIZED},
-    "gpt-image-2-fal-edit": {"image_size": _GPT_IMAGE_2_FAL_UNSIZED},
-}
-
-# Why a direct route can't take a run (direct_block).
-REQUIRES = "requires"  # DIRECT_REQUIRES: the direct route needs a param that isn't set
-BLOCKED = "blocked"    # a copy-only param is set (directRoute.blockedBy), or a value the maker can't render (DIRECT_BLOCKED_VALUES)
-RETIRED = "retired"    # DIRECT_RETIRES: the maker shut this model down on its API
-UNSUPPORTED = "unsupported"  # a value the maker's API rejects (directRoute.blockedWhen, directRoute.unsupported)
-SIZE = "size"          # the recipe's size is one the maker can't render exactly (directRoute.size)
-VALUE = "value"        # a param's value is one the maker doesn't take (directRoute.accepts)
+# Why a direct route can't take a run (direct_block). The rules live on the
+# definition's ``directRoute`` (see direct_block); Python and
+# frontend/src/lib/directRoute.ts read them the same way.
+REQUIRES = "requires"        # DIRECT_REQUIRES: the direct route needs a param that isn't set
+BLOCKED = "blocked"          # a copy-only param is set or wired (directRoute.blockedBy)
+UNSUPPORTED = "unsupported"  # a value the maker doesn't take (directRoute.accepts, rejects, rejectsWhen)
+SIZE = "size"                # a size the maker can't render exactly (directRoute.size)
+RETIRED = "retired"          # DIRECT_RETIRES: the maker shut this model down on its API
 
 LOCAL = "local"        # a utility node: no provider
 PLAN = "plan"          # the signed-in Krea plan
@@ -185,11 +172,21 @@ class DirectBlock(NamedTuple):
     reason: str
     param: str | None = None
     on: str | None = None
-    detail: str | None = None  # UNSUPPORTED: the rule's label ("1080p at 10 seconds")
+    # UNSUPPORTED: what the maker doesn't take, for readiness and errors: the
+    # param and its value ("resolution 4K"), or a rejectsWhen rule's label.
+    detail: str | None = None
 
 
-def _match_value(value: Any) -> str:
-    """One spelling for a param value, as pricing compares them (6 == 6.0, True == "true")."""
+# A rejectsWhen value that matches a param that is set: saved non-empty, or
+# wired into its port (with_wired_blockers).
+SET = "(set)"
+# A param that arrives by wire rather than saved (with_wired_blockers).
+WIRED = "(wired)"
+
+
+def match_value(value: Any) -> str:
+    """One spelling for a param value, as pricing compares them: 6 == 6.0 and
+    True == "true", but 0 is not False. directRoute.ts matchValue is the same."""
     if value is None:
         return ""
     if isinstance(value, bool):
@@ -199,138 +196,10 @@ def _match_value(value: Any) -> str:
     return str(value)
 
 
-def _unsupported(definition: Mapping[str, Any], params: Mapping[str, Any], rule: Mapping[str, Any]) -> str | None:
-    """The param a ``directRoute.unsupported`` rule blocks on, or None.
-
-    ``{"param": k, "allowed": [...]}`` blocks a set value of k outside the
-    list; ``{"match": {k: v, ...}}`` blocks when every k has value v. Values
-    are the run's (saved, else the definition default)."""
-    if "allowed" in rule:
-        key = str(rule.get("param") or "")
-        value = _effective(definition, params, key)
-        if not _has_value(value):
-            return None
-        allowed = {_match_value(item) for item in rule.get("allowed") or []}
-        return key if _match_value(value) not in allowed else None
-    match = rule.get("match")
-    if not isinstance(match, Mapping) or not match:
-        return None
-    if all(_match_value(_effective(definition, params, str(key))) == _match_value(want)
-           for key, want in match.items()):
-        return str(next(iter(match)))
-    return None
-
-
-def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None) -> DirectBlock | None:
-    """Why the direct route can't take a run with these params, or None when it can.
-
-    - REQUIRES: Ideogram's direct reframe sizes by ``resolution``; a recipe
-      with only fal's ``image_size`` stays on fal.
-    - BLOCKED: a generated Krea copy names, in ``directRoute.blockedBy``, the
-      Krea-only params (explicit width/height) the maker can't honor; a
-      recipe that sets one stays on Krea instead of silently changing shape.
-    - UNSUPPORTED: ``directRoute.blockedWhen`` maps a shared param to the
-      values the maker can't render (Veo 3.1 Fast at 4K on Vertex); a run
-      with one of them, saved or default, stays on the copy.
-      DIRECT_BLOCKED_VALUES does the same for a shared param's values the
-      maker can't render (gpt-image-2's small fal size presets).
-    - UNSUPPORTED: a param value (or pair of values) the maker's API rejects,
-      named in ``directRoute.unsupported`` (MiniMax takes 6 or 10 seconds, and
-      1080P only at 6), so the run stays on Krea instead of failing.
-    - RETIRED: on and after a DIRECT_RETIRES date the maker no longer serves
-      the model, so the fal or Krea copy runs it.
-    - SIZE: ``directRoute.size`` holds the maker's documented output size
-      limits; a recipe whose size the maker can't render exactly (too few or
-      too many pixels, too extreme a ratio, a fractional size, or a size
-      choice it has no equivalent for) stays on the copy instead of being
-      silently resized (Seedream on BytePlus, maker_routes_byteplus.py).
-    - VALUE: ``directRoute.accepts`` names params whose value the maker
-      takes only within limits (a list of values, or a whole number in a
-      range); any other saved or default value stays on the copy (Seedance
-      on BytePlus: Krea's 9:21 ratio, a fractional duration, Krea's upscale
-      or prompt enhancer switched on; maker_routes_byteplus_seedance.py)."""
-    values = params or {}
-    node_id = str(definition.get("id") or "")
-    needed = DIRECT_REQUIRES.get(node_id)
-    if needed and not values.get(needed):
-        return DirectBlock(REQUIRES, needed)
-    spec = definition.get("directRoute")
-    for key in (spec.get("blockedBy") or []) if isinstance(spec, Mapping) else []:
-        if _has_value(values.get(key)):
-            return DirectBlock(BLOCKED, str(key))
-    blocked_when = spec.get("blockedWhen") if isinstance(spec, Mapping) else None
-    for key, unsupported in (blocked_when or {}).items():
-        if _effective(definition, values, str(key)) in unsupported:
-            return DirectBlock(UNSUPPORTED, str(key))
-    for key, unsupported in DIRECT_BLOCKED_VALUES.get(node_id, {}).items():
-        if _effective(definition, values, key) in unsupported:
-            return DirectBlock(BLOCKED, key)
-    for rule in (spec.get("unsupported") or []) if isinstance(spec, Mapping) else []:
-        key = _unsupported(definition, values, rule) if isinstance(rule, Mapping) else None
-        if key:
-            return DirectBlock(UNSUPPORTED, key, None, str(rule.get("label") or key))
-    size = _size_block(definition, values, spec.get("size") if isinstance(spec, Mapping) else None)
-    if size is not None:
-        return size
-    accepts = spec.get("accepts") if isinstance(spec, Mapping) else None
-    for key, rule in (accepts.items() if isinstance(accepts, Mapping) else []):
-        value = _effective(definition, values, str(key))
-        if _has_value(value) and isinstance(rule, Mapping) and not value_accepted(value, rule):
-            return DirectBlock(VALUE, str(key))
-    retires = DIRECT_RETIRES.get(node_id)
-    if retires and _today() >= retires["on"]:
-        param = retires.get("param")
-        if not param or _effective(definition, values, param) in retires.get("values", []):
-            return DirectBlock(RETIRED, param, retires["on"])
-    return None
-
-
-# A blocker that arrives by wire rather than as a saved param.
-WIRED = "(wired)"
-
-
-def with_wired_blockers(
-    definition: Mapping[str, Any], params: Mapping[str, Any] | None, wired: Any,
-) -> dict[str, Any]:
-    """``params`` plus a marker for each ``directRoute.blockedBy`` field that
-    arrives on a wired input port (a Krea copy's style images), so
-    :func:`direct_block` keeps that run on the copy just as it would for the
-    saved param. ``wired`` are the input port ids with a value (the router)
-    or with an edge into them (the run estimate). Other params are unchanged."""
-    values = dict(params or {})
-    spec = definition.get("directRoute")
-    ports = set(wired or ())
-    for key in (spec.get("blockedBy") or []) if isinstance(spec, Mapping) else []:
-        if key in ports and not _has_value(values.get(key)):
-            values[key] = WIRED
-    return values
-
-
-def filled_ports(inputs: Mapping[str, Any] | None) -> set[str]:
-    """The input ports of a run that carry a value (PortValueDict-like objects
-    with ``.value``), as the router and the engine's cache key read wired
-    blockers: the same set in both, so the cache key names the route that ran."""
-    filled: set[str] = set()
-    for port, item in (inputs or {}).items():
-        value = getattr(item, "value", None)
-        if value is not None and value != "" and value != []:
-            filled.add(str(port))
-    return filled
-
-
-def _same(a: Any, b: Any) -> bool:
-    """Equal and of the same kind (True is not 1), as directRoute.ts compares with ===."""
-    if isinstance(a, bool) or isinstance(b, bool):
-        return isinstance(a, bool) and isinstance(b, bool) and a == b
-    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-        return a == b
-    return type(a) is type(b) and a == b
-
-
 def value_accepted(value: Any, rule: Mapping[str, Any]) -> bool:
-    """A set value the maker takes (``directRoute.accepts``): one of ``values``,
-    and/or a number (``integer``: whole) within ``min``..``max``."""
-    if "values" in rule and not any(_same(value, allowed) for allowed in rule.get("values") or []):
+    """A value the maker takes (one ``directRoute.accepts`` rule): one of
+    ``values``, and/or a number (``integer``: whole) within ``min``..``max``."""
+    if "values" in rule and match_value(value) not in {match_value(v) for v in rule.get("values") or []}:
         return False
     if any(key in rule for key in ("min", "max", "integer")):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
@@ -380,6 +249,131 @@ def _size_block(definition: Mapping[str, Any], params: Mapping[str, Any], limits
         if isinstance(value, Mapping) and not size_fits(value.get("width"), value.get("height"), limits):
             return DirectBlock(SIZE, str(key))
     return None
+
+
+def _matches(definition: Mapping[str, Any], params: Mapping[str, Any], key: str, want: Any) -> bool:
+    """One entry of a rejectsWhen ``match``: SET means saved non-empty or
+    wired; any other value is compared with the run's value (saved, else the
+    definition default)."""
+    if want == SET:
+        return _has_value(params.get(key))
+    return match_value(_effective(definition, params, key)) == match_value(want)
+
+
+def _unsupported(definition: Mapping[str, Any], params: Mapping[str, Any], spec: Mapping[str, Any]) -> DirectBlock | None:
+    """UNSUPPORTED from the value rules, read against the run's values (saved,
+    else the definition default):
+
+    - ``accepts`` ``{param: {values?, min?, max?, integer?}}``: the values
+      the maker takes; any other set value blocks.
+    - ``rejects`` ``{param: [values]}``: values the maker doesn't take.
+    - ``rejectsWhen`` ``[{match: {param: value | "(set)"}, label}]``: a
+      combination the maker doesn't take; every entry must match."""
+    accepts = spec.get("accepts")
+    for key, rule in (accepts.items() if isinstance(accepts, Mapping) else []):
+        value = _effective(definition, params, str(key))
+        if _has_value(value) and isinstance(rule, Mapping) and not value_accepted(value, rule):
+            return DirectBlock(UNSUPPORTED, str(key), None, f"{key} {match_value(value)}")
+    rejects = spec.get("rejects")
+    for key, refused in (rejects.items() if isinstance(rejects, Mapping) else []):
+        value = _effective(definition, params, str(key))
+        if _has_value(value) and match_value(value) in {match_value(v) for v in refused or []}:
+            return DirectBlock(UNSUPPORTED, str(key), None, f"{key} {match_value(value)}")
+    for rule in spec.get("rejectsWhen") or []:
+        match = rule.get("match") if isinstance(rule, Mapping) else None
+        if isinstance(match, Mapping) and match and all(
+                _matches(definition, params, str(key), want) for key, want in match.items()):
+            return DirectBlock(UNSUPPORTED, str(next(iter(match))), None, str(rule.get("label") or ""))
+    return None
+
+
+def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None) -> DirectBlock | None:
+    """Why the direct route can't take a run with these params, or None when it can.
+
+    ``params`` are the run's saved params; the router, the estimate and the
+    cache key first add the wired ports a rule reads (with_wired_blockers).
+    The rules, in the order they are checked:
+
+    - REQUIRES: the direct route needs a param the recipe doesn't set
+      (DIRECT_REQUIRES: Ideogram Reframe's ``resolution``, an ElevenLabs
+      ``voice_id`` on Runway TTS/STS).
+    - BLOCKED: ``directRoute.blockedBy`` names copy-only params the maker
+      can't honor (a Krea copy's explicit width/height, style images); a
+      recipe that sets or wires one stays on the copy.
+    - UNSUPPORTED: ``directRoute.accepts`` / ``rejects`` / ``rejectsWhen``
+      (see _unsupported): a value or combination the maker doesn't take (Veo
+      3.1 Fast at 4K on Vertex, GPT Image 2's small fal presets, MiniMax's 6
+      or 10 seconds, Seedance's ratios and whole-second durations).
+    - SIZE: ``directRoute.size`` holds the maker's documented output size
+      limits; a size it can't render exactly stays on the copy instead of
+      being silently resized (Seedream on BytePlus).
+    - RETIRED: on and after a DIRECT_RETIRES date the maker no longer serves
+      the model, so the fal or Krea copy runs it.
+
+    A rule never blocks a param's default (scripts/sync-krea-catalog.py and
+    tests/test_node_route.py check), so a new node can always take the
+    maker route."""
+    values = params or {}
+    node_id = str(definition.get("id") or "")
+    needed = DIRECT_REQUIRES.get(node_id)
+    if needed and not values.get(needed):
+        return DirectBlock(REQUIRES, needed)
+    spec = definition.get("directRoute")
+    spec = spec if isinstance(spec, Mapping) else {}
+    for key in spec.get("blockedBy") or []:
+        if _has_value(values.get(key)):
+            return DirectBlock(BLOCKED, str(key))
+    block = _unsupported(definition, values, spec) or _size_block(definition, values, spec.get("size"))
+    if block is not None:
+        return block
+    retires = DIRECT_RETIRES.get(node_id)
+    if retires and _today() >= retires["on"]:
+        param = retires.get("param")
+        if not param or _effective(definition, values, param) in retires.get("values", []):
+            return DirectBlock(RETIRED, param, retires["on"])
+    return None
+
+
+def wired_rule_params(definition: Mapping[str, Any]) -> set[str]:
+    """The params a rule counts as set when they arrive by wire: ``blockedBy``
+    and every ``rejectsWhen`` entry matching ``"(set)"``."""
+    spec = definition.get("directRoute")
+    if not isinstance(spec, Mapping):
+        return set()
+    named = {str(key) for key in spec.get("blockedBy") or []}
+    for rule in spec.get("rejectsWhen") or []:
+        match = rule.get("match") if isinstance(rule, Mapping) else None
+        named |= {str(key) for key, want in (match.items() if isinstance(match, Mapping) else []) if want == SET}
+    return named
+
+
+def with_wired_blockers(
+    definition: Mapping[str, Any], params: Mapping[str, Any] | None, wired: Any,
+) -> dict[str, Any]:
+    """``params`` plus a WIRED marker for each param a rule reads as set
+    (wired_rule_params) that arrives on a wired input port, so
+    :func:`direct_block` treats it as the saved param. ``wired`` are the
+    input ports with a value (the router and the cache key, filled_ports) or
+    with an edge into them (the run estimate, before any value exists).
+    Other params are unchanged."""
+    values = dict(params or {})
+    ports = set(wired or ())
+    for key in wired_rule_params(definition):
+        if key in ports and not _has_value(values.get(key)):
+            values[key] = WIRED
+    return values
+
+
+def filled_ports(inputs: Mapping[str, Any] | None) -> set[str]:
+    """The input ports of a run that carry a value (PortValueDict-like objects
+    with ``.value``), as the router and the engine's cache key read wired
+    blockers: the same set in both, so the cache key names the route that ran."""
+    filled: set[str] = set()
+    for port, item in (inputs or {}).items():
+        value = getattr(item, "value", None)
+        if value is not None and value != "" and value != []:
+            filled.add(str(port))
+    return filled
 
 
 def _effective(definition: Mapping[str, Any], params: Mapping[str, Any], key: str) -> Any:

@@ -96,9 +96,10 @@ def krea_hailuo_to_minimax(model: str) -> Translate:
     prompt (port, else param) -> prompt; start_image -> first_frame_image;
     end_image -> last_frame_image (Hailuo 02 only); expand_prompt ->
     prompt_optimizer; resolution 512p/768p/1080p -> 512P/768P/1080P; duration
-    -> 6 or 10. Values route selection can see (duration, 1080p at 10 s, a
-    saved end image on 2.3) keep the run on Krea (directRoute.unsupported /
-    blockedBy); what depends on a wired port is refused here, before any call."""
+    -> 6 or 10. What route selection can see (duration, 1080p at 10 s, an end
+    image on 2.3, saved or wired) keeps the run on Krea (directRoute.accepts /
+    rejectsWhen / blockedBy); the rules that depend on whether a start image
+    is wired (2.3 Fast, 512P) are refused here, before any call."""
 
     def translate(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[GraphNode, dict[str, PortValueDict]]:
         params = node.params

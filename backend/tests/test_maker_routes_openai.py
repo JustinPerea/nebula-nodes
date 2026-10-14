@@ -143,10 +143,23 @@ async def test_a_fal_size_openai_cant_render_stays_on_fal():
     assert fal.await_args.args[0].params["image_size"] == "portrait_16_9"
 
 
+@pytest.mark.asyncio
+async def test_a_fal_size_with_only_the_openai_key_says_why():
+    """The saved OpenAI key can't take a fal-only preset: the error names the
+    fal key and the size, not just "OPENAI_API_KEY or FAL_KEY is required"."""
+    from execution.missing_credential import MissingCredentialError
+    node = GraphNode(id="n", definitionId="gpt-image-2-fal-generate",
+                     params={**_defaults("gpt-image-2-fal-generate"), "image_size": "square"})
+    with respx.mock as router, pytest.raises(
+            MissingCredentialError, match="^FAL_KEY is required: .*doesn't take image_size square$"):
+        await _run(node, PROMPT, OPENAI)
+    assert not router.calls
+
+
 def test_every_gpt_image_2_fal_size_is_mapped_or_kept_on_fal():
     for node_id in ("gpt-image-2-fal-generate", "gpt-image-2-fal-edit"):
         options = {o["value"] for p in DEFINITIONS[node_id]["params"] if p["key"] == "image_size" for o in p["options"]}
-        blocked = set(node_route.DIRECT_BLOCKED_VALUES[node_id]["image_size"])
+        blocked = set(DEFINITIONS[node_id]["directRoute"]["rejects"]["image_size"])
         mapped = set(openai_routes.FAL_GPT_IMAGE_2_SIZES) | {"auto"}
         assert options <= mapped | blocked and not mapped & blocked, node_id
         default = next(p["default"] for p in DEFINITIONS[node_id]["params"] if p["key"] == "image_size")

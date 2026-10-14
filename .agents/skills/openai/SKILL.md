@@ -124,7 +124,7 @@ Seven non-OpenAI nodes also run on OpenAI's Images API when `OPENAI_API_KEY` is 
 | Node | OpenAI model | Stays on the copy when |
 |---|---|---|
 | `gpt-image-1-5`, `gpt-image-1-5-edit` (fal) | `gpt-image-1.5` | on/after **2026-12-01** (OpenAI shutdown; `DIRECT_RETIRES`) |
-| `gpt-image-2-fal-generate`, `gpt-image-2-fal-edit` (fal) | `gpt-image-2` | `image_size` is `square`, `portrait_16_9` or `landscape_16_9` (under OpenAI's 655,360-pixel minimum; `DIRECT_BLOCKED_VALUES`) |
+| `gpt-image-2-fal-generate`, `gpt-image-2-fal-edit` (fal) | `gpt-image-2` | `image_size` is `square`, `portrait_16_9` or `landscape_16_9` (under OpenAI's 655,360-pixel minimum; `directRoute.rejects`) |
 | `krea-image-openai-gpt-image-2` (Krea) | `gpt-image-2` | Krea's `width` or `height` is set (`directRoute.blockedBy`) |
 | `krea-image-openai-gpt-image-2-5-flare` / `-sunburst` (Krea) | `gpt-image-2.5-flare` / `-sunburst` | only `_kreaAuth: "mcp"` |
 

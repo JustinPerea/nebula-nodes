@@ -260,18 +260,59 @@ async def test_krea_grok_video_references_and_edits():
 
 
 @pytest.mark.asyncio
+async def test_krea_grok_video_refuses_what_xai_cannot_run():
+    """References run up to 10 seconds on xAI; a longer run fails before any request."""
+    node = GraphNode(id="v", definitionId="krea-video-xai-grok-video",
+                     params={"prompt": "p", "duration": 12, "reference_images": '["https://e.com/r.png"]'})
+    with patch("handlers.grok_video.httpx.AsyncClient") as xai, pytest.raises(ValueError, match="up to 10 seconds"):
+        await _run(node, {}, XAI)
+    xai.assert_not_called()
+
+
+IMAGE = "https://e.com/i.png"
+REFS = '["https://e.com/r.png"]'
+EDIT = "https://e.com/v.mp4"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("params,wired,detail", [
+    ({"duration": 6.5}, {}, "duration 6.5"),
+    ({"edit_video": EDIT, "start_image": IMAGE}, {}, "an edit video with a start image"),
+    ({"edit_video": EDIT}, {"reference_images": PortValueDict(type="Image", value=["https://e.com/r.png"])},
+     "an edit video with reference images"),
+    ({"start_image": IMAGE, "reference_images": REFS}, {}, "a start image with reference images"),
+    ({}, {"start_image": PortValueDict(type="Image", value=IMAGE),
+          "reference_images": PortValueDict(type="Image", value=["https://e.com/r.png"])},
+     "a start image with reference images"),
+])
+async def test_what_xai_cannot_run_stays_on_krea_saved_or_wired(params, wired, detail):
+    """directRoute.accepts (whole seconds, 1-15) and rejectsWhen (what xAI
+    doesn't document on one request): the run goes to Krea, or, with only the
+    xAI key saved, says why it can't use it."""
+    gateway, seen = _krea_gateway_spy()
+    node = GraphNode(id="v", definitionId="krea-video-xai-grok-video", params={"prompt": "p", **params})
+    with patch("handlers.krea_gateway.handle_krea_gateway", gateway), \
+            patch("handlers.grok_video.httpx.AsyncClient") as xai:
+        await _run(node, {**PROMPT, **wired}, {**XAI, **KREA})
+        with pytest.raises(MissingCredentialError, match=f"KREA_API_TOKEN is required: .*doesn't take {detail}$"):
+            await _run(node, {**PROMPT, **wired}, XAI)
+    xai.assert_not_called()
+    assert seen
+
+
 @pytest.mark.parametrize("params,inputs,match", [
     ({"prompt": "p", "duration": 6.5}, {}, "whole number"),
-    ({"prompt": "p", "edit_video": "https://e.com/v.mp4", "start_image": "https://e.com/i.png"}, {}, "on its own"),
-    ({"prompt": "p", "duration": 12, "reference_images": '["https://e.com/r.png"]'}, {}, "up to 10 seconds"),
-    ({"prompt": "p", "start_image": "https://e.com/i.png", "reference_images": '["https://e.com/r.png"]'}, {},
+    ({"prompt": "p", "edit_video": EDIT, "start_image": IMAGE}, {}, "on its own"),
+    ({"prompt": "p", "start_image": IMAGE}, {"reference_images": PortValueDict(type="Image", value=[IMAGE])},
      "not both"),
 ])
-async def test_krea_grok_video_refuses_what_xai_cannot_run(params, inputs, match):
+def test_the_translator_still_refuses_what_xai_cannot_run(params, inputs, match):
+    """The router keeps these on Krea; the translator refuses them too
+    rather than silently dropping one input if it is ever called directly."""
+    from execution.maker_routes_xai import GROK_VIDEO, krea_grok_video_to_xai
     node = GraphNode(id="v", definitionId="krea-video-xai-grok-video", params=params)
-    with patch("handlers.grok_video.httpx.AsyncClient") as xai, pytest.raises(ValueError, match=match):
-        await _run(node, inputs, XAI)
-    xai.assert_not_called()
+    with pytest.raises(ValueError, match=match):
+        krea_grok_video_to_xai(GROK_VIDEO)(node, inputs)
 
 
 @pytest.mark.asyncio

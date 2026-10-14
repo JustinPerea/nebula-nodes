@@ -243,6 +243,12 @@ APPROVED_DIRECT_KEY_ADDITIONS = {
     node_id: {"envKeyName": ("FAL_KEY", ["OPENAI_API_KEY", "FAL_KEY"]), "directKeyName": "OPENAI_API_KEY"}
     for node_id in ("gpt-image-1-5", "gpt-image-1-5-edit", "gpt-image-2-fal-generate", "gpt-image-2-fal-edit")
 }
+# GPT Image 2's fal presets under OpenAI's 655,360-pixel minimum stay on fal
+# (execution/maker_routes_openai.py FAL_GPT_IMAGE_2_SIZES): the rule is the
+# only new field.
+for _node_id in ("gpt-image-2-fal-generate", "gpt-image-2-fal-edit"):
+    APPROVED_TOP_LEVEL_FIELD_ADDITIONS[_node_id] = {
+        "directRoute": {"rejects": {"image_size": ["square", "portrait_16_9", "landscape_16_9"]}}}
 APPROVED_LEADING_PARAM_ADDITIONS = {
     "krea-2-generate": _KREA_AUTH_PARAM,
     "krea-style-search": _KREA_AUTH_PARAM,

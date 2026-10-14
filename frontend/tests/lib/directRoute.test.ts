@@ -16,6 +16,8 @@ type RouteCase = {
   apiKeys: Record<string, string>;
   expected: { kind: string; provider: string | null; key: string | null };
   paramKeys?: string[];
+  wired?: string[];
+  block?: { reason: string; param: string | null; detail?: string; on?: string } | null;
 };
 
 describe('selectRoute (cases shared with backend services/node_route.py)', () => {
@@ -27,9 +29,15 @@ describe('selectRoute (cases shared with backend services/node_route.py)', () =>
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(new Date(`${testCase.today ?? fixture.defaultToday}T12:00:00`));
       const definition = NODE_DEFINITIONS[testCase.nodeId];
-      const route = selectRoute(definition, testCase.params, testCase.apiKeys);
+      const params = withWiredBlockers(definition, testCase.params, testCase.wired ?? []);
+      const route = selectRoute(definition, params, testCase.apiKeys);
       expect(route).toEqual(testCase.expected);
-      expect(runRouteProvider(definition, testCase.apiKeys, testCase.params)).toBe(testCase.expected.provider);
+      expect(runRouteProvider(definition, testCase.apiKeys, params)).toBe(testCase.expected.provider);
+      if (testCase.block !== undefined) {
+        const block = directBlock(definition, params);
+        const got = block && Object.fromEntries(Object.entries(block).filter(([, value]) => value !== null && value !== undefined));
+        expect(got).toEqual(testCase.block);
+      }
       if (testCase.paramKeys) {
         expect(routeParamDefinitions(definition, route.kind).map((param) => param.key).sort()).toEqual(testCase.paramKeys);
       }
@@ -145,7 +153,7 @@ describe('when the direct route can\'t take a run', () => {
     const kreaPro = NODE_DEFINITIONS['krea-image-google-nano-banana-pro'];
     expect(directBlock(kreaPro, { width: 1024 })).toEqual({ reason: 'blocked', param: 'width', on: null });
     const veoFast = NODE_DEFINITIONS['krea-video-google-veo-3-1-fast'];
-    expect(directBlock(veoFast, { resolution: '4K' })).toEqual({ reason: 'unsupported', param: 'resolution', on: null });
+    expect(directBlock(veoFast, { resolution: '4K' })).toEqual({ reason: 'unsupported', param: 'resolution', on: null, detail: 'resolution 4K' });
     expect(directBlock(veoFast, {})).toBeNull();
     expect(directBlock(NODE_DEFINITIONS['krea-video-google-veo-3-1'], { resolution: '4K' })).toBeNull();
     const nano = NODE_DEFINITIONS['nano-banana-fal'];
@@ -160,16 +168,19 @@ describe('when the direct route can\'t take a run', () => {
     const gpt2 = NODE_DEFINITIONS['gpt-image-2-fal-generate'];
     expect(directBlock(gpt2, {})).toBeNull();
     expect(directBlock(gpt2, { image_size: 'square_hd' })).toBeNull();
-    expect(directBlock(gpt2, { image_size: 'landscape_16_9' })).toEqual({ reason: 'blocked', param: 'image_size', on: null });
+    expect(directBlock(gpt2, { image_size: 'landscape_16_9' })).toEqual({
+      reason: 'unsupported', param: 'image_size', on: null, detail: 'image_size landscape_16_9' });
   });
 
-  it('keeps values the maker rejects on the copy (directRoute.unsupported)', () => {
+  it('keeps values and combinations the maker doesn\'t take on the copy (directRoute.accepts / rejectsWhen)', () => {
     const hailuo = NODE_DEFINITIONS['krea-video-minimax-hailuo-02'];
     // The defaults (768p, 6 s) are values MiniMax takes.
     expect(directBlock(hailuo, {})).toBeNull();
     expect(directBlock(hailuo, { duration: 10 })).toBeNull();
     expect(directBlock(hailuo, { duration: 7.5 })).toEqual({
-      reason: 'unsupported', param: 'duration', on: null, detail: 'durations other than 6 or 10 seconds' });
+      reason: 'unsupported', param: 'duration', on: null, detail: 'duration 7.5' });
+    // 10.0 and '10' are 10, as the backend's match_value spells them.
+    expect(directBlock(hailuo, { resolution: '1080p', duration: '10' })?.detail).toBe('1080p at 10 seconds');
     expect(directBlock(hailuo, { resolution: '1080p', duration: 10 })).toEqual({
       reason: 'unsupported', param: 'resolution', on: null, detail: '1080p at 10 seconds' });
     expect(selectRoute(hailuo, { duration: 8 }, { MINIMAX_API_KEY: 'k', KREA_API_TOKEN: 'k' }))

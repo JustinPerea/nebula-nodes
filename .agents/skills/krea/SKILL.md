@@ -60,7 +60,7 @@ Google lane (2026-10-14, `backend/execution/maker_routes_google.py`):
   `width`/`height` keep it on Krea.
 - `krea-video-google-veo-3-1` / `-fast` / `-lite` -> Vertex
   `veo-3.1-*-generate-001` on `GOOGLE_VERTEX_CREDENTIALS` only (a Gemini API
-  key alone leaves them on Krea). `directRoute.blockedWhen` keeps Fast at
+  key alone leaves them on Krea). `directRoute.rejects` keeps Fast at
   `resolution: 4K` on Krea (Vertex: Fast is 720p/1080p). Reference images run
   on Vertex only at duration 8, not at 4K and not with start/end frames;
   other combinations are refused before any request.
@@ -94,7 +94,10 @@ precedence as Nano Banana: the Krea plan, else the xAI key, else
 `KREA_API_TOKEN`. Krea-only fields that keep a run on Krea, whether saved or
 wired into the port: Grok 2.0's `style_images` (xAI has no style references)
 and `start_video` on both Grok video copies (Krea doesn't say what it
-means, so it isn't mapped to xAI's extensions). The overlay is `XAI_DIRECT_ROUTES` in `scripts/sync-krea-catalog.py`.
+means, so it isn't mapped to xAI's extensions). Grok video also stays on Krea
+for a duration that isn't whole seconds in 1-15 and for combinations xAI
+doesn't document on one request (an edit with a start image or references, a
+start image with references): `directRoute.accepts` / `rejectsWhen`. The overlay is `XAI_DIRECT_ROUTES` in `scripts/sync-krea-catalog.py`.
 
 ### Ideogram and Runway copies (2026-10-14)
 

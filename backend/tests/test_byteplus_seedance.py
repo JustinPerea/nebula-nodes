@@ -292,7 +292,6 @@ async def test_local_reference_audio_goes_as_base64(monkeypatch, tmp_path):
     # Frame mode and reference mode "cannot be mixed".
     ("krea-video-bytedance-seedance-2-5", {"start_image": PortValueDict(type="Image", value="https://e.com/a.png")},
      {"reference_images": '["https://e.com/b.png"]'}, "can't mix"),
-    ("krea-video-bytedance-seedance-2", {"effects": PortValueDict(type="Any", value=[{"id": "x"}])}, {}, "effects"),
     # 2.0 rejects audio-only input; an end frame needs a start frame.
     ("krea-video-bytedance-seedance-2", {"reference_audios": PortValueDict(type="Audio", value=["https://e.com/a.mp3"])},
      {}, "audio-only"),
@@ -308,14 +307,17 @@ async def test_inputs_byteplus_cant_take_raise_before_any_request(monkeypatch, d
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("port,value,error", [
-    ("start_video", PortValueDict(type="Video", value="https://e.com/v.mp4"), "start video"),
-    ("reference_images", PortValueDict(type="Image", value=["https://e.com/a.png"]), "takes no reference images"),
+@pytest.mark.parametrize("definition_id,port,value,error", [
+    ("krea-video-bytedance-seedance-1-0-pro", "start_video", PortValueDict(type="Video", value="https://e.com/v.mp4"),
+     "start video"),
+    ("krea-video-bytedance-seedance-1-0-pro", "reference_images",
+     PortValueDict(type="Image", value=["https://e.com/a.png"]), "takes no reference images"),
+    ("krea-video-bytedance-seedance-2", "effects", PortValueDict(type="Any", value=[{"id": "x"}]), "effects"),
 ])
-async def test_wired_krea_only_inputs_keep_seedance_1_0_pro_on_krea(monkeypatch, port, value, error):
+async def test_wired_krea_only_inputs_keep_seedance_on_krea(monkeypatch, definition_id, port, value, error):
     """Krea-only fields wired into a port keep the run on Krea, as saved ones do."""
     ark = ModelArk(monkeypatch)
-    node = GraphNode(id="k", definitionId="krea-video-bytedance-seedance-1-0-pro", params={"prompt": "x"})
+    node = GraphNode(id="k", definitionId=definition_id, params={"prompt": "x"})
     with pytest.raises(MissingCredentialError, match=f"^KREA_API_TOKEN is required: {port}"):
         await _run(node, {port: value}, BYTEPLUS)
     gateway = AsyncMock(return_value={"video": {"type": "Video", "value": "https://e.com/k.mp4"}})
@@ -325,7 +327,7 @@ async def test_wired_krea_only_inputs_keep_seedance_1_0_pro_on_krea(monkeypatch,
     assert ark.requests == []
     # The translator still refuses one if it ever reached it.
     with pytest.raises(ValueError, match=error):
-        seedance.krea_to_byteplus("seedance-1-0-pro-250528")(node, {port: value})
+        seedance.krea_to_byteplus(DEFINITIONS[definition_id]["directRoute"]["model"])(node, {port: value})
 
 
 @pytest.mark.asyncio

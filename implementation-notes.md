@@ -4252,3 +4252,99 @@ Open (not fixed here):
 - A Cinema scene with a Character bundle injects a seed per shot, which keeps that shot on fal. The scene's price is
   read from the base params, which have no seed, so with a BytePlus key it's quoted at the BytePlus price while the
   shot bills fal (unpriced). With only a BytePlus key the shot fails with a missing FAL_KEY.
+
+## 2026-10-14 — Direct maker routes, round 2: integrate the seven lanes (stage 1)
+
+Branch `direct-makers-round2` (from `direct-maker-routes` @ f3fc3447). The seven lane branches merged with
+`--no-ff`, in this order, each followed by `sync-krea-catalog.py` (108 Krea models, 63 priced), the model reference
+check and that lane's tests:
+
+| Merge | Lane | What the merge needed |
+| --- | --- | --- |
+| 1a95441d | direct-google | clean |
+| f20379a2 | direct-openai | `MAKER_ROUTED` / `APPROVED_DUAL_ROUTE_SPLITS`, route and pricing cases combined |
+| a24e1091 | direct-xai | same shared lists; xAI's generalized wired-blocker helper kept |
+| a318953d | direct-ideogram-runway | a wired Ideogram 3 `style_images` now stays on Krea through the shared wired blockers (it used to fail in the translator); the translator guard is still unit-checked. Unpriced makers' Krea entries carry `routes: {krea}`; `test_direct_route_models_price_both_routes` generalized to that |
+| 45905fa4 | direct-minimax-meshy | a wired `end_image` on Hailuo 2.3 now stays on Krea (`test_a_wired_end_image_keeps_hailuo_2_3_on_krea`) instead of being refused |
+| d62baf16 | direct-elevenlabs | new `maker_routes._blocked_reason`: the missing-key error says why the saved maker key can't take this run |
+| e5ad83ae | byteplus-provider | wired `style_images` (Seedream) and `start_video` / `reference_images` (Seedance 1.0 Pro) stay on Krea; with only the BytePlus key the run says `KREA_API_TOKEN is required: <port> ...` |
+
+Security follow-up #3 (backup collision between the ElevenLabs and MiniMax lanes) checked: both route modules match
+their lane branches exactly, `handlers/elevenlabs.py` has no MiniMax content, and no lane module imports another.
+
+### One rule set for "the maker can't take this run"
+
+The lanes had grown five mechanisms for the same idea: `blockedBy`, `accepts` (BytePlus, reason `value`),
+`blockedWhen` (Google, reason `unsupported`), `unsupported` rules with `allowed`/`match` (MiniMax) and a
+`DIRECT_BLOCKED_VALUES` constant keyed by node id (OpenAI, reason `blocked`). They're now one documented set on the
+definition's `directRoute`, read the same way by `services/node_route.py direct_block` and
+`frontend/src/lib/directRoute.ts directBlock`, checked in this order:
+
+| Rule | Shape | Reason | Example |
+| --- | --- | --- | --- |
+| (DIRECT_REQUIRES) | node id -> param | `requires` | Ideogram Reframe needs `resolution` |
+| `blockedBy` | `[param]`, set or wired | `blocked` | Krea's `width`/`height`, `style_images`, `start_video`, Seedance 2 `effects` |
+| `accepts` | `{param: {values?, min?, max?, integer?}}` | `unsupported` | MiniMax 02 `duration` 6 or 10; Seedance ratios and whole seconds; xAI 1-15 whole seconds |
+| `rejects` | `{param: [values]}` | `unsupported` | Veo 3.1 Fast `resolution` 4K; GPT Image 2's fal `square` / 16:9 presets |
+| `rejectsWhen` | `[{match: {param: value or "(set)"}, label}]` | `unsupported` | MiniMax 1080p at 10 s; xAI start image with references |
+| `size` | BytePlus's limits, as built | `size` | Seedream pixel window |
+| (DIRECT_RETIRES) | node id -> date | `retired` | gemini-2.5-flash-image from 2027-03-15 |
+
+- Values compare through one spelling, `match_value` / `matchValue` (6 == 6.0 == "6", true == "true", 0 is not
+  false). Before this, Python used `in` (6 == 6.0, but True == 1) while TS used `includes` (6 !== "6"); the two sides
+  could disagree on a saved string duration.
+- `"(set)"` means saved non-empty or wired. `wired_rule_params` / `wiredRuleParams` (generalized from the xAI lane's
+  helper) is the set of params a rule reads as set: `blockedBy` plus every `"(set)"` entry. The router
+  (`filled_ports`), the engine's cache key (`filled_ports`) and the run estimate (ports with an edge) all add a WIRED
+  marker for those through `with_wired_blockers` before asking `select_route`.
+- Every value rule has one reason, `unsupported`, with `detail` naming the param and value ("resolution 4K") or the
+  rule's label ("1080p at 10 seconds"). Readiness: "MiniMax's own API doesn't take duration 8, so it runs on Krea.
+  Change duration to run on MiniMax." The missing-key error: "KREA_API_TOKEN is required: this recipe can't run on
+  MINIMAX_API_KEY because the maker doesn't take duration 8". `size` gets its own error line ("can't render its
+  image_size exactly").
+- Generated Krea entries take the rules from the overlay (`directBlockedBy`, `directAccepts`, `directRejects`,
+  `directRejectsWhen`, `directSize`); `_route_rules` in `sync-krea-catalog.py` imports `node_route.py` and refuses an
+  overlay whose rule names a field Krea doesn't take or refuses a default. Hand-written fal nodes carry the rules in
+  `nodeDefinitions.ts` / `node_definitions.json`: GPT Image 2's fal presets moved from the constant into
+  `directRoute.rejects` on both nodes (fingerprint approval in `test_reference_roles.py`).
+- Removed: `DIRECT_BLOCKED_VALUES`, the `value` reason, `blockedWhen`, the `unsupported` rule list and its
+  `UnsupportedRule` type, `unsupportedParam`. No aliases.
+- Tests: `route_cases.json` gained optional `wired` (ports with a value) and `block` (the expected
+  `direct_block`); both sides apply them. Cases now cover requires, blockedBy saved and wired, accepts, rejects,
+  rejectsWhen by value and by `"(set)"` with a wired port, size and retired. New
+  `test_no_direct_route_rule_blocks_a_new_nodes_defaults` checks every dual-route node at its defaults (only
+  `requires` may block) and that each rule names a real param or port. Mutation-checked: `"(set)"` read as a literal,
+  `wired_rule_params` without `rejectsWhen`, `match_value` without the 6.0 -> 6 step, `rejects` ignored (Python and
+  TS), and a default added to a `rejects` list each fail tests.
+
+Decisions beyond the mechanical conversion:
+
+- **xAI video** (closes the xAI reviewer's first open item): `krea-video-xai-grok-video` gains
+  `accepts: {duration: {integer, min 1, max 15}}` (xAI: duration "Range: [1, 15]", checked by the lane reviewer
+  today) and three `rejectsWhen` rules for what xAI doesn't document on one request: an edit video with a start
+  image, an edit video with references, a start image with references. Grok Imagine 1.5 gets the duration rule.
+  These runs used to be refused on the xAI route; now they stay on Krea, saved or wired. The translator keeps its
+  guards and tests call it directly.
+- **Wired blockers fall back instead of failing**: Ideogram 3 `style_images`, Hailuo 2.3 `end_image`, Seedream
+  `style_images`, Seedance 1.0 Pro `start_video` / `reference_images` and Seedance 2 `effects` wired into a port
+  now run on Krea (or name the Krea token) instead of being refused by the maker translator. The Seedance `effects`
+  refusal case was passing for the wrong reason (`MissingCredentialError` is a `ValueError` whose message contains
+  "effects"); it moved into the wired-Krea-only test. An audit that made the blocked-key branch raise a different
+  error found no other test passing that way.
+- **OpenAI's only-key error** (OpenAI reviewer's open item): with only an OpenAI key, a fal-only preset used to
+  say "OPENAI_API_KEY or FAL_KEY is required". It now says "FAL_KEY is required: this recipe can't run on
+  OPENAI_API_KEY because the maker doesn't take image_size square"
+  (`test_a_fal_size_with_only_the_openai_key_says_why`).
+- Rules that need an input to be *absent* (Hailuo 2.3 Fast without a start image, 512P without one, H3
+  text-to-video without a ratio, xAI references over 10 s) aren't route rules; the translators still refuse them
+  before any request.
+
+Still open:
+
+- Frontend readiness and `describe_node` read saved params only, so a wired blocker still shows "runs on <maker>"
+  there (the run, the estimate and the cache key are right). Cosmetic; the readiness side would need the canvas
+  edges.
+- Gen-4.5's 672:1584 ratio (ideogram-runway open item) could now be one `directRejects` entry in the overlay; not
+  added here because it needs Runway's current ratio list re-read first.
+- Security follow-ups #1, #2, #4, #5 (Ideogram SSRF, URL-download sweep, MiniMax media size cap, ElevenLabs
+  `voice_id` path quoting) are for the next stage.

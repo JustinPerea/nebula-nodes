@@ -63,7 +63,7 @@ Same three-step route order. Runway's Seedance options (`runway-video`) are not 
 | `krea-video-bytedance-seedance-2-mini` | `dreamina-seedance-2-0-mini-260615` | `seed` set |
 | `krea-video-bytedance-seedance-2-5` | `dreamina-seedance-2-5-260628` | `seed` or `effects` set; `enhance_prompt` or `draft` on |
 
-Krea copies also stay on Krea for an `aspect_ratio` outside 16:9, 4:3, 1:1, 3:4, 9:16, 21:9, or a duration that isn't whole seconds in range (1.0: 2–12, 2.0: 4–15, 2.5: 4–30). That's `directRoute.accepts` (route reason `value`), for settings that have defaults and so can't be `blockedBy` blockers.
+Krea copies also stay on Krea for an `aspect_ratio` outside 16:9, 4:3, 1:1, 3:4, 9:16, 21:9, or a duration that isn't whole seconds in range (1.0: 2–12, 2.0: 4–15, 2.5: 4–30). That's `directRoute.accepts` (route reason `unsupported`), for settings that have defaults and so can't be `blockedBy` blockers.
 
 Hard facts:
 

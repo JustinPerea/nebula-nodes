@@ -1,7 +1,7 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../types';
 import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
-import { DIRECT_BLOCKED_VALUES, directBlock, directKeyNames, fallbackKeyNames, KEY_PROVIDERS, selectRoute, type DirectBlock, type NodeRoute } from './directRoute';
+import { directBlock, directKeyNames, fallbackKeyNames, KEY_PROVIDERS, selectRoute, type DirectBlock, type NodeRoute } from './directRoute';
 import { modelChoice, paramCallsProvider } from './nodeKeys';
 
 export type ProviderSetupTarget =
@@ -148,13 +148,13 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
   const suggestDirect = directOk && def.directRoute?.setup !== 'fallback';
   const key = route.key ?? (suggestDirect ? directKeyNames(def)[0] : fallbackKeyNames(def)[0]) ?? keys[0];
   const ready = keyReadiness(key, cache, health);
-  const blockNote = block ? ` ${directBlockNote(def, block, params)}` : '';
+  const blockNote = block ? ` ${directBlockNote(def, block)}` : '';
   return { ...ready, connectionLabel: connectionLabelFor(key),
     detail: `${routeDetail(def, route, key, directOk)}${blockNote} ${ready.detail}` };
 }
 
 /** Why this recipe can't run on the maker's own API (lib/directRoute.ts directBlock). */
-function directBlockNote(def: ModelNodeDefinition, block: DirectBlock, params: Record<string, unknown>): string {
+function directBlockNote(def: ModelNodeDefinition, block: DirectBlock): string {
   const direct = directKeyNames(def)[0];
   const fallback = fallbackKeyNames(def)[0];
   const directName = direct ? keyProviderName(direct) : 'the maker';
@@ -164,22 +164,15 @@ function directBlockNote(def: ModelNodeDefinition, block: DirectBlock, params: R
     // ElevenLabs voice_id (Runway's voice presets don't map to one).
     return `This recipe sets no ${directName} ${block.param}, so it uses ${fallbackName}. Set it to run on ${directName}.`;
   }
-  if (block.reason === 'blocked' && block.param && Object.hasOwn(DIRECT_BLOCKED_VALUES[def.id] ?? {}, block.param)) {
-    return `This recipe's ${block.param} has no ${directName} equivalent, so it runs on ${fallbackName}. Pick another ${block.param} to run on ${directName}.`;
-  }
   if (block.reason === 'blocked') {
     return `This recipe sets ${block.param}, which only ${fallbackName} takes, so it runs on ${fallbackName}. Clear it to run on ${directName}.`;
   }
   if (block.reason === 'unsupported') {
-    if (block.detail) return `${directName}'s own API doesn't take ${block.detail}, so it runs on ${fallbackName}.`;
-    const value = block.param ? (params[block.param] ?? 'its default') : 'this setting';
-    return `${directName}'s own API can't run ${block.param} ${String(value)} for this model, so it runs on ${fallbackName}.`;
+    // directRoute.accepts / rejects / rejectsWhen: "resolution 4K", "1080p at 10 seconds".
+    return `${directName}'s own API doesn't take ${block.detail}, so it runs on ${fallbackName}. Change ${block.param} to run on ${directName}.`;
   }
   if (block.reason === 'size') {
     return `${directName} can't render this recipe's ${block.param} exactly, so it runs on ${fallbackName}. Pick a size ${directName} takes to run on ${directName}.`;
-  }
-  if (block.reason === 'value') {
-    return `${directName} doesn't take this recipe's ${block.param} setting, so it runs on ${fallbackName}. Change it to run on ${directName}.`;
   }
   return `${directName} retires this model on its own API from ${block.on}, so it runs on ${fallbackName}.`;
 }

@@ -217,9 +217,11 @@ def krea_grok_video_to_xai(model: str) -> Translate:
       extension endpoint, and a run that sets or wires it stays on Krea.
     - duration and resolution default to the Krea node's (6 s, 720p), not
       xAI's (8 s, 480p), so the run matches what the node shows and its price.
-    - Combinations xAI doesn't document on one request (an edit plus frames
-      or references, a start image plus references) are refused rather than
-      silently dropping one."""
+    - Combinations xAI doesn't document on one request (an edit plus a
+      start image or references, a start image plus references) and
+      durations outside whole 1-15 seconds stay on Krea, saved or wired
+      (directRoute.rejectsWhen / accepts); the translator refuses them too
+      rather than silently dropping one."""
 
     def translate(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[GraphNode, dict[str, PortValueDict]]:
         params = node.params

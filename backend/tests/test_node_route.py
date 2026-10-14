@@ -22,10 +22,15 @@ DEFINITIONS = NodeRegistry().get_all()
 def test_route_matches_shared_cases(case, monkeypatch):
     monkeypatch.setattr(node_route, "_today", lambda: case.get("today", CASES["defaultToday"]))
     definition = DEFINITIONS[case["nodeId"]]
-    route = node_route.select_route(definition, case["params"], case["apiKeys"])
+    params = node_route.with_wired_blockers(definition, case["params"], case.get("wired", ()))
+    route = node_route.select_route(definition, params, case["apiKeys"])
     assert route._asdict() == case["expected"]
     # Pricing and the spend gate bill the same provider.
-    assert model_pricing.route_provider(definition, case["apiKeys"], case["params"]) == case["expected"]["provider"]
+    assert model_pricing.route_provider(definition, case["apiKeys"], params) == case["expected"]["provider"]
+    if "block" in case:
+        block = node_route.direct_block(definition, params)
+        got = None if block is None else {k: v for k, v in block._asdict().items() if v is not None}
+        assert got == case["block"]
     if "paramKeys" in case:
         assert sorted(node_route.route_param_keys(definition, route.kind)) == case["paramKeys"]
 
@@ -45,6 +50,27 @@ def test_every_dual_route_node_lists_its_maker_key_first_and_splits_params_clean
                   for name in ("sharedParams", "falParams", "directParams")}
         assert not groups["sharedParams"] & groups["falParams"], node_id
         assert not groups["sharedParams"] & groups["directParams"], node_id
+
+
+def test_no_direct_route_rule_blocks_a_new_nodes_defaults(monkeypatch):
+    """A rule that refused a param's default would send every new node to the
+    copy. Only REQUIRES may (the direct route needs an opt-in param), and a
+    rule's params must be ones the node has."""
+    monkeypatch.setattr(node_route, "_today", lambda: CASES["defaultToday"])
+    checked = 0
+    for node_id, definition in DEFINITIONS.items():
+        if not node_route.direct_keys(definition):
+            continue
+        block = node_route.direct_block(definition, {})
+        assert block is None or block.reason == node_route.REQUIRES, (node_id, block)
+        spec = definition.get("directRoute") or {}
+        named = set(spec.get("blockedBy") or []) | set(spec.get("accepts") or {}) | set(spec.get("rejects") or {})
+        named |= {key for rule in spec.get("rejectsWhen") or [] for key in rule["match"]}
+        keys = {p["key"] for group in ("params", "sharedParams", "falParams", "directParams")
+                for p in definition.get(group) or []} | {port["id"] for port in definition.get("inputPorts") or []}
+        assert named <= keys, (node_id, named - keys)
+        checked += 1
+    assert checked > 40
 
 
 def test_cache_tag_names_the_route_only_for_multi_route_nodes():

@@ -369,7 +369,7 @@ GOOGLE_LANE_ROUTES = {
         # page still lists a 4k price), so a 4K run stays on Krea.
         "directKeyName": "GOOGLE_VERTEX_CREDENTIALS", "translation": "krea-veo-vertex",
         "model": "veo-3.1-fast-generate-001", "kreaOnly": [], "directParams": [],
-        "directBlockedWhen": {"resolution": ["4K"]},
+        "directRejects": {"resolution": ["4K"]},
         "pricing": {"provider": "google", "per": "second", "priceParams": ["resolution", "generate_audio"],
                     "rows": _veo_rows({("720p", True): 0.10, ("1080p", True): 0.12,
                                        ("720p", False): 0.08, ("1080p", False): 0.10}),
@@ -436,6 +436,11 @@ _XAI_QUALITY_SOURCE = {"url": "https://docs.x.ai/developers/model-capabilities/i
                        "quote": "Images are billed at the quality they are served at"}
 
 
+# xAI video generations: duration "integer", "Range: [1, 15]" (videos REST
+# reference); a fractional or longer Krea duration stays on Krea.
+_XAI_VIDEO_SECONDS = {"integer": True, "min": 1, "max": 15}
+
+
 def _xai_video_rows(rates, input_high, guards):
     """Per-request rows for each whole-second duration Krea's node takes
     (1-15): rate x duration, up to that plus the most input images the route
@@ -483,6 +488,15 @@ XAI_DIRECT_ROUTES = {
         # Krea-only rather than guessed onto xAI's /v1/videos/extensions.
         "directKeyName": "XAI_API_KEY", "translation": "krea-xai-video", "model": "grok-imagine-video",
         "kreaOnly": ["start_video"], "directBlockedBy": ["start_video"], "directParams": [],
+        "directAccepts": {"duration": _XAI_VIDEO_SECONDS},
+        # xAI documents an edit on its own and a start image or references on
+        # one generation, not these together; such a run stays on Krea.
+        "directRejectsWhen": [
+            {"match": {"edit_video": "(set)", "start_image": "(set)"}, "label": "an edit video with a start image"},
+            {"match": {"edit_video": "(set)", "reference_images": "(set)"},
+             "label": "an edit video with reference images"},
+            {"match": {"start_image": "(set)", "reference_images": "(set)"},
+             "label": "a start image with reference images"}],
         "pricing": {"provider": "xai", "per": "request", "priceParams": ["duration", "edit_video", "resolution"],
                     "rows": _xai_video_rows({"480p": 0.05, "720p": 0.07}, 7 * 0.002, {"edit_video": ""}),
                     "notes": "xAI list price for grok-imagine-video on the person's XAI_API_KEY: per second by "
@@ -498,6 +512,7 @@ XAI_DIRECT_ROUTES = {
     "/generate/video/xai/grok-video-1.5": {
         "directKeyName": "XAI_API_KEY", "translation": "krea-xai-video", "model": "grok-imagine-video-1.5",
         "kreaOnly": ["start_video"], "directBlockedBy": ["start_video"], "directParams": [],
+        "directAccepts": {"duration": _XAI_VIDEO_SECONDS},
         "pricing": {"provider": "xai", "per": "request", "priceParams": ["duration", "resolution"],
                     "rows": _xai_video_rows({"480p": 0.08, "720p": 0.14, "1080p": 0.25}, 0.01, {}),
                     "notes": "xAI list price for grok-imagine-video-1.5 on the person's XAI_API_KEY: per second by "
@@ -516,11 +531,12 @@ DIRECT_ROUTES.update(XAI_DIRECT_ROUTES)
 # execution/maker_routes_minimax_meshy.py translates them. Model ids, fields
 # and limits: platform.minimax.io/docs/api-reference/video-generation-{t2v,i2v,
 # fl2v,v2-create}.md and docs.meshy.ai/openapi.yaml, read 2026-10-14.
-# `directUnsupported` lists values MiniMax rejects, which keep a run on Krea:
+# `directAccepts` / `directRejectsWhen` keep a run MiniMax wouldn't take on Krea:
 # "duration ... `6` or `10`" and 1080P "`6`" only (i2v.md, t2v.md, fl2v.md).
-# Rules that depend on a wired port (2.3 Fast needs a start image, 512P needs
-# one, H3 text-to-video needs a concrete ratio) can't be seen by route
-# selection, so the translation refuses those before any call.
+# Rules that need an input to be present (2.3 Fast needs a start image, 512P
+# needs one, H3 text-to-video needs a concrete ratio) aren't route rules (a
+# rule only matches what is set or wired), so the translation refuses those
+# before any call.
 MINIMAX_PRICING_URL = "https://platform.minimax.io/docs/pricing/overview"
 MINIMAX_CHECKED = "2026-10-14"
 _MINIMAX_NOTE = ("MiniMax pay-as-you-go list price (Global platform, USD), for runs on the person's MINIMAX_API_KEY "
@@ -569,8 +585,7 @@ MINIMAX_MESHY_ROUTES = {
     "/generate/video/minimax/hailuo-02": {
         "directKeyName": "MINIMAX_API_KEY", "translation": "krea-minimax-hailuo", "model": "MiniMax-Hailuo-02",
         "kreaOnly": [], "directParams": [],
-        "directUnsupported": [{"param": "duration", "allowed": [6, 10], "label": "durations other than 6 or 10 seconds"},
-                              _MINIMAX_10S_1080P],
+        "directAccepts": {"duration": {"values": [6, 10]}}, "directRejectsWhen": [_MINIMAX_10S_1080P],
         "pricing": _hailuo_pricing("MiniMax-Hailuo-02", [
             ("512p", 6, 0.10, "$0.10 per 512P, 6s video"), ("512p", 10, 0.15, "$0.15 per 512P, 10s video"),
             ("768p", 6, 0.28, "$0.28 per 768P, 6s video"), ("768p", 10, 0.56, "$0.56 per 768P, 10s video"),
@@ -580,7 +595,7 @@ MINIMAX_MESHY_ROUTES = {
         "directKeyName": "MINIMAX_API_KEY", "translation": "krea-minimax-hailuo", "model": "MiniMax-Hailuo-2.3",
         # First & last frame is Hailuo 02 only (fl2v.md: "Supported values: `MiniMax-Hailuo-02`").
         "kreaOnly": ["end_image"], "directBlockedBy": ["end_image"], "directParams": [],
-        "directUnsupported": [_MINIMAX_10S_1080P],
+        "directRejectsWhen": [_MINIMAX_10S_1080P],
         "pricing": _hailuo_pricing("MiniMax-Hailuo-2.3", [
             ("768p", 6, 0.28, "$0.28 per 768P, 6s video"), ("768p", 10, 0.56, "$0.56 per 768P, 10s video"),
             ("1080p", 6, 0.49, "$0.49 per 1080P, 6s video")]),
@@ -589,7 +604,7 @@ MINIMAX_MESHY_ROUTES = {
         "directKeyName": "MINIMAX_API_KEY", "translation": "krea-minimax-hailuo",
         "model": "MiniMax-Hailuo-2.3-Fast",
         "kreaOnly": ["end_image"], "directBlockedBy": ["end_image"], "directParams": [],
-        "directUnsupported": [_MINIMAX_10S_1080P],
+        "directRejectsWhen": [_MINIMAX_10S_1080P],
         "pricing": _hailuo_pricing("MiniMax-Hailuo-2.3-Fast", [
             ("768p", 6, 0.19, "$0.19 per 768P, 6s video"), ("768p", 10, 0.32, "$0.32 per 768P, 10s video"),
             ("1080p", 6, 0.33, "$0.33 per 1080P, 6s video")]),
@@ -808,18 +823,57 @@ def _seedance_routes():
 DIRECT_ROUTES.update(_seedance_routes())
 
 
-def _accepted(value, rule):
-    """backend services/node_route.py value_accepted, for a default (stdlib only)."""
-    if "values" in rule and not any(type(value) is type(allowed) and value == allowed for allowed in rule["values"]):
-        return False
-    if any(key in rule for key in ("min", "max", "integer")):
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            return False
-        if rule.get("integer") and not float(value).is_integer():
-            return False
-        if value < rule.get("min", value) or value > rule.get("max", value):
-            return False
-    return True
+def _node_route():
+    """backend/services/node_route.py (stdlib only), for the rule checks below."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("node_route", ROOT / "backend/services/node_route.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _route_rules(endpoint, route, params):
+    """The overlay's directRoute rules (backend services/node_route.py
+    direct_block reads them), checked: each names Krea fields, and none
+    blocks a param's default (that would send every new node to Krea)."""
+    rules = _node_route()
+    keys = {param["key"] for param in params}
+    defaults = {param["key"]: param.get("default") for param in params}
+    blocked = route.get("directBlockedBy") or []
+    if set(blocked) - set(route["kreaOnly"]):
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedBy must be kreaOnly fields")
+    defaulted = sorted(key for key in blocked if defaults.get(key) is not None)
+    if defaulted:
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedBy fields have defaults: {defaulted}")
+    accepts = route.get("directAccepts") or {}
+    rejects = route.get("directRejects") or {}
+    rejects_when = route.get("directRejectsWhen") or []
+    named = set(accepts) | set(rejects) | {key for rule in rejects_when for key in rule.get("match") or {}}
+    if named - keys:
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: value rules name fields Krea doesn't take: {sorted(named - keys)}")
+    for key, rule in accepts.items():
+        if defaults.get(key) is not None and not rules.value_accepted(defaults[key], rule):
+            raise ValueError(f"DIRECT_ROUTES {endpoint}: directAccepts refuses {key}'s default")
+    for key, values in rejects.items():
+        if rules.match_value(defaults.get(key)) in {rules.match_value(value) for value in values}:
+            raise ValueError(f"DIRECT_ROUTES {endpoint}: directRejects refuses {key}'s default")
+    for rule in rejects_when:
+        match = rule.get("match") or {}
+        if not match or not rule.get("label"):
+            raise ValueError(f"DIRECT_ROUTES {endpoint}: a directRejectsWhen rule needs a match and a label: {rule}")
+        if all((defaults.get(key) is not None) if want == rules.SET
+               else rules.match_value(defaults.get(key)) == rules.match_value(want) for key, want in match.items()):
+            raise ValueError(f"DIRECT_ROUTES {endpoint}: directRejectsWhen refuses the defaults: {rule}")
+    size = route.get("directSize")
+    size_keys = {size[k] for k in ("widthParam", "heightParam", "param") if size and size.get(k)}
+    if size_keys & set(route["kreaOnly"]) or size_keys - keys:
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: directSize must name shared Krea fields")
+    return {**({"blockedBy": list(blocked)} if blocked else {}),
+            **({"accepts": {key: dict(rule) for key, rule in accepts.items()}} if accepts else {}),
+            **({"rejects": {key: list(values) for key, values in rejects.items()}} if rejects else {}),
+            **({"rejectsWhen": [dict(rule) for rule in rejects_when]} if rejects_when else {}),
+            **({"size": dict(size)} if size else {})}
 
 
 def direct_route_definition(endpoint, params):
@@ -831,54 +885,17 @@ def direct_route_definition(endpoint, params):
     unknown = sorted(set(route["kreaOnly"]) - keys)
     if unknown:
         raise ValueError(f"DIRECT_ROUTES {endpoint}: kreaOnly names fields Krea doesn't take: {unknown}")
-    blocked = route.get("directBlockedBy") or []
-    if set(blocked) - set(route["kreaOnly"]):
-        raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedBy must be kreaOnly fields")
-    defaulted = sorted(param["key"] for param in params if param["key"] in blocked and param.get("default") is not None)
-    if defaulted:
-        # A default would block the maker route for every new node.
-        raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedBy fields have defaults: {defaulted}")
-    blocked_when = route.get("directBlockedWhen") or {}
-    for key, values in blocked_when.items():
-        param = next((p for p in params if p["key"] == key), None)
-        if param is None or key in route["kreaOnly"]:
-            raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedWhen names {key!r}, not a shared Krea field")
-        if param.get("default") in values:
-            # The default would block the maker route for every new node.
-            raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedWhen blocks {key}'s default")
-    size = route.get("directSize")
-    size_keys = {size[k] for k in ("widthParam", "heightParam", "param") if size and size.get(k)}
-    if size_keys & set(route["kreaOnly"]) or size_keys - keys:
-        raise ValueError(f"DIRECT_ROUTES {endpoint}: directSize must name shared Krea fields")
-    accepts = route.get("directAccepts") or {}
-    if set(accepts) - keys:
-        raise ValueError(f"DIRECT_ROUTES {endpoint}: directAccepts names fields Krea doesn't take: "
-                         f"{sorted(set(accepts) - keys)}")
-    for param in params:
-        rule = accepts.get(param["key"])
-        if rule is not None and param.get("default") is not None and not _accepted(param["default"], rule):
-            # A refused default would block the maker route for every new node.
-            raise ValueError(f"DIRECT_ROUTES {endpoint}: directAccepts refuses {param['key']}'s default")
     clash = sorted(keys & {param["key"] for param in route["directParams"]})
     if clash:
         raise ValueError(f"DIRECT_ROUTES {endpoint}: directParams repeat Krea fields: {clash}")
-    unsupported = route.get("directUnsupported") or []
-    for rule in unsupported:
-        named = set(rule.get("match") or {}) | ({rule["param"]} if "param" in rule else set())
-        if not named or named - keys or "label" not in rule or ("allowed" in rule) == ("match" in rule):
-            raise ValueError(f"DIRECT_ROUTES {endpoint}: bad directUnsupported rule {rule}")
+    rules = _route_rules(endpoint, route, params)
     return {
         "envKeyName": [route["directKeyName"], "KREA_API_TOKEN"],
         "directKeyName": route["directKeyName"],
         "sharedParams": [param for param in params if param["key"] not in route["kreaOnly"]],
         "falParams": [param for param in params if param["key"] in route["kreaOnly"]],
         "directParams": list(route["directParams"]),
-        "directRoute": {"translation": route["translation"], "model": route["model"],
-                        **({"blockedBy": list(blocked)} if blocked else {}),
-                        **({"blockedWhen": {k: list(v) for k, v in blocked_when.items()}} if blocked_when else {}),
-                        **({"unsupported": [dict(rule) for rule in unsupported]} if unsupported else {}),
-                        **({"size": dict(size)} if size else {}),
-                        **({"accepts": {key: dict(rule) for key, rule in accepts.items()}} if accepts else {}),
+        "directRoute": {"translation": route["translation"], "model": route["model"], **rules,
                         **({"setup": route["directSetup"]} if route.get("directSetup") else {})},
     }
 

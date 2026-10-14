@@ -67,7 +67,9 @@ def _blocked_reason(definition: Mapping[str, Any], block: node_route.DirectBlock
         return f"this recipe can't run on {direct_key} because it needs {block.param} set"
     if block.reason == node_route.RETIRED:
         return f"this recipe can't run on {direct_key} because the maker retired this model on {block.on}"
-    return f"this recipe can't run on {direct_key} because the maker doesn't take {block.detail or block.param}"
+    if block.reason == node_route.SIZE:
+        return f"this recipe can't run on {direct_key} because the maker can't render its {block.param} exactly"
+    return f"this recipe can't run on {direct_key} because the maker doesn't take {block.detail}"
 
 
 def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | None = None) -> Handler:

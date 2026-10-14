@@ -64,8 +64,10 @@ STANDARD_SIZES = ("1024x1024", "1536x1024", "1024x1536")
 # fal's gpt-image-2 presets that OpenAI can render exactly, by the pixel size
 # the node's own option labels promise ("Square HD (1024x1024)", ...). The
 # others (Square 512x512, Portrait/Landscape 16:9 576x1024 / 1024x576) are
-# under OpenAI's 655,360-pixel minimum; node_route.DIRECT_BLOCKED_VALUES keeps
-# those runs on fal, so they never reach the translator.
+# under OpenAI's "total pixels between 655,360 and 8,294,400"
+# (https://developers.openai.com/api/docs/guides/image-generation, checked
+# 2026-10-14); the nodes' directRoute.rejects keeps those runs on fal, so
+# they never reach the translator.
 FAL_GPT_IMAGE_2_SIZES: dict[str, str] = {
     "square_hd": "1024x1024",
     "portrait_4_3": "768x1024",
