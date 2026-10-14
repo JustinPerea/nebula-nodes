@@ -3048,13 +3048,17 @@ hands him the bump. Session schedulers don't persist, so it lives in the repo as
 - **What counts as "action needed":** a candidate exists, or the pin is deprecated, or the pin is missing from the
   registry. A pin published inside the hold is noted in the report but doesn't open an issue on its own.
 - **Untrusted registry data.** Versions only reach the report if they match the strict semver regex. Deprecation
-  messages are flattened to one line, backticks swapped out, capped at 200 characters and shown in a code span. The
+  messages and error text are flattened to one line, backticks swapped out, angle brackets dropped, capped, and shown
+  in a code span, so they can't leave it or fake the signature comment (which is also read from the end of the body). The
   report goes from file to `gh --body-file`; no `${{ }}` expression ever holds registry data, and the only output
   read by an `if:` is the script's own `true`/`false`.
 - **Failures.** A fetch error is reported in the table and the job summary and fails the run (exit 1), so a broken
   check shows red in Actions. The issue step still runs if the other adapter needs action (`!cancelled()`).
-- **Duplicate guard.** The issue step lists open issues (up to 500) and matches the exact title; no labels, no search
-  index lag. The report ends with an HTML comment holding a signature (package=candidate). If the signature matches
+- **Duplicate guard.** The issue step lists open issues (up to 500) and matches the exact title *and* the workflow's
+  own author (`gh` reports it as `{"login": "app/github-actions", "is_bot": true}`, checked against a real bot issue;
+  no user login can contain "/"). Title alone wasn't enough: the repo is public, so anyone could open an issue with
+  that title first, the workflow would write its report into it, and the opener could then edit the versions or add
+  instructions to the issue I act on. No labels, no search index lag. The report ends with an HTML comment holding a signature (package=candidate). If the signature matches
   the open issue's, the body is refreshed quietly; if it changed, the body is replaced and a comment is added so
   Justin gets a notification. `concurrency: adapter-pins` stops two runs racing to create the issue.
 - **Testability.** `file_issue()` takes the gh runner as a parameter, and `--dry-run` prints the write commands

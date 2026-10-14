@@ -42,6 +42,10 @@ from services.personal_agents import PACKAGE_AGE_DAYS, PRESETS  # noqa: E402
 
 REGISTRY = "https://registry.npmjs.org/"
 ISSUE_TITLE = "ACP adapter updates past the 14-day hold"
+# How gh reports an issue the workflow's GITHUB_TOKEN opened. The repo is
+# public, so anyone can open an issue with ISSUE_TITLE; only this author's
+# issue is the report (no user login can contain "/").
+BOT_AUTHOR = "app/github-actions"
 SIGNATURE_RE = re.compile(r"<!-- adapter-pins: ([^>]*) -->")
 SEMVER_RE = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
@@ -126,6 +130,15 @@ class AdapterReport:
         return bool(self.candidate or self.pinned_missing or self.pinned_deprecated)
 
 
+def _untrusted(text: str, limit: int = 200) -> str:
+    """Registry and error text for the issue body: one line, capped, and
+    unable to leave its code span (no backticks) or fake the signature
+    comment (no angle brackets)."""
+    for ch in "`<>":
+        text = text.replace(ch, "'" if ch == "`" else "")
+    return " ".join(text.split())[:limit]
+
+
 def _deprecation(manifest: Any) -> str | None:
     if not isinstance(manifest, dict):
         return None
@@ -134,9 +147,7 @@ def _deprecation(manifest: Any) -> str | None:
     # truthiness, so any falsy value means "not deprecated".
     if not message:
         return None
-    text = message if isinstance(message, str) else "deprecated"
-    # Registry text is untrusted: one line, no backticks, capped.
-    text = " ".join(text.replace("`", "'").split())[:200]
+    text = _untrusted(message) if isinstance(message, str) else "deprecated"
     return text or "deprecated"
 
 
@@ -258,7 +269,7 @@ def render(reports: Sequence[AdapterReport], now: datetime, hold_days: int = PAC
     bullets = []
     for r in reports:
         if r.error:
-            bullets.append(f"- `{r.package}`: {r.error}")
+            bullets.append(f"- `{r.package}`: `{_untrusted(r.error, 300)}`")
         if r.pinned_deprecated:
             bullets.append(f"- `{r.package}@{r.pinned}` is deprecated: `{r.pinned_deprecated}`")
         if r.pinned_in_hold:
@@ -284,15 +295,25 @@ def _run_gh(args: list[str]) -> str:
     return subprocess.run(args, check=True, capture_output=True, text=True).stdout
 
 
+def _signature_in(body: str) -> str | None:
+    """The report's own signature: render() writes it last."""
+    found = SIGNATURE_RE.findall(body)
+    return found[-1] if found else None
+
+
+def _from_workflow(issue: dict[str, Any]) -> bool:
+    author = issue.get("author") if isinstance(issue.get("author"), dict) else {}
+    return author.get("login") == BOT_AUTHOR and author.get("is_bot") is True
+
+
 def file_issue(report_path: Path, run: Runner = _run_gh, dry_run: bool = False,
                out: Callable[[str], None] = print) -> str:
     """Open the issue, or update the open one with the exact title. Returns what it did."""
     body = report_path.read_text(encoding="utf-8")
-    match = SIGNATURE_RE.search(body)
-    new_sig = match.group(1) if match else ""
+    new_sig = _signature_in(body) or ""
     listed = json.loads(run(["gh", "issue", "list", "--state", "open", "--limit", "500",
-                             "--json", "number,title,body"]) or "[]")
-    existing = next((item for item in listed if item.get("title") == ISSUE_TITLE), None)
+                             "--json", "number,title,body,author"]) or "[]")
+    existing = next((item for item in listed if item.get("title") == ISSUE_TITLE and _from_workflow(item)), None)
 
     def act(args: list[str]) -> None:
         if dry_run:
@@ -304,9 +325,8 @@ def file_issue(report_path: Path, run: Runner = _run_gh, dry_run: bool = False,
         act(["gh", "issue", "create", "--title", ISSUE_TITLE, "--body-file", str(report_path)])
         return "created"
     number = str(existing["number"])
-    old = SIGNATURE_RE.search(existing.get("body") or "")
     act(["gh", "issue", "edit", number, "--body-file", str(report_path)])
-    if (old.group(1) if old else None) == new_sig:
+    if _signature_in(existing.get("body") or "") == new_sig:
         return "refreshed"
     act(["gh", "issue", "comment", number, "--body",
          "The available versions changed since this issue was last updated. The description has the new report."])

