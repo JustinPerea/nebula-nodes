@@ -774,10 +774,14 @@ def _error_detail(response: httpx.Response, api_key: str) -> tuple[str, str | No
     parts: list[str] = []
     if isinstance(body, Mapping):
         error = body.get("error") if isinstance(body.get("error"), Mapping) else body
-        for name in ("code", "type"):
+        detail = error.get("detail", body.get("detail"))
+        if isinstance(detail, Mapping):
+            # TypeSafe's own shape, seen on live 400 and 401 replies (2026-10-14):
+            # {"detail": {"error_type": "api_usage_error", "message": "..."}}.
+            error, detail = detail, None
+        for name in ("error_type", "code", "type"):
             if isinstance(error.get(name), str):
                 code = code or error[name]
-        detail = error.get("detail", body.get("detail"))
         if isinstance(detail, list):
             for item in detail[:3]:
                 if isinstance(item, Mapping):
@@ -796,24 +800,32 @@ def _error_detail(response: httpx.Response, api_key: str) -> tuple[str, str | No
         parts.append(response.text)
     text = " ".join(dict.fromkeys(part.strip() for part in parts if part and part.strip()))
     text = _redact(" ".join(text.split()), api_key)
-    if not code and "max_tokens_exceeded" in text:
-        code = "max_tokens_exceeded"
+    if "max_tokens_exceeded" in text:
+        code = "max_tokens_exceeded"  # more useful than a broad error_type
     return (text[:300] + "…" if len(text) > 300 else text), code
+
+
+# How a 400 says the images header is missing. The live reply names the
+# header and calls images experimental; "not turned on" is older wording.
+_IMAGES_OFF_HINTS = (IMAGES_HEADER.lower(), "images are experimental", "not turned on")
 
 
 def _error_for(response: httpx.Response, api_key: str, *, attempts: int, has_images: bool) -> TypeSafeError:
     status = response.status_code
     detail, code = _error_detail(response, api_key)
     request_id = response.headers.get(REQUEST_ID_HEADER)
+    # The messages below add their own full stop after the detail.
+    detail = detail.rstrip(".") if not detail.endswith("…") else detail
     said = f": {detail}" if detail else ""
     tries = f" after {attempts} tries" if attempts > 1 else ""
     lowered = f"{detail} {code or ''}".lower()
     if status == 400 and "max_tokens_exceeded" in lowered:
         message = ("TypeSafe: the request doesn't fit in the model's context (400 max_tokens_exceeded). "
                    "Send fewer or smaller images, shorten the context, or turn on Long context.")
-    elif status == 400 and "not turned on" in lowered:
-        message = (f"TypeSafe refused the images (400){said}. This build sends the images header, so "
-                   "TypeSafe may have changed the image format; check docs.typesafe.ai/images.")
+    elif status == 400 and any(hint in lowered for hint in _IMAGES_OFF_HINTS):
+        message = (f"TypeSafe refused the images (400){said}. This build sends the {IMAGES_HEADER} "
+                   "header, so TypeSafe may have renamed it or changed its value; "
+                   "check docs.typesafe.ai/images.")
     elif status == 400 and has_images and any(word in lowered for word in ("image", "asset", "part", "placeholder")):
         message = f"TypeSafe rejected an image (400){said}. Re-export it as PNG or JPEG and run again."
     elif status == 400:

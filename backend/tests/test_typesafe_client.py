@@ -238,6 +238,52 @@ async def test_errors_are_actionable_and_never_hold_the_key(monkeypatch, status,
     assert caught.value.status == status and caught.value.request_id == "req-1"
 
 
+# Error bodies exactly as TypeSafe sent them in the live probe (2026-10-14).
+LIVE_IMAGES_OFF = {"detail": {"error_type": "api_usage_error", "message": (
+    "Images are experimental. Send the header TypeSafe-Danger-Zone-Images: true to use them.")}}
+LIVE_BAD_KEY = {"detail": {"error_type": "authentication_error", "message": (
+    "Cannot authenticate with the server. Please check your API key and try again.")}}
+
+
+@pytest.mark.asyncio
+async def test_the_live_images_header_error_reads_its_message_and_type(monkeypatch):
+    _install(monkeypatch, lambda request, n: httpx.Response(400, json=LIVE_IMAGES_OFF,
+                                                            headers={ts.REQUEST_ID_HEADER: "req-5"}))
+    images = await ts.prepare_images([_data_uri(Image.new("RGB", (300, 300)))])
+    with pytest.raises(ts.TypeSafeError) as caught:
+        await _ask(state={"image": images[0].placeholder}, images=images)
+    message = str(caught.value)
+    assert message.startswith("TypeSafe refused the images (400): Images are experimental. "
+                              "Send the header TypeSafe-Danger-Zone-Images: true to use them. This build")
+    assert "may have renamed it or changed its value" in message
+    assert message.endswith("[request req-5]")
+    assert caught.value.code == "api_usage_error"
+
+
+@pytest.mark.asyncio
+async def test_the_live_auth_error_reads_its_message_and_type(monkeypatch):
+    _install(monkeypatch, lambda request, n: httpx.Response(401, json=LIVE_BAD_KEY))
+    with pytest.raises(ts.TypeSafeError) as caught:
+        await _ask()
+    assert str(caught.value) == (
+        "TypeSafe rejected TYPESAFE_API_KEY (401 unauthorized): Cannot authenticate with the server. "
+        "Please check your API key and try again. Check the key in Settings → TypeSafe.")
+    assert caught.value.code == "authentication_error"
+
+
+def test_nested_detail_messages_stay_capped_and_key_free():
+    body = {"detail": {"error_type": "api_usage_error", "message": f"key {KEY} " + "x" * 500}}
+    text, code = ts._error_detail(httpx.Response(400, json=body), KEY)
+    assert KEY not in text and "***" in text
+    assert len(text) == 301 and text.endswith("…")
+    assert code == "api_usage_error"
+
+
+def test_max_tokens_exceeded_wins_over_a_broad_error_type():
+    body = {"detail": {"error_type": "api_usage_error", "message": "max_tokens_exceeded: 40000 > 32768"}}
+    assert ts._error_detail(httpx.Response(400, json=body), KEY)[1] == "max_tokens_exceeded"
+
+
 @pytest.mark.asyncio
 async def test_an_image_rejection_says_what_to_do(monkeypatch):
     _install(monkeypatch, lambda request, n: httpx.Response(400, json={"message": "asset image-1 is damaged"}))
