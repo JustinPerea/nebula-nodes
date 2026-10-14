@@ -3570,3 +3570,30 @@ Banana: Krea plan, else maker key, else fal key / Krea token). Vendor facts come
 - **Followups.** `.claude/skills/krea/SKILL.md` is an older copy without the maker-routes section; the
   grok-imagine-video node could gain 1.5/1.5-lite and 1.5's references/last frame/keyframes; xAI video extension
   would need its own node if wanted.
+
+### Review fixes (xAI lane, 2026-10-14)
+
+Independent review of `direct-xai`. Spot-checked against docs.x.ai today: the images and videos REST
+references (aspect-ratio enums, `{url}` image objects, `images` for multi-source edits, `b64_json` +
+`mime_type`, duration "Range: [1, 15]", edits accept "a base64-encoded data URL"), the rendered pricing table
+(every Imagine price in `model_pricing.json` matches), the image generation guide (`n` 1-10, quality
+low/medium/auto on 2.0 only, `1k` default), the video overview (7 refs / 10 s on grok-imagine-video, 1080p and
+no editing on 1.5) and the model pages (ids and aliases; no shutdown dates, so no DIRECT_RETIRES entry).
+
+- **Fixed: the fal edit node could bill a generation.** `handle_xai_image` picks `/v1/images/edits` only when
+  sources arrive, so `grok-imagine-image-edit` on an xAI key with nothing wired ran text-to-image and billed it
+  (fal refuses). `fal_grok_image_to_xai` now refuses an edit with no source.
+- **Fixed: the cache tag ignored wired blockers.** The router kept a wired `start_video`/`style_images` run on
+  Krea, but `engine._cache_route_tag` read saved params only and filed the Krea result under `direct:xai`, so
+  removing the xAI key re-ran (and re-billed) the same Krea job. `node_route.filled_ports` now gives the router
+  and the cache tag the same wired set.
+- **Fixed: misleading missing-key error.** With only the xAI key saved and a wired blocker, the run asked for
+  "XAI_API_KEY or KREA_API_TOKEN". It now says the Krea token is needed and names the Krea-only field.
+- **Added route cases** for `krea-image-xai-grok-imagine-2-edit` (direct, plan) and the fal edit's xAI route
+  (no `output_format`).
+- **Refuted / kept:** fal `output_format` dropped on xAI (has a default, so it can't be a blocker; same as Nano
+  Banana); the xAI price ranges (high bound covers the most sources each route sends); start image + references
+  refused (xAI doesn't document combining them; refusing bills nothing).
+- **Left open (needs a shared value-based blocker rule):** a fractional Krea duration (6.5 s) or a start image
+  plus references worked on Krea but errors once an xAI key is saved, instead of staying on Krea. Readiness,
+  describe_node and the engine preflight still don't see wired blockers.
