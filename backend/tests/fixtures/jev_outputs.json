@@ -1,5 +1,5 @@
 {
-  "about": "Sample outputs of the Jev nodes, in the contract of docs/api-guides/typesafe.md. backend/tests/test_jev_decide.py checks the Decide handler produces these outputs exactly and that every sample keeps the contract (services/jev_outputs.validate_outputs); frontend/tests/lib/jev.test.ts checks parseJevOutputs turns each into `parsed`. test_jev_pick_best.py and test_jev_box.py do the same for the Pick Best and Box samples (Box file names are normalised, since saved files get unique names). `malformed` samples must parse to null. Decide outputs are the handler's, so the gate port it withheld appears as a `withheld` entry; the engine strips those before anything reaches the canvas.",
+  "about": "Sample outputs of the Jev nodes, in the contract of docs/api-guides/typesafe.md. backend/tests/test_jev_decide.py checks the Decide handler produces these outputs exactly and that every sample keeps the contract (services/jev_outputs.validate_outputs); frontend/tests/lib/jev.test.ts checks parseJevOutputs turns each into `parsed`. test_jev_pick_best.py and test_jev_box.py do the same for the Pick Best and Box samples (Box file names are normalised, since saved files get unique names). `malformed` samples must parse to null. The outputs are the handlers', so a gate port the node withheld (Decide's untaken branch, Box's crop/mask/annotated when the target wasn't found) appears as a `withheld` entry; the engine strips those before anything reaches the canvas.",
   "decide": [
     {
       "name": "yes/no that passes",
@@ -1052,6 +1052,21 @@
           "type": "Text",
           "value": "null"
         },
+        "crop": {
+          "type": "Any",
+          "value": null,
+          "withheld": "Jev Box was unsure whether the coffee mug is there (presence 0.62)"
+        },
+        "mask": {
+          "type": "Any",
+          "value": null,
+          "withheld": "Jev Box was unsure whether the coffee mug is there (presence 0.62)"
+        },
+        "annotated": {
+          "type": "Any",
+          "value": null,
+          "withheld": "Jev Box was unsure whether the coffee mug is there (presence 0.62)"
+        },
         "report": {
           "type": "Text",
           "value": "Jev Box\nTarget: the coffee mug\nFound: unsure\nPresence: 0.62\nModel: jev-1.14.0\nInput tokens: 290\nImages: 1 (experimental)\nNote: Presence confidence 0.24 is below the minimum 0.5, so found is unsure; no box, crop or mask."
@@ -1122,6 +1137,21 @@
         "box": {
           "type": "Text",
           "value": "null"
+        },
+        "crop": {
+          "type": "Any",
+          "value": null,
+          "withheld": "Jev Box didn't find a red umbrella (presence 0.03)"
+        },
+        "mask": {
+          "type": "Any",
+          "value": null,
+          "withheld": "Jev Box didn't find a red umbrella (presence 0.03)"
+        },
+        "annotated": {
+          "type": "Any",
+          "value": null,
+          "withheld": "Jev Box didn't find a red umbrella (presence 0.03)"
         },
         "report": {
           "type": "Text",

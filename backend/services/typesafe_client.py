@@ -54,8 +54,9 @@ MODELS: tuple[str, ...] = ("jev-1.14.0", "jev-1.13.0", "jev-latest", "jev-previe
 BOX_MODELS: tuple[str, ...] = ("jev-1.14.0", "jev-preview")
 _MODEL_RE = re.compile(r"^jev-[a-z0-9][a-z0-9.\-]{0,62}$")
 
-# TypeSafe's published image limits (docs.typesafe.ai/images). An image
-# outside them is rejected, never resized, so prepare_images does that here.
+# TypeSafe's published image limits (docs.typesafe.ai/images). TypeSafe
+# refuses an image that breaks them instead of fitting it, so prepare_images
+# fits each image here first.
 MIN_SIDE = 256
 MAX_SIDE = 1568
 MIN_PIXELS = 78_400

@@ -142,7 +142,7 @@ A port the handler leaves out is just missing downstream: the next node still ru
 
 ### Gate ports (`conditional: true`)
 
-A gate node lets a graph branch. Its conditional output ports carry a value on some runs and are *withheld* on others. Today the only gate is `jev-decide` (`on_pass` / `on_fail`).
+A gate node lets a graph branch. Its conditional output ports carry a value on some runs and are *withheld* on others. Today the gates are `jev-decide` (`on_pass` / `on_fail`) and `jev-box` (`crop` / `mask` / `annotated`, withheld unless the target was found).
 
 - **Withholding.** The handler returns `execution.gating.withheld(reason)` for the port: `{"type": "Any", "value": null, "withheld": "Jev Decide failed (answered no, 0.12)"}`. Only conditional ports can be withheld; withholding any other port fails the node. A conditional port the handler leaves out counts as withheld, so a buggy gate fails closed.
 - **The rule.** A node runs only if none of its inbound edges comes from a withheld port or a skipped node. Otherwise it is **skipped**: no `executing` event, no provider call, no cache entry, no charge. It gets a `skipped` event with the gate's reason, and its descendants follow the same rule.

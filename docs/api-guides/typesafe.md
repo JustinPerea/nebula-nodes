@@ -169,7 +169,7 @@ Every request pairs the Box question with a yes/no "is it there?" question, beca
 - Edges are fractions (0..1, from the top-left) of the **original** image: decoded, first frame, EXIF rotation applied (what a browser shows). Any resizing or padding Nebula did before sending is undone.
 - `px` is the integer pixel rectangle in that image; `image` is its size.
 - `confidence` is `null` (never 0) when TypeSafe doesn't report one.
-- When `found` is `false` or `unsure` there is no box, crop, mask or annotated image, so nothing downstream acts on a box that may point at nothing. The report still shows the presence probability.
+- When `found` is `false` or `unsure` there is no box, crop, mask or annotated image, so nothing downstream acts on a box that may point at nothing. `crop`, `mask` and `annotated` are gate ports, withheld in that case, so a node wired to them (an inpaint fed the mask) is skipped rather than run without its input ([gate](#gate-branching-a-graph)). The report still shows the presence probability.
 
 ## Number and report formats (all nodes)
 

@@ -6156,7 +6156,7 @@ Nodes: 305 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Endpoint** | `/v1/systemone` |
 | **Execution** | sync |
 | **Inputs** | Image (Image)*, Target (Text) |
-| **Outputs** | Found (Text), Box (JSON) (Text), Crop (Image), Mask (Mask), Annotated (Image), Report (Text) |
+| **Outputs** | Found (Text), Box (JSON) (Text), Crop (Image, gate), Mask (Mask, gate), Annotated (Image, gate), Report (Text) |
 | **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |

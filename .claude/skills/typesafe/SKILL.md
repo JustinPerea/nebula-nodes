@@ -75,7 +75,7 @@ TypeSafe says image input and Box aren't production-ready: format, limits and ac
 
 ## Box
 
-A Box answer always contains a box, even when the target isn't there, so the node asks "is it there?" in the same request. Read `found` first: `box` is JSON and `crop` / `mask` / `annotated` exist only when it is `true`; on `false` or `unsure` there is no box at all. One target per node, named plainly (`the red mug`, `the logo on the shirt`). Small targets in big images can be missed: crop to the region first. `pad` (default 0.05 of the image per side) grows the crop and mask, not the `box` output. The `mask` is white on black at the original size: white marks the region, the convention FLUX Fill uses. Ideogram edits the black area instead, so it needs the inverse.
+A Box answer always contains a box, even when the target isn't there, so the node asks "is it there?" in the same request. Read `found` first: `box` is JSON and `crop` / `mask` / `annotated` exist only when it is `true`; on `false` or `unsure` there is no box at all, and the nodes wired to `crop`, `mask` or `annotated` are skipped (they're gate ports, like Decide's). One target per node, named plainly (`the red mug`, `the logo on the shirt`). Small targets in big images can be missed: crop to the region first. `pad` (default 0.05 of the image per side) grows the crop and mask, not the `box` output. The `mask` is white on black at the original size: white marks the region, the convention FLUX Fill uses. Ideogram edits the black area instead, so it needs the inverse.
 
 ## Keys and cost
 
@@ -89,7 +89,7 @@ A Box answer always contains a box, even when the target isn't there, so the nod
 2. **Classify inputs.** `jev-decide` with `answer_type: choice`, options one per line, `pass_when` listing the acceptable ones.
 3. **Rate on a rubric.** `answer_type: score`, levels low to high, `threshold` 0.6 to pass the top part of the scale.
 4. **Generate N, keep the best.** Text Input (brief) → several image generators (or one with several outputs) → `jev-pick-best` (`candidates` = all of them, `brief` = the brief) → `winner` to upscale or save.
-5. **Find it, then fix it.** Image → `jev-box` (`target` = "the logo") → `mask` and the image into an inpainting node, or `crop` into an upscaler. Check `found` first.
+5. **Find it, then fix it.** Image → `jev-box` (`target` = "the logo") → `mask` and the image into an inpainting node, or `crop` into an upscaler. If the logo isn't found, the inpaint is skipped and costs nothing.
 
 ## Ground truth
 

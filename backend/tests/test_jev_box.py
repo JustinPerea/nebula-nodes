@@ -21,9 +21,11 @@ import httpx
 import pytest
 from PIL import Image
 
+from execution.engine import execute_graph
+from execution.gating import WITHHELD_KEY
 from execution.missing_credential import MissingCredentialError
 from handlers.jev_box import crop_rect, handle_jev_box
-from models.graph import GraphNode, PortValueDict
+from models.graph import GraphEdge, GraphNode, PortValueDict
 from services import jev_outputs
 from services import typesafe_client as ts
 from services.output import OUTPUT_ROOT, resolve_output_ref
@@ -128,7 +130,7 @@ async def test_one_request_with_presence_and_box_sharing_the_image(monkeypatch):
     (placeholder,) = body["assets"]
     assert body["state"] == {"image": placeholder}
     assert body["questions"] == {
-        "present": {"type": "noul", "instructions": "Is there the red square in `image`?"},
+        "present": {"type": "noul", "instructions": "Does `image` show the red square?"},
         "where": {"type": "box", "instructions": "the red square in `image`"},
     }
     # The image is in the state once; neither question repeats it.
@@ -288,7 +290,12 @@ async def test_a_missing_box_confidence_stays_null(monkeypatch):
 async def test_missing_or_unsure_targets_get_no_box_crop_or_mask(monkeypatch, presence, found):
     before = set(OUTPUT_ROOT.rglob("*jev-box-*"))
     outputs, _ = await _run(monkeypatch, {}, _data_uri(_scene((640, 480), (0, 0, 9, 9))), _response(presence))
-    assert set(outputs) == {"found", "box", "report"}
+    assert set(outputs) == {"found", "box", "report", *MEDIA_PORTS}
+    # Crop, mask and annotated are withheld, so the nodes wired to them are skipped.
+    reasons = {port: outputs[port].get(WITHHELD_KEY) for port in MEDIA_PORTS}
+    expected = (f"Jev Box didn't find the red square (presence {presence})" if found == "false"
+                else f"Jev Box was unsure whether the red square is there (presence {presence})")
+    assert reasons == dict.fromkeys(MEDIA_PORTS, expected)
     assert outputs["found"]["value"] == found
     assert outputs["box"]["value"] == "null"
     assert set(OUTPUT_ROOT.rglob("*jev-box-*")) == before  # nothing saved
@@ -306,6 +313,44 @@ async def test_presence_threshold_and_minimum_confidence_set_found(monkeypatch):
     assert lenient["found"]["value"] == "true"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("presence", "inpaint_runs"), [(0.97, True), (0.05, False), (0.6, False)])
+async def test_an_inpaint_fed_the_mask_runs_only_when_the_target_was_found(monkeypatch, presence, inpaint_runs):
+    import execution.engine as engine
+
+    async def keep(outputs, run_dir):
+        return outputs
+
+    monkeypatch.setattr(engine, "_materialize_media_outputs", keep)
+    _install(monkeypatch, _response(presence))
+    inpainted: list[dict] = []
+
+    async def inpaint(node, inputs, api_keys):  # stands in for a paid edit node
+        inpainted.append({port: value.value for port, value in inputs.items()})
+        return {"image": {"type": "Image", "value": "https://example.invalid/inpainted.png"}}
+
+    image = _scene_file([640, 480])
+    nodes = [GraphNode(id="img", definitionId="image-input", params={"filePath": image}),
+             _node(), GraphNode(id="edit", definitionId="gpt-image-1-edit", params={})]
+    wires = [("img", "image", "bx1", "image"), ("img", "image", "edit", "image"), ("bx1", "mask", "edit", "mask")]
+    edges = [GraphEdge(id=f"{a}.{p}->{b}.{q}", source=a, sourceHandle=p, target=b, targetHandle=q)
+             for a, p, b, q in wires]
+    events: list = []
+
+    async def emit(event):
+        events.append(event)
+
+    await execute_graph(nodes, edges, KEYS, {"jev-box": handle_jev_box, "gpt-image-1-edit": inpaint}, emit,
+                        run_id="jev-box-gate")
+    skipped = [event for event in events if event.type == "skipped"]
+    if inpaint_runs:
+        assert len(inpainted) == 1 and inpainted[0]["mask"].startswith("/api/outputs/") and not skipped
+    else:
+        assert inpainted == []
+        assert [(event.node_id, event.gate_node_id) for event in skipped] == [("edit", "bx1")]
+        assert skipped[0].reason.startswith(("Jev Box didn't find the red square", "Jev Box was unsure"))
+
+
 # -- the shared fixture ----------------------------------------------------------
 
 
@@ -319,7 +364,8 @@ def _scene_file(size: list[int]) -> str:
 
 def _normalised(outputs: dict) -> dict:
     """Saved files get unique names; the fixture holds stable ones."""
-    return {port: ({**entry, "value": f"/api/outputs/jev-box/{port}.png"} if port in MEDIA_PORTS else entry)
+    return {port: ({**entry, "value": f"/api/outputs/jev-box/{port}.png"}
+                   if port in MEDIA_PORTS and WITHHELD_KEY not in entry else entry)
             for port, entry in outputs.items()}
 
 

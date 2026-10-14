@@ -12922,7 +12922,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'jev-box': {
     id: 'jev-box',
     displayName: 'Jev Box (experimental)',
-    description: 'Find one thing in an image and get its bounding box, a crop and a rectangle mask for inpainting. A presence check runs in the same request, so a missing target gives found false and no crop. TypeSafe Jev makes decisions only, no text generation. Experimental at TypeSafe.',
+    description: 'Find one thing in an image and get its bounding box, a crop and a rectangle mask for inpainting. A presence check runs in the same request, so a missing target gives found false, no crop, and the nodes wired to Crop, Mask or Annotated are skipped. TypeSafe Jev makes decisions only, no text generation. Experimental at TypeSafe.',
     category: 'analyzer',
     apiProvider: 'typesafe',
     apiEndpoint: '/v1/systemone',
@@ -12937,9 +12937,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'found', label: 'Found', dataType: 'Text', required: false },
       { id: 'box', label: 'Box (JSON)', dataType: 'Text', required: false },
-      { id: 'crop', label: 'Crop', dataType: 'Image', required: false },
-      { id: 'mask', label: 'Mask', dataType: 'Mask', required: false },
-      { id: 'annotated', label: 'Annotated', dataType: 'Image', required: false },
+      { id: 'crop', label: 'Crop', dataType: 'Image', required: false, conditional: true },
+      { id: 'mask', label: 'Mask', dataType: 'Mask', required: false, conditional: true },
+      { id: 'annotated', label: 'Annotated', dataType: 'Image', required: false, conditional: true },
       { id: 'report', label: 'Report', dataType: 'Text', required: false },
     ],
     params: [

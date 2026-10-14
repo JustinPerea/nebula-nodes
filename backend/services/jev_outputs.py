@@ -24,6 +24,8 @@ Value formats:
   unchanged (or the pass verdict as Text), the other is a withheld entry
   (execution/gating.py). When pass is "unsure" either or neither may carry
   it, depending on ``when_unsure``.
+- crop / mask / annotated (Box): media references when found is "true",
+  otherwise withheld entries, so nodes wired to them are skipped.
 """
 from __future__ import annotations
 
@@ -42,7 +44,7 @@ VERDICTS = ("true", "false", "unsure")
 EXPERIMENTAL_IMAGES = "experimental"
 
 # Port id -> data type, per node. Optional ports may be left out of a result
-# (Box gives crop/mask/annotated only when found is "true").
+# or withheld (Box gives crop/mask/annotated only when found is "true").
 PORTS: dict[str, dict[str, str]] = {
     DECIDE: {"answer": "Text", "pass": "Text", "probability": "Text", "confidence": "Text",
              "probabilities": "Text", "report": "Text", "on_pass": "Any", "on_fail": "Any"},
@@ -212,7 +214,7 @@ def validate_outputs(definition_id: str, outputs: Mapping[str, Any]) -> list[str
                     is_withheld(entry) or (isinstance(entry.get("type"), str) and "value" in entry)):
                 problems.append(f"{port}: must be a value or withheld")
             continue
-        if entry is None:
+        if entry is None or (is_withheld(entry) and port in OPTIONAL_PORTS[definition_id]):
             if port not in OPTIONAL_PORTS[definition_id]:
                 problems.append(f"{port}: missing")
             continue
@@ -266,9 +268,10 @@ def validate_outputs(definition_id: str, outputs: Mapping[str, Any]) -> list[str
             ("box", _box_problem(value("box"), found)),
         ]
         for port in ("crop", "mask", "annotated"):
-            if found == "true" and port not in outputs:
+            given = port in outputs and not is_withheld(outputs[port])
+            if found == "true" and not given:
                 checks.append((port, "missing although found is true"))
-            elif found != "true" and port in outputs:
+            elif found != "true" and given:
                 checks.append((port, "only when found is true"))
     problems += [f"{port}: {problem}" for port, problem in checks if problem]
     return problems

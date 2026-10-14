@@ -7,7 +7,9 @@ questions share the one image in the state, so it is sent and billed once.
 Only a confident "yes" produces a box, crop, mask and annotated image. When
 the target is missing or Jev is unsure, the node emits ``found``, a null
 ``box`` and the report, and never cuts anything from a box that may point at
-nothing.
+nothing. Crop, mask and annotated are gate ports (execution/gating.py): they
+are withheld then, so a paid node wired to them (an inpaint fed the mask) is
+skipped instead of running without its input.
 
 TypeSafe sees a prepared copy (upright, resized or padded to its limits). The
 box comes back as fractions of that copy and is mapped back through the
@@ -27,6 +29,7 @@ from uuid import uuid4
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
+from execution.gating import withheld
 from execution.missing_credential import MissingCredentialError
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
@@ -45,6 +48,7 @@ from services.typesafe_client import (
 
 PRESENCE_ID = "present"
 BOX_ID = "where"
+MEDIA_PORTS = ("crop", "mask", "annotated")
 MAX_PAD = 0.5
 BOX_COLOR = "#65e6c4"  # the QC nodes' annotation colour
 
@@ -84,7 +88,7 @@ def _image_value(inputs: dict[str, PortValueDict]) -> str:
 def build_questions(target: str) -> dict[str, dict[str, Any]]:
     """The presence check and the box, both pointing at `image` in the state."""
     return {
-        PRESENCE_ID: {"type": "noul", "instructions": f"Is there {target} in `image`?"},
+        PRESENCE_ID: {"type": "noul", "instructions": f"Does `image` show {target}?"},
         BOX_ID: {"type": "box", "instructions": f"{target} in `image`"},
     }
 
@@ -244,9 +248,15 @@ async def handle_jev_box(
             outputs[port] = {"type": "Mask" if port == "mask" else "Image", "value": url}
     else:
         outputs["box"] = out.text("null")
+        shown = target if len(target) <= 60 else target[:59] + "…"
         if found == "unsure":
             notes.append(f"Presence confidence {out.format_number(noul_confidence(presence))} is below the "
                          f"minimum {out.format_number(min_confidence)}, so found is unsure; no box, crop or mask.")
+            reason = f"Jev Box was unsure whether {shown} is there (presence {out.format_number(presence)})"
+        else:
+            reason = f"Jev Box didn't find {shown} (presence {out.format_number(presence)})"
+        for port in MEDIA_PORTS:
+            outputs[port] = withheld(reason)
 
     if found == "true" and (transform.transposed or transform.frames > 1 or transform.padded
                             or transform.resized):
