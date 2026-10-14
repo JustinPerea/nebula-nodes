@@ -3025,6 +3025,11 @@ Two reviewers checked 5eba86fc. Concurrency said ship, with one older gap; the t
 - **Personal agents now use the agent guardian.** `_spawn()` calls `spawn_agent_process`, so a SIGKILLed backend no longer leaves an agent's grandchildren running: the guardian kills the group, as it does for in-app chats. New test `test_the_agent_guardian_watches_every_personal_agent` (fails with the old `create_subprocess_exec` call). PERSONAL-AGENTS.md drops the "doesn't use the guardian yet" caveat.
 - **Conflicts, all additive:** `OutsideSpend` keeps main's `connect` and adds `personal`. `PERSON_READ_PREFIXES` keeps main's comment and adds `/api/personal-agents`. MCP-SETUP.md puts "Personal agents' session tokens" before main's "Connect your agent". This file keeps main's entries first, then the ACP ones.
 
+## 2026-10-13 — Desktop early-exit test: skip unbuilt, check the real fields
+
+- **The early-exit integration test needed the same skip as the other three launch tests (628d35f8).** The app fails on a missing `frontend/dist-desktop` before it starts the sidecar (7cf754a1), so unbuilt the test can only see the renderer error. It still "passed" in the earlier scratch run because its last fallback was `message.includes('7')` and the scratch path contains one (`…-be74-…`). In the acp-host worktree, whose path has none, it failed.
+- **The assertion now checks the sidecar's own error:** `type === 'early_exit'`, `exitCode === 7`, and the fixture's `DISTINCTIVE_EARLY_EXIT_MARKER` in the message. With `FIXTURE_EXIT_CODE` changed to 9 it fails. Built: integration 4/4, desktop suite 354/354. Unbuilt: the four launch tests skip. CI doesn't run the desktop suite, so nothing there changes.
+
 ## 2026-10-14 — ACP adapter pin watch
 
 Justin asked for a check about every two weeks that finds the newest stable adapter release at least 14 days old and

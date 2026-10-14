@@ -512,7 +512,7 @@ No child process or listening port remains after any failure path.
 ## Tests
 
 ```bash
-cd desktop && npm test            # 348 Node lifecycle, credential, migration, packaging and integration tests
+cd desktop && npm test            # 354 Node lifecycle, credential, migration, packaging and integration tests
 cd desktop && npm run test:smoke  # end-to-end dynamic endpoint + bridge surface smoke
 ```
 
