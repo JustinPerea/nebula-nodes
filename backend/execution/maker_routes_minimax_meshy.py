@@ -235,7 +235,11 @@ def krea_meshy_to_meshy(model: str) -> Translate:
             return node.model_copy(update={"params": out}), {"prompt": _text(prompt)}
         if mode != "image":
             raise ValueError(f"Unknown Meshy input mode {mode!r}")
-        images = [str(value) for value in _values(inputs, params, "image_urls")]
+        from services.output import resolve_output_ref
+
+        # A saved graph's /api/outputs/... refs become local paths, which the Meshy handlers send as data
+        # URIs (as the Krea route uploads them); Meshy can't fetch Nebula's served URLs.
+        images = [resolve_output_ref(str(value)) for value in _values(inputs, params, "image_urls")]
         if not images:
             raise ValueError("Meshy image-to-3D needs an image. Connect one, or set Input mode to text.")
         if len(images) > MESHY_MAX_IMAGES:

@@ -393,6 +393,30 @@ async def test_meshy_7_image_mode_picks_single_or_multi_image(images, path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("count,path", [(1, "/v1/image-to-3d"), (2, "/v1/multi-image-to-3d")])
+async def test_meshy_7_sends_saved_output_refs_as_data_uris(count, path):
+    # A saved graph's image_urls JSON carries /api/outputs/... refs (the Krea route resolves them);
+    # Meshy can't fetch those, and the Meshy handlers read only plain local paths.
+    from services.output import portable_output_ref
+
+    refs = []
+    for index in range(count):
+        image = get_run_dir() / f"meshy-ref-{index}.png"
+        image.write_bytes(b"\x89PNG\r\n\x1a\n")
+        refs.append(portable_output_ref(str(image)))
+    assert all(ref.startswith("/api/outputs/") for ref in refs)
+    params = {**_defaults("krea-3d-meshy-meshy-7"), "image_urls": json.dumps(refs)}
+    node = GraphNode(id="m", definitionId="krea-3d-meshy-meshy-7", params=params)
+    with respx.mock() as router, patch("services.output.save_mesh_from_url", _fake_mesh):
+        submit = router.post(f"{MESHY_BASE}{path}").mock(return_value=httpx.Response(200, json={"result": "i"}))
+        _meshy_task(router, path, "i")
+        await _run(node, {}, MESHY)
+    body = json.loads(submit.calls.last.request.content)
+    sent = [body["image_url"]] if count == 1 else body["image_urls"]
+    assert len(sent) == count and all(value.startswith("data:image/png;base64,") for value in sent)
+
+
+@pytest.mark.asyncio
 async def test_meshy_7_refuses_more_images_than_meshy_takes():
     node = GraphNode(id="m", definitionId="krea-3d-meshy-meshy-7", params=_defaults("krea-3d-meshy-meshy-7"))
     images = PortValueDict(type="Image", value=[f"https://example.com/{i}.png" for i in range(5)])

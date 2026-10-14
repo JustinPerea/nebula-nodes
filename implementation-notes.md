@@ -3604,3 +3604,31 @@ Follow-ups:
 Incident: the session scratchpad is shared between lanes, and this lane's mutation backups at first used
 the same `mut/bak` path as the ElevenLabs lane. Files crossed between worktrees. The content was rebuilt and
 checked against a recovered copy. Mutation backups now live in `scratchpad/minimax-meshy-mut/`, one per mutation.
+
+### Review fixes (MiniMax and Meshy, 2026-10-14)
+
+An independent review re-read MiniMax's pricing, V2 create/query/delete, T2V, I2V, FL2V and error-code pages,
+Meshy's openapi.yaml and the MiniMax MCP README on 2026-10-14. The model IDs, endpoints, limits and every
+Hailuo and H3 price in the overlay match those pages.
+
+- **Region fallback now also moves on a 404.** MiniMax's Mainland reference documents `/v2/video_generation`
+  on `api.minimax.cn` (platform.minimax.cn/docs/api-reference/video-generation-v2-create.md), and its Global
+  reference on `api.minimax.io`. Neither puts it on `api.minimaxi.com`, which Nebula tries first. Before this
+  fix, a 404 there was returned as is, so a Global key could never reach Global for H3. `submit_task` now
+  tries the next host on a 404 as well as on a rejected key. A 404 creates no task, so it never bills. Test:
+  `test_h3_runs_on_global_when_the_mainland_host_has_no_v2_route` (mutation-checked).
+- **Meshy 7 now resolves saved `/api/outputs/...` refs.** The Krea route resolves them, but the Meshy handlers
+  only read plain local paths. A saved graph's `image_urls` JSON therefore failed on the Meshy route with
+  "Image file not found". The translation now resolves them first, and the handlers send the files as data
+  URIs, behind `require_allowed_path`. Test: `test_meshy_7_sends_saved_output_refs_as_data_uris`, which failed
+  before the fix.
+- Checked and refuted: route precedence and its frontend/backend mirror, per-route param filtering,
+  `unsupported` rule parity (Python `_match_value` and TS `matchValue` agree on 6 / 6.0 / "6"), the H3 high
+  bound (9 reference images with 5 free, plus 15 s of reference video at the output rate, with audio free,
+  which is MiniMax's maximum billable input), emit binding, cancel, and output ports.
+- Left as is (judgment, recorded): in Meshy image mode a set `prompt` or `seed` is dropped rather than
+  blocking the direct route. Meshy's image endpoints have no seed, and what Krea does with a prompt there is
+  undocumented. A route rule can't express "prompt set and input_mode image", and a prompt can arrive on a
+  wire. The price is the same either way (unpriced).
+- Still open: a Mainland key bills Mainland rates, but the spend gate shows Global USD, because the key's region
+  isn't known before the run.
