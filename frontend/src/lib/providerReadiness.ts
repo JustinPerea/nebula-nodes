@@ -145,13 +145,13 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
   const directOk = block === null;
   const key = route.key ?? (directOk ? directKeyNames(def)[0] : fallbackKeyNames(def)[0]) ?? keys[0];
   const ready = keyReadiness(key, cache, health);
-  const blockNote = block ? ` ${directBlockNote(def, block)}` : '';
+  const blockNote = block ? ` ${directBlockNote(def, block, params)}` : '';
   return { ...ready, connectionLabel: connectionLabelFor(key),
     detail: `${routeDetail(def, route, key, directOk)}${blockNote} ${ready.detail}` };
 }
 
 /** Why this recipe can't run on the maker's own API (lib/directRoute.ts directBlock). */
-function directBlockNote(def: ModelNodeDefinition, block: DirectBlock): string {
+function directBlockNote(def: ModelNodeDefinition, block: DirectBlock, params: Record<string, unknown>): string {
   const direct = directKeyNames(def)[0];
   const fallback = fallbackKeyNames(def)[0];
   const directName = direct ? keyProviderName(direct) : 'the maker';
@@ -159,6 +159,10 @@ function directBlockNote(def: ModelNodeDefinition, block: DirectBlock): string {
   if (block.reason === 'requires') return `This saved recipe has no direct ${block.param}, so it uses ${fallbackName}.`;
   if (block.reason === 'blocked') {
     return `This recipe sets ${block.param}, which only ${fallbackName} takes, so it runs on ${fallbackName}. Clear it to run on ${directName}.`;
+  }
+  if (block.reason === 'unsupported') {
+    const value = block.param ? (params[block.param] ?? 'its default') : 'this setting';
+    return `${directName}'s own API can't run ${block.param} ${String(value)} for this model, so it runs on ${fallbackName}.`;
   }
   return `${directName} retires this model on its own API from ${block.on}, so it runs on ${fallbackName}.`;
 }

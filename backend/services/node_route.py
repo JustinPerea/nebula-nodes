@@ -66,6 +66,7 @@ DIRECT_RETIRES: dict[str, dict[str, Any]] = {
 REQUIRES = "requires"  # DIRECT_REQUIRES: the direct route needs a param that isn't set
 BLOCKED = "blocked"    # a copy-only param is set that the maker can't honor (directRoute.blockedBy)
 RETIRED = "retired"    # DIRECT_RETIRES: the maker shut this model down on its API
+UNSUPPORTED = "unsupported"  # a shared param has a value the maker can't render (directRoute.blockedWhen)
 
 LOCAL = "local"        # a utility node: no provider
 PLAN = "plan"          # the signed-in Krea plan
@@ -160,6 +161,9 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
     - BLOCKED: a generated Krea copy names, in ``directRoute.blockedBy``, the
       Krea-only params (explicit width/height) the maker can't honor; a
       recipe that sets one stays on Krea instead of silently changing shape.
+    - UNSUPPORTED: ``directRoute.blockedWhen`` maps a shared param to the
+      values the maker can't render (Veo 3.1 Fast at 4K on Vertex); a run
+      with one of them, saved or default, stays on the copy.
     - RETIRED: on and after a DIRECT_RETIRES date the maker no longer serves
       the model, so the fal or Krea copy runs it."""
     values = params or {}
@@ -171,6 +175,10 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
     for key in (spec.get("blockedBy") or []) if isinstance(spec, Mapping) else []:
         if _has_value(values.get(key)):
             return DirectBlock(BLOCKED, str(key))
+    blocked_when = spec.get("blockedWhen") if isinstance(spec, Mapping) else None
+    for key, unsupported in (blocked_when or {}).items():
+        if _effective(definition, values, str(key)) in unsupported:
+            return DirectBlock(UNSUPPORTED, str(key))
     retires = DIRECT_RETIRES.get(node_id)
     if retires and _today() >= retires["on"]:
         param = retires.get("param")
