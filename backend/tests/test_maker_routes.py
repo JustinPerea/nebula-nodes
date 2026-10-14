@@ -32,6 +32,9 @@ MAKER_ROUTED = {
     "nano-banana-fal", "nano-banana-fal-edit", "meshy-text-to-3d", "meshy-image-to-3d",
     "krea-image-google-nano-banana-2", "krea-image-google-nano-banana-pro",
     "krea-image-google-nano-banana-flash-lite", "krea-image-google-nano-banana",
+    # ElevenLabs (test_maker_routes_elevenlabs.py)
+    "elevenlabs-music", "krea-audio-elevenlabs-music", "krea-audio-elevenlabs-music-v2",
+    "krea-audio-elevenlabs-music-v2-5", "krea-audio-elevenlabs-tts", "runway-tts", "runway-sts", "runway-dubbing",
 }
 
 

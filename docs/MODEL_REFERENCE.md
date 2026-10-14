@@ -4153,17 +4153,25 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `elevenlabs-music` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | ELEVENLABS_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/elevenlabs/music` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Audio (Audio) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Duration (ms) | int | 30000 | 3000–600000 |
 | Instrumental Only | bool | false | — |
+
+**Direct Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Model | enum | music_v1 | Music v1, Music v2, Music v2.5 |
 
 ---
 
@@ -4332,7 +4340,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-audio-elevenlabs-music` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | ELEVENLABS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/audio/elevenlabs/music` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text) |
@@ -4354,7 +4362,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-audio-elevenlabs-music-v2` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | ELEVENLABS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/audio/elevenlabs/music-v2` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text) |
@@ -4376,7 +4384,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-audio-elevenlabs-music-v2-5` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | ELEVENLABS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/audio/elevenlabs/music-v2.5` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text) |
@@ -4398,7 +4406,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-audio-elevenlabs-tts` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | ELEVENLABS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/audio/elevenlabs/tts` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text) |
@@ -4531,7 +4539,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `runway-dubbing` |
 | **Provider** | Runway |
-| **API Key** | RUNWAY_API_KEY |
+| **API Key** | ELEVENLABS_API_KEY, RUNWAY_API_KEY |
 | **Endpoint** | `/v1/voice_dubbing` |
 | **Execution** | async-poll |
 | **Inputs** | Audio (Audio)* |
@@ -4553,17 +4561,30 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `runway-sts` |
 | **Provider** | Runway |
-| **API Key** | RUNWAY_API_KEY |
+| **API Key** | ELEVENLABS_API_KEY, RUNWAY_API_KEY |
 | **Endpoint** | `/v1/speech_to_speech` |
 | **Execution** | async-poll |
 | **Inputs** | Audio (Audio), Video (Video) |
 | **Outputs** | Audio (Audio) |
 | **Audited** | 2026-10-14 |
 
+**Shared Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Remove Background Noise | bool | false | — |
+
+**Runway Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Voice | enum | Maya | Maya, Arjun, Serene, Bernard, Billy, Mark, Clint, Mabel, … |
-| Remove Background Noise | bool | false | — |
+
+**Direct Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| ElevenLabs voice ID | string | — | — |
 
 ---
 
@@ -4573,16 +4594,24 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `runway-tts` |
 | **Provider** | Runway |
-| **API Key** | RUNWAY_API_KEY |
+| **API Key** | ELEVENLABS_API_KEY, RUNWAY_API_KEY |
 | **Endpoint** | `/v1/text_to_speech` |
 | **Execution** | async-poll |
 | **Inputs** | Text (Text)* |
 | **Outputs** | Audio (Audio) |
 | **Audited** | 2026-10-14 |
 
+**Runway Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Voice | enum | Maya | Maya, Arjun, Serene, Bernard, Billy, Mark, Clint, Mabel, … |
+
+**Direct Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| ElevenLabs voice ID | string | — | — |
 
 ---
 

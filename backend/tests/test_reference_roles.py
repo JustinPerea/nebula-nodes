@@ -122,6 +122,41 @@ APPROVED_DUAL_ROUTE_SPLITS = {
               "falParams": ["output_format", "seed"], "order": _NANO_BANANA_FAL_ORDER}
     for node_id in ("nano-banana-fal", "nano-banana-fal-edit")
 }
+# Direct ElevenLabs routes (2026-10-14): ElevenLabs Music on fal and Runway's
+# resold ElevenLabs TTS / speech-to-speech / dubbing also run on ElevenLabs'
+# own API with the person's ELEVENLABS_API_KEY
+# (execution/maker_routes_elevenlabs.py). Same rule as above: the unchanged
+# params are only split by route (order rebuilt from `order`), and the one
+# direct-only param each gains is pinned exactly here (`directParams`), so a
+# change to any existing param, or to the new one, still fails.
+_ELEVENLABS_VOICE_ID = {"key": "voice_id", "label": "ElevenLabs voice ID", "type": "string", "required": False,
+                        "placeholder": "ElevenLabs voice ID (runs on your ElevenLabs key)"}
+APPROVED_DUAL_ROUTE_SPLITS.update({
+    "elevenlabs-music": {
+        "envKeyName": ("FAL_KEY", ["ELEVENLABS_API_KEY", "FAL_KEY"]), "directKeyName": "ELEVENLABS_API_KEY",
+        "falParams": [], "order": ["music_length_ms", "force_instrumental"],
+        "directParams": [{"key": "model_id", "label": "Model", "type": "enum", "required": False,
+                          "default": "music_v1", "options": [
+                              {"label": "Music v1", "value": "music_v1"},
+                              {"label": "Music v2", "value": "music_v2"},
+                              {"label": "Music v2.5", "value": "music_v2_5"}]}],
+    },
+    "runway-tts": {
+        "envKeyName": ("RUNWAY_API_KEY", ["ELEVENLABS_API_KEY", "RUNWAY_API_KEY"]),
+        "directKeyName": "ELEVENLABS_API_KEY", "falParams": ["voiceId"], "order": ["voiceId"],
+        "directParams": [_ELEVENLABS_VOICE_ID],
+    },
+    "runway-sts": {
+        "envKeyName": ("RUNWAY_API_KEY", ["ELEVENLABS_API_KEY", "RUNWAY_API_KEY"]),
+        "directKeyName": "ELEVENLABS_API_KEY", "falParams": ["voiceId"],
+        "order": ["voiceId", "removeBackgroundNoise"], "directParams": [_ELEVENLABS_VOICE_ID],
+    },
+    "runway-dubbing": {
+        "envKeyName": ("RUNWAY_API_KEY", ["ELEVENLABS_API_KEY", "RUNWAY_API_KEY"]),
+        "directKeyName": "ELEVENLABS_API_KEY", "falParams": [],
+        "order": ["targetLang", "disableVoiceCloning", "dropBackgroundAudio", "numSpeakers"],
+    },
+})
 # Direct maker routes, review fix (2026-10-14): Meshy's own image-to-3D API
 # takes texture_prompt ("Provide a text prompt to guide the texturing
 # process", https://docs.meshy.ai/en/api/image-to-3d), so it moves from
@@ -237,7 +272,7 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
         assert normalized.get("envKeyName") == current_env, f"unapproved envKeyName: {node_id}"
         normalized["envKeyName"] = baseline_env
         _remove_approved_fields(normalized, {"directKeyName": split["directKeyName"], "params": [],
-                                             "directParams": []})
+                                             "directParams": split.get("directParams", [])})
         shared, fal = normalized.pop("sharedParams"), normalized.pop("falParams")
         assert [param["key"] for param in fal] == split["falParams"], f"unapproved falParams: {node_id}"
         by_key = {param["key"]: param for param in shared + fal}

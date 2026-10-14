@@ -3,6 +3,38 @@
   "about": "Hand-curated list prices for paid nodes. Every entry cites the vendor page and the date it was checked. See services/model_pricing.py for the format; never add a price without a canonical source.",
   "currencies": {},
   "nodes": {
+    "elevenlabs-music": {
+      "routes": {
+        "elevenlabs": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "music_length_ms"
+          ],
+          "multiplyBy": [
+            "music_length_ms"
+          ],
+          "rows": [
+            {
+              "match": {},
+              "price": 2.5e-06
+            }
+          ],
+          "notes": "ElevenLabs API price for runs on the person's ELEVENLABS_API_KEY (any model_id: the page lists one Music price): $0.15 per minute of music, so $0.0000025 per millisecond of music_length_ms (default 30000 ms, $0.075). The fal route is not priced here.",
+          "sources": [
+            {
+              "url": "https://elevenlabs.io/pricing/api",
+              "quote": "Music Generation $0.15 Price per minute"
+            },
+            {
+              "url": "https://elevenlabs.io/docs/api-reference/music/compose",
+              "quote": "Must be between 3000ms and 600000ms."
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
     "gpt-image-2-5-edit": {
       "currency": "usd",
       "per": "image",
@@ -1627,6 +1659,132 @@
         }
       ],
       "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-audio-elevenlabs-music": {
+      "routes": {
+        "elevenlabs": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "music_length_ms"
+          ],
+          "multiplyBy": [
+            "music_length_ms"
+          ],
+          "rows": [
+            {
+              "match": {
+                "music_length_ms": ""
+              },
+              "price": [
+                0.0075,
+                1.5
+              ]
+            },
+            {
+              "match": {},
+              "price": 2.5e-06
+            }
+          ],
+          "notes": "ElevenLabs API price for runs on the person's ELEVENLABS_API_KEY: $0.15 per minute of music, so a set music_length_ms costs $0.0000025 per millisecond. With no length set the model picks it, so the price is the 3,000-600,000 ms range the API takes. The page lists one Music price for every model (music_v1, music_v2, music_v2_5).",
+          "sources": [
+            {
+              "url": "https://elevenlabs.io/pricing/api",
+              "quote": "Music Generation $0.15 Price per minute"
+            },
+            {
+              "url": "https://elevenlabs.io/docs/api-reference/music/compose",
+              "quote": "Must be between 3000ms and 600000ms. Optional - if not provided, the model will choose a length based on the prompt."
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-audio-elevenlabs-music-v2": {
+      "routes": {
+        "elevenlabs": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "music_length_ms"
+          ],
+          "multiplyBy": [
+            "music_length_ms"
+          ],
+          "rows": [
+            {
+              "match": {
+                "music_length_ms": ""
+              },
+              "price": [
+                0.0075,
+                1.5
+              ]
+            },
+            {
+              "match": {},
+              "price": 2.5e-06
+            }
+          ],
+          "notes": "ElevenLabs API price for runs on the person's ELEVENLABS_API_KEY: $0.15 per minute of music, so a set music_length_ms costs $0.0000025 per millisecond. With no length set the model picks it, so the price is the 3,000-600,000 ms range the API takes. The page lists one Music price for every model (music_v1, music_v2, music_v2_5).",
+          "sources": [
+            {
+              "url": "https://elevenlabs.io/pricing/api",
+              "quote": "Music Generation $0.15 Price per minute"
+            },
+            {
+              "url": "https://elevenlabs.io/docs/api-reference/music/compose",
+              "quote": "Must be between 3000ms and 600000ms. Optional - if not provided, the model will choose a length based on the prompt."
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-audio-elevenlabs-music-v2-5": {
+      "routes": {
+        "elevenlabs": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "music_length_ms"
+          ],
+          "multiplyBy": [
+            "music_length_ms"
+          ],
+          "rows": [
+            {
+              "match": {
+                "music_length_ms": ""
+              },
+              "price": [
+                0.0075,
+                1.5
+              ]
+            },
+            {
+              "match": {},
+              "price": 2.5e-06
+            }
+          ],
+          "notes": "ElevenLabs API price for runs on the person's ELEVENLABS_API_KEY: $0.15 per minute of music, so a set music_length_ms costs $0.0000025 per millisecond. With no length set the model picks it, so the price is the 3,000-600,000 ms range the API takes. The page lists one Music price for every model (music_v1, music_v2, music_v2_5).",
+          "sources": [
+            {
+              "url": "https://elevenlabs.io/pricing/api",
+              "quote": "Music Generation $0.15 Price per minute"
+            },
+            {
+              "url": "https://elevenlabs.io/docs/api-reference/music/compose",
+              "quote": "Must be between 3000ms and 600000ms. Optional - if not provided, the model will choose a length based on the prompt."
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-alibaba-qwen-image-2-1": {

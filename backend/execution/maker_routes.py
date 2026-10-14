@@ -27,6 +27,7 @@ import json
 from functools import lru_cache
 from typing import Any, Awaitable, Callable, Mapping
 
+from execution import maker_routes_elevenlabs
 from execution.missing_credential import MissingCredentialError
 from models.graph import GraphNode, PortValueDict
 from services import node_route
@@ -68,6 +69,17 @@ def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | Non
         definition = definition_for(node.definition_id)
         route = node_route.select_route(definition, node.params, api_keys)
         if route.kind == node_route.UNSET:
+            block = node_route.direct_block(definition, node.params)
+            set_direct = [k for k in node_route.direct_keys(definition) if str(api_keys.get(k) or "").strip()]
+            if block is not None and set_direct:
+                # The maker key is there but this recipe can't use it (say,
+                # Runway TTS without an ElevenLabs voice_id): name what to do.
+                why = {node_route.REQUIRES: f"it needs {block.param} set",
+                       node_route.BLOCKED: f"{block.param} is set, which only the copy takes",
+                       node_route.RETIRED: f"the maker retired this model on {block.on}"}[block.reason]
+                raise MissingCredentialError(
+                    f"{' or '.join(node_route.fallback_keys(definition))} is required: this recipe can't run "
+                    f"on {set_direct[0]} because {why}")
             raise MissingCredentialError(f"{' or '.join(node_route.env_keys(definition))} is required")
         if route.kind == node_route.DIRECT:
             routed = route_node(node, node_route.route_param_keys(definition, node_route.DIRECT))
@@ -250,6 +262,7 @@ async def krea_google_nano_banana(node: GraphNode, inputs: dict[str, PortValueDi
 # (scripts/sync-krea-catalog.py DIRECT_ROUTES): (direct handler, translator for a model).
 KREA_TRANSLATIONS: dict[str, tuple[Handler, Callable[[str], Translate]]] = {
     "krea-nano-banana": (krea_google_nano_banana, krea_nano_banana_to_google),
+    **maker_routes_elevenlabs.KREA_TRANSLATIONS,
 }
 
 

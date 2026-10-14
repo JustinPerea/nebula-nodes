@@ -446,6 +446,152 @@
         "provider": "google",
         "key": "GOOGLE_API_KEY"
       }
+    },
+    {
+      "name": "Runway TTS with only a Runway voice preset stays on Runway",
+      "nodeId": "runway-tts",
+      "params": {
+        "voiceId": "Maya"
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "paramKeys": [
+        "voiceId"
+      ]
+    },
+    {
+      "name": "Runway TTS with an ElevenLabs voice runs on ElevenLabs",
+      "nodeId": "runway-tts",
+      "params": {
+        "voiceId": "Maya",
+        "voice_id": "pNInz6obpgDQGcFmaJgB"
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "paramKeys": [
+        "voice_id"
+      ]
+    },
+    {
+      "name": "Runway speech-to-speech without a voice_id and only the ElevenLabs key has no route",
+      "nodeId": "runway-sts",
+      "params": {},
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "runway",
+        "key": null
+      }
+    },
+    {
+      "name": "Runway dubbing runs on ElevenLabs with the key",
+      "nodeId": "runway-dubbing",
+      "params": {},
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "paramKeys": [
+        "disableVoiceCloning",
+        "dropBackgroundAudio",
+        "numSpeakers",
+        "targetLang"
+      ]
+    },
+    {
+      "name": "fal ElevenLabs Music runs on ElevenLabs with the key",
+      "nodeId": "elevenlabs-music",
+      "params": {},
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "paramKeys": [
+        "force_instrumental",
+        "model_id",
+        "music_length_ms"
+      ]
+    },
+    {
+      "name": "fal ElevenLabs Music on fal never shows model_id",
+      "nodeId": "elevenlabs-music",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "paramKeys": [
+        "force_instrumental",
+        "music_length_ms"
+      ]
+    },
+    {
+      "name": "the Krea plan keeps Krea ElevenLabs TTS on Krea",
+      "nodeId": "krea-audio-elevenlabs-tts",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Krea ElevenLabs Music v2.5 runs on ElevenLabs with the key",
+      "nodeId": "krea-audio-elevenlabs-music-v2-5",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "force_instrumental",
+        "music_length_ms",
+        "prompt"
+      ]
     }
   ]
 }

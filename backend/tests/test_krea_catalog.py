@@ -147,7 +147,9 @@ def test_generated_prices_keep_the_kling_multi_shot_guard_and_the_audio_note():
     assert kling["rows"] and all(row["match"]["multi_prompt"] == "" for row in kling["rows"])
     assert "multi_prompt" in kling["priceParams"] and "Multi-prompt runs are unpriced" in kling["notes"]
     assert any(source["url"].startswith("https://kling.ai/") for source in kling["sources"])
-    krea_prices = {node_id: entry["routes"]["krea"] if "routes" in entry else entry for node_id, entry in entries.items()}
+    krea_prices = {node_id: entry["routes"].get("krea") if "routes" in entry else entry
+                   for node_id, entry in entries.items()}
+    krea_prices = {node_id: entry for node_id, entry in krea_prices.items() if entry}
     audio_free = {node_id for node_id, entry in krea_prices.items()
                   if "doesn't vary with generate_audio" in entry["notes"]}
     assert audio_free == {
@@ -169,7 +171,24 @@ def test_direct_route_models_price_both_routes():
         if direct is None:
             assert entry is None or "routes" not in entry
             continue
-        assert set(entry["routes"]) == {"krea", direct["pricing"]["provider"]}
+        krea_priced = bool(CATALOG["models"][node_id].get("pricing"))
+        maker = direct["pricing"]["provider"] if direct.get("pricing") else None
+        expected = {"krea"} if krea_priced else set()
+        expected |= {maker} if maker else set()
+        if not expected:
+            # Neither Krea nor the maker publishes a price these params can
+            # compute (ElevenLabs TTS bills per character of the prompt).
+            assert entry is None, node_id
+            continue
+        assert set(entry["routes"]) == expected, node_id
+        if krea_priced:
+            assert entry["routes"]["krea"].get("provider", "krea") == "krea"
+        if maker == "elevenlabs":
+            music = entry["routes"]["elevenlabs"]
+            assert music["checked"] == SYNC.ELEVENLABS_CHECKED
+            assert any(source["url"] == SYNC.ELEVENLABS_PRICING_URL for source in music["sources"])
+            assert music["multiplyBy"] == ["music_length_ms"]
+            continue
         google = entry["routes"]["google"]
         assert google.get("provider", "google") == "google"
         assert google["rows"] and google["checked"] == SYNC.GOOGLE_CHECKED
@@ -182,4 +201,3 @@ def test_direct_route_models_price_both_routes():
             low, high = row["price"]
             assert low == source_row["price"]
             assert high >= low + SYNC.MAX_REFERENCE_IMAGES * per_image > low
-        assert entry["routes"]["krea"].get("provider", "krea") == "krea"

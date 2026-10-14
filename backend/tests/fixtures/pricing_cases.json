@@ -205,6 +205,19 @@
         }
       ],
       "directParams": []
+    },
+    "lengthed": {
+      "id": "lengthed",
+      "apiProvider": "krea",
+      "envKeyName": "KREA_API_TOKEN",
+      "params": [
+        {
+          "key": "music_length_ms",
+          "type": "integer",
+          "min": 3000,
+          "max": 600000
+        }
+      ]
     }
   },
   "pricing": {
@@ -480,6 +493,38 @@
             "checked": "2026-10-14"
           }
         }
+      },
+      "lengthed": {
+        "currency": "usd",
+        "per": "request",
+        "priceParams": [
+          "music_length_ms"
+        ],
+        "multiplyBy": [
+          "music_length_ms"
+        ],
+        "rows": [
+          {
+            "match": {
+              "music_length_ms": ""
+            },
+            "price": [
+              0.0075,
+              1.5
+            ]
+          },
+          {
+            "match": {},
+            "price": 2.5e-06
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-14"
       }
     }
   },
@@ -820,6 +865,40 @@
       "params": {},
       "routeProvider": "krea",
       "expected": null
+    },
+    {
+      "name": "an unset length matches the empty-value row and prices its range unmultiplied",
+      "nodeId": "lengthed",
+      "params": {},
+      "expected": {
+        "currency": "usd",
+        "low": 0.0075,
+        "high": 1.5
+      }
+    },
+    {
+      "name": "a cleared length counts as unset",
+      "nodeId": "lengthed",
+      "params": {
+        "music_length_ms": ""
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.0075,
+        "high": 1.5
+      }
+    },
+    {
+      "name": "a set length multiplies the per-millisecond row",
+      "nodeId": "lengthed",
+      "params": {
+        "music_length_ms": 60000
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.15,
+        "high": 0.15
+      }
     }
   ]
 }

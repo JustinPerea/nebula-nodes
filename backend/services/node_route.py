@@ -16,8 +16,8 @@ Precedence, the same everywhere:
    the person's explicit choice, so a maker key never overrides it.
 2. a direct (maker) key is set, and the direct route can take this run
    (:func:`direct_block`): the maker's API.
-3. otherwise the first other key that is set (``FAL_KEY``, ``KREA_API_TOKEN``):
-   the aggregator copy.
+3. otherwise the first other key that is set (``FAL_KEY``, ``KREA_API_TOKEN``,
+   or ``RUNWAY_API_KEY`` for the ElevenLabs models Runway resells): the copy.
 
 Stdlib only, so the engine and the scripts can import it cheaply.
 """
@@ -41,7 +41,14 @@ KEY_PROVIDERS: dict[str, str] = {
 # A direct route that also needs a param set, else the run takes the fallback.
 # Ideogram's direct reframe sizes by `resolution`; a saved recipe with only
 # fal's `image_size` stays on fal (execution/sync_runner.py _ideogram_router).
-DIRECT_REQUIRES: dict[str, str] = {"ideogram-reframe": "resolution"}
+# Runway's TTS and speech-to-speech voices are Runway presets with no
+# documented ElevenLabs voice id, so their ElevenLabs route needs the
+# recipe's own ElevenLabs `voice_id` (execution/maker_routes_elevenlabs.py).
+DIRECT_REQUIRES: dict[str, str] = {
+    "ideogram-reframe": "resolution",
+    "runway-tts": "voice_id",
+    "runway-sts": "voice_id",
+}
 
 # A direct route the maker shuts down on a date: from that day on the run takes
 # the fal or Krea copy instead, and pricing, the spend gate, readiness and the
@@ -103,7 +110,9 @@ def is_multi_route(definition: Mapping[str, Any]) -> bool:
 
 
 def fallback_provider(definition: Mapping[str, Any]) -> str | None:
-    """Who runs a dual-route node without its maker key: "fal" or "krea"."""
+    """Who runs a dual-route node without its maker key: the provider of its
+    first non-direct key ("fal", "krea", or "runway" for Runway's resold
+    ElevenLabs models)."""
     if not direct_keys(definition):
         return None
     for key in fallback_keys(definition):

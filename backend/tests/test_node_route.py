@@ -37,7 +37,8 @@ def test_every_dual_route_node_lists_its_maker_key_first_and_splits_params_clean
             continue
         env = node_route.env_keys(definition)
         assert env[: len(direct)] == direct, node_id
-        assert node_route.fallback_provider(definition) in {"fal", "krea"}, node_id
+        # Runway resells ElevenLabs' TTS, speech-to-speech and dubbing.
+        assert node_route.fallback_provider(definition) in {"fal", "krea", "runway"}, node_id
         if not definition.get("sharedParams"):
             continue
         groups = {name: {p["key"] for p in definition.get(name) or []}

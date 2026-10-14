@@ -22,7 +22,16 @@ async def handle_elevenlabs_tts(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
     api_keys: dict[str, str],
+    *,
+    voice_settings: bool = True,
 ) -> dict[str, Any]:
+    """POST /v1/text-to-speech/{voice_id}.
+
+    ``voice_settings=False`` leaves the request's ``voice_settings`` out, so
+    ElevenLabs uses the voice's stored settings (the API reference: voice
+    settings "overriding stored settings for the given voice"). The Krea and
+    Runway copies routed here (execution/maker_routes_elevenlabs.py) expose no
+    voice settings, so they don't override the voice either."""
     text_input = inputs.get("text")
     if not text_input or not text_input.value:
         raise ValueError("Text input is required but was not provided")
@@ -42,20 +51,18 @@ async def handle_elevenlabs_tts(
     speed = float(node.params.get("speed", 1.0))
     output_format = node.params.get("output_format", "mp3_44100_128")
 
-    voice_settings: dict[str, Any] = {
+    settings: dict[str, Any] = {
         "stability": stability,
         "similarity_boost": similarity_boost,
         "use_speaker_boost": use_speaker_boost,
         "speed": speed,
     }
     if style > 0:
-        voice_settings["style"] = style
+        settings["style"] = style
 
-    body: dict[str, Any] = {
-        "text": text,
-        "model_id": model_id,
-        "voice_settings": voice_settings,
-    }
+    body: dict[str, Any] = {"text": text, "model_id": model_id}
+    if voice_settings:
+        body["voice_settings"] = settings
 
     seed = node.params.get("seed")
     if seed is not None and seed != "":
@@ -470,3 +477,68 @@ async def handle_elevenlabs_stt(
                     break
 
     return {"text": {"type": "Text", "value": text}}
+
+
+ELEVENLABS_MUSIC_URL = "https://api.elevenlabs.io/v1/music"
+# POST /v1/music (https://elevenlabs.io/docs/api-reference/music/compose,
+# checked 2026-10-14): "`model_id` ... default: music_v1 ... Allowed values:
+# `music_v1`, `music_v2`, `music_v2_5`"; `music_length_ms` "between 3000ms and
+# 600000ms" and only with `prompt`; output_format "auto" (the default when
+# omitted) gives mp3_44100_128 on v1 and mp3_48000_192 on v2, so the saved
+# file is always mp3.
+MUSIC_MODELS = ("music_v1", "music_v2", "music_v2_5")
+MUSIC_LENGTH_MS = (3000, 600000)
+
+
+async def handle_elevenlabs_music(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+) -> dict[str, Any]:
+    """Compose a track with ElevenLabs Music from a text prompt.
+
+    Params: ``model_id`` (music_v1 / music_v2 / music_v2_5, default
+    music_v1), ``music_length_ms`` (3000-600000; omitted lets the model pick
+    the length) and ``force_instrumental``."""
+    prompt_input = inputs.get("prompt")
+    if not prompt_input or prompt_input.value in (None, ""):
+        raise ValueError("Prompt input is required for ElevenLabs Music")
+
+    api_key = api_keys.get("ELEVENLABS_API_KEY")
+    if not api_key or not str(api_key).strip():
+        raise MissingCredentialError("ELEVENLABS_API_KEY is required")
+
+    model_id = node.params.get("model_id") or "music_v1"
+    if model_id not in MUSIC_MODELS:
+        raise ValueError(f"ElevenLabs Music model_id must be one of {', '.join(MUSIC_MODELS)} (received {model_id!r})")
+    body: dict[str, Any] = {"prompt": str(prompt_input.value), "model_id": model_id}
+
+    length = node.params.get("music_length_ms")
+    if length is not None and length != "":
+        if isinstance(length, bool):
+            raise ValueError("music_length_ms must be a whole number of milliseconds")
+        try:
+            length_ms = int(length)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("music_length_ms must be a whole number of milliseconds") from exc
+        low, high = MUSIC_LENGTH_MS
+        if not low <= length_ms <= high:
+            raise ValueError(f"music_length_ms must be between {low} and {high} (received {length_ms})")
+        body["music_length_ms"] = length_ms
+
+    if node.params.get("force_instrumental"):
+        body["force_instrumental"] = True
+
+    # A long track takes a while to compose; the response is the audio file.
+    timeout = httpx.Timeout(connect=30.0, read=600.0, write=60.0, pool=30.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(
+            ELEVENLABS_MUSIC_URL,
+            headers={"xi-api-key": api_key, "Content-Type": "application/json"},
+            json=body,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"ElevenLabs Music error {response.status_code}: {response.text}")
+
+    file_path = _save_audio(response.content, "mp3_44100_128")
+    return {"audio": {"type": "Audio", "value": file_path}}

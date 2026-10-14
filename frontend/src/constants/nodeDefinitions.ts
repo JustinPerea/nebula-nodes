@@ -689,7 +689,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'audio-gen',
     apiProvider: 'runway',
     apiEndpoint: '/v1/text_to_speech',
-    envKeyName: 'RUNWAY_API_KEY',
+    envKeyName: ['ELEVENLABS_API_KEY', 'RUNWAY_API_KEY'],
+    directKeyName: 'ELEVENLABS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'text', label: 'Text', dataType: 'Text', required: true },
@@ -697,7 +698,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [],
+    falParams: [
       {
         key: 'voiceId',
         label: 'Voice',
@@ -738,6 +741,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
     ],
+    directParams: [
+      {
+        key: 'voice_id',
+        label: 'ElevenLabs voice ID',
+        type: 'string',
+        required: false,
+        placeholder: 'ElevenLabs voice ID (runs on your ElevenLabs key)',
+      },
+    ],
   },
 
   'runway-sts': {
@@ -746,7 +758,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'audio-gen',
     apiProvider: 'runway',
     apiEndpoint: '/v1/speech_to_speech',
-    envKeyName: 'RUNWAY_API_KEY',
+    envKeyName: ['ELEVENLABS_API_KEY', 'RUNWAY_API_KEY'],
+    directKeyName: 'ELEVENLABS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
@@ -755,7 +768,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
+      {
+        key: 'removeBackgroundNoise',
+        label: 'Remove Background Noise',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+    ],
+    falParams: [
       {
         key: 'voiceId',
         label: 'Voice',
@@ -784,12 +807,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Tom', value: 'Tom' },
         ],
       },
+    ],
+    directParams: [
       {
-        key: 'removeBackgroundNoise',
-        label: 'Remove Background Noise',
-        type: 'boolean',
+        key: 'voice_id',
+        label: 'ElevenLabs voice ID',
+        type: 'string',
         required: false,
-        default: false,
+        placeholder: 'ElevenLabs voice ID (runs on your ElevenLabs key)',
       },
     ],
   },
@@ -800,7 +825,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'audio-gen',
     apiProvider: 'runway',
     apiEndpoint: '/v1/voice_dubbing',
-    envKeyName: 'RUNWAY_API_KEY',
+    envKeyName: ['ELEVENLABS_API_KEY', 'RUNWAY_API_KEY'],
+    directKeyName: 'ELEVENLABS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: true },
@@ -808,7 +834,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'targetLang',
         label: 'Target Language',
@@ -870,6 +897,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 10,
       },
     ],
+    falParams: [],
+    directParams: [],
   },
 
   'elevenlabs-tts': {
@@ -12343,7 +12372,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'audio-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/elevenlabs/music',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['ELEVENLABS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'ELEVENLABS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -12351,7 +12381,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'music_length_ms',
         label: 'Duration (ms)',
@@ -12367,6 +12398,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'boolean',
         required: false,
         default: false,
+      },
+    ],
+    falParams: [],
+    directParams: [
+      {
+        key: 'model_id',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'music_v1',
+        options: [
+          { label: 'Music v1', value: 'music_v1' },
+          { label: 'Music v2', value: 'music_v2' },
+          { label: 'Music v2.5', value: 'music_v2_5' },
+        ],
       },
     ],
   },
@@ -30615,7 +30661,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "audio-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/audio/elevenlabs/tts",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "ELEVENLABS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -30690,7 +30739,53 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "eleven_multilingual_v2"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "ELEVENLABS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "voice_id",
+        "label": "Voice id",
+        "required": false,
+        "type": "string",
+        "default": "hpp4J3VqNfWAUOO0d1Us"
+      },
+      {
+        "key": "model_id",
+        "label": "Model id",
+        "required": false,
+        "type": "string",
+        "default": "eleven_multilingual_v2"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-elevenlabs-tts",
+      "model": "eleven_multilingual_v2"
+    }
   },
   'krea-audio-elevenlabs-music': {
     "id": "krea-audio-elevenlabs-music",
@@ -30698,7 +30793,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "audio-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/audio/elevenlabs/music",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "ELEVENLABS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -30775,7 +30873,55 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": false
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "ELEVENLABS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "music_length_ms",
+        "label": "Music length ms",
+        "required": false,
+        "type": "integer",
+        "min": 3000,
+        "max": 600000,
+        "step": 1
+      },
+      {
+        "key": "force_instrumental",
+        "label": "Force instrumental",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-elevenlabs-music",
+      "model": "music_v1"
+    }
   },
   'krea-audio-elevenlabs-music-v2': {
     "id": "krea-audio-elevenlabs-music-v2",
@@ -30783,7 +30929,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "audio-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/audio/elevenlabs/music-v2",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "ELEVENLABS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -30860,7 +31009,55 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": false
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "ELEVENLABS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "music_length_ms",
+        "label": "Music length ms",
+        "required": false,
+        "type": "integer",
+        "min": 3000,
+        "max": 600000,
+        "step": 1
+      },
+      {
+        "key": "force_instrumental",
+        "label": "Force instrumental",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-elevenlabs-music",
+      "model": "music_v2"
+    }
   },
   'krea-audio-elevenlabs-music-v2-5': {
     "id": "krea-audio-elevenlabs-music-v2-5",
@@ -30868,7 +31065,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "audio-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/audio/elevenlabs/music-v2.5",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "ELEVENLABS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -30945,7 +31145,55 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": false
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "ELEVENLABS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "music_length_ms",
+        "label": "Music length ms",
+        "required": false,
+        "type": "integer",
+        "min": 3000,
+        "max": 600000,
+        "step": 1
+      },
+      {
+        "key": "force_instrumental",
+        "label": "Force instrumental",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-elevenlabs-music",
+      "model": "music_v2_5"
+    }
   },
   // END GENERATED KREA CATALOG
 };

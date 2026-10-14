@@ -178,6 +178,20 @@ describe('provider readiness without generation', () => {
     expect(modelReadiness(definition, freeze({ model: 'nano-banana-2' }), cache, health()).connectionLabel).toBe('Google API');
   });
 
+  it('names Runway as the copy for its resold ElevenLabs models and asks for an ElevenLabs voice', () => {
+    const definition = NODE_DEFINITIONS['runway-tts'];
+    const keys = { ELEVENLABS_API_KEY: TOKEN, RUNWAY_API_KEY: TOKEN };
+    const preset = modelReadiness(definition, freeze({ voiceId: 'Maya' }), credentials({ apiKeys: keys }), health());
+    expect(preset).toMatchObject({ connectionLabel: 'Runway API', setupTarget: { kind: 'api-key', key: 'RUNWAY_API_KEY' } });
+    expect(preset.detail).toContain('Runs on Runway with your Runway key.');
+    expect(preset.detail).toContain('This recipe sets no ElevenLabs voice_id, so it uses Runway. Set it to run on ElevenLabs.');
+    const voiced = modelReadiness(definition, freeze({ voice_id: 'pNInz6obpgDQGcFmaJgB' }), credentials({ apiKeys: keys }), health());
+    expect(voiced).toMatchObject({ connectionLabel: 'ElevenLabs API', setupTarget: { kind: 'api-key', key: 'ELEVENLABS_API_KEY' } });
+    expect(voiced.detail).toContain("Runs on ElevenLabs's own API with your ElevenLabs key, billed by ElevenLabs.");
+    const dubbing = modelReadiness(NODE_DEFINITIONS['runway-dubbing'], freeze({}), credentials({ apiKeys: { RUNWAY_API_KEY: TOKEN } }), health());
+    expect(dubbing.detail).toContain('Runs on Runway with your Runway key. Add an ElevenLabs key to run on ElevenLabs directly.');
+  });
+
   it('keeps a Krea copy on the signed-in plan even with a Google key', () => {
     const ready = modelReadiness(NODE_DEFINITIONS['krea-image-google-nano-banana-pro'], freeze({ _kreaAuth: 'mcp' }),
       credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN }, kreaConnection: { status: 'connected' } }), health());
