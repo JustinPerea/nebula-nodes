@@ -292,6 +292,16 @@ async def handle_nano_banana(
             image_config["imageSize"] = image_size
         body["generationConfig"]["imageConfig"] = image_config
 
+    # Optional controls the fal/Krea copies route here (execution/maker_routes.py).
+    # https://ai.google.dev/api/generate-content: generationConfig.thinkingConfig
+    # .thinkingLevel is an enum (MINIMAL ... HIGH); Tool.googleSearch is an
+    # object (web search when searchTypes is unset). Checked 2026-10-14.
+    thinking = str(node.params.get("thinkingLevel") or "").lower()
+    if thinking in {"minimal", "high"}:
+        body["generationConfig"]["thinkingConfig"] = {"thinkingLevel": thinking.upper()}
+    if node.params.get("googleSearch") is True:
+        body["tools"] = [{"googleSearch": {}}]
+
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     async with httpx.AsyncClient(timeout=120.0) as client:

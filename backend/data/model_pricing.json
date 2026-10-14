@@ -1798,67 +1798,129 @@
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-google-nano-banana": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token"
-          },
-          "price": 0.0429
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token"
+              },
+              "price": 0.0429
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/image/google/nano-banana (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
+        },
+        "google": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": 0.039
+            }
+          ],
+          "sources": [
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "Output images up to 1024x1024px consume 1290 tokens and are equivalent to $0.039 per image."
+            }
+          ],
+          "notes": "Gemini API standard (paid tier) output-image price, for runs on the person's GOOGLE_API_KEY (model gemini-2.5-flash-image). Input text and reference images add well under $0.01. Ignores Batch/Flex/Priority rates.",
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/image/google/nano-banana (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-google-nano-banana-2": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1K"
-          },
-          "price": 0.08
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1K"
+              },
+              "price": 0.08
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "2K"
+              },
+              "price": 0.12
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K"
+              },
+              "price": 0.16
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/image/google/nano-banana-2 (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "2K"
-          },
-          "price": 0.12
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K"
-          },
-          "price": 0.16
+        "google": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "1K"
+              },
+              "price": 0.067
+            },
+            {
+              "match": {
+                "resolution": "2K"
+              },
+              "price": 0.101
+            },
+            {
+              "match": {
+                "resolution": "4K"
+              },
+              "price": 0.151
+            }
+          ],
+          "sources": [
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "$60.00 (images) Equivalent to $0.045 per 0.5K image* $0.067 per 1K image*, $0.101 per 2K image*, and $0.151 per 4K image*."
+            }
+          ],
+          "notes": "Gemini API standard (paid tier) output-image price, for runs on the person's GOOGLE_API_KEY (model gemini-3.1-flash-image). Input text and reference images add well under $0.01. Ignores Batch/Flex/Priority rates.",
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/image/google/nano-banana-2 (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-google-nano-banana-2-1": {
@@ -1902,67 +1964,129 @@
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-google-nano-banana-flash-lite": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token"
-          },
-          "price": 0.034
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token"
+              },
+              "price": 0.034
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/image/google/nano-banana-flash-lite (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
+        },
+        "google": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": 0.0336
+            }
+          ],
+          "sources": [
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "$30.00 (images) Equivalent to $0.0336 per 1K resolution image*"
+            }
+          ],
+          "notes": "Gemini API standard (paid tier) output-image price, for runs on the person's GOOGLE_API_KEY (model gemini-3.1-flash-lite-image). Input text and reference images add well under $0.01. Ignores Batch/Flex/Priority rates.",
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/image/google/nano-banana-flash-lite (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-google-nano-banana-pro": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1K"
-          },
-          "price": 0.15
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1K"
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "2K"
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K"
+              },
+              "price": 0.3
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/image/google/nano-banana-pro (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "2K"
-          },
-          "price": 0.15
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K"
-          },
-          "price": 0.3
+        "google": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "1K"
+              },
+              "price": 0.134
+            },
+            {
+              "match": {
+                "resolution": "2K"
+              },
+              "price": 0.134
+            },
+            {
+              "match": {
+                "resolution": "4K"
+              },
+              "price": 0.24
+            }
+          ],
+          "sources": [
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "$120.00 (images) Equivalent to $0.134 per 1K/2K image** and $0.24 per 4K image**"
+            }
+          ],
+          "notes": "Gemini API standard (paid tier) output-image price, for runs on the person's GOOGLE_API_KEY (model gemini-3-pro-image). Input text and reference images add well under $0.01. Ignores Batch/Flex/Priority rates.",
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/image/google/nano-banana-pro (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-ideogram-ideogram-2-turbo": {
@@ -6698,296 +6822,626 @@
       "checked": "2026-10-10"
     },
     "nano-banana-fal": {
-      "currency": "usd",
-      "per": "image",
-      "priceParams": [
-        "model",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "model": "nano-banana-2",
-            "resolution": "0.5K"
-          },
-          "price": 0.06
+      "routes": {
+        "fal": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "model",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "0.5K"
+              },
+              "price": 0.06
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "1K"
+              },
+              "price": 0.08
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "2K"
+              },
+              "price": 0.12
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "4K"
+              },
+              "price": 0.16
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "0.5K"
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "1K"
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "2K"
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "4K"
+              },
+              "price": 0.3
+            },
+            {
+              "match": {
+                "model": "nano-banana"
+              },
+              "price": 0.039
+            },
+            {
+              "match": {
+                "model": "gemini-25-flash-image"
+              },
+              "price": 0.039
+            },
+            {
+              "match": {
+                "model": "gemini-3-pro-image"
+              },
+              "price": 0.15
+            }
+          ],
+          "extras": [
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "enable_web_search": true
+              },
+              "price": 0.015
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "enable_web_search": true
+              },
+              "price": 0.015
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "thinking_level": "high"
+              },
+              "price": 0.002
+            }
+          ],
+          "multiplyBy": [
+            "num_images"
+          ],
+          "notes": "fal list price per image. Pro bills 0.5K as 1K (the handler bumps it) and lists no 2K premium. Nano Banana, 2.5 Flash Image and Gemini 3 Pro Image ignore resolution, web search and thinking here (the handler strips them). fal doesn't say whether the web-search and thinking add-ons are per request or per image; they're counted per image, the higher reading.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/fal-ai/nano-banana-2",
+              "quote": "Your request will cost $0.08 per image."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/nano-banana-2",
+              "quote": "2K and 4K outputs will be charged at 1.5 times and 2 times the standard rate, respectively."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/nano-banana-2",
+              "quote": "0.5K (512px) resolution outputs will be charged at 0.75 times the standard rate."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/nano-banana-2",
+              "quote": "If web search is used, an additional $0.015 will be charged. If high thinking is used, an additional $0.002"
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/nano-banana-pro",
+              "quote": "Your request will cost $0.15 per image. ... 4K outputs will be charged at double the standard rate."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/nano-banana",
+              "quote": "Your request will cost $0.039 per image."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/gemini-25-flash-image",
+              "quote": "Your request will cost $0.039 per image."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/gemini-3-pro-image-preview",
+              "quote": "Your request will cost $0.15 per image."
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "model": "nano-banana-2",
-            "resolution": "1K"
-          },
-          "price": 0.08
-        },
-        {
-          "match": {
-            "model": "nano-banana-2",
-            "resolution": "2K"
-          },
-          "price": 0.12
-        },
-        {
-          "match": {
-            "model": "nano-banana-2",
-            "resolution": "4K"
-          },
-          "price": 0.16
-        },
-        {
-          "match": {
-            "model": "nano-banana-pro",
-            "resolution": "0.5K"
-          },
-          "price": 0.15
-        },
-        {
-          "match": {
-            "model": "nano-banana-pro",
-            "resolution": "1K"
-          },
-          "price": 0.15
-        },
-        {
-          "match": {
-            "model": "nano-banana-pro",
-            "resolution": "2K"
-          },
-          "price": 0.15
-        },
-        {
-          "match": {
-            "model": "nano-banana-pro",
-            "resolution": "4K"
-          },
-          "price": 0.3
-        },
-        {
-          "match": {
-            "model": "nano-banana"
-          },
-          "price": 0.039
-        },
-        {
-          "match": {
-            "model": "gemini-25-flash-image"
-          },
-          "price": 0.039
-        },
-        {
-          "match": {
-            "model": "gemini-3-pro-image"
-          },
-          "price": 0.15
+        "google": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "model",
+            "resolution",
+            "thinking_level",
+            "enable_web_search"
+          ],
+          "rows": [
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "0.5K",
+                "thinking_level": "",
+                "enable_web_search": false
+              },
+              "price": 0.045
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "0.5K",
+                "thinking_level": "minimal",
+                "enable_web_search": false
+              },
+              "price": 0.045
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "1K",
+                "thinking_level": "",
+                "enable_web_search": false
+              },
+              "price": 0.067
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "1K",
+                "thinking_level": "minimal",
+                "enable_web_search": false
+              },
+              "price": 0.067
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "2K",
+                "thinking_level": "",
+                "enable_web_search": false
+              },
+              "price": 0.101
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "2K",
+                "thinking_level": "minimal",
+                "enable_web_search": false
+              },
+              "price": 0.101
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "4K",
+                "thinking_level": "",
+                "enable_web_search": false
+              },
+              "price": 0.151
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "4K",
+                "thinking_level": "minimal",
+                "enable_web_search": false
+              },
+              "price": 0.151
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "0.5K",
+                "enable_web_search": false
+              },
+              "price": 0.134
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "1K",
+                "enable_web_search": false
+              },
+              "price": 0.134
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "2K",
+                "enable_web_search": false
+              },
+              "price": 0.134
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "4K",
+                "enable_web_search": false
+              },
+              "price": 0.24
+            },
+            {
+              "match": {
+                "model": "gemini-3-pro-image"
+              },
+              "price": 0.134
+            },
+            {
+              "match": {
+                "model": "nano-banana"
+              },
+              "price": 0.039
+            },
+            {
+              "match": {
+                "model": "gemini-25-flash-image"
+              },
+              "price": 0.039
+            }
+          ],
+          "multiplyBy": [
+            "num_images"
+          ],
+          "notes": "Gemini API standard (paid tier) output-image prices, for runs on the person's GOOGLE_API_KEY (execution/maker_routes.py: Nano Banana 2 = gemini-3.1-flash-image, Pro and Gemini 3 Pro Image = gemini-3-pro-image, Nano Banana and 2.5 Flash Image = gemini-2.5-flash-image). One call per image, so num_images multiplies. Pro renders 0.5K at 1K; Gemini 3 Pro Image, Nano Banana and 2.5 Flash Image ignore resolution here, as on fal. Unpriced on this route: web search (Google bills $14 per 1,000 search queries after a shared monthly free allowance, and one request may run several queries) and high thinking (billed as output tokens, with no per-image figure). Input text add well under $0.01. Ignores Batch/Flex/Priority rates.",
+          "sources": [
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "$60.00 (images) Equivalent to $0.045 per 0.5K image* $0.067 per 1K image*, $0.101 per 2K image*, and $0.151 per 4K image*."
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "$120.00 (images) Equivalent to $0.134 per 1K/2K image** and $0.24 per 4K image**"
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "Output images up to 1024x1024px consume 1290 tokens and are equivalent to $0.039 per image."
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "5,000 free search requests per month (shared across all Gemini 3 and newer models), then $14 per 1,000 requests for text and image-based grounding."
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "You will be charged for each individual search query performed."
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "extras": [
-        {
-          "match": {
-            "model": "nano-banana-2",
-            "enable_web_search": true
-          },
-          "price": 0.015
-        },
-        {
-          "match": {
-            "model": "nano-banana-pro",
-            "enable_web_search": true
-          },
-          "price": 0.015
-        },
-        {
-          "match": {
-            "model": "nano-banana-2",
-            "thinking_level": "high"
-          },
-          "price": 0.002
-        }
-      ],
-      "multiplyBy": [
-        "num_images"
-      ],
-      "notes": "fal list price per image. Pro bills 0.5K as 1K (the handler bumps it) and lists no 2K premium. Nano Banana, 2.5 Flash Image and Gemini 3 Pro Image ignore resolution, web search and thinking here (the handler strips them). fal doesn't say whether the web-search and thinking add-ons are per request or per image; they're counted per image, the higher reading.",
-      "sources": [
-        {
-          "url": "https://fal.ai/models/fal-ai/nano-banana-2",
-          "quote": "Your request will cost $0.08 per image."
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/nano-banana-2",
-          "quote": "2K and 4K outputs will be charged at 1.5 times and 2 times the standard rate, respectively."
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/nano-banana-2",
-          "quote": "0.5K (512px) resolution outputs will be charged at 0.75 times the standard rate."
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/nano-banana-2",
-          "quote": "If web search is used, an additional $0.015 will be charged. If high thinking is used, an additional $0.002"
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/nano-banana-pro",
-          "quote": "Your request will cost $0.15 per image. ... 4K outputs will be charged at double the standard rate."
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/nano-banana",
-          "quote": "Your request will cost $0.039 per image."
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/gemini-25-flash-image",
-          "quote": "Your request will cost $0.039 per image."
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/gemini-3-pro-image-preview",
-          "quote": "Your request will cost $0.15 per image."
-        }
-      ],
-      "checked": "2026-10-10"
+      }
     },
     "nano-banana-fal-edit": {
-      "currency": "usd",
-      "per": "image",
-      "priceParams": [
-        "model",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "model": "nano-banana-2",
-            "resolution": "0.5K"
-          },
-          "price": 0.06
+      "routes": {
+        "fal": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "model",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "0.5K"
+              },
+              "price": 0.06
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "1K"
+              },
+              "price": 0.08
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "2K"
+              },
+              "price": 0.12
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "4K"
+              },
+              "price": 0.16
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "0.5K"
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "1K"
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "2K"
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "4K"
+              },
+              "price": 0.3
+            },
+            {
+              "match": {
+                "model": "nano-banana"
+              },
+              "price": 0.039
+            },
+            {
+              "match": {
+                "model": "gemini-25-flash-image"
+              },
+              "price": 0.039
+            },
+            {
+              "match": {
+                "model": "gemini-3-pro-image"
+              },
+              "price": 0.15
+            }
+          ],
+          "extras": [
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "enable_web_search": true
+              },
+              "price": 0.015
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "enable_web_search": true
+              },
+              "price": 0.015
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "thinking_level": "high"
+              },
+              "price": 0.002
+            }
+          ],
+          "multiplyBy": [
+            "num_images"
+          ],
+          "notes": "fal list price per image. Pro bills 0.5K as 1K (the handler bumps it) and lists no 2K premium. Nano Banana, 2.5 Flash Image and Gemini 3 Pro Image ignore resolution, web search and thinking here (the handler strips them). fal doesn't say whether the web-search and thinking add-ons are per request or per image; they're counted per image, the higher reading.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/fal-ai/nano-banana-2/edit",
+              "quote": "Your request will cost $0.08 per image."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/nano-banana-2/edit",
+              "quote": "2K and 4K outputs will be charged at 1.5 times and 2 times the standard rate, respectively."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/nano-banana-2/edit",
+              "quote": "0.5K (512px) resolution outputs will be charged at 0.75 times the standard rate."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/nano-banana-2",
+              "quote": "If web search is used, an additional $0.015 will be charged. If high thinking is used, an additional $0.002"
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/nano-banana-pro/edit",
+              "quote": "Your request will cost $0.15 per image. ... 4K outputs will be charged at double the standard rate."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/nano-banana/edit",
+              "quote": "Your request will cost $0.039 per image."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/gemini-25-flash-image/edit",
+              "quote": "Your request will cost $0.039 per image."
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/gemini-3-pro-image-preview/edit",
+              "quote": "Your request will cost $0.15 per image."
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "model": "nano-banana-2",
-            "resolution": "1K"
-          },
-          "price": 0.08
-        },
-        {
-          "match": {
-            "model": "nano-banana-2",
-            "resolution": "2K"
-          },
-          "price": 0.12
-        },
-        {
-          "match": {
-            "model": "nano-banana-2",
-            "resolution": "4K"
-          },
-          "price": 0.16
-        },
-        {
-          "match": {
-            "model": "nano-banana-pro",
-            "resolution": "0.5K"
-          },
-          "price": 0.15
-        },
-        {
-          "match": {
-            "model": "nano-banana-pro",
-            "resolution": "1K"
-          },
-          "price": 0.15
-        },
-        {
-          "match": {
-            "model": "nano-banana-pro",
-            "resolution": "2K"
-          },
-          "price": 0.15
-        },
-        {
-          "match": {
-            "model": "nano-banana-pro",
-            "resolution": "4K"
-          },
-          "price": 0.3
-        },
-        {
-          "match": {
-            "model": "nano-banana"
-          },
-          "price": 0.039
-        },
-        {
-          "match": {
-            "model": "gemini-25-flash-image"
-          },
-          "price": 0.039
-        },
-        {
-          "match": {
-            "model": "gemini-3-pro-image"
-          },
-          "price": 0.15
+        "google": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "model",
+            "resolution",
+            "thinking_level",
+            "enable_web_search"
+          ],
+          "rows": [
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "0.5K",
+                "thinking_level": "",
+                "enable_web_search": false
+              },
+              "price": 0.045
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "0.5K",
+                "thinking_level": "minimal",
+                "enable_web_search": false
+              },
+              "price": 0.045
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "1K",
+                "thinking_level": "",
+                "enable_web_search": false
+              },
+              "price": 0.067
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "1K",
+                "thinking_level": "minimal",
+                "enable_web_search": false
+              },
+              "price": 0.067
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "2K",
+                "thinking_level": "",
+                "enable_web_search": false
+              },
+              "price": 0.101
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "2K",
+                "thinking_level": "minimal",
+                "enable_web_search": false
+              },
+              "price": 0.101
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "4K",
+                "thinking_level": "",
+                "enable_web_search": false
+              },
+              "price": 0.151
+            },
+            {
+              "match": {
+                "model": "nano-banana-2",
+                "resolution": "4K",
+                "thinking_level": "minimal",
+                "enable_web_search": false
+              },
+              "price": 0.151
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "0.5K",
+                "enable_web_search": false
+              },
+              "price": 0.134
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "1K",
+                "enable_web_search": false
+              },
+              "price": 0.134
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "2K",
+                "enable_web_search": false
+              },
+              "price": 0.134
+            },
+            {
+              "match": {
+                "model": "nano-banana-pro",
+                "resolution": "4K",
+                "enable_web_search": false
+              },
+              "price": 0.24
+            },
+            {
+              "match": {
+                "model": "gemini-3-pro-image"
+              },
+              "price": 0.134
+            },
+            {
+              "match": {
+                "model": "nano-banana"
+              },
+              "price": 0.039
+            },
+            {
+              "match": {
+                "model": "gemini-25-flash-image"
+              },
+              "price": 0.039
+            }
+          ],
+          "multiplyBy": [
+            "num_images"
+          ],
+          "notes": "Gemini API standard (paid tier) output-image prices, for runs on the person's GOOGLE_API_KEY (execution/maker_routes.py: Nano Banana 2 = gemini-3.1-flash-image, Pro and Gemini 3 Pro Image = gemini-3-pro-image, Nano Banana and 2.5 Flash Image = gemini-2.5-flash-image). One call per image, so num_images multiplies. Pro renders 0.5K at 1K; Gemini 3 Pro Image, Nano Banana and 2.5 Flash Image ignore resolution here, as on fal. Unpriced on this route: web search (Google bills $14 per 1,000 search queries after a shared monthly free allowance, and one request may run several queries) and high thinking (billed as output tokens, with no per-image figure). Input images and Input text add well under $0.01. Ignores Batch/Flex/Priority rates.",
+          "sources": [
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "$60.00 (images) Equivalent to $0.045 per 0.5K image* $0.067 per 1K image*, $0.101 per 2K image*, and $0.151 per 4K image*."
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "$120.00 (images) Equivalent to $0.134 per 1K/2K image** and $0.24 per 4K image**"
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "Output images up to 1024x1024px consume 1290 tokens and are equivalent to $0.039 per image."
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "5,000 free search requests per month (shared across all Gemini 3 and newer models), then $14 per 1,000 requests for text and image-based grounding."
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "You will be charged for each individual search query performed."
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "extras": [
-        {
-          "match": {
-            "model": "nano-banana-2",
-            "enable_web_search": true
-          },
-          "price": 0.015
-        },
-        {
-          "match": {
-            "model": "nano-banana-pro",
-            "enable_web_search": true
-          },
-          "price": 0.015
-        },
-        {
-          "match": {
-            "model": "nano-banana-2",
-            "thinking_level": "high"
-          },
-          "price": 0.002
-        }
-      ],
-      "multiplyBy": [
-        "num_images"
-      ],
-      "notes": "fal list price per image. Pro bills 0.5K as 1K (the handler bumps it) and lists no 2K premium. Nano Banana, 2.5 Flash Image and Gemini 3 Pro Image ignore resolution, web search and thinking here (the handler strips them). fal doesn't say whether the web-search and thinking add-ons are per request or per image; they're counted per image, the higher reading.",
-      "sources": [
-        {
-          "url": "https://fal.ai/models/fal-ai/nano-banana-2/edit",
-          "quote": "Your request will cost $0.08 per image."
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/nano-banana-2/edit",
-          "quote": "2K and 4K outputs will be charged at 1.5 times and 2 times the standard rate, respectively."
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/nano-banana-2/edit",
-          "quote": "0.5K (512px) resolution outputs will be charged at 0.75 times the standard rate."
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/nano-banana-2",
-          "quote": "If web search is used, an additional $0.015 will be charged. If high thinking is used, an additional $0.002"
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/nano-banana-pro/edit",
-          "quote": "Your request will cost $0.15 per image. ... 4K outputs will be charged at double the standard rate."
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/nano-banana/edit",
-          "quote": "Your request will cost $0.039 per image."
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/gemini-25-flash-image/edit",
-          "quote": "Your request will cost $0.039 per image."
-        },
-        {
-          "url": "https://fal.ai/models/fal-ai/gemini-3-pro-image-preview/edit",
-          "quote": "Your request will cost $0.15 per image."
-        }
-      ],
-      "checked": "2026-10-10"
+      }
     },
     "veo-3": {
       "currency": "usd",

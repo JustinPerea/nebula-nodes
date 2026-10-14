@@ -333,9 +333,14 @@ def get_handler_registry(
     ],
 ]:
     registry = dict(SYNC_HANDLERS)
+    from execution import maker_routes
     from handlers.krea_gateway import catalog_models, handle_krea_gateway
     for definition_id in catalog_models():
-        registry[definition_id] = partial(handle_krea_gateway, emit=emit)
+        # Krea copies with a maker route (scripts/sync-krea-catalog.py
+        # DIRECT_ROUTES) run on the maker's API when its key is set, unless
+        # the node bills the Krea plan; otherwise the Krea gateway.
+        gateway = partial(handle_krea_gateway, emit=emit)
+        registry[definition_id] = maker_routes.krea_router(definition_id, gateway) or gateway
     from handlers.krea import (
         handle_krea_library_manage, handle_krea_moodboard_create, handle_krea_moodboard_search,
     )
@@ -653,29 +658,30 @@ def get_handler_registry(
             routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=internal_params)
             return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
 
-        async def _meshy_text_to_3d_handler(
-            node: GraphNode,
-            inputs: dict[str, PortValueDict],
-            api_keys: dict[str, str],
-        ) -> dict[str, Any]:
-            # Prefer direct Meshy API, fall back to FAL
-            if api_keys.get("MESHY_API_KEY"):
-                from handlers.meshy import handle_meshy_text_to_3d
-                return await handle_meshy_text_to_3d(node, inputs, api_keys, emit=emit)
-            node.params.setdefault("endpoint_id", "fal-ai/meshy/v6/text-to-3d")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+        def _fal_endpoint(endpoint_id: str):
+            """A fallback that sends the route-filtered copy to one fal endpoint."""
+            async def _run(node, inputs, api_keys):
+                return await handle_fal_universal(
+                    _fal_wrapper_node(node, endpoint_id), inputs, api_keys, emit=emit)
+            return _run
 
-        async def _meshy_image_to_3d_handler(
-            node: GraphNode,
-            inputs: dict[str, PortValueDict],
-            api_keys: dict[str, str],
-        ) -> dict[str, Any]:
-            # Prefer direct Meshy API, fall back to FAL
-            if api_keys.get("MESHY_API_KEY"):
-                from handlers.meshy import handle_meshy_image_to_3d
-                return await handle_meshy_image_to_3d(node, inputs, api_keys, emit=emit)
-            node.params.setdefault("endpoint_id", "fal-ai/meshy/v6/image-to-3d")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+        # Prefer the direct Meshy API, fall back to fal. The router drops each
+        # route's foreign params (fal used to receive ai_model, hd_texture,
+        # remove_lighting and target_formats) and never mutates the node.
+        async def _meshy_text_to_3d_direct(node, inputs, api_keys):
+            from handlers.meshy import handle_meshy_text_to_3d
+            return await handle_meshy_text_to_3d(node, inputs, api_keys, emit=emit)
+
+        async def _meshy_image_to_3d_direct(node, inputs, api_keys):
+            from handlers.meshy import handle_meshy_image_to_3d
+            return await handle_meshy_image_to_3d(node, inputs, api_keys, emit=emit)
+
+        _meshy_text_to_3d_handler = maker_routes.dual_route(
+            direct=_meshy_text_to_3d_direct, fallback=_fal_endpoint("fal-ai/meshy/v6/text-to-3d"),
+        )
+        _meshy_image_to_3d_handler = maker_routes.dual_route(
+            direct=_meshy_image_to_3d_direct, fallback=_fal_endpoint("fal-ai/meshy/v6/image-to-3d"),
+        )
 
         async def _meshy_multi_image_to_3d_handler(
             node: GraphNode,
@@ -1415,13 +1421,22 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/ltx-2.3/text-to-video/fast")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
-        async def _nano_banana_fal_handler(node, inputs, api_keys):
-            routed_node = _nano_banana_fal_node(node, edit=False)
-            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+        def _nano_banana_on_fal(*, edit: bool):
+            async def _run(node, inputs, api_keys):
+                routed_node = _nano_banana_fal_node(node, edit=edit)
+                return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+            return _run
 
-        async def _nano_banana_fal_edit_handler(node, inputs, api_keys):
-            routed_node = _nano_banana_fal_node(node, edit=True)
-            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+        # Nano Banana's fal copies run on the Gemini API when GOOGLE_API_KEY is
+        # set (execution/maker_routes.py translates fal's params), else on fal.
+        _nano_banana_fal_handler = maker_routes.dual_route(
+            direct=maker_routes.google_nano_banana, fallback=_nano_banana_on_fal(edit=False),
+            translate=maker_routes.nano_banana_fal_to_google,
+        )
+        _nano_banana_fal_edit_handler = maker_routes.dual_route(
+            direct=maker_routes.google_nano_banana, fallback=_nano_banana_on_fal(edit=True),
+            translate=maker_routes.nano_banana_fal_to_google,
+        )
 
         async def _identity_edit_handler(node, inputs, api_keys):
             # identity-edit = nano-banana-2/edit + optional Character-bundle
