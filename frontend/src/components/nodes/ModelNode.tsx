@@ -31,7 +31,7 @@ import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
 import { JevResultView, type JevResultInputs } from './JevResult';
-import { isJevNode, parseJevOutputs, JEV_BOX, JEV_PICK_BEST } from '../../lib/jev';
+import { isJevNode, parseJevOutputs, JEV_BOX, JEV_DECIDE, JEV_PICK_BEST } from '../../lib/jev';
 import { jevResultKey, upstreamPortValues } from '../../lib/jevView';
 
 // Trigger a browser download for a URL produced by the backend. We fetch the
@@ -199,6 +199,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     if (!jevResult) return undefined;
     if (nodeData.definitionId === JEV_PICK_BEST) return { candidates: upstreamPortValues(id, 'candidates', nodes, edges) };
     if (nodeData.definitionId === JEV_BOX) return { image: upstreamPortValues(id, 'image', nodes, edges)[0] ?? null };
+    if (nodeData.definitionId === JEV_DECIDE) {
+      return { gated: edges.some((edge) => edge.source === id && (edge.sourceHandle === 'on_pass' || edge.sourceHandle === 'on_fail')) };
+    }
     return undefined;
   }, [jevResult, nodeData.definitionId, id, nodes, edges]);
 

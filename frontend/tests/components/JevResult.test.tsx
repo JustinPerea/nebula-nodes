@@ -6,7 +6,6 @@ import type { NodeData, PortValue } from '../../src/types';
 import { JevResultView } from '../../src/components/nodes/JevResult';
 import { JevResultDetails } from '../../src/components/panels/JevResultDetails';
 import { ModelNode } from '../../src/components/nodes/ModelNode';
-import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { useGraphStore } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
 import { JEV_BOX, JEV_DECIDE, JEV_PICK_BEST, parseJevOutputs, type JevResult } from '../../src/lib/jev';
@@ -87,7 +86,8 @@ describe('Jev Decide on the card', () => {
 });
 
 describe('Jev Pick Best on the card', () => {
-  const candidates = ['/api/outputs/run-7/candidate-a.png', '/api/outputs/run-7/candidate-b.png', '/api/outputs/run-7/candidate-c.png'];
+  // The URLs the handler test wired in when it wrote the fixture.
+  const candidates = [0, 1, 2].map((i) => `/api/outputs/jev-fixture/candidate-${i}.png`);
 
   it('shows each candidate with its share and highlights the winner', () => {
     const s = sample(fixture.pickBest, 'a clear winner');
@@ -96,7 +96,7 @@ describe('Jev Pick Best on the card', () => {
     const items = within(screen.getByRole('list', { name: 'Probability of each candidate' })).getAllByRole('listitem');
     expect(items.map((item) => item.getAttribute('aria-label'))).toEqual(['Candidate 1: 8%', 'Candidate 2: 87%, winner', 'Candidate 3: 5%']);
     expect(items[1]).toHaveClass('jev-result__candidate--winner');
-    expect(items[1].querySelector('img')).toHaveAttribute('src', expect.stringContaining('candidate-b.png'));
+    expect(items[1].querySelector('img')).toHaveAttribute('src', expect.stringContaining('candidate-1.png'));
     expect(screen.getByAltText('Winner, candidate 2')).toBeInTheDocument();
     expect(screen.queryByText(/any of them would do/)).not.toBeInTheDocument();
   });
@@ -138,12 +138,14 @@ describe('Jev Box on the card', () => {
     expect(screen.queryByText('0%')).not.toBeInTheDocument();
   });
 
-  it('keeps the unsure guess on screen with a hint', () => {
-    const s = sample(fixture.box, 'unsure keeps the guess');
+  it('shows unsure without a box, like not found but in its own tone', () => {
+    const s = sample(fixture.box, 'unsure gives no box');
     const { container } = render(<JevResultView result={parse(JEV_BOX, s)} params={{}} inputs={{ image: '/api/outputs/x.png' }} />);
-    expect(screen.getByText('Unsure')).toBeInTheDocument();
-    expect(container.querySelector('.jev-result__frame')).not.toBeNull();
-    expect(screen.getByText(/best guess/)).toBeInTheDocument();
+    expect(screen.getByTestId('jev-result')).toHaveClass('jev-result--unsure');
+    expect(screen.getAllByText('Unsure')).toHaveLength(2);
+    expect(screen.getByRole('status')).toHaveTextContent('the coffee mug');
+    expect(container.querySelector('.jev-result__frame')).toBeNull();
+    expect(screen.getByText(/couldn.t tell whether/)).toBeInTheDocument();
   });
 
   it('shows a clear Not found state, with or without the image', () => {
@@ -216,6 +218,19 @@ describe('Jev results inside ModelNode', () => {
     expect(container.querySelector('.model-node')).toHaveClass('model-node--jev-surface');
   });
 
+  it('says which gate port the verdict went out on once a branch is wired', () => {
+    const s = sample(fixture.decide, 'too close to call');
+    const decide = node('n1', JEV_DECIDE, s.outputs, s.params);
+    const { rerender } = render(<ModelNode {...props(decide)} />);
+    expect(screen.queryByTestId('jev-branch')).not.toBeInTheDocument();
+    useGraphStore.setState({
+      nodes: [decide],
+      edges: [{ id: 'e1', source: 'n1', sourceHandle: 'on_pass', target: 'n2', targetHandle: 'prompt' }],
+    });
+    rerender(<ModelNode {...props(decide)} />);
+    expect(screen.getByTestId('jev-branch')).toHaveTextContent('Sent on On Fail');
+  });
+
   it.each(fixture.malformed.filter((s) => s.definitionId === JEV_DECIDE).map((s) => [s.name, s] as const))(
     'falls back to the generic preview for a malformed result: %s',
     (_name, s) => {
@@ -226,27 +241,18 @@ describe('Jev results inside ModelNode', () => {
   );
 
   it('reads Pick Best candidates from the wired nodes, in edge order', () => {
-    // The definition lands with the Pick Best node; borrow a stand-in if it isn't here yet.
-    const added = !NODE_DEFINITIONS[JEV_PICK_BEST];
-    if (added) {
-      NODE_DEFINITIONS[JEV_PICK_BEST] = { ...NODE_DEFINITIONS[JEV_DECIDE], id: JEV_PICK_BEST, inputPorts: [], outputPorts: [] };
-    }
-    try {
-      const s = sample(fixture.pickBest, 'a clear winner');
-      const urls = ['/api/outputs/a.png', '/api/outputs/run-7/candidate-b.png', '/api/outputs/c.png'];
-      const sources = urls.map((url, i) => node(`g${i}`, 'gpt-image-2-generate', { image: { type: 'Image', value: url } }));
-      const pickNode = node('p1', JEV_PICK_BEST, s.outputs);
-      useGraphStore.setState({
-        nodes: [...sources, pickNode],
-        edges: sources.map((src, i) => ({ id: `e${i}`, source: src.id, sourceHandle: 'image', target: 'p1', targetHandle: 'candidates' })),
-      });
-      const { container } = render(<ModelNode {...props(pickNode)} />);
-      const thumbs = [...container.querySelectorAll('img.jev-result__thumb')].map((img) => img.getAttribute('src'));
-      expect(thumbs).toEqual(urls.map((url) => expect.stringContaining(url)));
-      expect(container.querySelector('.model-node--image-surface')).toBeNull();
-    } finally {
-      if (added) delete NODE_DEFINITIONS[JEV_PICK_BEST];
-    }
+    const s = sample(fixture.pickBest, 'a clear winner');
+    const urls = ['/api/outputs/a.png', '/api/outputs/jev-fixture/candidate-1.png', '/api/outputs/c.png'];
+    const sources = urls.map((url, i) => node(`g${i}`, 'gpt-image-2-generate', { image: { type: 'Image', value: url } }));
+    const pickNode = node('p1', JEV_PICK_BEST, s.outputs);
+    useGraphStore.setState({
+      nodes: [...sources, pickNode],
+      edges: sources.map((src, i) => ({ id: `e${i}`, source: src.id, sourceHandle: 'image', target: 'p1', targetHandle: 'candidates' })),
+    });
+    const { container } = render(<ModelNode {...props(pickNode)} />);
+    const thumbs = [...container.querySelectorAll('img.jev-result__thumb')].map((img) => img.getAttribute('src'));
+    expect(thumbs).toEqual(urls.map((url) => expect.stringContaining(url)));
+    expect(container.querySelector('.model-node--image-surface')).toBeNull();
   });
 
   it('renders nothing extra for a node that has not run', () => {

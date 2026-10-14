@@ -361,6 +361,18 @@ body.app-slava-restraint .jev-result__thumb--empty {
   opacity: 1;
 }
 
+/* Which gate port the verdict went out on, when the gate is wired. */
+body.app-slava-restraint .jev-result__branch {
+  margin: 0;
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-label);
+  line-height: var(--sr-line-meta);
+}
+body.app-slava-restraint .jev-result__branch span {
+  color: var(--jev-tone);
+  font-family: var(--sr-mono);
+}
+
 body.app-slava-restraint .jev-result__hint {
   margin: 0;
   padding-left: 10px;
@@ -428,10 +440,6 @@ body.app-slava-restraint .jev-result__box--glow {
   stroke-width: 6px;
   stroke-opacity: 0.22;
 }
-body.app-slava-restraint .jev-result--unsure .jev-result__box {
-  stroke-dasharray: 0.035 0.025;
-  animation: jev-fade-in 320ms var(--jev-spring) both;
-}
 
 @keyframes jev-label-in {
   from { opacity: 0; transform: translateY(calc(-100% + 4px)); }
@@ -466,6 +474,13 @@ body.app-slava-restraint .jev-result__box-label--inside {
 body.app-slava-restraint .jev-result--missing .jev-result__stage img {
   opacity: 0.32;
   filter: grayscale(1);
+}
+/* Unsure keeps the image's colour but dims it under the status. */
+body.app-slava-restraint .jev-result--box.jev-result--unsure .jev-result__stage img {
+  opacity: 0.5;
+}
+body.app-slava-restraint .jev-result--unsure .jev-result__missing-title {
+  color: var(--jev-unsure);
 }
 
 body.app-slava-restraint .jev-result__missing {

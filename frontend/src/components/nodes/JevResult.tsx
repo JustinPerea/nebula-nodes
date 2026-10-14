@@ -13,6 +13,9 @@ export interface JevResultInputs {
   candidates?: string[];
   /** Box: the image that was searched. */
   image?: string | null;
+  /** Decide: true when On Pass or On Fail is wired, so the card says which
+   * branch the verdict took. */
+  gated?: boolean;
 }
 
 interface JevResultViewProps {
@@ -163,7 +166,14 @@ function displayAnswer(answer: string, mode: JevDecideMode): string {
   return answer.charAt(0).toUpperCase() + answer.slice(1);
 }
 
-function JevDecideView({ result, params }: { result: JevDecideResult; params: Record<string, unknown> }) {
+// The gate port a Decide verdict went out on, in the definition's port names.
+function branchText(branch: JevDecideResult['branch']): string {
+  if (branch === 'pass') return 'Sent on On Pass';
+  if (branch === 'fail') return 'Sent on On Fail';
+  return 'Held back on both branches';
+}
+
+function JevDecideView({ result, params, gated }: { result: JevDecideResult; params: Record<string, unknown>; gated: boolean }) {
   const mode = decideMode(result, params);
   const verdict = verdictLabel(result.pass, mode, params);
   const question = askedQuestion(result.report, params, 'question', 'Question');
@@ -181,6 +191,11 @@ function JevDecideView({ result, params }: { result: JevDecideResult; params: Re
       {mode === 'yes_no' && <YesNoMeter result={result} threshold={numberParam(params, 'threshold', 0.5)} tone={verdict.tone} />}
       {mode === 'choice' && <ChoiceBars result={result} options={splitLines(params.options)} tone={verdict.tone} />}
       {mode === 'score' && <ScoreLevels result={result} levels={splitLines(params.levels)} tone={verdict.tone} />}
+      {gated && (
+        <p className={`jev-result__branch jev-result__branch--${result.branch ?? 'none'}`} data-testid="jev-branch">
+          <span aria-hidden="true">→</span> {branchText(result.branch)}
+        </p>
+      )}
       <Footer confidence={formatJevPercent(result.confidence)} model={result.report?.model ?? null} />
     </div>
   );
@@ -259,7 +274,10 @@ function JevBoxView({ result, params, image }: { result: JevBoxResult; params: R
   const box = result.box;
   const useOriginal = Boolean(image) && !mismatch;
   const src = useOriginal ? image! : result.annotated;
-  const overlay = useOriginal && box !== null && result.found !== 'false';
+  // Only a found target comes with a box. Unsure and not found both give
+  // just the verdict, so they share the centred status in place of a box.
+  const overlay = useOriginal && box !== null && result.found === 'true';
+  const noBox = result.found !== 'true';
   const tone: Tone = result.found === 'true' ? 'pass' : result.found === 'unsure' ? 'unsure' : 'none';
   const label = result.found === 'true' ? 'Found' : result.found === 'unsure' ? 'Unsure' : 'Not found';
   const presence = parseJevNumber(result.report?.fields.Presence);
@@ -317,22 +335,22 @@ function JevBoxView({ result, params, image }: { result: JevBoxResult; params: R
               </span>
             </>
           )}
-          {result.found === 'false' && (
+          {noBox && (
             <div className="jev-result__missing" role="status">
-              <span className="jev-result__missing-title">Not found</span>
+              <span className="jev-result__missing-title">{label}</span>
               {target && <span className="jev-result__missing-target">{target}</span>}
             </div>
           )}
         </div>
       ) : (
-        result.found === 'false' && (
+        noBox && (
           <div className="jev-result__missing jev-result__missing--plain" role="status">
-            <span className="jev-result__missing-title">Not found</span>
+            <span className="jev-result__missing-title">{label}</span>
             {target && <span className="jev-result__missing-target">{target}</span>}
           </div>
         )
       )}
-      {result.found === 'unsure' && <p className="jev-result__hint">Low confidence: this box is the model&apos;s best guess, so there is no crop or mask.</p>}
+      {result.found === 'unsure' && <p className="jev-result__hint">Jev couldn&apos;t tell whether it&apos;s there, so there is no box, crop or mask.</p>}
       <div className="jev-result__footer">
         <span>
           Presence {presence !== null ? <span className="jev-result__figure">{formatJevPercent(presence)}</span> : <span className="jev-result__muted">unknown</span>}
@@ -354,7 +372,7 @@ function JevBoxView({ result, params, image }: { result: JevBoxResult; params: R
 /** A Jev node's result on its card: verdict, the numbers behind it, and for
  * Pick Best and Box the images it judged. */
 export function JevResultView({ result, params, inputs }: JevResultViewProps) {
-  if (result.kind === 'decide') return <JevDecideView result={result} params={params} />;
+  if (result.kind === 'decide') return <JevDecideView result={result} params={params} gated={Boolean(inputs?.gated)} />;
   if (result.kind === 'pick-best') return <JevPickBestView result={result} params={params} candidates={inputs?.candidates} />;
   return <JevBoxView result={result} params={params} image={inputs?.image} />;
 }
