@@ -13,6 +13,18 @@ names Nano Banana 2.1 as the replacement
 Some nodes stay but lose a model option: Veo 3.0, 3.0 Fast and 2.0 were shut
 down on 2026-06-30, so a saved ``veo-3`` node on one of them moves to the
 matching Veo 3.1 model (``RETIRED_PARAMS``).
+
+Runway retired Gen-3 Alpha Turbo (``gen3a_turbo``) and Gen-4 Aleph
+(``gen4_aleph``) on 2026-07-30 ("Requests that use these model identifiers
+will fail", https://docs.dev.runwayml.com/llms-full.txt changelog, read
+2026-10-14). Runway names Gen-4.5 or Gen-4 Turbo for Gen-3a and Aleph 2.0
+(``aleph2``) for Gen-4 Aleph. ``veo3`` is no longer in Runway's
+image_to_video / text_to_video request schema (openapi.json, same date; no
+dated changelog entry). Saved ``runway-video`` nodes move gen3a_turbo to
+gen4_turbo (both image-to-video only, same 2-10 s range, so a saved
+image-to-video node keeps working; a text-only one gets the handler's "needs
+an image" error) and veo3 to veo3.1. Saved ``runway-aleph`` nodes move to
+aleph2. All of these shutdowns are past, so nothing is date-gated.
 """
 from __future__ import annotations
 
@@ -66,8 +78,38 @@ def _veo_params(params: dict[str, Any]) -> dict[str, Any]:
     return migrated
 
 
+# Veo 3.1 on Runway takes 4, 6 or 8 s; a saved duration rounds up to the
+# nearest of those (never shorter than what was saved, capped at 8).
+def _veo31_duration(value: Any) -> Any:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return value
+    return next((d for d in (4, 6, 8) if seconds <= d), 8)
+
+
+def _runway_video_params(params: dict[str, Any]) -> dict[str, Any]:
+    model = params.get("model")
+    if model == "gen3a_turbo":
+        return {**params, "model": "gen4_turbo"}
+    if model == "veo3":
+        migrated = {**params, "model": "veo3.1"}
+        if "duration" in migrated:
+            migrated["duration"] = _veo31_duration(migrated["duration"])
+        return migrated
+    return params
+
+
+def _runway_aleph_params(params: dict[str, Any]) -> dict[str, Any]:
+    if params.get("model") == "gen4_aleph":
+        return {**params, "model": "aleph2"}
+    return params
+
+
 RETIRED_PARAMS: dict[str, Any] = {
     "veo-3": _veo_params,
+    "runway-video": _runway_video_params,
+    "runway-aleph": _runway_aleph_params,
 }
 
 
