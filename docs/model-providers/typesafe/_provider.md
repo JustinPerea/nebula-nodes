@@ -42,11 +42,14 @@ on and what to re-check. Written in our own words from the vendor docs
 | Node | Handler | Status |
 |---|---|---|
 | `jev-decide` | `backend/handlers/jev_decide.py` | shipped 2026-10-14 |
+| `jev-pick-best` | `backend/handlers/jev_pick_best.py` | shipped 2026-10-14 |
+| `jev-box` | `backend/handlers/jev_box.py` | shipped 2026-10-14, experimental |
 
 ## Known gaps and re-checks
 
 - Score's request field is `criteria` (API reference and SDK types agree). The Score docs page shows `levels` only in its interactive demo data, not in a request.
 - The error body shape isn't documented; `typesafe_client._error_detail` reads `message`, `detail` (string or `loc`/`msg` list), `code` and `field`-like keys defensively.
-- Image token counts aren't published; pricing uses the context ceiling until they are.
+- Image token counts aren't published; pricing uses the context ceiling until they are. Pick Best caps candidates at 10 and retries once at 768 px on `max_tokens_exceeded`; raise or drop the cap once a probe measures image tokens.
 - Images and Box are marked not production-ready by the vendor; re-check the images page when Jev 1.15 ships.
+- When Box confidence comes back `null` isn't documented. Nebula keeps it `null`; it doesn't gate on box confidence.
 - Deprecation: the vendor has said 1.13 gets 60 days' notice and 1.14 30 days; no policy page yet.

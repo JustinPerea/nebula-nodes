@@ -27,7 +27,7 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 | [Nous Portal (Hermes)](./nous.md) | 1 | ~70% | complete | Legacy POST /completions endpoint (and `<think>` prefill via it) not exposed |
 | [Higgsfield](./higgsfield.md) | 1 | ~25% | complete | DoP motion/camera presets (getMotions()) — Higgsfield's headline feature — not surfaced |
 | [Anthropic (Claude)](./anthropic.md) | 1 | ~20% | complete | Tool use / function calling — both custom client tools and Anthropic server tools entirely unexposed |
-| [TypeSafe (Jev)](./typesafe.md) | 1 | ~50% | complete | Box questions and multi-question requests (Pick Best and Box nodes come next) |
+| [TypeSafe (Jev)](./typesafe.md) | 3 | ~75% | complete | Several questions in one Decide request; Box edge-check questions and several targets per image |
 
 ## Agent skill gaps
 

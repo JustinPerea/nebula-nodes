@@ -1,6 +1,6 @@
 ---
 name: typesafe
-description: TypeSafe Jev in Nebula — a decision model that answers typed questions (yes/no, pick one, score, where-is-it) with calibrated probabilities and never writes text. Use it to judge, classify, gate or rank generated media. Activate when the user wires `jev-decide` (or `jev-pick-best` / `jev-box` once they ship), asks to "judge", "check", "classify", "score", "pick the best" or "find the box" for an image or text, or mentions TypeSafe, Jev or System One. BYOK only (TYPESAFE_API_KEY). Written 2026-10-14 from docs.typesafe.ai and the Nebula guide docs/api-guides/typesafe.md.
+description: TypeSafe Jev in Nebula — a decision model that answers typed questions (yes/no, pick one, score, where-is-it) with calibrated probabilities and never writes text. Use it to judge, classify, gate or rank generated media. Activate when the user wires `jev-decide`, `jev-pick-best` or `jev-box`, asks to "judge", "check", "classify", "score", "pick the best" or "find the box" for an image or text, or mentions TypeSafe, Jev or System One. BYOK only (TYPESAFE_API_KEY). Written 2026-10-14 from docs.typesafe.ai and the Nebula guide docs/api-guides/typesafe.md.
 ---
 
 # TypeSafe Jev Skill
@@ -12,8 +12,8 @@ Jev returns probabilities, not prose. Treat it as a cheap, fast judge between ge
 | Need | Node | Notes |
 |---|---|---|
 | One yes/no check, a classification, or a 2-10 level rating of text and/or images | `jev-decide` | `answer_type`: `yes_no`, `choice`, `score` |
-| Keep the best of N candidate images | `jev-pick-best` | Not shipped yet. Until then, run `jev-decide` per image (iterator) and compare `probability` |
-| Where something is in an image (crop, mask for inpainting) | `jev-box` | Not shipped yet. Experimental; always paired with a presence check |
+| Keep the best of 2-10 candidate images | `jev-pick-best` | `winner` is the original image; low `confidence` means they're close |
+| Where something is in an image (crop, mask for inpainting) | `jev-box` | Experimental; every request includes a presence check |
 
 Use `claude-chat` or another LLM node when you need words back (captions, critiques, rewrites). Use Jev when you need a decision a graph or agent can act on.
 
@@ -42,11 +42,18 @@ Use `claude-chat` or another LLM node when you need words back (captions, critiq
 
 ## Images are experimental
 
-TypeSafe says image input and Box aren't production-ready: format, limits and accuracy can change. Say so when you rely on an image judgment, and prefer text checks where a text check is enough. Nebula prepares images itself (EXIF rotation, PNG/JPEG, 256-1568 px, padding, size caps), up to 16 images per Decide node.
+TypeSafe says image input and Box aren't production-ready: format, limits and accuracy can change. Say so when you rely on an image judgment, and prefer text checks where a text check is enough. Nebula prepares images itself (EXIF rotation, PNG/JPEG, 256-1568 px, padding, size caps), up to 16 images per Decide node and 10 per Pick Best.
 
-## Box (when it ships)
+## Pick Best
 
-A Box answer always contains a box, even when the target isn't there. Always read `found` first; `box` is `null` when it is `false`, and `crop` / `mask` only exist when it is `true`. One target per node. Small targets in big images can be missed: crop to the region first.
+- Wire every candidate into `candidates` (2 to 10) and the brief into `brief`. Over 10: split into groups, then run a second Pick Best on the winners.
+- `index` is 0-based. `probabilities` is keyed `"0"`, `"1"`, ...
+- Low `confidence` (below `min_confidence`) means the candidates are close; the report says so. Don't present that as a clear win.
+- One holistic pick can hide a failed must-have. When a requirement is hard (right product, legible logo), check the winner with `jev-decide` too.
+
+## Box
+
+A Box answer always contains a box, even when the target isn't there, so the node asks "is it there?" in the same request. Read `found` first: `box` is JSON and `crop` / `mask` / `annotated` exist only when it is `true`; on `false` or `unsure` there is no box at all. One target per node, named plainly (`the red mug`, `the logo on the shirt`). Small targets in big images can be missed: crop to the region first. `pad` (default 0.05 of the image per side) grows the crop and mask, not the `box` output. The `mask` is white on black at the original size: white marks the region, the convention FLUX Fill uses. Ideogram edits the black area instead, so it needs the inverse.
 
 ## Keys and cost
 
@@ -59,9 +66,11 @@ A Box answer always contains a box, even when the target isn't there. Always rea
 1. **Gate a generation on the brief.** Text Input (brief) → image generator → `jev-decide` (`state` = brief, `images` = generated image, question "Does `image` show a red mug on a plain white background?"). Act on `pass`.
 2. **Classify inputs.** `jev-decide` with `answer_type: choice`, options one per line, `pass_when` listing the acceptable ones.
 3. **Rate on a rubric.** `answer_type: score`, levels low to high, `threshold` 0.6 to pass the top part of the scale.
+4. **Generate N, keep the best.** Text Input (brief) → several image generators (or one with several outputs) → `jev-pick-best` (`candidates` = all of them, `brief` = the brief) → `winner` to upscale or save.
+5. **Find it, then fix it.** Image → `jev-box` (`target` = "the logo") → `mask` and the image into an inpainting node, or `crop` into an upscaler. Check `found` first.
 
 ## Ground truth
 
-- Node: `backend/data/node_definitions.json` (`jev-decide`, provider `typesafe`).
-- Handler: `backend/handlers/jev_decide.py`; client: `backend/services/typesafe_client.py`; formats: `backend/services/jev_outputs.py`.
+- Nodes: `backend/data/node_definitions.json` (`jev-decide`, `jev-pick-best`, `jev-box`, provider `typesafe`).
+- Handlers: `backend/handlers/jev_decide.py`, `jev_pick_best.py`, `jev_box.py`; client: `backend/services/typesafe_client.py`; formats: `backend/services/jev_outputs.py`.
 - Guide: `docs/api-guides/typesafe.md`.

@@ -19,8 +19,8 @@ flowchart LR
 | Node | ID | Status | Use it for |
 |---|---|---|---|
 | Jev Decide (judge / classify / yes-no) | `jev-decide` | shipped | One question about text and images: yes/no, pick an option, or a score |
-| Jev Pick Best | `jev-pick-best` | contract only (next change) | Pick the best of several candidate images |
-| Jev Box (experimental) | `jev-box` | contract only (next change) | Find one thing in an image: box, crop and mask |
+| Jev Pick Best (rank / choose best image) | `jev-pick-best` | shipped | Pick the best of several candidate images |
+| Jev Box (experimental) | `jev-box` | shipped, experimental | Find one thing in an image: box, crop and mask |
 
 All three are `analyzer` nodes, `sync` (one request), and need `TYPESAFE_API_KEY`.
 
@@ -86,29 +86,57 @@ How `pass` is decided:
 - score: normalized score ≥ `threshold`.
 - Then, for all three, `unsure` whenever confidence < `min_confidence`.
 
-## Jev Pick Best (contract)
+## Jev Pick Best
 
-Inputs: `candidates` (Image, multiple, required), `brief` (Text, optional). Outputs:
+Inputs:
+
+| Port | Type | Notes |
+|---|---|---|
+| `candidates` (Candidates) | Image, multiple, required, 2 to 10 | The images to choose from, in order |
+| `brief` (Brief) | Text, optional | What the best one should match. Without it, Jev judges by the question alone |
+
+Params: `model` (as Decide), `question` (default "Which image best matches the brief?"), `min_confidence` (0.5).
+
+Nebula sends one Choice question. Each option is one candidate: a neutral key (`a`, `b`, ...) whose description is only that image, so no option name can steer the pick and each image is sent once.
+
+Outputs:
 
 | Port | Type | Format |
 |---|---|---|
-| `winner` | Image | The winning candidate's value, unchanged (the same reference that came in) |
+| `winner` | Image | The winning candidate's value, unchanged (the same reference that came in, never the resized copy) |
 | `index` | Text | 0-based position among the candidates, as an integer: `1` |
 | `probabilities` | Text | JSON keyed `"0"`, `"1"`, ... in candidate order: `{"0": 0.08, "1": 0.87, "2": 0.05}` |
 | `confidence` | Text | number, Jev's Choice confidence. Low means the candidates are close and any would do |
-| `report` | Text | report text |
+| `report` | Text | report text. Below `min_confidence` it gets a note that the candidates are close |
 
-## Jev Box (contract)
+Limits:
 
-Inputs: `image` (Image, required), `target` (Text, optional; overrides the `target` param). Every request pairs the Box question with a yes/no "is it there?" question, because a Box answer always returns a box, even for something that isn't in the image.
+- At most 10 candidates, until TypeSafe publishes how many tokens an image costs. For more, split them across two nodes and pick again between the winners.
+- If TypeSafe answers `max_tokens_exceeded`, Nebula sends the candidates once more at 768 px on the long side and notes it in the report. If that is still too long, the node fails and says to split the set.
+
+## Jev Box (experimental)
+
+Inputs: `image` (Image, required), `target` (Text, optional; overrides the `target` param).
+
+Params:
+
+| Param | Default | Meaning |
+|---|---|---|
+| `target` | empty | What to find, e.g. `the red car`. One thing per node |
+| `model` | `jev-1.14.0` | `jev-1.14.0` or `jev-preview` only: Box needs Jev 1.14 |
+| `presence_threshold` | 0.5 | Found when the "is it there?" probability is at least this |
+| `min_confidence` | 0.5 | `found` is `unsure` when the presence probability is this close to a coin flip: confidence is twice its distance from 0.5 |
+| `pad` | 0.05 | Grows the crop and mask by this fraction of the image on each side, clamped to the image. The `box` output stays unpadded |
+
+Every request pairs the Box question with a yes/no "is it there?" question, because a Box answer always returns a box, even for something that isn't in the image. Both questions share the one image, so it is sent once.
 
 | Port | Type | When | Format |
 |---|---|---|---|
 | `found` | Text | always | `true`, `false` or `unsure`, from the presence question |
-| `box` | Text | always | JSON below, or the text `null` when `found` is `false` |
-| `crop` | Image | `found` is `true` | The box cut from the original image |
-| `mask` | Mask | `found` is `true` | White rectangle on black, original image size |
-| `annotated` | Image | `found` is `true` or `unsure` | The original with the box drawn |
+| `box` | Text | always | JSON below when `found` is `true`; otherwise the text `null` |
+| `crop` | Image | `found` is `true` | The padded box cut from the original image |
+| `mask` | Mask | `found` is `true` | White rectangle (the padded box) on black, original image size |
+| `annotated` | Image | `found` is `true` | The original with the box drawn and labelled |
 | `report` | Text | always | report text |
 
 `box` JSON:
@@ -121,7 +149,7 @@ Inputs: `image` (Image, required), `target` (Text, optional; overrides the `targ
 - Edges are fractions (0..1, from the top-left) of the **original** image: decoded, first frame, EXIF rotation applied (what a browser shows). Any resizing or padding Nebula did before sending is undone.
 - `px` is the integer pixel rectangle in that image; `image` is its size.
 - `confidence` is `null` (never 0) when TypeSafe doesn't report one.
-- When `found` is `unsure`, `box` holds the model's guess but there is no crop or mask.
+- When `found` is `false` or `unsure` there is no box, crop, mask or annotated image, so nothing downstream acts on a box that may point at nothing. The report still shows the presence probability.
 
 ## Number and report formats (all nodes)
 
@@ -167,12 +195,13 @@ Nebula prepares every image before sending, because TypeSafe rejects images outs
 
 ## Cost
 
-TypeSafe charges per input token ($0.042 per million) and nothing for output; images count as input tokens, and the per-image count isn't published yet. A request can't be longer than the context limit, so Nebula prices each run at that ceiling: up to **$0.0027** (64k tokens) by default and up to **$0.011** (262k) with Long context. Most questions cost a small fraction of that. Re-running an unchanged node replays from Nebula's cache for free.
+TypeSafe charges per input token ($0.042 per million) and nothing for output; images count as input tokens, and the per-image count isn't published yet. A request can't be longer than the context limit, so Nebula prices each run at that ceiling: up to **$0.0027** (64k tokens) by default and up to **$0.011** (262k) with Long context. Most questions cost a small fraction of that. Pick Best and Box are priced the same way at the default ceiling; Pick Best's retry after `max_tokens_exceeded` is a second request, and Nebula assumes the rejected first one isn't billed (TypeSafe doesn't say). Re-running an unchanged node replays from Nebula's cache for free.
 
 ## Limits
 
 - One question per Decide node. Keep it atomic; ask several narrow questions rather than one compound one.
-- Box needs Jev 1.14 (`jev-1.14.0` or `jev-preview`).
+- Pick Best takes 2 to 10 candidates. Box finds one target per node and needs Jev 1.14 (`jev-1.14.0` or `jev-preview`).
+- Pick Best and Box have no Long context switch.
 - Rate limits are set per organization in the TypeSafe console.
 - Graphs can't branch on `pass` yet; it is information for people, agents and prompts until the engine gains skip support.
 
@@ -180,7 +209,7 @@ TypeSafe charges per input token ($0.042 per million) and nothing for output; im
 
 `backend/services/typesafe_client.py` is shared by every Jev node:
 
-- `await prepare_images(values, label="Image", max_images=16) -> list[PreparedImage]`: each has `placeholder` (fresh uuid4), `part`, `data`, `format`, `mime`, `source` and `transform` (`ImageTransform`, with `to_original_box(top=, bottom=, left=, right=)`).
+- `await prepare_images(values, label="Image", max_images=16, max_side=1568) -> list[PreparedImage]` (a smaller `max_side` shrinks further, for a retry): each has `placeholder` (fresh uuid4), `part`, `data`, `format`, `mime`, `source` and `transform` (`ImageTransform`, with `to_original_box(top=, bottom=, left=, right=)`).
 - `await system_one(api_key, *, model, state, questions, images=(), long_context=False) -> JevResult`: every placeholder must appear exactly once in `state` and `questions`. `JevResult` has `model`, `requested_model`, `answers`, `input_tokens`, `output_tokens`, `request_id` and `answer(question_id, kind)`.
 - `ChoiceOptions.from_labels(labels)` (`criteria()`, `read(answer)`), `score_criteria(levels)`, `read_score(answer, levels)`, `noul_confidence(p)`, `neutral_keys(n)`, `split_lines(text)`, `check_model(model)`.
 - Errors are `TypeSafeError` (a `ValueError`) with `status`, `code` and `request_id`.
