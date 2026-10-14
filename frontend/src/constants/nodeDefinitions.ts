@@ -33,11 +33,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gpt-image-1',
+        default: 'gpt-image-2.5-flare',
         options: [
-          { label: 'GPT Image 1', value: 'gpt-image-1' },
-          { label: 'GPT Image 1.5', value: 'gpt-image-1.5' },
-          { label: 'GPT Image 1 Mini', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 1 (shuts down Oct 23, 2026)', value: 'gpt-image-1' },
+          { label: 'GPT Image 1.5 (shuts down Dec 1, 2026)', value: 'gpt-image-1.5' },
+          { label: 'GPT Image 1 Mini (shuts down Dec 1, 2026)', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 2.5 Flare (fastest)', value: 'gpt-image-2.5-flare' },
+          { label: 'GPT Image 2.5 Sunburst (most precise edits)', value: 'gpt-image-2.5-sunburst' },
         ],
       },
       {
@@ -64,6 +66,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
+          { label: 'Extra High', value: 'xhigh', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
+          { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
         ],
       },
       {
@@ -5072,6 +5076,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
+      { id: 'images', label: 'All images', dataType: 'Array', required: false },
     ],
     params: [
       {
@@ -5079,11 +5084,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gpt-image-1',
+        default: 'gpt-image-2.5-sunburst',
         options: [
-          { label: 'GPT Image 1', value: 'gpt-image-1' },
-          { label: 'GPT Image 1.5', value: 'gpt-image-1.5' },
-          { label: 'GPT Image 1 Mini', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 1 (shuts down Oct 23, 2026)', value: 'gpt-image-1' },
+          { label: 'GPT Image 1.5 (shuts down Dec 1, 2026)', value: 'gpt-image-1.5' },
+          { label: 'GPT Image 1 Mini (shuts down Dec 1, 2026)', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 2.5 Flare (fastest)', value: 'gpt-image-2.5-flare' },
+          { label: 'GPT Image 2.5 Sunburst (most precise edits)', value: 'gpt-image-2.5-sunburst' },
         ],
       },
       {
@@ -5119,6 +5126,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
+          { label: 'Extra High', value: 'xhigh', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
+          { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
         ],
       },
       {

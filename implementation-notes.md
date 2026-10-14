@@ -3223,3 +3223,26 @@ deprecations/model pages/image guide, Meshy openapi.yaml and llms.txt, Gemini sp
   Vertex lists Veo per "count"; read as per second like the existing veo-3 entry (unit label NOT CONFIRMED).
 - Not done: Vertex `generateAudio` is still always true on veo-3 (Vertex sells video-only at about half price),
   and reference images on Vertex are still not exposed. Both are feature work, not retirement work.
+
+### OpenAI gpt-image-1 (gpt-image-1-generate, gpt-image-1-edit)
+- **Choice: Flare on generate, Sunburst on edit.** OpenAI's deprecations page names "`gpt-image-2.5-sunburst` or
+  `gpt-image-2.5-flare`" for gpt-image-1 (shutdown October 23, 2026). The guide says "Choose Sunburst for workflows
+  where editing precision matters most, and Flare for fast, high-quality everyday image generation", and the
+  Sunburst page calls it "Our most capable model for image generation and editing". So the generate node defaults to
+  Flare and the edit node to Sunburst, and saved `gpt-image-1` values migrate the same way from 2026-10-23
+  (date-gated `_model_after` in retired_nodes; until then they keep running on gpt-image-1). Same token prices
+  ($30/1M image output) for both.
+- Differences that mattered: 2.5 adds `xhigh`/`max` quality (added as options, visible only on the 2.5 models),
+  supports transparent backgrounds with png/webp (a jpeg + transparent request is now refused before the call on
+  all models), and the documented 1024²/1536×1024/1024×1536/auto sizes are all valid, so no size migration.
+  `input_fidelity` stays unexposed (the node never had it).
+- Both 2.5 options were appended after the existing three; labels on the old ones now carry their shutdown
+  dates (gpt-image-1.5 and gpt-image-1-mini end Dec 1, 2026; I did not migrate those yet — a later gate can reuse
+  `_model_after`). The node display names ("GPT Image 1", "GPT Image 1 Edit") are unchanged; renaming them is
+  Justin's call.
+- A saved node with no `model` key at all now runs the new default. I didn't pin those to gpt-image-1, because
+  migrate_node also runs on fresh agent proposals and would pin new nodes to a model that dies in 9 days.
+- **Count fix:** `handle_openai_image_edit` forwarded `n` but kept only `data[0]`. It now saves every returned
+  image; `image` is the first and a new `images` (Array) output port carries all of them as `/api/outputs/` refs
+  (the Krea gateway's convention). No pricing entry exists for these nodes; I didn't add one (2.5 is
+  token-priced and OpenAI's per-image calculator doesn't cover 2.5).

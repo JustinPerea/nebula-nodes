@@ -227,15 +227,15 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Endpoint** | `/v1/images/edits` |
 | **Execution** | sync |
 | **Inputs** | Image (Image)*, Prompt (Text)*, Mask (Mask) |
-| **Outputs** | Image (Image) |
+| **Outputs** | Image (Image), All images (Array) |
 | **Audited** | 2026-06-30 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gpt-image-1 | GPT Image 1, GPT Image 1.5, GPT Image 1 Mini |
+| Model | enum | gpt-image-2.5-sunburst | GPT Image 1 (shuts down Oct 23, 2026), GPT Image 1.5 (shuts down Dec 1, 2026), GPT Image 1 Mini (shuts down Dec 1, 2026), GPT Image 2.5 Flare (fastest), GPT Image 2.5 Sunburst (most precise edits) |
 | Count | int | 1 | 1–10 |
 | Size | enum | auto | Auto, 1024×1024, 1536×1024, 1024×1536 |
-| Quality | enum | auto | Auto, Low, Medium, High |
+| Quality | enum | auto | Auto, Low, Medium, High, Extra High, Max |
 | Format | enum | png | PNG, JPEG, WebP |
 | Background | enum | auto | Auto, Transparent, Opaque |
 
@@ -256,9 +256,9 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gpt-image-1 | GPT Image 1, GPT Image 1.5, GPT Image 1 Mini |
+| Model | enum | gpt-image-2.5-flare | GPT Image 1 (shuts down Oct 23, 2026), GPT Image 1.5 (shuts down Dec 1, 2026), GPT Image 1 Mini (shuts down Dec 1, 2026), GPT Image 2.5 Flare (fastest), GPT Image 2.5 Sunburst (most precise edits) |
 | Size | enum | auto | Auto, 1024×1024, 1536×1024, 1024×1536 |
-| Quality | enum | auto | Auto, Low, Medium, High |
+| Quality | enum | auto | Auto, Low, Medium, High, Extra High, Max |
 | Format | enum | png | PNG, JPEG, WebP |
 | Background | enum | auto | Auto, Transparent, Opaque |
 

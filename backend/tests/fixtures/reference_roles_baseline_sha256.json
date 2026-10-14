@@ -1,7 +1,7 @@
 {
   "baselineCommit": "c708400",
   "nodes": {
-    "gpt-image-1-generate": "3b6944f39f0b49663907ec3b162623d146541bc7883524b1eb026bc3836f7df1",
+    "gpt-image-1-generate": "de587a1089c9e9448df8a299ad929f5591bdaa0c2e79c9023ec3d2b3794d5fdb",
     "claude-chat": "0ced29793940d713c0fe6ca3e89f638e48e717e8aeef6bb6d0f41bfe2ede1405",
     "runway-video": "b6f78ecd4e5fcd4662e53f0e48ffa27bc6800c56b457557042fa88e5406eded2",
     "runway-aleph": "ccfbf38ccc0d2ba7d6f43f36b111926a317fcad8e11723ee2e4e38ff3fc303ad",
@@ -75,7 +75,7 @@
     "meshy-3d-print": "9ab2156f035d54b037a4acfe7093c5773fdd5af71251f4aa8b31bc753fe18bff",
     "hunyuan3d-text-to-3d": "a63574a194db030aba0f8107d121df9318ee1541f5a37edf3a3b0c592eb02549",
     "hunyuan3d-image-to-3d": "f17207bf29cf6f754a488d6261fa25cff3186a990bf34ad5547d6c89073b1904",
-    "gpt-image-1-edit": "44a0ccdb9e6ec4ddcdbc506a14e014cccb35497db6880b51ca54ea831fb14d46",
+    "gpt-image-1-edit": "80c0ca92b81ff8b1d39d259f2a123aa61d5f56a36d19f07f6ca15a459a9f34c4",
     "remove-background": "f446b35d7929ba2e5c4830b31ded19320ba31b5270e5676ef0e70c616ecb783f",
     "recraft-v4-raster": "91d0b0d2043a6fab514524540032b127609f9379ce30f98b55295c3cd2ee234e",
     "recraft-v4-svg": "d52a69bc05cb8d109de067281b8a8777181b2e1984fa353b623e5871f2ecf240",

@@ -19,6 +19,13 @@ Some nodes stay but lose a model option (``RETIRED_PARAMS``):
   (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-14).
   The node now stores the Vertex IDs, so a saved preview ID is renamed. The
   model doesn't change, so this rename isn't date-gated.
+- OpenAI shuts down ``gpt-image-1`` on 2026-10-23 and names
+  ``gpt-image-2.5-sunburst`` or ``gpt-image-2.5-flare`` as the replacement
+  (https://developers.openai.com/api/docs/deprecations, checked 2026-10-14).
+  From that date a saved GPT Image node on it moves to Flare ("our fastest
+  model for high-quality, everyday image generation") on the generate node and
+  Sunburst ("for workflows where editing precision matters most") on the edit
+  node. Its sizes and qualities all exist on 2.5.
 
 A migration for a shutdown that is still ahead is date-gated (``_today``):
 until the shutdown the saved value keeps working and stays as it is.
@@ -84,8 +91,21 @@ def _veo_params(params: dict[str, Any]) -> dict[str, Any]:
     return migrated
 
 
+def _model_after(shutdown: date, models: dict[str, str]):
+    """Move a saved ``model`` to its replacement once ``shutdown`` has passed."""
+    def fix(params: dict[str, Any]) -> dict[str, Any]:
+        if params.get("model") not in models or _today() < shutdown:
+            return params
+        return {**params, "model": models[params["model"]]}
+    return fix
+
+
+GPT_IMAGE_1_SHUTDOWN = date(2026, 10, 23)
+
 RETIRED_PARAMS: dict[str, Any] = {
     "veo-3": _veo_params,
+    "gpt-image-1-generate": _model_after(GPT_IMAGE_1_SHUTDOWN, {"gpt-image-1": "gpt-image-2.5-flare"}),
+    "gpt-image-1-edit": _model_after(GPT_IMAGE_1_SHUTDOWN, {"gpt-image-1": "gpt-image-2.5-sunburst"}),
 }
 
 

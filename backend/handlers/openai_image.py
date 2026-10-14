@@ -9,6 +9,19 @@ from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
 
 OPENAI_API_URL = "https://api.openai.com/v1/images/generations"
+# gpt-image-1 shuts down 2026-10-23; OpenAI names gpt-image-2.5-sunburst or
+# -flare as the replacement and calls Flare its "fastest model for
+# high-quality, everyday image generation"
+# (https://developers.openai.com/api/docs/deprecations, .../models/gpt-image-2.5-flare,
+# checked 2026-10-14).
+DEFAULT_MODEL = "gpt-image-2.5-flare"
+
+
+def check_background(params: dict[str, Any]) -> None:
+    """A transparent background needs PNG or WebP output
+    (https://developers.openai.com/api/docs/guides/image-generation)."""
+    if params.get("background") == "transparent" and (params.get("output_format") or "png") not in ("png", "webp"):
+        raise ValueError("A transparent background needs PNG or WebP output, not JPEG")
 
 
 async def handle_openai_image_generate(
@@ -26,7 +39,8 @@ async def handle_openai_image_generate(
     if not api_key:
         raise MissingCredentialError("OPENAI_API_KEY is required")
 
-    model = node.params.get("model", "gpt-image-1")
+    model = node.params.get("model") or DEFAULT_MODEL
+    check_background(node.params)
 
     body: dict[str, Any] = {
         "model": model,
