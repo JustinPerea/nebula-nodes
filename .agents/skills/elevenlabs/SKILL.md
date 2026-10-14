@@ -12,7 +12,8 @@ ElevenLabs is the audio studio inside Nebula: turn text into lifelike speech, ge
 - User configures an `elevenlabs-tts`, `elevenlabs-sfx`, `elevenlabs-sts`, `elevenlabs-isolation`, `elevenlabs-dubbing`, or `elevenlabs-stt` node
 - User wants text-to-speech / narration / voiceover, sound effects from a prompt, re-voicing a recording, denoising/isolating speech, translated dubbing, or transcription (speech → text or subtitles)
 - User asks which ElevenLabs node to use, what params are valid, how to set a voice, or how to chain audio nodes
-- User asks for music, multi-speaker dialogue, voice design, or voice cloning — so you can tell them those are **not** Nebula nodes (see Capability boundaries)
+- User asks for multi-speaker dialogue, voice design, or voice cloning — so you can tell them those are **not** Nebula nodes (see Capability boundaries)
+- User configures `elevenlabs-music`, a Krea ElevenLabs copy (`krea-audio-elevenlabs-tts`, `-music`, `-music-v2`, `-music-v2-5`) or Runway's `runway-tts` / `runway-sts` / `runway-dubbing`: these run on ElevenLabs' own API when `ELEVENLABS_API_KEY` is saved (see "ElevenLabs copies on the person's key")
 
 ## Universal rules
 
@@ -137,11 +138,22 @@ Types, ranges, enums, and defaults below are exactly what the node exposes. "(ha
 - **How outputs render:** each node writes its bytes to the run directory (`get_run_dir()`) as `<12-hex>.<ext>` and returns `{"audio": {"type": "Audio", "value": "<path>"}}`. The frontend serves/plays that file as an audio result. `.mp3` plays everywhere; a `.pcm` (raw, headerless) generally won't — another reason to prefer MP3.
 - **Dubbing internals (why it's slow):** submit returns a `dubbing_id`; the handler polls `GET /v1/dubbing/{id}` every 5s up to 120 times (~10 min), tolerating up to 5 *consecutive* poll failures, then downloads `GET /v1/dubbing/{id}/audio/{target_lang}` and saves MP3. So a single dubbing node may run for minutes — that's expected, not a hang.
 
+### ElevenLabs copies on the person's key
+
+Router: `backend/execution/maker_routes_elevenlabs.py` (on `maker_routes.dual_route`). Route rule (`services/node_route.py`): `_kreaAuth == "mcp"` keeps a Krea node on the Krea plan; else `ELEVENLABS_API_KEY` runs it on ElevenLabs; else the copy's key (`FAL_KEY`, `KREA_API_TOKEN`, `RUNWAY_API_KEY`).
+
+- `elevenlabs-music` (fal copy): `POST /v1/music`; `sharedParams` `music_length_ms`, `force_instrumental`; direct-only `model_id` (`music_v1` default, `music_v2`, `music_v2_5`). fal never receives `model_id`.
+- Krea `-music`, `-music-v2`, `-music-v2-5` -> `music_v1`, `music_v2`, `music_v2_5`. An unset `music_length_ms` is left out (the model picks the length), as on Krea.
+- `krea-audio-elevenlabs-tts`: Krea's `voice_id` and `model_id` are ElevenLabs' (Krea's schema says so); prompt -> `text`. No `voice_settings` are sent (`handle_elevenlabs_tts(voice_settings=False)`), so the voice's stored settings apply. A `voice_id` that isn't letters, digits, `_` or `-` is refused before any call (it is a URL path segment; `handlers/elevenlabs.py _voice_id`).
+- `runway-tts` / `runway-sts`: Runway's `voiceId` presets are Runway-only (`falParams`). The ElevenLabs route needs the direct-only `voice_id` (`node_route.DIRECT_REQUIRES`); without it the run stays on Runway, and with only the ElevenLabs key it fails naming `RUNWAY_API_KEY` and `voice_id`. Models fixed to Runway's: `eleven_multilingual_v2` / `eleven_multilingual_sts_v2`. STS takes the `audio` port only.
+- `runway-dubbing`: `targetLang`/`numSpeakers`/`dropBackgroundAudio`/`disableVoiceCloning` -> `target_lang`/`num_speakers`/`drop_background_audio`/`disable_voice_cloning` on `POST /v1/dubbing` (`handle_elevenlabs_dubbing`).
+- Prices: only Music is priced on the ElevenLabs route ($0.15/min from `music_length_ms`, `data/model_pricing.json` `routes.elevenlabs`). TTS/STS/dubbing bill per character or input minute and stay unpriced (agent runs must be proposed).
+
 ### Capability boundaries — what ElevenLabs offers but Nebula does NOT expose
 
 Never promise these via a node; there is **no node** for any of them (per the audit gap table in `docs/api-guides/elevenlabs.md`):
 
-- **Music generation** (`/v1/music/compose`, stems, video-to-music) — prompt-to-music and stem separation. No node.
+- **Music extras** — composition plans, streaming, inpainting, stems and video-to-music. Plain prompt-to-music is covered by `elevenlabs-music` (and the Krea music copies) on `POST /v1/music`.
 - **Text-to-Dialogue** (`/v1/text-to-dialogue`) — multi-speaker scenes in one call. No node; `elevenlabs-tts` is single-voice only.
 - **Voice Design** (`/v1/text-to-voice/design|create|remix`) — invent a brand-new voice from a description. No node.
 - **Voice Cloning** (`/v1/voices/add` IVC, `/add/professional` PVC) — clone a voice from samples. No node.

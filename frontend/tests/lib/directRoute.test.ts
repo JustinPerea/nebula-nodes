@@ -125,6 +125,19 @@ describe('when the direct route can\'t take a run', () => {
     expect(paramDefinitionsForRun(reframe, {}, { FAL_KEY: 'k' }).map((param) => param.key)).not.toContain('resolution');
   });
 
+  it('offers Runway TTS an ElevenLabs voice_id once the ElevenLabs key is set', () => {
+    const tts = NODE_DEFINITIONS['runway-tts'];
+    const keys = { ELEVENLABS_API_KEY: 'k', RUNWAY_API_KEY: 'r' };
+    expect(fallbackProvider(tts)).toBe('runway');
+    // On Runway it shows Runway's preset, plus the ElevenLabs voice to opt in.
+    expect(paramDefinitionsForRun(tts, { voiceId: 'Maya' }, keys).map((param) => param.key)).toEqual(['voiceId', 'voice_id']);
+    // With a voice set it runs on ElevenLabs, where Runway's preset means nothing.
+    expect(paramDefinitionsForRun(tts, { voice_id: 'v' }, keys).map((param) => param.key)).toEqual(['voice_id']);
+    expect(paramDefinitionsForRun(tts, {}, { RUNWAY_API_KEY: 'r' }).map((param) => param.key)).toEqual(['voiceId']);
+    // A new node doesn't get a made-up voice: the field has no default.
+    expect(buildDefaultParamsForUi(tts, keys)).not.toHaveProperty('voice_id');
+  });
+
   it('names the reason: a missing direct param, a Krea-only size, a retired model', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-14T12:00:00'));

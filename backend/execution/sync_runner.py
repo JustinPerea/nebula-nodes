@@ -1583,6 +1583,10 @@ def get_handler_registry(
         registry["pika-i2v"] = _pika_i2v_handler
         registry["hunyuan-video"] = _hunyuan_video_handler
         registry["elevenlabs-music"] = _elevenlabs_music_handler
+        # ElevenLabs Music (fal) and Runway's ElevenLabs TTS/STS/dubbing run on
+        # ElevenLabs' own API with the person's key (maker_routes_elevenlabs).
+        from execution import maker_routes_elevenlabs
+        maker_routes_elevenlabs.register(registry, emit)
         registry["wan-animate-move"] = _wan_animate_move_handler
         registry["wan-animate-replace"] = _wan_animate_replace_handler
         registry["kling-video-to-audio"] = _kling_video_to_audio_handler

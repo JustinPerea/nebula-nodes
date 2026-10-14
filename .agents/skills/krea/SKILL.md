@@ -141,6 +141,17 @@ says so. Not routed: `krea-video-minimax-hailuo` (upstream model not
 confirmed), `-h3-max` and `-h3-max-turbo` (which Krea node is MiniMax's
 `MiniMax-H3-Max` is ambiguous), `-h3-max-camera-controls` (no maker field).
 
+### ElevenLabs copies on the person's ElevenLabs key
+
+Same mechanism (`DIRECT_ROUTES`, translations in
+`backend/execution/maker_routes_elevenlabs.py`): `krea-audio-elevenlabs-tts`
+(`POST /v1/text-to-speech/{voice_id}`, Krea's `voice_id`/`model_id` are
+ElevenLabs ids) and `krea-audio-elevenlabs-music`, `-music-v2`, `-music-v2-5`
+(`POST /v1/music` with `music_v1`, `music_v2`, `music_v2_5`) run on
+`ELEVENLABS_API_KEY` when it is set, unless `_kreaAuth` is `mcp`. Nothing is
+Krea-only on these, so there is no blocker. The music copies carry an
+ElevenLabs route price ($0.15 per minute from `music_length_ms`); TTS has none.
+
 ## Gateway Model Nodes
 
 The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108) included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.

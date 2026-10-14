@@ -156,7 +156,11 @@ function directBlockNote(def: ModelNodeDefinition, block: DirectBlock, params: R
   const fallback = fallbackKeyNames(def)[0];
   const directName = direct ? keyProviderName(direct) : 'the maker';
   const fallbackName = fallback ? (fallback === 'FAL_KEY' ? 'FAL' : keyProviderName(fallback)) : 'the copy';
-  if (block.reason === 'requires') return `This saved recipe has no direct ${block.param}, so it uses ${fallbackName}.`;
+  if (block.reason === 'requires') {
+    // Ideogram Reframe without a direct resolution; Runway TTS/STS without an
+    // ElevenLabs voice_id (Runway's voice presets don't map to one).
+    return `This recipe sets no ${directName} ${block.param}, so it uses ${fallbackName}. Set it to run on ${directName}.`;
+  }
   if (block.reason === 'blocked' && block.param && Object.hasOwn(DIRECT_BLOCKED_VALUES[def.id] ?? {}, block.param)) {
     return `This recipe's ${block.param} has no ${directName} equivalent, so it runs on ${fallbackName}. Pick another ${block.param} to run on ${directName}.`;
   }
@@ -199,7 +203,9 @@ function routeDetail(def: ModelNodeDefinition, route: NodeRoute, key: string, di
     return `Runs on ${directName}'s own API with your ${PROVIDER_KEY_LABELS[key] ?? key} key, billed by ${directName}.`;
   }
   if (route.kind === 'fallback') {
-    return `Runs on ${fallbackCopy}.${directOk ? ` Add a ${PROVIDER_KEY_LABELS[direct] ?? direct} key to run on ${directName} directly.` : ''}`;
+    const directLabel = PROVIDER_KEY_LABELS[direct] ?? direct;
+    const article = /^[AEIOU]/i.test(directLabel) ? 'an' : 'a';
+    return `Runs on ${fallbackCopy}.${directOk ? ` Add ${article} ${directLabel} key to run on ${directName} directly.` : ''}`;
   }
   return directOk
     ? `Runs on ${directName} with your ${PROVIDER_KEY_LABELS[direct] ?? direct} key, or on ${fallbackName} with a ${fallbackKey}.`

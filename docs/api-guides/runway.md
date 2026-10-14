@@ -48,6 +48,8 @@ Not routed: `krea-video-runway-gen-4-video`. Krea calls it "Runway Gen-4" and
 runs it from text alone, but Runway's only Gen-4 video model, `gen4_turbo`,
 needs an image, so the upstream model isn't confirmed.
 
+**Voice nodes on your ElevenLabs key (2026-10-14).** Runway's voice nodes are ElevenLabs models, so with an ElevenLabs key saved they can run on ElevenLabs directly, billed by ElevenLabs. `runway-dubbing` switches as soon as the key is saved. `runway-tts` and `runway-sts` switch only when you set an **ElevenLabs voice ID** (the Inspector shows the field once the key is saved): Runway's preset voices (Maya, Arjun, ...) have no ElevenLabs equivalent Nebula can look up, so a recipe with only a preset keeps running on Runway. Readiness says which route runs. Details: [the ElevenLabs guide](elevenlabs.md).
+
 ## How to use it in Nebula
 
 **Where the nodes appear.** Runway nodes live in the node palette under their media categories — the three video nodes (`runway-video`, `runway-aleph`, `runway-act-two`) under **video-gen**, `runway-image` under **image-gen**, `runway-upscale` under **transform**, and the three voice nodes (`runway-tts`, `runway-sts`, `runway-dubbing`) under **audio-gen**. Drag a node onto the canvas, wire inputs into its ports, set its params in the inspector, and run.

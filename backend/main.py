@@ -3443,8 +3443,9 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     fallback = node_route.fallback_provider(definition)
     if fallback:
         # Which route a run takes here at defaults (services/node_route.py):
-        # "direct" (the maker's API with your key), the fallback copy ("fal" or
-        # "krea"), or None when none of its keys are set. A node whose
+        # "direct" (the maker's API with your key), the fallback copy ("fal",
+        # "krea", or "runway" for the ElevenLabs models Runway resells), or
+        # None when none of its keys are set. A node whose
         # _kreaAuth is "mcp" bills the Krea plan whatever keys are set.
         route = node_route.select_route(definition, {}, settings.get("apiKeys") or {})
         result["route"] = ("direct" if route.kind == node_route.DIRECT

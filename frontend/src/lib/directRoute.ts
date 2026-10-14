@@ -10,7 +10,8 @@ import { usesKreaAccount } from './kreaConnection';
  *    maker key never overrides that explicit choice.
  * 2. a direct (maker) key is set, and the direct route can take this run
  *    (directBlock): the maker's API.
- * 3. otherwise the first other key that is set (FAL_KEY, KREA_API_TOKEN).
+ * 3. otherwise the first other key that is set (FAL_KEY, KREA_API_TOKEN, or
+ *    RUNWAY_API_KEY for the ElevenLabs models Runway resells).
  */
 
 /** Which provider bills a run that uses this key (node_route.KEY_PROVIDERS). */
@@ -25,8 +26,14 @@ export const KEY_PROVIDERS: Readonly<Record<string, APIProvider>> = {
 };
 
 /** A direct route that also needs a param set, else the run takes the fallback
- * (node_route.DIRECT_REQUIRES): Ideogram's direct reframe sizes by `resolution`. */
-export const DIRECT_REQUIRES: Readonly<Record<string, string>> = { 'ideogram-reframe': 'resolution' };
+ * (node_route.DIRECT_REQUIRES): Ideogram's direct reframe sizes by `resolution`;
+ * Runway's TTS and speech-to-speech run on ElevenLabs only with the recipe's
+ * own ElevenLabs `voice_id` (Runway's voice presets don't map to one). */
+export const DIRECT_REQUIRES: Readonly<Record<string, string>> = {
+  'ideogram-reframe': 'resolution',
+  'runway-tts': 'voice_id',
+  'runway-sts': 'voice_id',
+};
 
 /** A direct route the maker shuts down on a date (node_route.DIRECT_RETIRES):
  * from that day the fal or Krea copy runs it. `param`/`values` narrow it to
@@ -108,7 +115,8 @@ export function fallbackKeyNames(definition: Pick<ModelNodeDefinition, 'envKeyNa
   return envKeyNames(definition).filter((key) => !direct.includes(key));
 }
 
-/** Who runs a dual-route node without its maker key: 'fal' or 'krea'. */
+/** Who runs a dual-route node without its maker key: the provider of its first
+ * non-direct key ('fal', 'krea', or 'runway' for Runway's resold ElevenLabs models). */
 export function fallbackProvider(definition: Pick<ModelNodeDefinition, 'envKeyName' | 'directKeyName'>): APIProvider | undefined {
   if (directKeyNames(definition).length === 0) return undefined;
   const key = fallbackKeyNames(definition).find((candidate) => Object.hasOwn(KEY_PROVIDERS, candidate));

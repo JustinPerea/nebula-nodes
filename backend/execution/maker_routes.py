@@ -27,6 +27,7 @@ import json
 from functools import lru_cache, partial
 from typing import Any, Awaitable, Callable, Mapping
 
+from execution import maker_routes_elevenlabs
 from execution.missing_credential import MissingCredentialError
 from models.graph import GraphNode, PortValueDict
 from services import node_route
@@ -58,6 +59,17 @@ def route_node(node: GraphNode, allowed: set[str], extra: Mapping[str, Any] | No
     return node.model_copy(update={"params": params})
 
 
+def _blocked_reason(definition: Mapping[str, Any], block: node_route.DirectBlock, direct_key: str) -> str:
+    """Why a run can't use the saved maker key, for the missing-key error."""
+    if block.reason == node_route.BLOCKED:
+        return f"{block.param} is only supported on the {node_route.fallback_provider(definition) or 'copy'} route"
+    if block.reason == node_route.REQUIRES:
+        return f"this recipe can't run on {direct_key} because it needs {block.param} set"
+    if block.reason == node_route.RETIRED:
+        return f"this recipe can't run on {direct_key} because the maker retired this model on {block.on}"
+    return f"this recipe can't run on {direct_key} because the maker doesn't take {block.detail or block.param}"
+
+
 def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | None = None) -> Handler:
     """The registry handler for a dual-route node (see the module docstring).
 
@@ -70,12 +82,14 @@ def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | Non
         route = node_route.select_route(definition, routed_params, api_keys)
         if route.kind == node_route.UNSET:
             block = node_route.direct_block(definition, routed_params)
-            if block is not None and block.reason == node_route.BLOCKED and any(
-                    isinstance(api_keys.get(k), str) and api_keys[k].strip() for k in node_route.direct_keys(definition)):
-                # The maker key is saved, but this run can only go to the copy.
+            set_direct = [k for k in node_route.direct_keys(definition) if str(api_keys.get(k) or "").strip()]
+            if block is not None and set_direct:
+                # The maker key is saved, but this run can only go to the copy
+                # (a Krea-only field, Runway TTS without an ElevenLabs voice_id):
+                # name the key that would run it, and why.
                 raise MissingCredentialError(
-                    f"{' or '.join(node_route.fallback_keys(definition))} is required: {block.param} is only "
-                    f"supported on the {node_route.fallback_provider(definition) or 'copy'} route")
+                    f"{' or '.join(node_route.fallback_keys(definition))} is required: "
+                    f"{_blocked_reason(definition, block, set_direct[0])}")
             raise MissingCredentialError(f"{' or '.join(node_route.env_keys(definition))} is required")
         if route.kind == node_route.DIRECT:
             routed = route_node(node, node_route.route_param_keys(definition, node_route.DIRECT))
@@ -258,6 +272,7 @@ async def krea_google_nano_banana(node: GraphNode, inputs: dict[str, PortValueDi
 # (scripts/sync-krea-catalog.py DIRECT_ROUTES): (direct handler, translator for a model).
 KREA_TRANSLATIONS: dict[str, tuple[Handler, Callable[[str], Translate]]] = {
     "krea-nano-banana": (krea_google_nano_banana, krea_nano_banana_to_google),
+    **maker_routes_elevenlabs.KREA_TRANSLATIONS,
 }
 # Krea's Ideogram and Runway copies (execution/maker_routes_ideogram_runway.py).
 from execution.maker_routes_ideogram_runway import TRANSLATIONS as _IDEOGRAM_RUNWAY  # noqa: E402

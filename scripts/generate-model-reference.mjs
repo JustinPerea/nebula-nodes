@@ -86,7 +86,9 @@ const PARAM_GROUP_LABELS = {
 };
 
 // Which provider a fallback key bills (backend/services/node_route.py KEY_PROVIDERS).
-const FALLBACK_KEY_PROVIDERS = { FAL_KEY: 'fal', KREA_API_TOKEN: 'krea', REPLICATE_API_TOKEN: 'replicate' };
+const FALLBACK_KEY_PROVIDERS = {
+  FAL_KEY: 'fal', KREA_API_TOKEN: 'krea', REPLICATE_API_TOKEN: 'replicate', RUNWAY_API_KEY: 'runway',
+};
 
 function keyList(value) {
   return (Array.isArray(value) ? value : [value]).filter((key) => typeof key === 'string' && key);

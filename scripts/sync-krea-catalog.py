@@ -614,6 +614,49 @@ MINIMAX_MESHY_ROUTES = {
 DIRECT_ROUTES.update(MINIMAX_MESHY_ROUTES)
 
 
+# ElevenLabs (execution/maker_routes_elevenlabs.py). Krea's TTS and music
+# fields are ElevenLabs' own (Krea's schema: voice_id "ElevenLabs voice ID",
+# model_id "ElevenLabs model ID"; music_length_ms "3s to 600s. Omit to let the
+# model choose"), so nothing is Krea-only. Music is priced per minute of
+# music_length_ms; TTS bills per character of the prompt, which isn't a
+# number pricing can read, so its ElevenLabs route stays unpriced.
+ELEVENLABS_PRICING_URL = "https://elevenlabs.io/pricing/api"
+ELEVENLABS_MUSIC_URL = "https://elevenlabs.io/docs/api-reference/music/compose"
+ELEVENLABS_CHECKED = "2026-10-14"
+# $0.15 per minute = $0.0000025 per millisecond of music_length_ms. Unset, the
+# model picks the length, so the price is the documented range: 3000 ms to
+# 600000 ms (the API's bound; the pricing page's "5 minute duration limit" is
+# lower, so the high end is conservative).
+ELEVENLABS_MUSIC_PER_MS = 0.0000025  # 0.15 / 60000, written out so the JSON stays exact
+ELEVENLABS_MUSIC_PRICING = {
+    "provider": "elevenlabs", "currency": "usd", "per": "request", "priceParams": ["music_length_ms"],
+    "multiplyBy": ["music_length_ms"],
+    "rows": [{"match": {"music_length_ms": ""}, "price": [round(3000 * ELEVENLABS_MUSIC_PER_MS, 6),
+                                                         round(600000 * ELEVENLABS_MUSIC_PER_MS, 6)]},
+             {"match": {}, "price": ELEVENLABS_MUSIC_PER_MS}],
+    "notes": ("ElevenLabs API price for runs on the person's ELEVENLABS_API_KEY: $0.15 per minute of music, "
+              "so a set music_length_ms costs $0.0000025 per millisecond. With no length set the model picks "
+              "it, so the price is the 3,000-600,000 ms range the API takes. The page lists one Music price for "
+              "every model (music_v1, music_v2, music_v2_5)."),
+    "sources": [{"url": ELEVENLABS_PRICING_URL, "quote": "Music Generation $0.15 Price per minute"},
+                {"url": ELEVENLABS_MUSIC_URL,
+                 "quote": "Must be between 3000ms and 600000ms. Optional - if not provided, the model will "
+                          "choose a length based on the prompt."}],
+    "checked": ELEVENLABS_CHECKED,
+}
+for _endpoint, _model in (("/generate/audio/elevenlabs/music", "music_v1"),
+                          ("/generate/audio/elevenlabs/music-v2", "music_v2"),
+                          ("/generate/audio/elevenlabs/music-v2.5", "music_v2_5")):
+    DIRECT_ROUTES[_endpoint] = {
+        "directKeyName": "ELEVENLABS_API_KEY", "translation": "krea-elevenlabs-music", "model": _model,
+        "kreaOnly": [], "directParams": [], "pricing": ELEVENLABS_MUSIC_PRICING,
+    }
+DIRECT_ROUTES["/generate/audio/elevenlabs/tts"] = {
+    "directKeyName": "ELEVENLABS_API_KEY", "translation": "krea-elevenlabs-tts",
+    "model": "eleven_multilingual_v2", "kreaOnly": [], "directParams": [], "pricing": None,
+}
+
+
 def direct_route_definition(endpoint, params):
     """The dual-route fields a Krea node with a maker route adds (DIRECT_ROUTES)."""
     route = DIRECT_ROUTES.get(endpoint)

@@ -4013,3 +4013,108 @@ Hailuo and H3 price in the overlay match those pages.
   wire. The price is the same either way (unpriced).
 - Still open: a Mainland key bills Mainland rates, but the spend gate shows Global USD, because the key's region
   isn't known before the run.
+
+## 2026-10-14 — Direct ElevenLabs routes (fal, Krea and Runway copies on your ElevenLabs key)
+
+Eight nodes now run on ElevenLabs' own API when `ELEVENLABS_API_KEY` is saved, on the Nano Banana pattern
+(`select_route`, `dual_route`, route-split params, per-route pricing). Lane code is in
+`backend/execution/maker_routes_elevenlabs.py`; shared files only got registration lines.
+
+- **Nodes.** `elevenlabs-music` (fal) and Krea `krea-audio-elevenlabs-music` / `-music-v2` / `-music-v2-5` ->
+  `POST /v1/music` with `music_v1` / `music_v2` / `music_v2_5`. `krea-audio-elevenlabs-tts` ->
+  `POST /v1/text-to-speech/{voice_id}`. `runway-tts`, `runway-sts`, `runway-dubbing` -> TTS
+  (`eleven_multilingual_v2`), speech-to-speech (`eleven_multilingual_sts_v2`) and `POST /v1/dubbing`.
+- **Runway voices are not mapped.** Runway's docs call them "Runway preset voices" and give no ElevenLabs
+  voice ids, so I didn't map any. Instead `runway-tts` / `runway-sts` get a direct-only `voice_id` (no
+  default), and `node_route.DIRECT_REQUIRES` (both sides) keeps a run on Runway until it's set. That reuses
+  the Ideogram Reframe opt-in: with the ElevenLabs key saved, the Inspector shows "ElevenLabs voice ID".
+  `voiceId` (Runway presets, default Maya) moved to `falParams`. A saved Runway recipe never silently
+  changes voice.
+- **Fallback provider is Runway for three nodes.** `fallback_provider` already reads `KEY_PROVIDERS`
+  (RUNWAY_API_KEY -> runway), so it needed no logic change. I fixed the "fal or krea" comments, the model
+  reference's `FALLBACK_KEY_PROVIDERS` ("Runway Parameters"), and the test that pinned `{"fal", "krea"}`.
+  Readiness text: "Runs on Runway with your Runway key. Add an ElevenLabs key to run on ElevenLabs directly."
+  (I also fixed the a/an article.) The requires note became generic: "This recipe sets no ElevenLabs
+  voice_id, so it uses Runway. Set it to run on ElevenLabs." Ideogram gets the same wording.
+- **Clearer no-route error (shared `dual_route`, small).** When the maker key is set but `direct_block`
+  stops the run and no fallback key exists, the MissingCredentialError now names the fallback key and the
+  reason ("RUNWAY_API_KEY is required: this recipe can't run on ELEVENLABS_API_KEY because it needs voice_id
+  set"). The old message only listed every key.
+- **TTS voice settings.** `handle_elevenlabs_tts` gains `voice_settings: bool = True`. The Krea and Runway
+  copies pass False, so no `voice_settings` are sent and the voice's stored settings apply. The API reference
+  says voice settings override "stored settings for the given voice"; Krea and Runway expose none. The
+  first-party `elevenlabs-tts` is unchanged (test pins it).
+- **Music handler (new).** `handle_elevenlabs_music` in `handlers/elevenlabs.py` sends prompt, `model_id`,
+  `music_length_ms` (validated 3000-600000), and `force_instrumental` only when true. No `output_format`
+  (auto = mp3), saved as .mp3, read timeout 600 s. `elevenlabs-music` gained a direct-only `model_id`
+  (default `music_v1`, ElevenLabs' own default); fal never receives it. Unset settings take the definition
+  default (30000 ms), the same value pricing reads.
+- **STS video.** ElevenLabs speech-to-speech documents an `audio` file only. A Runway STS run with only the
+  video input wired is refused on the ElevenLabs route before any call. I didn't build local audio
+  extraction (ffmpeg); that's a follow-up if wanted.
+- **Runway TTS text length.** Runway's handler cuts text at 1,000 characters; the ElevenLabs route sends all
+  of it (Multilingual v2 takes 10,000). It bills per character, so a long script costs more there.
+- **Dubbing.** Runway's four settings map one-to-one onto the `POST /v1/dubbing` fields (`target_lang`,
+  `num_speakers`, `drop_background_audio`, `disable_voice_cloning`). All 28 Runway languages are in
+  ElevenLabs' Dubbing v1 list (a test pins this). ElevenLabs files `/v1/dubbing` under "Legacy" in its API
+  reference, with no deprecation notice or shutdown date, so there's no DIRECT_RETIRES entry. The newer
+  `POST /v1/dubbing/project` (default `dubbing_v2`, $2.20/min) has none of these four settings and delivers
+  output by webhook, so it isn't a fit. **NOT CONFIRMED:** which ElevenLabs dubbing version Runway's
+  `eleven_voice_dubbing` uses. Runway's announcement says "29 languages", which matches ElevenLabs' "Dubbing
+  v1 ... 29 languages supported", so it's probably v1.
+- **Pricing (ElevenLabs pages, 2026-10-14).** Only music is priced: "Music Generation $0.15 Price per
+  minute" (pricing/api) gives $0.0000025 per ms of `music_length_ms`, with `multiplyBy`. A Krea music recipe
+  with no length lets "the model ... choose a length", so a row matching the empty value prices the
+  documented 3000-600000 ms range ($0.0075-$1.50). The pricing page also says "5 minute duration limit", so
+  the $1.50 high end is conservative. A shared pricing case pins that empty-value matching on both sides.
+  TTS ($0.08 / 1K chars), Voice Changer ($0.12/min of input) and Dubbing ($0.33/$0.50 per min) bill by text
+  length or input duration, which params don't give, so they're unpriced. The fal route of
+  `elevenlabs-music` stays unpriced as before (I didn't check fal's price).
+- **Generator.** `scripts/sync-krea-catalog.py` adds the four ElevenLabs `DIRECT_ROUTES` (kreaOnly empty,
+  no blockers). `direct_route_pricing` returns a complete maker entry as is when the model isn't a Google
+  image model, and returns None when `pricing` is None (TTS). `test_krea_catalog` now expects a route set
+  that depends on what's priced: these Krea audio models have no Krea price, so music has only an
+  `elevenlabs` route and TTS has no entry.
+- **Fingerprints.** `APPROVED_DUAL_ROUTE_SPLITS` covers the four non-Krea nodes. A split can now pin exact
+  `directParams` (voice_id, model_id) instead of assuming `[]`, so editing them fails the test (checked
+  by mutation).
+- **Verified facts (fetched 2026-10-14).** ElevenLabs compose / TTS convert / STS convert / legacy dubbing
+  create reference pages, models page (`eleven_multilingual_sts_v2`, `music_v1/v2/v2_5`; `music_v1`
+  "Outclassed", not deprecated), dubbing language list, pricing/api. Krea's OpenAPI (`voice_id` "ElevenLabs
+  voice ID. Available voices: Bella (hpp4J3VqNfWAUOO0d1Us)..."). Runway llms-full.txt (model ids, preset
+  voices, dubbing launch). **NOT CONFIRMED:** that every ElevenLabs account can use Krea's listed default
+  voice ids (no real calls were made); live behavior of any request.
+- **Incident:** my mutation-check backups used a shared scratchpad path (`scratchpad/mut/bak`) that another
+  lane also used. One restore wrote that lane's MiniMax file over `maker_routes_elevenlabs.py`. I rewrote
+  mine from my original content, re-ran every check, used a lane-unique temp dir from then on, and told the
+  coordinator. Its clobbered copy is saved at `scratchpad/clobbered-by-minimax-in-elevenlabs-worktree.py`.
+  After that, the `elevenlabs-music` price in `model_pricing.json` turned up as `2.6e-06`. None of my
+  mutations wrote that value, so another process probably mutated this worktree. I set it back to
+  `2.5e-06` (the catalog `--check` agrees) and re-ran every check.
+
+### Review fixes (2026-10-14, ElevenLabs lane)
+
+An independent review of `direct-elevenlabs` against the ElevenLabs, Krea and Runway pages (fetched
+2026-10-14: pricing/api, music compose, TTS convert, STS convert, legacy dubbing create, models, the Dubbing
+v1 language list, Krea's openapi.json, Runway's llms-full.txt). Model ids, endpoints, field names, the
+3000-600000 ms range, the $0.15/min Music price and the 28 Runway dubbing languages all matched.
+
+- **voice_id path injection (fixed).** The voice id is interpolated into `POST /v1/text-to-speech/{voice_id}`
+  and `/v1/speech-to-speech/{voice_id}`, and httpx resolves dot segments: a `voice_id` of `../../music`
+  became `https://api.elevenlabs.io/music`, and `a/../../../v1/voices/add` became `/v1/voices/add`, on the
+  person's key. Before this lane the Krea TTS `voice_id` only went into Krea's JSON body; now it and the new
+  Runway `voice_id` are free text in an ElevenLabs URL. `handlers/elevenlabs.py _voice_id` now refuses
+  anything but letters, digits, `_` and `-` before any call. It sits in the handler (not the translators)
+  so first-party `elevenlabs-tts` / `elevenlabs-sts` get the same check; a real ElevenLabs id always
+  passes. Test: 16 cases (4 bad ids x Krea TTS, Runway TTS, Runway STS, first-party TTS); all fail with the
+  check disabled.
+- **Route cases (added).** `route_cases.json` lacked Krea TTS on the API token, Krea music without the
+  ElevenLabs key, a cleared Runway `voice_id`, Runway STS on ElevenLabs (with its param split) and Runway
+  dubbing on Runway. Added; removing `runway-tts` from the frontend `DIRECT_REQUIRES` fails them.
+- **Source URL.** The dubbing language list was cited as a relative path; it now names
+  https://elevenlabs.io/docs/help-center/product/dubbing/which-languages-are-supported-in-dubbing.
+- **Checked and left as is.** A whitespace-only `voice_id` counts as set in `direct_block` (both sides), so
+  the run picks ElevenLabs and the translator refuses it before any call; no money moves, and changing the
+  shared rule would touch Ideogram too. A Runway STS run with only video wired and a `voice_id` set is
+  refused on the ElevenLabs route rather than sent to Runway (documented; ffmpeg extraction is the
+  follow-up). The legacy dubbing page gives no `watermark` default; the route stays unpriced either way.

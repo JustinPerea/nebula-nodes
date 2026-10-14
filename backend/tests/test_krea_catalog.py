@@ -195,6 +195,10 @@ def test_direct_route_models_price_both_routes():
                 assert maker["checked"] == SYNC.MAKER_CHECKED
                 assert all(source["url"] in (SYNC.IDEOGRAM_PRICING_URL, SYNC.RUNWAY_PRICING_URL)
                            for source in maker["sources"])
+            if provider == "elevenlabs":
+                assert maker["checked"] == SYNC.ELEVENLABS_CHECKED
+                assert any(source["url"] == SYNC.ELEVENLABS_PRICING_URL for source in maker["sources"])
+                assert maker["multiplyBy"] == ["music_length_ms"]
             continue
         google = entry["routes"]["google"]
         assert google.get("provider", "google") == "google"

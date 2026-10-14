@@ -63,6 +63,8 @@ Simple parameters use ordinary controls. Optional complex parameters use JSON fi
 
 This JSON belongs in the chosen Kling model's `multi_prompt` field. It does not select a model. Leave optional advanced fields empty when you do not need them. Consult the [gateway reference](../model-providers/krea/krea-gateway.md) for route and schema details, and the generated [model reference](../MODEL_REFERENCE.md) for the full Nebula catalog.
 
+**ElevenLabs copies on your ElevenLabs key.** `krea-audio-elevenlabs-tts` and the three music copies (`krea-audio-elevenlabs-music`, `-music-v2`, `-music-v2-5`) run on ElevenLabs' own API when an ElevenLabs key (`ELEVENLABS_API_KEY`) is saved, with the same rule: the Krea plan stays on the plan, else the ElevenLabs key wins, else your Krea API token. Krea's fields are ElevenLabs' own, so nothing is dropped. On ElevenLabs the node fills `audio`, `audios` and `artifacts`, with no Krea `job`. Music is priced at ElevenLabs' $0.15 per minute; TTS on ElevenLabs is unpriced (billed per character). Details: [the ElevenLabs guide](elevenlabs.md).
+
 ## Keep using Krea 2 styles and moodboards
 
 The six existing Krea nodes remain available:
