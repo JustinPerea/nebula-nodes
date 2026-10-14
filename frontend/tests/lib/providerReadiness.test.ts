@@ -157,6 +157,27 @@ describe('provider readiness without generation', () => {
     expect(none.detail).toContain(`or on ${copy} with a ${copyKey}`);
   });
 
+  it('keeps a Krea copy with an explicit size on Krea and says why', () => {
+    const definition = NODE_DEFINITIONS['krea-image-google-nano-banana-2'];
+    const keys = { GOOGLE_API_KEY: TOKEN, KREA_API_TOKEN: TOKEN };
+    const ready = modelReadiness(definition, freeze({ _kreaAuth: 'api-token', width: 1920 }), credentials({ apiKeys: keys }), health());
+    expect(ready).toMatchObject({ connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+    expect(ready.detail).toContain('This recipe sets width, which only Krea takes, so it runs on Krea.');
+    const googleOnly = modelReadiness(definition, freeze({ width: 1920 }), credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN } }), health());
+    expect(googleOnly).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+  });
+
+  it('moves Nano Banana (2.5) to fal from Google\'s shutdown date and says so', () => {
+    const definition = NODE_DEFINITIONS['nano-banana-fal'];
+    const cache = credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN, FAL_KEY: TOKEN } });
+    expect(modelReadiness(definition, freeze({ model: 'nano-banana' }), cache, health()).connectionLabel).toBe('Google API');
+    vi.setSystemTime(Date.parse('2027-03-15T12:00:00'));
+    const ready = modelReadiness(definition, freeze({ model: 'nano-banana' }), cache, health());
+    expect(ready).toMatchObject({ connectionLabel: 'fal.ai API', setupTarget: { kind: 'api-key', key: 'FAL_KEY' } });
+    expect(ready.detail).toContain('Google retires this model on its own API from 2027-03-15, so it runs on FAL.');
+    expect(modelReadiness(definition, freeze({ model: 'nano-banana-2' }), cache, health()).connectionLabel).toBe('Google API');
+  });
+
   it('keeps a Krea copy on the signed-in plan even with a Google key', () => {
     const ready = modelReadiness(NODE_DEFINITIONS['krea-image-google-nano-banana-pro'], freeze({ _kreaAuth: 'mcp' }),
       credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN }, kreaConnection: { status: 'connected' } }), health());

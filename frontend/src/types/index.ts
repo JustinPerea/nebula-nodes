@@ -150,8 +150,10 @@ export interface ModelNodeDefinition {
    *  order (Veo: Vertex, then Gemini API). */
   directKeyName?: string | string[];
   /** A generated Krea node's maker route (scripts/sync-krea-catalog.py
-   *  DIRECT_ROUTES): the backend translation and the maker's model id. */
-  directRoute?: { translation: string; model: string };
+   *  DIRECT_ROUTES): the backend translation and the maker's model id.
+   *  `blockedBy` lists Krea-only params that keep a run on Krea when set
+   *  (the maker can't honor them; lib/directRoute.ts directBlock). */
+  directRoute?: { translation: string; model: string; blockedBy?: string[] };
   docUrl?: string;
   /** A local (utility) node that still calls a provider. `utility` only means
    *  "no top-level key"; this says what the node really needs. Readiness, the

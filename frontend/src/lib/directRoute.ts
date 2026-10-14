@@ -8,7 +8,8 @@ import { usesKreaAccount } from './kreaConnection';
  *
  * 1. `_kreaAuth == "mcp"` (or an account-only Krea node): the Krea plan. A
  *    maker key never overrides that explicit choice.
- * 2. a direct (maker) key is set: the maker's API.
+ * 2. a direct (maker) key is set, and the direct route can take this run
+ *    (directBlock): the maker's API.
  * 3. otherwise the first other key that is set (FAL_KEY, KREA_API_TOKEN).
  */
 
@@ -26,6 +27,28 @@ export const KEY_PROVIDERS: Readonly<Record<string, APIProvider>> = {
 /** A direct route that also needs a param set, else the run takes the fallback
  * (node_route.DIRECT_REQUIRES): Ideogram's direct reframe sizes by `resolution`. */
 export const DIRECT_REQUIRES: Readonly<Record<string, string>> = { 'ideogram-reframe': 'resolution' };
+
+/** A direct route the maker shuts down on a date (node_route.DIRECT_RETIRES):
+ * from that day the fal or Krea copy runs it. `param`/`values` narrow it to
+ * the saved model choices that call the retiring model. gemini-2.5-flash-image:
+ * "March 15, 2027" in Google's deprecations table (checked 2026-10-14). */
+interface DirectRetirement { on: string; param?: string; values?: readonly string[] }
+const GEMINI_25_FLASH_IMAGE_SHUTDOWN = '2027-03-15';
+export const DIRECT_RETIRES: Readonly<Record<string, DirectRetirement>> = {
+  'nano-banana-fal': { on: GEMINI_25_FLASH_IMAGE_SHUTDOWN, param: 'model', values: ['nano-banana', 'gemini-25-flash-image'] },
+  'nano-banana-fal-edit': { on: GEMINI_25_FLASH_IMAGE_SHUTDOWN, param: 'model', values: ['nano-banana', 'gemini-25-flash-image'] },
+  'krea-image-google-nano-banana': { on: GEMINI_25_FLASH_IMAGE_SHUTDOWN },
+};
+
+/** Why the direct route can't take a run (node_route.direct_block):
+ * `requires` a direct param that isn't set (DIRECT_REQUIRES), `blocked` by a
+ * copy-only param that is set (directRoute.blockedBy: a Krea copy's explicit
+ * width/height), or `retired` by the maker on `on` (DIRECT_RETIRES). */
+export interface DirectBlock {
+  reason: 'requires' | 'blocked' | 'retired';
+  param: string | null;
+  on: string | null;
+}
 
 export type RouteKind = 'local' | 'plan' | 'only' | 'direct' | 'fallback' | 'unset';
 
@@ -77,9 +100,46 @@ export function configuredDirectKey(
   return directKeyNames(definition).find((key) => isSet(apiKeys, key));
 }
 
-export function directAllowed(definition: Pick<ModelNodeDefinition, 'id'>, params: Record<string, unknown>): boolean {
+function hasValue(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== '';
+}
+
+/** Today's local date as YYYY-MM-DD, as Python's date.today() reads it. */
+function todayIso(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+/** A param's value as a run reads it: the saved value, else the definition default. */
+function effectiveValue(definition: ModelNodeDefinition, params: Record<string, unknown>, key: string): unknown {
+  if (hasValue(params[key])) return params[key];
+  for (const group of [definition.sharedParams, definition.directParams, definition.falParams, definition.params]) {
+    const param = group?.find((candidate) => candidate.key === key);
+    if (param) return param.default;
+  }
+  return undefined;
+}
+
+/** Why the direct route can't take a run with these params, or null when it can. */
+export function directBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
   const needed = Object.hasOwn(DIRECT_REQUIRES, definition.id) ? DIRECT_REQUIRES[definition.id] : undefined;
-  return !needed || Boolean(params[needed]);
+  if (needed && !params[needed]) return { reason: 'requires', param: needed, on: null };
+  for (const key of definition.directRoute?.blockedBy ?? []) {
+    if (hasValue(params[key])) return { reason: 'blocked', param: key, on: null };
+  }
+  const retires = Object.hasOwn(DIRECT_RETIRES, definition.id) ? DIRECT_RETIRES[definition.id] : undefined;
+  if (retires && todayIso() >= retires.on) {
+    const value = retires.param ? effectiveValue(definition, params, retires.param) : undefined;
+    if (!retires.param || (retires.values ?? []).includes(value as string)) {
+      return { reason: 'retired', param: retires.param ?? null, on: retires.on };
+    }
+  }
+  return null;
+}
+
+export function directAllowed(definition: ModelNodeDefinition, params: Record<string, unknown>): boolean {
+  return directBlock(definition, params) === null;
 }
 
 /** The route a run of this node takes with these params and keys. */
@@ -114,4 +174,30 @@ export function routeParamDefinitions(definition: ModelNodeDefinition, kind: Rou
   const byKey = new Map<string, ParamDefinition>();
   for (const param of [...definition.sharedParams, ...group]) byKey.set(param.key, param);
   return [...byKey.values()];
+}
+
+/** The params to show for a node's next run: its route's (routeParamDefinitions),
+ * plus the one direct param the maker route still needs (DIRECT_REQUIRES) when
+ * the maker key is set, so the person can opt in. Ideogram Reframe saved
+ * without `resolution` (an agent-made node) would otherwise hide the only
+ * control that moves it onto the person's Ideogram key. Create seeds that
+ * param's default (as a new node always did); the Inspector passes
+ * `seedOptIn: false` so it shows unset ("Choose…") until the person picks. */
+export function paramDefinitionsForRun(
+  definition: ModelNodeDefinition,
+  params: Record<string, unknown> | undefined,
+  apiKeys: ApiKeys,
+  { seedOptIn = true }: { seedOptIn?: boolean } = {},
+): ParamDefinition[] {
+  const values = params ?? {};
+  const route = selectRoute(definition, values, apiKeys);
+  const shown = routeParamDefinitions(definition, route.kind);
+  const block = directBlock(definition, values);
+  if (route.kind === 'direct' || block?.reason !== 'requires' || !block.param || !configuredDirectKey(definition, apiKeys)) {
+    return shown;
+  }
+  const needed = definition.directParams?.find((param) => param.key === block.param);
+  if (!needed) return shown;
+  const optIn = seedOptIn ? needed : { ...needed, default: undefined, required: true };
+  return [...shown.filter((param) => param.key !== needed.key), optIn];
 }

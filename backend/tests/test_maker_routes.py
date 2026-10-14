@@ -195,7 +195,7 @@ async def test_meshy_direct_gets_no_fal_only_params():
 @pytest.mark.asyncio
 async def test_krea_copy_runs_on_google_with_the_maker_key():
     node = GraphNode(id="k", definitionId="krea-image-google-nano-banana-2", params={
-        "_kreaAuth": "api-token", "aspect_ratio": "16:9", "resolution": "4K", "width": 640, "height": 480,
+        "_kreaAuth": "api-token", "aspect_ratio": "16:9", "resolution": "4K", "width": None, "height": "",
         "image_urls": '["https://example.com/ref.png"]'})
     before = copy.deepcopy(node.params)
     client = _gemini_client()
@@ -210,7 +210,6 @@ async def test_krea_copy_runs_on_google_with_the_maker_key():
     body = client.post.call_args.kwargs["json"]
     assert "models/gemini-3.1-flash-image:generateContent" in url
     assert body["generationConfig"]["imageConfig"] == {"aspectRatio": "16:9", "imageSize": "4K"}
-    assert "640" not in str(body["generationConfig"])
     # The reference goes to Google as a public HTTPS URL (fileData.fileUri).
     assert {"fileData": {"fileUri": "https://example.com/ref.png"}} in body["contents"][0]["parts"]
 
@@ -230,6 +229,71 @@ async def test_krea_plan_wins_over_a_maker_key_and_krea_gets_its_own_params():
         await _run(node, PROMPT, {**GOOGLE, **KREA})
     google.assert_not_called()
     assert seen == params
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_krea_size_keeps_the_run_on_krea():
+    """Google can't render an exact width/height; dropping them on the direct
+    route would silently change a saved 16:9 recipe to Google's default."""
+    seen = {}
+
+    async def gateway(node, inputs, api_keys, emit=None):
+        seen.update(node.params)
+        return {"image": {"type": "Image", "value": "https://example.com/k.png"}}
+
+    params = {"_kreaAuth": "api-token", "prompt": "p", "width": 1920, "height": 1080, "resolution": "2K"}
+    node = GraphNode(id="k", definitionId="krea-image-google-nano-banana-2", params=params)
+    with patch("handlers.krea_gateway.handle_krea_gateway", gateway), \
+            patch("handlers.google_gemini.httpx.AsyncClient") as google:
+        await _run(node, PROMPT, {**GOOGLE, **KREA})
+    google.assert_not_called()
+    assert seen["width"] == 1920 and seen["height"] == 1080
+    # Without the Krea token there is no route that honors the size.
+    with pytest.raises(MissingCredentialError):
+        await _run(node, PROMPT, GOOGLE)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("today,on_google", [("2027-03-14", True), ("2027-03-15", False)])
+async def test_nano_banana_25_leaves_google_on_its_shutdown_date(monkeypatch, today, on_google):
+    monkeypatch.setattr(node_route, "_today", lambda: today)
+    fal = AsyncMock(return_value={"image": {"type": "Image", "value": "https://example.com/f.png"}})
+    client = _gemini_client()
+    node = GraphNode(id="n", definitionId="nano-banana-fal", params={"model": "nano-banana", "num_images": 1})
+    with patch("handlers.google_gemini.httpx.AsyncClient", return_value=client), \
+            patch("handlers.fal_universal.handle_fal_universal", fal):
+        await _run(node, PROMPT, {**GOOGLE, **FAL})
+    assert client.post.called is on_google
+    assert fal.called is not on_google
+
+
+def test_retired_direct_routes_cover_every_route_to_the_retiring_model():
+    """DIRECT_RETIRES names every saved choice that calls gemini-2.5-flash-image."""
+    fal_values = sorted(value for value, model in maker_routes.NANO_BANANA_FAL_GOOGLE_MODELS.items()
+                        if model == maker_routes.GEMINI_25_FLASH_IMAGE)
+    for node_id in ("nano-banana-fal", "nano-banana-fal-edit"):
+        assert sorted(node_route.DIRECT_RETIRES[node_id]["values"]) == fal_values
+    krea = {node_id for node_id, definition in DEFINITIONS.items()
+            if (definition.get("directRoute") or {}).get("model") == maker_routes.GEMINI_25_FLASH_IMAGE}
+    assert krea and krea <= set(node_route.DIRECT_RETIRES)
+    assert {entry["on"] for entry in node_route.DIRECT_RETIRES.values()} == {"2027-03-15"}
+
+
+@pytest.mark.asyncio
+async def test_meshy_direct_gets_a_saved_texture_prompt():
+    """Meshy's own API takes texture_prompt ("Provide a text prompt to guide the
+    texturing process", docs.meshy.ai/en/api/image-to-3d), so both routes send it."""
+    seen = {}
+
+    async def fake_direct(node, inputs, api_keys, emit=None):
+        seen.update(node.params)
+        return {"model": {"type": "Mesh", "value": "x.glb"}}
+
+    params = {"texture_prompt": "red brick", "topology": "quad", "ai_model": "latest", "seed": 7}
+    node = GraphNode(id="n", definitionId="meshy-image-to-3d", params=params)
+    with patch("handlers.meshy.handle_meshy_image_to_3d", fake_direct):
+        await _run(node, {}, {"MESHY_API_KEY": "fixture-meshy", **FAL})
+    assert seen == {"texture_prompt": "red brick", "topology": "quad", "ai_model": "latest"}
 
 
 @pytest.mark.asyncio

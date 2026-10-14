@@ -47,6 +47,11 @@ def test_each_model_has_a_valid_request_contract_and_valid_control_defaults(node
         krea_only = {param["key"] for param in definition["falParams"]}
         assert shared | krea_only == {param["key"] for param in definition["params"]}
         assert not shared & krea_only and "_kreaAuth" in shared
+        # Krea-only fields that keep a run on Krea when set: never defaulted,
+        # or every new node would skip the maker route.
+        blocked = definition["directRoute"].get("blockedBy", [])
+        assert blocked == direct.get("directBlockedBy", []) and set(blocked) <= krea_only
+        assert not [p for p in definition["falParams"] if p["key"] in blocked and p.get("default") is not None]
     assert definition["apiEndpoint"] == model["endpoint"]
     assert model["endpoint"].startswith(tuple(SYNC.MEDIA_ROUTES))
     assert definition["category"] == SYNC.category_for(model["endpoint"], model["mediaType"])
@@ -168,5 +173,13 @@ def test_direct_route_models_price_both_routes():
         google = entry["routes"]["google"]
         assert google.get("provider", "google") == "google"
         assert google["rows"] and google["checked"] == SYNC.GOOGLE_CHECKED
-        assert all(source["url"] == SYNC.GOOGLE_PRICING_URL for source in google["sources"])
+        assert all(source["url"].startswith("https://ai.google.dev/gemini-api/docs/") for source in google["sources"])
+        assert any(source["url"] == SYNC.GOOGLE_PRICING_URL for source in google["sources"])
+        # Every row is a range: the output image, up to it plus 14 reference
+        # images at the model's input rate (input tokens Google bills per call).
+        per_image = SYNC.REFERENCE_IMAGE_COST[direct["model"]][0]
+        for row, source_row in zip(google["rows"], direct["pricing"]["rows"]):
+            low, high = row["price"]
+            assert low == source_row["price"]
+            assert high >= low + SYNC.MAX_REFERENCE_IMAGES * per_image > low
         assert entry["routes"]["krea"].get("provider", "krea") == "krea"

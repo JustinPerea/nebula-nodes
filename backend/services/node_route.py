@@ -14,7 +14,8 @@ Precedence, the same everywhere:
 
 1. ``_kreaAuth == "mcp"`` (or an account-only Krea node): the Krea plan. It's
    the person's explicit choice, so a maker key never overrides it.
-2. a direct (maker) key is set: the maker's API.
+2. a direct (maker) key is set, and the direct route can take this run
+   (:func:`direct_block`): the maker's API.
 3. otherwise the first other key that is set (``FAL_KEY``, ``KREA_API_TOKEN``):
    the aggregator copy.
 
@@ -22,6 +23,7 @@ Stdlib only, so the engine and the scripts can import it cheaply.
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Mapping, NamedTuple
 
 # Which provider bills a run that uses this key. Vertex bills Veo at the same
@@ -40,6 +42,30 @@ KEY_PROVIDERS: dict[str, str] = {
 # Ideogram's direct reframe sizes by `resolution`; a saved recipe with only
 # fal's `image_size` stays on fal (execution/sync_runner.py _ideogram_router).
 DIRECT_REQUIRES: dict[str, str] = {"ideogram-reframe": "resolution"}
+
+# A direct route the maker shuts down on a date: from that day on the run takes
+# the fal or Krea copy instead, and pricing, the spend gate, readiness and the
+# cache key move with it (they all ask select_route). ``param``/``values``
+# narrow it to the saved model choices that call the retiring model.
+# gemini-2.5-flash-image: Google's deprecations table lists "March 15, 2027"
+# as its earliest shutdown (https://ai.google.dev/gemini-api/docs/deprecations,
+# checked 2026-10-14; the page tracks the announced dates). The pricing page
+# banner says "October 2, 2026", already past, with no shutdown in the
+# changelog and the model still listed as stable, so the table's date is the
+# one gated; a 404 before then names the replacement (maker_routes.py).
+_GEMINI_25_FLASH_IMAGE_SHUTDOWN = "2027-03-15"
+DIRECT_RETIRES: dict[str, dict[str, Any]] = {
+    "nano-banana-fal": {"on": _GEMINI_25_FLASH_IMAGE_SHUTDOWN, "param": "model",
+                        "values": ["nano-banana", "gemini-25-flash-image"]},
+    "nano-banana-fal-edit": {"on": _GEMINI_25_FLASH_IMAGE_SHUTDOWN, "param": "model",
+                             "values": ["nano-banana", "gemini-25-flash-image"]},
+    "krea-image-google-nano-banana": {"on": _GEMINI_25_FLASH_IMAGE_SHUTDOWN},
+}
+
+# Why a direct route can't take a run (direct_block).
+REQUIRES = "requires"  # DIRECT_REQUIRES: the direct route needs a param that isn't set
+BLOCKED = "blocked"    # a copy-only param is set that the maker can't honor (directRoute.blockedBy)
+RETIRED = "retired"    # DIRECT_RETIRES: the maker shut this model down on its API
 
 LOCAL = "local"        # a utility node: no provider
 PLAN = "plan"          # the signed-in Krea plan
@@ -111,9 +137,61 @@ def _is_set(api_keys: Mapping[str, Any], key: str) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def _today() -> str:
+    """Today's date as YYYY-MM-DD (tests patch this; directRoute.ts reads the clock)."""
+    return date.today().isoformat()
+
+
+def _has_value(value: Any) -> bool:
+    return value is not None and value != ""
+
+
+class DirectBlock(NamedTuple):
+    reason: str
+    param: str | None = None
+    on: str | None = None
+
+
+def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None) -> DirectBlock | None:
+    """Why the direct route can't take a run with these params, or None when it can.
+
+    - REQUIRES: Ideogram's direct reframe sizes by ``resolution``; a recipe
+      with only fal's ``image_size`` stays on fal.
+    - BLOCKED: a generated Krea copy names, in ``directRoute.blockedBy``, the
+      Krea-only params (explicit width/height) the maker can't honor; a
+      recipe that sets one stays on Krea instead of silently changing shape.
+    - RETIRED: on and after a DIRECT_RETIRES date the maker no longer serves
+      the model, so the fal or Krea copy runs it."""
+    values = params or {}
+    node_id = str(definition.get("id") or "")
+    needed = DIRECT_REQUIRES.get(node_id)
+    if needed and not values.get(needed):
+        return DirectBlock(REQUIRES, needed)
+    spec = definition.get("directRoute")
+    for key in (spec.get("blockedBy") or []) if isinstance(spec, Mapping) else []:
+        if _has_value(values.get(key)):
+            return DirectBlock(BLOCKED, str(key))
+    retires = DIRECT_RETIRES.get(node_id)
+    if retires and _today() >= retires["on"]:
+        param = retires.get("param")
+        if not param or _effective(definition, values, param) in retires.get("values", []):
+            return DirectBlock(RETIRED, param, retires["on"])
+    return None
+
+
+def _effective(definition: Mapping[str, Any], params: Mapping[str, Any], key: str) -> Any:
+    """A param's value as a run reads it: the saved value, else the definition default."""
+    if _has_value(params.get(key)):
+        return params[key]
+    for group in ("sharedParams", "directParams", "falParams", "params"):
+        for param in definition.get(group) or []:
+            if isinstance(param, Mapping) and param.get("key") == key:
+                return param.get("default")
+    return None
+
+
 def direct_allowed(definition: Mapping[str, Any], params: Mapping[str, Any] | None) -> bool:
-    needed = DIRECT_REQUIRES.get(str(definition.get("id") or ""))
-    return not needed or bool((params or {}).get(needed))
+    return direct_block(definition, params) is None
 
 
 def select_route(

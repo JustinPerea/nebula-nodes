@@ -1,7 +1,7 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../types';
 import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
-import { directAllowed, directKeyNames, fallbackKeyNames, KEY_PROVIDERS, selectRoute, type NodeRoute } from './directRoute';
+import { directBlock, directKeyNames, fallbackKeyNames, KEY_PROVIDERS, selectRoute, type DirectBlock, type NodeRoute } from './directRoute';
 import { modelChoice, paramCallsProvider } from './nodeKeys';
 
 export type ProviderSetupTarget =
@@ -137,15 +137,30 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
   // The run's route (lib/directRoute.ts, the backend's rule): a configured
   // direct key first, so a valid alternate never masks a rejected direct key.
   // With none of a multi-route node's keys set, setup points at the maker's
-  // key, unless this recipe can't take the direct route (Ideogram Reframe
-  // saved without a direct resolution).
+  // key, unless this recipe can't take the direct route (directBlock: Ideogram
+  // Reframe saved without a direct resolution, a Krea copy with explicit
+  // width/height, or a model the maker has retired).
   const route = selectRoute(def, params, cache.loaded ? cache.apiKeys : {});
-  const directOk = directAllowed(def, params);
+  const block = keys.length > 1 && directKeyNames(def).length ? directBlock(def, params) : null;
+  const directOk = block === null;
   const key = route.key ?? (directOk ? directKeyNames(def)[0] : fallbackKeyNames(def)[0]) ?? keys[0];
   const ready = keyReadiness(key, cache, health);
-  const reframeNote = keys.length > 1 && !directOk ? ' This saved recipe has no direct resolution, so it uses FAL.' : '';
+  const blockNote = block ? ` ${directBlockNote(def, block)}` : '';
   return { ...ready, connectionLabel: connectionLabelFor(key),
-    detail: `${routeDetail(def, route, key, directOk)}${reframeNote} ${ready.detail}` };
+    detail: `${routeDetail(def, route, key, directOk)}${blockNote} ${ready.detail}` };
+}
+
+/** Why this recipe can't run on the maker's own API (lib/directRoute.ts directBlock). */
+function directBlockNote(def: ModelNodeDefinition, block: DirectBlock): string {
+  const direct = directKeyNames(def)[0];
+  const fallback = fallbackKeyNames(def)[0];
+  const directName = direct ? keyProviderName(direct) : 'the maker';
+  const fallbackName = fallback ? (fallback === 'FAL_KEY' ? 'FAL' : keyProviderName(fallback)) : 'the copy';
+  if (block.reason === 'requires') return `This saved recipe has no direct ${block.param}, so it uses ${fallbackName}.`;
+  if (block.reason === 'blocked') {
+    return `This recipe sets ${block.param}, which only ${fallbackName} takes, so it runs on ${fallbackName}. Clear it to run on ${directName}.`;
+  }
+  return `${directName} retires this model on its own API from ${block.on}, so it runs on ${fallbackName}.`;
 }
 
 function connectionLabelFor(key: string): string {

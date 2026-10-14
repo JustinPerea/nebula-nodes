@@ -164,7 +164,9 @@ def _image_count(value: Any) -> int:
 async def google_nano_banana(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str]) -> dict[str, Any]:
     """handle_nano_banana for a translated copy: ``num_images`` calls (fal
     bills and makes that many too); the node's one Image port shows the first,
-    as on fal. A 404 on the deprecated 2.5 model names Google's replacement."""
+    as on fal. A 404 on the deprecated 2.5 model names Google's replacement
+    (from its shutdown date, node_route.DIRECT_RETIRES sends those runs to the
+    fal or Krea copy instead)."""
     from handlers.google_gemini import handle_nano_banana
 
     count = _image_count(node.params.get("num_images"))
@@ -204,7 +206,8 @@ def krea_nano_banana_to_google(model: str) -> Translate:
     prompt (port, else param) -> prompt; image_urls (port, else the JSON
     param) -> images; aspect_ratio -> aspect_ratio (Krea's choices are
     Google's); resolution 1K/2K/4K -> imageSize. width/height are Krea-only
-    (falParams) and never reach here."""
+    (falParams): a run that sets either stays on Krea (directRoute.blockedBy,
+    node_route.direct_block), since Google can't render an exact size."""
 
     def translate(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[GraphNode, dict[str, PortValueDict]]:
         params = node.params

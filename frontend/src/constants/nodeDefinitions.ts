@@ -14414,7 +14414,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "directParams": [],
     "directRoute": {
       "translation": "krea-nano-banana",
-      "model": "gemini-3-pro-image"
+      "model": "gemini-3-pro-image",
+      "blockedBy": [
+        "width",
+        "height"
+      ]
     }
   },
   'krea-image-google-nano-banana-2': {
@@ -14730,7 +14734,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "directParams": [],
     "directRoute": {
       "translation": "krea-nano-banana",
-      "model": "gemini-3.1-flash-image"
+      "model": "gemini-3.1-flash-image",
+      "blockedBy": [
+        "width",
+        "height"
+      ]
     }
   },
   'krea-image-google-nano-banana-2-1': {
@@ -15180,7 +15188,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "directParams": [],
     "directRoute": {
       "translation": "krea-nano-banana",
-      "model": "gemini-3.1-flash-lite-image"
+      "model": "gemini-3.1-flash-lite-image",
+      "blockedBy": [
+        "width",
+        "height"
+      ]
     }
   },
   'krea-image-google-nano-banana': {
@@ -15430,7 +15442,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "directParams": [],
     "directRoute": {
       "translation": "krea-nano-banana",
-      "model": "gemini-2.5-flash-image"
+      "model": "gemini-2.5-flash-image",
+      "blockedBy": [
+        "width",
+        "height"
+      ]
     }
   },
   'krea-image-bfl-flux-1-1-pro': {

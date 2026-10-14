@@ -1,16 +1,18 @@
 import type { ModelNodeDefinition, ParamDefinition, ParamOption } from '../types';
-import { routeParamDefinitions, selectRoute } from './directRoute';
+import { paramDefinitionsForRun } from './directRoute';
 import { withNewKreaMode, type KreaConnectionMode } from './kreaConnection';
 
 /** The params Create shows for the route this run would take (lib/directRoute.ts):
  * the maker's own on a maker key, the fal or Krea copy's otherwise, and Krea's
- * when the recipe bills the Krea plan. */
+ * when the recipe bills the Krea plan; plus a direct param the maker route
+ * still needs when its key is set (seeded, so a new Ideogram Reframe on an
+ * Ideogram key runs there). */
 export function resolveCreateParamDefinitions(
   def: ModelNodeDefinition,
   apiKeys: Record<string, string> = {},
   params: Record<string, unknown> = {},
 ): ParamDefinition[] {
-  return routeParamDefinitions(def, selectRoute(def, params, apiKeys).kind);
+  return paramDefinitionsForRun(def, params, apiKeys);
 }
 
 export function matchesVisibleWhen(

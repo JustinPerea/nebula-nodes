@@ -85,6 +85,25 @@ def test_real_table_prices_veo_by_model_and_resolution():
     assert model_pricing.estimate_node(entry, veo, {}, "fal") is None
 
 
+def test_google_route_counts_reference_images_in_its_high_bound():
+    """Gemini bills each reference image as input on every call (Pro: $0.0011
+    per image, up to 14), so the spend gate's high bound includes them; fal's
+    flat per-image price already does."""
+    definitions = NodeRegistry().get_all()
+    table = model_pricing.load_pricing()["nodes"]
+    edit = definitions["nano-banana-fal-edit"]
+    pro = {"model": "nano-banana-pro", "resolution": "1K", "num_images": 2}
+    google = model_pricing.estimate_node(table["nano-banana-fal-edit"], edit, pro, "google")
+    assert google["low"] == pytest.approx(0.268)
+    assert google["high"] == pytest.approx(2 * (0.134 + 14 * 0.0011))
+    fal = model_pricing.estimate_node(table["nano-banana-fal-edit"], edit, pro, "fal")
+    assert fal["low"] == fal["high"] == pytest.approx(0.30)
+    krea_pro = definitions["krea-image-google-nano-banana-pro"]
+    google = model_pricing.estimate_node(table["krea-image-google-nano-banana-pro"], krea_pro,
+                                         {"resolution": "4K"}, "google")
+    assert (google["low"], google["high"]) == (pytest.approx(0.24), pytest.approx(0.24 + 14 * 0.0011))
+
+
 def test_run_multipliers_follow_the_nearest_batch_or_iterator():
     nodes = [
         {"id": "b", "definitionId": "batch", "params": {"items_text": "one\n\ntwo\nthree"}},

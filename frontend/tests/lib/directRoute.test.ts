@@ -1,15 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import shared from '../../../backend/tests/fixtures/route_cases.json';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { buildDefaultParamsForUi, resolveCreateParamDefinitions } from '../../src/lib/createParams';
 import {
-  configuredDirectKey, directKeyNames, fallbackProvider, routeParamDefinitions, selectRoute,
+  configuredDirectKey, directBlock, directKeyNames, fallbackProvider, paramDefinitionsForRun, routeParamDefinitions,
+  selectRoute,
 } from '../../src/lib/directRoute';
 import { runRouteProvider } from '../../src/lib/modelDiscovery';
 
 type RouteCase = {
   name: string;
   nodeId: string;
+  today?: string;
   params: Record<string, unknown>;
   apiKeys: Record<string, string>;
   expected: { kind: string; provider: string | null; key: string | null };
@@ -17,8 +19,13 @@ type RouteCase = {
 };
 
 describe('selectRoute (cases shared with backend services/node_route.py)', () => {
-  for (const testCase of (shared as { cases: RouteCase[] }).cases) {
+  const fixture = shared as { defaultToday: string; cases: RouteCase[] };
+  afterEach(() => { vi.useRealTimers(); });
+  for (const testCase of fixture.cases) {
     it(testCase.name, () => {
+      // Local noon on the case's day, as node_route._today reads date.today().
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(`${testCase.today ?? fixture.defaultToday}T12:00:00`));
       const definition = NODE_DEFINITIONS[testCase.nodeId];
       const route = selectRoute(definition, testCase.params, testCase.apiKeys);
       expect(route).toEqual(testCase.expected);
@@ -85,5 +92,38 @@ describe('direct routes with more than one key', () => {
     expect(model?.options?.map((option) => option.value)).toEqual([
       'veo-3.1-generate-preview', 'veo-3.1-fast-generate-preview', 'veo-3.1-lite-generate-preview',
     ]);
+  });
+});
+
+describe('when the direct route can\'t take a run', () => {
+  const reframe = NODE_DEFINITIONS['ideogram-reframe'];
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('offers the one direct param a reframe needs when only the Ideogram key is set', () => {
+    const keys = { IDEOGRAM_API_KEY: 'k' };
+    expect(selectRoute(reframe, {}, keys).kind).toBe('unset');
+    const shown = paramDefinitionsForRun(reframe, {}, keys).map((param) => param.key);
+    expect(shown).toContain('resolution');
+    expect(paramDefinitionsForRun(reframe, {}, keys, { seedOptIn: false }).find((p) => p.key === 'resolution'))
+      .toMatchObject({ default: undefined, required: true });
+    // Create seeds it, so a new node runs on the Ideogram key (as before).
+    expect(buildDefaultParamsForUi(reframe, keys)).toMatchObject({ resolution: '1024x1024' });
+    // Without the Ideogram key there is nothing to opt into.
+    expect(paramDefinitionsForRun(reframe, {}, { FAL_KEY: 'k' }).map((param) => param.key)).not.toContain('resolution');
+  });
+
+  it('names the reason: a missing direct param, a Krea-only size, a retired model', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-14T12:00:00'));
+    expect(directBlock(reframe, {})).toEqual({ reason: 'requires', param: 'resolution', on: null });
+    const kreaPro = NODE_DEFINITIONS['krea-image-google-nano-banana-pro'];
+    expect(directBlock(kreaPro, { width: 1024 })).toEqual({ reason: 'blocked', param: 'width', on: null });
+    const nano = NODE_DEFINITIONS['nano-banana-fal'];
+    expect(directBlock(nano, { model: 'nano-banana' })).toBeNull();
+    vi.setSystemTime(new Date('2027-03-15T00:30:00'));
+    expect(directBlock(nano, { model: 'nano-banana' })).toEqual({ reason: 'retired', param: 'model', on: '2027-03-15' });
+    expect(directBlock(nano, {})).toBeNull();
+    expect(directBlock(NODE_DEFINITIONS['krea-image-google-nano-banana'], {}))
+      .toEqual({ reason: 'retired', param: null, on: '2027-03-15' });
   });
 });

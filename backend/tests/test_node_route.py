@@ -19,7 +19,8 @@ DEFINITIONS = NodeRegistry().get_all()
 
 
 @pytest.mark.parametrize("case", CASES["cases"], ids=[case["name"] for case in CASES["cases"]])
-def test_route_matches_shared_cases(case):
+def test_route_matches_shared_cases(case, monkeypatch):
+    monkeypatch.setattr(node_route, "_today", lambda: case.get("today", CASES["defaultToday"]))
     definition = DEFINITIONS[case["nodeId"]]
     route = node_route.select_route(definition, case["params"], case["apiKeys"])
     assert route._asdict() == case["expected"]
@@ -90,3 +91,45 @@ def test_describe_node_names_the_route_and_its_price(monkeypatch, keys, route, p
     assert set(body["price"]["routes"]) == {"fal", "google"}
     assert body["price"]["billedBy"] == billed
     assert body["price"]["atDefaultsUsd"] == [at_defaults, at_defaults]
+
+
+@pytest.mark.asyncio
+async def test_engine_reruns_on_google_once_a_maker_key_is_added_and_caches_per_route():
+    """End to end through execute_graph: a fal result is cached under its
+    route, the same keys hit that cache, and adding GOOGLE_API_KEY misses it
+    and runs the Google handler (never a replay of fal's image)."""
+    from unittest.mock import AsyncMock
+    from uuid import uuid4
+
+    from execution.engine import execute_graph
+    from execution.maker_routes import dual_route
+    from models.graph import GraphNode
+    from services.cache import ExecutionCache
+    from services.output import OUTPUT_ROOT
+
+    image = OUTPUT_ROOT / f"{uuid4().hex}.png"
+    image.parent.mkdir(parents=True, exist_ok=True)
+    image.write_bytes(b"\x89PNG fixture")
+    output = {"image": {"type": "Image", "value": str(image)}}
+    direct = AsyncMock(return_value=output)
+    fallback = AsyncMock(return_value=output)
+    registry = {"nano-banana-fal": dual_route(direct=direct, fallback=fallback)}
+    cache = ExecutionCache()
+
+    async def emit(_event):
+        pass
+
+    async def run(keys):
+        node = GraphNode(id="n", definitionId="nano-banana-fal", params={"model": "nano-banana-2"})
+        await execute_graph([node], [], keys, registry, emit, cache=cache)
+
+    try:
+        await run({"FAL_KEY": "k"})
+        await run({"FAL_KEY": "k"})
+        assert (fallback.await_count, direct.await_count) == (1, 0)  # the second run hit the cache
+        await run({"FAL_KEY": "k", "GOOGLE_API_KEY": "g"})
+        assert (fallback.await_count, direct.await_count) == (1, 1)  # a new route misses it
+        await run({"FAL_KEY": "k", "GOOGLE_API_KEY": "g"})
+        assert direct.await_count == 1
+    finally:
+        image.unlink(missing_ok=True)

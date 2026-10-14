@@ -12,7 +12,7 @@ import { fetchOpenRouterModels, fetchNousModels, fetchQuiverModels, getSettings,
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from './MaskPainterModal';
-import { routeParamDefinitions, selectRoute } from '../../lib/directRoute';
+import { paramDefinitionsForRun } from '../../lib/directRoute';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
 
@@ -221,13 +221,14 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // Resolve params: dual-route nodes show sharedParams plus the params of the
   // route this run takes (lib/directRoute.ts selectRoute, the backend's rule):
   // directParams on the maker's key, falParams on the fal or Krea copy and on
-  // the Krea plan. Until settings load, no key counts as set.
+  // the Krea plan. With the maker key set but a direct param still missing
+  // (Ideogram Reframe without `resolution`), that param shows unset so the
+  // person can opt in. Until settings load, no key counts as set.
   const settingsCache = useUIStore((s) => s.settingsCache);
   const nodeParams = nodeData?.params;
   const resolvedParams: ParamDefinition[] = useMemo(() => {
     if (!definition) return [];
-    const route = selectRoute(definition, nodeParams, settingsCache.loaded ? settingsCache.apiKeys : {});
-    return routeParamDefinitions(definition, route.kind);
+    return paramDefinitionsForRun(definition, nodeParams, settingsCache.loaded ? settingsCache.apiKeys : {}, { seedOptIn: false });
   }, [definition, nodeParams, settingsCache.loaded, settingsCache.apiKeys]);
 
   // Filter params by visibleWhen conditions
