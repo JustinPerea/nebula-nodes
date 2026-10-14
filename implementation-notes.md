@@ -3610,3 +3610,33 @@ hooks only.
 - **NOT CONFIRMED (no live calls):** Lite frames on Vertex; GA referenceImages acceptance; the "8s" Omni
   duration string on the Gemini API; whether Omni honors several video parts as references (Google also says
   "Referencing or reasoning across multiple videos is not supported").
+
+### Google lane: review fixes (2026-10-14)
+
+An independent review of `direct-google`. I re-checked these against Google's own pages today: Vertex Veo
+pricing (the per-"count" rows, all six Standard/Fast/Lite figures match), the Vertex Veo 3.1 model card
+(Fast and Lite output "720p, 1080p", Lite "Use reference images Not supported", GA ids "Retirement date:
+November 17, 2026 or later"), the Vertex references page (GA ids listed, Omni duration "integers between 3
+and 10, followed by "s""), the Gemini API pricing page (NB 2.1 $0.0336/$0.0504/$0.113, input $1.50; Omni
+5,792 tokens/s at $17.50 per 1M; 3.1 Flash Image $0.067/$0.101), the image-generation thinking table
+("Gemini Nano Banana 2.1 | minimal, medium, high | medium"; "Gemini 3.1 Flash Image | minimal, high |
+minimal"), the Omni guide ("Video references support a maximum of 3 clips") and the deprecations table
+(no shutdown date for `gemini-nano-banana-2.1`, `gemini-3.1-flash-image` or `gemini-omni-1.1-flash`).
+
+- **Fixed: a direct video run could differ from what the estimate priced.** Pricing reads the saved value, or
+  the definition default if there isn't one (`model_pricing.effective_params`). The Veo and Omni translators
+  only sent values that were saved on the node, so an agent-made node with no saved `duration` was priced at
+  8 s, and Google then picked its own length. Omni has no documented default, so the bill could differ from
+  the estimate. Both translators now read aspect ratio, duration, resolution and audio through
+  `_run_values` (the same `effective_params`). The test is `test_unsaved_video_settings_run_what_the_estimate_priced`.
+  Mutation-checked: with the translators reading `node.params` again, it fails.
+- **Added route cases** to `route_cases.json`, run by both the Python and TS tests: NB 2.1 direct on a Google
+  key with its param set, NB 2.1 with an explicit width staying on Krea, and the Krea plan beating Vertex
+  credentials on Veo 3.1. Mutation-checked: dropping the `blockedBy` return in `direct_block` fails the width case.
+- **Refuted / left as is.** Veo "per count" read as per second: Krea's own per-request prices divide to the same
+  per-second figures (Lite 720p: $0.12 / 4 s = $0.03), so the reading holds. Fast 4K kept on Krea: the
+  conservative choice while the model card and pricing page disagree. Omni with up to 3 reference videos matches
+  Google's cap and Krea's schema (`reference_videos` maxItems 3).
+- **Open, for Justin.** Vertex lists the GA Veo 3.1 ids as retiring "November 17, 2026 or later". The pilot
+  gated Nano Banana 2.5 on its earliest shutdown date, but an "or later" retirement is not an announced
+  shutdown, so I added no `DIRECT_RETIRES` entry. If Vertex announces a firm date, add one on both sides.

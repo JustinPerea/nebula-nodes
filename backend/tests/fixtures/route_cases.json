@@ -587,6 +587,76 @@
         "provider": "fal",
         "key": "FAL_KEY"
       }
+    },
+    {
+      "name": "Nano Banana 2.1's Krea copy runs on the Gemini API with a Google key",
+      "nodeId": "krea-image-google-nano-banana-2-1",
+      "params": {
+        "_kreaAuth": "api-token",
+        "resolution": "2K",
+        "thinking_level": "high"
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "image_urls",
+        "prompt",
+        "resolution",
+        "thinking_level"
+      ]
+    },
+    {
+      "name": "Nano Banana 2.1 with an explicit width stays on Krea (Google can't render an exact size)",
+      "nodeId": "krea-image-google-nano-banana-2-1",
+      "params": {
+        "_kreaAuth": "api-token",
+        "width": 1200
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "height",
+        "image_urls",
+        "prompt",
+        "resolution",
+        "thinking_level",
+        "width"
+      ]
+    },
+    {
+      "name": "the Krea plan keeps Veo 3.1 on Krea even with Vertex credentials",
+      "nodeId": "krea-video-google-veo-3-1",
+      "params": {
+        "_kreaAuth": "mcp",
+        "resolution": "1080p"
+      },
+      "apiKeys": {
+        "GOOGLE_VERTEX_CREDENTIALS": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
     }
   ]
 }

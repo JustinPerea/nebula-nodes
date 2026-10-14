@@ -367,6 +367,38 @@ async def test_krea_omni_references_go_as_reference_to_video():
 
 
 @pytest.mark.asyncio
+async def test_unsaved_video_settings_run_what_the_estimate_priced():
+    """A node saved without duration/resolution/audio (an agent-made node) is
+    priced at the definition's defaults, so the direct run must send those
+    defaults, not leave Google to pick its own (review fix, 2026-10-14)."""
+    from services import model_pricing
+
+    pricing = model_pricing.load_pricing()["nodes"]
+    veo = GraphNode(id="v", definitionId="krea-video-google-veo-3-1", params={})
+    mock = _VertexMock()
+    a, b, c = _vertex(mock)
+    with a, b, c:
+        await _run(veo, PROMPT, VERTEX)
+    parameters = mock.posts[0]["json"]["parameters"]
+    assert parameters == {"aspectRatio": "16:9", "durationSeconds": 8, "resolution": "720p",
+                          "generateAudio": False, "sampleCount": 1}
+    veo_estimate = model_pricing.estimate_node(
+        pricing["krea-video-google-veo-3-1"], DEFINITIONS["krea-video-google-veo-3-1"], {}, "google")
+    assert veo_estimate["high"] == pytest.approx(0.20 * parameters["durationSeconds"])
+
+    omni = GraphNode(id="o", definitionId="krea-video-google-gemini-omni-flash-1-1", params={})
+    client = _omni_client()
+    with patch("handlers.gemini_omni.httpx.AsyncClient", return_value=client):
+        await _run(omni, PROMPT, GOOGLE)
+    response_format = client.post.call_args.kwargs["json"]["response_format"]
+    assert response_format["duration"] == "8s" and response_format["aspect_ratio"] == "16:9"
+    omni_estimate = model_pricing.estimate_node(
+        pricing["krea-video-google-gemini-omni-flash-1-1"],
+        DEFINITIONS["krea-video-google-gemini-omni-flash-1-1"], {}, "google")
+    assert omni_estimate["high"] == pytest.approx(0.10136 * 8)
+
+
+@pytest.mark.asyncio
 async def test_krea_omni_refuses_a_start_frame_with_references():
     node = GraphNode(id="o", definitionId="krea-video-google-gemini-omni-flash-1-1",
                      params={"start_image": PNG_DATA_URI, "reference_images": f'["{PNG_DATA_URI}"]'})

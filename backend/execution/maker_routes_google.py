@@ -57,6 +57,17 @@ def _prompt(inputs: dict[str, PortValueDict], params: dict[str, Any]) -> PortVal
     return PortValueDict(type="Text", value=value) if value else None
 
 
+def _run_values(node: GraphNode) -> dict[str, Any]:
+    """The node's params as the run estimate reads them: saved values over the
+    definition's defaults (services/model_pricing.effective_params). A video
+    translator sends the priced settings (duration, resolution, audio) from
+    here, so a node saved without one (an agent-made node) still runs what it
+    was priced at instead of whatever Google defaults to."""
+    from services.model_pricing import effective_params
+
+    return effective_params({}, maker_routes.definition_for(node.definition_id), node.params)
+
+
 def _krea_video_result(result: dict[str, Any]) -> dict[str, Any]:
     """A direct video in a Krea node's ports: video, videos and artifacts (no Krea job)."""
     from services.output import portable_output_ref
@@ -222,17 +233,20 @@ def krea_veo_to_vertex(model: str) -> maker_routes.Translate:
     - generate_audio -> generateAudio (Lite's Krea copy has no such field and
       is priced at Google's video-only rate, so it sends false).
     - start_image -> image, end_image -> lastFrame, reference_images ->
-      referenceImages (asset): port first, else the saved param."""
+      referenceImages (asset): port first, else the saved param.
+    - aspect ratio, duration, resolution and audio unset on the node take the
+      definition's defaults (_run_values), the values the estimate priced."""
 
     def translate(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[GraphNode, dict[str, PortValueDict]]:
         params = node.params
-        out: dict[str, Any] = {"model": model, "generateAudio": params.get("generate_audio") is True}
-        if params.get("aspect_ratio"):
-            out["aspectRatio"] = str(params["aspect_ratio"])
-        if params.get("duration") not in (None, ""):
-            out["duration"] = str(params["duration"])
-        if params.get("resolution"):
-            out["resolution"] = str(params["resolution"]).lower()
+        run = _run_values(node)
+        out: dict[str, Any] = {"model": model, "generateAudio": run.get("generate_audio") is True}
+        if run.get("aspect_ratio"):
+            out["aspectRatio"] = str(run["aspect_ratio"])
+        if run.get("duration") not in (None, ""):
+            out["duration"] = str(run["duration"])
+        if run.get("resolution"):
+            out["resolution"] = str(run["resolution"]).lower()
         routed: dict[str, PortValueDict] = {}
         prompt = _prompt(inputs, params)
         if prompt:
@@ -330,17 +344,19 @@ def krea_omni_to_google(model: str) -> maker_routes.Translate:
       starting frame").
     - reference_images -> images and reference_videos -> video parts, task
       reference_to_video.
-    - aspect_ratio -> response_format.aspect_ratio; duration -> response_format.duration.
+    - aspect_ratio -> response_format.aspect_ratio; duration -> response_format.duration,
+      the definition's default (8) when unset, since the price multiplies by it.
     - A start image together with references is refused: Google only tells
       them apart by tags written into the prompt."""
 
     def translate(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[GraphNode, dict[str, PortValueDict]]:
         params = node.params
+        run = _run_values(node)
         out: dict[str, Any] = {"model": model, "delivery": "uri"}
-        if params.get("aspect_ratio"):
-            out["aspect_ratio"] = str(params["aspect_ratio"])
-        if params.get("duration") not in (None, ""):
-            out["duration"] = params["duration"]
+        if run.get("aspect_ratio"):
+            out["aspect_ratio"] = str(run["aspect_ratio"])
+        if run.get("duration") not in (None, ""):
+            out["duration"] = run["duration"]
         routed: dict[str, PortValueDict] = {}
         prompt = _prompt(inputs, params)
         if prompt:
