@@ -49,9 +49,13 @@ describe('the shipped price table', () => {
   it('prices every entry at its default settings', () => {
     // Every curated or generated entry must resolve at the node's defaults,
     // or the chip would read "unpriced" for a fresh node.
+    // A dual-route node prices each route on its own: check every route.
     const missing = Object.entries(nodes)
-      .filter(([id, entry]) => estimateNode(entry, catalog[id] ?? {}, {}, entry.provider) === null)
-      .map(([id]) => id);
+      .flatMap(([id, entry]) => (entry.routes
+        ? Object.keys(entry.routes).map((provider) => [id, entry, provider, `${id} (${provider})`] as const)
+        : [[id, entry, entry.provider, id] as const]))
+      .filter(([id, entry, provider]) => estimateNode(entry, catalog[id] ?? {}, {}, provider) === null)
+      .map(([, , , label]) => label);
     expect(missing).toEqual([]);
   });
 });
