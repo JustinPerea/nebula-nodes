@@ -84,7 +84,7 @@ Notable unused capabilities: **sound-effect generation**, **voice isolation/clea
 
 ## Retired models and per-model limits (checked 2026-10-14)
 
-Runway's changelog: "July 30th, 2026 - Gen-3 Alpha Turbo (`gen3a_turbo`) and Gen-4 Aleph (`gen4_aleph`) are no longer available on Runway Dev. Requests that use these model identifiers will fail." `veo3` is no longer in the image/text-to-video request schema. Saved graphs move `gen3a_turbo` to `gen4_turbo` (image-to-video only, so a text-only node now asks for an image), `veo3` to `veo3.1` (duration rounded up to 4, 6 or 8 s) and `gen4_aleph` to `aleph2` (`backend/services/retired_nodes.py`).
+Runway's changelog: "July 30th, 2026 - Gen-3 Alpha Turbo (`gen3a_turbo`) and Gen-4 Aleph (`gen4_aleph`) are no longer available on Runway Dev. Requests that use these model identifiers will fail." `veo3` is no longer in the image/text-to-video request schema. Saved graphs move `gen3a_turbo` to `gen4_turbo` (image-to-video only, so a text-only node now asks for an image), `veo3` to `veo3.1` (duration rounded up to 4, 6 or 8 s; a node with no saved duration ran at 5 s, so it becomes 6) and `gen4_aleph` to `aleph2` (`backend/services/retired_nodes.py`).
 
 Each model takes its own ratios and durations (from Runway's `openapi.json`). The inspector shows only those, and the handler checks them before submitting:
 

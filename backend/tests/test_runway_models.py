@@ -121,6 +121,16 @@ async def test_veo31_rejects_the_old_defaults_before_submitting():
 
 
 @pytest.mark.asyncio
+async def test_image_to_video_rejects_ratios_the_model_doesnt_take(tmp_path):
+    node = _node("runway-video", model="veo3.1", duration=8, ratio="1104:832")
+    await _rejected_video(node, {"image": _image(tmp_path), "prompt": _text("x")},
+                          "isn't available for Veo 3.1 image-to-video")
+    node = _node("runway-video", model="seedance2_fast", duration=6, ratio="1104:832")
+    await _rejected_video(node, {"image": _image(tmp_path)},
+                          "isn't available for Seedance 2.0 Fast image-to-video")
+
+
+@pytest.mark.asyncio
 async def test_veo31_text_to_video_sends_1080p_and_audio_off():
     body, url = await _video_body(
         _node("runway-video", model="veo3.1", duration=8, ratio="1920:1080", audio=False, seed=7),
@@ -343,7 +353,8 @@ async def test_uploads_over_200mb_are_refused_before_any_request(tmp_path):
     ({"model": "veo3", "duration": 5}, {"model": "veo3.1", "duration": 6}),
     ({"model": "veo3", "duration": "10"}, {"model": "veo3.1", "duration": 8}),
     ({"model": "veo3", "duration": 2}, {"model": "veo3.1", "duration": 4}),
-    ({"model": "veo3"}, {"model": "veo3.1"}),
+    ({"model": "veo3"}, {"model": "veo3.1", "duration": 6}),
+    ({"model": "veo3", "duration": ""}, {"model": "veo3.1", "duration": 6}),
     ({"model": "gen4.5", "duration": 5}, {"model": "gen4.5", "duration": 5}),
     ({}, {}),
 ])

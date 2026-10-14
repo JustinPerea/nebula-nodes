@@ -93,10 +93,11 @@ def _runway_video_params(params: dict[str, Any]) -> dict[str, Any]:
     if model == "gen3a_turbo":
         return {**params, "model": "gen4_turbo"}
     if model == "veo3":
-        migrated = {**params, "model": "veo3.1"}
-        if "duration" in migrated:
-            migrated["duration"] = _veo31_duration(migrated["duration"])
-        return migrated
+        # No saved duration means the node ran at the 5 s default, which Veo 3.1
+        # doesn't take; round that up to 6 like an explicit 5.
+        saved = params.get("duration")
+        duration = 5 if saved is None or saved == "" else saved
+        return {**params, "model": "veo3.1", "duration": _veo31_duration(duration)}
     return params
 
 

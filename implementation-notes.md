@@ -3277,3 +3277,8 @@ starting point; every ID, enum and price below was re-read from those files.
   recomputed (same as the Veo retirement commit did).
 - **Not checked live.** No Runway call was made; all of this is schema comparison plus mocked
   HTTP tests.
+
+### Review fixes (2026-10-14)
+
+- A saved `veo3` node with no `duration` key ran at the 5 s default, which Veo 3.1 rejects. The migration now treats a missing or empty duration as 5 and rounds it to 6, the same as an explicit 5 (and the same 5 to 6 intent as the Google Veo migration). The old test that expected `{"model": "veo3"}` to become `{"model": "veo3.1"}` with no duration was asserting the bug; it now expects `duration: 6`.
+- Added an image-to-video ratio rejection test (Veo 3.1 and Seedance 2.0 Fast at 1104:832). Checked it by disabling the `i2v_ratios` guard: the new test fails, the rest pass.
