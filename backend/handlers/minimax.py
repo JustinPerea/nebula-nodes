@@ -55,12 +55,19 @@ def _rejected_key(response: httpx.Response) -> bool:
 async def submit_task(
     client: httpx.AsyncClient, path: str, headers: dict[str, str], body: dict[str, Any],
 ) -> tuple[str, httpx.Response]:
-    """POST a generation task on the key's region: (base URL that took it, response)."""
+    """POST a generation task on the key's region: (base URL that took it, response).
+
+    The next host is tried when this one refused the key, or answered 404
+    because it doesn't serve the path. MiniMax documents H3's
+    /v2/video_generation on api.minimax.io and, for Mainland, on
+    api.minimax.cn (platform.minimax.cn/docs/api-reference/
+    video-generation-v2-create.md, read 2026-10-14), not on api.minimaxi.com.
+    Neither answer creates a task, so neither is billed."""
     response: httpx.Response | None = None
     for base in MINIMAX_API_BASES:
         _log(f"submitting to {base}{path}")
         response = await client.post(f"{base}{path}", headers=headers, json=body)
-        if not _rejected_key(response):
+        if not _rejected_key(response) and response.status_code != 404:
             return base, response
     assert response is not None
     return MINIMAX_API_BASES[-1], response

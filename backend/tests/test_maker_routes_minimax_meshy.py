@@ -294,6 +294,22 @@ async def test_h3_rejected_on_both_regions_tries_global_and_explains():
 
 
 @pytest.mark.asyncio
+async def test_h3_runs_on_global_when_the_mainland_host_has_no_v2_route():
+    # MiniMax documents /v2 on api.minimax.io and api.minimax.cn, not on api.minimaxi.com: a 404 there
+    # creates no task, so a Global key must still reach Global instead of failing on Mainland's 404.
+    node = GraphNode(id="h", definitionId="krea-video-minimax-hailuo-3", params=_defaults("krea-video-minimax-hailuo-3"))
+    with respx.mock(assert_all_called=True) as router, \
+            patch("handlers.minimax_v2.save_video_from_url", _fake_video):
+        mainland = router.post(f"{MAINLAND}/v2/video_generation").mock(return_value=httpx.Response(404, text="404 page not found"))
+        world = router.post(f"{GLOBAL}/v2/video_generation").mock(return_value=httpx.Response(200, json={"task_id": "g"}))
+        polled = router.get(f"{GLOBAL}/v2/query/video_generation/g").mock(return_value=httpx.Response(
+            200, json={"task": {"status": "succeeded", "content": {"url": "https://cdn.example.com/h3.mp4"}}}))
+        result = await _run(node, PROMPT, MINIMAX)
+    assert mainland.call_count == world.call_count == polled.call_count == 1
+    assert result["video"]["type"] == "Video"
+
+
+@pytest.mark.asyncio
 async def test_h3_cancel_asks_minimax_to_drop_a_queued_task():
     node = GraphNode(id="h", definitionId="krea-video-minimax-hailuo-3", params=_defaults("krea-video-minimax-hailuo-3"))
     cancels = []

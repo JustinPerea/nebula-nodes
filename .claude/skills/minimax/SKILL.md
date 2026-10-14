@@ -15,7 +15,7 @@ description: MiniMax (Hailuo) video generation in Nebula — text-to-video, imag
 ## Universal rules (all MiniMax nodes)
 
 1. **Auth + Settings.** Header `Authorization: Bearer <MINIMAX_API_KEY>` plus `Content-Type: application/json`. Enter the key in Nebula **Settings → MiniMax** and save; it is persisted under `apiKeys.MINIMAX_API_KEY` in project-root `settings.json` and takes effect without a restart. Missing key → the node errors with `MINIMAX_API_KEY is required`.
-2. **Base URL.** Mainland `https://api.minimaxi.com` first (`MINIMAX_API_BASE`), then Global `https://api.minimax.io` when Mainland rejects the key (MiniMax keys only work on their own region's host). Polling and retrieval use the host that accepted the task.
+2. **Base URL.** Mainland `https://api.minimaxi.com` first (`MINIMAX_API_BASE`), then Global `https://api.minimax.io` when Mainland rejects the key or answers 404 for the path (MiniMax keys only work on their own region's host). Polling and retrieval use the host that accepted the task.
 3. **Execution pattern: async-poll (3 steps).** All three nodes are `executionPattern: "async-poll"`:
    - **Submit** `POST /v1/video_generation` → returns `task_id`. Accepts HTTP `200/201/202`; anything else raises `MiniMax submit failed`.
    - **Poll** `GET /v1/query/video_generation?task_id=<id>` every **5 s**, up to **300 polls (~25 min)**. Poll must return HTTP `200`. The JSON `status` field drives the loop.
@@ -45,7 +45,9 @@ deleted (MiniMax: "no charge").
 **Region.** MiniMax keys are tied to a region (Global `api.minimax.io`,
 Mainland `api.minimaxi.com`). The handler tries Mainland first (as Nebula
 always has), and if MiniMax rejects the key itself (HTTP 401, or codes
-1004 / 2049) it tries Global, then polls wherever the task was accepted.
+1004 / 2049), or answers 404 for the path (MiniMax documents H3's /v2 on
+`api.minimax.io` and Mainland's `api.minimax.cn`, not `api.minimaxi.com`), it
+tries Global, then polls wherever the task was accepted. Neither answer creates a task.
 Prices shown are MiniMax Global's USD list prices.
 
 ## Pick the right node
