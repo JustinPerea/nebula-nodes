@@ -160,6 +160,8 @@ export interface ModelNodeDefinition {
    *  - `rejectsWhen`: combinations it doesn't take ("(set)" = set or wired,
    *    "(unset)" = neither);
    *  - `size`: the maker's documented output size limits.
+   *  `snap` isn't a rule: a maker that takes a fixed size list gets the
+   *  nearest entry on its route (lib/makerSizes.ts).
    *  A rule never blocks a param's default. `setup: 'fallback'` points setup
    *  at the copy's key when no key is set (BytePlus, which doesn't serve the
    *  United States and needs each model activated, is not the key to suggest
@@ -170,6 +172,7 @@ export interface ModelNodeDefinition {
     rejects?: Record<string, ReadonlyArray<string | number | boolean>>;
     rejectsWhen?: DirectRejectsWhenRule[];
     size?: DirectSizeLimits;
+    snap?: DirectSizeSnap;
   };
   docUrl?: string;
   /** A local (utility) node that still calls a provider. `utility` only means
@@ -196,6 +199,22 @@ export interface DirectAcceptRule {
 export interface DirectRejectsWhenRule {
   match: Readonly<Record<string, string | number | boolean>>;
   label: string;
+}
+
+/** A maker that takes a fixed size list on its direct route (backend
+ *  services/maker_sizes.py SNAPS, copied here by scripts/sync-krea-catalog.py).
+ *  `kind` 'size': the choices are exact pixel sizes (Ideogram 3, Runway Gen-4
+ *  Image); 'shape': aspect ratios, and the maker picks the pixels (Ideogram
+ *  2a). `sep` is how the maker spells a choice ("1312x736", "1360:768"), and
+ *  `field` the request field it goes in. */
+export interface DirectSizeSnap {
+  widthParam: string;
+  heightParam: string;
+  maker: string;
+  field: string;
+  kind: 'size' | 'shape';
+  sep: string;
+  choices: string[];
 }
 
 /** A maker's documented output size rules for its direct route
@@ -471,6 +490,10 @@ export interface NodeData {
   batchOutputs?: Array<Record<string, PortValue>>;
   batchVariants?: VariantScope[];
   batchRunId?: string;
+  /** What the last run said beside its outputs (the executed event's
+   *  notes), kept with the results like `outputs`, never part of the recipe; e.g. "Ideogram made 1312x736, the closest it could get
+   *  to your 1000x560." */
+  runNotes?: string[];
   outputFreshness?: PaperOutputFreshness;
   error?: string;
   /** Friendly classification of `error` (see backend error_classifier). `error`

@@ -38,7 +38,9 @@ description: Runway API — Gen-4.5 / Gen-4 Turbo, Veo 3.1 pass-through, Seedanc
 
 Krea copies on the Runway key (2026-10-14): `krea-image-runway-gen-4-image` (gen4_image),
 `krea-video-runway-gen-4-5` (gen4.5) and `krea-enhance-runway-ruby` (ruby) run on Runway when
-`RUNWAY_API_KEY` is saved, unless the node uses the Krea plan. See `docs/api-guides/runway.md`.
+`RUNWAY_API_KEY` is saved, unless the node uses the Krea plan. On that route Gen-4 Image's
+width/height round to the nearest of gen4_image's 16 sizes (`sizeNote` in `describe_node`;
+run results carry `notes` with the size made). See `docs/api-guides/runway.md`.
 
 ## Detailed references
 

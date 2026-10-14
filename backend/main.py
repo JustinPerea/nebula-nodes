@@ -83,7 +83,7 @@ from services.settings import (
 )
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
-from services import agent_connect, agent_spend, backend_address, app_tokens, model_pricing, node_readiness, node_route, output_preview
+from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services.cli_graph import CLIGraph
 from services.retired_nodes import migrate_node, migrate_param_update, migrate_params, retired_message
 from services.project_store import (
@@ -3454,6 +3454,11 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         result["fallback"] = fallback
         result["paramsDirect"] = shown("directParams")
         result["paramsFallback"] = shown("falParams")
+        size_note = maker_sizes.rule_note(definition)
+        if size_note:
+            # A maker that takes a fixed size list (Ideogram 3, Ideogram 2a,
+            # Runway Gen-4 Image): width/height round on its route.
+            result["sizeNote"] = size_note
     if access is None:
         result["missing"] = node_readiness.missing(definition, krea_signed_in, definitions)
     options = node_readiness.detail(definition, keys, krea_signed_in, definitions)
@@ -8820,6 +8825,8 @@ async def _execute_cli_run(
             await _emit_and_sync(event)
         elif isinstance(event, ExecutedEvent):
             results[event.node_id] = event.outputs
+            if event.notes:
+                outcome.setdefault("notes", {})[event.node_id] = list(event.notes)
             # Saved as each node finishes, so a stopped run keeps what it made.
             if event.node_id in cli_graph.nodes:
                 _sync_outputs_to_cli_graph(event.node_id, event.outputs)
@@ -8878,6 +8885,8 @@ async def _execute_cli_run(
     return {
         "results": results,
         "errors": errors,
+        # Per node, what each run said beside its outputs (the size a maker made).
+        **({"notes": outcome["notes"]} if outcome.get("notes") else {}),
         "duration": round(duration, 2),
         "nodesExecuted": len(results) + len(errors),
     }
@@ -8917,6 +8926,7 @@ async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: 
     if task.cancelled():
         made = entry["outcome"]
         return {**head, "status": "cancelled", "results": made["results"], "errors": made["errors"],
+                **({"notes": made["notes"]} if made.get("notes") else {}),
                 "nodesExecuted": len(made["results"]) + len(made["errors"])}
     if report_failure and task.exception() is not None:
         return {**head, "status": "failed", "error": str(task.exception())}
@@ -9798,6 +9808,9 @@ async def output_meta(rel: str):
         "params": params if isinstance(params, dict) else {},
         "output_path": output_path,
         "timestamp": record.get("timestamp"),
+        # What the run said about this output (models/events.py add_run_note),
+        # e.g. the size a maker made when it couldn't make the one asked for.
+        "notes": [note for note in record.get("notes") or [] if isinstance(note, str)],
     }
 
 

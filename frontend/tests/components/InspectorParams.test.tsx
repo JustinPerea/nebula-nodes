@@ -37,6 +37,46 @@ function currentParams() {
   return useGraphStore.getState().nodes[0].data.params;
 }
 
+describe('Inspector maker size note', () => {
+  const ideogramKeys = { IDEOGRAM_API_KEY: 'fixture-only', KREA_API_TOKEN: 'fixture-only' };
+  function withKeys(apiKeys: Record<string, string>) {
+    useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true, apiKeys } });
+  }
+
+  it('says what Ideogram makes when the maker route runs and the size changes', () => {
+    withKeys(ideogramKeys);
+    renderModel('krea-image-ideogram-ideogram-3', { _kreaAuth: 'api-token', width: 1000, height: 560 });
+    expect(screen.getByText('Ideogram makes 1312x736, the closest it can get to your 1000x560.')).toBeVisible();
+  });
+
+  it.each([
+    // The maker can make it: nothing to say.
+    [ideogramKeys, { _kreaAuth: 'api-token', width: 1280, height: 768 }],
+    // The Krea copy runs it: how Krea sizes it isn't known, so nothing is claimed.
+    [{ KREA_API_TOKEN: 'fixture-only' }, { _kreaAuth: 'api-token', width: 1000, height: 560 }],
+    // The Krea plan is the person's choice, whatever keys are set.
+    [ideogramKeys, { _kreaAuth: 'mcp', width: 1000, height: 560 }],
+  ])('shows no size note with %o and %o', (apiKeys, params) => {
+    withKeys(apiKeys);
+    renderModel('krea-image-ideogram-ideogram-3', params);
+    expect(screen.queryByText(/closest it can get/)).toBeNull();
+  });
+
+  it('shows what the last run said', () => {
+    withKeys(ideogramKeys);
+    useGraphStore.setState({
+      nodes: [{ id: 'test-krea', position: { x: 0, y: 0 },
+        data: { definitionId: 'krea-image-ideogram-ideogram-3', label: 'Krea test', params: { width: 1000, height: 560 },
+          outputs: {}, state: 'complete', runNotes: ['Ideogram made 1312x736, the closest it could get to your 1000x560.'] } }],
+      edges: [],
+    });
+    useUIStore.setState({ selectedNodeId: 'test-krea' });
+    render(<Inspector embedded />);
+    expect(screen.getByText('Last run')).toBeVisible();
+    expect(screen.getByText('Ideogram made 1312x736, the closest it could get to your 1000x560.')).toBeVisible();
+  });
+});
+
 describe('Canvas inspector enum controls', () => {
   it('uses the default Seedream model for capability visibility and hides 5 Lite seed', () => {
     renderModel('seedream-4-5');

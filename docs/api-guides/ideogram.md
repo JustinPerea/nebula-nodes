@@ -84,8 +84,8 @@ key, your Krea API token runs it.
 | Krea node | Ideogram endpoint | What changes on Ideogram |
 |---|---|---|
 | `krea-image-ideogram-ideogram-4-5-precise` | POST `/v2/image/precise-edit/ideogram-4-5` | Nothing: image, mask, up to 4 references (3 with a mask), quality, seed. US $0.008 / $0.03 / $0.06 / $0.22 per image by quality. |
-| `krea-image-ideogram-ideogram-3` | POST `/v1/ideogram-v3/generate` | `rendering_speed` DEFAULT; width/height snap to the nearest Ideogram aspect ratio; one character reference. Krea `style_images` (each with a strength) keep the run on Krea. US $0.06, or $0.15 with a character reference. |
-| `krea-image-ideogram-ideogram-2-turbo` | POST `/v2/image/generate/ideogram-2a` (JSON, `rendering_speed: turbo`) | width/height snap to the nearest aspect ratio. US $0.025 per image. |
+| `krea-image-ideogram-ideogram-3` | POST `/v1/ideogram-v3/generate` | `rendering_speed` DEFAULT; width/height go as `resolution`, the nearest of Ideogram 3's 69 sizes (`backend/services/maker_sizes.py`), so 1024x1024 or 1280x768 come out exact; `aspect_ratio` is never sent with it. The Inspector notes a size that changes, and the run's notes give the size Ideogram made. One character reference. Krea `style_images` (each with a strength) keep the run on Krea. US $0.06, or $0.15 with a character reference. |
+| `krea-image-ideogram-ideogram-2-turbo` | POST `/v2/image/generate/ideogram-2a` (JSON, `rendering_speed: turbo`) | width/height go as the nearest of the 15 aspect ratios; 2a takes a shape, not a size, and picks the pixels. The Inspector notes a shape that changes, and the run's notes give the size Ideogram made. US $0.025 per image. |
 
 Not routed: `krea-image-ideogram-ideogram-4-5`. Ideogram's 4.5 generate page
 says an exact size without source images "must be one of the supported 1K/2K

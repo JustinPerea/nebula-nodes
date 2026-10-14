@@ -107,8 +107,11 @@ Same rule, other makers (`execution/maker_routes_ideogram_runway.py`):
 `-ideogram-2-turbo` (`/v2/image/generate/ideogram-2a`, turbo) on
 `IDEOGRAM_API_KEY`; `krea-image-runway-gen-4-image` (`gen4_image`),
 `krea-video-runway-gen-4-5` (`gen4.5`) and `krea-enhance-runway-ruby` (`ruby`,
-`/v1/video_to_hdr`) on `RUNWAY_API_KEY`. width/height snap to the maker's
-nearest shape. Ideogram 3 `style_images` (per-image strength) keep a run on
+`/v1/video_to_hdr`) on `RUNWAY_API_KEY`. On the maker route width/height round
+to the nearest size the maker takes (`backend/services/maker_sizes.py`: Ideogram
+3's 69 resolutions, Ideogram 2a's 15 ratios, gen4_image's 16 sizes);
+`describe_node` says so in `sizeNote`, and run results carry `notes` with the
+size made. On Krea they are sent as given. Ideogram 3 `style_images` (per-image strength) keep a run on
 Krea, saved or wired. Gen-4.5 stays on Krea at Krea's 672:1584 (not in Runway's
 gen4.5 request schema) and for text-to-video (no start image, saved or wired) at
 any ratio but 1280:720 / 720:1280 (`directRoute.rejects` and `rejectsWhen` with

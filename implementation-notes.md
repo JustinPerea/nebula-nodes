@@ -4582,3 +4582,47 @@ Independent pass over `git diff direct-maker-routes...HEAD`. What was checked, w
   Gen-4.5 672:1584 schema-vs-guide conflict; no live BytePlus smoke test (US, region, activation); Veo 3.1 GA
   retire dates; NB 2.1 costs more on Google than on Krea; OpenAI 2.5 price rows; MiniMax Mainland host; Cinema
   `_seedOverride` variations still need FAL_KEY with only a BytePlus key. No live provider calls were made.
+
+## Round 2: maker size notes (2026-10-14)
+
+Two approved changes: Ideogram 3's maker route sends the nearest exact `resolution`, and no maker route
+changes a requested size without saying so.
+
+**Audit: which maker routes change a size or shape** (every `backend/execution/maker_routes*.py` translator)
+
+| Route | Before | Now |
+| --- | --- | --- |
+| Krea Ideogram 3 (`krea-ideogram-3`) | width/height -> nearest of 15 `aspect_ratio`s | nearest of Ideogram 3's 69 `resolution`s, sent alone (never with aspect_ratio); note when it differs |
+| Krea Ideogram 2a Turbo (`krea-ideogram-2a`) | nearest aspect ratio, silent | same ratio rule; note when the shape differs; run note gives the pixels Ideogram picked |
+| Krea Runway Gen-4 Image (`krea-runway-gen4-image`) | nearest gen4_image ratio, silent | same rule; note when the size differs; run note gives the size made |
+| All others | | no snapping found: OpenAI (fal presets map exactly or stay on fal; Krea aspect x resolution is a table, the ratio kept exactly), xAI image/video (values pass as is), Google (Nano Banana width/height keep runs on Krea; Veo/Omni pass ratios), BytePlus Seedream (exact WxH or stays on the copy; fal shaped presets keep the shape), Seedance and MiniMax (ratios pass or the run stays on the copy), Runway Gen-4.5 (ratio checked, never snapped), Ideogram native nodes (take Ideogram's own `resolution`) |
+
+**Decisions**
+
+- One list place per side. `backend/services/maker_sizes.py` (stdlib) owns the three lists and the rule;
+  `handlers/ideogram.py` and `handlers/runway.py` now import their lists from it. `sync-krea-catalog.py`
+  copies each into the node's `directRoute.snap`, so the frontend (`frontend/src/lib/makerSizes.ts`) reads the
+  same values from the catalog. `backend/tests/fixtures/maker_size_cases.json` is read by both test suites.
+- The rule is the old one (closest shape, then closest pixel count), with an explicit tolerance loop instead of
+  `round(..., 9)` so Python and TS tie-break the same way. An exact entry always wins, so 1024x1024 and 1280x768
+  reach Ideogram 3 unchanged.
+- Ideogram 2a takes a shape, not a size, and its docs give no pixels per ratio. The Inspector notes only a
+  changed shape (1600x900 -> 16:9 says nothing before the run); the run note then reports the pixels it made.
+- After a run: the repo had no per-run note field. The closest existing mechanisms were the executed event's
+  metadata beside outputs (`variant`, via a ContextVar) and the run manifest (`/api/outputs/<rel>/meta`). Both
+  were extended rather than adding a parallel channel: `models/events.py` `execution_notes` + `add_run_note`,
+  `ExecutedEvent.notes`, cache entries keep notes for replays, manifest records and `/meta` carry `notes`,
+  CLI/MCP run results carry `notes`, and the Inspector shows "Last run" notes (`NodeData.runNotes`, saved
+  with results, cleared when the next run starts). Output ports were not used: an undeclared output handle
+  fails graph import.
+- The made size is read from the saved file with Pillow (truth for all three makers; Runway returns no size).
+  An unreadable file records nothing rather than a guess.
+- Krea/fal copy runs never get a note: how the copy sizes isn't known.
+- Agents: `describe_node` adds `sizeNote`; `nebula info` prints a SIZE line.
+
+**Left open**
+
+- Ideogram 2a at an exact shape shows no pre-run note even though Ideogram picks the pixels (2048x2048 -> 1x1).
+  Showing one would add noise to the default 1024x1024; the run note covers it.
+- Gen-4.5's fractional duration is still rounded to whole seconds on the Runway route (a duration, not a size;
+  outside this change).

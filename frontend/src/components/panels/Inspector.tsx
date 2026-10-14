@@ -12,7 +12,8 @@ import { fetchOpenRouterModels, fetchNousModels, fetchQuiverModels, getSettings,
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from './MaskPainterModal';
-import { paramDefinitionsForRun, withWiredBlockers } from '../../lib/directRoute';
+import { paramDefinitionsForRun, selectRoute, withWiredBlockers } from '../../lib/directRoute';
+import { definitionSnap, sizeNote } from '../../lib/makerSizes';
 import { nodeWiredPorts } from '../../lib/runScope';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
@@ -235,6 +236,17 @@ export function Inspector({ embedded = false }: InspectorProps) {
     if (!definition) return [];
     const routed = withWiredBlockers(definition, nodeParams, wiredKey ? wiredKey.split('\n') : []);
     return paramDefinitionsForRun(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {}, { seedOptIn: false });
+  }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
+
+  // A maker that takes a fixed size list (Ideogram 3, Ideogram 2a, Runway
+  // Gen-4 Image) gets the nearest one on its route (lib/makerSizes.ts, the
+  // backend's rule). Say so under the size when that isn't what was asked;
+  // on the Krea copy the size is sent as given, so nothing is said.
+  const makerSizeNote = useMemo(() => {
+    if (!definition?.directRoute?.snap || !settingsCache.loaded) return null;
+    const routed = withWiredBlockers(definition, nodeParams, wiredKey ? wiredKey.split('\n') : []);
+    if (selectRoute(definition, routed, settingsCache.apiKeys).kind !== 'direct') return null;
+    return sizeNote(definitionSnap(definition, nodeParams));
   }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
 
   // Filter params by visibleWhen conditions
@@ -875,6 +887,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
         {'disabledReason' in param && param.disabledReason && (
           <div className="inspector__notice" role="note">{param.disabledReason}</div>
         )}
+        {source === 'definition' && makerSizeNote && param.key === definition?.directRoute?.snap?.heightParam && (
+          <div className="inspector__notice" role="note" data-inspector-size-note="true">{makerSizeNote}</div>
+        )}
         {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && (
           <button
             type="button"
@@ -1015,6 +1030,18 @@ export function Inspector({ embedded = false }: InspectorProps) {
         )}
 
         {visibleParams.map((param) => renderParamSection(param, 'definition'))}
+
+        {/* What the last run said beside its outputs (the executed event's
+            notes), e.g. the size a maker made when it couldn't make the one
+            asked for. */}
+        {nodeData.runNotes && nodeData.runNotes.length > 0 && (
+          <div className="inspector__section" data-inspector-run-notes="true">
+            <div className="inspector__label">Last run</div>
+            {nodeData.runNotes.map((note) => (
+              <div key={note} className="inspector__notice" role="note">{note}</div>
+            ))}
+          </div>
+        )}
 
         {/* Mask Painter: paint the mask over the connected upstream image. The
             painted data rides params._maskData (white = painted; polarity is

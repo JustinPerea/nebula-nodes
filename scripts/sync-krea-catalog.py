@@ -191,8 +191,8 @@ IDEOGRAM_RUNWAY_DIRECT_ROUTES = {
         "pricing": {"provider": "runway", "per": "image", "priceParams": [],
                     "rows": [{"match": {}, "price": [0.05, 0.08]}],
                     "notes": "Runway API price for runs on the person's RUNWAY_API_KEY (gen4_image on "
-                             "POST /v1/text_to_image). width/height snap to the nearest gen4_image ratio; Runway "
-                             "names only 720p and 1080p tiers, so the price is the range between them.",
+                             "POST /v1/text_to_image). width/height round to the nearest gen4_image size, and the "
+                             "Inspector says when that changes them; Runway names only 720p and 1080p tiers, so the price is the range between them.",
                     "sources": [{"url": RUNWAY_PRICING_URL,
                                  "quote": "`gen4_image` | 5 credits per 720p image, or 8 credits per 1080p image"},
                                 _RUNWAY_CREDIT],
@@ -852,6 +852,29 @@ def _node_route():
     return module
 
 
+def _maker_sizes():
+    """backend/services/maker_sizes.py (stdlib only): the size lists makers take."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("maker_sizes", ROOT / "backend/services/maker_sizes.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _size_snap(endpoint, route, params):
+    """``directRoute.snap`` for a maker that takes a fixed size list
+    (maker_sizes.SNAPS, by translation): the list and how it is spelled, so
+    the frontend snaps width/height to the same values the backend sends."""
+    spec = _maker_sizes().SNAPS.get(route["translation"])
+    if spec is None:
+        return {}
+    keys = {param["key"] for param in params}
+    if not {"width", "height"} <= keys or {"width", "height"} & set(route["kreaOnly"]):
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: a size list needs shared width/height fields")
+    return {"snap": {"widthParam": "width", "heightParam": "height", **spec, "choices": list(spec["choices"])}}
+
+
 def _route_rules(endpoint, route, params):
     """The overlay's directRoute rules (backend services/node_route.py
     direct_block reads them), checked: each names Krea fields, and none
@@ -916,6 +939,7 @@ def direct_route_definition(endpoint, params):
         "falParams": [param for param in params if param["key"] in route["kreaOnly"]],
         "directParams": list(route["directParams"]),
         "directRoute": {"translation": route["translation"], "model": route["model"], **rules,
+                        **_size_snap(endpoint, route, params),
                         **({"setup": route["directSetup"]} if route.get("directSetup") else {})},
     }
 

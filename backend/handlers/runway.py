@@ -7,6 +7,7 @@ from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent
 from execution.async_poll_runner import AsyncPollConfig, async_poll_execute
 from services.file_access import require_allowed_path
+from services.maker_sizes import RUNWAY_GEN4_IMAGE_RATIOS
 from services.output import get_run_dir, save_video_from_url, save_base64_image, image_to_data_uri
 
 import base64
@@ -100,10 +101,9 @@ RUNWAY_VIDEO_MODELS: dict[str, dict[str, Any]] = {
 # Models that support text-to-video (no image required)
 TEXT_TO_VIDEO_MODELS = {m for m, spec in RUNWAY_VIDEO_MODELS.items() if spec["t2v_ratios"]}
 
-_GEN4_IMAGE_RATIOS = (
-    "1024:1024", "1080:1080", "1168:880", "1360:768", "1440:1080", "1080:1440", "1808:768", "1920:1080",
-    "1080:1920", "2112:912", "1280:720", "720:1280", "720:720", "960:720", "720:960", "1680:720",
-)
+# gen4_image's sizes live in services/maker_sizes.py (the Krea copy's maker
+# route snaps to the same list).
+_GEN4_IMAGE_RATIOS = RUNWAY_GEN4_IMAGE_RATIOS
 _GEMINI_FLASH_RATIOS = (
     "1344:768", "768:1344", "1024:1024", "1184:864", "864:1184", "1536:672", "832:1248", "1248:832",
     "896:1152", "1152:896",

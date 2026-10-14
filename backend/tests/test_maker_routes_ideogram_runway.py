@@ -159,7 +159,9 @@ async def test_ideogram_3_runs_on_v1_generate_with_its_character_reference():
                    {**IDEOGRAM, **KREA})
     [call] = ideogram.calls
     assert call["path"] == "/v1/ideogram-v3/generate"
-    assert call["fields"] == {"prompt": "a hero", "aspect_ratio": "16x9", "rendering_speed": "DEFAULT",
+    # Only `resolution` (Ideogram takes it or aspect_ratio): the nearest of
+    # Ideogram 3's sizes to 1920x1080.
+    assert call["fields"] == {"prompt": "a hero", "resolution": "1312x736", "rendering_speed": "DEFAULT",
                               "num_images": 1, "seed": 1337}
     assert [field for field, _ in call["files"]] == ["character_reference_images"]
 
@@ -229,17 +231,88 @@ async def test_ideogram_2a_request_reaches_the_documented_endpoint():
     assert result["image"]["value"].endswith(".png")
 
 
-def test_sizes_snap_to_the_nearest_maker_shape():
-    assert ir.nearest_ratio(1024, 1024, ir.IDEOGRAM_ASPECT_RATIOS, "x") == "1x1"
-    assert ir.nearest_ratio(3000, 1000, ir.IDEOGRAM_ASPECT_RATIOS, "x") == "3x1"
-    assert ir.nearest_ratio(1000, 1250, ir.IDEOGRAM_ASPECT_RATIOS, "x") == "4x5"
-    from handlers.runway import RUNWAY_IMAGE_MODELS
+def test_common_sizes_reach_ideogram_3_exactly():
+    for width, height in ((1024, 1024), (1280, 768), (768, 1344), (1536, 640)):
+        fields, _ = ir.ideogram_3_request({"prompt": "p", "width": width, "height": height})
+        assert fields["resolution"] == f"{width}x{height}"
+        assert "aspect_ratio" not in fields
+    # Krea's defaults (1024 x 1024) when the recipe sets no size.
+    assert ir.ideogram_3_request({"prompt": "p"})[0]["resolution"] == "1024x1024"
 
-    ratios = RUNWAY_IMAGE_MODELS["gen4_image"]["ratios"]
-    # Same shape, nearest pixel count: 1024x1024 is 1024:1024, not 720:720 or 1080:1080.
-    assert ir.nearest_ratio(1024, 1024, ratios, ":") == "1024:1024"
-    assert ir.nearest_ratio(1920, 1080, ratios, ":") == "1920:1080"
-    assert ir.nearest_ratio(1280, 720, ratios, ":") == "1280:720"
+
+def _png(width: int, height: int) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+class _SizedIdeogram(_Ideogram):
+    """Saves an image of a given size, as Ideogram would return it."""
+
+    def __init__(self, width: int, height: int):
+        super().__init__()
+        self.size = (width, height)
+
+    async def save(self, result):
+        return {"image": {"type": "Image", "value": _output_file("sized.png", _png(*self.size))}}
+
+
+async def _noted_run(node, inputs, keys):
+    from models.events import execution_notes
+
+    notes: list[str] = []
+    token = execution_notes.set(notes)
+    try:
+        result = await _run(node, inputs, keys)
+    finally:
+        execution_notes.reset(token)
+    return result, notes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("width", "height", "made", "note"), [
+    (1000, 560, (1312, 736), "Ideogram made 1312x736, the closest it could get to your 1000x560."),
+    (1280, 768, (1280, 768), None),
+])
+async def test_ideogram_3_notes_the_size_it_made(width, height, made, note):
+    ideogram = _SizedIdeogram(*made)
+    node = GraphNode(id="n", definitionId="krea-image-ideogram-ideogram-3",
+                     params={"prompt": "p", "width": width, "height": height})
+    a, b, c = ideogram.patches()
+    with a, b, c:
+        _, notes = await _noted_run(node, {}, IDEOGRAM)
+    assert ideogram.calls[0]["fields"]["resolution"] == f"{made[0]}x{made[1]}"
+    assert notes == ([note] if note else [])
+
+
+@pytest.mark.asyncio
+async def test_ideogram_2a_notes_the_size_it_picked_for_a_shape():
+    # 1920x1080 is exactly 16:9, so the Inspector says nothing before the run;
+    # Ideogram picks the pixels, and the run says what it made.
+    ideogram = _SizedIdeogram(1312, 736)
+    node = GraphNode(id="n", definitionId="krea-image-ideogram-ideogram-2-turbo",
+                     params={"prompt": "p", "width": 1920, "height": 1080})
+    a, b, c = ideogram.patches()
+    with a, b, c:
+        _, notes = await _noted_run(node, {}, IDEOGRAM)
+    assert ideogram.calls[0]["json"]["aspect_ratio"] == "16x9"
+    assert notes == ["Ideogram made 1312x736 (its 16:9 size), the closest it could get to your 1920x1080."]
+
+
+@pytest.mark.asyncio
+async def test_the_krea_copy_says_nothing_about_size():
+    """On Krea the size is sent as given; how Krea sizes it isn't known, so no note."""
+    gateway = _gateway()
+    node = GraphNode(id="n", definitionId="krea-image-ideogram-ideogram-3",
+                     params={"_kreaAuth": "api-token", "prompt": "p", "width": 1000, "height": 560})
+    with patch("handlers.krea_gateway.handle_krea_gateway", gateway):
+        _, notes = await _noted_run(node, {}, KREA)
+    assert gateway.await_args.args[0].params["width"] == 1000
+    assert notes == []
 
 
 def test_seeds_become_whole_numbers_in_range():
@@ -271,7 +344,9 @@ async def test_gen4_image_keeps_krea_reference_tags():
         "reference_images": refs})
     with patch("execution.async_poll_runner.async_poll_execute", poll), \
             patch("services.output.materialize_media_value", materialize):
-        result = await _run(node, {}, {**RUNWAY, **KREA})
+        result, notes = await _noted_run(node, {}, {**RUNWAY, **KREA})
+    # The saved test image is 1x1, so the run says what Runway made.
+    assert notes == ["Runway made 1x1, the closest it could get to your 1920x1080."]
     assert submitted["url"] == "https://api.dev.runwayml.com/v1/text_to_image"
     assert submitted["body"] == {"model": "gen4_image", "promptText": "@hero in the rain", "ratio": "1920:1080",
                                  "seed": 1337, "referenceImages": [{"uri": "https://example.com/hero.png",

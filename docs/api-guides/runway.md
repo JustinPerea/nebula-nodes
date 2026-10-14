@@ -40,7 +40,7 @@ Three Krea copies of Runway's models also run on Runway's own API when
 
 | Krea node | Runway model and endpoint | Notes |
 |---|---|---|
-| `krea-image-runway-gen-4-image` | `gen4_image`, POST `/v1/text_to_image` | width/height snap to the nearest gen4_image ratio; reference images keep their tags. 5 credits (720p) or 8 credits (1080p) per image, shown as $0.05-0.08. |
+| `krea-image-runway-gen-4-image` | `gen4_image`, POST `/v1/text_to_image` | width/height go as the nearest of gen4_image's 16 output sizes (`backend/services/maker_sizes.py`); the Inspector notes a size that changes, and the run's notes give the size Runway made; reference images keep their tags. 5 credits (720p) or 8 credits (1080p) per image, shown as $0.05-0.08. |
 | `krea-video-runway-gen-4-5` | `gen4.5`, `/v1/image_to_video` or `/v1/text_to_video` | Duration rounds to whole seconds (Runway takes 2-10). Krea's 672:1584 isn't in Runway's gen4.5 request schema, and text-to-video takes only 1280:720 or 720:1280; both runs stay on Krea (route rules), and the handler still refuses them before submit if called directly. 12 credits per second. |
 | `krea-enhance-runway-ruby` | `ruby`, POST `/v1/video_to_hdr` | hdr10 / hlg (.mp4) or hdr_prores (.mov, `proresProfile` only there). Local videos over the 5MB data URI cap go up through `/v1/uploads`. Unpriced: 20 credits per second, 40 above 4 MP, and the source's length and size are only known at run time. |
 

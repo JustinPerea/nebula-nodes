@@ -30,6 +30,7 @@ from typing import Any, Callable, Mapping
 from urllib.parse import urlsplit
 
 from models.graph import GraphNode, PortValueDict
+from services import maker_sizes
 
 # -- shared -------------------------------------------------------------------
 
@@ -95,19 +96,29 @@ def _size(body: Mapping[str, Any]) -> tuple[float, float]:
     return width, height
 
 
-def nearest_ratio(width: float, height: float, choices: tuple[str, ...], sep: str) -> str:
-    """The choice closest in shape to width x height, then closest in pixel count.
+def size_snap(translation: str, body: Mapping[str, Any]) -> "maker_sizes.SizeSnap":
+    """The maker's nearest size for Krea's width/height (services/maker_sizes.py,
+    the rule the Inspector shows before the run)."""
+    return maker_sizes.snap(maker_sizes.SNAPS[translation], *_size(body))
 
-    The makers take a fixed list of shapes, not free sizes, so Krea (which
-    resells these same models) has to snap too; this keeps the aspect."""
-    target_shape = math.log(width / height)
-    target_area = math.log(width * height)
 
-    def distance(choice: str) -> tuple[float, float]:
-        a, b = (float(part) for part in choice.split(sep))
-        return (round(abs(math.log(a / b) - target_shape), 9), abs(math.log(a * b) - target_area))
+def _record_made_size(snap: "maker_sizes.SizeSnap", path: str) -> None:
+    """Add the run's note when the saved image isn't the size asked for
+    (models/events.py add_run_note: the executed event and the manifest).
+    The size is read from the file, so it is what the maker really made."""
+    from PIL import Image
 
-    return min(choices, key=distance)
+    from models.events import add_run_note
+    from services.output import resolve_output_ref
+
+    try:
+        with Image.open(resolve_output_ref(path)) as image:
+            width, height = image.size
+    except (OSError, ValueError):
+        return  # an unreadable image says nothing about its size; nothing is claimed
+    note = snap.made_note(width, height)
+    if note:
+        add_run_note(note)
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -158,14 +169,8 @@ def fixed_model(expected: str) -> Callable[[str], Callable[..., Any]]:
 # Ideogram's seed field is an integer; Krea's own Ideogram 4.5 schema bounds it
 # at 2147483647, and no Ideogram page names a different bound.
 IDEOGRAM_SEED_MAX = 2147483647
-# "The aspect ratio for an Ideogram 3.x or 2.x generation ... Allowed values:
-# `auto`, `1x3`, `3x1`, `1x2`, `2x1`, `9x16`, `16x9`, `10x16`, `16x10`, `2x3`,
-# `3x2`, `3x4`, `4x3`, `4x5`, `5x4`, `1x1`"
-# (https://developer.ideogram.ai/v2/api-reference/images/generate/ideogram-2a.md).
-IDEOGRAM_ASPECT_RATIOS = (
-    "1x1", "1x3", "3x1", "1x2", "2x1", "9x16", "16x9", "10x16", "16x10",
-    "2x3", "3x2", "3x4", "4x3", "4x5", "5x4",
-)
+# Ideogram's aspect ratios and Ideogram 3's resolutions: services/maker_sizes.py.
+IDEOGRAM_ASPECT_RATIOS = maker_sizes.IDEOGRAM_ASPECT_RATIOS
 # Precise edit: "reference_images ... (max 4 ...) A request with a `mask` can
 # include at most three" (v2 precise-edit/ideogram-4-5).
 PRECISE_EDIT_MAX_REFS = 4
@@ -176,12 +181,13 @@ PRECISE_EDIT_QUALITIES = ("very_low", "low", "medium", "high")
 def ideogram_2a_request(body: Mapping[str, Any]) -> dict[str, Any]:
     """Krea "Ideogram 2.0A Turbo" -> POST /v2/image/generate/ideogram-2a (JSON).
 
-    rendering_speed "turbo"; width/height -> the nearest aspect_ratio (the
-    field is "not `auto`: it uses `1x1`" when omitted, so it's always sent);
-    seed -> integer; one image. Nothing Krea takes is dropped."""
+    rendering_speed "turbo"; width/height -> the nearest aspect_ratio
+    (services/maker_sizes.py; 2a takes a shape, not a size, and the field is
+    "not `auto`: it uses `1x1`" when omitted, so it's always sent); seed ->
+    integer; one image. Nothing Krea takes is dropped."""
     request: dict[str, Any] = {
         "prompt": _required_prompt(body),
-        "aspect_ratio": nearest_ratio(*_size(body), IDEOGRAM_ASPECT_RATIOS, "x"),
+        "aspect_ratio": size_snap("krea-ideogram-2a", body).value,
         "rendering_speed": "turbo",
         "num_images": 1,
     }
@@ -198,13 +204,16 @@ def ideogram_3_request(body: Mapping[str, Any]) -> tuple[dict[str, Any], list[st
     The v1 endpoint is the one Nebula's own ideogram-character node uses.
     Its page (v1/api-reference/generate-images/generate-v3, read
     2026-10-14) defines RenderingSpeed FLASH / TURBO / DEFAULT / QUALITY,
-    default DEFAULT, and the same 15 aspect ratios as IDEOGRAM_ASPECT_RATIOS;
-    the v2 ideogram-3 page lists no values for them. Pricing: "Every
+    default DEFAULT; the request takes ``resolution`` (one of Ideogram
+    3.0's 69 sizes, api-reference/generate-v3) or ``aspect_ratio``, and only
+    resolution is sent, so a common size (1024x1024, 1280x768) comes out
+    exact. Pricing: "Every
     Ideogram 4.0 and 3.0 model endpoint bills the model rate above"
     (Ideogram 3.0 Default US $0.06, with Character Reference US $0.15). v1 takes the character reference in the same call ("Generations
     with character reference are subject to the character reference
     pricing ... currently only supports 1 character reference image").
-    rendering_speed DEFAULT (Krea exposes none); width/height -> aspect_ratio;
+    rendering_speed DEFAULT (Krea exposes none); width/height -> the nearest
+    resolution (services/maker_sizes.py);
     seed -> integer. style_images never reach here: their per-image
     strength has no Ideogram field, so a recipe with them, saved or wired,
     stays on Krea (directRoute.blockedBy)."""
@@ -221,7 +230,7 @@ def ideogram_3_request(body: Mapping[str, Any]) -> tuple[dict[str, Any], list[st
         )
     fields: dict[str, Any] = {
         "prompt": _required_prompt(body),
-        "aspect_ratio": nearest_ratio(*_size(body), IDEOGRAM_ASPECT_RATIOS, "x"),
+        "resolution": size_snap("krea-ideogram-3", body).value,
         "rendering_speed": "DEFAULT",
         "num_images": 1,
     }
@@ -274,20 +283,26 @@ async def krea_ideogram_2a(node: GraphNode, inputs: dict[str, PortValueDict], ap
     from handlers.ideogram import _post_json, _require_key, _save_first_image
 
     api_key = _require_key(api_keys)
-    request = ideogram_2a_request(await krea_request(node, inputs))
+    body = await krea_request(node, inputs)
+    request = ideogram_2a_request(body)
     result = await _post_json("/v2/image/generate/ideogram-2a", api_key, request)
-    return krea_outputs("Image", (await _save_first_image(result))["image"]["value"])
+    path = (await _save_first_image(result))["image"]["value"]
+    _record_made_size(size_snap("krea-ideogram-2a", body), path)
+    return krea_outputs("Image", path)
 
 
 async def krea_ideogram_3(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str]) -> dict[str, Any]:
     from handlers.ideogram import _post_multipart, _require_key, _save_first_image
 
     api_key = _require_key(api_keys)
-    fields, characters = ideogram_3_request(await krea_request(node, inputs))
+    body = await krea_request(node, inputs)
+    fields, characters = ideogram_3_request(body)
     files = [await _ideogram_file("character_reference_images", value, "Character reference image")
              for value in characters]
     result = await _post_multipart("/v1/ideogram-v3/generate", api_key, fields, files)
-    return krea_outputs("Image", (await _save_first_image(result))["image"]["value"])
+    path = (await _save_first_image(result))["image"]["value"]
+    _record_made_size(size_snap("krea-ideogram-3", body), path)
+    return krea_outputs("Image", path)
 
 
 async def krea_ideogram_precise_edit(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str]) -> dict[str, Any]:
@@ -329,7 +344,7 @@ def runway_gen4_image_request(body: Mapping[str, Any]) -> tuple[dict[str, Any], 
 
     prompt -> promptText (Runway: "A non-empty string up to 1000 characters");
     width/height -> the nearest gen4_image ``ratio`` (Runway takes a fixed
-    list); seed -> integer; reference_images [{url, tag}] ->
+    list of output sizes, services/maker_sizes.py); seed -> integer; reference_images [{url, tag}] ->
     referenceImages [{uri, tag}] (both max 3; the tag is how the prompt names
     an image, so it is kept)."""
     from handlers.runway import RUNWAY_IMAGE_MODELS
@@ -351,7 +366,7 @@ def runway_gen4_image_request(body: Mapping[str, Any]) -> tuple[dict[str, Any], 
     request: dict[str, Any] = {
         "model": "gen4_image",
         "promptText": prompt,
-        "ratio": nearest_ratio(*_size(body), spec["ratios"], ":"),
+        "ratio": size_snap("krea-runway-gen4-image", body).value,
     }
     seed = whole_seed(body.get("seed"), RUNWAY_SEED_MAX)
     if seed is not None:
@@ -433,7 +448,8 @@ async def krea_runway_gen4_image(node: GraphNode, inputs: dict[str, PortValueDic
     from services.output import get_run_dir, materialize_media_value
 
     api_key = _runway_key(api_keys)
-    request, references = runway_gen4_image_request(await krea_request(node, inputs))
+    body = await krea_request(node, inputs)
+    request, references = runway_gen4_image_request(body)
     if references:
         request["referenceImages"] = [
             {"uri": await _runway_media(item["url"], "Reference image", api_key),
@@ -442,6 +458,7 @@ async def krea_runway_gen4_image(node: GraphNode, inputs: dict[str, PortValueDic
         ]
     url = await _runway_task(api_key, "/text_to_image", request, node.id)
     path = await materialize_media_value(url, "Image", get_run_dir())
+    _record_made_size(size_snap("krea-runway-gen4-image", body), str(path))
     return krea_outputs("Image", str(path))
 
 
