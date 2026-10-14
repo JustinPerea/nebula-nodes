@@ -148,6 +148,10 @@ function validatePorts(nodeId, group, ports) {
     if ('maxConnections' in port && !Number.isInteger(port.maxConnections)) {
       errors.push(`${nodeId}.${group}.${port.id}.maxConnections must be integer`);
     }
+    // Gate ports (backend/execution/gating.py) exist only on outputs.
+    if ('conditional' in port && (group !== 'outputPorts' || port.conditional !== true)) {
+      errors.push(`${nodeId}.${group}.${port.id}.conditional must be true and only on an output port`);
+    }
   }
 }
 

@@ -54,7 +54,9 @@ async def test_find_and_describe_say_what_decide_needs_and_costs(no_keys):
 
     described = await main.agent_describe_node("jev-decide")
     assert [port["id"] for port in described["outputs"]] == [
-        "answer", "pass", "probability", "confidence", "probabilities", "report"]
+        "answer", "pass", "probability", "confidence", "probabilities", "report",
+        "on_pass", "on_fail"]
+    assert [port["id"] for port in described["outputs"] if port.get("gate")] == ["on_pass", "on_fail"]
     params = {param["key"]: param for param in described["params"]}
     assert params["model"]["default"] == "jev-1.14.0"
     assert params["options"]["onlyWhen"] == {"answer_type": ["choice"]}

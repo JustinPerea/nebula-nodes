@@ -19,12 +19,18 @@ Value formats:
 - report: plain text. Line 1 is the title, then "Key: value" lines, then
   zero or more "Note: ..." lines. "Model:" and "Input tokens:" are always
   there.
+- on_pass / on_fail (Decide's gate): one carries the ``through`` input
+  unchanged (or the pass verdict as Text), the other is a withheld entry
+  (execution/gating.py). When pass is "unsure" either or neither may carry
+  it, depending on ``when_unsure``.
 """
 from __future__ import annotations
 
 import json
 import math
 from typing import Any, Iterable, Mapping, Sequence
+
+from execution.gating import is_withheld
 
 DECIDE = "jev-decide"
 PICK_BEST = "jev-pick-best"
@@ -38,7 +44,7 @@ EXPERIMENTAL_IMAGES = "experimental"
 # (Box leaves out crop/mask/annotated when it found nothing).
 PORTS: dict[str, dict[str, str]] = {
     DECIDE: {"answer": "Text", "pass": "Text", "probability": "Text", "confidence": "Text",
-             "probabilities": "Text", "report": "Text"},
+             "probabilities": "Text", "report": "Text", "on_pass": "Any", "on_fail": "Any"},
     PICK_BEST: {"winner": "Image", "index": "Text", "probabilities": "Text", "confidence": "Text",
                 "report": "Text"},
     BOX: {"found": "Text", "box": "Text", "crop": "Image", "mask": "Mask", "annotated": "Image",
@@ -198,6 +204,12 @@ def validate_outputs(definition_id: str, outputs: Mapping[str, Any]) -> list[str
     problems: list[str] = []
     for port, kind in ports.items():
         entry = outputs.get(port)
+        if kind == "Any":
+            # A gate port: withheld, or any typed value passed through.
+            if not isinstance(entry, Mapping) or not (
+                    is_withheld(entry) or (isinstance(entry.get("type"), str) and "value" in entry)):
+                problems.append(f"{port}: must be a value or withheld")
+            continue
         if entry is None:
             if port not in OPTIONAL_PORTS[definition_id]:
                 problems.append(f"{port}: missing")
@@ -224,6 +236,13 @@ def validate_outputs(definition_id: str, outputs: Mapping[str, Any]) -> list[str
             ("confidence", _number_problem(value("confidence"))),
             ("probabilities", _probabilities_problem(value("probabilities"))),
         ]
+        carried = {port for port in ("on_pass", "on_fail")
+                   if isinstance(outputs.get(port), Mapping) and not is_withheld(outputs[port])}
+        expected = {"true": {"on_pass"}, "false": {"on_fail"}}.get(value("pass"))
+        if expected is not None and carried != expected:
+            checks.append(("on_pass", f"exactly {next(iter(expected))} must carry the value when pass is {value('pass')}"))
+        elif expected is None and len(carried) > 1:
+            checks.append(("on_pass", "at most one of on_pass / on_fail may carry the value"))
     elif definition_id == PICK_BEST:
         index = value("index")
         index_ok = isinstance(index, str) and index.isdigit() and str(int(index)) == index

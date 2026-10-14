@@ -12781,7 +12781,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'jev-decide': {
     id: 'jev-decide',
     displayName: 'Jev Decide (judge / classify / yes-no)',
-    description: 'Judge, classify or score text and images with one typed question: yes/no, pick one option, or rate on a scale. Returns the answer, its probability, confidence and a pass / fail / unsure verdict. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.',
+    description: 'Judge, classify or score text and images with one typed question: yes/no, pick one option, or rate on a scale. Returns the answer, its probability, confidence and a pass / fail / unsure verdict. Also a gate: whatever is wired into Through comes out of On Pass or On Fail, and the nodes on the other branch are skipped. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.',
     category: 'analyzer',
     apiProvider: 'typesafe',
     apiEndpoint: '/v1/systemone',
@@ -12792,6 +12792,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'state', label: 'Context', dataType: 'Text', required: false },
       { id: 'images', label: 'Images', dataType: 'Image', required: false, multiple: true, maxConnections: 16 },
+      // The gate's passenger: comes out of On Pass or On Fail unchanged.
+      { id: 'through', label: 'Through', dataType: 'Any', required: false },
     ],
     outputPorts: [
       { id: 'answer', label: 'Answer', dataType: 'Text', required: false },
@@ -12800,6 +12802,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'confidence', label: 'Confidence', dataType: 'Text', required: false },
       { id: 'probabilities', label: 'Probabilities (JSON)', dataType: 'Text', required: false },
       { id: 'report', label: 'Report', dataType: 'Text', required: false },
+      // Exactly one carries a value; nodes wired to the other are skipped
+      // (backend/execution/gating.py).
+      { id: 'on_pass', label: 'On Pass', dataType: 'Any', required: false, conditional: true },
+      { id: 'on_fail', label: 'On Fail', dataType: 'Any', required: false, conditional: true },
     ],
     params: [
       {
@@ -12835,6 +12841,18 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { key: 'levels', label: 'Levels, Low to High (one per line)', type: 'textarea', required: false, default: '', placeholder: 'Off brief\nPartly on brief\nOn brief', visibleWhen: { answer_type: ['score'] } },
       { key: 'threshold', label: 'Pass Threshold', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05, visibleWhen: { answer_type: ['yes_no', 'score'] } },
       { key: 'min_confidence', label: 'Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
+      {
+        key: 'when_unsure',
+        label: 'When Unsure',
+        type: 'enum',
+        required: false,
+        default: 'fail',
+        options: [
+          { label: 'Take the fail branch', value: 'fail' },
+          { label: 'Take the pass branch', value: 'pass' },
+          { label: 'Take neither branch', value: 'neither' },
+        ],
+      },
       { key: 'long_context', label: 'Long Context (slower, less accurate)', type: 'boolean', required: false, default: false },
     ],
   },

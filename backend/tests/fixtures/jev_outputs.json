@@ -1,5 +1,5 @@
 {
-  "about": "Sample outputs of the Jev nodes, in the contract of docs/api-guides/typesafe.md. backend/tests/test_jev_decide.py checks the Decide handler produces these outputs exactly and that every sample keeps the contract (services/jev_outputs.validate_outputs); frontend/tests/lib/jev.test.ts checks parseJevOutputs turns each into `parsed`. Pick Best and Box samples are hand-written until those handlers exist; their tests should then produce them too. `malformed` samples must parse to null.",
+  "about": "Sample outputs of the Jev nodes, in the contract of docs/api-guides/typesafe.md. backend/tests/test_jev_decide.py checks the Decide handler produces these outputs exactly and that every sample keeps the contract (services/jev_outputs.validate_outputs); frontend/tests/lib/jev.test.ts checks parseJevOutputs turns each into `parsed`. Pick Best and Box samples are hand-written until those handlers exist; their tests should then produce them too. `malformed` samples must parse to null. Decide outputs are the handler's, so the gate port it withheld appears as a `withheld` entry; the engine strips those before anything reaches the canvas.",
   "decide": [
     {
       "name": "yes/no that passes",
@@ -44,6 +44,15 @@
         "report": {
           "type": "Text",
           "value": "Jev Decide (yes/no)\nQuestion: Is the product on a plain white background?\nAnswer: yes\nPass: true\nProbability: 0.93\nConfidence: 0.86\nModel: jev-1.14.0\nInput tokens: 312"
+        },
+        "on_pass": {
+          "type": "Text",
+          "value": "true"
+        },
+        "on_fail": {
+          "type": "Any",
+          "value": null,
+          "withheld": "Jev Decide passed (answered yes, 0.93)"
         }
       },
       "parsed": {
@@ -70,7 +79,8 @@
           "notes": [],
           "model": "jev-1.14.0",
           "inputTokens": 312
-        }
+        },
+        "branch": "pass"
       }
     },
     {
@@ -116,6 +126,15 @@
         "report": {
           "type": "Text",
           "value": "Jev Decide (yes/no)\nQuestion: Is the logo fully visible?\nAnswer: yes\nPass: unsure\nProbability: 0.6\nConfidence: 0.2\nModel: jev-1.14.0\nInput tokens: 298\nNote: Confidence 0.2 is below the minimum 0.5, so pass is unsure."
+        },
+        "on_pass": {
+          "type": "Any",
+          "value": null,
+          "withheld": "Jev Decide was unsure (confidence 0.2, below 0.5); unsure counts as fail"
+        },
+        "on_fail": {
+          "type": "Text",
+          "value": "unsure"
         }
       },
       "parsed": {
@@ -144,7 +163,8 @@
           ],
           "model": "jev-1.14.0",
           "inputTokens": 298
-        }
+        },
+        "branch": "fail"
       }
     },
     {
@@ -199,6 +219,15 @@
         "report": {
           "type": "Text",
           "value": "Jev Decide (choice)\nQuestion: What kind of image is this?\nOptions: 3\nAnswer: Product photo\nPass: true\nProbability: 0.88\nConfidence: 0.82\nModel: jev-1.14.0\nInput tokens: 341"
+        },
+        "on_pass": {
+          "type": "Text",
+          "value": "true"
+        },
+        "on_fail": {
+          "type": "Any",
+          "value": null,
+          "withheld": "Jev Decide passed (answered Product photo, 0.88)"
         }
       },
       "parsed": {
@@ -227,7 +256,8 @@
           "notes": [],
           "model": "jev-1.14.0",
           "inputTokens": 341
-        }
+        },
+        "branch": "pass"
       }
     },
     {
@@ -286,6 +316,15 @@
         "report": {
           "type": "Text",
           "value": "Jev Decide (score)\nQuestion: How well does it match the brief?\nScore: 1.43 on 0..2\nAnswer: Partly on brief\nPass: unsure\nProbability: 0.715\nConfidence: 0.35\nModel: jev-1.14.0\nInput tokens: 356\nNote: Confidence 0.35 is below the minimum 0.5, so pass is unsure."
+        },
+        "on_pass": {
+          "type": "Any",
+          "value": null,
+          "withheld": "Jev Decide was unsure (confidence 0.35, below 0.5); unsure counts as fail"
+        },
+        "on_fail": {
+          "type": "Text",
+          "value": "unsure"
         }
       },
       "parsed": {
@@ -316,7 +355,8 @@
           ],
           "model": "jev-1.14.0",
           "inputTokens": 356
-        }
+        },
+        "branch": "fail"
       }
     },
     {
@@ -363,6 +403,15 @@
         "report": {
           "type": "Text",
           "value": "Jev Decide (yes/no)\nQuestion: Does this convey urgency?\nAnswer: yes\nPass: true\nProbability: 0.95\nConfidence: 0.9\nModel: jev-1.13.0 (asked for jev-latest)\nInput tokens: 296"
+        },
+        "on_pass": {
+          "type": "Text",
+          "value": "true"
+        },
+        "on_fail": {
+          "type": "Any",
+          "value": null,
+          "withheld": "Jev Decide passed (answered yes, 0.95)"
         }
       },
       "parsed": {
@@ -389,7 +438,8 @@
           "notes": [],
           "model": "jev-1.13.0",
           "inputTokens": 296
-        }
+        },
+        "branch": "pass"
       }
     }
   ],

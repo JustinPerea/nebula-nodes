@@ -60,6 +60,23 @@ class ExecutedEvent(RunScopedEvent):
     batch_outputs: list[dict[str, Any]] | None = None
     variant: dict[str, Any] | None = Field(default_factory=_current_variant)
     batch_variants: list[dict[str, Any]] | None = None
+    # Output ports the node left empty on purpose (port -> reason), so the
+    # canvas can show their wires as inactive. See execution/gating.py.
+    withheld: dict[str, str] | None = None
+
+
+class SkippedEvent(RunScopedEvent):
+    """The node didn't run because a gate upstream withheld its input.
+
+    ``reason`` names the gate ("Jev Decide failed (answered no, 0.12)") and
+    ``gate_node_id`` is the node that withheld it. A skipped node made no
+    provider call, wrote no cache entry and costs nothing.
+    """
+
+    type: Literal["skipped"] = "skipped"
+    node_id: str
+    reason: str
+    gate_node_id: str | None = None
 
 
 class ErrorEvent(RunScopedEvent):
@@ -92,6 +109,7 @@ class GraphCompleteEvent(RunScopedEvent):
     type: Literal["graph_complete"] = "graph_complete"
     duration: float
     nodes_executed: int
+    nodes_skipped: int = 0
 
 
 class GraphCancelledEvent(RunScopedEvent):
@@ -153,6 +171,7 @@ ExecutionEvent = Union[
     ExecutingEvent,
     ProgressEvent,
     ExecutedEvent,
+    SkippedEvent,
     ErrorEvent,
     ValidationErrorEvent,
     GraphCompleteEvent,

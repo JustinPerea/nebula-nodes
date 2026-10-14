@@ -6155,8 +6155,8 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | TYPESAFE_API_KEY |
 | **Endpoint** | `/v1/systemone` |
 | **Execution** | sync |
-| **Inputs** | Context (Text), Images (Image ×n) |
-| **Outputs** | Answer (Text), Pass (Text), Probability (Text), Confidence (Text), Probabilities (JSON) (Text), Report (Text) |
+| **Inputs** | Context (Text), Images (Image ×n), Through (Any) |
+| **Outputs** | Answer (Text), Pass (Text), Probability (Text), Confidence (Text), Probabilities (JSON) (Text), Report (Text), On Pass (Any, gate), On Fail (Any, gate) |
 | **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
@@ -6171,6 +6171,7 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Levels, Low to High (one per line) | textarea | — | — |
 | Pass Threshold | float | 0.5 | 0–1 |
 | Minimum Confidence | float | 0.5 | 0–1 |
+| When Unsure | enum | fail | Take the fail branch, Take the pass branch, Take neither branch |
 | Long Context (slower, less accurate) | bool | false | — |
 
 ---

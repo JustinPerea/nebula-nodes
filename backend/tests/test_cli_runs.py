@@ -9,7 +9,7 @@ import threading
 import pytest
 from fastapi.testclient import TestClient
 
-from models.events import ExecutedEvent
+from models.events import ExecutedEvent, SkippedEvent
 
 
 @pytest.fixture
@@ -95,3 +95,26 @@ def test_unknown_run_and_bad_wait(harness):
     bad = client.post("/api/graph/run", json={"targetNodeId": node_id, "wait": "soon"})
     assert bad.status_code == 400
     assert client.post("/api/graph/run", json={"targetNodeId": node_id, "wait": -1}).status_code == 400
+
+
+def test_a_run_reports_the_nodes_a_gate_skipped(monkeypatch):
+    import main
+    from cli.formatter import format_run_results
+
+    async def gated_execute_graph(*, nodes, emit, run_id, **kwargs):
+        first, second = nodes[0].id, nodes[1].id
+        await emit(ExecutedEvent(node_id=first, outputs={"text": {"type": "Text", "value": "made"}}, run_id=run_id))
+        await emit(SkippedEvent(node_id=second, reason="Jev Decide failed (answered no, 0.12)",
+                                gate_node_id=first, run_id=run_id))
+
+    monkeypatch.setattr(main, "execute_graph", gated_execute_graph)
+    with TestClient(main.app) as client:
+        client.delete("/api/graph")
+        ids = [client.post("/api/graph/node", json={"definitionId": "text-input", "params": {"value": v}}).json()["id"]
+               for v in ("a", "b")]
+        body = client.post("/api/graph/run", json={}).json()
+        client.delete("/api/graph")
+    assert body["status"] == "finished"
+    assert body["skipped"] == {ids[1]: "Jev Decide failed (answered no, 0.12)"}
+    assert body["nodesExecuted"] == 1  # a skipped node never ran
+    assert f"{ids[1]}: skipped — Jev Decide failed (answered no, 0.12)" in format_run_results(body)
