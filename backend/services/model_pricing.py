@@ -45,6 +45,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from services.retired_nodes import migrate_params
+
 PRICING_PATH = Path(__file__).resolve().parent.parent / "data" / "model_pricing.json"
 CURRENCIES = ("usd", "krea_cu")
 PER_UNITS = ("image", "video", "second", "request")
@@ -240,6 +242,8 @@ def estimate_node(
         return None
     if priced_keys(entry) & {str(port) for port in wired}:
         return None
+    # Price what will run: a retired value is replaced before the run (retired_nodes).
+    params = migrate_params(str(definition.get("id") or ""), dict(params or {}))
     values = effective_params(entry, definition, params)
     for row in entry.get("rows") or []:
         if _matches(values, row.get("match") or {}):

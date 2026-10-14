@@ -18,7 +18,7 @@ Audit of what Flora (app.flora.ai, 369 models via MCP `client.models.list`) offe
 | `runway-video` | Gen-4.5, Gen-4 Turbo, Seedance 2.0 (+Fast, Mini), Seedance 2.5, Happy Horse 1.0, Veo 3.1 (+Fast) via model enum (Runway resells the ByteDance and Google models) |
 | `runway-image` | Gen-4 Image (+Turbo), Nano Banana Pro, GPT Image 2, Gemini 2.5 Flash, Seedream 5.0 Pro / Lite via model enum (Runway resells all but Gen-4) |
 | `minimax-t2v/i2v/s2v` | Hailuo 2.3 (+Fast), Hailuo 02 via model enum |
-| `veo-3` | Actually Veo **3.1** (generate-preview endpoint) |
+| `veo-3` | Actually Veo **3.1** (Vertex `veo-3.1-*-001` ids; Gemini API previews end 2026-10-22) |
 | Universal nodes (`fal-universal`, `replicate-universal`, `openrouter-universal`, `nous-portal-universal`) | Can reach most missing models ad hoc, just without typed params/first-class UX |
 
 "Gap" below means: no dedicated node and no enum option; universal-node reachability doesn't count.

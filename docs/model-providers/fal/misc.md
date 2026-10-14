@@ -45,14 +45,15 @@ Covers four miscellaneous FAL wrapper nodes. All route through `handle_fal_unive
 
 | ID | Endpoint | Input Ports | Output Port | Handler |
 |----|----------|-------------|-------------|---------|
-| `sora-2` | `fal-ai/sora-2/text-to-video` (std) or `/pro` | `prompt` | `video` | `_sora2_handler` |
 | `pixverse-v4-5` | `fal-ai/pixverse/v4.5/text-to-video` | `prompt`, `image` | `video` | `_pixverse_handler` |
 | `remove-background` | `fal-ai/imageutils/rembg` | `image` | `image` | `_remove_bg_handler` |
 | `seedvr2-upscale` | `fal-ai/seedvr/upscale/image` | `image` | `image` | `_seedvr2_upscale_handler` |
 
 ---
 
-## sora-2
+## sora-2 (retired)
+
+> Retired 2026-10-14: OpenAI shut down the Sora 2 API on 2026-09-24 (no one-to-one replacement), and fal's endpoints ran on it. Saved `sora-2` / `sora-2-i2v` nodes load as `veo-3` on Veo 3.1 Fast (Sora 2 Pro → Veo 3.1), titled "Veo 3.1 Fast (was Sora 2)"; `grok-imagine-video` and `runway-video` are the other choices. The notes below are kept as history.
 
 **Endpoint routing:** `_sora2_handler` pops the `model` param and selects the Pro endpoint
 (`fal-ai/sora-2/text-to-video/pro`) when `model == "pro"`, otherwise standard. The `model`

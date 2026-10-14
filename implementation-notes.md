@@ -3196,6 +3196,144 @@ Tradeoffs and surprises:
 - **Left for later:** the `nebula` CLI's own commands still read only `NEBULA_APP_TOKEN`, not the file. Connect
   only sets up the MCP server, so nothing needs it yet.
 
+## 2026-10-14 — Maker retirements (Veo previews, gpt-image-1, Sora 2, Meshy, Gemini TTS)
+
+Track: keep the existing direct maker routes working past the October–November 2026 shutdowns. Vendor pages
+were re-fetched on 2026-10-14 (Gemini API deprecations, Vertex Veo 3.1 model card and pricing, OpenAI
+deprecations/model pages/image guide, Meshy openapi.yaml and llms.txt, Gemini speech-generation and model pages).
+
+### Veo (veo-3, veo-3-flf)
+- **The node now stores the Vertex IDs** (`veo-3.1-generate-001`, `veo-3.1-fast-generate-001`,
+  `veo-3.1-lite-generate-001`), as enum values, default and `apiEndpoint`. Option order and labels are kept;
+  Lite's label now says it is a preview on Vertex. The Gemini API route translates back to the
+  `-preview` IDs (`GEMINI_API_MODELS` in veo.py) until 2026-10-22.
+- **Saved preview IDs migrate without a date gate.** It's a rename of the same model, and both routes accept
+  either spelling (`canonical_model`), so there was nothing to protect by waiting. The Veo 3.0/2.0 migration
+  now targets the `-001` IDs directly instead of the dying preview IDs.
+- **GOOGLE_API_KEY-only after 2026-10-22:** `handle_veo` raises `MissingCredentialError` naming
+  `GOOGLE_VERTEX_CREDENTIALS` before any request (reused `previews_retired`). Routing is unchanged: a user with
+  both GOOGLE_API_KEY and FAL_KEY still lands on the Google route and gets that message rather than falling
+  through to fal. I kept it that way because fal's Veo 3.1 is believed to run on the same previews (status
+  unverified) and changing `route_provider` would also need the frontend mirror changed. `with_vertex_hint`
+  still decorates fal failures.
+- Tests that exercise the Gemini API route now pin `previews_retired` to False, so they keep passing after
+  2026-10-22 (several would have broken on that date).
+- **veo-3-flf pricing added** (Vertex route, `provider: google`). The node stores duration as "4s", which
+  `multiplyBy` can't read, so the entry is `per: video` with one row per resolution × audio × duration.
+  Vertex lists Veo per "count"; read as per second like the existing veo-3 entry (unit label NOT CONFIRMED).
+- Not done: Vertex `generateAudio` is still always true on veo-3 (Vertex sells video-only at about half price),
+  and reference images on Vertex are still not exposed. Both are feature work, not retirement work.
+
+### OpenAI gpt-image-1 (gpt-image-1-generate, gpt-image-1-edit)
+- **Choice: Flare on generate, Sunburst on edit.** OpenAI's deprecations page names "`gpt-image-2.5-sunburst` or
+  `gpt-image-2.5-flare`" for gpt-image-1 (shutdown October 23, 2026). The guide says "Choose Sunburst for workflows
+  where editing precision matters most, and Flare for fast, high-quality everyday image generation", and the
+  Sunburst page calls it "Our most capable model for image generation and editing". So the generate node defaults to
+  Flare and the edit node to Sunburst, and saved `gpt-image-1` values migrate the same way from 2026-10-23
+  (date-gated `_model_after` in retired_nodes; until then they keep running on gpt-image-1). Same token prices
+  ($30/1M image output) for both.
+- Differences that mattered: 2.5 adds `xhigh`/`max` quality (added as options, visible only on the 2.5 models),
+  supports transparent backgrounds with png/webp (a jpeg + transparent request is now refused before the call on
+  all models), and the documented 1024²/1536×1024/1024×1536/auto sizes are all valid, so no size migration.
+  `input_fidelity` stays unexposed (the node never had it).
+- Both 2.5 options were appended after the existing three; labels on the old ones now carry their shutdown
+  dates (gpt-image-1.5 and gpt-image-1-mini end Dec 1, 2026; I did not migrate those yet — a later gate can reuse
+  `_model_after`). The node display names ("GPT Image 1", "GPT Image 1 Edit") are unchanged; renaming them is
+  Justin's call.
+- A saved node with no `model` key at all keeps gpt-image-1 until 2026-10-23 (review fix: the handler fallback is
+  `default_until(GPT_IMAGE_1_SHUTDOWN, ...)`), then runs the new default. I didn't pin those in the migration,
+  because migrate_node also runs on fresh agent proposals and would pin new nodes to a model that dies in 9 days.
+- **Count fix:** `handle_openai_image_edit` forwarded `n` but kept only `data[0]`. It now saves every returned
+  image; `image` is the first and a new `images` (Array) output port carries all of them as `/api/outputs/` refs
+  (the Krea gateway's convention). No pricing entry exists for these nodes; I didn't add one (2.5 is
+  token-priced and OpenAI's per-image calculator doesn't cover 2.5).
+
+### Sora 2 (sora-2, sora-2-i2v)
+- Retired with the Imagen pattern (`RETIRED` in retired_nodes): both definitions and their fal handlers (incl. the
+  Standard/Pro endpoint switch) are gone, so they're hidden for new graphs; saved nodes load as **`veo-3` on Veo
+  3.1 Fast**, titled "Veo 3.1 Fast (was Sora 2)" / "(was Sora 2 Image-to-Video)" unless the person renamed them.
+- Why Veo 3.1 Fast: OpenAI says "There is no one-to-one replacement API", so I picked the closest maker-direct
+  node. Veo does text- and first-frame-to-video with sound like Sora 2, its `prompt`/`image`/`video` ports match
+  so saved edges keep working, and Fast's $0.10/s at 720p equals Sora 2's listed $0.10/s. Sora 2 Pro maps to Veo
+  3.1 (Standard). Sora's 12/16/20 s become 8 s (Veo's max); `auto` aspect/resolution fall back to Veo's defaults.
+- The other choices are named where people see them: `retired_message` (API/agent/CLI create attempts) now
+  appends "(or 'grok-imagine-video' or 'runway-video')", and the docs say the same. The canvas only shows the
+  title; there's no per-node notice mechanism to hang a longer message on.
+- Tradeoff: a migrated node runs on Google, not fal, so it needs a Vertex key (or GOOGLE_API_KEY until
+  2026-10-22, or fal if fal's Veo still works). The alternative, keeping a dead Sora node that only errors,
+  would have needed a new "hidden definition" concept across ~25 frontend consumers.
+- Left alone: the fal catalog mirror files `.agents/skills/fal/skills/fal-ai__sora-2__*.md` (they describe fal's
+  catalog, not Nebula nodes), historical research docs, and `docs/flora-gap-matrix.md`'s history entries.
+
+### Meshy (meshy-text-to-3d, meshy-image-to-3d, meshy-multi-image-to-3d, meshy-retexture)
+
+- Meshy's openapi.yaml (2026-10-14) no longer lists `meshy-5` in any `ai_model` enum, so it's gone from all four
+  nodes and saved nodes move to `meshy-6` right away (not date-gated: it's already unavailable). Option order and
+  the `latest` default are unchanged; only the `latest` label moved to "Meshy 7.1" (Retexture: "Meshy 7", since
+  Retexture rejects 7.1).
+- `lowpoly` retires 2026-10-30. Kept the option (relabelled "Low Poly (retires Oct 30, 2026)") and appended
+  "Smart Topology (Meshy T2)". Date-gated migration from 10-30: lowpoly → smart-topology, quad → triangle, polycount
+  capped at 15,000 (smart topology's max). A lowpoly node with no saved polycount gets 15,000 explicitly, because
+  the node default (30,000) would otherwise fail. Tradeoff: lowpoly ignored polycount, so 15,000 isn't "what they
+  had", just the closest valid value; Meshy's own lower T2 default (4,000 per fal's page) isn't in Meshy's docs.
+- Didn't add `meshy-t2` as an ai_model option: Meshy says smart-topology "implies the meshy-t2 model family" and
+  meshy-t2 "requires model_type: smart-topology", so the direct handler sets it whenever smart-topology is picked.
+  That avoids an option that errors with every other mesh type. The handler also drops image_enhancement /
+  remove_lighting (not supported under smart topology; both default on in the node) and refuses quad or >15,000
+  faces with a message before spending credits. The text-to-3d refine omits ai_model so it inherits meshy-t2.
+- Surprise: with the default polycount 30,000, picking Smart Topology fails until Polycount is lowered. The error
+  says exactly that; I didn't silently clamp a value the person can see.
+- Not done at first, fixed after review: meshy-6-lite / meshy-7.1 options and seed forwarding (see "Review
+  fixes" below). Smart-topology on the fal image-to-3d route stays off (model_type is a direct-only param there). Meshy says
+  7/7.1/T2 need account entitlement while `latest` (the default) resolves to 7.1; couldn't verify what an
+  unentitled account gets without a real call.
+
+### Gemini TTS (gemini-tts)
+
+- Google shuts down all three TTS models the node offered (2.5 Flash, 2.5 Pro, 3.1 Flash previews) on 2026-11-17
+  and names "gemini-3.8-flash-tts or gemini-3.8-flash-lite-tts". Appended both 3.8 options after the existing three
+  (order kept), labelled the old three with the shutdown date, and moved the default (node + handler fallback)
+  from 2.5 Flash to **3.8 Flash TTS**. That default change is deliberate: a new node shouldn't start on a model
+  that dies in a month. A saved node with no stored `model` keeps 2.5 Flash until 2026-11-17 (review fix: the
+  handler fallback is date-gated; only the node-definition default moved now).
+- Date-gated migration from 11-17: 2.5 Flash and 2.5 Pro → 3.8 Flash (the fidelity model; Pro users wanted
+  quality), 3.1 Flash → 3.8 Flash-Lite (Google: "recommended replacement for gemini-3.1-flash-tts-preview").
+- Handler fix that has to ship before people pick 3.8: 3.8 returns a whole WAV file (RIFF header) on unary calls,
+  where 3.1/2.5 returned raw PCM. The old code always wrapped bytes in a new WAV header, which would have put a
+  44-byte header inside the audio. `_write_tts_wav` now writes RIFF / `wav`-mime bytes as is and only wraps raw
+  PCM, taking the rate from the mime type's `rate=`. Request body unchanged (same 30 prebuilt voices).
+- Not done: `speech_metadata.style` (3.8's way to give delivery direction; inline "Say cheerfully:" may now be
+  spoken). That's a new param, not a retirement fix. No pricing rows exist for gemini-tts, so none were added.
+
+### Review fixes (2026-10-14)
+
+- **Retired values are replaced at run time, not only on staging.** `migrate_params` (retired_nodes) now runs in
+  `_normalize_execute_nodes` (/api/execute, /api/execute-node and the other request paths that use it, before
+  validation and the spend gate), as a backstop in `execute_graph` (every caller, incl. /api/quick and CLI runs;
+  it copies the node, never mutates the caller's), in `estimate_node` (so a preview Veo ID is priced as the -001
+  it runs as), and on node create / node-and-connect / param update / proposal param changes. Before this, a
+  canvas opened on 10-22 and run on 10-23 would still have sent `gpt-image-1`.
+- **Partial updates** go through `migrate_param_update`: it migrates the merged params and returns the updated
+  keys plus any stored key the fix changed. Without it, a PUT of just `model_type: lowpoly` after 10-30 would
+  have overwritten a stored 5,000 polycount with 15,000.
+- **No-model fallbacks are date-gated** (`default_until`): gpt-image-1 until 10-23 on both GPT Image handlers,
+  2.5 Flash TTS until 11-17. Only the definition defaults (what a new canvas node stores) moved now. These nodes
+  have no pricing entries, so the estimate can't disagree with the run.
+- **Meshy options:** appended (order kept, default `latest`) `meshy-6-lite` and `meshy-7.1` on text / image /
+  multi-image-to-3d and `meshy-6-lite` and `meshy-7` on Retexture, per the per-endpoint enums in openapi.yaml
+  (Retexture's enum has no 7.1; llms.txt: "Retexture rejects meshy-7.1"). Labels say 7/7.1 need a Meshy
+  entitlement and Lite is 2K-only. `meshy-t2` stays handler-only. Handlers refuse Lite + HD Texture (4K) before
+  calling Meshy (llms.txt: "`meshy-6-lite` ... `2k` texture only"). Meshy says `meshy-7` is deprecated in favour
+  of 7.1 elsewhere, but it's Retexture's newest, so it's the explicit pin there.
+- **Seed:** moved from falParams to sharedParams on meshy-text-to-3d and forwarded on the direct preview
+  (TextTo3DRequest has `seed`; refine doesn't). ImageTo3DRequest and MultiImageTo3DRequest have no seed, so
+  image-to-3d keeps it fal-only.
+- **Smart Topology on the fal route:** `check_smart_topology` (split out of `_apply_smart_topology`) runs before
+  the text-to-3d fal fallback too; fal's schema has the same 15,000 cap and accepts smart-topology.
+- Noticed, not fixed (pre-existing on main): 14 definitions differ between nodeDefinitions.ts and
+  node_definitions.json (e.g. gemini-tts's 3.1 label says "Gemini 3.1 Flash TTS" in JSON and "3.1 Flash TTS" in
+  TS; veo-3's port `_note`s exist only in JSON).
+
 ## 2026-10-14 — Runway nodes against Runway's current API (+ ByteDance models)
 
 Sources, all fetched 2026-10-14: `https://docs.dev.runwayml.com/openapi.json` (per-model request

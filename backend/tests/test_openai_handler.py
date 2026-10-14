@@ -314,3 +314,120 @@ async def test_gpt_image_1_saves_webp_extension() -> None:
         result = await handle_openai_image_generate(node, inputs, _API_KEYS)
 
     assert result["image"]["value"].endswith(".webp")
+
+
+# ---------------------------------------------------------------------------
+# gpt-image-1 retirement (shuts down 2026-10-23) and the edit node's Count
+# ---------------------------------------------------------------------------
+
+
+def _on(day):
+    from datetime import date
+    return patch("services.retired_nodes._today", return_value=date.fromisoformat(day))
+
+
+@pytest.mark.asyncio
+async def test_generate_with_no_model_keeps_gpt_image_1_until_its_shutdown() -> None:
+    patcher, client = _patch_client(_mock_response(RED_PIXEL_B64))
+    with patcher, _on("2026-10-22"):
+        await handle_openai_image_generate(
+            GraphNode(id="g", definitionId="gpt-image-1-generate", params={}),
+            {"prompt": PortValueDict(type="Text", value="x")}, _API_KEYS,
+        )
+    assert client.post.call_args.kwargs["json"]["model"] == "gpt-image-1"
+
+
+@pytest.mark.asyncio
+async def test_generate_defaults_to_gpt_image_2_5_flare_and_sends_max_quality() -> None:
+    patcher, client = _patch_client(_mock_response(RED_PIXEL_B64))
+    with patcher, _on("2026-10-23"):
+        await handle_openai_image_generate(
+            GraphNode(id="g", definitionId="gpt-image-1-generate", params={"quality": "max"}),
+            {"prompt": PortValueDict(type="Text", value="x")}, _API_KEYS,
+        )
+    body = client.post.call_args.kwargs["json"]
+    assert body["model"] == "gpt-image-2.5-flare"
+    assert body["quality"] == "max"
+
+
+@pytest.mark.asyncio
+async def test_transparent_background_needs_png_or_webp() -> None:
+    patcher, client = _patch_client(_mock_response(RED_PIXEL_B64))
+    with patcher, pytest.raises(ValueError, match="PNG or WebP"):
+        await handle_openai_image_generate(
+            _make_node(params={"model": "gpt-image-2.5-flare", "background": "transparent", "output_format": "jpeg"}),
+            {"prompt": PortValueDict(type="Text", value="x")}, _API_KEYS,
+        )
+    client.post.assert_not_called()
+
+
+def _edit_client(images: list[str]):
+    resp = MagicMock(status_code=200, raise_for_status=MagicMock())
+    resp.json.return_value = {"data": [{"b64_json": b64} for b64 in images]}
+    client = AsyncMock()
+    client.post.return_value = resp
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    return patch("handlers.openai_image_edit.httpx.AsyncClient", return_value=client), client
+
+
+@pytest.mark.asyncio
+async def test_edit_keeps_every_image_count_asks_for(tmp_path) -> None:
+    from handlers.openai_image_edit import handle_openai_image_edit
+    from services.output import resolve_output_ref
+
+    source = OUTPUT_ROOT / "edit-source.png"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(base64.b64decode(RED_PIXEL_B64))
+    patcher, client = _edit_client([RED_PIXEL_B64, RED_PIXEL_B64, RED_PIXEL_B64])
+    with patcher, _on("2026-10-23"):
+        result = await handle_openai_image_edit(
+            GraphNode(id="e", definitionId="gpt-image-1-edit", params={"n": 3}),
+            {"image": PortValueDict(type="Image", value=str(source)),
+             "prompt": PortValueDict(type="Text", value="make it blue")},
+            _API_KEYS,
+        )
+    fields = dict((k, v[1]) for k, v in client.post.call_args.kwargs["files"] if k != "image")
+    assert fields["model"] == "gpt-image-2.5-sunburst", "the edit node's default once gpt-image-1 is gone"
+    assert fields["n"] == "3"
+    assert result["images"]["type"] == "Array"
+    assert len(result["images"]["value"]) == 3
+    saved = [Path(resolve_output_ref(ref)) for ref in result["images"]["value"]]
+    assert len(set(saved)) == 3 and all(path.exists() for path in saved)
+    assert Path(result["image"]["value"]) == saved[0]
+
+
+@pytest.mark.asyncio
+async def test_edit_with_no_image_in_the_reply_says_so() -> None:
+    from handlers.openai_image_edit import handle_openai_image_edit
+
+    source = OUTPUT_ROOT / "edit-source-empty.png"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(base64.b64decode(RED_PIXEL_B64))
+    patcher, _ = _edit_client([])
+    with patcher, pytest.raises(RuntimeError, match="no image"):
+        await handle_openai_image_edit(
+            GraphNode(id="e", definitionId="gpt-image-1-edit", params={}),
+            {"image": PortValueDict(type="Image", value=str(source)),
+             "prompt": PortValueDict(type="Text", value="x")},
+            _API_KEYS,
+        )
+
+
+@pytest.mark.asyncio
+async def test_edit_with_no_model_keeps_gpt_image_1_until_its_shutdown() -> None:
+    from handlers.openai_image_edit import handle_openai_image_edit
+
+    source = OUTPUT_ROOT / "edit-source-legacy.png"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(base64.b64decode(RED_PIXEL_B64))
+    patcher, client = _edit_client([RED_PIXEL_B64])
+    with patcher, _on("2026-10-22"):
+        await handle_openai_image_edit(
+            GraphNode(id="e", definitionId="gpt-image-1-edit", params={}),
+            {"image": PortValueDict(type="Image", value=str(source)),
+             "prompt": PortValueDict(type="Text", value="x")},
+            _API_KEYS,
+        )
+    fields = dict((k, v[1]) for k, v in client.post.call_args.kwargs["files"] if k != "image")
+    assert fields["model"] == "gpt-image-1"

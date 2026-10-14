@@ -38,10 +38,10 @@ These are the **ten OpenAI-direct nodes** (all BYOK, one key). For prompting *cr
 
 | Node (display) | Node ID | Endpoint / model | Key inputs | Key params |
 |---|---|---|---|---|
-| GPT Image 1 | `gpt-image-1-generate` | `/v1/images/generations` · `gpt-image-1` \| `gpt-image-1.5` \| `gpt-image-1-mini` | `prompt` (Text) | `model`, `size`, `quality`, `output_format`, `background` (transparent OK) |
+| GPT Image 1 | `gpt-image-1-generate` | `/v1/images/generations` · `gpt-image-2.5-flare` (default) \| `gpt-image-2.5-sunburst` \| `gpt-image-1` \| `gpt-image-1.5` \| `gpt-image-1-mini` | `prompt` (Text) | `model`, `size`, `quality`, `output_format`, `background` (transparent OK) |
 | GPT Image 2 | `gpt-image-2-generate` | `/v1/images/generations` · `gpt-image-2` (streams) | `prompt` (Text) | `size` (→4K), `quality`, `output_format`, `output_compression`, `moderation` |
 | GPT Image 2.5 | `gpt-image-2-5-generate` | `/v1/images/generations` · `gpt-image-2.5-flare` \| `gpt-image-2.5-sunburst` (streams) | `prompt` (Text) | `model`, `size` (→4K, >2560x1440 experimental), `quality` (adds `xhigh`/`max`), `background` (transparent OK), `output_format`, `output_compression`, `moderation` |
-| GPT Image 1 Edit | `gpt-image-1-edit` | `/v1/images/edits` · `gpt-image-1*` | `image` (Image), `prompt` (Text), `mask` (Mask) | `model`, `n` (1–10), `size`, `quality`, `output_format`, `background` |
+| GPT Image 1 Edit | `gpt-image-1-edit` | `/v1/images/edits` · `gpt-image-2.5-sunburst` (default), 2.5 Flare, `gpt-image-1*` | `image` (Image), `prompt` (Text), `mask` (Mask) | `model`, `n` (1–10), `size`, `quality`, `output_format`, `background` |
 | GPT Image 2 Edit | `gpt-image-2-edit` | `/v1/images/edits` · `gpt-image-2` (streams) | `images` (Image, ≤10), `prompt` (Text), `mask` (Mask) | `size`, `quality`, `output_format`, `output_compression`, `moderation` |
 | GPT Image 2.5 Edit | `gpt-image-2-5-edit` | `/v1/images/edits` · `gpt-image-2.5-flare` \| `gpt-image-2.5-sunburst` (streams) | `images` (Image, ≤10), `prompt` (Text), `mask` (Mask) | same as GPT Image 2.5 |
 | OpenAI TTS | `openai-tts` | `/v1/audio/speech` · `tts-1` \| `tts-1-hd` \| `gpt-4o-mini-tts` | `text` (Text) | `model`, `voice` (13), `speed`, `response_format` (6), `instructions` (mini-tts only) |
@@ -54,7 +54,8 @@ These are the **ten OpenAI-direct nodes** (all BYOK, one key). For prompting *cr
 Types/ranges/enums/defaults are from `node_definitions.json`; behavior notes are from the handlers.
 
 ### `gpt-image-1-generate` (sync)
-- `model` *(enum, req, default `gpt-image-1`)*: `gpt-image-1` · `gpt-image-1.5` · `gpt-image-1-mini`.
+- `model` *(enum, req, default `gpt-image-2.5-flare` since 2026-10-14)*: `gpt-image-1` (shuts down 2026-10-23) · `gpt-image-1.5` · `gpt-image-1-mini` (both shut down 2026-12-01) · `gpt-image-2.5-flare` · `gpt-image-2.5-sunburst`. OpenAI names the two 2.5 models as the replacement for all three; saved `gpt-image-1` nodes move to Flare from 2026-10-23 (on load and at run time). A node with no stored `model` runs gpt-image-1 until then.
+- `quality` also offers `xhigh` and `max` on the 2.5 models. A transparent background needs `png` or `webp` (checked before the request).
 - `size` *(enum, default `auto`)*: `auto` · `1024x1024` · `1536x1024` · `1024x1536`. `auto` is omitted from the request (lets OpenAI pick).
 - `quality` *(enum, default `auto`)*: `auto` · `low` · `medium` · `high`. `auto` omitted.
 - `output_format` *(enum, default `png`)*: `png` · `jpeg` · `webp`. Drives the saved file extension (so downstream MIME is correct). Only sent when ≠ `png`.
@@ -69,8 +70,8 @@ Types/ranges/enums/defaults are from `node_definitions.json`; behavior notes are
 - Handler **always** sets `stream: true`, `partial_images: 0`, and strips `background`/`input_fidelity`/`n`. For prompting craft + cost table, see the gpt-image-2 skill.
 
 ### `gpt-image-1-edit` (sync, multipart)
-- `model` *(enum, req, default `gpt-image-1`)*: `gpt-image-1` · `gpt-image-1.5` · `gpt-image-1-mini`.
-- `n` *(int 1–10, default 1)*: number of variations; only sent when >1.
+- `model` *(enum, req, default `gpt-image-2.5-sunburst` since 2026-10-14)*: same options as `gpt-image-1-generate`. Sunburst is OpenAI's pick "for workflows where editing precision matters most"; saved `gpt-image-1` nodes move to it from 2026-10-23 (on load and at run time). A node with no stored `model` runs gpt-image-1 until then.
+- `n` *(int 1–10, default 1)*: number of variations; only sent when >1. Every image comes back: the first on `image`, all of them on the `images` (Array) output.
 - `size` / `quality` / `output_format` / `background`: same enums/defaults as `gpt-image-1-generate`.
 - Inputs: `image` (req), `prompt` (req), `mask` (optional PNG). Image + mask are read from disk and uploaded multipart.
 
@@ -159,7 +160,7 @@ Do not promise these — they aren't wired. (From the audit guide's gap table, `
 - **Audio-in/out chat** (`gpt-4o-audio-preview`) — not wired.
 - **Realtime API** (gpt-realtime, speech-to-speech) — entire family unsupported.
 - **Responses API** (`/v1/responses`) — Nebula uses the older Chat Completions endpoint.
-- **Embeddings / Moderations / Batch / Files / Assistants / Sora video** — out of scope (Sora's Videos API + sora-2/sora-2-pro shut down 2026-09-24 anyway).
+- **Embeddings / Moderations / Batch / Files / Assistants / Sora video** — out of scope (Sora's Videos API + sora-2/sora-2-pro shut down 2026-09-24; Nebula's fal `sora-2` / `sora-2-i2v` nodes were retired and load as `veo-3`).
 
 Coverage: roughly 60% of OpenAI's media-generation surface (images + audio + chat) is exposed; ~30% of the entire OpenAI platform.
 

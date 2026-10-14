@@ -82,10 +82,10 @@ Generates a new texture for an existing 3D model using text or reference image. 
 **Other params:**
 | Param | Type | Default | Notes |
 |---|---|---|---|
-| `ai_model` | string | `"latest"` | `"meshy-5"`, `"meshy-6"`, `"latest"` |
+| `ai_model` | string | `"latest"` | `"latest"` (= `meshy-7` here; Retexture rejects `meshy-7.1`), `"meshy-7"`, `"meshy-6"`, `"meshy-6-lite"`. `meshy-5` is no longer accepted |
 | `enable_original_uv` | boolean | `true` | Preserve existing textures from the uploaded model |
 | `enable_pbr` | boolean | `false` | Metallic + roughness + normal maps |
-| `remove_lighting` | boolean | `true` | Remove baked highlights/shadows. **`meshy-6`/`latest` only** |
+| `remove_lighting` | boolean | `true` | Remove baked highlights/shadows |
 | `target_formats` | string[] | all except `3mf` | Same options as other endpoints |
 
 ### Limitations from docs

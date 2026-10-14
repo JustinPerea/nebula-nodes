@@ -24,8 +24,8 @@
 
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
-| Meshy Multi-Image-to-3D | `meshy-multi-image-to-3d` | 3d-gen | `images` (1–4 images, required) | `ai_model` (latest/meshy-6/meshy-5), `should_remesh`, `topology`, `target_polycount` (100–300k), `should_texture`, `enable_pbr`, `pose_mode`, `hd_texture` (4K), `image_enhancement`, `remove_lighting` | Building a textured 3D model from a few photos of the same object |
-| Meshy Retexture | `meshy-retexture` | 3d-gen | `model_url` (text, required), `prompt` (style, optional) | `ai_model`, `enable_original_uv`, `enable_pbr`, `remove_lighting` | Giving an existing model a new texture/material from a text style prompt |
+| Meshy Multi-Image-to-3D | `meshy-multi-image-to-3d` | 3d-gen | `images` (1–4 images, required) | `ai_model` (latest = Meshy 7.1 / meshy-6 / meshy-6-lite / meshy-7.1; meshy-5 removed 2026-10-14), `should_remesh`, `topology`, `target_polycount` (100–300k), `should_texture`, `enable_pbr`, `pose_mode`, `hd_texture` (4K), `image_enhancement`, `remove_lighting` | Building a textured 3D model from a few photos of the same object |
+| Meshy Retexture | `meshy-retexture` | 3d-gen | `model_url` (text, required), `prompt` (style, optional) | `ai_model` (latest = Meshy 7 / meshy-6 / meshy-6-lite / meshy-7; Retexture rejects 7.1), `enable_original_uv`, `enable_pbr`, `remove_lighting` | Giving an existing model a new texture/material from a text style prompt |
 | Meshy Auto-Rig | `meshy-rigging` | 3d-gen | `model_url` (text, required) | `height_meters` (0.1–5, default 1.7) | Adding a skeleton to a textured humanoid GLB so it can be animated; outputs a **Rig Task ID** |
 | Meshy Animate | `meshy-animate` | 3d-gen | `rig_task_id` (text, required — from Auto-Rig) | `action_id` (Idle/Walking/Running/Jumping/Dancing/Waving/Sitting/Clapping/Punching/Kicking/Sword Swing), `fps` (24/25/30/60) | Applying a library animation to a rigged character |
 | Meshy Remesh | `meshy-remesh` | 3d-gen | `model_url` (text, required) | `topology` (triangle/quad), `target_polycount` (100–300k), `target_formats` (glb,fbx,obj,usdz,blend,stl), `resize_height` (m), `convert_format_only` | Retopology, polygon reduction, resizing, and format conversion of an existing model |
@@ -63,8 +63,8 @@ Notes for the curious:
 
 | Capability / Endpoint | In the API | In Nebula | Notes |
 |---|---|---|---|
-| Text-to-3D (`/v2/text-to-3d`) | yes | none | Nebula's `meshy-text-to-3d` node is **FAL-backed** (uses `FAL_KEY`, not the direct Meshy API), so the native endpoint isn't called by any of these 8 nodes. |
-| Image-to-3D (`/v1/image-to-3d`) | yes | none | Same — Nebula's `meshy-image-to-3d` is FAL-backed, outside this provider. |
+| Text-to-3D (`/v2/text-to-3d`) | yes | none | Nebula's `meshy-text-to-3d` node calls this endpoint directly when `MESHY_API_KEY` is set and falls back to fal (`FAL_KEY`) otherwise; it sends `ai_model`, `model_type` (incl. smart-topology) and `seed`. |
+| Image-to-3D (`/v1/image-to-3d`) | yes | none | Nebula's `meshy-image-to-3d` calls this endpoint directly when `MESHY_API_KEY` is set and falls back to fal otherwise. Meshy's ImageTo3DRequest has no `seed`, so seed stays fal-only. |
 | Multi-Image-to-3D (`/v1/multi-image-to-3d`) | yes | full | `meshy-multi-image-to-3d`. Core params exposed (model, remesh, topology, polycount, texture, PBR, pose, HD texture, enhancement, remove-lighting). |
 | Remesh (`/v1/remesh`) | yes | full | `meshy-remesh`. Topology, polycount, formats, resize-height, convert-only all exposed. |
 | Convert (`/v1/convert`) | yes | partial | Standalone format-conversion endpoint (May 2026). Not wired as its own node; Remesh's `convert_format_only` + `target_formats` covers the common case, but the dedicated endpoint's `input_task_id` chaining is unused. |
