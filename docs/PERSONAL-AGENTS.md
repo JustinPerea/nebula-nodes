@@ -146,6 +146,9 @@ Reattaching after a reconnect (`session/load`), Hermes profile setup, OpenClaw (
 agents and an HTTP MCP transport, image and file prompts, session modes and model choice, slash commands, environment
 variables for custom agents, and more than one personal session per chat panel.
 
+Hermes is planned to come in through the API server on its running gateway instead of a separate
+profile, so it keeps one memory: [HERMES-GATEWAY-PLAN.md](HERMES-GATEWAY-PLAN.md).
+
 If the backend is killed outright (no cleanup runs), the agent guardian (`services/agent_guardian.py`) kills the
 agent's whole process group, as it does for in-app chats, and the token dies with the backend.
 
