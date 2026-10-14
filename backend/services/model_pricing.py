@@ -517,6 +517,8 @@ def estimate_run(
     each of those to {model, runs}: how many runs it bills to the Krea plan
     (batch runs times a cinema scene's shots). ``low``/``high`` are None when
     nothing is priced."""
+    from services import node_route
+
     nodes_pricing = pricing.get("nodes") or {}
     low = high = 0.0
     priced: dict[str, dict[str, float]] = {}
@@ -549,9 +551,12 @@ def estimate_run(
             plan_runs[node_id] = {"model": str(definition.get("id") or item.get("definitionId") or ""),
                                   "runs": (multipliers or {}).get(node_id, (1, 1))[1] * calls}
             continue
+        # A Krea-only setting that arrives by wire keeps the run on Krea
+        # (node_route.with_wired_blockers), as the router does.
+        routed = node_route.with_wired_blockers(definition, params, ports)
         estimate = estimate_node(
             nodes_pricing.get(definition.get("id") or item.get("definitionId")),
-            definition, params, route_provider(definition, api_keys, params), ports,
+            definition, params, route_provider(definition, api_keys, routed), ports,
         )
         if estimate is None or estimate["currency"] != "usd":
             unpriced.append(node_id)
