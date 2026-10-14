@@ -337,6 +337,17 @@ async def test_a_big_webp_shrinks_to_the_long_side_limit():
 
 
 @pytest.mark.asyncio
+async def test_max_side_shrinks_further_for_a_retry_and_boxes_still_map_back():
+    [image] = await ts.prepare_images([_data_uri(Image.new("RGB", (2000, 1000), "green"))], max_side=768)
+    t = image.transform
+    assert (t.sent_width, t.sent_height) == (768, 384) and (t.width, t.height) == (2000, 1000)
+    assert t.to_original_box(top=0.5, bottom=1, left=0.25, right=0.5)["px"] == {"x": 500, "y": 500, "w": 500, "h": 500}
+    for bad in (100, 2000):
+        with pytest.raises(ValueError, match="max_side must be from 256 to 1568"):
+            await ts.prepare_images([], max_side=bad)
+
+
+@pytest.mark.asyncio
 async def test_a_small_image_is_padded_never_stretched():
     [image] = await ts.prepare_images([_data_uri(Image.new("RGBA", (200, 200), (0, 0, 255, 128)))])
     t = image.transform

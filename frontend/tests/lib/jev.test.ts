@@ -94,5 +94,19 @@ describe('Jev node definitions', () => {
     expect(decide.outputPorts.every((port) => port.dataType === 'Text')).toBe(true);
     expect(decide.envKeyName).toBe('TYPESAFE_API_KEY');
     expect(decide.description).toMatch(/judge/i);
+
+    const pick = NODE_DEFINITIONS[JEV_PICK_BEST];
+    expect(pick.outputPorts.map((port) => [port.id, port.dataType])).toEqual([
+      ['winner', 'Image'], ['index', 'Text'], ['probabilities', 'Text'], ['confidence', 'Text'], ['report', 'Text'],
+    ]);
+    expect(pick.inputPorts[0]).toMatchObject({ id: 'candidates', dataType: 'Image', multiple: true, maxConnections: 10 });
+
+    const box = NODE_DEFINITIONS[JEV_BOX];
+    expect(box.displayName).toBe('Jev Box (experimental)');
+    expect(box.outputPorts.map((port) => [port.id, port.dataType])).toEqual([
+      ['found', 'Text'], ['box', 'Text'], ['crop', 'Image'], ['mask', 'Mask'], ['annotated', 'Image'], ['report', 'Text'],
+    ]);
+    const model = box.params.find((param) => param.key === 'model');
+    expect(model?.options?.map((option) => option.value)).toEqual(['jev-1.14.0', 'jev-preview']);
   });
 });

@@ -296,11 +296,11 @@ def _has_alpha(image: Image.Image) -> bool:
     return image.mode == "P" and "transparency" in image.info
 
 
-def _target_size(width: int, height: int) -> tuple[int, int, int, int]:
-    """(content_w, content_h, sent_w, sent_h): shrink to MAX_SIDE, then pad up."""
-    scale = min(1.0, MAX_SIDE / max(width, height))
-    content_w = max(1, min(MAX_SIDE, round(width * scale)))
-    content_h = max(1, min(MAX_SIDE, round(height * scale)))
+def _target_size(width: int, height: int, max_side: int = MAX_SIDE) -> tuple[int, int, int, int]:
+    """(content_w, content_h, sent_w, sent_h): shrink to max_side, then pad up."""
+    scale = min(1.0, max_side / max(width, height))
+    content_w = max(1, min(max_side, round(width * scale)))
+    content_h = max(1, min(max_side, round(height * scale)))
     sent_w, sent_h = max(content_w, MIN_SIDE), max(content_h, MIN_SIDE)
     if sent_w * sent_h < MIN_PIXELS:
         grow = math.sqrt(MIN_PIXELS / (sent_w * sent_h))
@@ -325,7 +325,7 @@ class _Working:
     base: dict[str, Any] = field(default_factory=dict)
 
 
-def _prepare_geometry(source: str, data: bytes, label: str) -> _Working:
+def _prepare_geometry(source: str, data: bytes, label: str, max_side: int = MAX_SIDE) -> _Working:
     image, source_format, frames, src_w, src_h, orientation = _open_first_frame(data, label)
     upright = ImageOps.exif_transpose(image) or image
     if upright.mode == "P":
@@ -333,7 +333,7 @@ def _prepare_geometry(source: str, data: bytes, label: str) -> _Working:
     alpha = _has_alpha(upright)
     upright = upright.convert("RGBA" if alpha else "RGB")
     width, height = upright.size
-    content_w, content_h, sent_w, sent_h = _target_size(width, height)
+    content_w, content_h, sent_w, sent_h = _target_size(width, height, max_side)
     content = upright if (content_w, content_h) == (width, height) else upright.resize(
         (content_w, content_h), Image.Resampling.LANCZOS)
     pad_left, pad_top = (sent_w - content_w) // 2, (sent_h - content_h) // 2
@@ -378,8 +378,9 @@ def _ladder(work: _Working) -> list[tuple[str, int | None]]:
     return ([("png", None)] if work.prefer_png else []) + [("jpg", q) for q in _JPEG_QUALITIES]
 
 
-def _prepare_all(sources: Sequence[tuple[str, bytes]], label: str, budget: int) -> list[PreparedImage]:
-    works = [_prepare_geometry(source, data, f"{label} {index + 1}") for index, (source, data) in
+def _prepare_all(sources: Sequence[tuple[str, bytes]], label: str, budget: int,
+                 max_side: int = MAX_SIDE) -> list[PreparedImage]:
+    works = [_prepare_geometry(source, data, f"{label} {index + 1}", max_side) for index, (source, data) in
              enumerate(sources)]
     ladders = [_ladder(work) for work in works]
     steps = [0] * len(works)
@@ -420,13 +421,16 @@ def _prepare_all(sources: Sequence[tuple[str, bytes]], label: str, budget: int) 
 
 
 async def prepare_images(values: Iterable[Any], *, label: str = "Image",
-                         max_images: int = DEFAULT_MAX_IMAGES) -> list[PreparedImage]:
+                         max_images: int = DEFAULT_MAX_IMAGES, max_side: int = MAX_SIDE) -> list[PreparedImage]:
     """Load and fit graph image values for one request, in order.
 
     Every image gets a fresh uuid4 placeholder and a part name. The total stays
     inside TypeSafe's 32 MiB body (re-encoding as JPEG if needed); otherwise a
-    ValueError says what to change.
+    ValueError says what to change. ``max_side`` shrinks the long side further
+    than TypeSafe requires, for a retry after max_tokens_exceeded.
     """
+    if not MIN_SIDE <= max_side <= MAX_SIDE:
+        raise ValueError(f"max_side must be from {MIN_SIDE} to {MAX_SIDE}")
     items = [str(value) for value in values if value not in (None, "")]
     if len(items) > max_images:
         raise ValueError(f"{len(items)} images connected; this node takes at most {max_images}")
@@ -434,7 +438,7 @@ async def prepare_images(values: Iterable[Any], *, label: str = "Image",
               for index, item in enumerate(items)]
     if not loaded:
         return []
-    return await asyncio.to_thread(_prepare_all, loaded, label, MAX_REQUEST_BYTES - _REQUEST_MARGIN)
+    return await asyncio.to_thread(_prepare_all, loaded, label, MAX_REQUEST_BYTES - _REQUEST_MARGIN, max_side)
 
 
 # -- questions -----------------------------------------------------------------

@@ -15,7 +15,8 @@ Value formats:
 - probabilities: a JSON object of label -> number (four places), in the
   order the options were given.
 - box: JSON {"top","bottom","left","right","confidence","px","image"}, or
-  the JSON text "null" when the target wasn't found.
+  the JSON text "null" unless the target was found ("unsure" gives null
+  too: Nebula never hands on a box that may point at nothing).
 - report: plain text. Line 1 is the title, then "Key: value" lines, then
   zero or more "Note: ..." lines. "Model:" and "Input tokens:" are always
   there.
@@ -35,7 +36,7 @@ VERDICTS = ("true", "false", "unsure")
 EXPERIMENTAL_IMAGES = "experimental"
 
 # Port id -> data type, per node. Optional ports may be left out of a result
-# (Box leaves out crop/mask/annotated when it found nothing).
+# (Box gives crop/mask/annotated only when found is "true").
 PORTS: dict[str, dict[str, str]] = {
     DECIDE: {"answer": "Text", "pass": "Text", "probability": "Text", "confidence": "Text",
              "probabilities": "Text", "report": "Text"},
@@ -88,7 +89,8 @@ def box_json(mapped: Mapping[str, Any] | None, confidence: float | None) -> str:
 
 
 def _one_line(text: Any, limit: int = 300) -> str:
-    flat = " ".join(str(text or "").split())
+    # 0 is a real value (a Pick Best winner at index 0), so only None is empty.
+    flat = " ".join(("" if text is None else str(text)).split())
     return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 
@@ -164,8 +166,8 @@ def _box_problem(value: Any, found: Any) -> str | None:
         return "is not JSON"
     if parsed is None:
         return "is null although found is true" if found == "true" else None
-    if found == "false":
-        return "must be null when found is false"
+    if found != "true":
+        return f"must be null when found is {found}"
     if not isinstance(parsed, dict):
         return "is not a JSON object"
     for edge in ("top", "bottom", "left", "right"):
@@ -244,11 +246,10 @@ def validate_outputs(definition_id: str, outputs: Mapping[str, Any]) -> list[str
             ("found", None if found in VERDICTS else "must be true, false or unsure"),
             ("box", _box_problem(value("box"), found)),
         ]
-        if found != "true":
-            for port in ("crop", "mask"):
-                if port in outputs:
-                    checks.append((port, "only when found is true"))
-        if found == "false" and "annotated" in outputs:
-            checks.append(("annotated", "not when found is false"))
+        for port in ("crop", "mask", "annotated"):
+            if found == "true" and port not in outputs:
+                checks.append((port, "missing although found is true"))
+            elif found != "true" and port in outputs:
+                checks.append((port, "only when found is true"))
     problems += [f"{port}: {problem}" for port, problem in checks if problem]
     return problems

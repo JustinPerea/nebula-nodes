@@ -12839,6 +12839,91 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
+  // Picks the best of several candidate images; `winner` is the original value.
+  'jev-pick-best': {
+    id: 'jev-pick-best',
+    displayName: 'Jev Pick Best (rank / choose best image)',
+    description: 'Pick the best of several candidate images against a brief, in one typed Choice. Returns the winning image itself, its index, every candidate\'s probability and how confident the pick is; low confidence means the candidates are close. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.',
+    category: 'analyzer',
+    apiProvider: 'typesafe',
+    apiEndpoint: '/v1/systemone',
+    envKeyName: 'TYPESAFE_API_KEY',
+    executionPattern: 'sync',
+    capabilityNote: 'Image input is experimental at TypeSafe: the request format and accuracy can change between releases. Up to 10 candidates per node.',
+    docUrl: 'docs/api-guides/typesafe.md',
+    inputPorts: [
+      { id: 'candidates', label: 'Candidates', dataType: 'Image', required: true, multiple: true, maxConnections: 10 },
+      { id: 'brief', label: 'Brief', dataType: 'Text', required: false },
+    ],
+    outputPorts: [
+      { id: 'winner', label: 'Winner', dataType: 'Image', required: false },
+      { id: 'index', label: 'Index', dataType: 'Text', required: false },
+      { id: 'probabilities', label: 'Probabilities (JSON)', dataType: 'Text', required: false },
+      { id: 'confidence', label: 'Confidence', dataType: 'Text', required: false },
+      { id: 'report', label: 'Report', dataType: 'Text', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'jev-1.14.0',
+        options: [
+          { label: 'Jev 1.14.0 (pinned)', value: 'jev-1.14.0' },
+          { label: 'Jev 1.13.0 (pinned)', value: 'jev-1.13.0' },
+          { label: 'jev-latest (moves; re-check thresholds)', value: 'jev-latest' },
+          { label: 'jev-preview (moves)', value: 'jev-preview' },
+        ],
+      },
+      { key: 'question', label: 'Question', type: 'textarea', required: false, default: 'Which image best matches the brief?', placeholder: 'Which image best matches the brief?' },
+      { key: 'min_confidence', label: 'Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
+    ],
+  },
+
+  // Finds one thing in an image. Only a confident 'found' produces crop / mask / annotated.
+  'jev-box': {
+    id: 'jev-box',
+    displayName: 'Jev Box (experimental)',
+    description: 'Find one thing in an image and get its bounding box, a crop and a rectangle mask for inpainting. A presence check runs in the same request, so a missing target gives found false and no crop. TypeSafe Jev makes decisions only, no text generation. Experimental at TypeSafe.',
+    category: 'analyzer',
+    apiProvider: 'typesafe',
+    apiEndpoint: '/v1/systemone',
+    envKeyName: 'TYPESAFE_API_KEY',
+    executionPattern: 'sync',
+    capabilityNote: 'Box questions and image input are experimental at TypeSafe: the format, limits and accuracy can change between releases. Needs Jev 1.14.',
+    docUrl: 'docs/api-guides/typesafe.md',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'target', label: 'Target', dataType: 'Text', required: false },
+    ],
+    outputPorts: [
+      { id: 'found', label: 'Found', dataType: 'Text', required: false },
+      { id: 'box', label: 'Box (JSON)', dataType: 'Text', required: false },
+      { id: 'crop', label: 'Crop', dataType: 'Image', required: false },
+      { id: 'mask', label: 'Mask', dataType: 'Mask', required: false },
+      { id: 'annotated', label: 'Annotated', dataType: 'Image', required: false },
+      { id: 'report', label: 'Report', dataType: 'Text', required: false },
+    ],
+    params: [
+      { key: 'target', label: 'Target', type: 'string', required: false, default: '', placeholder: 'the red car' },
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'jev-1.14.0',
+        options: [
+          { label: 'Jev 1.14.0 (pinned)', value: 'jev-1.14.0' },
+          { label: 'jev-preview (moves)', value: 'jev-preview' },
+        ],
+      },
+      { key: 'presence_threshold', label: 'Presence Threshold', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
+      { key: 'min_confidence', label: 'Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
+      { key: 'pad', label: 'Crop Padding (fraction of image)', type: 'float', required: false, default: 0.05, min: 0, max: 0.5, step: 0.01 },
+    ],
+  },
+
   'identity-edit': {
     id: 'identity-edit',
     displayName: 'Identity Edit',

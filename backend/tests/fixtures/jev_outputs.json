@@ -1,5 +1,5 @@
 {
-  "about": "Sample outputs of the Jev nodes, in the contract of docs/api-guides/typesafe.md. backend/tests/test_jev_decide.py checks the Decide handler produces these outputs exactly and that every sample keeps the contract (services/jev_outputs.validate_outputs); frontend/tests/lib/jev.test.ts checks parseJevOutputs turns each into `parsed`. Pick Best and Box samples are hand-written until those handlers exist; their tests should then produce them too. `malformed` samples must parse to null.",
+  "about": "Sample outputs of the Jev nodes, in the contract of docs/api-guides/typesafe.md. backend/tests/test_jev_decide.py checks the Decide handler produces these outputs exactly and that every sample keeps the contract (services/jev_outputs.validate_outputs); frontend/tests/lib/jev.test.ts checks parseJevOutputs turns each into `parsed`. test_jev_pick_best.py and test_jev_box.py do the same for the Pick Best and Box samples (Box file names are normalised, since saved files get unique names). `malformed` samples must parse to null.",
   "decide": [
     {
       "name": "yes/no that passes",
@@ -396,10 +396,45 @@
   "pickBest": [
     {
       "name": "a clear winner",
+      "params": {},
+      "brief": "A red ceramic mug on a plain white background, soft studio light.",
+      "candidates": [
+        [
+          1024,
+          1024
+        ],
+        [
+          1024,
+          1024
+        ],
+        [
+          1024,
+          1024
+        ]
+      ],
+      "response": {
+        "model": "jev-1.14.0",
+        "answers": {
+          "pick": {
+            "type": "choice",
+            "choice": "b",
+            "probabilities": {
+              "a": 0.08,
+              "b": 0.87,
+              "c": 0.05
+            },
+            "confidence": 0.81
+          }
+        },
+        "usage": {
+          "input_tokens": 2810,
+          "output_tokens": 20
+        }
+      },
       "outputs": {
         "winner": {
           "type": "Image",
-          "value": "/api/outputs/run-7/candidate-b.png"
+          "value": "/api/outputs/jev-fixture/candidate-1.png"
         },
         "index": {
           "type": "Text",
@@ -415,12 +450,12 @@
         },
         "report": {
           "type": "Text",
-          "value": "Jev Pick Best\nQuestion: Which image best matches the brief?\nCandidates: 3\nWinner: 1\nProbability: 0.87\nConfidence: 0.81\nModel: jev-1.14.0\nInput tokens: 2810\nImages: 3 (experimental)"
+          "value": "Jev Pick Best\nQuestion: Which image best matches the brief?\nBrief: A red ceramic mug on a plain white background, soft studio light.\nCandidates: 3\nWinner: 1\nProbability: 0.87\nConfidence: 0.81\nModel: jev-1.14.0\nInput tokens: 2810\nImages: 3 (experimental)"
         }
       },
       "parsed": {
         "kind": "pick-best",
-        "winner": "/api/outputs/run-7/candidate-b.png",
+        "winner": "/api/outputs/jev-fixture/candidate-1.png",
         "index": 1,
         "probabilities": {
           "0": 0.08,
@@ -432,6 +467,7 @@
           "title": "Jev Pick Best",
           "fields": {
             "Question": "Which image best matches the brief?",
+            "Brief": "A red ceramic mug on a plain white background, soft studio light.",
             "Candidates": "3",
             "Winner": "1",
             "Probability": "0.87",
@@ -448,10 +484,45 @@
     },
     {
       "name": "any would do",
+      "params": {},
+      "brief": "A red ceramic mug on a plain white background, soft studio light.",
+      "candidates": [
+        [
+          1024,
+          1024
+        ],
+        [
+          1024,
+          1024
+        ],
+        [
+          1024,
+          1024
+        ]
+      ],
+      "response": {
+        "model": "jev-1.14.0",
+        "answers": {
+          "pick": {
+            "type": "choice",
+            "choice": "a",
+            "probabilities": {
+              "a": 0.36,
+              "b": 0.33,
+              "c": 0.31
+            },
+            "confidence": 0.04
+          }
+        },
+        "usage": {
+          "input_tokens": 2790,
+          "output_tokens": 20
+        }
+      },
       "outputs": {
         "winner": {
           "type": "Image",
-          "value": "https://cdn.example.com/a.jpg"
+          "value": "/api/outputs/jev-fixture/candidate-0.png"
         },
         "index": {
           "type": "Text",
@@ -467,12 +538,12 @@
         },
         "report": {
           "type": "Text",
-          "value": "Jev Pick Best\nQuestion: Which image best matches the brief?\nCandidates: 3\nWinner: 0\nProbability: 0.36\nConfidence: 0.04\nModel: jev-1.14.0\nInput tokens: 2790\nImages: 3 (experimental)\nNote: Confidence 0.04 is below the minimum 0.5: the candidates are close, so any would do."
+          "value": "Jev Pick Best\nQuestion: Which image best matches the brief?\nBrief: A red ceramic mug on a plain white background, soft studio light.\nCandidates: 3\nWinner: 0\nProbability: 0.36\nConfidence: 0.04\nModel: jev-1.14.0\nInput tokens: 2790\nImages: 3 (experimental)\nNote: Confidence 0.04 is below the minimum 0.5: the candidates are close, so any would do.\nNote: Jev can lean toward the first option when options are close; reorder the candidates to check."
         }
       },
       "parsed": {
         "kind": "pick-best",
-        "winner": "https://cdn.example.com/a.jpg",
+        "winner": "/api/outputs/jev-fixture/candidate-0.png",
         "index": 0,
         "probabilities": {
           "0": 0.36,
@@ -484,6 +555,7 @@
           "title": "Jev Pick Best",
           "fields": {
             "Question": "Which image best matches the brief?",
+            "Brief": "A red ceramic mug on a plain white background, soft studio light.",
             "Candidates": "3",
             "Winner": "0",
             "Probability": "0.36",
@@ -493,10 +565,95 @@
             "Images": "3 (experimental)"
           },
           "notes": [
-            "Confidence 0.04 is below the minimum 0.5: the candidates are close, so any would do."
+            "Confidence 0.04 is below the minimum 0.5: the candidates are close, so any would do.",
+            "Jev can lean toward the first option when options are close; reorder the candidates to check."
           ],
           "model": "jev-1.14.0",
           "inputTokens": 2790
+        }
+      }
+    },
+    {
+      "name": "no brief, alias model",
+      "params": {
+        "question": "Which image is sharpest?",
+        "model": "jev-latest"
+      },
+      "brief": null,
+      "candidates": [
+        [
+          1024,
+          768
+        ],
+        [
+          1024,
+          768
+        ]
+      ],
+      "response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "pick": {
+            "type": "choice",
+            "choice": "a",
+            "probabilities": {
+              "a": 0.91,
+              "b": 0.09
+            },
+            "confidence": 0.82
+          }
+        },
+        "usage": {
+          "input_tokens": 1650,
+          "output_tokens": 20
+        }
+      },
+      "outputs": {
+        "winner": {
+          "type": "Image",
+          "value": "/api/outputs/jev-fixture/candidate-0.png"
+        },
+        "index": {
+          "type": "Text",
+          "value": "0"
+        },
+        "probabilities": {
+          "type": "Text",
+          "value": "{\"0\": 0.91, \"1\": 0.09}"
+        },
+        "confidence": {
+          "type": "Text",
+          "value": "0.82"
+        },
+        "report": {
+          "type": "Text",
+          "value": "Jev Pick Best\nQuestion: Which image is sharpest?\nCandidates: 2\nWinner: 0\nProbability: 0.91\nConfidence: 0.82\nModel: jev-1.13.0 (asked for jev-latest)\nInput tokens: 1650\nImages: 2 (experimental)"
+        }
+      },
+      "parsed": {
+        "kind": "pick-best",
+        "winner": "/api/outputs/jev-fixture/candidate-0.png",
+        "index": 0,
+        "probabilities": {
+          "0": 0.91,
+          "1": 0.09
+        },
+        "confidence": 0.82,
+        "report": {
+          "title": "Jev Pick Best",
+          "fields": {
+            "Question": "Which image is sharpest?",
+            "Candidates": "2",
+            "Winner": "0",
+            "Probability": "0.91",
+            "Confidence": "0.82",
+            "Model": "jev-1.13.0 (asked for jev-latest)",
+            "Input tokens": "1650",
+            "Images": "2 (experimental)"
+          },
+          "notes": [],
+          "model": "jev-1.13.0",
+          "inputTokens": 1650
         }
       }
     }
@@ -504,6 +661,36 @@
   "box": [
     {
       "name": "found with a confident box",
+      "params": {
+        "target": "the coffee mug"
+      },
+      "image": [
+        1024,
+        768
+      ],
+      "response": {
+        "model": "jev-1.14.0",
+        "answers": {
+          "present": {
+            "type": "noul",
+            "noul": 0.97
+          },
+          "where": {
+            "type": "box",
+            "box": {
+              "top": 0.25,
+              "bottom": 0.82,
+              "left": 0.44,
+              "right": 0.84
+            },
+            "confidence": 0.92
+          }
+        },
+        "usage": {
+          "input_tokens": 290,
+          "output_tokens": 21
+        }
+      },
       "outputs": {
         "found": {
           "type": "Text",
@@ -515,19 +702,19 @@
         },
         "crop": {
           "type": "Image",
-          "value": "/api/outputs/run-8/crop.png"
+          "value": "/api/outputs/jev-box/crop.png"
         },
         "mask": {
           "type": "Mask",
-          "value": "/api/outputs/run-8/mask.png"
+          "value": "/api/outputs/jev-box/mask.png"
         },
         "annotated": {
           "type": "Image",
-          "value": "/api/outputs/run-8/annotated.png"
+          "value": "/api/outputs/jev-box/annotated.png"
         },
         "report": {
           "type": "Text",
-          "value": "Jev Box\nTarget: the coffee mug\nFound: true\nPresence: 0.97\nBox: x 450, y 192, 411 x 438 px of 1024 x 768\nBox confidence: 0.92\nModel: jev-1.14.0\nInput tokens: 290\nImages: 1 (experimental)"
+          "value": "Jev Box\nTarget: the coffee mug\nFound: true\nPresence: 0.97\nBox: x 450, y 192, 411 x 438 px of 1024 x 768\nBox confidence: 0.92\nCrop: x 398, y 153, 515 x 516 px (pad 0.05)\nModel: jev-1.14.0\nInput tokens: 290\nImages: 1 (experimental)"
         }
       },
       "parsed": {
@@ -550,9 +737,9 @@
             "h": 768
           }
         },
-        "crop": "/api/outputs/run-8/crop.png",
-        "mask": "/api/outputs/run-8/mask.png",
-        "annotated": "/api/outputs/run-8/annotated.png",
+        "crop": "/api/outputs/jev-box/crop.png",
+        "mask": "/api/outputs/jev-box/mask.png",
+        "annotated": "/api/outputs/jev-box/annotated.png",
         "report": {
           "title": "Jev Box",
           "fields": {
@@ -561,6 +748,7 @@
             "Presence": "0.97",
             "Box": "x 450, y 192, 411 x 438 px of 1024 x 768",
             "Box confidence": "0.92",
+            "Crop": "x 398, y 153, 515 x 516 px (pad 0.05)",
             "Model": "jev-1.14.0",
             "Input tokens": "290",
             "Images": "1 (experimental)"
@@ -573,6 +761,35 @@
     },
     {
       "name": "found, box confidence not reported",
+      "params": {
+        "target": "the coffee mug"
+      },
+      "image": [
+        1024,
+        768
+      ],
+      "response": {
+        "model": "jev-1.14.0",
+        "answers": {
+          "present": {
+            "type": "noul",
+            "noul": 0.95
+          },
+          "where": {
+            "type": "box",
+            "box": {
+              "top": 0.25,
+              "bottom": 0.82,
+              "left": 0.44,
+              "right": 0.84
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 290,
+          "output_tokens": 21
+        }
+      },
       "outputs": {
         "found": {
           "type": "Text",
@@ -584,19 +801,19 @@
         },
         "crop": {
           "type": "Image",
-          "value": "/api/outputs/run-9/crop.png"
+          "value": "/api/outputs/jev-box/crop.png"
         },
         "mask": {
           "type": "Mask",
-          "value": "/api/outputs/run-9/mask.png"
+          "value": "/api/outputs/jev-box/mask.png"
         },
         "annotated": {
           "type": "Image",
-          "value": "/api/outputs/run-9/annotated.png"
+          "value": "/api/outputs/jev-box/annotated.png"
         },
         "report": {
           "type": "Text",
-          "value": "Jev Box\nTarget: the coffee mug\nFound: true\nPresence: 0.95\nBox: x 450, y 192, 411 x 438 px of 1024 x 768\nBox confidence: unknown\nModel: jev-1.14.0\nInput tokens: 290\nImages: 1 (experimental)"
+          "value": "Jev Box\nTarget: the coffee mug\nFound: true\nPresence: 0.95\nBox: x 450, y 192, 411 x 438 px of 1024 x 768\nBox confidence: unknown\nCrop: x 398, y 153, 515 x 516 px (pad 0.05)\nModel: jev-1.14.0\nInput tokens: 290\nImages: 1 (experimental)"
         }
       },
       "parsed": {
@@ -619,9 +836,9 @@
             "h": 768
           }
         },
-        "crop": "/api/outputs/run-9/crop.png",
-        "mask": "/api/outputs/run-9/mask.png",
-        "annotated": "/api/outputs/run-9/annotated.png",
+        "crop": "/api/outputs/jev-box/crop.png",
+        "mask": "/api/outputs/jev-box/mask.png",
+        "annotated": "/api/outputs/jev-box/annotated.png",
         "report": {
           "title": "Jev Box",
           "fields": {
@@ -630,6 +847,7 @@
             "Presence": "0.95",
             "Box": "x 450, y 192, 411 x 438 px of 1024 x 768",
             "Box confidence": "unknown",
+            "Crop": "x 398, y 153, 515 x 516 px (pad 0.05)",
             "Model": "jev-1.14.0",
             "Input tokens": "290",
             "Images": "1 (experimental)"
@@ -641,7 +859,140 @@
       }
     },
     {
-      "name": "unsure keeps the guess but no crop or mask",
+      "name": "target from the input, small image padded",
+      "params": {
+        "target": "ignored"
+      },
+      "target": "the logo",
+      "image": [
+        200,
+        150
+      ],
+      "response": {
+        "model": "jev-1.14.0",
+        "answers": {
+          "present": {
+            "type": "noul",
+            "noul": 0.9
+          },
+          "where": {
+            "type": "box",
+            "box": {
+              "top": 0.4,
+              "bottom": 0.6,
+              "left": 0.4,
+              "right": 0.6
+            },
+            "confidence": 0.7
+          }
+        },
+        "usage": {
+          "input_tokens": 260,
+          "output_tokens": 21
+        }
+      },
+      "outputs": {
+        "found": {
+          "type": "Text",
+          "value": "true"
+        },
+        "box": {
+          "type": "Text",
+          "value": "{\"top\": 0.3133, \"bottom\": 0.6867, \"left\": 0.36, \"right\": 0.64, \"confidence\": 0.7, \"px\": {\"x\": 72, \"y\": 47, \"w\": 56, \"h\": 56}, \"image\": {\"w\": 200, \"h\": 150}}"
+        },
+        "crop": {
+          "type": "Image",
+          "value": "/api/outputs/jev-box/crop.png"
+        },
+        "mask": {
+          "type": "Mask",
+          "value": "/api/outputs/jev-box/mask.png"
+        },
+        "annotated": {
+          "type": "Image",
+          "value": "/api/outputs/jev-box/annotated.png"
+        },
+        "report": {
+          "type": "Text",
+          "value": "Jev Box\nTarget: the logo\nFound: true\nPresence: 0.9\nBox: x 72, y 47, 56 x 56 px of 200 x 150\nBox confidence: 0.7\nCrop: x 62, y 39, 76 x 72 px (pad 0.05)\nModel: jev-1.14.0\nInput tokens: 260\nImages: 1 (experimental)\nNote: Image: PNG 200x150 -> PNG 280x280 (padded); the box is mapped back to the original."
+        }
+      },
+      "parsed": {
+        "kind": "box",
+        "found": "true",
+        "box": {
+          "top": 0.3133,
+          "bottom": 0.6867,
+          "left": 0.36,
+          "right": 0.64,
+          "confidence": 0.7,
+          "px": {
+            "x": 72,
+            "y": 47,
+            "w": 56,
+            "h": 56
+          },
+          "image": {
+            "w": 200,
+            "h": 150
+          }
+        },
+        "crop": "/api/outputs/jev-box/crop.png",
+        "mask": "/api/outputs/jev-box/mask.png",
+        "annotated": "/api/outputs/jev-box/annotated.png",
+        "report": {
+          "title": "Jev Box",
+          "fields": {
+            "Target": "the logo",
+            "Found": "true",
+            "Presence": "0.9",
+            "Box": "x 72, y 47, 56 x 56 px of 200 x 150",
+            "Box confidence": "0.7",
+            "Crop": "x 62, y 39, 76 x 72 px (pad 0.05)",
+            "Model": "jev-1.14.0",
+            "Input tokens": "260",
+            "Images": "1 (experimental)"
+          },
+          "notes": [
+            "Image: PNG 200x150 -> PNG 280x280 (padded); the box is mapped back to the original."
+          ],
+          "model": "jev-1.14.0",
+          "inputTokens": 260
+        }
+      }
+    },
+    {
+      "name": "unsure gives no box, crop or mask",
+      "params": {
+        "target": "the coffee mug"
+      },
+      "image": [
+        1024,
+        768
+      ],
+      "response": {
+        "model": "jev-1.14.0",
+        "answers": {
+          "present": {
+            "type": "noul",
+            "noul": 0.62
+          },
+          "where": {
+            "type": "box",
+            "box": {
+              "top": 0.25,
+              "bottom": 0.82,
+              "left": 0.44,
+              "right": 0.84
+            },
+            "confidence": 0.41
+          }
+        },
+        "usage": {
+          "input_tokens": 290,
+          "output_tokens": 21
+        }
+      },
       "outputs": {
         "found": {
           "type": "Text",
@@ -649,54 +1000,32 @@
         },
         "box": {
           "type": "Text",
-          "value": "{\"top\": 0.25, \"bottom\": 0.82, \"left\": 0.44, \"right\": 0.84, \"confidence\": 0.41, \"px\": {\"x\": 450, \"y\": 192, \"w\": 411, \"h\": 438}, \"image\": {\"w\": 1024, \"h\": 768}}"
-        },
-        "annotated": {
-          "type": "Image",
-          "value": "/api/outputs/run-10/annotated.png"
+          "value": "null"
         },
         "report": {
           "type": "Text",
-          "value": "Jev Box\nTarget: the coffee mug\nFound: unsure\nPresence: 0.62\nBox: x 450, y 192, 411 x 438 px of 1024 x 768\nBox confidence: 0.41\nModel: jev-1.14.0\nInput tokens: 290\nImages: 1 (experimental)\nNote: Presence confidence 0.24 is below the minimum 0.5, so found is unsure; no crop or mask."
+          "value": "Jev Box\nTarget: the coffee mug\nFound: unsure\nPresence: 0.62\nModel: jev-1.14.0\nInput tokens: 290\nImages: 1 (experimental)\nNote: Presence confidence 0.24 is below the minimum 0.5, so found is unsure; no box, crop or mask."
         }
       },
       "parsed": {
         "kind": "box",
         "found": "unsure",
-        "box": {
-          "top": 0.25,
-          "bottom": 0.82,
-          "left": 0.44,
-          "right": 0.84,
-          "confidence": 0.41,
-          "px": {
-            "x": 450,
-            "y": 192,
-            "w": 411,
-            "h": 438
-          },
-          "image": {
-            "w": 1024,
-            "h": 768
-          }
-        },
+        "box": null,
         "crop": null,
         "mask": null,
-        "annotated": "/api/outputs/run-10/annotated.png",
+        "annotated": null,
         "report": {
           "title": "Jev Box",
           "fields": {
             "Target": "the coffee mug",
             "Found": "unsure",
             "Presence": "0.62",
-            "Box": "x 450, y 192, 411 x 438 px of 1024 x 768",
-            "Box confidence": "0.41",
             "Model": "jev-1.14.0",
             "Input tokens": "290",
             "Images": "1 (experimental)"
           },
           "notes": [
-            "Presence confidence 0.24 is below the minimum 0.5, so found is unsure; no crop or mask."
+            "Presence confidence 0.24 is below the minimum 0.5, so found is unsure; no box, crop or mask."
           ],
           "model": "jev-1.14.0",
           "inputTokens": 290
@@ -705,6 +1034,36 @@
     },
     {
       "name": "not found",
+      "params": {
+        "target": "a red umbrella"
+      },
+      "image": [
+        1024,
+        768
+      ],
+      "response": {
+        "model": "jev-1.14.0",
+        "answers": {
+          "present": {
+            "type": "noul",
+            "noul": 0.03
+          },
+          "where": {
+            "type": "box",
+            "box": {
+              "top": 0.1,
+              "bottom": 0.3,
+              "left": 0.5,
+              "right": 0.7
+            },
+            "confidence": 0.2
+          }
+        },
+        "usage": {
+          "input_tokens": 288,
+          "output_tokens": 21
+        }
+      },
       "outputs": {
         "found": {
           "type": "Text",
@@ -863,6 +1222,29 @@
         "box": {
           "type": "Text",
           "value": "{top: 1}"
+        },
+        "report": {
+          "type": "Text",
+          "value": "Jev Box\nModel: jev-1.14.0\nInput tokens: 1"
+        }
+      },
+      "parsed": null
+    },
+    {
+      "name": "box unsure but a box is given",
+      "definitionId": "jev-box",
+      "outputs": {
+        "found": {
+          "type": "Text",
+          "value": "unsure"
+        },
+        "box": {
+          "type": "Text",
+          "value": "{\"top\": 0.25, \"bottom\": 0.82, \"left\": 0.44, \"right\": 0.84, \"confidence\": 0.41, \"px\": {\"x\": 450, \"y\": 192, \"w\": 411, \"h\": 438}, \"image\": {\"w\": 1024, \"h\": 768}}"
+        },
+        "annotated": {
+          "type": "Image",
+          "value": "/api/outputs/run-10/annotated.png"
         },
         "report": {
           "type": "Text",
