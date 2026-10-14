@@ -17,7 +17,9 @@ from services import maker_sizes, node_route
 from services.node_registry import NodeRegistry
 
 DEFINITIONS = NodeRegistry().get_all()
-CASES = json.loads((Path(__file__).parent / "fixtures" / "maker_size_cases.json").read_text())["cases"]
+SHARED = json.loads((Path(__file__).parent / "fixtures" / "maker_size_cases.json").read_text())
+CASES = SHARED["cases"]
+START_SHAPE_CASES = SHARED["startShapeCases"]
 SNAPPED = {
     "krea-image-ideogram-ideogram-3": "krea-ideogram-3",
     "krea-image-ideogram-ideogram-2-turbo": "krea-ideogram-2a",
@@ -31,6 +33,22 @@ def test_shared_cases(case):
     assert snap is not None
     assert snap.value == case["value"]
     assert snap.note() == case["note"]
+
+
+@pytest.mark.parametrize("case", START_SHAPE_CASES, ids=lambda c: f"{c['nodeId']}-{c['params']}-{c['wired']}")
+def test_shared_start_shape_cases(case):
+    note = maker_sizes.definition_start_shape_note(DEFINITIONS[case["nodeId"]], case["params"], set(case["wired"]))
+    assert note == case["note"]
+
+
+def test_start_shape_rules_reach_the_catalog():
+    """scripts/sync-krea-catalog.py copies maker_sizes.START_SHAPES into
+    directRoute.startShape, by the route's model."""
+    carried = {node_id: d["directRoute"] for node_id, d in DEFINITIONS.items()
+               if isinstance(d.get("directRoute"), dict) and "startShape" in d["directRoute"]}
+    assert set(carried) == {"krea-video-bytedance-seedance-2-5"}
+    for route in carried.values():
+        assert route["startShape"] == maker_sizes.START_SHAPES[route["model"]]
 
 
 def test_every_snapping_route_carries_its_list_in_the_catalog():
@@ -88,9 +106,14 @@ def test_routes_without_a_list_never_snap():
     on the copy (directRoute.size / accepts / blockedBy): no other node has a
     snap list, and no other translator rounds a width/height."""
     for node_id, definition in DEFINITIONS.items():
-        if node_id in SNAPPED:
+        if node_id in SNAPPED or node_id == "krea-video-bytedance-seedance-2-5":
             continue
         assert maker_sizes.rule_note(definition) is None, node_id
+    # Seedance 2.5 keeps a start image's shape on BytePlus: agents are told.
+    assert maker_sizes.rule_note(DEFINITIONS["krea-video-bytedance-seedance-2-5"]) == (
+        "On the maker route (BytePlus key), a run with a start_image makes the video in the start image's shape "
+        "and aspect_ratio is not used (Seedance 2.5 takes no other ratio then); the run's notes say so. On the "
+        "Krea copy it is sent as given.")
 
 
 @pytest.mark.parametrize(("keys", "route", "note"), [

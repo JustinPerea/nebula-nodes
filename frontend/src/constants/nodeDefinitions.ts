@@ -28771,6 +28771,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           ]
         }
       },
+      "startShape": {
+        "maker": "BytePlus",
+        "model": "Seedance 2.5",
+        "ratioParam": "aspect_ratio",
+        "imageParam": "start_image"
+      },
       "setup": "fallback"
     }
   },

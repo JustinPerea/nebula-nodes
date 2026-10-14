@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import shared from '../../../backend/tests/fixtures/maker_size_cases.json';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
-import { definitionSnap, nearestChoice, sizeNote } from '../../src/lib/makerSizes';
+import { definitionSnap, definitionStartShapeNote, nearestChoice, sizeNote } from '../../src/lib/makerSizes';
 
 type SizeCase = { nodeId: string; width: number; height: number; value: string; note: string | null };
+type StartShapeCase = { nodeId: string; params: Record<string, unknown>; wired: string[]; note: string | null };
 
 describe('maker sizes (cases shared with backend services/maker_sizes.py)', () => {
   for (const testCase of (shared as { cases: SizeCase[] }).cases) {
@@ -33,4 +34,10 @@ describe('maker sizes (cases shared with backend services/maker_sizes.py)', () =
     expect(definitionSnap(ideogram3, { width: 'wide', height: 1024 })).toBeNull();
     expect(definitionSnap(NODE_DEFINITIONS['krea-image-google-nano-banana-pro'], {})).toBeNull();
   });
+
+  for (const testCase of (shared as unknown as { startShapeCases: StartShapeCase[] }).startShapeCases) {
+    it(`${testCase.nodeId} start shape ${JSON.stringify(testCase.params)} wired ${testCase.wired.join(',')}`, () => {
+      expect(definitionStartShapeNote(NODE_DEFINITIONS[testCase.nodeId], testCase.params, testCase.wired)).toBe(testCase.note);
+    });
+  }
 });

@@ -875,6 +875,19 @@ def _size_snap(endpoint, route, params):
     return {"snap": {"widthParam": "width", "heightParam": "height", **spec, "choices": list(spec["choices"])}}
 
 
+def _start_shape(endpoint, route, params):
+    """``directRoute.startShape`` for a maker that doesn't take the aspect
+    ratio on a start-image run (maker_sizes.START_SHAPES, by model), so the
+    Inspector can say so before the run."""
+    spec = _maker_sizes().START_SHAPES.get(route["model"])
+    if spec is None:
+        return {}
+    keys = {param["key"] for param in params}
+    if not {spec["ratioParam"], spec["imageParam"]} <= keys:
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: a start-shape rule needs its ratio and start image fields")
+    return {"startShape": dict(spec)}
+
+
 def _route_rules(endpoint, route, params):
     """The overlay's directRoute rules (backend services/node_route.py
     direct_block reads them), checked: each names Krea fields, and none
@@ -939,7 +952,7 @@ def direct_route_definition(endpoint, params):
         "falParams": [param for param in params if param["key"] in route["kreaOnly"]],
         "directParams": list(route["directParams"]),
         "directRoute": {"translation": route["translation"], "model": route["model"], **rules,
-                        **_size_snap(endpoint, route, params),
+                        **_size_snap(endpoint, route, params), **_start_shape(endpoint, route, params),
                         **({"setup": route["directSetup"]} if route.get("directSetup") else {})},
     }
 

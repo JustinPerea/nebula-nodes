@@ -62,6 +62,37 @@ describe('Inspector maker size note', () => {
     expect(screen.queryByText(/closest it can get/)).toBeNull();
   });
 
+  it('shows no size note when a wired style image keeps the run on Krea', () => {
+    withKeys(ideogramKeys);
+    useGraphStore.setState({
+      nodes: [
+        { id: 'test-krea', position: { x: 0, y: 0 },
+          data: { definitionId: 'krea-image-ideogram-ideogram-3', label: 'Krea test',
+            params: { _kreaAuth: 'api-token', width: 1000, height: 560 }, outputs: {}, state: 'idle' } },
+        { id: 'style', position: { x: -200, y: 0 },
+          data: { definitionId: 'image-input', label: 'Style', params: {}, outputs: {}, state: 'idle' } },
+      ],
+      edges: [{ id: 'e-style', source: 'style', sourceHandle: 'image', target: 'test-krea', targetHandle: 'style_images' }],
+    });
+    useUIStore.setState({ selectedNodeId: 'test-krea' });
+    render(<Inspector embedded />);
+    expect(screen.queryByText(/closest it can get/)).toBeNull();
+  });
+
+  it.each([
+    // BytePlus runs it with a start image: the aspect ratio isn't used.
+    [{ BYTEPLUS_API_KEY: 'fixture-only', KREA_API_TOKEN: 'fixture-only' }, true],
+    // The Krea copy runs it: nothing is claimed.
+    [{ KREA_API_TOKEN: 'fixture-only' }, false],
+  ])('says when Seedance 2.5 keeps the start image shape with %o', (apiKeys, shown) => {
+    withKeys(apiKeys);
+    renderModel('krea-video-bytedance-seedance-2-5',
+      { _kreaAuth: 'api-token', start_image: 'https://example.com/start.png', aspect_ratio: '9:16' });
+    const note = "BytePlus makes this video in your start image's shape: Seedance 2.5 doesn't use the 9:16 aspect ratio when it starts from an image.";
+    if (shown) expect(screen.getByText(note)).toBeVisible();
+    else expect(screen.queryByText(note)).toBeNull();
+  });
+
   it('shows what the last run said', () => {
     withKeys(ideogramKeys);
     useGraphStore.setState({

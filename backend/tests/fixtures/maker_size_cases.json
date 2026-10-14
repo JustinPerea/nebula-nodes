@@ -1,5 +1,5 @@
 {
-  "about": "Maker size cases shared by backend services/maker_sizes.py and frontend/src/lib/makerSizes.ts: a Krea copy's width x height on the maker route -> the value the maker gets (in its own spelling) and the Inspector's note (null when the maker can make the size asked for). Both read each node's directRoute.snap from the real node catalog.",
+  "about": "Maker size cases shared by backend services/maker_sizes.py and frontend/src/lib/makerSizes.ts: a Krea copy's width x height on the maker route -> the value the maker gets (in its own spelling) and the Inspector's note (null when the maker can make the size asked for). Both read each node's directRoute.snap from the real node catalog. startShapeCases: a Krea copy whose maker doesn't use the aspect ratio on a start-image run (directRoute.startShape) -> the Inspector's note on the maker route (null when the maker uses the ratio as given). `wired` lists wired input ports.",
   "cases": [
     {
       "nodeId": "krea-image-ideogram-ideogram-3",
@@ -79,6 +79,20 @@
       "note": "Ideogram makes 1312x736, the closest it can get to your 4096x2304."
     },
     {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 1024,
+      "height": 1000,
+      "value": "1024x1024",
+      "note": "Ideogram makes 1024x1024, the closest it can get to your 1024x1000."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 1000.5,
+      "height": 560.25,
+      "value": "1312x736",
+      "note": "Ideogram makes 1312x736, the closest it can get to your 1000.5x560.25."
+    },
+    {
       "nodeId": "krea-image-ideogram-ideogram-2-turbo",
       "width": 1024,
       "height": 1024,
@@ -121,6 +135,13 @@
       "note": null
     },
     {
+      "nodeId": "krea-image-ideogram-ideogram-2-turbo",
+      "width": 1000.5,
+      "height": 560.25,
+      "value": "16x9",
+      "note": "Ideogram makes a 16:9 image at a size it picks, the closest shape it has to your 1000.5x560.25."
+    },
+    {
       "nodeId": "krea-image-runway-gen-4-image",
       "width": 1920,
       "height": 1080,
@@ -161,6 +182,67 @@
       "height": 1000,
       "value": "1808:768",
       "note": "Runway makes 1808x768, the closest it can get to your 4000x1000."
+    },
+    {
+      "nodeId": "krea-image-runway-gen-4-image",
+      "width": 1920,
+      "height": 1100,
+      "value": "1360:768",
+      "note": "Runway makes 1360x768, the closest it can get to your 1920x1100."
+    },
+    {
+      "nodeId": "krea-image-runway-gen-4-image",
+      "width": 1080,
+      "height": 1100,
+      "value": "1080:1080",
+      "note": "Runway makes 1080x1080, the closest it can get to your 1080x1100."
+    }
+  ],
+  "startShapeCases": [
+    {
+      "nodeId": "krea-video-bytedance-seedance-2-5",
+      "params": {
+        "start_image": "https://example.com/start.png",
+        "aspect_ratio": "9:16"
+      },
+      "wired": [],
+      "note": "BytePlus makes this video in your start image's shape: Seedance 2.5 doesn't use the 9:16 aspect ratio when it starts from an image."
+    },
+    {
+      "nodeId": "krea-video-bytedance-seedance-2-5",
+      "params": {},
+      "wired": [
+        "start_image"
+      ],
+      "note": "BytePlus makes this video in your start image's shape: Seedance 2.5 doesn't use the 16:9 aspect ratio when it starts from an image."
+    },
+    {
+      "nodeId": "krea-video-bytedance-seedance-2-5",
+      "params": {
+        "start_image": "",
+        "aspect_ratio": "1:1"
+      },
+      "wired": [],
+      "note": null
+    },
+    {
+      "nodeId": "krea-video-bytedance-seedance-2-5",
+      "params": {
+        "aspect_ratio": "1:1"
+      },
+      "wired": [
+        "end_image"
+      ],
+      "note": null
+    },
+    {
+      "nodeId": "krea-video-bytedance-seedance-2",
+      "params": {
+        "start_image": "https://example.com/start.png",
+        "aspect_ratio": "9:16"
+      },
+      "wired": [],
+      "note": null
     }
   ]
 }

@@ -3457,7 +3457,8 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         size_note = maker_sizes.rule_note(definition)
         if size_note:
             # A maker that takes a fixed size list (Ideogram 3, Ideogram 2a,
-            # Runway Gen-4 Image): width/height round on its route.
+            # Runway Gen-4 Image): width/height round on its route; Seedance
+            # 2.5 on BytePlus keeps a start image's shape.
             result["sizeNote"] = size_note
     if access is None:
         result["missing"] = node_readiness.missing(definition, krea_signed_in, definitions)

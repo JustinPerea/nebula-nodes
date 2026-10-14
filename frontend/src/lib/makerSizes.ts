@@ -1,4 +1,4 @@
-import type { DirectSizeSnap, ModelNodeDefinition } from '../types';
+import type { DirectSizeSnap, DirectStartShape, ModelNodeDefinition } from '../types';
 
 /**
  * The size a maker with a fixed size list makes for a Krea copy's free
@@ -94,4 +94,27 @@ export function sizeNote(snap: SizeSnap | null): string | null {
   const asked = `${snap.width}x${snap.height}`;
   if (snap.kind === 'size') return `${snap.maker} makes ${snap.a}x${snap.b}, the closest it can get to your ${asked}.`;
   return `${snap.maker} makes a ${snap.a}:${snap.b} image at a size it picks, the closest shape it has to your ${asked}.`;
+}
+
+/** What the Inspector shows before a maker-route run with a start image when
+ * the maker doesn't use the aspect ratio then (maker_sizes.start_shape_note). */
+export function startShapeNote(spec: DirectStartShape, aspect: unknown): string {
+  return `${spec.maker} makes this video in your start image's shape: ${spec.model} doesn't use the ${String(aspect)} aspect ratio when it starts from an image.`;
+}
+
+/** The start-shape note for a maker-route run of this node, or null when the
+ * maker uses the aspect ratio as given (maker_sizes.definition_start_shape_note).
+ * `wired` lists the node's wired input ports. The caller checks the route first. */
+export function definitionStartShapeNote(
+  definition: ModelNodeDefinition,
+  params: Record<string, unknown> | undefined,
+  wired: readonly string[] = [],
+): string | null {
+  const spec = definition.directRoute?.startShape;
+  if (!spec) return null;
+  const values = params ?? {};
+  const image = values[spec.imageParam];
+  const empty = image === undefined || image === null || image === '' || (Array.isArray(image) && image.length === 0);
+  if (!wired.includes(spec.imageParam) && empty) return null;
+  return startShapeNote(spec, effective(definition, values, spec.ratioParam));
 }

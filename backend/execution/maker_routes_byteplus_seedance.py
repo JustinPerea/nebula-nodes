@@ -61,7 +61,9 @@ from execution.byteplus_seedance_prices import (
     DURATIONS, RATIOS, SEEDANCE_1_0_PRO, SEEDANCE_1_0_PRO_FAST, SEEDANCE_1_5_PRO, SEEDANCE_2_0, SEEDANCE_2_0_FAST,
     SEEDANCE_2_0_MINI, SEEDANCE_2_5,
 )
+from models.events import add_run_note
 from models.graph import GraphNode, PortValueDict
+from services import maker_sizes
 
 # The fal nodes -> their ModelArk model. seedance-v1-5 picks by its model param.
 FAL_NODE_MODELS: dict[str, str] = {
@@ -338,6 +340,11 @@ def krea_to_byteplus(model: str):
         if aspect not in RATIOS:
             raise ValueError(f"BytePlus has no {aspect!r} ratio; run this on Krea")
         ratio = "adaptive" if model == SEEDANCE_2_5 and first else aspect
+        if ratio == "adaptive" and model in maker_sizes.START_SHAPES:
+            # The aspect ratio the node shows isn't used: say so beside the
+            # video (models/events.py add_run_note; the Inspector says it
+            # before the run, services/maker_sizes.py).
+            add_run_note(maker_sizes.start_shape_note(maker_sizes.START_SHAPES[model], aspect))
         task = _task(model, ratio=ratio, duration=_whole_seconds(_setting(node, "duration"), model),
                      resolution=_resolution(_setting(node, "resolution"), model),
                      audio=_setting(node, "generate_audio"))

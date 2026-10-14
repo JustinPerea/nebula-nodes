@@ -356,7 +356,8 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     "fal" or "krea"), and `price.routes` prices each. `sizeNote`, on a node
     whose maker takes a fixed size list, says that width/height round to the
     maker's nearest supported size on the maker route (run results then carry
-    `notes` with the size it made). A local node that calls a provider (Cinema
+    `notes` with the size it made); on Seedance 2.5 it says a start-image run
+    on BytePlus keeps the start image's shape and doesn't use aspect_ratio. A local node that calls a provider (Cinema
     Scene's base model, a Video QC node's vision-llm mode) has
     `runsWithOptions`: readiness per value of the param that picks it, and a
     note when a different value would run with the keys set here."""

@@ -13,7 +13,7 @@ import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from './MaskPainterModal';
 import { paramDefinitionsForRun, selectRoute, withWiredBlockers } from '../../lib/directRoute';
-import { definitionSnap, sizeNote } from '../../lib/makerSizes';
+import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
 import { nodeWiredPorts } from '../../lib/runScope';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
@@ -239,14 +239,24 @@ export function Inspector({ embedded = false }: InspectorProps) {
   }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
 
   // A maker that takes a fixed size list (Ideogram 3, Ideogram 2a, Runway
-  // Gen-4 Image) gets the nearest one on its route (lib/makerSizes.ts, the
-  // backend's rule). Say so under the size when that isn't what was asked;
-  // on the Krea copy the size is sent as given, so nothing is said.
-  const makerSizeNote = useMemo(() => {
-    if (!definition?.directRoute?.snap || !settingsCache.loaded) return null;
-    const routed = withWiredBlockers(definition, nodeParams, wiredKey ? wiredKey.split('\n') : []);
+  // Gen-4 Image) gets the nearest one on its route, and Seedance 2.5 on
+  // BytePlus makes a start-image run in the start image's shape
+  // (lib/makerSizes.ts, the backend's rules). Say so under the size or the
+  // aspect ratio when that isn't what was asked; on the Krea copy it is sent
+  // as given, so nothing is said.
+  const makerSizeNote = useMemo((): { param: string; text: string } | null => {
+    const route = definition?.directRoute;
+    if (!definition || !(route?.snap || route?.startShape) || !settingsCache.loaded) return null;
+    const wired = wiredKey ? wiredKey.split('\n') : [];
+    const routed = withWiredBlockers(definition, nodeParams, wired);
     if (selectRoute(definition, routed, settingsCache.apiKeys).kind !== 'direct') return null;
-    return sizeNote(definitionSnap(definition, nodeParams));
+    if (route.snap) {
+      const text = sizeNote(definitionSnap(definition, nodeParams));
+      return text ? { param: route.snap.heightParam, text } : null;
+    }
+    if (!route.startShape) return null;
+    const text = definitionStartShapeNote(definition, nodeParams, wired);
+    return text ? { param: route.startShape.ratioParam, text } : null;
   }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
 
   // Filter params by visibleWhen conditions
@@ -887,8 +897,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
         {'disabledReason' in param && param.disabledReason && (
           <div className="inspector__notice" role="note">{param.disabledReason}</div>
         )}
-        {source === 'definition' && makerSizeNote && param.key === definition?.directRoute?.snap?.heightParam && (
-          <div className="inspector__notice" role="note" data-inspector-size-note="true">{makerSizeNote}</div>
+        {source === 'definition' && makerSizeNote && param.key === makerSizeNote.param && (
+          <div className="inspector__notice" role="note" data-inspector-size-note="true">{makerSizeNote.text}</div>
         )}
         {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && (
           <button

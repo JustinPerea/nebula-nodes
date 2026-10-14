@@ -68,6 +68,7 @@ Krea copies also stay on Krea for an `aspect_ratio` outside 16:9, 4:3, 1:1, 3:4,
 Hard facts:
 
 - `seed` and `camera_fixed` are documented for 1.5 pro, 1.0 pro and 1.0 pro fast only. Never send a seed to 2.x.
+- Seedance 2.5 frame runs take only `ratio: adaptive`, so on BytePlus a 2.5 run with a start image keeps the start image's shape and the node's `aspect_ratio` isn't used. The Inspector, `describe_node` (`sizeNote`) and the run's `notes` say so; the Krea copy gets no note.
 - Frames (`first_frame`, `last_frame`) and references (`reference_image`/`_video`/`_audio`) "cannot be mixed". Last frame isn't on 1.0 pro fast. References: 2.0 series 9 images / 3 videos / 3 audio; 2.5 30 / 10 / 10; none on 1.x. 2.0 rejects audio-only input.
 - Reference videos are "Video URL or asset ID" only: a local file is refused before the request. Images and audio go as data URIs when local.
 - A setting the recipe never saved uses the node's own default (the value its price reads), not BytePlus's: an unsaved `duration` on `seedance-v1-5` / `seedance-1-0-t2v` is 5 s, never `-1`, and an unsaved ratio is 16:9 (1.0 text-to-video doesn't take `adaptive`).

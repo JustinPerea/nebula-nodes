@@ -4595,7 +4595,8 @@ changes a requested size without saying so.
 | Krea Ideogram 3 (`krea-ideogram-3`) | width/height -> nearest of 15 `aspect_ratio`s | nearest of Ideogram 3's 69 `resolution`s, sent alone (never with aspect_ratio); note when it differs |
 | Krea Ideogram 2a Turbo (`krea-ideogram-2a`) | nearest aspect ratio, silent | same ratio rule; note when the shape differs; run note gives the pixels Ideogram picked |
 | Krea Runway Gen-4 Image (`krea-runway-gen4-image`) | nearest gen4_image ratio, silent | same rule; note when the size differs; run note gives the size made |
-| All others | | no snapping found: OpenAI (fal presets map exactly or stay on fal; Krea aspect x resolution is a table, the ratio kept exactly), xAI image/video (values pass as is), Google (Nano Banana width/height keep runs on Krea; Veo/Omni pass ratios), BytePlus Seedream (exact WxH or stays on the copy; fal shaped presets keep the shape), Seedance and MiniMax (ratios pass or the run stays on the copy), Runway Gen-4.5 (ratio checked, never snapped), Ideogram native nodes (take Ideogram's own `resolution`) |
+| Krea Seedance 2.5 (`krea-seedance`, model `dreamina-seedance-2-5-260628`), start-image runs | `aspect_ratio` replaced by `adaptive`, silent (found by the verify lane) | same request (BytePlus: frame runs "only support adaptive"); note under Aspect ratio before the run, run note after, agent note via `rule_note` |
+| All others | | no snapping found: OpenAI (fal presets map exactly or stay on fal; Krea aspect x resolution is a table, the ratio kept exactly), xAI image/video (values pass as is), Google (Nano Banana width/height keep runs on Krea; Veo/Omni pass ratios), BytePlus Seedream (exact WxH or stays on the copy; fal shaped presets keep the shape), Seedance 1.x/2.x and MiniMax (ratios pass or the run stays on the copy), Runway Gen-4.5 (ratio checked, never snapped), Ideogram native nodes (take Ideogram's own `resolution`) |
 
 **Decisions**
 
@@ -4626,3 +4627,22 @@ changes a requested size without saying so.
   Showing one would add noise to the default 1024x1024; the run note covers it.
 - Gen-4.5's fractional duration is still rounded to whole seconds on the Runway route (a duration, not a size;
   outside this change).
+
+**Verify lane (2026-10-14)**
+
+- Re-read the makers' pages: Ideogram 3's request `resolution` is typed `ResolutionV3` on the v1 generate-v3
+  page (the same 69 values, same order, as `IDEOGRAM_V3_RESOLUTIONS`); the 2a page's `aspect_ratio` enum is the
+  15 values plus `auto`, and 2a has no request `resolution` field; Runway's API reference lists the same 16
+  `gen4_image` ratios in the same order. Field names match (`resolution`, `aspect_ratio`, `ratio`).
+- Missed route: Seedance 2.5 on BytePlus replaces the node's aspect ratio with `adaptive` on a start-image run.
+  That changes the requested shape without a fixed list, so it got its own rule, `START_SHAPES` in
+  `services/maker_sizes.py`, copied to `directRoute.startShape` by `sync-krea-catalog.py` and read by
+  `lib/makerSizes.ts`. The translator adds the run note at request time (a video's pixel size isn't read back).
+  The shared fixture gained `startShapeCases`.
+- Fixture cases added where the width matches but the height doesn't (1024x1000, 1080x1100) and for decimal
+  sizes; a mutation that compared only the width passed every earlier case.
+- Python/TS parity: 9,400 random and edge requests (integers, two-decimal floats, scaled and swapped list
+  entries) gave the same value and note on both sides. The temp test was deleted.
+- Not changed: the rule is shape first, so 1920x1100 on Runway goes to 1360x768 rather than 1920x1080, a much
+  smaller image for a closer shape. That's the old rule, and the note now says it out loud.
+

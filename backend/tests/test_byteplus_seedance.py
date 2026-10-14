@@ -24,6 +24,7 @@ from execution import maker_routes_byteplus_seedance as seedance
 from execution.missing_credential import MissingCredentialError
 from execution.sync_runner import get_handler_registry
 from handlers import byteplus
+from models.events import execution_notes
 from models.graph import GraphNode, PortValueDict
 from services import model_pricing, node_route
 from services.node_registry import NodeRegistry
@@ -261,10 +262,34 @@ async def test_seedance_2_5_frame_runs_send_adaptive(monkeypatch):
     node = GraphNode(id="k", definitionId="krea-video-bytedance-seedance-2-5",
                      params={"prompt": "a fox", "aspect_ratio": "16:9", "duration": 12})
     inputs = {"start_image": PortValueDict(type="Image", value="https://example.com/a.png")}
-    await _run(node, inputs, BYTEPLUS)
+    notes: list[str] = []
+    token = execution_notes.set(notes)
+    try:
+        await _run(node, inputs, BYTEPLUS)
+    finally:
+        execution_notes.reset(token)
     body = ark.bodies[0]
     assert body["model"] == "dreamina-seedance-2-5-260628" and body["ratio"] == "adaptive"
     assert body["content"][1]["role"] == "first_frame"
+    # The 16:9 the node shows isn't used: the run says so beside the video
+    # (services/maker_sizes.py, the note the Inspector shows before the run).
+    assert notes == ["BytePlus makes this video in your start image's shape: Seedance 2.5 doesn't use the 16:9 "
+                     "aspect ratio when it starts from an image."]
+
+
+@pytest.mark.asyncio
+async def test_seedance_2_5_text_runs_keep_the_ratio_and_say_nothing(monkeypatch):
+    ark = ModelArk(monkeypatch)
+    node = GraphNode(id="k", definitionId="krea-video-bytedance-seedance-2-5",
+                     params={"prompt": "a fox", "aspect_ratio": "9:16", "duration": 12})
+    notes: list[str] = []
+    token = execution_notes.set(notes)
+    try:
+        await _run(node, {}, BYTEPLUS)
+    finally:
+        execution_notes.reset(token)
+    assert ark.bodies[0]["ratio"] == "9:16"
+    assert notes == []
 
 
 @pytest.mark.asyncio

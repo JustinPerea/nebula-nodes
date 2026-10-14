@@ -17,6 +17,9 @@ handlers/ideogram.py and handlers/runway.py validate their own nodes against
 them. backend/tests/fixtures/maker_size_cases.json holds cases both sides'
 tests check.
 
+START_SHAPES covers the other way a maker route changes a shape: Seedance
+2.5 on BytePlus doesn't use the aspect ratio on a start-image run.
+
 Stdlib only, so node_route, the scripts and the CLI can import it.
 """
 from __future__ import annotations
@@ -75,6 +78,18 @@ SNAPS: dict[str, dict[str, Any]] = {
                          "choices": list(IDEOGRAM_ASPECT_RATIOS)},
     "krea-runway-gen4-image": {"maker": "Runway", "field": "ratio", "kind": SIZE, "sep": ":",
                                "choices": list(RUNWAY_GEN4_IMAGE_RATIOS)},
+}
+# Makers that don't take the aspect ratio on some runs, by model
+# (directRoute.model): Seedance 2.5 on BytePlus makes a start-image run in the
+# start image's shape. "Seedance 2.5 first-frame / first-and-last-frame
+# 'Defaults to and only supports adaptive'" (docs.byteplus.com/en/docs/
+# ModelArk/create-video-generation-task-api, read 2026-10-14;
+# execution/maker_routes_byteplus_seedance.py sends ratio adaptive).
+# scripts/sync-krea-catalog.py copies each into its node's
+# ``directRoute.startShape`` for the Inspector (lib/makerSizes.ts).
+START_SHAPES: dict[str, dict[str, Any]] = {
+    "dreamina-seedance-2-5-260628": {"maker": "BytePlus", "model": "Seedance 2.5",
+                                     "ratioParam": "aspect_ratio", "imageParam": "start_image"},
 }
 # Two shapes this close in log ratio count as the same shape, so the pixel
 # count decides (the same tolerance in makerSizes.ts).
@@ -191,10 +206,40 @@ def definition_snap(definition: Mapping[str, Any], params: Mapping[str, Any] | N
     return snap(spec, sizes[0], sizes[1])
 
 
+def start_shape_note(spec: Mapping[str, Any], aspect: Any) -> str:
+    """What the Inspector shows before a maker-route run with a start image
+    (``spec``: a START_SHAPES entry or a definition's ``directRoute.startShape``),
+    and what the run's notes say after it."""
+    return (f"{spec['maker']} makes this video in your start image's shape: {spec['model']} doesn't use the "
+            f"{aspect} aspect ratio when it starts from an image.")
+
+
+def definition_start_shape_note(definition: Mapping[str, Any], params: Mapping[str, Any] | None,
+                                wired: set[str] | frozenset[str] = frozenset()) -> str | None:
+    """The note for a maker-route run of this node, or None when the maker
+    uses the aspect ratio as given (no start image, or no such rule). The
+    caller checks the route first."""
+    spec = (definition.get("directRoute") or {}).get("startShape")
+    if not isinstance(spec, Mapping):
+        return None
+    values = params or {}
+    image = values.get(str(spec.get("imageParam")))
+    if str(spec.get("imageParam")) not in wired and (image is None or image == "" or image == []):
+        return None
+    return start_shape_note(spec, _effective(definition, values, str(spec.get("ratioParam"))))
+
+
 def rule_note(definition: Mapping[str, Any]) -> str | None:
-    """For agents (describe_node, ``nebula info``): how width/height are
-    treated on the maker route, or None for a node without a size list."""
-    spec = (definition.get("directRoute") or {}).get("snap")
+    """For agents (describe_node, ``nebula info``): how width/height (or the
+    aspect ratio) are treated on the maker route, or None for a node whose
+    maker takes them as given."""
+    route = definition.get("directRoute") or {}
+    shape = route.get("startShape")
+    if isinstance(shape, Mapping):
+        return (f"On the maker route ({shape['maker']} key), a run with a {shape['imageParam']} makes the video in "
+                f"the start image's shape and {shape['ratioParam']} is not used ({shape['model']} takes no other "
+                f"ratio then); the run's notes say so. On the Krea copy it is sent as given.")
+    spec = route.get("snap")
     if not isinstance(spec, Mapping):
         return None
     maker, count = spec.get("maker"), len(spec.get("choices") or [])

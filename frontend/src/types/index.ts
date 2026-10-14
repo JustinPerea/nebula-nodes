@@ -161,7 +161,8 @@ export interface ModelNodeDefinition {
    *    "(unset)" = neither);
    *  - `size`: the maker's documented output size limits.
    *  `snap` isn't a rule: a maker that takes a fixed size list gets the
-   *  nearest entry on its route (lib/makerSizes.ts).
+   *  nearest entry on its route (lib/makerSizes.ts). Nor is `startShape`:
+   *  a maker that keeps a start image's shape (lib/makerSizes.ts).
    *  A rule never blocks a param's default. `setup: 'fallback'` points setup
    *  at the copy's key when no key is set (BytePlus, which doesn't serve the
    *  United States and needs each model activated, is not the key to suggest
@@ -173,6 +174,7 @@ export interface ModelNodeDefinition {
     rejectsWhen?: DirectRejectsWhenRule[];
     size?: DirectSizeLimits;
     snap?: DirectSizeSnap;
+    startShape?: DirectStartShape;
   };
   docUrl?: string;
   /** A local (utility) node that still calls a provider. `utility` only means
@@ -215,6 +217,17 @@ export interface DirectSizeSnap {
   kind: 'size' | 'shape';
   sep: string;
   choices: string[];
+}
+
+/** A maker that doesn't use the aspect ratio on a start-image run, and makes
+ *  the video in the start image's shape (Seedance 2.5 on BytePlus; backend
+ *  services/maker_sizes.py START_SHAPES, copied here by
+ *  scripts/sync-krea-catalog.py). */
+export interface DirectStartShape {
+  maker: string;
+  model: string;
+  ratioParam: string;
+  imageParam: string;
 }
 
 /** A maker's documented output size rules for its direct route

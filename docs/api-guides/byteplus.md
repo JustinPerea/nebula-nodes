@@ -109,7 +109,7 @@ Request: `POST /contents/generations/tasks`, then `GET /contents/generations/tas
 | `images` (fal R2V), `reference_images` (Krea) | `image_url` with role `reference_image` | 2.0 series 1–9, 2.5 1–30; not on 1.0 or 1.5 |
 | `reference_videos` (Krea) | `video_url` with role `reference_video` | "Video URL or asset ID" only: a public http(s) URL or `asset://`. A local file is refused before the request. 2.0 series 0–3, 2.5 0–10. |
 | `reference_audios` (Krea) | `audio_url` with role `reference_audio` | URL or `data:audio/<fmt>;base64,` (wav or mp3). 2.0 needs an image or video alongside; audio-only is 2.5. |
-| `aspect_ratio` | `ratio` | fal's `auto` becomes `adaptive`. Seedance 2.5 frame runs send `adaptive`, the only ratio it takes there. |
+| `aspect_ratio` | `ratio` | fal's `auto` becomes `adaptive`. Seedance 2.5 frame runs send `adaptive`, the only ratio it takes there, so the video keeps the start image's shape. The Inspector says so under Aspect ratio before the run, the run's notes say it after, and `describe_node` / `nebula info` tell agents (`services/maker_sizes.py` `START_SHAPES`). Nothing is said on the Krea copy. |
 | `duration` | `duration` | fal's `auto` becomes `-1` (the model picks a length in its range). A setting the recipe never saved (a node added by the CLI or an agent) uses the node's own default, the value its price is read at, not BytePlus's: `seedance-v1-5` and `seedance-1-0-t2v` run 5 s at 16:9, never `-1` (up to 12 s on 1.5 pro) or `adaptive` (Seedance 1.0 text-to-video "Does not support `adaptive`") |
 | `resolution` | `resolution` | 2.0: 480p, 720p, 1080p, 4k; 2.0 fast and mini: 480p, 720p; 2.5, 1.5 and 1.0: 480p, 720p, 1080p |
 | `generate_audio` | `generate_audio` | 2.x and 1.5 pro only; 1.0 makes silent video |
