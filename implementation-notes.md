@@ -3040,8 +3040,9 @@ hands him the bump. Session schedulers don't persist, so it lives in the repo as
   `services/personal_agents.py`, so the pins and the 14-day number have one home. That import chain is stdlib only,
   so the workflow installs nothing. The logic is covered by `tests/test_adapter_pins.py`, which the CI backend job
   already runs.
-- **Version choice.** Strict semver parse; anything with a prerelease tag, a missing publish time, or a `deprecated`
-  field is skipped. Compare is on integer tuples (0.10.0 > 0.9.0). The cutoff is `now - 14 days` to the minute,
+- **Version choice.** Strict semver parse; anything with a prerelease tag, a missing publish time, or a non-empty
+  `deprecated` field is skipped. An empty `deprecated` string is what `npm deprecate pkg@x ""` leaves behind to
+  un-deprecate, and npm's resolver checks truthiness, so we treat any falsy value as not deprecated. Compare is on integer tuples (0.10.0 > 0.9.0). The cutoff is `now - 14 days` to the minute,
   the same instant `npx_env()` uses for `npm_config_before`. "Next newer release" is the earliest-published stable
   release above the candidate (or the pin) that is still held, and its clear date is publish time + 14 days.
 - **What counts as "action needed":** a candidate exists, or the pin is deprecated, or the pin is missing from the

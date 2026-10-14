@@ -130,7 +130,9 @@ def _deprecation(manifest: Any) -> str | None:
     if not isinstance(manifest, dict):
         return None
     message = manifest.get("deprecated")
-    if message is None or message is False:
+    # npm un-deprecates with an empty message, and its resolver checks
+    # truthiness, so any falsy value means "not deprecated".
+    if not message:
         return None
     text = message if isinstance(message, str) else "deprecated"
     # Registry text is untrusted: one line, no backticks, capped.

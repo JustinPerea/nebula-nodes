@@ -57,6 +57,17 @@ def test_picks_the_newest_stable_release_past_the_hold():
     assert report.pinned_published == datetime(2026, 8, 1, tzinfo=timezone.utc)
 
 
+def test_an_undeprecated_release_counts_as_not_deprecated():
+    # `npm deprecate pkg@x ""` leaves deprecated: "" in the packument.
+    releases = {"1.0.0": "2026-08-01T00:00:00Z", "1.1.0": "2026-09-01T00:00:00Z"}
+    report = pins.evaluate("pkg", "1.1.0", doc(releases, deprecated={"1.1.0": ""}), NOW)
+    assert report.pinned_deprecated is None
+    assert not report.needs_action
+    report = pins.evaluate("pkg", "1.0.0", doc(releases, deprecated={"1.1.0": ""}), NOW)
+    assert report.candidate.version == "1.1.0"
+    assert report.notes == []
+
+
 def test_nothing_to_do_when_newer_releases_are_still_held_or_prereleases():
     report = pins.evaluate("pkg", "2.0.0", doc({
         "2.0.0": "2026-09-01T00:00:00Z",
