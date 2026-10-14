@@ -200,6 +200,18 @@ def with_wired_blockers(
     return values
 
 
+def filled_ports(inputs: Mapping[str, Any] | None) -> set[str]:
+    """The input ports of a run that carry a value (PortValueDict-like objects
+    with ``.value``), as the router and the engine's cache key read wired
+    blockers: the same set in both, so the cache key names the route that ran."""
+    filled: set[str] = set()
+    for port, item in (inputs or {}).items():
+        value = getattr(item, "value", None)
+        if value is not None and value != "" and value != []:
+            filled.add(str(port))
+    return filled
+
+
 def _effective(definition: Mapping[str, Any], params: Mapping[str, Any], key: str) -> Any:
     """A param's value as a run reads it: the saved value, else the definition default."""
     if _has_value(params.get(key)):

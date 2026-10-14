@@ -507,9 +507,13 @@ def _node_def_for(definition_id: str) -> dict[str, Any] | None:
 
 def _cache_route_tag(
     node: GraphNode, definition: dict[str, Any] | None, api_keys: dict[str, str],
+    inputs: dict[str, PortValueDict] | None = None,
 ) -> str | None:
     """The route a multi-route node runs on, for its cache key (or that of a
-    cinema scene's base model, which the scene calls through the registry)."""
+    cinema scene's base model, which the scene calls through the registry).
+    A Krea-only setting that arrives by wire keeps the run on the copy
+    (node_route.with_wired_blockers, as maker_routes.dual_route reads it), so
+    the tag names that route too."""
     from services import node_route
 
     definition = definition or {}
@@ -523,6 +527,7 @@ def _cache_route_tag(
         definition, params = base, nested[1]
         tag = node_route.cache_tag(definition, params, api_keys)
         return f"{nested[0]}={tag}" if tag else None
+    params = node_route.with_wired_blockers(definition, params, node_route.filled_ports(inputs))
     return node_route.cache_tag(definition, params, api_keys)
 
 
@@ -1104,7 +1109,7 @@ async def _execute_graph(
                     cache_params["_kreaConnectionRevision"] = connection_revision()
                 # Which route this run takes (maker key, fal or Krea copy, Krea
                 # plan). Adding a maker key must not replay a fal/Krea result.
-                route_tag = _cache_route_tag(node, definition_metadata, api_keys)
+                route_tag = _cache_route_tag(node, definition_metadata, api_keys, resolved_inputs)
                 if route_tag:
                     cache_params["_route"] = route_tag
                 cache_key = ExecutionCache.get_key(

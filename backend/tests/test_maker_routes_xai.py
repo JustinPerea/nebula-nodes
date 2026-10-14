@@ -358,3 +358,31 @@ async def test_fal_grok_edit_without_a_source_never_bills_a_generation_on_xai(im
         await _run(node, inputs, XAI)
     xai.assert_not_called()
 
+
+def test_cache_tag_follows_a_wired_krea_only_blocker():
+    """The cache key names the route the router takes: a wired start video
+    runs on Krea, so its result is never filed under the xAI route."""
+    from execution.engine import _cache_route_tag
+
+    definition = DEFINITIONS["krea-video-xai-grok-video-1-5"]
+    node = GraphNode(id="v", definitionId=definition["id"], params={"prompt": "p"})
+    keys = {**XAI, **KREA}
+    assert _cache_route_tag(node, definition, keys) == "direct:xai"
+    wired = {"start_video": PortValueDict(type="Video", value="https://e.com/v.mp4")}
+    assert _cache_route_tag(node, definition, keys, wired) == "fallback:krea"
+    empty = {"start_video": PortValueDict(type="Video", value="")}
+    assert _cache_route_tag(node, definition, keys, empty) == "direct:xai"
+
+
+@pytest.mark.asyncio
+async def test_a_wired_blocker_with_only_the_xai_key_names_the_krea_token():
+    """xAI is saved but the start video can only run on Krea: the error says
+    so instead of asking for the xAI key the person already saved."""
+    node = GraphNode(id="v", definitionId="krea-video-xai-grok-video-1-5", params={"prompt": "p"})
+    inputs = {**PROMPT, "start_video": PortValueDict(type="Video", value="https://e.com/v.mp4")}
+    with patch("handlers.grok_video.httpx.AsyncClient") as xai, \
+            pytest.raises(MissingCredentialError, match=r"^KREA_API_TOKEN is required: start_video"):
+        await _run(node, inputs, XAI)
+    xai.assert_not_called()
+    with pytest.raises(MissingCredentialError, match=r"^XAI_API_KEY or KREA_API_TOKEN is required$"):
+        await _run(node, PROMPT, {})
