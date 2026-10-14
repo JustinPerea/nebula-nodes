@@ -592,6 +592,105 @@
         "music_length_ms",
         "prompt"
       ]
+    },
+    {
+      "name": "Krea ElevenLabs TTS on the API token runs on ElevenLabs with the key",
+      "nodeId": "krea-audio-elevenlabs-tts",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "model_id",
+        "prompt",
+        "voice_id"
+      ]
+    },
+    {
+      "name": "Krea ElevenLabs Music runs on Krea without the ElevenLabs key",
+      "nodeId": "krea-audio-elevenlabs-music",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only",
+        "ELEVENLABS_API_KEY": "  "
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "a cleared ElevenLabs voice_id keeps Runway TTS on Runway",
+      "nodeId": "runway-tts",
+      "params": {
+        "voiceId": "Maya",
+        "voice_id": ""
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "paramKeys": [
+        "voiceId"
+      ]
+    },
+    {
+      "name": "Runway speech-to-speech with an ElevenLabs voice sends only the shared and ElevenLabs params",
+      "nodeId": "runway-sts",
+      "params": {
+        "voiceId": "Maya",
+        "voice_id": "pNInz6obpgDQGcFmaJgB",
+        "removeBackgroundNoise": true
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "paramKeys": [
+        "removeBackgroundNoise",
+        "voice_id"
+      ]
+    },
+    {
+      "name": "Runway dubbing stays on Runway without the ElevenLabs key",
+      "nodeId": "runway-dubbing",
+      "params": {},
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "paramKeys": [
+        "disableVoiceCloning",
+        "dropBackgroundAudio",
+        "numSpeakers",
+        "targetLang"
+      ]
     }
   ]
 }
