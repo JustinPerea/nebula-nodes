@@ -17724,6 +17724,13 @@
         "unsupported": [
           "square"
         ]
+      },
+      "accepts": {
+        "enable_safety_checker": {
+          "values": [
+            true
+          ]
+        }
       }
     }
   },
@@ -22012,7 +22019,14 @@
     ],
     "directParams": [],
     "directRoute": {
-      "setup": "fallback"
+      "setup": "fallback",
+      "accepts": {
+        "enable_safety_checker": {
+          "values": [
+            true
+          ]
+        }
+      }
     }
   },
   "ltx-audio-to-video": {

@@ -889,6 +889,54 @@
         "provider": "krea",
         "key": "KREA_API_TOKEN"
       }
+    },
+    {
+      "name": "fal's safety checker switched off keeps Seedream on fal (ModelArk always filters)",
+      "nodeId": "seedream-4-5",
+      "params": {
+        "enable_safety_checker": false
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "fal's safety checker left on still runs Seedance 1.0 T2V on BytePlus",
+      "nodeId": "seedance-1-0-t2v",
+      "params": {
+        "enable_safety_checker": true
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      }
+    },
+    {
+      "name": "fal's safety checker switched off keeps Seedance 1.0 T2V on fal",
+      "nodeId": "seedance-1-0-t2v",
+      "params": {
+        "enable_safety_checker": false
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
     }
   ]
 }

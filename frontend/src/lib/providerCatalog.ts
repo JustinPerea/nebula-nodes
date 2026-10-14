@@ -56,8 +56,8 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   // Services are not available in the United States." Models need activating
   // first (404 ModelNotOpen otherwise). docs/api-guides/byteplus.md.
   { key: 'BYTEPLUS_API_KEY', label: 'BytePlus · ModelArk', placeholder: 'ModelArk API key',
-    url: 'https://ai.byteplus.com/ark/region:ap-southeast-1/apiKey', brand: ['Seedream'],
-    note: 'Seedream on ByteDance\'s own API',
+    url: 'https://ai.byteplus.com/ark/region:ap-southeast-1/apiKey', brand: ['Seedream', 'Seedance'],
+    note: 'Seedream and Seedance on ByteDance\'s own API',
     caveat: 'BytePlus doesn\'t offer its model services in the United States (BytePlus Service Specific Terms). '
       + 'Use an Asia Pacific (ap-southeast-1) ModelArk key, and activate each model on the ModelArk console\'s '
       + 'Model activation page first; Seedance 2.x also needs USD 30 of BytePlus credits before activation.' },

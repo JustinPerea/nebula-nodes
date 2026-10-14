@@ -186,11 +186,47 @@ async def test_seedance_1x_sends_seed_and_camera_and_audio_only_where_documented
 @pytest.mark.asyncio
 async def test_seedance_1_0_t2v_leaves_the_fal_safety_checker_behind(monkeypatch):
     ark = ModelArk(monkeypatch)
-    await _run(GraphNode(id="t", definitionId="seedance-1-0-t2v",
-                         params={**_defaults("seedance-1-0-t2v"), "enable_safety_checker": False}), PROMPT, BYTEPLUS)
+    await _run(GraphNode(id="t", definitionId="seedance-1-0-t2v", params=_defaults("seedance-1-0-t2v")),
+               PROMPT, BYTEPLUS)
     body = ark.bodies[0]
     assert body["model"] == "seedance-1-0-pro-250528" and body["ratio"] == "16:9" and body["resolution"] == "1080p"
     assert "enable_safety_checker" not in body and "generate_audio" not in body
+
+
+@pytest.mark.asyncio
+async def test_the_fal_safety_checker_switched_off_keeps_seedance_1_0_on_fal(monkeypatch):
+    # ModelArk always runs its own content filter, so it can't honor a recipe
+    # that turned fal's checker off (directRoute.accepts).
+    ark = ModelArk(monkeypatch)
+    fal = AsyncMock(return_value={"video": {"type": "Video", "value": "x.mp4"}})
+    node = GraphNode(id="t", definitionId="seedance-1-0-t2v",
+                     params={**_defaults("seedance-1-0-t2v"), "enable_safety_checker": False})
+    with patch("handlers.fal_universal.handle_fal_universal", fal):
+        await _run(node, PROMPT, {**BYTEPLUS, **FAL})
+    assert ark.requests == []
+    assert fal.call_args.args[0].params["enable_safety_checker"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("definition_id,params,inputs,expected", [
+    # Saved by the CLI or an agent with only the model: the node's own
+    # defaults (5 s, 16:9), not BytePlus's (-1 lets 1.5 pro run up to 12 s).
+    ("seedance-v1-5", {"model": "1.5"}, {"image": PortValueDict(type="Image", value="https://e.com/a.png")},
+     {"duration": 5, "ratio": "16:9", "resolution": "720p", "generate_audio": True}),
+    # Seedance 1.0 text-to-video "Does not support adaptive"; -1 isn't a 1.0 duration.
+    ("seedance-1-0-t2v", {}, {}, {"duration": 5, "ratio": "16:9", "resolution": "1080p"}),
+])
+async def test_unsaved_settings_use_the_node_defaults_the_price_reads(monkeypatch, definition_id, params, inputs,
+                                                                      expected):
+    ark = ModelArk(monkeypatch)
+    await _run(GraphNode(id="d", definitionId=definition_id, params=params), {**PROMPT, **inputs}, BYTEPLUS)
+    body = ark.bodies[0]
+    assert {key: body.get(key) for key in expected} == expected
+    # The spend gate's high bound covers the video BytePlus is asked for.
+    estimate = _estimate(definition_id, params, BYTEPLUS)
+    model = body["model"]
+    one = prices.video_price(model, body["resolution"], str(body["duration"]), audio=body.get("generate_audio", True))
+    assert estimate["high"] >= (one[1] if isinstance(one, list) else one) - 1e-9
 
 
 # -- Krea copies -----------------------------------------------------------------

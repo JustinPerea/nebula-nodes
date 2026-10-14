@@ -128,7 +128,8 @@ def seedream_fal_to_byteplus(
       many per request (fal: "will potentially return up to max_images
       images every generation").
     - Never reach here: seed (blocks this route when set) and
-      enable_safety_checker (fal-only; ModelArk always runs its own content
+      enable_safety_checker switched off (directRoute.accepts; left on it's
+      fal-only and not sent, as ModelArk always runs its own content
       filter)."""
     params = node.params
     model_choice = str(params.get("model") or "4.5")
@@ -219,12 +220,16 @@ def request_body(node: GraphNode, inputs: dict[str, PortValueDict]) -> dict[str,
     refs = _port_values(inputs, "images")
     if refs:
         body["image"] = [_reference(ref) for ref in refs]
+    # One image is BytePlus's default ("sequential_image_generation ...
+    # Default: disabled"), so the field goes only with a batch. Seedream 5.0
+    # pro doesn't take it at all ("Single image generation:
+    # sequential_image_generation is not supported"; its supported models are
+    # "Seedream 5.0 lite, Seedream 4.5, Seedream 4.0"), and the Krea 5.0 pro
+    # copy always asks for one image.
     max_images = int(params.get("max_images") or 1)
     if max_images > 1:
         body["sequential_image_generation"] = "auto"
         body["sequential_image_generation_options"] = {"max_images": max_images}
-    else:
-        body["sequential_image_generation"] = "disabled"
     return body
 
 

@@ -145,7 +145,7 @@ async def test_seedream_runs_on_byteplus_with_the_maker_key(monkeypatch):
     assert result["image"]["value"].endswith(".png")
     assert ark.bodies == [{
         "model": "seedream-4-5-251128", "prompt": "a lighthouse at dusk", "size": "2848x1600",
-        "response_format": "b64_json", "watermark": False, "sequential_image_generation": "disabled",
+        "response_format": "b64_json", "watermark": False,
     }]
 
 
@@ -194,6 +194,7 @@ async def test_references_go_as_urls_or_data_uris(monkeypatch, tmp_path):
     {"seed": 7},                     # ModelArk has no seed
     {"image_size": "square"},        # 512x512: below ModelArk's 3,686,400 pixels
     {"image_size": {"width": 1024, "height": 1024}},
+    {"enable_safety_checker": False},  # ModelArk always runs its own content filter
 ])
 async def test_settings_byteplus_cant_honor_keep_seedream_on_fal(monkeypatch, params):
     ark = ModelArk(monkeypatch)
@@ -270,9 +271,10 @@ async def test_krea_copy_runs_on_byteplus_with_the_maker_key(monkeypatch, node_i
     gateway.assert_not_called()
     assert node.params == before
     assert set(result) == {"image", "images", "artifacts"}
+    # One image is BytePlus's default, and Seedream 5.0 pro doesn't take
+    # sequential_image_generation at all, so a single-image request omits it.
     assert ark.bodies == [{"model": model, "prompt": "a lighthouse", "size": f"{int(width)}x{int(height)}",
-                           "response_format": "b64_json", "watermark": False,
-                           "sequential_image_generation": "disabled"}]
+                           "response_format": "b64_json", "watermark": False}]
 
 
 @pytest.mark.asyncio

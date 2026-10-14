@@ -137,6 +137,9 @@ APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedream-4-5"] = {"directRoute": {
     "blockedBy": ["seed"],
     "size": {"param": "image_size", "minPixels": 3686400, "maxPixels": 16777216, "maxAspect": 16,
              "unsupported": ["square"]},
+    # Review fix: ModelArk always runs its own content filter, so fal's
+    # safety checker switched off keeps the run on fal.
+    "accepts": {"enable_safety_checker": {"values": [True]}},
 }}
 # Seedance on BytePlus ModelArk (2026-10-14,
 # execution/maker_routes_byteplus_seedance.py): BYTEPLUS_API_KEY joins
@@ -162,7 +165,9 @@ APPROVED_DUAL_ROUTE_SPLITS["seedance-1-0-t2v"] = {
     "falParams": ["enable_safety_checker"],
     "order": ["aspect_ratio", "resolution", "duration", "camera_fixed", "seed", "enable_safety_checker"],
 }
-APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedance-1-0-t2v"] = {"directRoute": {"setup": "fallback"}}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedance-1-0-t2v"] = {"directRoute": {
+    "setup": "fallback", "accepts": {"enable_safety_checker": {"values": [True]}},  # review fix, as Seedream
+}}
 # Direct maker routes, review fix (2026-10-14): Meshy's own image-to-3D API
 # takes texture_prompt ("Provide a text prompt to guide the texturing
 # process", https://docs.meshy.ai/en/api/image-to-3d), so it moves from

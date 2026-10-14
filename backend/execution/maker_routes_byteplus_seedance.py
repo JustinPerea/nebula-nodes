@@ -174,6 +174,25 @@ def _prompt(inputs: Mapping[str, PortValueDict], params: Mapping[str, Any]) -> d
     return {}
 
 
+def _setting(node: GraphNode, key: str) -> Any:
+    """A param as the run's price reads it (model_pricing.effective_params):
+    the saved value, else the node definition's default. A node added by the
+    CLI or an agent may save only some params; reading BytePlus's own default
+    instead (duration -1, ratio adaptive) would bill a longer video than the
+    estimate, or send a ratio Seedance 1.0 text-to-video refuses."""
+    value = node.params.get(key)
+    if value not in (None, ""):
+        return value
+    from execution.maker_routes import definition_for
+
+    definition = definition_for(node.definition_id)
+    for group in ("sharedParams", "falParams", "directParams", "params"):
+        for param in definition.get(group) or []:
+            if isinstance(param, Mapping) and param.get("key") == key:
+                return param.get("default")
+    return None
+
+
 def _whole_seconds(value: Any, model: str) -> int:
     shortest, longest = DURATIONS[model]
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
@@ -242,24 +261,24 @@ def fal_to_byteplus(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[
     - image -> first_frame, end_image -> last_frame; images (r2v) ->
       reference_image, 1 to 9.
     - Never reach here: seed on 2.x (blocks this route) and
-      enable_safety_checker (fal-only; ModelArk always runs its own filter)."""
-    params = node.params
+      enable_safety_checker switched off on 1.0 T2V (directRoute.accepts; left
+      on it's fal-only and not sent, as ModelArk always runs its own filter)."""
     if node.definition_id == "seedance-v1-5":
-        choice = str(params.get("model") or "1.5")
+        choice = str(_setting(node, "model") or "1.5")
         model = FAL_V1_5_MODELS.get(choice)
         if model is None:
             raise ValueError(f"Seedance model {choice!r} has no BytePlus route")
     else:
         model = FAL_NODE_MODELS[node.definition_id]
-    aspect = str(params.get("aspect_ratio") or "auto")
+    aspect = str(_setting(node, "aspect_ratio") or "auto")
     ratio = "adaptive" if aspect == "auto" else aspect
     if ratio != "adaptive" and ratio not in RATIOS:
         raise ValueError(f"BytePlus has no {aspect!r} ratio")
-    raw_duration = params.get("duration")
+    raw_duration = _setting(node, "duration")
     duration = -1 if raw_duration in (None, "", "auto") else _whole_seconds(raw_duration, model)
-    task = _task(model, ratio=ratio, duration=duration, resolution=_resolution(params.get("resolution"), model),
-                 audio=params.get("generate_audio"), camera_fixed=params.get("camera_fixed"),
-                 seed=params.get("seed") if model in _SERIES_1 else None)
+    task = _task(model, ratio=ratio, duration=duration, resolution=_resolution(_setting(node, "resolution"), model),
+                 audio=_setting(node, "generate_audio"), camera_fixed=_setting(node, "camera_fixed"),
+                 seed=_setting(node, "seed") if model in _SERIES_1 else None)
     routed = _prompt(inputs, {})
     routed.update(_frames(model, _port_values(inputs, "image"), _port_values(inputs, "end_image")))
     refs = _port_values(inputs, "images")
@@ -315,12 +334,13 @@ def krea_to_byteplus(model: str):
             if audios and not (images or videos) and model != SEEDANCE_2_5:
                 raise ValueError("Seedance 2.0 needs a reference image or video with reference audio "
                                  "(audio-only input is a Seedance 2.5 feature)")
-        aspect = str(params.get("aspect_ratio") or "16:9")
+        aspect = str(_setting(node, "aspect_ratio") or "16:9")
         if aspect not in RATIOS:
             raise ValueError(f"BytePlus has no {aspect!r} ratio; run this on Krea")
         ratio = "adaptive" if model == SEEDANCE_2_5 and first else aspect
-        task = _task(model, ratio=ratio, duration=_whole_seconds(params.get("duration", 5), model),
-                     resolution=_resolution(params.get("resolution"), model), audio=params.get("generate_audio"))
+        task = _task(model, ratio=ratio, duration=_whole_seconds(_setting(node, "duration"), model),
+                     resolution=_resolution(_setting(node, "resolution"), model),
+                     audio=_setting(node, "generate_audio"))
         routed = _prompt(inputs, params)
         routed.update(_frames(model, first, last))
         for port, values, kind in (("reference_images", images, "Image"), ("reference_videos", videos, "Video"),

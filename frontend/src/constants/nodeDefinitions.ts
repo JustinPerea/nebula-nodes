@@ -10221,6 +10221,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       setup: 'fallback',
       blockedBy: ['seed'],
       size: { param: 'image_size', minPixels: 3686400, maxPixels: 16777216, maxAspect: 16, unsupported: ['square'] },
+      // ModelArk always runs its own content filter, so fal's safety checker
+      // switched off keeps the run on fal.
+      accepts: { enable_safety_checker: { values: [true] } },
     },
   },
 
@@ -12700,7 +12703,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py) with
     // BYTEPLUS_API_KEY, else fal. With no key set, setup suggests the fal key
     // (BytePlus doesn't serve the US and each model must be activated first).
-    directRoute: { setup: 'fallback' },
+    directRoute: { setup: 'fallback', accepts: { enable_safety_checker: { values: [true] } } },
   },
   'ltx-audio-to-video': {
     id: 'ltx-audio-to-video',
