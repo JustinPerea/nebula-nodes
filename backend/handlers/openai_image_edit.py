@@ -9,6 +9,7 @@ from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
 from services.output import get_run_dir, portable_output_ref, save_base64_image
 from execution.missing_credential import MissingCredentialError
+from services.retired_nodes import GPT_IMAGE_1_SHUTDOWN, default_until
 from handlers.openai_image import check_background
 
 OPENAI_IMAGE_EDIT_URL = "https://api.openai.com/v1/images/edits"
@@ -58,7 +59,8 @@ async def handle_openai_image_edit(
 
     # --- build multipart form data ---
     prompt_text = str(prompt_input.value)
-    model = node.params.get("model") or DEFAULT_MODEL
+    # A node with no stored model keeps gpt-image-1 until it shuts down.
+    model = node.params.get("model") or default_until(GPT_IMAGE_1_SHUTDOWN, "gpt-image-1", DEFAULT_MODEL)
 
     files: list[tuple[str, Any]] = [
         ("image", ("image.png", image_bytes, "image/png")),

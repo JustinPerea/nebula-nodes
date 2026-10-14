@@ -7,6 +7,7 @@ import httpx
 from models.graph import GraphNode, PortValueDict
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
+from services.retired_nodes import GPT_IMAGE_1_SHUTDOWN, default_until
 
 OPENAI_API_URL = "https://api.openai.com/v1/images/generations"
 # gpt-image-1 shuts down 2026-10-23; OpenAI names gpt-image-2.5-sunburst or
@@ -39,7 +40,8 @@ async def handle_openai_image_generate(
     if not api_key:
         raise MissingCredentialError("OPENAI_API_KEY is required")
 
-    model = node.params.get("model") or DEFAULT_MODEL
+    # A node with no stored model keeps gpt-image-1 until it shuts down.
+    model = node.params.get("model") or default_until(GPT_IMAGE_1_SHUTDOWN, "gpt-image-1", DEFAULT_MODEL)
     check_background(node.params)
 
     body: dict[str, Any] = {

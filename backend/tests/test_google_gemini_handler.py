@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import base64
 import json
 import shutil
@@ -577,7 +579,8 @@ async def test_gemini_3_8_tts_wav_is_saved_as_is(tmp_path):
     client = _tts_client({"mimeType": "audio/wav", "data": base64.b64encode(wav).decode()})
 
     with patch("handlers.google_gemini.httpx.AsyncClient", return_value=client), \
-            patch("handlers.google_gemini.get_run_dir", return_value=tmp_path):
+            patch("handlers.google_gemini.get_run_dir", return_value=tmp_path), \
+            patch("services.retired_nodes._today", return_value=date(2026, 11, 17)):
         result = await handle_gemini_tts(
             _make_tts_node({"voiceName": "Kore"}),
             {"text": PortValueDict(type="Text", value="Hello")},
@@ -586,7 +589,22 @@ async def test_gemini_3_8_tts_wav_is_saved_as_is(tmp_path):
 
     assert Path(result["audio"]["value"]).read_bytes() == wav
     url = client.post.call_args.args[0]
-    assert url.endswith("/gemini-3.8-flash-tts:generateContent"), "the default is 3.8 Flash TTS"
+    assert url.endswith("/gemini-3.8-flash-tts:generateContent"), "the default once the previews are gone"
+
+
+@pytest.mark.asyncio
+async def test_gemini_tts_with_no_model_keeps_2_5_flash_until_the_shutdown(tmp_path):
+    client = _tts_client({"mimeType": "audio/L16;codec=pcm;rate=24000",
+                          "data": base64.b64encode(b"\x01\x00" * 4).decode()})
+    with patch("handlers.google_gemini.httpx.AsyncClient", return_value=client), \
+            patch("handlers.google_gemini.get_run_dir", return_value=tmp_path), \
+            patch("services.retired_nodes._today", return_value=date(2026, 11, 16)):
+        await handle_gemini_tts(
+            _make_tts_node({"voiceName": "Kore"}),
+            {"text": PortValueDict(type="Text", value="Hello")},
+            {"GOOGLE_API_KEY": "test-key"},
+        )
+    assert client.post.call_args.args[0].endswith("/gemini-2.5-flash-preview-tts:generateContent")
 
 
 @pytest.mark.asyncio

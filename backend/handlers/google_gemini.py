@@ -12,6 +12,7 @@ from execution.stream_runner import StreamConfig, stream_execute
 from uuid import uuid4
 
 from services.image_input import load_local_image
+from services.retired_nodes import GEMINI_TTS_PREVIEWS_SHUTDOWN, default_until
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
 
@@ -450,7 +451,9 @@ async def handle_gemini_tts(
     if not api_key:
         raise MissingCredentialError("GOOGLE_API_KEY is required")
 
-    model = node.params.get("model", GEMINI_TTS_DEFAULT_MODEL)
+    # A node with no stored model keeps 2.5 Flash until the previews shut down.
+    model = node.params.get("model") or default_until(
+        GEMINI_TTS_PREVIEWS_SHUTDOWN, "gemini-2.5-flash-preview-tts", GEMINI_TTS_DEFAULT_MODEL)
     voice_name = node.params.get("voiceName", "Kore")
 
     body: dict[str, Any] = {

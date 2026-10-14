@@ -98,7 +98,7 @@ Displayed as "Veo 3.1". Params split three ways in the def (this is a multi-rout
 - Sends `responseModalities: ["AUDIO","TEXT"]`.
 
 ### `gemini-tts`
-- `model` (enum, default `gemini-3.8-flash-tts`): `gemini-3.1-flash-tts-preview` · `gemini-2.5-flash-preview-tts` · `gemini-2.5-pro-preview-tts` (all three shut down 2026-11-17) · `gemini-3.8-flash-tts` · `gemini-3.8-flash-lite-tts` (added 2026-10-14). From 2026-11-17 saved nodes move: 2.5 Flash/Pro → 3.8 Flash, 3.1 Flash → 3.8 Flash-Lite (`backend/services/retired_nodes.py`).
+- `model` (enum, default `gemini-3.8-flash-tts`): `gemini-3.1-flash-tts-preview` · `gemini-2.5-flash-preview-tts` · `gemini-2.5-pro-preview-tts` (all three shut down 2026-11-17) · `gemini-3.8-flash-tts` · `gemini-3.8-flash-lite-tts` (added 2026-10-14). From 2026-11-17 saved nodes move: 2.5 Flash/Pro → 3.8 Flash, 3.1 Flash → 3.8 Flash-Lite (`backend/services/retired_nodes.py`, applied on load and at run time). A node with no stored `model` runs 2.5 Flash until then.
 - `voiceName` (enum, default `Kore`) — **30 prebuilt voices**, each labeled with a character: e.g. `Kore` (Firm), `Puck` (Upbeat), `Zephyr` (Bright), `Charon` (Informative), `Fenrir` (Excitable), `Leda` (Youthful), `Aoede` (Breezy), `Enceladus` (Breathy), `Algieba` (Smooth), `Sulafat` (Warm), `Achird` (Friendly), `Gacrux` (Mature) … through `Sadaltager` (Knowledgeable). Pick by the vibe label.
 - Input: `text` (req) — this is the script to speak. Output: `audio` (WAV).
 - Single-speaker only; sends `speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName`.

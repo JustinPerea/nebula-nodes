@@ -54,7 +54,7 @@ These are the **ten OpenAI-direct nodes** (all BYOK, one key). For prompting *cr
 Types/ranges/enums/defaults are from `node_definitions.json`; behavior notes are from the handlers.
 
 ### `gpt-image-1-generate` (sync)
-- `model` *(enum, req, default `gpt-image-2.5-flare` since 2026-10-14)*: `gpt-image-1` (shuts down 2026-10-23) · `gpt-image-1.5` · `gpt-image-1-mini` (both shut down 2026-12-01) · `gpt-image-2.5-flare` · `gpt-image-2.5-sunburst`. OpenAI names the two 2.5 models as the replacement for all three; saved `gpt-image-1` nodes move to Flare on load from 2026-10-23.
+- `model` *(enum, req, default `gpt-image-2.5-flare` since 2026-10-14)*: `gpt-image-1` (shuts down 2026-10-23) · `gpt-image-1.5` · `gpt-image-1-mini` (both shut down 2026-12-01) · `gpt-image-2.5-flare` · `gpt-image-2.5-sunburst`. OpenAI names the two 2.5 models as the replacement for all three; saved `gpt-image-1` nodes move to Flare from 2026-10-23 (on load and at run time). A node with no stored `model` runs gpt-image-1 until then.
 - `quality` also offers `xhigh` and `max` on the 2.5 models. A transparent background needs `png` or `webp` (checked before the request).
 - `size` *(enum, default `auto`)*: `auto` · `1024x1024` · `1536x1024` · `1024x1536`. `auto` is omitted from the request (lets OpenAI pick).
 - `quality` *(enum, default `auto`)*: `auto` · `low` · `medium` · `high`. `auto` omitted.
@@ -70,7 +70,7 @@ Types/ranges/enums/defaults are from `node_definitions.json`; behavior notes are
 - Handler **always** sets `stream: true`, `partial_images: 0`, and strips `background`/`input_fidelity`/`n`. For prompting craft + cost table, see the gpt-image-2 skill.
 
 ### `gpt-image-1-edit` (sync, multipart)
-- `model` *(enum, req, default `gpt-image-2.5-sunburst` since 2026-10-14)*: same options as `gpt-image-1-generate`. Sunburst is OpenAI's pick "for workflows where editing precision matters most"; saved `gpt-image-1` nodes move to it on load from 2026-10-23.
+- `model` *(enum, req, default `gpt-image-2.5-sunburst` since 2026-10-14)*: same options as `gpt-image-1-generate`. Sunburst is OpenAI's pick "for workflows where editing precision matters most"; saved `gpt-image-1` nodes move to it from 2026-10-23 (on load and at run time). A node with no stored `model` runs gpt-image-1 until then.
 - `n` *(int 1–10, default 1)*: number of variations; only sent when >1. Every image comes back: the first on `image`, all of them on the `images` (Array) output.
 - `size` / `quality` / `output_format` / `background`: same enums/defaults as `gpt-image-1-generate`.
 - Inputs: `image` (req), `prompt` (req), `mask` (optional PNG). Image + mask are read from disk and uploaded multipart.
