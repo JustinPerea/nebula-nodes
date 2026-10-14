@@ -1869,7 +1869,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Reference Images (Image ×n) |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3487,7 +3487,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Character Image (Image), Character Video (Video), Performance Video (Video)* |
 | **Outputs** | Video (Video) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3509,7 +3509,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Video (Video)*, Prompt (Text)*, Reference Image (Image) |
 | **Outputs** | Video (Video) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3529,7 +3529,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image (Image) |
 | **Outputs** | Video (Video) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -4536,7 +4536,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Audio (Audio)* |
 | **Outputs** | Audio (Audio) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -4558,7 +4558,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Audio (Audio), Video (Video) |
 | **Outputs** | Audio (Audio) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -4578,7 +4578,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Text (Text)* |
 | **Outputs** | Audio (Audio) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -6706,7 +6706,7 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | sync |
 | **Inputs** | — |
 | **Outputs** | Character (Character) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|

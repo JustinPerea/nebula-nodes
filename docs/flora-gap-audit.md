@@ -15,7 +15,8 @@ Audit of what Flora (app.flora.ai, 369 models via MCP `client.models.list`) offe
 | Nebula node | Actually covers |
 |---|---|
 | `nano-banana` (Google direct) | Nano Banana 2, 2 Lite, **Nano Banana Pro** (gemini-3-pro-image), 2.5 Flash via model enum |
-| `runway-video` | Gen-4.5, Gen-4 Turbo, Seedance 2.0 (+Fast), Happy Horse 1.0 via model enum |
+| `runway-video` | Gen-4.5, Gen-4 Turbo, Seedance 2.0 (+Fast, Mini), Seedance 2.5, Happy Horse 1.0, Veo 3.1 (+Fast) via model enum (Runway resells the ByteDance and Google models) |
+| `runway-image` | Gen-4 Image (+Turbo), Nano Banana Pro, GPT Image 2, Gemini 2.5 Flash, Seedream 5.0 Pro / Lite via model enum (Runway resells all but Gen-4) |
 | `minimax-t2v/i2v/s2v` | Hailuo 2.3 (+Fast), Hailuo 02 via model enum |
 | `veo-3` | Actually Veo **3.1** (generate-preview endpoint) |
 | Universal nodes (`fal-universal`, `replicate-universal`, `openrouter-universal`, `nous-portal-universal`) | Can reach most missing models ad hoc, just without typed params/first-class UX |
@@ -29,7 +30,7 @@ Audit of what Flora (app.flora.ai, 369 models via MCP `client.models.list`) offe
 | **Enhancor V1/V3/V4** (i2i skin realism) | **Blocked 2026-08-14:** No BYOK-reachable API (not on FAL, no direct API documented). Closest FAL substitute `topaz-image-upscale` added — has face_enhancement + face_enhancement_strength for skin-realism use case. |
 | Qwen Image 2.0 / Edit / Edit Plus / Edit 2511 Angles | Strong open-weights editing family, incl. camera-angle re-pose. |
 | Riverflow 2.0 Fast/Pro, 2.5 Pro (+ Pro Inpainting) | |
-| Seedream 5 Pro / 5.0 Lite | Nebula tops out at Seedream 4.5. |
+| Seedream 5 Pro / 5.0 Lite | **Partly closed 2026-10-14:** `runway-image` offers `seedream5_pro` / `seedream5_lite` through Runway, a reseller (Krea copies exist too). No ByteDance maker route yet. |
 | Flux 2 family breadth: Flex, Klein 4B/9B, Max, Turbo | Nebula has Flux 2 Pro only. |
 | Flux Kontext **Max**, Flux Canny / Depth / Redux | Nebula has base Kontext; no ControlNet-style structure guidance. |
 | Recraft V4.1 family (Pro / Vector / Utility / Utility Pro) | Nebula has V4 raster+SVG. |
@@ -97,3 +98,4 @@ Add entries as gaps are hit in real Flora work. Format: date — model/capabilit
 | 2026-08-17 | Video QC suite closed | Added first-class `qc-loop-safety`, `qc-frame-review`, `qc-composited-look`, and `qc-camera-geometry` analyzers with keyless heuristic/OpenCV modes plus an optional bounded vision-LLM advisory mode. This closes the logged loop-seam, identity-drift, integrated-scene, and camera-geometry QC tooling gaps. | High → Closed |
 | 2026-10-03 | Krea image/video catalog closes provider gaps | Added 74 first-class Krea API routes. Grok image quality and Veo 3.1 variants are covered; UNI-1/max, Kling tiers/references, and Hailuo first/last-frame breadth are partially closed as detailed above. Exact controls derive from current official schemas; this is catalog and deterministic execution evidence, not paid generation or loop-quality proof. | Mixed → Closed/Partial |
 | 2026-10-09 | Imported 3D mesh view/capture as a first-class node | UI audit observed Flora's 3D Import/View/Capture entry; its [official September update](https://flora.ai/updates/pipeline-ready-3d-shareable-decks-2026-09-20) documents lighting and captures. Current definitions include Meshy/Hunyuan/World Labs mesh outputs, and `MeshPreview` supports viewing/downloading, but no imported-mesh-to-image capture node. Catalog/source comparison only; live capture quality was not tested. | Medium / later |
+| 2026-10-14 | Seedream 5.0 Pro / Lite, Seedance 2.0 Mini / 2.5 via Runway | Added as `runway-image` / `runway-video` model options from Runway's request schema (reseller route; the ByteDance maker route is still unconfirmed). Seedance video-to-video and draft mode aren't exposed. | Medium → Partial |
