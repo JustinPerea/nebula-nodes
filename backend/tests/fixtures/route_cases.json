@@ -974,6 +974,59 @@
       ]
     },
     {
+      "name": "a fal Grok recipe that asks for PNG stays on fal (xAI returns JPEG and has no format field)",
+      "nodeId": "grok-imagine-image",
+      "params": {
+        "output_format": "png"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "output_format",
+        "detail": "output_format png"
+      }
+    },
+    {
+      "name": "a fal Grok edit saved with JPEG output runs on xAI",
+      "nodeId": "grok-imagine-image-edit",
+      "params": {
+        "output_format": "jpeg"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "xai",
+        "key": "XAI_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "with only the xAI key, a fal Grok edit that asks for WebP has no route",
+      "nodeId": "grok-imagine-image-edit",
+      "params": {
+        "output_format": "webp"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null
+      }
+    },
+    {
       "name": "Grok Imagine Edit on fal keeps output_format",
       "nodeId": "grok-imagine-image-edit",
       "params": {},
@@ -1927,6 +1980,50 @@
         "provider": "krea",
         "key": "KREA_API_TOKEN"
       }
+    },
+    {
+      "name": "a Krea Seedream recipe with its own seed stays on Krea (ModelArk has no seed)",
+      "nodeId": "krea-image-bytedance-seedream-4",
+      "params": {
+        "_kreaAuth": "api-token",
+        "width": 2048,
+        "height": 2048,
+        "seed": 42
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "seed",
+        "detail": "seed 42"
+      }
+    },
+    {
+      "name": "a Krea Seedream recipe at Krea's default seed (saved as a float) still goes to BytePlus",
+      "nodeId": "krea-image-bytedance-seedream-5-pro",
+      "params": {
+        "_kreaAuth": "api-token",
+        "width": 1024,
+        "height": 1024,
+        "seed": 1337.0
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      },
+      "block": null
     },
     {
       "name": "Krea style images keep Seedream on Krea",

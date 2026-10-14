@@ -89,7 +89,8 @@ def fal_grok_image_to_xai(node: GraphNode, inputs: dict[str, PortValueDict]) -> 
     1k/2k are all in xAI's enums). The edit node's ``images`` port reaches xAI
     as the edit's source images. Dropped: output_format (fal-only, falParams;
     xAI has no output-format field and returns JPEG unless the quality
-    produces PNG).
+    produces PNG). Only its default, jpeg, reaches this route: a recipe set
+    to png or webp stays on fal (directRoute.accepts).
 
     The edit node needs a source image: handle_xai_image picks the edits
     endpoint only when images arrive, so an edit run without one would bill

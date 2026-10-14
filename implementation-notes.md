@@ -4513,3 +4513,72 @@ skill for the other maker routes.
 
 Docs updated: `docs/api-guides/runway.md`, `docs/api-guides/elevenlabs.md`, `docs/api-guides/byteplus.md`,
 `.agents/skills/krea/SKILL.md`, `.agents/skills/byteplus/SKILL.md`.
+
+### Round 2 stage 4: final review
+
+Independent pass over `git diff direct-maker-routes...HEAD`. What was checked, what changed, what was left.
+
+**Checked, no change needed**
+
+- Every lane's routes survived the merge. A script compared each lane branch's dual-route nodes with HEAD in
+  `node_definitions.json` and `nodeDefinitions.ts` (directKeyName, envKeyName order `[maker, copy]`, translation,
+  model, param groups, ports): 72 dual-route nodes on HEAD, none lost, none unclaimed, JSON and TS identical. The
+  only differences from the lane branches are stage 1/3's rule conversions.
+- Python and TS route rules agree. A generated property test (10,800 random cases over every dual-route node:
+  saved values incl. blank strings, `"[]"`, numeric strings, `_kreaAuth`, wired ports, key sets incl. blank keys)
+  gave identical `select_route`, `direct_block` and `with_wired_blockers` results on both sides. A mutant TS
+  `hasValue` without the trim was caught. The temporary test file was deleted; `route_cases.json` stays the
+  checked-in contract.
+- Approvals in `test_reference_roles.py` are exact values (`_remove_approved_fields` asserts equality), not broad.
+  No new backend test is assertion-free (AST scan of the branch's new tests).
+- Security fixes from stage 2 still hold: encoded traversal (`%2e%2e`, `..%2f`) and `[::1]` refused in
+  `media_input`; ElevenLabs `voice_id` validated and quoted on every route; Runway Ruby local reads capped and
+  path-checked.
+- Prices spot-checked live today against the makers' own pages: xAI (image, image-2.0, video, video-1.5, input
+  image/video surcharges), MiniMax (Hailuo-02, 2.3, 2.3-Fast, H3), Runway (Gen-4.5 12 credits/s, gen4_image 5/8,
+  Ruby 20/40, $0.01/credit), ElevenLabs Music ($0.15/min), Vertex Veo 3.1 / Fast / Lite, BytePlus (Seedream 4.5
+  $0.04, 5.0 lite $0.035, 4.0 $0.03, Seedance 2.0 rate). All match. Ideogram's pricing page renders prices with
+  JavaScript only, so Ideogram was **not** re-verified this stage. High bounds include per-input surcharges, and a
+  wired priced param leaves the node unpriced, so the spend gate reads the high bound.
+- Translator refusals for limits of the model itself (Hailuo 2.3 Fast with no start image, 512P, Veo references at
+  4/6 s or 4K or with frames, Seedance end frame without a start frame, Seedance 2.0 audio-only references, xAI
+  reference-to-video over 10 s) were left as refusals, not turned into route rules: the copy runs the same maker
+  model, so moving the run there would fail there too, and refusing before any request costs nothing.
+- Ideogram 3 / 2a and Runway gen4 image snap a free width/height to the nearest supported ratio. Not a regression
+  (the makers only take fixed shapes, and Krea has to do the same), but it is a silent change; listed for Justin.
+
+**Fixed**
+
+1. *Wired ports on the canvas.* The run-status line under a node and the Inspector's route-specific params read
+   saved params only, so a wired blocker (for example Grok Video 1.5's `start_video`, Seedream 4's style images)
+   showed "xAI" or "Seed" while the run went to Krea. New `nodeWiredPorts(nodeId, edges)` in `lib/runScope.ts`;
+   `NodeRunStatus` takes `nodeId`, subscribes to the edges and passes `withWiredBlockers` params to
+   `runRouteProvider`; `ModelNode` and `DynamicNode` pass it; `Inspector` does the same for
+   `paramDefinitionsForRun`. Library, Create and connection-popup badges have no wires, and backend
+   `describe_node` is catalog-level, so they stay as they are. Two tests, both fail with the change reverted.
+2. *Grok Imagine (fal copies) silently returned JPEG for a PNG or WebP request.* xAI's image REST reference has no
+   format field ("image/jpeg unless the requested quality produces PNG"), and the translator dropped
+   `output_format`. `grok-imagine-image` and `grok-imagine-image-edit` get `directRoute.accepts {output_format:
+   [jpeg]}`, so PNG/WebP stays on fal (or names FAL_KEY with only the xAI key). The old xAI test asserted the
+   drop; it now uses jpeg, and a new parametrized test covers png/webp. Fingerprint approvals added.
+3. *Krea Seedream copies silently dropped a seed.* BytePlus documents no seed for Seedream 4.0 / 4.5 / 5.0, and
+   the translator ignored it. `sync-krea-catalog.py _byteplus_route` now emits `directAccepts {seed: [1337]}`
+   (Krea's default, `KREA_SEEDREAM_DEFAULT_SEED`; the generator refuses if Krea's default changes), so any other
+   seed keeps the run on Krea, where it is honored. Regenerated.
+4. `route_cases.json`: five cases for the two new rules (fallback with block detail, direct, only-maker-key unset,
+   `1337.0` counts as the default). Mutation-checked on both sides.
+5. `docs/api-guides/README.md` provider rows for BytePlus, ElevenLabs and xAI were stale (node counts and
+   coverage); refreshed. Also updated: `docs/api-guides/xai.md`, `docs/api-guides/byteplus.md`, the xAI and
+   BytePlus skills (`.agents` and `.claude` for xAI).
+
+**Left open**
+
+- Older nodes outside this diff (for example `nano-banana-fal` seed/output_format, `veo-3` negative_prompt/seed,
+  Meshy texture_prompt in image mode) still drop copy-only params on the maker route. Same class as fixes 2 and 3;
+  not changed here because they predate the branch and each needs its own vendor check.
+- A saved `"[]"` string counts as set for a `"(set)"` rule on both sides (consistent, but a cleared list saved as
+  that string would keep a run on the copy).
+- Carried from earlier stages: Veo / Omni result downloads send `x-goog-api-key` with `follow_redirects=True`;
+  Gen-4.5 672:1584 schema-vs-guide conflict; no live BytePlus smoke test (US, region, activation); Veo 3.1 GA
+  retire dates; NB 2.1 costs more on Google than on Krea; OpenAI 2.5 price rows; MiniMax Mainland host; Cinema
+  `_seedOverride` variations still need FAL_KEY with only a BytePlus key. No live provider calls were made.

@@ -88,6 +88,20 @@ describe('Canvas inspector enum controls', () => {
     expect(screen.getByLabelText('Width')).toBeVisible();
   });
 
+  it('shows the Krea params when a Krea-only input arrives by wire, as the run goes to Krea', () => {
+    useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true,
+      apiKeys: { BYTEPLUS_API_KEY: 'fixture-only', KREA_API_TOKEN: 'fixture-only' } } });
+    renderModel('krea-image-bytedance-seedream-4', { _kreaAuth: 'api-token', width: 2048, height: 2048 });
+    // On BytePlus: Krea's seed isn't a BytePlus field, so it is hidden.
+    expect(screen.queryByLabelText('Seed')).toBeNull();
+    cleanup();
+    useGraphStore.setState({ edges: [{ id: 'e', source: 'refs', target: 'test-krea', sourceHandle: 'images',
+      targetHandle: 'style_images' }] });
+    render(<Inspector embedded />);
+    // Wired style images keep the run on Krea (directRoute.blockedBy), so Krea's own params show.
+    expect(screen.getByLabelText('Seed')).toBeVisible();
+  });
+
   it('lets an Ideogram key opt a reframe saved without a resolution into the direct route', () => {
     // An agent-made node (no seeded defaults) with only the Ideogram key: the
     // run needs `resolution` to go direct, so it shows unset until picked.

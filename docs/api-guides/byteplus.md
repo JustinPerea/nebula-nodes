@@ -24,9 +24,9 @@ flowchart LR
 | Seedream 4.5 (model 4.5) | `seedream-4-5` | fal | `seedream-4-5-251128` | `seed` is set; the safety checker is switched off; size is `square` (512x512), `auto_3K`, or a custom size outside the limits |
 | Seedream 4.5 (model 5.0 lite) | `seedream-4-5` | fal | `seedream-5-0-lite-260128` | `seed` is set; the safety checker is switched off; size is `square` or a custom size outside the limits |
 | Cinema Scene (default base) | `cinema-scene` | fal, through `seedream-4-5` | as above | as above, for the scene's computed size. A Character bundle's seed isn't sent on the BytePlus route (BytePlus takes no seed for Seedream 4.5), so the shots run where the price says |
-| Krea Seedream 4 | `krea-image-bytedance-seedream-4` | Krea | `seedream-4-0-250828` | Krea plan; `style_images` set; width x height outside the limits |
-| Krea Seedream 5 Lite | `krea-image-bytedance-seedream-5-lite` | Krea | `seedream-5-0-lite-260128` | Krea plan; `style_images` set; width x height outside the limits |
-| Krea Seedream 5 Pro | `krea-image-bytedance-seedream-5-pro` | Krea | `dola-seedream-5-0-pro-260628` | Krea plan; `style_images` set; width x height outside the limits |
+| Krea Seedream 4 | `krea-image-bytedance-seedream-4` | Krea | `seedream-4-0-250828` | Krea plan; `style_images` set; a seed other than 1337; width x height outside the limits |
+| Krea Seedream 5 Lite | `krea-image-bytedance-seedream-5-lite` | Krea | `seedream-5-0-lite-260128` | Krea plan; `style_images` set; a seed other than 1337; width x height outside the limits |
+| Krea Seedream 5 Pro | `krea-image-bytedance-seedream-5-pro` | Krea | `dola-seedream-5-0-pro-260628` | Krea plan; `style_images` set; a seed other than 1337; width x height outside the limits |
 
 The readiness line under each node says which route a run takes and why. When a setting keeps the run on its copy, the line names the setting. A run never quietly changes a recipe to make it fit BytePlus.
 
@@ -51,7 +51,7 @@ Request: `POST /images/generations` with `watermark: false` (BytePlus's default 
 | `max_images` > 1 (fal) | `sequential_image_generation: auto` + `max_images` | "The model determines whether to return multiple images and how many"; references + outputs ≤ 15 |
 | `max_images` 1, and every Krea copy | `sequential_image_generation` left out | BytePlus's default is `disabled` (one image), and Seedream 5.0 pro doesn't take the field: "Single image generation: **sequential_image_generation** is not supported" |
 | `seed` (fal), `enable_safety_checker` (fal) | none | fal only. A set `seed`, or the safety checker switched off (ModelArk always runs its own content filter), keeps the run on fal. |
-| `seed` (Krea) | none | Krea fills a default (1337), so it can't decide the route; it's dropped on BytePlus |
+| `seed` (Krea) | none | Krea fills a default (1337), which is dropped on BytePlus. Any other seed keeps the run on Krea, where it is honored (`directRoute.accepts`) |
 | `style_images` (Krea) | none | Krea's per-image `strength` has no ModelArk field; set ones keep the run on Krea |
 
 Size limits per model ("Total pixels range", "Aspect ratio range: [1/16, 16]"):

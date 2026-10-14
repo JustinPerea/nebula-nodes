@@ -23,7 +23,7 @@ Same rules in routing, pricing, the spend gate, readiness and the cache key (`ba
 What keeps a run on the copy (the readiness line names it):
 
 - `seedream-4-5`: a set `seed` (`directRoute.blockedBy`); `image_size` of `square` (512x512), `auto_3K` on model 4.5, or a custom `{width, height}` outside 3,686,400–16,777,216 pixels or past 16:1 (`directRoute.size`).
-- Krea copies: set `style_images` (Krea's `strength` has no ModelArk field); `width` x `height` outside the model's limits — 4.0: 921,600–16,777,216 px; 5 Lite: 3,686,400–16,777,216; 5 Pro: 921,600–4,624,220.
+- Krea copies: set `style_images` (Krea's `strength` has no ModelArk field); a `seed` other than Krea's default 1337 (`directRoute.accepts`; ModelArk has no seed, so the default is dropped there); `width` x `height` outside the model's limits — 4.0: 921,600–16,777,216 px; 5 Lite: 3,686,400–16,777,216; 5 Pro: 921,600–4,624,220.
 
 To move a recipe onto BytePlus, clear the seed or style images, or pick a size it takes. Never rewrite someone's recipe silently to make it fit.
 

@@ -19,7 +19,7 @@
 | Node (as shown in app) | Node ID | Runs on | xAI model on your key | Notes |
 |---|---|---|---|---|
 | Grok Imagine Video | `grok-imagine-video` | xAI only | `grok-imagine-video` | `prompt` (required), optional `image`; `duration` 1-15 (default 5), 7 aspect ratios, 480p/720p |
-| Grok Imagine Image | `grok-imagine-image` | xAI key, else fal | `grok-imagine-image` | `num_images` -> `n`; `output_format` is fal-only |
+| Grok Imagine Image | `grok-imagine-image` | xAI key, else fal | `grok-imagine-image` | `num_images` -> `n`; `output_format` is fal-only (PNG/WebP stay on fal) |
 | Grok Imagine Image Edit | `grok-imagine-image-edit` | xAI key, else fal | `grok-imagine-image` | `images` port: up to 5 sources on xAI (fal takes 3) |
 | Grok Imagine 2.0 (Krea) | `krea-image-xai-grok-imagine-2` | Krea plan, else xAI key, else Krea token | `grok-imagine-image-2.0` | `quality` low/medium; `style_images` keep the run on Krea |
 | Grok Imagine 2.0 Edit (Krea) | `krea-image-xai-grok-imagine-2-edit` | same | `grok-imagine-image-2.0` | 1-3 `image_urls` |
@@ -38,7 +38,7 @@ Added 2026-10-14. Six copies of Grok Imagine also run on xAI's own API when `XAI
 
 What changes on the xAI route:
 
-- **fal copies** send `num_images` as `n`, and `aspect_ratio` and `resolution` as they are. `output_format` is fal-only (xAI has no output-format field and returns JPEG unless the quality produces PNG), so the Inspector hides it on the xAI route.
+- **fal copies** send `num_images` as `n`, and `aspect_ratio` and `resolution` as they are. `output_format` is fal-only (xAI has no output-format field and returns JPEG unless the quality produces PNG), so the Inspector hides it on the xAI route, and a recipe saved with PNG or WebP stays on fal (`directRoute.accepts output_format: [jpeg]`) rather than coming back as JPEG.
 - **Krea Grok 2.0** sends `quality` and `resolution` as `1k`/`2k`. An unset resolution renders at xAI's default, 1k. Krea's `style_images` (style references with a strength) have no xAI equivalent: a recipe that sets them, or wires them into the port, stays on Krea.
 - **Krea Grok video** picks the endpoint from its inputs: `edit_video` -> `/v1/videos/edits` (prompt required; xAI keeps the source's length, shape and resolution, capped at 720p), otherwise `/v1/videos/generations` with `start_image` -> `image` and `reference_images` (up to 7, at most 10 s). Unset `duration` and `resolution` send the Krea node's defaults (6 s, 720p), not xAI's (8 s, 480p). xAI takes whole seconds only. A duration that isn't a whole 1-15 seconds, and combinations xAI doesn't document on one request (an edit with a start image or references, a start image with references), saved or wired, stay on Krea (`directRoute.accepts` / `rejectsWhen`); with only the xAI key saved, the run says the Krea token is needed and why.
 - **`start_video` stays on Krea** on both video copies, saved or wired. Krea's OpenAPI gives the field no description (it appears on Grok, Veo 2, Seedance and Flux alike), so whether it means "extend this clip" is NOT CONFIRMED. xAI's extensions endpoint also works on `grok-imagine-video` only ("Model | `grok-imagine-video`" in the extension guide). Mapping it would risk a different result than the Krea copy, so it isn't mapped.

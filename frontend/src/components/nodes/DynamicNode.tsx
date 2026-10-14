@@ -172,7 +172,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      <NodeRunStatus data={nodeData} definition={definition} />
+      <NodeRunStatus data={nodeData} definition={definition} nodeId={id} />
 
       {previewComplete && worldOutput && (
         <div className="model-node__preview model-node__preview--world">

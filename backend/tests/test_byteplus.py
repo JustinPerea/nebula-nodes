@@ -286,6 +286,9 @@ async def test_krea_copy_runs_on_byteplus_with_the_maker_key(monkeypatch, node_i
     ("krea-image-bytedance-seedream-4", {"width": 1024, "height": 1024,
                                          "style_images": '[{"url": "https://e/s.png", "strength": 1}]'}),
     ("krea-image-bytedance-seedream-4", {"width": 1024, "height": 1024, "_kreaAuth": "mcp"}),
+    # ModelArk has no seed: Krea's default (1337) is dropped there, any other
+    # seed stays on Krea, where it is honored, instead of being dropped silently.
+    ("krea-image-bytedance-seedream-5-lite", {"width": 2560, "height": 1440, "seed": 42}),
 ])
 async def test_what_byteplus_cant_render_stays_on_krea(monkeypatch, node_id, params):
     ark = ModelArk(monkeypatch)
@@ -300,6 +303,8 @@ async def test_what_byteplus_cant_render_stays_on_krea(monkeypatch, node_id, par
         await _run(node, {}, {**BYTEPLUS, **KREA})
     assert ark.requests == []
     assert seen["width"] == params["width"]
+    if "seed" in params:
+        assert seen["seed"] == params["seed"]
 
 
 @pytest.mark.asyncio

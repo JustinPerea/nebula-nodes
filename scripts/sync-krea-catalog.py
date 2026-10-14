@@ -694,18 +694,25 @@ DIRECT_ROUTES["/generate/audio/elevenlabs/tts"] = {
 # - Seedream 5.0 lite: the model list names "seedream-5-0-260128 (also
 #   supports: seedream-5-0-lite-260128)"; the pricing page prices
 #   seedream-5-0-lite-260128, so that id is the one called.
-# - seed (default 1337) has no ModelArk equivalent: Krea-only, dropped on the
-#   maker route. style_images carry a Krea `strength` (-2..2) ModelArk can't
-#   take, so they're Krea-only and keep a run on Krea when set.
+# - seed (default 1337) has no ModelArk equivalent: Krea-only. Its default
+#   can't be a blocker (every new node would stay on Krea), so the default is
+#   dropped on the maker route, and any other seed keeps the run on Krea
+#   (directAccepts), where it is honored, instead of being dropped silently.
+#   style_images carry a Krea `strength` (-2..2) ModelArk can't take, so
+#   they're Krea-only and keep a run on Krea when set.
 _BYTEPLUS_PRICING_URL = "https://docs.byteplus.com/en/docs/ModelArk/model-pricing"
 _BYTEPLUS_NOTE = ("BytePlus ModelArk pay-as-you-go output price for runs on the person's BYTEPLUS_API_KEY (model "
                   "{model}). Images that fail (content moderation) aren't billed.")
+
+
+KREA_SEEDREAM_DEFAULT_SEED = 1337  # Krea's own default (api.krea.ai/openapi.json), checked against the catalog below
 
 
 def _byteplus_route(model, minimum, maximum, price, quote, note=""):
     return {
         "directKeyName": "BYTEPLUS_API_KEY", "translation": "krea-seedream", "model": model,
         "kreaOnly": ["seed", "style_images"], "directBlockedBy": ["style_images"], "directParams": [],
+        "directAccepts": {"seed": {"values": [KREA_SEEDREAM_DEFAULT_SEED]}},
         # With no key set, setup suggests the Krea token: BytePlus doesn't
         # serve the United States and each model needs activating first.
         "directSetup": "fallback",

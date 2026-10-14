@@ -12,7 +12,8 @@ import { fetchOpenRouterModels, fetchNousModels, fetchQuiverModels, getSettings,
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from './MaskPainterModal';
-import { paramDefinitionsForRun } from '../../lib/directRoute';
+import { paramDefinitionsForRun, withWiredBlockers } from '../../lib/directRoute';
+import { nodeWiredPorts } from '../../lib/runScope';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
 
@@ -224,12 +225,17 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // the Krea plan. With the maker key set but a direct param still missing
   // (Ideogram Reframe without `resolution`), that param shows unset so the
   // person can opt in. Until settings load, no key counts as set.
+  // A Krea-only input that arrives by wire keeps the run on the copy
+  // (withWiredBlockers, as the backend router reads it), so show that route's params.
   const settingsCache = useUIStore((s) => s.settingsCache);
   const nodeParams = nodeData?.params;
+  const renderNodeId = renderNode?.id;
+  const wiredKey = useMemo(() => (renderNodeId ? nodeWiredPorts(renderNodeId, edges).join('\n') : ''), [renderNodeId, edges]);
   const resolvedParams: ParamDefinition[] = useMemo(() => {
     if (!definition) return [];
-    return paramDefinitionsForRun(definition, nodeParams, settingsCache.loaded ? settingsCache.apiKeys : {}, { seedOptIn: false });
-  }, [definition, nodeParams, settingsCache.loaded, settingsCache.apiKeys]);
+    const routed = withWiredBlockers(definition, nodeParams, wiredKey ? wiredKey.split('\n') : []);
+    return paramDefinitionsForRun(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {}, { seedOptIn: false });
+  }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
 
   // Filter params by visibleWhen conditions
   const visibleParams = useMemo(() => {

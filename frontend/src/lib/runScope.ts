@@ -107,6 +107,15 @@ export { cinemaSceneBase } from './nodeKeys';
  * run sends: only edges whose source also runs, since a cluster run sends just
  * the edges inside it (graphStore runCluster) and a wire from outside never
  * reaches the backend. Graph and node scopes already hold every source. */
+/** The input ports of one canvas node that have an edge into them, as the
+ * run estimate reads them (wiredPorts), for the node's own route display
+ * (its run status and its Inspector params). */
+export function nodeWiredPorts(nodeId: string, edges: readonly Pick<Edge, 'target' | 'targetHandle'>[]): string[] {
+  const ports = new Set<string>();
+  for (const edge of edges) if (edge.target === nodeId && edge.targetHandle) ports.add(edge.targetHandle);
+  return [...ports].sort();
+}
+
 export function wiredPorts(nodes: Node<NodeData>[], edges: Edge[]): Map<string, Set<string>> {
   const ids = new Set(nodes.map((node) => node.id));
   const wired = new Map<string, Set<string>>();

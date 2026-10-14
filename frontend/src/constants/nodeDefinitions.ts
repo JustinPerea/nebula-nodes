@@ -12126,6 +12126,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: 'xai/grok-imagine-image',
     envKeyName: ['XAI_API_KEY', 'FAL_KEY'],
     directKeyName: 'XAI_API_KEY',
+    // xAI's images API has no output-format field (it returns JPEG), so a
+    // recipe that asks fal for PNG or WebP stays on fal.
+    directRoute: { accepts: { output_format: { values: ['jpeg'] } } },
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -12198,6 +12201,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: 'xai/grok-imagine-image/edit',
     envKeyName: ['XAI_API_KEY', 'FAL_KEY'],
     directKeyName: 'XAI_API_KEY',
+    // xAI's images API has no output-format field (it returns JPEG), so a
+    // recipe that asks fal for PNG or WebP stays on fal.
+    directRoute: { accepts: { output_format: { values: ['jpeg'] } } },
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -19086,6 +19092,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       "blockedBy": [
         "style_images"
       ],
+      "accepts": {
+        "seed": {
+          "values": [
+            1337
+          ]
+        }
+      },
       "size": {
         "widthParam": "width",
         "heightParam": "height",
@@ -19272,6 +19285,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       "blockedBy": [
         "style_images"
       ],
+      "accepts": {
+        "seed": {
+          "values": [
+            1337
+          ]
+        }
+      },
       "size": {
         "widthParam": "width",
         "heightParam": "height",
@@ -19458,6 +19478,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       "blockedBy": [
         "style_images"
       ],
+      "accepts": {
+        "seed": {
+          "values": [
+            1337
+          ]
+        }
+      },
       "size": {
         "widthParam": "width",
         "heightParam": "height",

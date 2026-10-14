@@ -87,7 +87,7 @@ def _krea_gateway_spy():
 @pytest.mark.asyncio
 async def test_fal_grok_image_runs_on_xai_with_the_maker_key_and_translates():
     node = GraphNode(id="g", definitionId="grok-imagine-image",
-                     params={"num_images": 2, "aspect_ratio": "16:9", "resolution": "2k", "output_format": "png"})
+                     params={"num_images": 2, "aspect_ratio": "16:9", "resolution": "2k", "output_format": "jpeg"})
     before = copy.deepcopy(node.params)
     client = _image_client(2)
     with patch("handlers.xai_image.httpx.AsyncClient", return_value=client), \
@@ -102,6 +102,26 @@ async def test_fal_grok_image_runs_on_xai_with_the_maker_key_and_translates():
     assert client.post.call_args.kwargs["json"] == {
         "model": "grok-imagine-image", "prompt": "a lighthouse at dusk", "response_format": "b64_json",
         "n": 2, "aspect_ratio": "16:9", "resolution": "2k"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("output_format", ["png", "webp"])
+async def test_a_fal_grok_recipe_that_asks_for_png_or_webp_stays_on_fal(output_format):
+    """xAI has no output-format field and returns JPEG, so a recipe that asks
+    fal for another format runs on fal (directRoute.accepts) instead of
+    silently coming back as JPEG from xAI."""
+    node = GraphNode(id="g", definitionId="grok-imagine-image",
+                     params={"num_images": 1, "output_format": output_format})
+    client = _image_client(1)
+    with patch("handlers.xai_image.httpx.AsyncClient", return_value=client), \
+            patch("handlers.fal_universal.handle_fal_universal",
+                  return_value={"image": {"type": "Image", "value": "fal.png"}}) as fal:
+        await _run(node, PROMPT, {**XAI, **FAL})
+    client.post.assert_not_called()
+    fal.assert_called_once()
+    assert fal.call_args.args[0].params["output_format"] == output_format
+    with pytest.raises(MissingCredentialError, match=f"FAL_KEY is required: .*output_format {output_format}"):
+        await _run(node, PROMPT, XAI)
 
 
 @pytest.mark.asyncio

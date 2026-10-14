@@ -21155,6 +21155,15 @@
       "FAL_KEY"
     ],
     "directKeyName": "XAI_API_KEY",
+    "directRoute": {
+      "accepts": {
+        "output_format": {
+          "values": [
+            "jpeg"
+          ]
+        }
+      }
+    },
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -21282,6 +21291,15 @@
       "FAL_KEY"
     ],
     "directKeyName": "XAI_API_KEY",
+    "directRoute": {
+      "accepts": {
+        "output_format": {
+          "values": [
+            "jpeg"
+          ]
+        }
+      }
+    },
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -29158,6 +29176,13 @@
       "blockedBy": [
         "style_images"
       ],
+      "accepts": {
+        "seed": {
+          "values": [
+            1337
+          ]
+        }
+      },
       "size": {
         "widthParam": "width",
         "heightParam": "height",
@@ -29344,6 +29369,13 @@
       "blockedBy": [
         "style_images"
       ],
+      "accepts": {
+        "seed": {
+          "values": [
+            1337
+          ]
+        }
+      },
       "size": {
         "widthParam": "width",
         "heightParam": "height",
@@ -29530,6 +29562,13 @@
       "blockedBy": [
         "style_images"
       ],
+      "accepts": {
+        "seed": {
+          "values": [
+            1337
+          ]
+        }
+      },
       "size": {
         "widthParam": "width",
         "heightParam": "height",

@@ -249,6 +249,13 @@ APPROVED_DIRECT_KEY_ADDITIONS = {
 for _node_id in ("gpt-image-2-fal-generate", "gpt-image-2-fal-edit"):
     APPROVED_TOP_LEVEL_FIELD_ADDITIONS[_node_id] = {
         "directRoute": {"rejects": {"image_size": ["square", "portrait_16_9", "landscape_16_9"]}}}
+# Grok Imagine's fal copies: xAI's images API has no output-format field and
+# returns JPEG (docs.x.ai images REST reference: no format field; upload_urls
+# "`image/jpeg` unless the requested quality produces PNG"), so a recipe that
+# asks fal for PNG or WebP stays on fal. The rule is the only new field.
+for _node_id in ("grok-imagine-image", "grok-imagine-image-edit"):
+    APPROVED_TOP_LEVEL_FIELD_ADDITIONS[_node_id] = {
+        "directRoute": {"accepts": {"output_format": {"values": ["jpeg"]}}}}
 # Runway speech-to-speech with only a video wired stays on Runway: ElevenLabs'
 # speech-to-speech takes an audio file only (execution/maker_routes_elevenlabs.py
 # runway_sts_to_elevenlabs). The rule is the only new field.

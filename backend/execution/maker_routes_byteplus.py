@@ -17,7 +17,9 @@ so pricing, the spend gate, readiness and the cache key agree:
 - ``krea-image-bytedance-seedream-4`` / ``-5-lite`` / ``-5-pro`` (Krea):
   with BYTEPLUS_API_KEY set, unless the node bills the Krea plan, sets
   ``style_images`` (Krea's per-image ``strength`` has no ModelArk
-  equivalent), or sets a width x height outside the model's limits.
+  equivalent), sets a seed other than Krea's default 1337 (ModelArk has no
+  seed; ``directRoute.accepts``, so the default is the only one dropped), or
+  sets a width x height outside the model's limits.
 
 Facts from docs.byteplus.com/en/docs/ModelArk/image-generation-api, read
 2026-10-14 (quoted where they decide a mapping):
