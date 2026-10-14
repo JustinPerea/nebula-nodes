@@ -138,6 +138,31 @@ APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedream-4-5"] = {"directRoute": {
     "size": {"param": "image_size", "minPixels": 3686400, "maxPixels": 16777216, "maxAspect": 16,
              "unsupported": ["square"]},
 }}
+# Seedance on BytePlus ModelArk (2026-10-14,
+# execution/maker_routes_byteplus_seedance.py): BYTEPLUS_API_KEY joins
+# envKeyName as the direct key and the unchanged params split into
+# sharedParams + falParams (seed on the 2.x nodes, which BytePlus documents
+# for 1.x only; enable_safety_checker on 1.0 T2V). The exact directRoute rules
+# below are the only new field.
+_SEEDANCE_2_ORDER = ["aspect_ratio", "duration", "resolution", "generate_audio", "seed"]
+for _node_id in ("seedance-2-t2v", "seedance-2-i2v", "seedance-2-r2v", "seedance-2-fast-t2v", "seedance-2-fast-i2v"):
+    APPROVED_DUAL_ROUTE_SPLITS[_node_id] = {
+        "envKeyName": ("FAL_KEY", ["BYTEPLUS_API_KEY", "FAL_KEY"]), "directKeyName": "BYTEPLUS_API_KEY",
+        "falParams": ["seed"], "order": _SEEDANCE_2_ORDER,
+    }
+    APPROVED_TOP_LEVEL_FIELD_ADDITIONS[_node_id] = {"directRoute": {"setup": "fallback", "blockedBy": ["seed"]}}
+APPROVED_DUAL_ROUTE_SPLITS["seedance-v1-5"] = {
+    "envKeyName": ("FAL_KEY", ["BYTEPLUS_API_KEY", "FAL_KEY"]), "directKeyName": "BYTEPLUS_API_KEY",
+    "falParams": [], "order": ["model", "duration", "aspect_ratio", "resolution", "generate_audio", "camera_fixed",
+                               "seed"],
+}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedance-v1-5"] = {"directRoute": {"setup": "fallback"}}
+APPROVED_DUAL_ROUTE_SPLITS["seedance-1-0-t2v"] = {
+    "envKeyName": ("FAL_KEY", ["BYTEPLUS_API_KEY", "FAL_KEY"]), "directKeyName": "BYTEPLUS_API_KEY",
+    "falParams": ["enable_safety_checker"],
+    "order": ["aspect_ratio", "resolution", "duration", "camera_fixed", "seed", "enable_safety_checker"],
+}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedance-1-0-t2v"] = {"directRoute": {"setup": "fallback"}}
 # Direct maker routes, review fix (2026-10-14): Meshy's own image-to-3D API
 # takes texture_prompt ("Provide a text prompt to guide the texturing
 # process", https://docs.meshy.ai/en/api/image-to-3d), so it moves from

@@ -1,12 +1,12 @@
 """BytePlus ModelArk: ByteDance's own international API for Seedream and Seedance.
 
 One client for every ModelArk call Nebula makes, with the person's
-``BYTEPLUS_API_KEY``. Today it serves Seedream image generation (a direct route
-for the fal and Krea Seedream copies, execution/maker_routes_byteplus.py). The
-video task API (Seedance) builds on :func:`request` too:
+``BYTEPLUS_API_KEY``: Seedream image generation (a direct route for the fal
+and Krea Seedream copies, execution/maker_routes_byteplus.py) and Seedance
+video tasks (execution/maker_routes_byteplus_seedance.py):
 ``POST {base}/contents/generations/tasks`` creates a task, ``GET`` and
 ``DELETE {base}/contents/generations/tasks/{id}`` poll and cancel it
-(docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api).
+(:func:`run_video_task`).
 
 Vendor facts, read from BytePlus's own docs on 2026-10-14:
 
@@ -166,3 +166,105 @@ async def generate_images(key: str, body: dict[str, Any]) -> list[tuple[bytes, s
         detail = f" ({', '.join(failures)})" if failures else ""
         raise RuntimeError(f"BytePlus ModelArk returned no image for {model or 'the request'}{detail}")
     return images
+
+
+# -- Seedance video tasks --------------------------------------------------------
+# docs.byteplus.com/en/docs/ModelArk/{create-video-generation-task-api,
+# get-video-generation-task-api, cancel-or-delete-video-generation-tasks-api},
+# read 2026-10-14:
+# - POST /contents/generations/tasks returns {"id": ...}; "The video generation
+#   task creation is an asynchronous API".
+# - GET /contents/generations/tasks/{id}: status "queued", "running",
+#   "cancelled", "succeeded" or "failed" (callbacks add "expired": "the task
+#   has been in the running or queued state for longer than the expiration
+#   time"); content.video_url "is valid for 24 hours" (Seedance 2.5 URLs "can be
+#   downloaded up to 100 times"), so a run saves it at once; error {code,
+#   message} on failure; usage.completion_tokens is what BytePlus bills.
+# - DELETE on a queued task: "The task is removed from the queue and its status
+#   is updated to cancelled". A running task "can't" be cancelled, so a
+#   cancelled run whose task already started still finishes on BytePlus.
+VIDEO_TASKS_PATH = "/contents/generations/tasks"
+TASK_SUCCEEDED = "succeeded"
+TASK_FAILED = frozenset({"failed", "cancelled", "expired"})
+POLL_INTERVAL = 5.0
+# Polling stops after this long. Requests also send execution_expires_after
+# 3600 (the documented minimum), so BytePlus expires a task Nebula stopped
+# waiting for instead of finishing (and billing) it later.
+POLL_TIMEOUT = 3900.0
+TASK_EXPIRES_AFTER = 3600
+
+
+async def create_video_task(key: str, body: dict[str, Any], *, client: httpx.AsyncClient | None = None) -> str:
+    model = str(body.get("model") or "")
+    data = await request("POST", VIDEO_TASKS_PATH, key, json=body, model=model, client=client)
+    task_id = data.get("id")
+    if not isinstance(task_id, str) or not task_id:
+        raise RuntimeError(f"BytePlus ModelArk accepted the {model or 'video'} task but returned no task id")
+    return task_id
+
+
+async def get_video_task(key: str, task_id: str, *, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
+    return await request("GET", f"{VIDEO_TASKS_PATH}/{task_id}", key, client=client)
+
+
+async def cancel_video_task(key: str, task_id: str) -> None:
+    """Best effort: DELETE a task Nebula no longer waits for (only a queued task
+    can be cancelled). Runs on a detached task with its own client."""
+    try:
+        await request("DELETE", f"{VIDEO_TASKS_PATH}/{task_id}", key)
+    except Exception:  # noqa: BLE001 - fire and forget
+        pass
+
+
+def _schedule_cancel(key: str, task_id: str) -> None:
+    from services.cancellation import schedule_detached_cancel
+
+    schedule_detached_cancel(lambda: cancel_video_task(key, task_id))
+
+
+async def run_video_task(
+    key: str, body: dict[str, Any], *, node_id: str = "", emit: Any = None,
+    poll_interval: float | None = None, timeout: float | None = None,
+) -> dict[str, Any]:
+    """Create a Seedance task and poll it to ``succeeded``; returns the task.
+
+    A failed, cancelled or expired task raises with BytePlus's error and what
+    to do about it. If the run is cancelled (or polling times out), the task
+    is DELETEd so a queued one never starts."""
+    import asyncio
+
+    model = str(body.get("model") or "")
+    poll_interval = POLL_INTERVAL if poll_interval is None else poll_interval
+    timeout = POLL_TIMEOUT if timeout is None else timeout
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        task_id = await create_video_task(key, body, client=client)
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        polls = 0
+        while True:
+            try:
+                await asyncio.sleep(poll_interval)
+                task = await get_video_task(key, task_id, client=client)
+            except asyncio.CancelledError:
+                _schedule_cancel(key, task_id)
+                raise
+            polls += 1
+            status = str(task.get("status") or "")
+            if status == TASK_SUCCEEDED:
+                return task
+            if status in TASK_FAILED:
+                error = task.get("error") if isinstance(task.get("error"), dict) else {}
+                code, message = str(error.get("code") or ""), str(error.get("message") or f"task {status}")
+                raise BytePlusError(200, code, message, explain(200, code, message, model))
+            if emit is not None:
+                from models.events import ProgressEvent
+
+                # BytePlus reports no percentage; creep toward done.
+                await emit(ProgressEvent(node_id=node_id, value=min(0.95, polls / (polls + 20))))
+            if loop.time() - started > timeout:
+                _schedule_cancel(key, task_id)
+                raise RuntimeError(
+                    f"BytePlus ModelArk task {task_id} ({model}) was still {status or 'pending'} after "
+                    f"{int(timeout // 60)} minutes; Nebula stopped waiting and asked BytePlus to cancel it "
+                    f"(a task that has started can't be cancelled; it expires {TASK_EXPIRES_AFTER // 60} minutes "
+                    "after creation).")

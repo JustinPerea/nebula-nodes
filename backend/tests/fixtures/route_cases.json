@@ -658,6 +658,237 @@
         "provider": "krea",
         "key": null
       }
+    },
+    {
+      "name": "Seedance 2.0 on fal runs on BytePlus with the BytePlus key",
+      "nodeId": "seedance-2-t2v",
+      "params": {},
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "a saved seed keeps Seedance 2.0 on fal (BytePlus has seed on 1.x only)",
+      "nodeId": "seedance-2-i2v",
+      "params": {
+        "seed": 7
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "duration",
+        "generate_audio",
+        "resolution",
+        "seed"
+      ]
+    },
+    {
+      "name": "Seedance 1.5/1.0 on fal sends seed and camera_fixed to BytePlus",
+      "nodeId": "seedance-v1-5",
+      "params": {
+        "model": "1.0",
+        "seed": 7
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "camera_fixed",
+        "duration",
+        "generate_audio",
+        "model",
+        "resolution",
+        "seed"
+      ]
+    },
+    {
+      "name": "Seedance 1.0 T2V's safety checker stays on fal",
+      "nodeId": "seedance-1-0-t2v",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "camera_fixed",
+        "duration",
+        "enable_safety_checker",
+        "resolution",
+        "seed"
+      ]
+    },
+    {
+      "name": "a Krea Seedance on the Krea plan ignores the BytePlus key",
+      "nodeId": "krea-video-bytedance-seedance-2",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "a Krea Seedance on the API token runs on BytePlus",
+      "nodeId": "krea-video-bytedance-seedance-2-mini",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "duration",
+        "end_image",
+        "generate_audio",
+        "prompt",
+        "reference_audios",
+        "reference_images",
+        "reference_videos",
+        "resolution",
+        "start_image"
+      ]
+    },
+    {
+      "name": "Krea's upscale switched on keeps Seedance 2.0 on Krea",
+      "nodeId": "krea-video-bytedance-seedance-2",
+      "params": {
+        "upscale": true
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "Krea's upscale left off still runs Seedance 2.0 on BytePlus",
+      "nodeId": "krea-video-bytedance-seedance-2-fast",
+      "params": {
+        "upscale": false,
+        "enhance_prompt": false
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      }
+    },
+    {
+      "name": "a fractional duration keeps Seedance 2.5 on Krea",
+      "nodeId": "krea-video-bytedance-seedance-2-5",
+      "params": {
+        "duration": 7.5
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "Krea's 9:21 ratio keeps Seedance 1.0 Pro on Krea",
+      "nodeId": "krea-video-bytedance-seedance-1-0-pro",
+      "params": {
+        "aspect_ratio": "9:21"
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "Seedance 1.0 Pro reference images with only a BytePlus key have no route",
+      "nodeId": "krea-video-bytedance-seedance-1-0-pro",
+      "params": {
+        "reference_images": "[\"https://example.com/a.png\"]"
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Seedance 2.5 draft switched on keeps it on Krea",
+      "nodeId": "krea-video-bytedance-seedance-2-5",
+      "params": {
+        "draft": true
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
     }
   ]
 }

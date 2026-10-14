@@ -256,11 +256,17 @@ KREA_TRANSLATIONS: dict[str, tuple[Handler, Callable[[str], Translate]]] = {
 from execution import maker_routes_byteplus as _byteplus  # noqa: E402
 
 KREA_TRANSLATIONS["krea-seedream"] = (_byteplus.krea_byteplus_seedream, _byteplus.krea_seedream_to_byteplus)
+# Seedance on BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py).
+from execution import maker_routes_byteplus_seedance as _seedance  # noqa: E402
+
+KREA_TRANSLATIONS["krea-seedance"] = (_seedance.krea_byteplus_seedance, _seedance.krea_to_byteplus)
 
 
-def krea_router(definition_id: str, fallback: Handler) -> Handler | None:
+def krea_router(definition_id: str, fallback: Handler, emit: Any = None) -> Handler | None:
     """The dual-route handler for a generated Krea node with a maker route, or
-    None when it has none (it stays on the Krea gateway alone)."""
+    None when it has none (it stays on the Krea gateway alone). A direct
+    handler marked ``takes_emit`` (a long video task) also gets the run's
+    progress sink."""
     definition = _definitions().get(definition_id) or {}
     spec = definition.get("directRoute")
     if not isinstance(spec, Mapping) or not node_route.direct_keys(definition):
@@ -269,4 +275,8 @@ def krea_router(definition_id: str, fallback: Handler) -> Handler | None:
     if translation is None:
         raise ValueError(f"{definition_id}: unknown direct translation {spec.get('translation')!r}")
     direct, make_translate = translation
+    if emit is not None and getattr(direct, "takes_emit", False):
+        from functools import partial
+
+        direct = partial(direct, emit=emit)
     return dual_route(direct=direct, fallback=fallback, translate=make_translate(str(spec.get("model"))))

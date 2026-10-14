@@ -6219,7 +6219,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -6229,7 +6230,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'model',
         label: 'Model',
@@ -6309,6 +6311,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    falParams: [],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py) with
+    // BYTEPLUS_API_KEY, else fal. With no key set, setup suggests the fal key
+    // (BytePlus doesn't serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback' },
   },
   'kling-o3': {
     id: 'kling-o3',
@@ -6711,7 +6719,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'bytedance/seedance-2.0/text-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -6719,7 +6728,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -6772,6 +6782,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    falParams: [
       {
         key: 'seed',
         label: 'Seed',
@@ -6780,6 +6792,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py): a saved
+    // seed keeps the run on fal (BytePlus documents seed for Seedance 1.x
+    // only). With no key set, setup suggests the fal key (BytePlus doesn't
+    // serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback', blockedBy: ['seed'] },
   },
 
   'seedance-2-i2v': {
@@ -6788,7 +6806,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'bytedance/seedance-2.0/image-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
@@ -6798,7 +6817,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -6851,6 +6871,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    falParams: [
       {
         key: 'seed',
         label: 'Seed',
@@ -6859,6 +6881,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py): a saved
+    // seed keeps the run on fal (BytePlus documents seed for Seedance 1.x
+    // only). With no key set, setup suggests the fal key (BytePlus doesn't
+    // serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback', blockedBy: ['seed'] },
   },
 
   'seedance-2-r2v': {
@@ -6867,7 +6895,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'bytedance/seedance-2.0/reference-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -6876,7 +6905,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -6927,6 +6957,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    falParams: [
       {
         key: 'seed',
         label: 'Seed',
@@ -6935,6 +6967,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py): a saved
+    // seed keeps the run on fal (BytePlus documents seed for Seedance 1.x
+    // only). With no key set, setup suggests the fal key (BytePlus doesn't
+    // serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback', blockedBy: ['seed'] },
   },
 
   'seedance-2-fast-t2v': {
@@ -6943,7 +6981,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'bytedance/seedance-2.0/fast/text-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -6951,7 +6990,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -7003,6 +7043,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    falParams: [
       {
         key: 'seed',
         label: 'Seed',
@@ -7011,6 +7053,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py): a saved
+    // seed keeps the run on fal (BytePlus documents seed for Seedance 1.x
+    // only). With no key set, setup suggests the fal key (BytePlus doesn't
+    // serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback', blockedBy: ['seed'] },
   },
 
   'seedance-2-fast-i2v': {
@@ -7019,7 +7067,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'bytedance/seedance-2.0/fast/image-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
@@ -7029,7 +7078,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -7081,6 +7131,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    falParams: [
       {
         key: 'seed',
         label: 'Seed',
@@ -7089,6 +7141,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py): a saved
+    // seed keeps the run on fal (BytePlus documents seed for Seedance 1.x
+    // only). With no key set, setup suggests the fal key (BytePlus doesn't
+    // serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback', blockedBy: ['seed'] },
   },
 
   'flux-kontext': {
@@ -12556,7 +12614,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/bytedance/seedance/v1/pro/text-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -12564,7 +12623,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -12626,6 +12686,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         placeholder: 'Random',
       },
+    ],
+    falParams: [
       {
         key: 'enable_safety_checker',
         label: 'Safety Checker',
@@ -12634,6 +12696,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: true,
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py) with
+    // BYTEPLUS_API_KEY, else fal. With no key set, setup suggests the fal key
+    // (BytePlus doesn't serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback' },
   },
   'ltx-audio-to-video': {
     id: 'ltx-audio-to-video',
@@ -24263,7 +24330,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/bytedance/seedance-1.0-pro",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -24437,7 +24507,149 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "720p"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "9:21",
+            "value": "9:21"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "720p"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "start_video",
+        "label": "Start video",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedance",
+      "model": "seedance-1-0-pro-250528",
+      "blockedBy": [
+        "start_video",
+        "reference_images"
+      ],
+      "accepts": {
+        "aspect_ratio": {
+          "values": [
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16",
+            "21:9"
+          ]
+        },
+        "duration": {
+          "integer": true,
+          "min": 2,
+          "max": 12
+        }
+      },
+      "setup": "fallback"
+    }
   },
   'krea-video-bytedance-seedance-1-0-pro-fast': {
     "id": "krea-video-bytedance-seedance-1-0-pro-fast",
@@ -24445,7 +24657,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/bytedance/seedance-1.0-pro-fast",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -24598,7 +24813,141 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "720p"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "9:21",
+            "value": "9:21"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 2,
+        "max": 12,
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "720p"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "start_video",
+        "label": "Start video",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedance",
+      "model": "seedance-1-0-pro-fast-251015",
+      "blockedBy": [
+        "start_video"
+      ],
+      "accepts": {
+        "aspect_ratio": {
+          "values": [
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16",
+            "21:9"
+          ]
+        },
+        "duration": {
+          "integer": true,
+          "min": 2,
+          "max": 12
+        }
+      },
+      "setup": "fallback"
+    }
   },
   'krea-video-bytedance-seedance-2': {
     "id": "krea-video-bytedance-seedance-2",
@@ -24606,7 +24955,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/bytedance/seedance-2",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -24848,7 +25200,199 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": false
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_videos",
+        "label": "Reference videos (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_audios",
+        "label": "Reference audios (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 4,
+        "max": 15,
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          },
+          {
+            "label": "4k",
+            "value": "4k"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate audio",
+        "required": false,
+        "type": "boolean"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "integer",
+        "min": -9007199254740991,
+        "max": 9007199254740991,
+        "step": 1
+      },
+      {
+        "key": "effects",
+        "label": "Effects (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "upscale",
+        "label": "Upscale",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "enhance_prompt",
+        "label": "Enhance prompt",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedance",
+      "model": "dreamina-seedance-2-0-260128",
+      "blockedBy": [
+        "seed",
+        "effects"
+      ],
+      "accepts": {
+        "duration": {
+          "integer": true,
+          "min": 4,
+          "max": 15
+        },
+        "upscale": {
+          "values": [
+            false
+          ]
+        },
+        "enhance_prompt": {
+          "values": [
+            false
+          ]
+        }
+      },
+      "setup": "fallback"
+    }
   },
   'krea-video-bytedance-seedance-2-fast': {
     "id": "krea-video-bytedance-seedance-2-fast",
@@ -24856,7 +25400,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/bytedance/seedance-2-fast",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -25090,7 +25637,191 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": false
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_videos",
+        "label": "Reference videos (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_audios",
+        "label": "Reference audios (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 4,
+        "max": 15,
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate audio",
+        "required": false,
+        "type": "boolean"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "integer",
+        "min": -9007199254740991,
+        "max": 9007199254740991,
+        "step": 1
+      },
+      {
+        "key": "effects",
+        "label": "Effects (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "upscale",
+        "label": "Upscale",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "enhance_prompt",
+        "label": "Enhance prompt",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedance",
+      "model": "dreamina-seedance-2-0-fast-260128",
+      "blockedBy": [
+        "seed",
+        "effects"
+      ],
+      "accepts": {
+        "duration": {
+          "integer": true,
+          "min": 4,
+          "max": 15
+        },
+        "upscale": {
+          "values": [
+            false
+          ]
+        },
+        "enhance_prompt": {
+          "values": [
+            false
+          ]
+        }
+      },
+      "setup": "fallback"
+    }
   },
   'krea-video-bytedance-seedance-2-mini': {
     "id": "krea-video-bytedance-seedance-2-mini",
@@ -25098,7 +25829,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/bytedance/seedance-2-mini",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -25303,7 +26037,159 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "boolean"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_videos",
+        "label": "Reference videos (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_audios",
+        "label": "Reference audios (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 4,
+        "max": 15,
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate audio",
+        "required": false,
+        "type": "boolean"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "integer",
+        "min": -9007199254740991,
+        "max": 9007199254740991,
+        "step": 1
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedance",
+      "model": "dreamina-seedance-2-0-mini-260615",
+      "blockedBy": [
+        "seed"
+      ],
+      "accepts": {
+        "duration": {
+          "integer": true,
+          "min": 4,
+          "max": 15
+        }
+      },
+      "setup": "fallback"
+    }
   },
   'krea-video-bytedance-seedance-2-5': {
     "id": "krea-video-bytedance-seedance-2-5",
@@ -25311,7 +26197,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/bytedance/seedance-2-5",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -25549,7 +26438,195 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": false
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_videos",
+        "label": "Reference videos (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_audios",
+        "label": "Reference audios (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 4,
+        "max": 30,
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate audio",
+        "required": false,
+        "type": "boolean"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "integer",
+        "min": -9007199254740991,
+        "max": 9007199254740991,
+        "step": 1
+      },
+      {
+        "key": "effects",
+        "label": "Effects (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "enhance_prompt",
+        "label": "Enhance prompt",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "draft",
+        "label": "Draft",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedance",
+      "model": "dreamina-seedance-2-5-260628",
+      "blockedBy": [
+        "seed",
+        "effects"
+      ],
+      "accepts": {
+        "duration": {
+          "integer": true,
+          "min": 4,
+          "max": 30
+        },
+        "enhance_prompt": {
+          "values": [
+            false
+          ]
+        },
+        "draft": {
+          "values": [
+            false
+          ]
+        }
+      },
+      "setup": "fallback"
+    }
   },
   'krea-video-lightricks-ltx-video-2-3-22b': {
     "id": "krea-video-lightricks-ltx-video-2-3-22b",

@@ -173,8 +173,9 @@ def test_direct_route_models_price_both_routes():
             continue
         provider = direct["pricing"]["provider"]
         # Krea's own price where Krea publishes one per request field (Seedream
-        # 5 Pro's depends on fields the request doesn't set, so it has none).
-        krea_priced = node_id not in SYNC.pricing_entries(CATALOG)[1]
+        # 5 Pro's depends on fields the request doesn't set, so it has none;
+        # Seedance 1.0 Pro's catalog entry carries no price at all).
+        krea_priced = node_id not in SYNC.pricing_entries(CATALOG)[1] and bool(model.get("pricing"))
         assert set(entry["routes"]) == ({"krea"} if krea_priced else set()) | {provider}
         if krea_priced:
             assert entry["routes"]["krea"].get("provider", "krea") == "krea"
