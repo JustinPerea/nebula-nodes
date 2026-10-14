@@ -97,11 +97,11 @@ def validate_pricing(pricing: Mapping[str, Any], definitions: Mapping[str, Mappi
         if definition is None:
             problems.append(f"{where} no such node definition")
             continue
-        if definition.get("apiProvider") == "utility":
-            problems.append(f"{where} local utility nodes are free and must not be priced")
         if not isinstance(entry, Mapping):
             problems.append(f"{where} entry must be an object")
             continue
+        if definition.get("apiProvider") == "utility":
+            problems += _utility_entry_problems(where, entry, definition)
         currency = entry.get("currency")
         if currency not in CURRENCIES:
             problems.append(f"{where} currency must be one of {CURRENCIES}")
@@ -163,6 +163,27 @@ def validate_pricing(pricing: Mapping[str, Any], definitions: Mapping[str, Mappi
         for key in entry.get("multiplyBy") or []:
             if key not in known_keys:
                 problems.append(f"{where} multiplyBy names unknown param '{key}'")
+    return problems
+
+
+def _utility_entry_problems(where: str, entry: Mapping[str, Any], definition: Mapping[str, Any]) -> list[str]:
+    """A local utility node is free, so it has no entry, unless one param
+    picks provider work (``providerVia`` kind param). Then every row must
+    match that param on a value that calls the provider (QC ``mode: jev``),
+    so the local values stay free and the unpriced ones (vision-llm) stay
+    unpriced."""
+    from services import node_readiness
+
+    via = node_readiness.provider_via(definition)
+    if not via or via.get("kind") != "param":
+        return [f"{where} local utility nodes are free and must not be priced"]
+    param = str(via.get("param") or "")
+    free = {str(value) for value in via.get("freeWhen") or []}
+    problems = []
+    for index, row in enumerate(entry.get("rows") or []):
+        match = row.get("match") if isinstance(row, Mapping) else None
+        if not isinstance(match, Mapping) or param not in match or _as_match_value(match[param]) in free:
+            problems.append(f"{where} row {index} must match a {param} value that calls a provider")
     return problems
 
 
@@ -446,7 +467,8 @@ def estimate_run(
     ``wired`` maps a node id to its input ports that have an edge into them
     (``wired_ports``); a priced setting that arrives by wire leaves the node
     unpriced. A utility node whose ``providerVia`` param picks provider work
-    (vision-llm QC) has no list price, so it is unpriced too.
+    is priced by its own entry's rows for that value (QC Jev mode), and is
+    unpriced without one (vision-llm QC).
 
     ``priced`` maps node id to {low, high, model}, ``model`` being the
     definition billed (a cinema scene's base model); paid nodes without a list
@@ -477,9 +499,12 @@ def estimate_run(
         else:
             ports = (wired or {}).get(node_id, ())
         if definition and definition.get("apiProvider") == "utility" and not is_local(definition, params):
-            unpriced.append(node_id)
-            continue
-        if not definition or definition.get("apiProvider") == "utility":
+            # Priced only by its own rows for the value it runs (QC Jev mode);
+            # with none (vision-llm QC) it is unpriced.
+            if not nodes_pricing.get(str(definition.get("id") or "")):
+                unpriced.append(node_id)
+                continue
+        elif not definition or definition.get("apiProvider") == "utility":
             continue
         if uses_krea_account(definition, params):
             plan.append(node_id)

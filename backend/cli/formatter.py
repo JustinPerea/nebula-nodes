@@ -292,10 +292,18 @@ def format_context(
     for node_id in keyed_modes:
         via = provider_via(definitions[node_id]) or {}
         keys = [str(key) for key in via.get("anyKey") or []]
-        legend = (f"+ free at its defaults; {via.get('param')} other than {'/'.join(via.get('freeWhen') or [])} calls a "
+        own = via.get("byValue") if isinstance(via.get("byValue"), dict) else {}
+        skip = list(via.get("freeWhen") or []) + list(own)
+        legend = (f"+ free at its defaults; {via.get('param')} other than {'/'.join(skip)} calls a "
                   f"{via.get('provider')} model with {' or '.join(keys)}"
                   f"{' (set here)' if any(key in configured_keys for key in keys) else ''}. No list price, "
                   "so under a spending limit that takes a proposal.")
+        for value, route in own.items():
+            route_keys = [str(key) for key in (route or {}).get("anyKey") or []]
+            legend += (f" {via.get('param')} {value} calls {(route or {}).get('provider')} with "
+                       f"{' or '.join(route_keys)}"
+                       f"{' (set here)' if any(key in configured_keys for key in route_keys) else ''}, "
+                       "priced per run.")
         if legend not in legends:
             legends.append(legend)
     lines.extend(legends)

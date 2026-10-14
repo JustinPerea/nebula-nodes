@@ -7083,6 +7083,130 @@
       ],
       "checked": "2026-10-10"
     },
+    "qc-camera-geometry": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "mode"
+      ],
+      "rows": [
+        {
+          "match": {
+            "mode": "jev"
+          },
+          "price": [
+            1e-05,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "Jev mode only: every check goes in one TypeSafe request, so a run is one request. TypeSafe bills input tokens only ($0.042 per million) and images as input tokens, with no published per-image count yet; the high end is the 64k-token request limit (Jev mode doesn't offer Long context). Heuristic and opencv modes are free; vision-llm mode has no list price. Failed requests are assumed not to bill.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
+    "qc-composited-look": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "mode"
+      ],
+      "rows": [
+        {
+          "match": {
+            "mode": "jev"
+          },
+          "price": [
+            1e-05,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "Jev mode only: every check goes in one TypeSafe request, so a run is one request. TypeSafe bills input tokens only ($0.042 per million) and images as input tokens, with no published per-image count yet; the high end is the 64k-token request limit (Jev mode doesn't offer Long context). Heuristic and opencv modes are free; vision-llm mode has no list price. Failed requests are assumed not to bill.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
+    "qc-frame-review": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "mode"
+      ],
+      "rows": [
+        {
+          "match": {
+            "mode": "jev"
+          },
+          "price": [
+            1e-05,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "Jev mode only: every check goes in one TypeSafe request, so a run is one request. TypeSafe bills input tokens only ($0.042 per million) and images as input tokens, with no published per-image count yet; the high end is the 64k-token request limit (Jev mode doesn't offer Long context). Heuristic and opencv modes are free; vision-llm mode has no list price. Failed requests are assumed not to bill.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
+    "qc-loop-safety": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "mode"
+      ],
+      "rows": [
+        {
+          "match": {
+            "mode": "jev"
+          },
+          "price": [
+            1e-05,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "Jev mode only: every check goes in one TypeSafe request, so a run is one request. TypeSafe bills input tokens only ($0.042 per million) and images as input tokens, with no published per-image count yet; the high end is the 64k-token request limit (Jev mode doesn't offer Long context). Heuristic and opencv modes are free; vision-llm mode has no list price. Failed requests are assumed not to bill.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
     "veo-3": {
       "currency": "usd",
       "per": "second",

@@ -14,6 +14,7 @@ Jev returns probabilities, not prose. Treat it as a cheap, fast judge between ge
 | One yes/no check, a classification, or a 2-10 level rating of text and/or images | `jev-decide` | `answer_type`: `yes_no`, `choice`, `score` |
 | Keep the best of 2-10 candidate images | `jev-pick-best` | `winner` is the original image; low `confidence` means they're close |
 | Where something is in an image (crop, mask for inpainting) | `jev-box` | Experimental; every request includes a presence check |
+| Typed QC of a video (loop seam, identity drift, compositing, camera angle) | `qc-*` nodes with `mode: jev` | One question per check over the sampled frames; read `jev.verdict` and `jev.checks` in the `text` report |
 
 Use `claude-chat` or another LLM node when you need words back (captions, critiques, rewrites). Use Jev when you need a decision a graph or agent can act on.
 
@@ -46,6 +47,14 @@ Use `claude-chat` or another LLM node when you need words back (captions, critiq
 - Inside an iterator each item is gated on its own: the next step runs only for the items that passed.
 - A cached decision replays the same branch.
 - The run's cost estimate still counts the nodes a gate may skip (it's an upper bound).
+
+## QC nodes in Jev mode
+
+- Set `mode` to `jev` on `qc-loop-safety`, `qc-frame-review`, `qc-composited-look` or `qc-camera-geometry`. It needs `TYPESAFE_API_KEY`; the default `heuristic` mode stays free.
+- The `text` report keeps its usual keys and adds `jev`: `verdict` (`true` / `false` / `unsure`, or `null` when no must-pass check applied), `min_pass_probability`, and `checks.<id>` with the question, answer, probabilities, confidence and verdict.
+- Act on `jev.verdict`, not on one score. `unsure` means a check fell below `min_confidence`; look at `jev.unsure` and check by eye or rerun with another sample density.
+- Camera geometry only gates when you set `expected_angle` or wire a `reference` frame.
+- At most 8 frames go to Jev; `jev.frames.sent` lists which samples.
 
 ## Models
 

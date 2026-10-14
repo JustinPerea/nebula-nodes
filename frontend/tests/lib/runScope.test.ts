@@ -5,6 +5,7 @@ import {
   summarizeRunScope,
 } from '../../src/lib/runScope';
 import type { PricingTable } from '../../src/lib/pricing';
+import shippedTable from '../../../backend/data/model_pricing.json';
 import type { NodeData } from '../../src/types';
 
 const node = (id: string, definitionId: string, label = ''): Node<NodeData> => ({
@@ -212,6 +213,18 @@ describe('local nodes that call a provider, and wired price settings', () => {
     }
     // A value the handler would refuse isn't free either.
     expect(summarizeRunScope([qc('')], [], { kind: 'graph' }, context).paid).toEqual(['QC']);
+  });
+
+  it('prices a QC node in Jev mode per request from its own entry, and only that mode', () => {
+    const shipped = { pricing: shippedTable as unknown as PricingTable, apiKeys: {} };
+    const qc = (mode: string) => priced(`qc-${mode}`, 'qc-loop-safety', { mode }, `QC ${mode}`);
+    const run = summarizeRunScope([qc('jev'), qc('vision-llm'), qc('heuristic')], [], { kind: 'graph' }, shipped);
+    expect(run.paid).toEqual(['QC jev', 'QC vision-llm']);
+    expect(run.cost?.lines).toEqual([{ name: 'QC jev', low: 0.00001, high: 0.0027, runs: [1, 1] }]);
+    expect(run.cost?.unpriced).toEqual(['QC vision-llm']);
+    expect(run.cost?.plus).toEqual(['input images']);
+    // Without the table entry, Jev mode is paid but unpriced like vision-llm.
+    expect(summarizeRunScope([qc('jev')], [], { kind: 'graph' }, context).cost?.unpriced).toEqual(['QC jev']);
   });
 
   it('leaves a node unpriced when a setting its price reads arrives by wire', () => {

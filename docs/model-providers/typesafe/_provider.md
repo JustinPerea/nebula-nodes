@@ -44,6 +44,7 @@ on and what to re-check. Written in our own words from the vendor docs
 | `jev-decide` | `backend/handlers/jev_decide.py` | shipped 2026-10-14 |
 | `jev-pick-best` | `backend/handlers/jev_pick_best.py` | shipped 2026-10-14 |
 | `jev-box` | `backend/handlers/jev_box.py` | shipped 2026-10-14, experimental |
+| QC nodes, `mode: jev` | `backend/services/qc_jev.py` + the four `backend/handlers/qc_*.py` | shipped 2026-10-14 |
 
 ## Known gaps and re-checks
 

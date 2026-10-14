@@ -188,6 +188,46 @@
           "default": false
         }
       ]
+    },
+    "qc-judge": {
+      "id": "qc-judge",
+      "apiProvider": "utility",
+      "params": [
+        {
+          "key": "mode",
+          "default": "heuristic",
+          "options": [
+            {
+              "value": "heuristic"
+            },
+            {
+              "value": "vision-llm"
+            },
+            {
+              "value": "jev"
+            }
+          ]
+        }
+      ],
+      "providerVia": {
+        "kind": "param",
+        "param": "mode",
+        "freeWhen": [
+          "heuristic"
+        ],
+        "anyKey": [
+          "OPENAI_API_KEY"
+        ],
+        "provider": "vision",
+        "byValue": {
+          "jev": {
+            "anyKey": [
+              "TYPESAFE_API_KEY"
+            ],
+            "provider": "typesafe"
+          }
+        }
+      }
     }
   },
   "pricing": {
@@ -413,6 +453,29 @@
           },
           {
             "match": {},
+            "price": [
+              1e-05,
+              0.0027
+            ]
+          }
+        ],
+        "plus": "input images",
+        "sources": [
+          {
+            "url": "https://example.com/judge",
+            "quote": "$0.042 per Mtok input"
+          }
+        ],
+        "checked": "2026-10-14"
+      },
+      "qc-judge": {
+        "currency": "usd",
+        "per": "request",
+        "rows": [
+          {
+            "match": {
+              "mode": "jev"
+            },
             "price": [
               1e-05,
               0.0027
@@ -766,6 +829,33 @@
         "high": 0.0027,
         "plus": "input images"
       }
+    },
+    {
+      "name": "a local node's paid mode with its own row is priced",
+      "nodeId": "qc-judge",
+      "params": {
+        "mode": "jev"
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 1e-05,
+        "high": 0.0027,
+        "plus": "input images"
+      }
+    },
+    {
+      "name": "a local node's paid mode without a row is unpriced",
+      "nodeId": "qc-judge",
+      "params": {
+        "mode": "vision-llm"
+      },
+      "expected": null
+    },
+    {
+      "name": "a local node at its free default matches no row",
+      "nodeId": "qc-judge",
+      "params": {},
+      "expected": null
     }
   ]
 }

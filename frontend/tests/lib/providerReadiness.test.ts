@@ -280,6 +280,19 @@ describe('provider readiness without generation', () => {
     expect(openai.setupTarget).toEqual({ kind: 'api-key', key: 'OPENAI_API_KEY' });
   });
 
+  it('reads a QC node in Jev mode as the TypeSafe key, whatever vision keys are set', () => {
+    const qc = NODE_DEFINITIONS['qc-composited-look'];
+    const local = modelReadiness(qc, {}, credentials(), health());
+    expect(local.detail).toContain('mode jev calls typesafe with TYPESAFE_API_KEY');
+    const keyless = modelReadiness(qc, { mode: 'jev' }, credentials({ apiKeys: { OPENAI_API_KEY: TOKEN } }), health());
+    expect(keyless).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'TYPESAFE_API_KEY' } });
+    expect(keyless.detail).toContain('Calls a typesafe model with TYPESAFE_API_KEY.');
+    expect(keyless.detail).not.toContain('no list price');
+    const keyed = modelReadiness(qc, { mode: 'jev' }, credentials({ apiKeys: { TYPESAFE_API_KEY: TOKEN } }), health());
+    expect(keyed.setupTarget).toEqual({ kind: 'api-key', key: 'TYPESAFE_API_KEY' });
+    expect(keyed.label).not.toBe('Setup required');
+  });
+
   it('explains Paper and local-input prerequisites without an API setup target or a ready promise', () => {
     const paper = modelReadiness(NODE_DEFINITIONS['paper-source'], {}, credentials(), health());
     expect(paper).toMatchObject({ label: 'Paper link required', tone: 'neutral' });

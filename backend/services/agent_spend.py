@@ -87,7 +87,10 @@ opencv (vision-llm, or a value the handler would refuse) they call a vision
 model with the first of ANTHROPIC_API_KEY, OPENAI_API_KEY and GOOGLE_API_KEY
 that is set (the definition's ``providerVia``). Nebula has no list price for
 that, so such a run is unpriced: with any limit set it needs a proposal, as
-for any other paid node without one. Heuristic and opencv runs stay free.
+for any other paid node without one. Jev mode calls TypeSafe with
+TYPESAFE_API_KEY and is priced per request at its context ceiling (the QC
+entries in model_pricing.json), so it counts against a limit like any priced
+node. Heuristic and opencv runs stay free.
 
 A priced setting that arrives by wire (Krea Kling 3.0's ``multi_prompt``
 port) is only known at run time, so that node is unpriced too

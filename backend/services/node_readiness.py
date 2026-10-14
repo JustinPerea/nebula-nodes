@@ -12,7 +12,9 @@ that still calls a provider says how in its definition's ``providerVia``:
   any of its models can; ``detail`` says which.
 - ``kind: param``: one param picks local or provider work (the QC nodes' mode).
   It is FREE at its defaults when the default runs locally; ``detail`` and
-  ``keys_needed`` name the keys the other values need.
+  ``keys_needed`` name the keys the other values need. ``byValue`` gives a
+  value its own keys and provider (QC ``mode: jev`` needs TYPESAFE_API_KEY,
+  the other paid modes a vision key); ``param_route`` reads it.
 """
 from __future__ import annotations
 
@@ -69,6 +71,24 @@ def param_calls_provider(definition: Mapping[str, Any], params: Mapping[str, Any
     return not (isinstance(value, str) and value in free)
 
 
+def param_value(definition: Mapping[str, Any], params: Mapping[str, Any] | None) -> Any:
+    """The value a ``kind: param`` node's params pick: the param, or its default."""
+    via = provider_via(definition) or {}
+    key = str(via.get("param") or "")
+    given = params or {}
+    return given[key] if key in given else _param_default(definition, key)
+
+
+def param_route(via: Mapping[str, Any], value: Any) -> tuple[list[str], str]:
+    """(keys, provider) one value of a ``kind: param`` node calls: its
+    ``byValue`` entry, else the node's ``anyKey`` and ``provider``."""
+    own = via.get("byValue") if isinstance(via.get("byValue"), Mapping) else {}
+    route = own.get(value) if isinstance(value, str) else None
+    if isinstance(route, Mapping):
+        return _keys(route.get("anyKey")), str(route.get("provider") or "provider")
+    return _keys(via.get("anyKey")), str(via.get("provider") or "provider")
+
+
 def model_choice(definition: Mapping[str, Any], params: Mapping[str, Any] | None) -> str | None:
     """For a ``kind: model`` node: the model these params run, normalized the way
     cinema's handler guard does it (empty or a fallback value runs the default),
@@ -109,8 +129,8 @@ def keys_needed(
     if via.get("kind") == "param":
         if not param_calls_provider(definition, params):
             return []
-        return [{"id": definition.get("id"), "apiProvider": via.get("provider"),
-                 "envKeyName": _keys(via.get("anyKey"))}]
+        keys, provider = param_route(via, param_value(definition, params))
+        return [{"id": definition.get("id"), "apiProvider": provider, "envKeyName": keys}]
     if via.get("kind") == "model":
         chosen = model_choice(definition, params)
         target = (definitions or {}).get(chosen or "")
@@ -148,7 +168,8 @@ def node_access(
     if via.get("kind") == "param":
         if not param_calls_provider(definition, {}):
             return FREE
-        return KEY if any(key in configured for key in _keys(via.get("anyKey"))) else None
+        keys, _ = param_route(via, param_value(definition, {}))
+        return KEY if any(key in configured for key in keys) else None
     if via.get("kind") == "model" and definitions is not None:
         options = [_plain_access(definitions[m], configured, krea_signed_in)
                    for m in via.get("models") or [] if m in definitions]
@@ -165,7 +186,8 @@ def missing(
     """What the person would need to set up, for a node node_access says can't run."""
     via = provider_via(definition)
     if via is not None and via.get("kind") == "param":
-        options = " or ".join(dict.fromkeys(_keys(via.get("anyKey"))))
+        keys, _ = param_route(via, param_value(definition, {}))
+        options = " or ".join(dict.fromkeys(keys))
         return f"needs {options} {_WHERE}"
     if via is not None and via.get("kind") == "model":
         by_key: dict[str, list[str]] = {}
@@ -209,18 +231,36 @@ def detail(
                   for group in ("params", "sharedParams") for param in definition.get(group) or []
                   if isinstance(param, Mapping) and param.get("key") == key
                   for option in param.get("options") or []]
-        keyed = any(k in configured for k in _keys(via.get("anyKey")))
         free = set(via.get("freeWhen") or [])
-        options = {str(value): FREE if value in free else (KEY if keyed else None) for value in values}
-        paid = [value for value in options if value not in free]
+        own = via.get("byValue") if isinstance(via.get("byValue"), Mapping) else {}
+        options: dict[str, str | None] = {}
+        missing_by_value: dict[str, str] = {}
+        for value in values:
+            if value in free:
+                options[str(value)] = FREE
+                continue
+            keys, _ = param_route(via, value)
+            keyed = any(k in configured for k in keys)
+            options[str(value)] = KEY if keyed else None
+            if not keyed:
+                missing_by_value[str(value)] = f"needs {' or '.join(dict.fromkeys(keys))} {_WHERE}"
+        shared = [value for value in options if value not in free and value not in own]
+        notes = []
+        if shared:
+            notes.append(f"{key}={'/'.join(shared)} calls a {via.get('provider') or 'provider'} model with the first of "
+                         f"{', '.join(_keys(via.get('anyKey')))} that is set; Nebula has no list price for it, so agent "
+                         "runs in that mode must be proposed (propose_change) whenever a spending limit is set.")
+        for value in own:
+            if value in options:
+                keys, provider = param_route(via, value)
+                notes.append(f"{key}={value} calls {provider} with {' or '.join(keys)}; its price is the node's "
+                             "price rows for that value (describe_node price).")
         result: dict[str, Any] = {
             "param": key, "default": _param_default(definition, key), "options": options,
-            "note": (f"{key}={'/'.join(paid)} calls a {via.get('provider') or 'provider'} model with the first of "
-                     f"{', '.join(_keys(via.get('anyKey')))} that is set; Nebula has no list price for it, so agent "
-                     "runs in that mode must be proposed (propose_change) whenever a spending limit is set."),
+            "note": " ".join(notes),
         }
-        if not keyed:
-            result["missing"] = {value: missing(definition, krea_signed_in, definitions) for value in paid}
+        if missing_by_value:
+            result["missing"] = missing_by_value
         return result
     if via.get("kind") == "model":
         path = ".".join(str(part) for part in via.get("path") or [])

@@ -209,9 +209,10 @@ export function summarizeRunScope(
         noPrice = true;
       }
     } else if (definition.apiProvider === 'utility') {
-      // A local node whose providerVia param picks provider work (vision-llm
-      // QC): it calls a vision model, and Nebula has no list price for it.
-      noPrice = true;
+      // A local node whose providerVia param picks provider work: priced
+      // only by a row of its own entry for that value (QC Jev mode); vision-llm
+      // QC calls a vision model, and Nebula has no list price for it.
+      noPrice = !pricing?.nodes[definition.id];
     }
     paid.push(name);
     if (behindGates.has(node.id)) gated.push(name);
