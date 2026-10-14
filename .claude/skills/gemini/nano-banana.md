@@ -35,6 +35,15 @@ list price on the Google route (grounding bills per search query), so those
 runs are unpriced. Wired image URLs go to Google as `fileData.fileUri`, so they
 must be public HTTPS (15 MB per file; ai.google.dev/gemini-api/docs/file-input-methods).
 
+The Google-route price is a range: the output image, up to the output plus 14
+reference images (Google's limit) at the model's input rate, since every call
+re-sends them ($0.0011 each on Pro). Nano Banana (2.5) and fal's
+`gemini-25-flash-image` leave Google on 2027-03-15, the earliest shutdown in
+Google's deprecations table (`node_route.DIRECT_RETIRES`): from that day those
+runs take the fal or Krea copy, and pricing, readiness and the cache key move
+with them. A Krea copy with an explicit `width`/`height` stays on Krea (Google
+can't render an exact size).
+
 ## Core prompting principle
 
 > **Describe the scene in a narrative paragraph. Don't list keywords.**

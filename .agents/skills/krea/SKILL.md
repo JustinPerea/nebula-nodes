@@ -43,7 +43,10 @@ Precedence, the same in the router, pricing, the spend gate, readiness and
 the cache key (`backend/services/node_route.py`):
 
 1. `_kreaAuth == "mcp"`: the Krea plan, whatever keys are set.
-2. else `GOOGLE_API_KEY` set: Google, billed by Google (`width`/`height` don't apply).
+2. else `GOOGLE_API_KEY` set and the recipe has no explicit `width`/`height`
+   (`directRoute.blockedBy`; Google can't render an exact size): Google, billed
+   by Google. `krea-image-google-nano-banana` (2.5) leaves Google on
+   2027-03-15, Google's listed shutdown (`node_route.DIRECT_RETIRES`).
 3. else `KREA_API_TOKEN`: the Krea API, billed to API balance.
 
 So an `api-token` node runs on Google once a Google key is saved; a person

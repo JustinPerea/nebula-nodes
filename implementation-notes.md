@@ -3259,3 +3259,47 @@ Banana (`nano-banana-fal`, `nano-banana-fal-edit`, and the Krea copies `krea-ima
   banana-2-1` (Interactions API; would need thinking passthrough, and Krea's $0.03 vs Google's $0.0336 needs a
   call), Krea's Veo/Omni copies, Krea direct-only extras (thinking/web search) — `directParams` is supported but
   empty, and moving Ideogram onto `dual_route`.
+
+### 2026-10-14 — direct maker routes: review fixes
+
+- **2.5 Flash Image is now date-gated** (both reviewers' main finding). `node_route.DIRECT_RETIRES` (mirrored in
+  `directRoute.ts`) retires the Google route on **2027-03-15** for `nano-banana-fal`/`-edit` saved with
+  `model: nano-banana` or `gemini-25-flash-image`, and for `krea-image-google-nano-banana`. From that day
+  `select_route` picks the fal or Krea copy, so the router, pricing, the spend gate, readiness and the cache key
+  all move together. Date choice: Google's deprecations page says it is where "the announced earliest shutdown
+  dates are tracked" and lists March 15, 2027; the pricing page's "October 2, 2026" banner is already past, the
+  changelog has no shutdown entry, and the model page still lists `gemini-2.5-flash-image` as Stable. **If
+  Justin would rather trust the banner, change one constant on each side** (`_GEMINI_25_FLASH_IMAGE_SHUTDOWN`,
+  `GEMINI_25_FLASH_IMAGE_SHUTDOWN`); runs before the gate still get the 404 hint. I did not add a "fall back to
+  fal on a Google 404" path: it would bill fal for a run the spend gate priced on Google.
+- **Clock in tests.** `node_route._today()` is the one clock (tests monkeypatch it); TS reads `new Date()` (tests
+  use fake timers). `route_cases.json` gained `defaultToday` plus a per-case `today`, so 2.5 cases written now
+  don't flip in March 2027.
+- **Krea width/height keep a run on Krea.** New `directBlockedBy` in the sync overlay becomes
+  `directRoute.blockedBy` on the generated node; `direct_block`/`directBlock` treat a set (non-empty) `width` or
+  `height` as "stay on Krea". Chose this over converting width/height to the nearest Google aspect ratio: a saved
+  1920x1080 recipe stays exactly as authored, and the rule lives in route selection so pricing/readiness/cache
+  agree. The generator refuses a blocker that has a default (it would switch every new node off Google).
+  With only a Google key, such a recipe has no route and says why ("This recipe sets width, which only Krea
+  takes...").
+- **`direct_allowed` became `direct_block`** with a reason (`requires` / `blocked` / `retired`); readiness words
+  each one. `direct_allowed` stays as the boolean wrapper.
+- **Google-route prices are now ranges** for the nodes that take reference images (`nano-banana-fal-edit` and the
+  four Krea copies): low = output image, high = output + 14 reference images (Google's documented limit) at the
+  model's input rate, per call (so `num_images` multiplies it). Rates: Pro $0.0011/image (pricing footnote);
+  3.1 Flash 1,120 tokens x $0.50/1M and Flash-Lite 1,120 x $0.25/1M (Gemini 3 default image media resolution);
+  2.5 Flash up to 8 tiles x 258 tokens x $0.30/1M — the 8-tile bound (images up to about 21:9) is **my
+  derivation** from Google's rough tiling formula, not a Google figure. Prompt text input is still not counted
+  (noted). `nano-banana-fal` (text-only) is unchanged. The spend gate reads `high`, so it now covers a full
+  reference set.
+- **Ideogram Reframe opt-in.** New `paramDefinitionsForRun` (directRoute.ts): when the maker key is set but the
+  only thing stopping the direct route is a `DIRECT_REQUIRES` param, that param is appended to the shown group.
+  Inspector shows it unset ("Choose…"); Create seeds its default, as the pre-branch Create did via
+  `configuredDirectKey`, so a new reframe on an Ideogram key runs direct again.
+- **Meshy `texture_prompt` moved to sharedParams** (`meshy-image-to-3d`, JSON + TS): Meshy's API takes it
+  (max 800 chars; fal caps at 600), and the pre-branch direct handler forwarded it. Fingerprint approval:
+  `APPROVED_PARAM_GROUP_MOVES` in `test_reference_roles.py` moves it back to its baseline slot before hashing.
+  Corrected the meshy skill's "Max 600" for image-to-3d.
+- **Engine cache test.** `test_node_route.py` now runs `execute_graph` end to end: fal run, same keys hit the
+  cache, adding GOOGLE_API_KEY misses and calls the direct handler. Verified it fails with the `_route` tag
+  disabled.
