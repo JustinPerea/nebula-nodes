@@ -16,8 +16,6 @@ OpenAI's `gpt-image-2` (released 2026-04-21, snapshot `gpt-image-2-2026-04-21`) 
 | `gpt-image-2-fal-generate` | OpenAI direct with `OPENAI_API_KEY`, else FAL proxy | `OPENAI_API_KEY` or `FAL_KEY` | Text→image; on FAL no OpenAI org-verification needed |
 | `gpt-image-2-fal-edit` | OpenAI direct with `OPENAI_API_KEY`, else FAL proxy | `OPENAI_API_KEY` or `FAL_KEY` | Edit |
 
-**FAL copies on your OpenAI key (2026-10-14).** With `OPENAI_API_KEY` saved, the two FAL nodes call OpenAI's own Images API (`gpt-image-2`). Their presets map to the size their label names (Square HD 1024x1024, Portrait 4:3 768x1024, Landscape 4:3 1024x768); Square (512x512) and the 16:9 presets are under OpenAI's 655,360-pixel minimum, so those stay on FAL. Count makes that many streamed calls (first image shown); Preview Frames are sent as `partial_images` (100 extra output tokens each). The OpenAI route is unpriced at the default Landscape 4:3: OpenAI's per-image table covers only 1024x1024, 1024x1536 and 1536x1024.
-
 All four use `executionPattern: "stream"`. Partial previews render in the canvas as they arrive.
 
 **Newer model:** GPT Image 2.5 (2026-09-08) has its own OpenAI-direct nodes, `gpt-image-2-5-generate` and `gpt-image-2-5-edit`, with a Flare/Sunburst `model` choice, `xhigh`/`max` quality and transparent backgrounds. Their params are in `.agents/skills/openai/SKILL.md`; the prompting advice here applies to both.
@@ -36,7 +34,7 @@ Edit node also accepts: `images` (Image, multiple, up to 16), `mask` (alpha-chan
 
 ## The FAL nodes on your OpenAI key (since 2026-10-14)
 
-With `OPENAI_API_KEY` saved, `gpt-image-2-fal-generate` / `-edit` run on OpenAI's own API (`gpt-image-2`), billed by OpenAI, with the same params: `image_size` becomes `size` (`square_hd` 1024x1024, `portrait_4_3` 768x1024, `landscape_4_3` 1024x768), `num_images` becomes that many streamed calls (first image shown), `partial_images` is sent as is. `square` (512x512) and the two 16:9 presets (576x1024, 1024x576) are below OpenAI's 655,360-pixel minimum, so a node set to one stays on FAL. Without an OpenAI key they run on FAL as before. Details: the OpenAI skill's "Your OpenAI key on the fal and Krea copies".
+With `OPENAI_API_KEY` saved, `gpt-image-2-fal-generate` / `-edit` run on OpenAI's own API (`gpt-image-2`), billed by OpenAI, with the same params: `image_size` becomes `size` (`square_hd` 1024x1024, `portrait_4_3` 768x1024, `landscape_4_3` 1024x768), `num_images` becomes that many streamed calls (first image shown), `partial_images` is sent as is. `square` (512x512) and the two 16:9 presets (576x1024, 1024x576) are below OpenAI's 655,360-pixel minimum, so a node set to one stays on FAL. Preview Frames cost OpenAI 100 extra image output tokens each. The OpenAI route is unpriced at the default Landscape 4:3: OpenAI's per-image table covers only 1024x1024, 1024x1536 and 1536x1024. Without an OpenAI key they run on FAL as before. Details: the OpenAI skill's "Your OpenAI key on the fal and Krea copies".
 
 ## FAL-routed params
 

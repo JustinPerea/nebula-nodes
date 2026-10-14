@@ -3598,3 +3598,37 @@ image-generation guide, the pricing page and the Images API reference.
   input_fidelity form field, the preset map, the Count loop and the URL download each fails a test.
 - **Docs:** someone else's edit to `docs/api-guides/openai.md` (a section on these copies, 10 -> 16 refs) appeared
   in this worktree while I worked; it matched the code, so I kept it instead of adding my own section.
+
+### Review fixes (OpenAI lane, 2026-10-14)
+
+Independent review of `direct-openai` against `direct-maker-routes`. Re-read OpenAI's own pages today (gpt-image-1.5,
+gpt-image-2 and gpt-image-2.5-flare model pages, the deprecations table, the Images API reference, the image
+generation guide's "Calculating costs"): the model ids, both endpoints, the 1.5 per-image table, the Dec 1, 2026
+shutdown, "up to 16 images", the pixel/edge/multiple-of-16 rules, "For `gpt-image-2`, omit this parameter", the
+100-token partial-image charge and "The GPT Image 2 calculator does not estimate GPT Image 2.5 token consumption"
+all match what the lane cites.
+
+- **Count overwrote the images it paid for (fixed).** Both OpenAI handlers save each call's result as
+  `<node id>_final.<ext>` in the run dir, so with `num_images` > 1 every call replaced the previous file: OpenAI
+  billed N images, one survived, and `image` (promised as the first) held the last. `openai_image_direct` now
+  renames each call's file to `<node id>_final_<n>` when Count > 1; `image` is the first. Test
+  `test_count_keeps_every_paid_image_and_shows_the_first` (two distinct images through respx); it failed before
+  the fix.
+- **Shared route cases gaps (added).** Only one blocked preset per node was in `route_cases.json`, so a frontend
+  list that dropped `square` or `portrait_16_9` would pass. Added cases for Portrait 16:9, Square, Square HD
+  (direct), GPT Image 1.5 Edit with only the fal key, Krea GPT Image 2 with only the Krea token, and the Krea plan
+  beating the OpenAI key on GPT Image 2. Mutation: trimming `GPT_IMAGE_2_FAL_UNSIZED` in `directRoute.ts` to one
+  value fails three shared cases.
+- **Docs duplicated (fixed).** `docs/api-guides/krea.md` had two "GPT Image on your OpenAI key" paragraphs (the
+  concurrent edit plus the lane's); `.agents/skills/krea/SKILL.md` had the same text twice (paragraph and a
+  `###` section); both gpt-image-2 skill mirrors had a paragraph and a section saying the same. Each now says it
+  once, with the details merged.
+- **Checked, not a problem:** precedence (Krea plan > OpenAI key > fal/Krea key) and the block order are the same in
+  `node_route.py` and `directRoute.ts`; params reach only their route (the fal nodes are unsplit and every param
+  has an OpenAI field; Krea `width`/`height` are falParams and block); the fingerprint approval only normalizes
+  `envKeyName`/`directKeyName` (changing a `gpt-image-1-5` default still fails `test_reference_roles.py`); the 1.5
+  prices match OpenAI's table and the spend gate's high bound (edit `auto` = $0.133-$0.2 x Count + input images);
+  every `KREA_OPENAI_SIZES` entry is within OpenAI's limits; no API keys or live calls in tests.
+- **Left as is (pre-existing, outside the lane):** the repo's claim that OpenAI rejects `n>1` with `stream=true`
+  (handler comment, OpenAI skill) is still not in today's reference either way, so NOT CONFIRMED; the lane's
+  loop-of-calls design doesn't depend on it.

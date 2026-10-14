@@ -58,26 +58,12 @@ Since 2026-10-14 the OpenAI copies do the same with `OPENAI_API_KEY`
 `krea-image-openai-gpt-image-2` (`gpt-image-2`; `width`/`height` are
 Krea-only and keep a run on Krea), `-2-5-flare` and `-2-5-sunburst`
 (`gpt-image-2.5-*`; every Krea field reaches OpenAI). `aspect_ratio` x
-`resolution` map to the fixed `KREA_OPENAI_SIZES` table; references in
-`image_urls` send the run to `/v1/images/edits`. Their OpenAI route is
-unpriced. `krea-image-openai-gpt-image` has no maker route (its OpenAI model
-isn't confirmed).
-
-
-### GPT Image on your OpenAI key
-
-Also since 2026-10-14, `krea-image-openai-gpt-image-2` (`gpt-image-2`),
-`krea-image-openai-gpt-image-2-5-flare` (`gpt-image-2.5-flare`) and
-`krea-image-openai-gpt-image-2-5-sunburst` (`gpt-image-2.5-sunburst`) run on
-OpenAI's Images API with the person's `OPENAI_API_KEY` (same precedence).
-`aspect_ratio` x `resolution` become a fixed OpenAI size (16:9 at 2K =
-2048x1152, 1:1 at 4K = 2880x2880; table `KREA_OPENAI_SIZES` in
-`backend/execution/maker_routes_openai.py`), and only one of the two set means
-1:1 or 1K. GPT Image 2's explicit `width`/`height` keep the run on Krea.
-Reference images go to `/v1/images/edits` (public https URLs are fetched
-first). The OpenAI route is unpriced: OpenAI publishes no per-image price for
-these models' default sizes. `krea-image-openai-gpt-image` (ChatGPT Image)
-stays Krea-only, since its upstream OpenAI model isn't confirmed.
+`resolution` map to the fixed `KREA_OPENAI_SIZES` table (16:9 at 2K =
+2048x1152, 1:1 at 4K = 2880x2880); only one of the two set means 1:1 or 1K.
+References in `image_urls` send the run to `/v1/images/edits` (public https
+URLs are fetched first). Their OpenAI route is unpriced: OpenAI publishes no
+per-image price for these models' default sizes. `krea-image-openai-gpt-image`
+has no maker route (its OpenAI model isn't confirmed).
 
 ## Gateway Model Nodes
 
