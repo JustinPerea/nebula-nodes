@@ -46,9 +46,6 @@ KREA_EDIT_MAX_IMAGES = 3
 # (https://docs.x.ai/developers/model-capabilities/video/overview).
 GROK_VIDEO_MAX_REFERENCES = 7
 GROK_VIDEO_R2V_MAX_SECONDS = 10
-# Video extension: "Extension length (`duration`) | 2-10 seconds"
-# (https://docs.x.ai/developers/model-capabilities/video/extension).
-EXTENSION_SECONDS = (2, 10)
 
 
 def _present(value: Any) -> bool:
@@ -200,49 +197,41 @@ def krea_grok_video_to_xai(model: str) -> Translate:
     """Krea's Grok Imagine (and 1.5) params -> run_xai_video's.
 
     - edit_video -> POST /v1/videos/edits {video, prompt} (grok-imagine-video
-      only; "Video editing does not support custom `duration`", nor
-      resolution or aspect ratio, so those are not sent).
-    - start_video -> POST /v1/videos/extensions {video, prompt, duration}
-      (grok-imagine-video only: the 1.5 copy is blockedBy start_video and
-      stays on Krea; "Model | `grok-imagine-video`" in the extension guide).
-      duration is the added segment, 2-10 s.
+      only: "Video editing | Not supported" on 1.5; "Video editing does not
+      support custom `duration`", nor resolution or aspect ratio, so those
+      are not sent).
     - otherwise POST /v1/videos/generations: prompt, duration (whole seconds,
       1-15), resolution, aspect_ratio, start_image -> image {url},
       reference_images -> reference_images [{url}] (up to 7, at most 10 s).
+    - start_video is Krea-only on both copies (directRoute.blockedBy): Krea's
+      schema doesn't say what it does, so it isn't guessed onto xAI's
+      extension endpoint, and a run that sets or wires it stays on Krea.
     - duration and resolution default to the Krea node's (6 s, 720p), not
       xAI's (8 s, 480p), so the run matches what the node shows and its price.
-    - Combinations xAI doesn't document on one request (an edit or extension
-      plus frames or references, a start image plus references) are refused
-      rather than silently dropping one."""
+    - Combinations xAI doesn't document on one request (an edit plus frames
+      or references, a start image plus references) are refused rather than
+      silently dropping one."""
 
     def translate(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[GraphNode, dict[str, PortValueDict]]:
         params = node.params
+        if _present(_port_or_param(inputs, params, "start_video")):
+            raise ValueError("Start video is a Krea feature here; this run belongs on Krea")
         routed = _prompt(inputs, params)
         start_image = _port_or_param(inputs, params, "start_image")
-        start_video = _port_or_param(inputs, params, "start_video")
         edit_video = _port_or_param(inputs, params, "edit_video")
         references = _list(_port_or_param(inputs, params, "reference_images"), "reference_images")
-        frames = [name for name, value in (("start_image", start_image), ("start_video", start_video),
-                                           ("edit_video", edit_video), ("reference_images", references))
-                  if _present(value)]
         out: dict[str, Any] = {"model": model}
-        if _present(edit_video) or _present(start_video):
+        if _present(edit_video):
             if model != GROK_VIDEO:
-                raise ValueError(f"xAI edits and extends videos on {GROK_VIDEO} only, not {model}")
-            if len(frames) > 1:
-                raise ValueError(f"xAI takes {frames[0]} on its own; this run also sets {', '.join(frames[1:])}")
+                raise ValueError(f"xAI edits videos on {GROK_VIDEO} only, not {model}")
+            extra = [name for name, value in (("start_image", start_image), ("reference_images", references))
+                     if _present(value)]
+            if extra:
+                raise ValueError(f"xAI takes edit_video on its own; this run also sets {', '.join(extra)}")
             if "prompt" not in routed:
-                raise ValueError("xAI needs a prompt to edit or extend a video")
-            if _present(edit_video):
-                out["endpoint"] = "edits"
-                routed["video"] = PortValueDict(type="Video", value=edit_video)
-            else:
-                seconds = _whole_seconds(_effective(node, "duration"))
-                low, high = EXTENSION_SECONDS
-                if not low <= seconds <= high:
-                    raise ValueError(f"xAI extends a video by {low} to {high} seconds (received {seconds})")
-                out.update(endpoint="extensions", duration=seconds)
-                routed["video"] = PortValueDict(type="Video", value=start_video)
+                raise ValueError("xAI needs a prompt to edit a video")
+            out["endpoint"] = "edits"
+            routed["video"] = PortValueDict(type="Video", value=edit_video)
             return node.model_copy(update={"params": out}), routed
 
         if _present(start_image) and references:

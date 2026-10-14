@@ -243,7 +243,7 @@ async def test_krea_grok_video_generates_with_the_krea_defaults_and_object_image
 
 
 @pytest.mark.asyncio
-async def test_krea_grok_video_references_edits_and_extensions():
+async def test_krea_grok_video_references_and_edits():
     refs = {"reference_images": PortValueDict(type="Image", value=["https://example.com/r1.png"] * 2)}
     node = GraphNode(id="v", definitionId="krea-video-xai-grok-video", params={"prompt": "p", "duration": 8})
     _, client = await _run_video(node, {**PROMPT, **refs}, XAI)
@@ -257,19 +257,11 @@ async def test_krea_grok_video_references_edits_and_extensions():
     assert client.post.call_args.kwargs["json"] == {
         "model": "grok-imagine-video", "prompt": "add snow", "video": {"url": "https://example.com/in.mp4"}}
 
-    node = GraphNode(id="v", definitionId="krea-video-xai-grok-video",
-                     params={"prompt": "keep going", "start_video": "https://example.com/in.mp4", "duration": 4})
-    _, client = await _run_video(node, {}, XAI)
-    assert client.post.call_args.args[0] == "https://api.x.ai/v1/videos/extensions"
-    assert client.post.call_args.kwargs["json"] == {
-        "model": "grok-imagine-video", "duration": 4, "prompt": "keep going",
-        "video": {"url": "https://example.com/in.mp4"}}
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("params,inputs,match", [
     ({"prompt": "p", "duration": 6.5}, {}, "whole number"),
-    ({"prompt": "p", "start_video": "https://e.com/v.mp4", "duration": 12}, {}, "2 to 10"),
     ({"prompt": "p", "edit_video": "https://e.com/v.mp4", "start_image": "https://e.com/i.png"}, {}, "on its own"),
     ({"prompt": "p", "duration": 12, "reference_images": '["https://e.com/r.png"]'}, {}, "up to 10 seconds"),
     ({"prompt": "p", "start_image": "https://e.com/i.png", "reference_images": '["https://e.com/r.png"]'}, {},
@@ -283,25 +275,31 @@ async def test_krea_grok_video_refuses_what_xai_cannot_run(params, inputs, match
 
 
 @pytest.mark.asyncio
-async def test_krea_grok_video_1_5_uses_its_model_and_a_start_video_stays_on_krea():
+@pytest.mark.parametrize("node_id", ["krea-video-xai-grok-video", "krea-video-xai-grok-video-1-5"])
+async def test_a_krea_start_video_saved_or_wired_stays_on_krea(node_id):
+    """Krea doesn't say what start_video does, so it is never guessed onto
+    xAI's extension endpoint."""
+    gateway, seen = _krea_gateway_spy()
+    video = "https://e.com/v.mp4"
+    for params, inputs in (({"prompt": "p", "start_video": video}, PROMPT),
+                           ({"prompt": "p"}, {**PROMPT, "start_video": PortValueDict(type="Video", value=video)})):
+        seen.clear()
+        node = GraphNode(id="v", definitionId=node_id, params=params)
+        with patch("handlers.krea_gateway.handle_krea_gateway", gateway), \
+                patch("handlers.grok_video.httpx.AsyncClient") as xai:
+            await _run(node, inputs, {**XAI, **KREA})
+        xai.assert_not_called()
+        assert seen
+
+
+@pytest.mark.asyncio
+async def test_krea_grok_video_1_5_uses_its_model():
     node = GraphNode(id="v", definitionId="krea-video-xai-grok-video-1-5",
                      params={"prompt": "p", "resolution": "1080p", "duration": 10})
     _, client = await _run_video(node, PROMPT, {**XAI, **KREA})
     body = client.post.call_args.kwargs["json"]
     assert body["model"] == "grok-imagine-video-1.5" and body["resolution"] == "1080p" and body["duration"] == 10
     assert body["aspect_ratio"] == "16:9"  # the node's default
-
-    gateway, seen = _krea_gateway_spy()
-    for params, inputs in (({"prompt": "p", "start_video": "https://e.com/v.mp4"}, PROMPT),
-                           ({"prompt": "p"}, {**PROMPT, "start_video": PortValueDict(type="Video",
-                                                                                      value="https://e.com/v.mp4")})):
-        seen.clear()
-        node = GraphNode(id="v", definitionId="krea-video-xai-grok-video-1-5", params=params)
-        with patch("handlers.krea_gateway.handle_krea_gateway", gateway), \
-                patch("handlers.grok_video.httpx.AsyncClient") as xai:
-            await _run(node, inputs, {**XAI, **KREA})
-        xai.assert_not_called()
-        assert seen
 
 
 # -- route rule and price ----------------------------------------------------------
@@ -337,10 +335,9 @@ def test_xai_route_prices(node_id, params, keys, expected):
 
 @pytest.mark.parametrize("params,wired", [
     ({"edit_video": "https://e.com/v.mp4"}, None),
-    ({"start_video": "https://e.com/v.mp4"}, None),
     ({}, {"n": {"edit_video"}}),
     ({"duration": 6.5}, None),
 ])
-def test_xai_video_edits_extensions_and_fractional_durations_are_unpriced(params, wired):
+def test_xai_video_edits_and_fractional_durations_are_unpriced(params, wired):
     item = {"id": "n", "definitionId": "krea-video-xai-grok-video", "params": params}
     assert model_pricing.estimate_run([item], PRICING, DEFINITIONS, XAI, None, wired)["unpriced"] == ["n"]

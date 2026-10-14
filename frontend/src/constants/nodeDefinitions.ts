@@ -26906,12 +26906,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "string"
       },
       {
-        "key": "start_video",
-        "label": "Start video",
-        "required": false,
-        "type": "string"
-      },
-      {
         "key": "duration",
         "label": "Duration",
         "required": false,
@@ -26988,11 +26982,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "string"
       }
     ],
-    "falParams": [],
+    "falParams": [
+      {
+        "key": "start_video",
+        "label": "Start video",
+        "required": false,
+        "type": "string"
+      }
+    ],
     "directParams": [],
     "directRoute": {
       "translation": "krea-xai-video",
-      "model": "grok-imagine-video"
+      "model": "grok-imagine-video",
+      "blockedBy": [
+        "start_video"
+      ]
     }
   },
   'krea-video-xai-grok-video-1-5': {

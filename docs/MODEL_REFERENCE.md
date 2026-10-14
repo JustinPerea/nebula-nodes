@@ -3242,17 +3242,24 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
 | Start image | string | — | — |
-| Start video | string | — | — |
 | Duration | float | 6 | 1–15 |
 | Resolution | enum | 720p | 480p, 720p |
 | Aspect ratio | enum | — | 16:9, 9:16, 1:1, 4:3, 3:4, 3:2, 2:3 |
 | Reference images (JSON) | textarea | — | — |
 | Edit video | string | — | — |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Start video | string | — | — |
 
 ---
 

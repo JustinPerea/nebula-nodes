@@ -53,7 +53,7 @@ Audit of what Flora (app.flora.ai, 369 models via MCP `client.models.list`) offe
 | WAN 2.5 / 2.7, WAN 2.2 Animate **Move/Replace**, WAN 2.6 audio-to-video | Nebula has WAN 2.6 t2v/i2v/r2v. |
 | Marey + Motion Transfer + Pose Transfer | Performance/pose transfer beyond Runway Act-Two. |
 | **Lipsync stack**: Lipsync 2 Pro, Sync 3, VEED Lipsync, Fabric 1.0, Aurora avatar | **Partially closed 2026-08-14:** `sync-lipsync` node (FAL) now covers Sync 3, Sync Lipsync v2 Pro, and VEED Lipsync via model enum. Fabric 1.0, Aurora avatar, and Kling Avatar v2 Pro remain. |
-| Video edit models: Lucy Edit Pro, LTX-2 Retake, Grok Imagine Edit | Nebula has Runway Aleph + Luma Modify only. |
+| Video edit models: Lucy Edit Pro, LTX-2 Retake, Grok Imagine Edit | Nebula has Runway Aleph + Luma Modify. Grok Imagine video edit is reachable through `krea-video-xai-grok-video`'s `edit_video` (Krea, or xAI's own `/v1/videos/edits` on an xAI key since 2026-10-14); Lucy Edit Pro and LTX-2 Retake remain open. |
 | VEED Subtitles, VEED BG Removal (video), Mirelo SFX 1.5, Animatediff, Frame Morphing | Utility long tail. |
 | Pika, Tencent Hunyuan video | |
 | Video upscalers: Magnific (3 variants), Bria, Topaz video | Nebula has SeedVR/SeedVR2. |

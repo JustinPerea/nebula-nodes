@@ -577,6 +577,22 @@
         "provider": "krea",
         "key": null
       }
+    },
+    {
+      "name": "a start video keeps Grok Imagine on Krea",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "start_video": "https://example.com/v.mp4"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
     }
   ]
 }

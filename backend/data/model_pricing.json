@@ -6630,15 +6630,13 @@
           "priceParams": [
             "duration",
             "edit_video",
-            "resolution",
-            "start_video"
+            "resolution"
           ],
           "rows": [
             {
               "match": {
                 "resolution": "480p",
                 "duration": 1,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6650,7 +6648,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 2,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6662,7 +6659,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 3,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6674,7 +6670,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 4,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6686,7 +6681,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 5,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6698,7 +6692,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 6,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6710,7 +6703,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 7,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6722,7 +6714,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 8,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6734,7 +6725,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 9,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6746,7 +6736,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 10,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6758,7 +6747,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 11,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6770,7 +6758,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 12,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6782,7 +6769,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 13,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6794,7 +6780,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 14,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6806,7 +6791,6 @@
               "match": {
                 "resolution": "480p",
                 "duration": 15,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6818,7 +6802,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 1,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6830,7 +6813,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 2,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6842,7 +6824,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 3,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6854,7 +6835,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 4,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6866,7 +6846,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 5,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6878,7 +6857,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 6,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6890,7 +6868,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 7,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6902,7 +6879,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 8,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6914,7 +6890,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 9,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6926,7 +6901,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 10,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6938,7 +6912,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 11,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6950,7 +6923,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 12,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6962,7 +6934,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 13,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6974,7 +6945,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 14,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6986,7 +6956,6 @@
               "match": {
                 "resolution": "720p",
                 "duration": 15,
-                "start_video": "",
                 "edit_video": ""
               },
               "price": [
@@ -6995,7 +6964,7 @@
               ]
             }
           ],
-          "notes": "xAI list price for grok-imagine-video on the person's XAI_API_KEY: per second by resolution, up to that plus $0.002 per input image (a start image, or up to 7 reference images). Edits and extensions (edit_video, start_video) bill the source video at $0.01/sec and their output length depends on it, so they are unpriced.",
+          "notes": "xAI list price for grok-imagine-video on the person's XAI_API_KEY: per second by resolution, up to that plus $0.002 per input image (a start image, or up to 7 reference images). An edit (edit_video) bills the source video at $0.01/sec and returns a clip as long as the source, so it is unpriced. A start video keeps the run on Krea.",
           "sources": [
             {
               "url": "https://docs.x.ai/developers/pricing",
@@ -7847,15 +7816,11 @@
               ]
             }
           ],
-          "notes": "xAI list price for grok-imagine-video-1.5 on the person's XAI_API_KEY: per second by resolution, up to that plus $0.01 for a start image. A start video keeps the run on Krea (xAI extends videos on grok-imagine-video only).",
+          "notes": "xAI list price for grok-imagine-video-1.5 on the person's XAI_API_KEY: per second by resolution, up to that plus $0.01 for a start image. A start video keeps the run on Krea.",
           "sources": [
             {
               "url": "https://docs.x.ai/developers/pricing",
               "quote": "grok-imagine-video-1.5 | Text, Image, Audio -> Video | $0.01 / img (media input) | 480p $0.08 / sec | 720p $0.14 / sec | 1080p $0.25 / sec"
-            },
-            {
-              "url": "https://docs.x.ai/developers/model-capabilities/video/extension",
-              "quote": "Model | `grok-imagine-video`"
             }
           ],
           "checked": "2026-10-14"

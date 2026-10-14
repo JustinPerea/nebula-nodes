@@ -10,10 +10,7 @@ checked 2026-10-14):
   (an object: "`url` (string) - Public URL or base64-encoded data URL of the
   image"), ``reference_images`` (array of the same objects).
 - POST /v1/videos/edits: ``model``, ``prompt`` (required), ``video`` {url}.
-- POST /v1/videos/extensions: ``model``, ``prompt`` (required), ``video``
-  {url}, ``duration`` ("Duration of the extension segment to generate in
-  seconds (2-10)").
-- All three return ``request_id``; poll GET /v1/videos/{request_id} until
+- All return ``request_id``; poll GET /v1/videos/{request_id} until
   ``status`` is "done" (``video.url``) or "failed" (``error.message``).
 
 ``handle_grok_video`` runs the grok-imagine-video node. ``run_xai_video`` is
@@ -41,7 +38,6 @@ DEFAULT_MODEL = "grok-imagine-video"
 ENDPOINTS = {
     "generations": f"{XAI_API_BASE}/videos/generations",
     "edits": f"{XAI_API_BASE}/videos/edits",
-    "extensions": f"{XAI_API_BASE}/videos/extensions",
 }
 POLL_INTERVAL = 3.0
 MAX_POLLS = 300

@@ -1,11 +1,24 @@
 ---
 name: xai
-description: xAI (Grok Imagine) video generation in Nebula — text-to-video and image-to-video short clips with duration, aspect-ratio, and resolution control via the Grok Imagine Video model. Activate when the user configures the `grok-imagine-video` node or asks about xAI / Grok / Grok Imagine in Nebula. Sourced from the official xAI docs (docs.x.ai — Imagine video generation reference) and the Nebula audit guide docs/api-guides/xai.md on 2026-06-04.
+description: xAI (Grok Imagine) in Nebula — the grok-imagine-video node, plus the fal and Krea Grok Imagine copies (grok-imagine-image, grok-imagine-image-edit, krea-image-xai-grok-imagine-2/-edit, krea-video-xai-grok-video/-1-5) that run on xAI's own API when XAI_API_KEY is saved. Activate when the user configures any of those nodes or asks about xAI / Grok / Grok Imagine in Nebula. Sourced from the official xAI docs (docs.x.ai REST reference, Imagine guides, pricing) and docs/api-guides/xai.md on 2026-06-04 (direct routes added 2026-10-14).
 ---
 
 # xAI (Grok Imagine) Skill
 
-xAI's Grok Imagine API turns a text prompt (or a starting image) into a short generated video clip. Nebula wires up exactly one node from this provider — **Grok Imagine Video** (`grok-imagine-video`) — covering text-to-video and image-to-video. Everything else the Grok Imagine API offers (image gen/edit, reference-to-video, video edit/extend, voice/audio, chat) is reachable with the same key but is **not** exposed as a Nebula node yet (see Capability boundaries).
+xAI's Grok Imagine API makes images and short video clips. One node runs on xAI only: **Grok Imagine Video** (`grok-imagine-video`, text-to-video and image-to-video). Six fal and Krea copies of Grok Imagine also run on xAI's own API when `XAI_API_KEY` is saved (see Direct routes below). Voice/audio and chat are reachable with the same key but are **not** Nebula nodes (see Capability boundaries).
+
+## Direct routes (fal and Krea copies on your xAI key)
+
+Since 2026-10-14 (`backend/execution/maker_routes_xai.py`, rule in `backend/services/node_route.py`):
+
+| Node | Fallback | xAI model |
+|---|---|---|
+| `grok-imagine-image`, `grok-imagine-image-edit` | fal (`FAL_KEY`) | `grok-imagine-image` |
+| `krea-image-xai-grok-imagine-2`, `-2-edit` | Krea (`KREA_API_TOKEN`) | `grok-imagine-image-2.0` |
+| `krea-video-xai-grok-video` | Krea | `grok-imagine-video` |
+| `krea-video-xai-grok-video-1-5` | Krea | `grok-imagine-video-1.5` |
+
+Precedence: a Krea node on the Krea plan (`_kreaAuth: "mcp"`) stays there; else the xAI key runs it (billed by xAI); else the fal key / Krea token. Krea-only settings keep the run on Krea whether saved or wired: Grok 2.0's `style_images`, and `start_video` on both Krea video copies (Krea doesn't document what its start video does, so it isn't mapped to xAI's extensions endpoint). fal's `output_format` isn't sent to xAI. On the xAI route the Krea video copy picks `/v1/videos/edits` for `edit_video`, else generations (start image or up to 7 references, ≤10 s with references); unset duration/resolution send the Krea defaults (6 s, 720p); xAI takes whole seconds only. Prices: docs/api-guides/xai.md.
 
 ## When to use
 
@@ -20,26 +33,27 @@ xAI's Grok Imagine API turns a text prompt (or a starting image) into a short ge
 1. **Auth.** `Authorization: Bearer <XAI_API_KEY>` header + `Content-Type: application/json`. Enter the key in Nebula **Settings → xAI** and save; it is persisted under `apiKeys.XAI_API_KEY` in project-root `settings.json` and takes effect without a restart. The same xAI key works for video, image, voice, and chat. Missing key → the node fails immediately with `XAI_API_KEY is required`.
 2. **Base URL.** `https://api.x.ai/v1`. Submit endpoint: `POST /v1/videos/generations`. Poll endpoint: `GET /v1/videos/{request_id}`.
 3. **Execution pattern: async submit-then-poll** (`executionPattern: "async-poll"` in the node def). Submit returns `{"request_id": "..."}`; the handler then polls `GET /v1/videos/{request_id}` every 3 s. A `ProgressEvent` advances the node's progress bar each poll. Terminal state `done` returns `{"status": "done", "video": {"url": "..."}}`, the MP4 is downloaded to the run dir, and the `video` port emits the local path. **Set expectations in minutes, not seconds.** The poll cap is 300 attempts × 3 s ≈ **15 minutes** before the handler raises `Grok timed out` (the guide's "up to a few minutes" is the typical case, not the ceiling).
-4. **Model is fixed.** The handler always sends `"model": "grok-imagine-video"`. The user does **not** pick a model — there is no model param on the node.
+4. **Model is fixed per node.** `grok-imagine-video` always sends `"model": "grok-imagine-video"`; each copy sends its own model (table above). There is no model param.
 5. **Status / error codes.**
    - Submit must return `200`, `201`, or `202`; anything else raises `Grok submit failed (<status>): <body>`.
    - Submit response missing `request_id` raises `Grok returned unexpected response`.
-   - Poll must return `200`; otherwise `Grok poll failed (<status>): <body>`.
+   - Poll must return `200` or `202`; otherwise `Grok poll failed (<status>): <body>`.
    - Poll `status: "failed"` or `"expired"` raises `Grok failed: <error.message>`.
-   - `status: "done"` with no `video.url` raises `Grok completed but no video URL`.
+   - `status: "done"` with no `video.url` raises `Grok completed but no video URL` (or, when `respect_moderation` is false, says the video was filtered).
    - 401 on submit/poll → bad or missing `XAI_API_KEY`.
 6. **Input-URI rules (the `image` port, for image-to-video).** The handler accepts either form:
-   - An `http://` or `https://` URL → passed straight through as `body["image"]`.
-   - A local file path → read and inlined as a base64 **data URI** (`data:<mime>;base64,...`). MIME is inferred from the extension: `.png` → `image/png`, `.jpg`/`.jpeg` → `image/jpeg`, anything else defaults to `image/png`. Wiring an upstream image node into the port (which yields a local path) is the normal flow and works automatically.
+   - Sent as an object, `body["image"] = {"url": ...}` (xAI's REST reference: "`url` (string) - Public URL or base64-encoded data URL of the image").
+   - An `http://`/`https://` URL or `data:` URI goes as is.
+   - A local file path (or served `/api/outputs/...` ref) is read and inlined as a base64 **data URI**; a missing or unsupported file (PNG, JPEG, WebP, GIF) fails the node. Wiring an upstream image node into the port is the normal flow and works automatically.
 7. **Key gotchas.**
    - `prompt` is required even for image-to-video — an empty/missing prompt raises `Prompt is required`. For i2v, give it a short *motion* prompt (e.g. "gentle wind, the cape flutters, embers rise"), not a full scene description.
-   - The `image` param the node exposes is the **first-frame** image (i2v). It is **not** the API's `reference_images` (reference-to-video guides without forcing the first frame) — that's a different, unexposed capability.
+   - The `image` port is the **first-frame** image (i2v). It is **not** the API's `reference_images` (reference-to-video); for that use `krea-video-xai-grok-video`'s `reference_images` port.
    - 720p and longer durations cost more (per-second pricing). For cheap/fast drafts use `480p` + short `duration`.
    - Outputs are MP4. The downloaded clip lands in the run dir as `<hex>.mp4` and is served back to the canvas.
 
 ## Pick the right node
 
-xAI exposes a single node in Nebula. Use it for both text-to-video (prompt only) and image-to-video (prompt + image).
+`grok-imagine-video` is the one node that runs only on xAI. Use it for text-to-video (prompt only) and image-to-video (prompt + image). For Grok images, references or video edits use the copies in Direct routes above.
 
 | Node (display name) | Node ID | Category | Endpoint / Model | Key inputs | Key params |
 |---|---|---|---|---|---|
@@ -108,24 +122,23 @@ All recipes use the real node id `grok-imagine-video`.
 
 ### Capability boundaries (what the Grok Imagine API can do that Nebula does NOT expose)
 
-Do **not** promise these through Nebula — there is no node for them today (all reachable with the same `XAI_API_KEY`, but absent from the canvas). Source: the gap table in `docs/api-guides/xai.md`.
+Do **not** promise these through Nebula; there is no node for them today:
 
-- **Reference-to-video** (`reference_images` array) — guide a video with reference images *without* forcing the first frame. Distinct from the node's `image` port (which forces the first frame). No input port for it.
-- **Video editing** (`POST /v1/videos/edits`) — restyle/modify an existing video with a prompt while keeping the scene. No node.
-- **Video extension** (`POST /v1/videos/extensions`) — continue an existing clip from its last frame. No node.
-- **Image generation** (`POST /v1/images/generations`) — Grok Imagine image models (`grok-imagine-image`, `grok-imagine-image-quality`). No node. (Use another provider's image node, e.g. gpt-image-2 / gemini / FAL.)
-- **Image editing + multi-image compositing** (`POST /v1/images/edits`, up to 3 source images) — merge subjects / transfer style / compose scenes. No node.
-- **Voice / audio** on the same key — Text-to-Speech, Speech-to-Text, Realtime Voice. No node.
-- **Text / chat** (Grok 4.x via `POST /v1/chat/completions` or `POST /v1/responses`, incl. reasoning, function calling, live web/X search, structured outputs) and **deferred chat completion** (`GET /v1/chat/deferred-completion/{id}`). No node.
-- **Model choice** — the node hard-codes `grok-imagine-video`; the user can't select a different Grok model from the node.
+- **Voice / audio** on the same key: Text-to-Speech, Speech-to-Text, Realtime Voice.
+- **Text / chat** (Grok 4.x via `POST /v1/chat/completions` or `POST /v1/responses`).
+- **`grok-imagine-video-1.5-lite`** (cheapest per second).
+- **Grok 1.5's extra controls**: up to 14 reference images, voice references, `last_frame`, keyframes. The Krea 1.5 copy has no ports for them.
+- **Model choice** on a node: each node is pinned to one Grok model.
 
-Overall Nebula exposes ~20% of the xAI (Grok Imagine) API surface — only video generation, and within that only the text-to-video and image-to-video modes.
+Reference-to-video (7 refs) and video editing are reachable through `krea-video-xai-grok-video`; xAI's video extension (`/v1/videos/extensions`) has no node; image generation and editing through the four image copies.
 
 ## Sources
 
 - Imagine overview (image + video + modes) — https://docs.x.ai/developers/model-capabilities/imagine
 - Video generation (endpoints, params, modes, statuses) — https://docs.x.ai/developers/model-capabilities/video/generation
-- Image generation & editing — https://docs.x.ai/docs/guides/image-generations
+- Images REST reference — https://docs.x.ai/developers/rest-api-reference/inference/images
+- Videos REST reference — https://docs.x.ai/developers/rest-api-reference/inference/videos
+- Pricing (Imagine table) — https://docs.x.ai/developers/pricing
 - Model catalog (model IDs, modalities, pricing) — https://docs.x.ai/docs/models
 - xAI API overview — https://docs.x.ai/docs/overview
 - Nebula audit guide — `docs/api-guides/xai.md`

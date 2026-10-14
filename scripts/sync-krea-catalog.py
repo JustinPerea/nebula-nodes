@@ -234,16 +234,18 @@ XAI_DIRECT_ROUTES = {
                     "checked": XAI_CHECKED},
     },
     "/generate/video/xai/grok-video": {
+        # Krea's schema doesn't say what start_video does (it also appears on
+        # 1.5 and Veo 2, neither of which xAI or Google extends), so it is
+        # Krea-only rather than guessed onto xAI's /v1/videos/extensions.
         "directKeyName": "XAI_API_KEY", "translation": "krea-xai-video", "model": "grok-imagine-video",
-        "kreaOnly": [], "directParams": [],
-        "pricing": {"provider": "xai", "per": "request", "priceParams": ["duration", "edit_video", "resolution",
-                                                                        "start_video"],
-                    "rows": _xai_video_rows({"480p": 0.05, "720p": 0.07}, 7 * 0.002,
-                                            {"start_video": "", "edit_video": ""}),
+        "kreaOnly": ["start_video"], "directBlockedBy": ["start_video"], "directParams": [],
+        "pricing": {"provider": "xai", "per": "request", "priceParams": ["duration", "edit_video", "resolution"],
+                    "rows": _xai_video_rows({"480p": 0.05, "720p": 0.07}, 7 * 0.002, {"edit_video": ""}),
                     "notes": "xAI list price for grok-imagine-video on the person's XAI_API_KEY: per second by "
                              "resolution, up to that plus $0.002 per input image (a start image, or up to 7 "
-                             "reference images). Edits and extensions (edit_video, start_video) bill the source "
-                             "video at $0.01/sec and their output length depends on it, so they are unpriced.",
+                             "reference images). An edit (edit_video) bills the source video at $0.01/sec and "
+                             "returns a clip as long as the source, so it is unpriced. A start video keeps the "
+                             "run on Krea.",
                     "sources": [{"url": XAI_PRICING_URL,
                                  "quote": "grok-imagine-video | Text, Image, Video -> Video | $0.01 / sec | $0.002 / "
                                           "img (media input) | 480p $0.05 / sec | 720p $0.07 / sec"}],
@@ -256,12 +258,10 @@ XAI_DIRECT_ROUTES = {
                     "rows": _xai_video_rows({"480p": 0.08, "720p": 0.14, "1080p": 0.25}, 0.01, {}),
                     "notes": "xAI list price for grok-imagine-video-1.5 on the person's XAI_API_KEY: per second by "
                              "resolution, up to that plus $0.01 for a start image. A start video keeps the run on "
-                             "Krea (xAI extends videos on grok-imagine-video only).",
+                             "Krea.",
                     "sources": [{"url": XAI_PRICING_URL,
                                  "quote": "grok-imagine-video-1.5 | Text, Image, Audio -> Video | $0.01 / img (media "
-                                          "input) | 480p $0.08 / sec | 720p $0.14 / sec | 1080p $0.25 / sec"},
-                                {"url": "https://docs.x.ai/developers/model-capabilities/video/extension",
-                                 "quote": "Model | `grok-imagine-video`"}],
+                                          "input) | 480p $0.08 / sec | 720p $0.14 / sec | 1080p $0.25 / sec"}],
                     "checked": XAI_CHECKED},
     },
 }
