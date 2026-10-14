@@ -160,6 +160,9 @@ function directBlockNote(def: ModelNodeDefinition, block: DirectBlock): string {
   if (block.reason === 'blocked') {
     return `This recipe sets ${block.param}, which only ${fallbackName} takes, so it runs on ${fallbackName}. Clear it to run on ${directName}.`;
   }
+  if (block.reason === 'unsupported') {
+    return `${directName}'s own API doesn't take ${block.detail ?? block.param}, so it runs on ${fallbackName}.`;
+  }
   return `${directName} retires this model on its own API from ${block.on}, so it runs on ${fallbackName}.`;
 }
 

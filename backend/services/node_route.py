@@ -66,6 +66,7 @@ DIRECT_RETIRES: dict[str, dict[str, Any]] = {
 REQUIRES = "requires"  # DIRECT_REQUIRES: the direct route needs a param that isn't set
 BLOCKED = "blocked"    # a copy-only param is set that the maker can't honor (directRoute.blockedBy)
 RETIRED = "retired"    # DIRECT_RETIRES: the maker shut this model down on its API
+UNSUPPORTED = "unsupported"  # a value the maker's API rejects (directRoute.unsupported)
 
 LOCAL = "local"        # a utility node: no provider
 PLAN = "plan"          # the signed-in Krea plan
@@ -150,6 +151,40 @@ class DirectBlock(NamedTuple):
     reason: str
     param: str | None = None
     on: str | None = None
+    detail: str | None = None  # UNSUPPORTED: the rule's label ("1080p at 10 seconds")
+
+
+def _match_value(value: Any) -> str:
+    """One spelling for a param value, as pricing compares them (6 == 6.0, True == "true")."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _unsupported(definition: Mapping[str, Any], params: Mapping[str, Any], rule: Mapping[str, Any]) -> str | None:
+    """The param a ``directRoute.unsupported`` rule blocks on, or None.
+
+    ``{"param": k, "allowed": [...]}`` blocks a set value of k outside the
+    list; ``{"match": {k: v, ...}}`` blocks when every k has value v. Values
+    are the run's (saved, else the definition default)."""
+    if "allowed" in rule:
+        key = str(rule.get("param") or "")
+        value = _effective(definition, params, key)
+        if not _has_value(value):
+            return None
+        allowed = {_match_value(item) for item in rule.get("allowed") or []}
+        return key if _match_value(value) not in allowed else None
+    match = rule.get("match")
+    if not isinstance(match, Mapping) or not match:
+        return None
+    if all(_match_value(_effective(definition, params, str(key))) == _match_value(want)
+           for key, want in match.items()):
+        return str(next(iter(match)))
+    return None
 
 
 def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None) -> DirectBlock | None:
@@ -160,6 +195,9 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
     - BLOCKED: a generated Krea copy names, in ``directRoute.blockedBy``, the
       Krea-only params (explicit width/height) the maker can't honor; a
       recipe that sets one stays on Krea instead of silently changing shape.
+    - UNSUPPORTED: a param value (or pair of values) the maker's API rejects,
+      named in ``directRoute.unsupported`` (MiniMax takes 6 or 10 seconds, and
+      1080P only at 6), so the run stays on Krea instead of failing.
     - RETIRED: on and after a DIRECT_RETIRES date the maker no longer serves
       the model, so the fal or Krea copy runs it."""
     values = params or {}
@@ -171,6 +209,10 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
     for key in (spec.get("blockedBy") or []) if isinstance(spec, Mapping) else []:
         if _has_value(values.get(key)):
             return DirectBlock(BLOCKED, str(key))
+    for rule in (spec.get("unsupported") or []) if isinstance(spec, Mapping) else []:
+        key = _unsupported(definition, values, rule) if isinstance(rule, Mapping) else None
+        if key:
+            return DirectBlock(UNSUPPORTED, key, None, str(rule.get("label") or key))
     retires = DIRECT_RETIRES.get(node_id)
     if retires and _today() >= retires["on"]:
         param = retires.get("param")

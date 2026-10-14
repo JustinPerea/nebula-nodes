@@ -5357,247 +5357,681 @@
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-minimax-hailuo-02": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "duration",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "512p",
-            "duration": 6
-          },
-          "price": 0.1
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "512p",
+                "duration": 6
+              },
+              "price": 0.1
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "512p",
+                "duration": 10
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "768p",
+                "duration": 6
+              },
+              "price": 0.27
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "512p",
+                "duration": 7
+              },
+              "price": 0.315
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "768p",
+                "duration": 7
+              },
+              "price": 0.315
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "512p",
+                "duration": 8
+              },
+              "price": 0.36
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "768p",
+                "duration": 8
+              },
+              "price": 0.36
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "512p",
+                "duration": 9
+              },
+              "price": 0.405
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "768p",
+                "duration": 9
+              },
+              "price": 0.405
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "768p",
+                "duration": 10
+              },
+              "price": 0.45
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 6
+              },
+              "price": 0.54
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 7
+              },
+              "price": 0.63
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 8
+              },
+              "price": 0.72
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 9
+              },
+              "price": 0.81
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 10
+              },
+              "price": 0.9
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/video/minimax/hailuo-02 (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "512p",
-            "duration": 10
-          },
-          "price": 0.15
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "768p",
-            "duration": 6
-          },
-          "price": 0.27
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "512p",
-            "duration": 7
-          },
-          "price": 0.315
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "768p",
-            "duration": 7
-          },
-          "price": 0.315
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "512p",
-            "duration": 8
-          },
-          "price": 0.36
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "768p",
-            "duration": 8
-          },
-          "price": 0.36
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "512p",
-            "duration": 9
-          },
-          "price": 0.405
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "768p",
-            "duration": 9
-          },
-          "price": 0.405
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "768p",
-            "duration": 10
-          },
-          "price": 0.45
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 6
-          },
-          "price": 0.54
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 7
-          },
-          "price": 0.63
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 8
-          },
-          "price": 0.72
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 9
-          },
-          "price": 0.81
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 10
-          },
-          "price": 0.9
+        "minimax": {
+          "currency": "usd",
+          "per": "video",
+          "priceParams": [
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "512p",
+                "duration": 6
+              },
+              "price": 0.1
+            },
+            {
+              "match": {
+                "resolution": "512p",
+                "duration": 10
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "resolution": "768p",
+                "duration": 6
+              },
+              "price": 0.28
+            },
+            {
+              "match": {
+                "resolution": "768p",
+                "duration": 10
+              },
+              "price": 0.56
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 6
+              },
+              "price": 0.49
+            }
+          ],
+          "sources": [
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-Hailuo-02 | $0.10 per 512P, 6s video |"
+            },
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-Hailuo-02 | $0.15 per 512P, 10s video |"
+            },
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-Hailuo-02 | $0.28 per 768P, 6s video |"
+            },
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-Hailuo-02 | $0.56 per 768P, 10s video |"
+            },
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-Hailuo-02 | $0.49 per 1080P, 6s video |"
+            }
+          ],
+          "notes": "MiniMax pay-as-you-go list price (Global platform, USD), for runs on the person's MINIMAX_API_KEY (model MiniMax-Hailuo-02). Video Packages deduct video points instead, and a Mainland China key (api.minimaxi.com) bills that platform's own rates; neither is priced here.",
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/video/minimax/hailuo-02 (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-minimax-hailuo-2-3": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "duration",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "768p",
-            "duration": 6
-          },
-          "price": 0.28
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "768p",
+                "duration": 6
+              },
+              "price": 0.28
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 10
+              },
+              "price": 0.49
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 6
+              },
+              "price": 0.49
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "768p",
+                "duration": 10
+              },
+              "price": 0.56
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/video/minimax/hailuo-2.3 (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 10
-          },
-          "price": 0.49
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 6
-          },
-          "price": 0.49
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "768p",
-            "duration": 10
-          },
-          "price": 0.56
+        "minimax": {
+          "currency": "usd",
+          "per": "video",
+          "priceParams": [
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "768p",
+                "duration": 6
+              },
+              "price": 0.28
+            },
+            {
+              "match": {
+                "resolution": "768p",
+                "duration": 10
+              },
+              "price": 0.56
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 6
+              },
+              "price": 0.49
+            }
+          ],
+          "sources": [
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-Hailuo-2.3 | $0.28 per 768P, 6s video |"
+            },
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-Hailuo-2.3 | $0.56 per 768P, 10s video |"
+            },
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-Hailuo-2.3 | $0.49 per 1080P, 6s video |"
+            }
+          ],
+          "notes": "MiniMax pay-as-you-go list price (Global platform, USD), for runs on the person's MINIMAX_API_KEY (model MiniMax-Hailuo-2.3). Video Packages deduct video points instead, and a Mainland China key (api.minimaxi.com) bills that platform's own rates; neither is priced here.",
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/video/minimax/hailuo-2.3 (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-minimax-hailuo-2-3-fast": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "duration",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "768p",
-            "duration": 6
-          },
-          "price": 0.19
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "768p",
+                "duration": 6
+              },
+              "price": 0.19
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "768p",
+                "duration": 10
+              },
+              "price": 0.32
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 10
+              },
+              "price": 0.33
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 6
+              },
+              "price": 0.33
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/video/minimax/hailuo-2.3-fast (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "768p",
-            "duration": 10
-          },
-          "price": 0.32
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 10
-          },
-          "price": 0.33
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 6
-          },
-          "price": 0.33
+        "minimax": {
+          "currency": "usd",
+          "per": "video",
+          "priceParams": [
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "768p",
+                "duration": 6
+              },
+              "price": 0.19
+            },
+            {
+              "match": {
+                "resolution": "768p",
+                "duration": 10
+              },
+              "price": 0.32
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 6
+              },
+              "price": 0.33
+            }
+          ],
+          "sources": [
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-Hailuo-2.3-Fast | $0.19 per 768P, 6s video |"
+            },
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-Hailuo-2.3-Fast | $0.32 per 768P, 10s video |"
+            },
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-Hailuo-2.3-Fast | $0.33 per 1080P, 6s video |"
+            }
+          ],
+          "notes": "MiniMax pay-as-you-go list price (Global platform, USD), for runs on the person's MINIMAX_API_KEY (model MiniMax-Hailuo-2.3-Fast). Video Packages deduct video points instead, and a Mainland China key (api.minimaxi.com) bills that platform's own rates; neither is priced here.",
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/video/minimax/hailuo-2.3-fast (spec sha256 9d5dd91a9e81)"
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-minimax-hailuo-3": {
+      "routes": {
+        "minimax": {
+          "currency": "usd",
+          "per": "video",
+          "priceParams": [
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "2K",
+                "duration": 5
+              },
+              "price": [
+                0.65,
+                2.76
+              ]
+            },
+            {
+              "match": {
+                "resolution": "2K",
+                "duration": 6
+              },
+              "price": [
+                0.78,
+                2.89
+              ]
+            },
+            {
+              "match": {
+                "resolution": "2K",
+                "duration": 7
+              },
+              "price": [
+                0.91,
+                3.02
+              ]
+            },
+            {
+              "match": {
+                "resolution": "2K",
+                "duration": 8
+              },
+              "price": [
+                1.04,
+                3.15
+              ]
+            },
+            {
+              "match": {
+                "resolution": "2K",
+                "duration": 9
+              },
+              "price": [
+                1.17,
+                3.28
+              ]
+            },
+            {
+              "match": {
+                "resolution": "2K",
+                "duration": 10
+              },
+              "price": [
+                1.3,
+                3.41
+              ]
+            },
+            {
+              "match": {
+                "resolution": "2K",
+                "duration": 11
+              },
+              "price": [
+                1.43,
+                3.54
+              ]
+            },
+            {
+              "match": {
+                "resolution": "2K",
+                "duration": 12
+              },
+              "price": [
+                1.56,
+                3.67
+              ]
+            },
+            {
+              "match": {
+                "resolution": "2K",
+                "duration": 13
+              },
+              "price": [
+                1.69,
+                3.8
+              ]
+            },
+            {
+              "match": {
+                "resolution": "2K",
+                "duration": 14
+              },
+              "price": [
+                1.82,
+                3.93
+              ]
+            },
+            {
+              "match": {
+                "resolution": "2K",
+                "duration": 15
+              },
+              "price": [
+                1.95,
+                4.06
+              ]
+            },
+            {
+              "match": {
+                "resolution": "768P",
+                "duration": 5
+              },
+              "price": [
+                0.4,
+                1.76
+              ]
+            },
+            {
+              "match": {
+                "resolution": "768P",
+                "duration": 6
+              },
+              "price": [
+                0.48,
+                1.84
+              ]
+            },
+            {
+              "match": {
+                "resolution": "768P",
+                "duration": 7
+              },
+              "price": [
+                0.56,
+                1.92
+              ]
+            },
+            {
+              "match": {
+                "resolution": "768P",
+                "duration": 8
+              },
+              "price": [
+                0.64,
+                2.0
+              ]
+            },
+            {
+              "match": {
+                "resolution": "768P",
+                "duration": 9
+              },
+              "price": [
+                0.72,
+                2.08
+              ]
+            },
+            {
+              "match": {
+                "resolution": "768P",
+                "duration": 10
+              },
+              "price": [
+                0.8,
+                2.16
+              ]
+            },
+            {
+              "match": {
+                "resolution": "768P",
+                "duration": 11
+              },
+              "price": [
+                0.88,
+                2.24
+              ]
+            },
+            {
+              "match": {
+                "resolution": "768P",
+                "duration": 12
+              },
+              "price": [
+                0.96,
+                2.32
+              ]
+            },
+            {
+              "match": {
+                "resolution": "768P",
+                "duration": 13
+              },
+              "price": [
+                1.04,
+                2.4
+              ]
+            },
+            {
+              "match": {
+                "resolution": "768P",
+                "duration": 14
+              },
+              "price": [
+                1.12,
+                2.48
+              ]
+            },
+            {
+              "match": {
+                "resolution": "768P",
+                "duration": 15
+              },
+              "price": [
+                1.2,
+                2.56
+              ]
+            }
+          ],
+          "sources": [
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-H3 | 768P | Billed per second | $0.08 / second |"
+            },
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-H3 | 2K | Billed per second | $0.13 / second |"
+            },
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-H3 | Image | First 5 images free; $0.04 per additional image |"
+            },
+            {
+              "url": "https://platform.minimax.io/docs/pricing/overview",
+              "quote": "| MiniMax-H3 | Video | Billed by input video duration and output video resolution: 2K $0.13/sec, 768P $0.08/sec |"
+            },
+            {
+              "url": "https://platform.minimax.io/docs/api-reference/video-generation-v2-create",
+              "quote": "Count | first frame <= 1, last frame <= 1, reference images <= 9 ... Per-clip duration | [2, 15] s; total <= 15 s"
+            }
+          ],
+          "notes": "MiniMax pay-as-you-go list price (Global platform, USD), for runs on the person's MINIMAX_API_KEY (model MiniMax-H3). Video Packages deduct video points instead, and a Mainland China key (api.minimaxi.com) bills that platform's own rates; neither is priced here. The low end is the output video alone; the high end adds 4 billed reference images (of 9) and 15 s of reference video. Video Packages don't cover H3 (MiniMax: \"MiniMax H3 is not supported yet\"); M Plan Explore/Build Subscription Keys deduct the same list price from plan usage.",
+          "checked": "2026-10-14"
         }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-runway-gen-4-5": {

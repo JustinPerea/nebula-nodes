@@ -45,9 +45,21 @@ export const DIRECT_RETIRES: Readonly<Record<string, DirectRetirement>> = {
  * copy-only param that is set (directRoute.blockedBy: a Krea copy's explicit
  * width/height), or `retired` by the maker on `on` (DIRECT_RETIRES). */
 export interface DirectBlock {
-  reason: 'requires' | 'blocked' | 'retired';
+  reason: 'requires' | 'blocked' | 'retired' | 'unsupported';
   param: string | null;
   on: string | null;
+  /** `unsupported`: the rule's label ("1080p at 10 seconds"). */
+  detail?: string;
+}
+
+/** A value the maker's API rejects (directRoute.unsupported, node_route._unsupported):
+ * `allowed` blocks a set value of `param` outside the list; `match` blocks
+ * when every key has that value. */
+export interface UnsupportedRule {
+  param?: string;
+  allowed?: readonly (string | number | boolean)[];
+  match?: Readonly<Record<string, string | number | boolean>>;
+  label?: string;
 }
 
 export type RouteKind = 'local' | 'plan' | 'only' | 'direct' | 'fallback' | 'unset';
@@ -121,12 +133,35 @@ function effectiveValue(definition: ModelNodeDefinition, params: Record<string, 
   return undefined;
 }
 
+/** One spelling for a param value, as pricing compares them (6 == 6.0, true == "true"). */
+function matchValue(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  return String(value);
+}
+
+function unsupportedParam(definition: ModelNodeDefinition, params: Record<string, unknown>, rule: UnsupportedRule): string | null {
+  if (rule.allowed) {
+    const key = rule.param ?? '';
+    const value = effectiveValue(definition, params, key);
+    if (!hasValue(value)) return null;
+    return rule.allowed.map(matchValue).includes(matchValue(value)) ? null : key;
+  }
+  const entries = Object.entries(rule.match ?? {});
+  if (!entries.length) return null;
+  return entries.every(([key, want]) => matchValue(effectiveValue(definition, params, key)) === matchValue(want))
+    ? entries[0][0] : null;
+}
+
 /** Why the direct route can't take a run with these params, or null when it can. */
 export function directBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
   const needed = Object.hasOwn(DIRECT_REQUIRES, definition.id) ? DIRECT_REQUIRES[definition.id] : undefined;
   if (needed && !params[needed]) return { reason: 'requires', param: needed, on: null };
   for (const key of definition.directRoute?.blockedBy ?? []) {
     if (hasValue(params[key])) return { reason: 'blocked', param: key, on: null };
+  }
+  for (const rule of definition.directRoute?.unsupported ?? []) {
+    const key = unsupportedParam(definition, params, rule);
+    if (key) return { reason: 'unsupported', param: key, on: null, detail: rule.label ?? key };
   }
   const retires = Object.hasOwn(DIRECT_RETIRES, definition.id) ? DIRECT_RETIRES[definition.id] : undefined;
   if (retires && todayIso() >= retires.on) {
