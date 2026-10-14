@@ -1,4 +1,4 @@
-import type { APIProvider, ModelNodeDefinition, ParamDefinition } from '../types';
+import type { APIProvider, DirectAcceptRule, DirectSizeLimits, ModelNodeDefinition, ParamDefinition } from '../types';
 import { usesKreaAccount } from './kreaConnection';
 
 /**
@@ -23,6 +23,8 @@ export const KEY_PROVIDERS: Readonly<Record<string, APIProvider>> = {
   MINIMAX_API_KEY: 'minimax', XAI_API_KEY: 'xai', HIGGSFIELD_API_KEY: 'higgsfield',
   QUIVER_API_KEY: 'quiver', KREA_API_TOKEN: 'krea', IDEOGRAM_API_KEY: 'ideogram',
   WORLDLABS_API_KEY: 'worldlabs',
+  // BytePlus ModelArk, ByteDance's own international API (Seedream, Seedance).
+  BYTEPLUS_API_KEY: 'bytedance',
 };
 
 /** A direct route that also needs a param set, else the run takes the fallback
@@ -66,9 +68,11 @@ export const DIRECT_BLOCKED_VALUES: Readonly<Record<string, Readonly<Record<stri
  * width/height) or a value the maker can't render (DIRECT_BLOCKED_VALUES),
  * `unsupported` by a shared param's value the maker can't render
  * (directRoute.blockedWhen: Veo 3.1 Fast at 4K on Vertex), or
- * `retired` by the maker on `on` (DIRECT_RETIRES). */
+ * `retired` by the maker on `on` (DIRECT_RETIRES), `size`: the recipe's size
+ * is one the maker can't render exactly (directRoute.size), or `value`: a
+ * param's value is one the maker doesn't take (directRoute.accepts). */
 export interface DirectBlock {
-  reason: 'requires' | 'blocked' | 'unsupported' | 'retired';
+  reason: 'requires' | 'blocked' | 'unsupported' | 'retired' | 'size' | 'value';
   param: string | null;
   on: string | null;
   /** `unsupported`: the rule's label ("1080p at 10 seconds"). */
@@ -196,6 +200,53 @@ function unsupportedParam(definition: ModelNodeDefinition, params: Record<string
     ? entries[0][0] : null;
 }
 
+/** A whole-pixel width x height inside the maker's documented limits
+ * (node_route.size_fits). */
+export function sizeFits(width: unknown, height: unknown, limits: DirectSizeLimits): boolean {
+  if (typeof width !== 'number' || typeof height !== 'number') return false;
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) return false;
+  const pixels = width * height;
+  if (pixels < (limits.minPixels ?? 0) || pixels > (limits.maxPixels ?? Infinity)) return false;
+  return Math.max(width / height, height / width) <= (limits.maxAspect ?? Infinity);
+}
+
+/** `size` when the recipe's size is outside directRoute.size (node_route._size_block). */
+function sizeBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
+  const limits = definition.directRoute?.size;
+  if (!limits) return null;
+  if (limits.widthParam && limits.heightParam) {
+    const width = params[limits.widthParam];
+    const height = params[limits.heightParam];
+    if ((hasValue(width) || hasValue(height)) && !sizeFits(width, height, limits)) {
+      return { reason: 'size', param: limits.widthParam, on: null };
+    }
+  }
+  if (limits.param) {
+    const value = effectiveValue(definition, params, limits.param);
+    if (typeof value === 'string' && (limits.unsupported ?? []).includes(value)) {
+      return { reason: 'size', param: limits.param, on: null };
+    }
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const size = value as Record<string, unknown>;
+      if (!sizeFits(size.width, size.height, limits)) return { reason: 'size', param: limits.param, on: null };
+    }
+  }
+  return null;
+}
+
+/** A set value the maker takes (node_route.value_accepted): one of `values`,
+ * and/or a number (`integer`: whole) within `min`..`max`. */
+export function valueAccepted(value: unknown, rule: DirectAcceptRule): boolean {
+  if (rule.values && !rule.values.some((allowed) => allowed === value)) return false;
+  if (rule.min !== undefined || rule.max !== undefined || rule.integer !== undefined) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return false;
+    if (rule.integer && !Number.isInteger(value)) return false;
+    if (rule.min !== undefined && value < rule.min) return false;
+    if (rule.max !== undefined && value > rule.max) return false;
+  }
+  return true;
+}
+
 /** Why the direct route can't take a run with these params, or null when it can. */
 export function directBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
   const needed = Object.hasOwn(DIRECT_REQUIRES, definition.id) ? DIRECT_REQUIRES[definition.id] : undefined;
@@ -215,6 +266,12 @@ export function directBlock(definition: ModelNodeDefinition, params: Record<stri
   for (const rule of definition.directRoute?.unsupported ?? []) {
     const key = unsupportedParam(definition, params, rule);
     if (key) return { reason: 'unsupported', param: key, on: null, detail: rule.label ?? key };
+  }
+  const size = sizeBlock(definition, params);
+  if (size) return size;
+  for (const [key, rule] of Object.entries(definition.directRoute?.accepts ?? {})) {
+    const value = effectiveValue(definition, params, key);
+    if (hasValue(value) && !valueAccepted(value, rule)) return { reason: 'value', param: key, on: null };
   }
   const retires = Object.hasOwn(DIRECT_RETIRES, definition.id) ? DIRECT_RETIRES[definition.id] : undefined;
   if (retires && todayIso() >= retires.on) {

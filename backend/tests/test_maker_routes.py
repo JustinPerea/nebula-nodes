@@ -52,6 +52,15 @@ MAKER_ROUTED = {
     # ElevenLabs (test_maker_routes_elevenlabs.py)
     "elevenlabs-music", "krea-audio-elevenlabs-music", "krea-audio-elevenlabs-music-v2",
     "krea-audio-elevenlabs-music-v2-5", "krea-audio-elevenlabs-tts", "runway-tts", "runway-sts", "runway-dubbing",
+    # BytePlus ModelArk: Seedream (execution/maker_routes_byteplus.py).
+    "seedream-4-5", "krea-image-bytedance-seedream-4", "krea-image-bytedance-seedream-5-lite",
+    "krea-image-bytedance-seedream-5-pro",
+    # Seedance on BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py).
+    "seedance-2-t2v", "seedance-2-i2v", "seedance-2-r2v", "seedance-2-fast-t2v", "seedance-2-fast-i2v",
+    "seedance-v1-5", "seedance-1-0-t2v", "krea-video-bytedance-seedance-1-0-pro",
+    "krea-video-bytedance-seedance-1-0-pro-fast", "krea-video-bytedance-seedance-2",
+    "krea-video-bytedance-seedance-2-fast", "krea-video-bytedance-seedance-2-mini",
+    "krea-video-bytedance-seedance-2-5",
 }
 
 

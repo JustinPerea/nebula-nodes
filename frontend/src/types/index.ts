@@ -150,16 +150,22 @@ export interface ModelNodeDefinition {
    *  'MESHY_API_KEY' or 'GOOGLE_API_KEY'. A list means any of them, tried in
    *  order (Veo: Vertex, then Gemini API). */
   directKeyName?: string | string[];
-  /** A generated Krea node's maker route (scripts/sync-krea-catalog.py
-   *  DIRECT_ROUTES): the backend translation and the maker's model id.
-   *  `blockedBy` lists Krea-only params that keep a run on Krea when set
-   *  (the maker can't honor them; lib/directRoute.ts directBlock).
-   *  `blockedWhen` maps a shared param to values the maker can't render
-   *  (Veo 3.1 Fast at 4K on Vertex); a run with one stays on Krea.
-   *  `unsupported` lists values the maker's API rejects, which keep a run on
-   *  Krea too (MiniMax: 6 or 10 seconds only). */
+  /** A dual-route node's maker-route rules. A generated Krea node
+   *  (scripts/sync-krea-catalog.py DIRECT_ROUTES) names the backend
+   *  translation and the maker's model id; a fal node may carry only the
+   *  rules. `blockedBy` lists copy-only params that keep a run on the copy
+   *  when set (the maker can't honor them), and `size` the maker's documented
+   *  output size limits, and `accepts` the values the maker takes for a
+   *  param (lib/directRoute.ts directBlock). `blockedWhen` maps a shared
+   *  param to values the maker can't render (Veo 3.1 Fast at 4K on Vertex).
+   *  `unsupported` lists values the maker's API rejects (MiniMax: 6 or 10
+   *  seconds only). `setup: 'fallback'`
+   *  points setup at the copy's key when no key is set (BytePlus, which
+   *  doesn't serve the United States and needs each model activated, is not
+   *  the key to suggest first; lib/providerReadiness.ts). */
   directRoute?: {
-    translation: string; model: string; blockedBy?: string[];
+    translation?: string; model?: string; blockedBy?: string[]; size?: DirectSizeLimits; setup?: 'fallback';
+    accepts?: Record<string, DirectAcceptRule>;
     blockedWhen?: Record<string, ReadonlyArray<string | number | boolean>>;
     unsupported?: UnsupportedRule[];
   };
@@ -169,6 +175,30 @@ export interface ModelNodeDefinition {
    *  missing-key badge, the run estimate and the agent surfaces all read it
    *  (lib/nodeKeys.ts, backend services/node_readiness.py). */
   providerVia?: ProviderVia;
+}
+
+/** The values a maker takes for one param (directRoute.accepts); any other
+ * saved or default value keeps the run on the copy. */
+export interface DirectAcceptRule {
+  values?: readonly (string | number | boolean)[];
+  min?: number;
+  max?: number;
+  integer?: boolean;
+}
+
+/** A maker's documented output size rules for its direct route
+ *  (backend services/node_route.py _size_block). `widthParam`/`heightParam`
+ *  name an explicit size (a Krea copy's width/height); `param` names a size
+ *  choice whose `unsupported` values, or a `{width, height}` outside the
+ *  limits, keep the run on the copy. */
+export interface DirectSizeLimits {
+  minPixels?: number;
+  maxPixels?: number;
+  maxAspect?: number;
+  widthParam?: string;
+  heightParam?: string;
+  param?: string;
+  unsupported?: string[];
 }
 
 /** How a utility node reaches a provider.

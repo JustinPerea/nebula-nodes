@@ -655,6 +655,171 @@ DIRECT_ROUTES["/generate/audio/elevenlabs/tts"] = {
     "directKeyName": "ELEVENLABS_API_KEY", "translation": "krea-elevenlabs-tts",
     "model": "eleven_multilingual_v2", "kreaOnly": [], "directParams": [], "pricing": None,
 }
+# Seedream's Krea copies on BytePlus ModelArk, ByteDance's own international
+# API, with the person's BYTEPLUS_API_KEY (backend handlers/byteplus.py,
+# execution/maker_routes_byteplus.py). Read from BytePlus's docs 2026-10-14:
+# - Model ids and size rules: docs.byteplus.com/en/docs/ModelArk/image-generation-api
+#   ("Seedream 4.0 ... Total pixels range: [1280x720=921,600, 4096x4096=16,777,216]";
+#   5.0 lite "[2560x1440(3,686,400), 4096x4096(16,777,216)]"; 5.0 pro / flash
+#   "[1280x720(921,600), 2048x2048x1.1025(4,624,220)]"; "Aspect ratio range:
+#   [1/16, 16]" for all). A Krea width/height outside them stays on Krea
+#   (directSize -> directRoute.size; never resized).
+# - Seedream 5.0 lite: the model list names "seedream-5-0-260128 (also
+#   supports: seedream-5-0-lite-260128)"; the pricing page prices
+#   seedream-5-0-lite-260128, so that id is the one called.
+# - seed (default 1337) has no ModelArk equivalent: Krea-only, dropped on the
+#   maker route. style_images carry a Krea `strength` (-2..2) ModelArk can't
+#   take, so they're Krea-only and keep a run on Krea when set.
+_BYTEPLUS_PRICING_URL = "https://docs.byteplus.com/en/docs/ModelArk/model-pricing"
+_BYTEPLUS_NOTE = ("BytePlus ModelArk pay-as-you-go output price for runs on the person's BYTEPLUS_API_KEY (model "
+                  "{model}). Images that fail (content moderation) aren't billed.")
+
+
+def _byteplus_route(model, minimum, maximum, price, quote, note=""):
+    return {
+        "directKeyName": "BYTEPLUS_API_KEY", "translation": "krea-seedream", "model": model,
+        "kreaOnly": ["seed", "style_images"], "directBlockedBy": ["style_images"], "directParams": [],
+        # With no key set, setup suggests the Krea token: BytePlus doesn't
+        # serve the United States and each model needs activating first.
+        "directSetup": "fallback",
+        "directSize": {"widthParam": "width", "heightParam": "height", "minPixels": minimum,
+                       "maxPixels": maximum, "maxAspect": 16},
+        "pricing": {"provider": "bytedance", "per": "image", "priceParams": [],
+                    "rows": [{"match": {}, "price": price}],
+                    "notes": _BYTEPLUS_NOTE.format(model=model) + note,
+                    "sources": [{"url": _BYTEPLUS_PRICING_URL, "quote": quote}], "checked": "2026-10-14"},
+    }
+
+
+DIRECT_ROUTES.update({
+    "/generate/image/bytedance/seedream-4": _byteplus_route(
+        "seedream-4-0-250828", 921_600, 16_777_216, 0.03, "seedream-4-0-250828 | Free | 0.03"),
+    "/generate/image/bytedance/seedream-5-lite": _byteplus_route(
+        "seedream-5-0-lite-260128", 3_686_400, 16_777_216, 0.035, "seedream-5-0-lite-260128 | Free | 0.035"),
+    "/generate/image/bytedance/seedream-5-pro": _byteplus_route(
+        "dola-seedream-5-0-pro-260628", 921_600, 4_624_220, [0.045, 0.09],
+        "Single image generation: ≤ 2.61 million pixels (1.5K or lower): 0.045; > 2.61 million pixels "
+        "(higher than 1.5K): 0.09",
+        " The price is per output pixel tier: 0.045 USD up to 2.61 million pixels, 0.09 USD above, so a run "
+        "is quoted as that range (the price rows can't read width x height). The maker route sends no input "
+        "images (style images keep a run on Krea), so the 0.003 USD per extra input image doesn't apply."),
+})
+
+
+# Seedance's Krea copies on BytePlus ModelArk (backend
+# execution/maker_routes_byteplus_seedance.py). Read from BytePlus's docs
+# 2026-10-14 (create-video-generation-task-api, model-pricing):
+# - seed is documented for "Seedance 1.5 pro, Seedance 1.0 pro, Seedance 1.0
+#   pro fast" only, so a set seed keeps a 2.x run on Krea.
+# - Krea's effects, upscale, prompt enhancer and 2.5 draft, a start video, and
+#   reference images on 1.0 pro have no ModelArk field: set (or switched on),
+#   they keep the run on Krea. Krea's 9:21 ratio isn't one of BytePlus's
+#   ("16:9, 4:3, 1:1, 3:4, 9:16, 21:9, and adaptive"), and BytePlus's duration
+#   is whole seconds ("duration integer"; 2.5 "[4, 30]", 2.0 series "[4, 15]",
+#   1.0 pro / pro fast "[2, 12]"), so other values stay on Krea too.
+# - Price: BytePlus bills completion tokens; "Estimated token consumption =
+#   (Input video duration + Output video duration) x Output video width x
+#   Output video height x Output video frame rate / 1024", at the model's rate
+#   per resolution, for input without video. A run with a reference video
+#   bills another rate plus a minimum that depends on the input video's
+#   length, so it's unpriced (the rows need reference_videos empty).
+def _seedance_prices():
+    import importlib.util
+
+    path = ROOT / "backend/execution/byteplus_seedance_prices.py"
+    spec = importlib.util.spec_from_file_location("byteplus_seedance_prices", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _byteplus_seedance_route(model, krea_only, blocked, accepts, resolutions, ratio_rows=True,
+                             video_refs=True):
+    prices = _seedance_prices()
+    rows = []
+    for resolution in resolutions:
+        guard = {"reference_videos": ""} if video_refs else {}
+        if ratio_rows:
+            for ratio in prices.RATIOS:
+                low, high = prices.per_second(model, resolution, ratio)
+                rows.append({"match": {"resolution": resolution, "aspect_ratio": ratio, **guard},
+                             "price": round(low, 6)})
+        else:
+            low, high = prices.per_second(model, resolution)
+            rows.append({"match": {"resolution": resolution, **guard}, "price": [round(low, 6), round(high, 6)]})
+    note = (f"BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (model {model}), from "
+            "BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the "
+            "duration. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and "
+            "doesn't bill failed runs.")
+    if video_refs:
+        note += (" A run with reference videos bills a lower rate plus a minimum that depends on the input "
+                 "video's length, so it's unpriced.")
+    if not ratio_rows:
+        note += (" Seedance 2.5 keeps a start image's shape (its only frame-run ratio is adaptive), so the "
+                 "price is the range over the documented sizes for that resolution (assumes the output keeps "
+                 "the tier's pixel count, as every documented ratio does).")
+    return {
+        "directKeyName": "BYTEPLUS_API_KEY", "translation": "krea-seedance", "model": model,
+        "kreaOnly": krea_only, "directBlockedBy": blocked, "directParams": [], "directSetup": "fallback",
+        "directAccepts": accepts,
+        "pricing": {"provider": "bytedance", "per": "second", "priceParams": sorted({k for r in rows for k in r["match"]}),
+                    "rows": rows, "multiplyBy": ["duration"], "notes": note,
+                    "sources": [{"url": prices.PRICING_URL, "quote": prices.RATE_QUOTES[model]},
+                                {"url": prices.PRICING_URL, "quote": prices.TOKEN_FORMULA_QUOTE},
+                                {"url": prices.SIZES_URL, "quote": prices.SIZES_QUOTE}],
+                    "checked": prices.CHECKED},
+    }
+
+
+def _seedance_accepts(model, **switches):
+    prices = _seedance_prices()
+    shortest, longest = prices.DURATIONS[model]
+    return {"duration": {"integer": True, "min": shortest, "max": longest},
+            **{key: {"values": [False]} for key in switches}}
+
+
+def _seedance_routes():
+    prices = _seedance_prices()
+    ratios = {"aspect_ratio": {"values": list(prices.RATIOS)}}
+    return {
+        "/generate/video/bytedance/seedance-1.0-pro": _byteplus_seedance_route(
+            prices.SEEDANCE_1_0_PRO, ["start_video", "reference_images"], ["start_video", "reference_images"],
+            {**ratios, **_seedance_accepts(prices.SEEDANCE_1_0_PRO)}, ["720p", "1080p"], video_refs=False),
+        "/generate/video/bytedance/seedance-1.0-pro-fast": _byteplus_seedance_route(
+            prices.SEEDANCE_1_0_PRO_FAST, ["start_video"], ["start_video"],
+            {**ratios, **_seedance_accepts(prices.SEEDANCE_1_0_PRO_FAST)}, ["480p", "720p", "1080p"],
+            video_refs=False),
+        "/generate/video/bytedance/seedance-2": _byteplus_seedance_route(
+            prices.SEEDANCE_2_0, ["seed", "effects", "upscale", "enhance_prompt"], ["seed", "effects"],
+            _seedance_accepts(prices.SEEDANCE_2_0, upscale=1, enhance_prompt=1), ["480p", "720p", "1080p", "4k"]),
+        "/generate/video/bytedance/seedance-2-fast": _byteplus_seedance_route(
+            prices.SEEDANCE_2_0_FAST, ["seed", "effects", "upscale", "enhance_prompt"], ["seed", "effects"],
+            _seedance_accepts(prices.SEEDANCE_2_0_FAST, upscale=1, enhance_prompt=1), ["480p", "720p"]),
+        "/generate/video/bytedance/seedance-2-mini": _byteplus_seedance_route(
+            prices.SEEDANCE_2_0_MINI, ["seed"], ["seed"], _seedance_accepts(prices.SEEDANCE_2_0_MINI),
+            ["480p", "720p"]),
+        "/generate/video/bytedance/seedance-2-5": _byteplus_seedance_route(
+            prices.SEEDANCE_2_5, ["seed", "effects", "enhance_prompt", "draft"], ["seed", "effects"],
+            _seedance_accepts(prices.SEEDANCE_2_5, enhance_prompt=1, draft=1), ["480p", "720p", "1080p"],
+            ratio_rows=False),
+    }
+
+
+DIRECT_ROUTES.update(_seedance_routes())
+
+
+def _accepted(value, rule):
+    """backend services/node_route.py value_accepted, for a default (stdlib only)."""
+    if "values" in rule and not any(type(value) is type(allowed) and value == allowed for allowed in rule["values"]):
+        return False
+    if any(key in rule for key in ("min", "max", "integer")):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return False
+        if rule.get("integer") and not float(value).is_integer():
+            return False
+        if value < rule.get("min", value) or value > rule.get("max", value):
+            return False
+    return True
 
 
 def direct_route_definition(endpoint, params):
@@ -681,6 +846,19 @@ def direct_route_definition(endpoint, params):
         if param.get("default") in values:
             # The default would block the maker route for every new node.
             raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedWhen blocks {key}'s default")
+    size = route.get("directSize")
+    size_keys = {size[k] for k in ("widthParam", "heightParam", "param") if size and size.get(k)}
+    if size_keys & set(route["kreaOnly"]) or size_keys - keys:
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: directSize must name shared Krea fields")
+    accepts = route.get("directAccepts") or {}
+    if set(accepts) - keys:
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: directAccepts names fields Krea doesn't take: "
+                         f"{sorted(set(accepts) - keys)}")
+    for param in params:
+        rule = accepts.get(param["key"])
+        if rule is not None and param.get("default") is not None and not _accepted(param["default"], rule):
+            # A refused default would block the maker route for every new node.
+            raise ValueError(f"DIRECT_ROUTES {endpoint}: directAccepts refuses {param['key']}'s default")
     clash = sorted(keys & {param["key"] for param in route["directParams"]})
     if clash:
         raise ValueError(f"DIRECT_ROUTES {endpoint}: directParams repeat Krea fields: {clash}")
@@ -698,7 +876,10 @@ def direct_route_definition(endpoint, params):
         "directRoute": {"translation": route["translation"], "model": route["model"],
                         **({"blockedBy": list(blocked)} if blocked else {}),
                         **({"blockedWhen": {k: list(v) for k, v in blocked_when.items()}} if blocked_when else {}),
-                        **({"unsupported": [dict(rule) for rule in unsupported]} if unsupported else {})},
+                        **({"unsupported": [dict(rule) for rule in unsupported]} if unsupported else {}),
+                        **({"size": dict(size)} if size else {}),
+                        **({"accepts": {key: dict(rule) for key, rule in accepts.items()}} if accepts else {}),
+                        **({"setup": route["directSetup"]} if route.get("directSetup") else {})},
     }
 
 
@@ -709,7 +890,9 @@ def direct_route_pricing(endpoint):
     pricing = dict(route["pricing"])
     provider = pricing.pop("provider")
     if provider != "google":
-        # Other makers' entries are complete as written (notes, sources, checked).
+        # A maker whose overlay entry is the whole price (sources, notes and
+        # checked date included); the Google reference-image range below is
+        # Gemini-specific.
         return provider, {"currency": "usd", **pricing}
     model = route["model"]
     note_extra = pricing.pop("noteExtra", "")

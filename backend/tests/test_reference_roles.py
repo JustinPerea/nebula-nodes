@@ -179,6 +179,52 @@ APPROVED_DUAL_ROUTE_SPLITS.update({
         "order": ["targetLang", "disableVoiceCloning", "dropBackgroundAudio", "numSpeakers"],
     },
 })
+# Seedream on BytePlus ModelArk (2026-10-14, execution/maker_routes_byteplus.py):
+# BYTEPLUS_API_KEY joins envKeyName as the direct key, the unchanged params
+# split into sharedParams (model, image_size, num_images, max_images) +
+# falParams (enable_safety_checker, seed), and the exact directRoute rules
+# below are the only new field.
+APPROVED_DUAL_ROUTE_SPLITS["seedream-4-5"] = {
+    "envKeyName": ("FAL_KEY", ["BYTEPLUS_API_KEY", "FAL_KEY"]), "directKeyName": "BYTEPLUS_API_KEY",
+    "falParams": ["enable_safety_checker", "seed"],
+    "order": ["model", "image_size", "num_images", "max_images", "enable_safety_checker", "seed"],
+}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedream-4-5"] = {"directRoute": {
+    "setup": "fallback",
+    "blockedBy": ["seed"],
+    "size": {"param": "image_size", "minPixels": 3686400, "maxPixels": 16777216, "maxAspect": 16,
+             "unsupported": ["square"]},
+    # Review fix: ModelArk always runs its own content filter, so fal's
+    # safety checker switched off keeps the run on fal.
+    "accepts": {"enable_safety_checker": {"values": [True]}},
+}}
+# Seedance on BytePlus ModelArk (2026-10-14,
+# execution/maker_routes_byteplus_seedance.py): BYTEPLUS_API_KEY joins
+# envKeyName as the direct key and the unchanged params split into
+# sharedParams + falParams (seed on the 2.x nodes, which BytePlus documents
+# for 1.x only; enable_safety_checker on 1.0 T2V). The exact directRoute rules
+# below are the only new field.
+_SEEDANCE_2_ORDER = ["aspect_ratio", "duration", "resolution", "generate_audio", "seed"]
+for _node_id in ("seedance-2-t2v", "seedance-2-i2v", "seedance-2-r2v", "seedance-2-fast-t2v", "seedance-2-fast-i2v"):
+    APPROVED_DUAL_ROUTE_SPLITS[_node_id] = {
+        "envKeyName": ("FAL_KEY", ["BYTEPLUS_API_KEY", "FAL_KEY"]), "directKeyName": "BYTEPLUS_API_KEY",
+        "falParams": ["seed"], "order": _SEEDANCE_2_ORDER,
+    }
+    APPROVED_TOP_LEVEL_FIELD_ADDITIONS[_node_id] = {"directRoute": {"setup": "fallback", "blockedBy": ["seed"]}}
+APPROVED_DUAL_ROUTE_SPLITS["seedance-v1-5"] = {
+    "envKeyName": ("FAL_KEY", ["BYTEPLUS_API_KEY", "FAL_KEY"]), "directKeyName": "BYTEPLUS_API_KEY",
+    "falParams": [], "order": ["model", "duration", "aspect_ratio", "resolution", "generate_audio", "camera_fixed",
+                               "seed"],
+}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedance-v1-5"] = {"directRoute": {"setup": "fallback"}}
+APPROVED_DUAL_ROUTE_SPLITS["seedance-1-0-t2v"] = {
+    "envKeyName": ("FAL_KEY", ["BYTEPLUS_API_KEY", "FAL_KEY"]), "directKeyName": "BYTEPLUS_API_KEY",
+    "falParams": ["enable_safety_checker"],
+    "order": ["aspect_ratio", "resolution", "duration", "camera_fixed", "seed", "enable_safety_checker"],
+}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedance-1-0-t2v"] = {"directRoute": {
+    "setup": "fallback", "accepts": {"enable_safety_checker": {"values": [True]}},  # review fix, as Seedream
+}}
 # Direct maker routes, review fix (2026-10-14): Meshy's own image-to-3D API
 # takes texture_prompt ("Provide a text prompt to guide the texturing
 # process", https://docs.meshy.ai/en/api/image-to-3d), so it moves from
@@ -536,22 +582,41 @@ def test_approved_art_direction_normalization_preserves_fixture_and_other_fields
     # identity-edit's params live in sharedParams since its Google route (2026-10-14).
     ("identity-edit", "sharedParams", "identity_strength", "disabledReason", "Strength works"),
     ("reference-set", "params", "style_weight", "label", "Style Strength"),
-    ("seedream-4-5", "params", "seed", "visibleWhen", {"model": ["4.5", "5.0-lite"]}),
+    ("seedream-4-5", "falParams", "seed", "visibleWhen", {"model": ["4.5", "5.0-lite"]}),
+    ("seedream-4-5", None, None, "directKeyName", "FAL_KEY"),
     ("identity-edit", "inputPorts", "mask", "label", "Mask"),
 ])
 def test_approved_art_direction_values_cannot_drift(definitions, node_id, section, selector, field, value):
     changed = deepcopy(definitions[node_id])
     target = changed if section is None else _sole_entry(
-        changed[section], "key" if section in ("params", "sharedParams") else "id", selector,
+        changed[section], "key" if section.endswith(("params", "Params")) else "id", selector,
     )
     target[field] = value
     with pytest.raises(AssertionError):
         _node_fingerprint(node_id, changed)
 
 
+@pytest.mark.parametrize("change", [
+    lambda node: _sole_entry(node["sharedParams"], "key", "image_size").update(default="landscape_16_9"),
+    lambda node: node["falParams"].reverse(),
+    lambda node: node["sharedParams"].append(node["falParams"].pop()),
+    lambda node: node["directRoute"]["size"].update(minPixels=921600),
+])
+def test_seedream_route_split_still_fingerprints_every_param(definitions, change):
+    """The approved BytePlus split rebuilds the baseline params, so a real
+    param edit, a regrouping or a looser size rule still fails."""
+    changed = deepcopy(definitions["seedream-4-5"])
+    change(changed)
+    try:
+        fingerprint = _node_fingerprint("seedream-4-5", changed)
+    except AssertionError:
+        return
+    assert fingerprint != _baseline_fingerprints()["seedream-4-5"]
+
+
 def test_seedream_auto_3k_approved_visibility_cannot_expand(definitions):
     changed = deepcopy(definitions["seedream-4-5"])
-    sizes = _sole_entry(changed["params"], "key", "image_size")
+    sizes = _sole_entry(changed["sharedParams"], "key", "image_size")
     _sole_entry(sizes["options"], "value", "auto_3K")["visibleWhen"] = {"model": ["4.5", "5.0-lite"]}
     with pytest.raises(AssertionError):
         _node_fingerprint("seedream-4-5", changed)

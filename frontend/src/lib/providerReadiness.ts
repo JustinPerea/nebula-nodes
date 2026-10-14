@@ -38,7 +38,7 @@ export const PROVIDER_KEY_LABELS: Readonly<Record<string, string>> = {
   MESHY_API_KEY: 'Meshy', RUNWAY_API_KEY: 'Runway', ELEVENLABS_API_KEY: 'ElevenLabs',
   MINIMAX_API_KEY: 'MiniMax', XAI_API_KEY: 'xAI', HIGGSFIELD_API_KEY: 'Higgsfield',
   QUIVER_API_KEY: 'QuiverAI', KREA_API_TOKEN: 'Krea', KREA_USAGE_KEY: 'Krea usage', IDEOGRAM_API_KEY: 'Ideogram',
-  WORLDLABS_API_KEY: 'World Labs',
+  WORLDLABS_API_KEY: 'World Labs', BYTEPLUS_API_KEY: 'BytePlus',
 };
 
 export function providerCheckIsCurrent(entry: ProviderHealthEntry | undefined, completedAt: number | null, now = Date.now()): entry is ProviderHealthEntry {
@@ -139,11 +139,14 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
   // With none of a multi-route node's keys set, setup points at the maker's
   // key, unless this recipe can't take the direct route (directBlock: Ideogram
   // Reframe saved without a direct resolution, a Krea copy with explicit
-  // width/height, or a model the maker has retired).
+  // width/height, a size the maker can't render exactly, a value the maker
+  // doesn't take, or a model the maker has retired), or the node asks to
+  // suggest the copy's key first (directRoute.setup: BytePlus Seedream).
   const route = selectRoute(def, params, cache.loaded ? cache.apiKeys : {});
   const block = keys.length > 1 && directKeyNames(def).length ? directBlock(def, params) : null;
   const directOk = block === null;
-  const key = route.key ?? (directOk ? directKeyNames(def)[0] : fallbackKeyNames(def)[0]) ?? keys[0];
+  const suggestDirect = directOk && def.directRoute?.setup !== 'fallback';
+  const key = route.key ?? (suggestDirect ? directKeyNames(def)[0] : fallbackKeyNames(def)[0]) ?? keys[0];
   const ready = keyReadiness(key, cache, health);
   const blockNote = block ? ` ${directBlockNote(def, block, params)}` : '';
   return { ...ready, connectionLabel: connectionLabelFor(key),
@@ -171,6 +174,12 @@ function directBlockNote(def: ModelNodeDefinition, block: DirectBlock, params: R
     if (block.detail) return `${directName}'s own API doesn't take ${block.detail}, so it runs on ${fallbackName}.`;
     const value = block.param ? (params[block.param] ?? 'its default') : 'this setting';
     return `${directName}'s own API can't run ${block.param} ${String(value)} for this model, so it runs on ${fallbackName}.`;
+  }
+  if (block.reason === 'size') {
+    return `${directName} can't render this recipe's ${block.param} exactly, so it runs on ${fallbackName}. Pick a size ${directName} takes to run on ${directName}.`;
+  }
+  if (block.reason === 'value') {
+    return `${directName} doesn't take this recipe's ${block.param} setting, so it runs on ${fallbackName}. Change it to run on ${directName}.`;
   }
   return `${directName} retires this model on its own API from ${block.on}, so it runs on ${fallbackName}.`;
 }

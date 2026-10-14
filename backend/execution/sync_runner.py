@@ -1577,7 +1577,13 @@ def get_handler_registry(
         registry["seedvr2-upscale"] = _seedvr2_upscale_handler
         registry["clarity-upscaler"] = _clarity_upscaler_handler
         registry["seedvr-video-upscale"] = _seedvr_video_upscale_handler
-        registry["seedream-4-5"] = _seedream45_handler
+        # Seedream 4.5 / 5.0 Lite on BytePlus ModelArk with BYTEPLUS_API_KEY,
+        # else on fal (execution/maker_routes_byteplus.py).
+        from execution import maker_routes_byteplus
+        registry["seedream-4-5"] = maker_routes.dual_route(
+            direct=maker_routes_byteplus.byteplus_seedream, fallback=_seedream45_handler,
+            translate=maker_routes_byteplus.seedream_fal_to_byteplus,
+        )
         registry["esrgan-upscale"] = _esrgan_upscale_handler
         registry["recraft-crisp-upscale"] = _recraft_crisp_upscale_handler
         registry["pika-i2v"] = _pika_i2v_handler
@@ -1591,6 +1597,15 @@ def get_handler_registry(
         registry["wan-animate-replace"] = _wan_animate_replace_handler
         registry["kling-video-to-audio"] = _kling_video_to_audio_handler
         registry["seedance-1-0-t2v"] = _seedance_1_0_t2v_handler
+        # Seedance on BytePlus ModelArk with BYTEPLUS_API_KEY, else on fal
+        # (execution/maker_routes_byteplus_seedance.py).
+        from execution import maker_routes_byteplus_seedance as _seedance_routes
+        for _seedance_id in ("seedance-2-t2v", "seedance-2-i2v", "seedance-2-r2v", "seedance-2-fast-t2v",
+                             "seedance-2-fast-i2v", "seedance-v1-5", "seedance-1-0-t2v"):
+            registry[_seedance_id] = maker_routes.dual_route(
+                direct=partial(_seedance_routes.byteplus_seedance, emit=emit), fallback=registry[_seedance_id],
+                translate=_seedance_routes.fal_to_byteplus,
+            )
         registry["ltx-audio-to-video"] = _ltx_audio_to_video_handler
         registry["video-understanding"] = _video_understanding_handler
         registry["ltx-2-3-fast-t2v"] = _ltx_2_3_fast_t2v_handler

@@ -296,6 +296,15 @@ from execution.maker_routes_minimax_meshy import TRANSLATIONS as _MINIMAX_MESHY 
 
 KREA_TRANSLATIONS.update(_MINIMAX_MESHY)
 
+# Seedream on BytePlus ModelArk (execution/maker_routes_byteplus.py).
+from execution import maker_routes_byteplus as _byteplus  # noqa: E402
+
+KREA_TRANSLATIONS["krea-seedream"] = (_byteplus.krea_byteplus_seedream, _byteplus.krea_seedream_to_byteplus)
+# Seedance on BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py).
+from execution import maker_routes_byteplus_seedance as _seedance  # noqa: E402
+
+KREA_TRANSLATIONS["krea-seedance"] = (_seedance.krea_byteplus_seedance, _seedance.krea_to_byteplus)
+
 
 def krea_router(definition_id: str, fallback: Handler, emit: Any = None) -> Handler | None:
     """The dual-route handler for a generated Krea node with a maker route, or

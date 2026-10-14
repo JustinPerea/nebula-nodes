@@ -4118,3 +4118,137 @@ v1 language list, Krea's openapi.json, Runway's llms-full.txt). Model ids, endpo
   shared rule would touch Ideogram too. A Runway STS run with only video wired and a `voice_id` set is
   refused on the ElevenLabs route rather than sent to Runway (documented; ffmpeg extraction is the
   follow-up). The legacy dubbing page gives no `watermark` default; the route stays unpriced either way.
+
+## 2026-10-14 — BytePlus ModelArk provider + Seedream direct routes
+
+Step 1 of 2 on `byteplus-provider` (Seedance video is step 2). Vendor facts were read from docs.byteplus.com
+on 2026-10-14 and are quoted in `backend/handlers/byteplus.py`, `backend/execution/maker_routes_byteplus.py`
+and `docs/api-guides/byteplus.md`. No live calls, keys or paid runs; tests use a fake ModelArk (httpx.MockTransport).
+
+- **Provider id reuses `bytedance`.** `KEY_PROVIDERS["BYTEPLUS_API_KEY"] = "bytedance"` (the APIProvider that already
+  existed) instead of a new `byteplus` id, so fewer shared enums change. User-facing text says "BytePlus" through the
+  key label. Key name `BYTEPLUS_API_KEY`, distinct from Volcengine's `ARK_API_KEY`.
+- **Asia Pacific only.** Base URL `https://ark.ap-southeast.bytepluses.com/api/v3`; keys and activation are per region.
+  No region setting (follow-up). EU Seedream support is NOT CONFIRMED: the model list and region-availability disagree.
+- **US terms are shown, not enforced.** The Settings row's new `caveat` quotes the Service Specific Terms ("not
+  available in the United States") and the activation step. Nebula doesn't geo-check anything.
+- **`directRoute.setup: 'fallback'`** (new, additive): with no key saved, readiness points first-time setup at the fal or
+  Krea key, not BytePlus, so a US user isn't sent to a service they can't use.
+- **New shared `size` block reason** (`node_route.py` `_size_block`/`size_fits`, mirrored in `directRoute.ts`).
+  `directRoute.size` names a size param (or width/height pair) plus min/max pixels and max aspect; a value outside them
+  keeps the run on the copy, worded in readiness. Chose "block" over "nearest valid size" because the rules say never
+  change a recipe to fit.
+- **fal shaped presets map to ModelArk's 2K-table size for that aspect** (square_hd 2048x2048, 4:3 2304x1728,
+  16:9 2848x1600, and portraits). fal doesn't publish its presets' pixel sizes, so the aspect is exact but the pixel
+  count may differ from what fal renders. `square` (512x512) stays on fal. If Justin prefers the strict reading,
+  add every shaped preset to `size.unsupported`.
+- **`auto_*` → tiers 2K/3K/4K.** `auto_3K` on model 4.5 stays on fal (4.5 has no 3K tier).
+- **num_images = N separate requests; max_images > 1 = `sequential_image_generation: auto`.** Matches fal's own
+  definitions ("separate model generations" / "up to max_images"). The price is per generated image, so the estimate
+  is a range from 1 to max_images, times num_images. The port shows the first image; every image is saved.
+- **seed.** fal `seed` is a blocker (ModelArk has none). It also blocks for model 5.0-lite, where fal itself omits it;
+  a minor edge case. Krea's `seed` has a default (1337), so it can't be a blocker; it's kreaOnly and dropped on direct.
+- **Krea `style_images` is a blocker** (per-image `strength` has no ModelArk field), so the Krea direct route is
+  text-to-image only; a wired one raises if it ever reaches the translator.
+- **Seedream 5 Pro priced as [0.045, 0.09]** because price rows can't read width x height (the price changes at 2.61 MP).
+  Its Krea price stays unmapped, so only the `bytedance` route is priced.
+- **Key never probed.** BytePlus documents no free read-only check, so `PROVIDER_CHECKS["BytePlus"]` has no URL and
+  the key stays `configured_unverified`.
+- **`QuotaExceeded` is still classified as rate_limit (retryable)** by the shared error classifier, although BytePlus
+  also uses it for an exhausted free trial. The message explains both meanings; changing the classifier was out of scope.
+- **Step 2 hooks.** `handlers/byteplus.request()` is generic (method, path, json) for
+  `POST /contents/generations/tasks` and `GET`/`DELETE /contents/generations/tasks/{id}`; `explain()` already covers
+  Seedance's USD 30 activation rule.
+- **Sync generator** (`scripts/sync-krea-catalog.py`): the overlay now emits `directRoute.size` and `setup`, validates
+  that size param names are shared fields, and `direct_route_pricing` passes a non-Google overlay price through as-is.
+- **Desktop tests** pinned 18 providers; now 19. `sidecar.test.mjs` needs `ws`, which the worktree's `desktop/` has
+  no `node_modules` for; it passed with a temporary symlink to the main checkout's, removed afterwards.
+- **Not mirrored to `.claude/skills/`**: that tree is already a stale copy of `.agents/skills/` (fal and krea differ),
+  and nothing syncs it.
+
+## 2026-10-14 — BytePlus Seedance direct routes
+
+Step 2 of the BytePlus lane. Seven fal Seedance nodes (`seedance-2-t2v`, `-2-i2v`, `-2-r2v`, `-2-fast-t2v`,
+`-2-fast-i2v`, `seedance-v1-5` for both its 1.5 and 1.0 choices, `seedance-1-0-t2v`) and six Krea copies
+(`krea-video-bytedance-seedance-1-0-pro`, `-1-0-pro-fast`, `-2`, `-2-fast`, `-2-mini`, `-2-5`) gained a direct route
+on ModelArk video tasks. `runway-video`'s Seedance options were left alone (Runway is a reseller). No live calls.
+
+- **New route reason `value` (`directRoute.accepts`).** Krea's `upscale`, `enhance_prompt` and `draft` default to
+  `False`, so they can't be `blockedBy` blockers (blockers can't have defaults); Krea offers a 9:21 ratio BytePlus
+  lacks; Krea durations are floats. `accepts` lists the values (or integer min/max) the direct route takes; any
+  other value keeps the run on the copy, worded in readiness ("doesn't take this recipe's X setting"). Added to
+  `services/node_route.py`, mirrored in `frontend/src/lib/directRoute.ts`, emitted by the sync script's overlay
+  (`directAccepts`), which checks that the keys are Krea fields and the defaults are accepted.
+- **Seed on 2.x stays on the copy.** BytePlus lists `seed`/`camera_fixed` for "Seedance 1.5 pro, 1.0 pro, 1.0 pro
+  fast" only. So `seed` is a fal-only blocker on the five 2.0 fal nodes and a Krea-only blocker on the 2.x copies,
+  and the translator never sends a seed to 2.x. On 1.x (`seedance-v1-5`) seed and camera_fixed are shared.
+- **Inputs a route check can't see raise instead of falling back.** `select_route` reads params, not wired ports, so
+  a wired `start_video`/`effects`, references on 1.0, frames mixed with references ("cannot be mixed"), too many
+  references, audio-only input on 2.0, and a local reference video (the API takes "Video URL or asset ID" only) raise
+  a clear error before any request. Same precedent as Seedream's wired `style_images`.
+- **Seedance 2.5 frame runs send ratio `adaptive`**, the only value BytePlus takes for them. How Krea treats the
+  recipe's ratio there isn't known.
+- **Task lifetime.** Every task sends `execution_expires_after: 3600` (allowed 3600–259200) and `watermark: false`.
+  Polling every 5 s, giving up after 3900 s with a DELETE. DELETE only cancels a queued task; a running one finishes
+  and is billed if it succeeds. The `video_url` (24 h) is saved as soon as the task succeeds.
+- **`krea_router` gained an optional `emit`** passed to handlers marked `takes_emit`, so Krea Seedance runs report
+  progress. Progress is a heuristic; BytePlus reports no percentage.
+- **Prices from the token formula** (model-pricing), per video, using the API's size table at 24 fps. Each row is a
+  range over the documented ratio sizes; fal `auto` duration spans the model's range; runs with reference videos are
+  unpriced (different rate plus a minimum). The adaptive-ratio assumption is that output keeps the tier's pixel count
+  (NOT CONFIRMED). The fal route stays unpriced, as before. `usage.completion_tokens` is only logged; recording actual
+  cost is a follow-up.
+- **No DIRECT_RETIRES entry for Seedance 1.5 pro**: the model list says "Retiring" with no date.
+- **Dropped on direct:** `generate_audio` on 1.0 (silent model), `enable_safety_checker` on `seedance-1-0-t2v`
+  (fal-only, like Seedream).
+- **NOT CONFIRMED:** seed on 2.x; the `mp3` token in `data:audio/mp3;base64,` (docs: `data:audio/<audio format>`);
+  the exact HTTP error envelope; adaptive output size; live behavior.
+- **Tests touched in shared suites:** `test_krea_catalog.py` (`krea_priced` also needs a `pricing` block; the Krea
+  Seedance 1.0 Pro entry has none), `test_maker_routes.py` (13 more maker-routed nodes), `test_reference_roles.py`
+  (approvals for the seven fal splits), `route_cases.json` (12 cases).
+
+### BytePlus lane: review fixes (2026-10-14)
+
+An independent review of the whole lane (`direct-maker-routes...byteplus-provider`). Vendor pages were re-read
+today from docs.byteplus.com (model-pricing, image-generation-api, create-video-generation-task-api, model-list,
+base-url-and-authentication). They're a JS app, so the MDContent markdown was pulled from each page's
+`_ROUTER_DATA`. Every price, size window, ratio list, duration range and model id the lane relies on matched. The
+pricing page's own worked examples (Seedance 2.0 4K 0.78/s, 2.5 480p 0.514 per 5 s video, 1.5 pro 0.12, 1.0 pro
+token counts) reproduce from the token formula and size tables.
+
+Fixed (each with a test that fails when the fix is reverted):
+
+- **An unsaved Seedance setting read BytePlus's default, not the node's.** `fal_to_byteplus` filled a missing
+  `duration` with `-1` and a missing `aspect_ratio` with `adaptive`. A node added by the CLI or an agent can save only
+  some params, and the price (`model_pricing.effective_params`) reads the definition defaults. So `seedance-v1-5`
+  saved with only `model` was quoted for 5 s but asked BytePlus for `-1`, which lets 1.5 pro run up to 12 s (2.4x the
+  spend gate's high bound). On `seedance-1-0-t2v` it sent `-1` (1.0 takes `[2, 12]` only) and `adaptive` (1.0
+  text-to-video "Does not support `adaptive`"), a refused request. Both translators now read a missing setting from
+  the node definition (`_setting`). The new test checks the request and that the estimate's high bound covers it.
+- **Seedream sent `sequential_image_generation: disabled` on every single-image request**, including Krea's Seedream
+  5.0 pro, which doesn't take the field ("Single image generation: **sequential_image_generation** is not
+  supported"; its supported models are 5.0 lite, 4.5 and 4.0). `disabled` is the default, so the field now goes only
+  with a batch (`max_images` > 1, fal 4.5 / 5.0 lite).
+- **fal's safety checker switched off was dropped silently.** `enable_safety_checker` defaults to true, so it can't
+  be a blocker, but ModelArk always runs its own content filter and can't honor `false`. `seedream-4-5` and
+  `seedance-1-0-t2v` gain `directRoute.accepts: {enable_safety_checker: {values: [true]}}`, so a recipe that turned
+  it off stays on fal (readiness: "BytePlus doesn't take this recipe's enable_safety_checker setting"). Approvals in
+  `test_reference_roles.py` name the exact rule; three route cases cover both nodes.
+- The BytePlus Settings row said "Seedream on ByteDance's own API" after Seedance landed; it now names both.
+
+Refuted or left as the builder decided:
+
+- Krea Seedream's `seed` stays dropped on BytePlus. Krea's spec ships a random example seed as the default and the
+  graph saves defaults, so a set seed can't be told from the default, and an `accepts` pin to 1337 would break on the
+  next spec refresh.
+- Route precedence (Krea plan, then maker key, then copy) matches on both sides and is covered by
+  `route_cases.json`; size and accepts rules were mutation-checked on both sides.
+- 2.0 4K at 4.0 per million tokens looks low but is BytePlus's figure, and its 4K example (0.78 USD/s) confirms it.
+
+Open (not fixed here):
+
+- A transient error on a Seedance poll (`GET` 5xx or network) fails the run while the task keeps running and is
+  billed. The shared `async_poll_runner` behaves the same for other providers; a retry belongs there too.
+- A Cinema scene with a Character bundle injects a seed per shot, which keeps that shot on fal. The scene's price is
+  read from the base params, which have no seed, so with a BytePlus key it's quoted at the BytePlus price while the
+  shot bills fal (unpriced). With only a BytePlus key the shot fails with a missing FAL_KEY.

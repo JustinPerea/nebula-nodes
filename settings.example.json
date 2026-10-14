@@ -1,6 +1,7 @@
 {
   "apiKeys": {
     "ANTHROPIC_API_KEY": "",
+    "BYTEPLUS_API_KEY": "",
     "ELEVENLABS_API_KEY": "",
     "FAL_KEY": "",
     "GOOGLE_API_KEY": "",

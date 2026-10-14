@@ -1,6 +1,6 @@
 # Nebula Nodes - API Guides
 
-Nebula integrates **17 external AI/media API families** (image, video, audio, 3D/world, text/LLM, and SVG). This directory holds the **user-facing guide** for each provider plus a **coverage + agent-skill audit** measuring how much of each provider's API surface Nebula actually wires up, and whether an agent skill exists to drive those nodes.
+Nebula integrates **18 external AI/media API families** (image, video, audio, 3D/world, text/LLM, and SVG). This directory holds the **user-facing guide** for each provider plus a **coverage + agent-skill audit** measuring how much of each provider's API surface Nebula actually wires up, and whether an agent skill exists to drive those nodes.
 
 Per-provider guides live alongside this file at `./<provider>.md` (e.g. [`./fal.md`](./fal.md)).
 
@@ -19,6 +19,7 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 | [ElevenLabs](./elevenlabs.md) | 6 | ~33% | complete | Music generation (prompt-to-music + stems) — no node |
 | [MiniMax (Hailuo)](./minimax.md) | 3 | ~12% | complete | Entire audio stack: TTS (40+ languages), voice cloning, voice design |
 | [Krea](./krea.md) | 3 | ~10% | complete | Video generation entirely unused (Veo, Kling, Runway, Hailuo, Seedance, Wan, Ray 2, LTX, Grok — 30+ models) |
+| [BytePlus ModelArk](./byteplus.md) | 5 (as direct routes) | Seedream images only | complete | Seedance video tasks API (step 2); Seedream 5.0 flash; eu-west-1 region |
 | [QuiverAI (Arrow)](./quiver.md) | 2 | ~85% | complete | No user-facing model browser (GET /v1/models data only fills the dropdown) |
 | [World Labs (Marble)](./worldlabs.md) | 2 | ~42% | complete | World/media lifecycle, listing, sharing, and depth-panorama conversion are not exposed as nodes |
 | [xAI (Grok Imagine)](./xai.md) | 1 | ~20% | complete | Image generation (grok-imagine-image / -quality) — entire text-to-image modality absent |

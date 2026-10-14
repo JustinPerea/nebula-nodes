@@ -293,6 +293,15 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
         lambda key: {},
         local_validator=validate_google_service_account_json,
     ),
+    # BytePlus ModelArk (Seedream, Seedance). BytePlus documents no free,
+    # read-only data-plane call an API key can make (its management APIs use
+    # AK/SK signing on another host), so the key is never probed: a check
+    # would mean a paid generation. Status stays configured_unverified.
+    "BytePlus": ProviderCheck(
+        ("BYTEPLUS_API_KEY",),
+        "",
+        lambda key: {"Authorization": f"Bearer {key}"},
+    ),
     "Higgsfield": ProviderCheck(
         ("HIGGSFIELD_API_KEY",),
         "",

@@ -152,6 +152,28 @@ ElevenLabs ids) and `krea-audio-elevenlabs-music`, `-music-v2`, `-music-v2-5`
 Krea-only on these, so there is no blocker. The music copies carry an
 ElevenLabs route price ($0.15 per minute from `music_length_ms`); TTS has none.
 
+## Maker routes (Seedream on your BytePlus key)
+
+The Seedream copies `krea-image-bytedance-seedream-4` (`seedream-4-0-250828`),
+`-seedream-5-lite` (`seedream-5-0-lite-260128`) and `-seedream-5-pro`
+(`dola-seedream-5-0-pro-260628`) also run on BytePlus ModelArk with the
+person's `BYTEPLUS_API_KEY`, same precedence as above (Krea plan, then the
+maker key, then `KREA_API_TOKEN`). Also from the `DIRECT_ROUTES` overlay:
+`style_images` is a blocker (set ones stay on Krea), `seed` is Krea-only and
+dropped on BytePlus, and `directRoute.size` keeps a width x height outside
+ModelArk's pixel limits on Krea. `directRoute.setup: "fallback"` keeps
+first-time setup on the Krea token, because BytePlus isn't offered in the
+United States. Details: the `byteplus` skill.
+
+The Seedance copies `krea-video-bytedance-seedance-1-0-pro`, `-1-0-pro-fast`,
+`-2`, `-2-fast`, `-2-mini` and `-2-5` take the same BytePlus route (ModelArk
+video tasks). Blockers: `seed` (2.x), `effects` (2.0, 2.0 fast, 2.5),
+`start_video` (1.0), `reference_images` (1.0 pro). `directRoute.accepts`
+keeps Krea-only values on Krea: an `aspect_ratio` ModelArk lacks (9:21), a
+non-whole or out-of-range `duration`, and `upscale` / `enhance_prompt` /
+`draft` switched on. On BytePlus the node fills `video`, `videos` and
+`artifacts`, with no Krea `job`.
+
 ## Gateway Model Nodes
 
 The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108) included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.

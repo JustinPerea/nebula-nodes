@@ -2288,51 +2288,124 @@
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-bytedance-seedream-4": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token"
-          },
-          "price": 0.03
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token"
+              },
+              "price": 0.03
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/image/bytedance/seedream-4 (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
+        },
+        "bytedance": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": 0.03
+            }
+          ],
+          "notes": "BytePlus ModelArk pay-as-you-go output price for runs on the person's BYTEPLUS_API_KEY (model seedream-4-0-250828). Images that fail (content moderation) aren't billed.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedream-4-0-250828 | Free | 0.03"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/image/bytedance/seedream-4 (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-bytedance-seedream-5-lite": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token"
-          },
-          "price": 0.035
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token"
+              },
+              "price": 0.035
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/image/bytedance/seedream-5-lite (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
+        },
+        "bytedance": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": 0.035
+            }
+          ],
+          "notes": "BytePlus ModelArk pay-as-you-go output price for runs on the person's BYTEPLUS_API_KEY (model seedream-5-0-lite-260128). Images that fail (content moderation) aren't billed.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedream-5-0-lite-260128 | Free | 0.035"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/image/bytedance/seedream-5-lite (spec sha256 9d5dd91a9e81)"
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-bytedance-seedream-5-pro": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": [
+                0.045,
+                0.09
+              ]
+            }
+          ],
+          "notes": "BytePlus ModelArk pay-as-you-go output price for runs on the person's BYTEPLUS_API_KEY (model dola-seedream-5-0-pro-260628). Images that fail (content moderation) aren't billed. The price is per output pixel tier: 0.045 USD up to 2.61 million pixels, 0.09 USD above, so a run is quoted as that range (the price rows can't read width x height). The maker route sends no input images (style images keep a run on Krea), so the 0.003 USD per extra input image doesn't apply.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Single image generation: ≤ 2.61 million pixels (1.5K or lower): 0.045; > 2.61 million pixels (higher than 1.5K): 0.09"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-google-nano-banana": {
@@ -4080,6 +4153,837 @@
         }
       ],
       "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-bytedance-seedance-1-0-pro": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "second",
+          "priceParams": [
+            "aspect_ratio",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "16:9"
+              },
+              "price": 0.05148
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "4:3"
+              },
+              "price": 0.0546
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "1:1"
+              },
+              "price": 0.054
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "3:4"
+              },
+              "price": 0.0546
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "9:16"
+              },
+              "price": 0.05148
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "21:9"
+              },
+              "price": 0.0564
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "16:9"
+              },
+              "price": 0.1224
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "4:3"
+              },
+              "price": 0.12168
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "1:1"
+              },
+              "price": 0.1215
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "3:4"
+              },
+              "price": 0.12168
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "9:16"
+              },
+              "price": 0.1224
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "21:9"
+              },
+              "price": 0.11832
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (model seedance-1-0-pro-250528), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedance-1-0-pro-250528 | 2.5"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-bytedance-seedance-1-0-pro-fast": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "second",
+          "priceParams": [
+            "aspect_ratio",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "16:9"
+              },
+              "price": 0.00972
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "4:3"
+              },
+              "price": 0.009384
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "1:1"
+              },
+              "price": 0.0096
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "3:4"
+              },
+              "price": 0.009384
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "9:16"
+              },
+              "price": 0.00972
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "21:9"
+              },
+              "price": 0.00936
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "16:9"
+              },
+              "price": 0.020592
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "4:3"
+              },
+              "price": 0.02184
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "1:1"
+              },
+              "price": 0.0216
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "3:4"
+              },
+              "price": 0.02184
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "9:16"
+              },
+              "price": 0.020592
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "21:9"
+              },
+              "price": 0.02256
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "16:9"
+              },
+              "price": 0.04896
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "4:3"
+              },
+              "price": 0.048672
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "1:1"
+              },
+              "price": 0.0486
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "3:4"
+              },
+              "price": 0.048672
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "9:16"
+              },
+              "price": 0.04896
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "21:9"
+              },
+              "price": 0.047328
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (model seedance-1-0-pro-fast-251015), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedance-1-0-pro-fast-251015 | 1"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-bytedance-seedance-2": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "second",
+          "priceParams": [
+            "aspect_ratio",
+            "reference_videos",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "16:9",
+                "reference_videos": ""
+              },
+              "price": 0.070308
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "4:3",
+                "reference_videos": ""
+              },
+              "price": 0.06909
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "1:1",
+                "reference_videos": ""
+              },
+              "price": 0.0672
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "3:4",
+                "reference_videos": ""
+              },
+              "price": 0.06909
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "9:16",
+                "reference_videos": ""
+              },
+              "price": 0.070308
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "21:9",
+                "reference_videos": ""
+              },
+              "price": 0.070308
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "16:9",
+                "reference_videos": ""
+              },
+              "price": 0.1512
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "4:3",
+                "reference_videos": ""
+              },
+              "price": 0.152153
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "1:1",
+                "reference_videos": ""
+              },
+              "price": 0.1512
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "3:4",
+                "reference_videos": ""
+              },
+              "price": 0.152153
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "9:16",
+                "reference_videos": ""
+              },
+              "price": 0.1512
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "21:9",
+                "reference_videos": ""
+              },
+              "price": 0.151938
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "16:9",
+                "reference_videos": ""
+              },
+              "price": 0.37422
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "4:3",
+                "reference_videos": ""
+              },
+              "price": 0.374774
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "1:1",
+                "reference_videos": ""
+              },
+              "price": 0.37422
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "3:4",
+                "reference_videos": ""
+              },
+              "price": 0.374774
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "9:16",
+                "reference_videos": ""
+              },
+              "price": 0.37422
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "aspect_ratio": "21:9",
+                "reference_videos": ""
+              },
+              "price": 0.376616
+            },
+            {
+              "match": {
+                "resolution": "4k",
+                "aspect_ratio": "16:9",
+                "reference_videos": ""
+              },
+              "price": 0.7776
+            },
+            {
+              "match": {
+                "resolution": "4k",
+                "aspect_ratio": "4:3",
+                "reference_videos": ""
+              },
+              "price": 0.77766
+            },
+            {
+              "match": {
+                "resolution": "4k",
+                "aspect_ratio": "1:1",
+                "reference_videos": ""
+              },
+              "price": 0.7776
+            },
+            {
+              "match": {
+                "resolution": "4k",
+                "aspect_ratio": "3:4",
+                "reference_videos": ""
+              },
+              "price": 0.77766
+            },
+            {
+              "match": {
+                "resolution": "4k",
+                "aspect_ratio": "9:16",
+                "reference_videos": ""
+              },
+              "price": 0.7776
+            },
+            {
+              "match": {
+                "resolution": "4k",
+                "aspect_ratio": "21:9",
+                "reference_videos": ""
+              },
+              "price": 0.777621
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (model dreamina-seedance-2-0-260128), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs. A run with reference videos bills a lower rate plus a minimum that depends on the input video's length, so it's unpriced.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "dreamina-seedance-2-0-260128 | For 480p and 720p outputs: Input without video: 7.0 | For 1080p outputs: Input without video: 7.7 | For 4K outputs: Input without video: 4.0"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-bytedance-seedance-2-5": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "second",
+          "priceParams": [
+            "reference_videos",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "reference_videos": ""
+              },
+              "price": [
+                0.10272,
+                0.107471
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "reference_videos": ""
+              },
+              "price": [
+                0.23112,
+                0.232577
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "reference_videos": ""
+              },
+              "price": [
+                0.56862,
+                0.572261
+              ]
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (model dreamina-seedance-2-5-260628), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs. A run with reference videos bills a lower rate plus a minimum that depends on the input video's length, so it's unpriced. Seedance 2.5 keeps a start image's shape (its only frame-run ratio is adaptive), so the price is the range over the documented sizes for that resolution (assumes the output keeps the tier's pixel count, as every documented ratio does).",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "dreamina-seedance-2-5-260628 | For 480p and 720p outputs: Input without video: 10.70 | For 1080p outputs: Input without video: 11.7"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-bytedance-seedance-2-fast": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "second",
+          "priceParams": [
+            "aspect_ratio",
+            "reference_videos",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "16:9",
+                "reference_videos": ""
+              },
+              "price": 0.056246
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "4:3",
+                "reference_videos": ""
+              },
+              "price": 0.055272
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "1:1",
+                "reference_videos": ""
+              },
+              "price": 0.05376
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "3:4",
+                "reference_videos": ""
+              },
+              "price": 0.055272
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "9:16",
+                "reference_videos": ""
+              },
+              "price": 0.056246
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "21:9",
+                "reference_videos": ""
+              },
+              "price": 0.056246
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "16:9",
+                "reference_videos": ""
+              },
+              "price": 0.12096
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "4:3",
+                "reference_videos": ""
+              },
+              "price": 0.121722
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "1:1",
+                "reference_videos": ""
+              },
+              "price": 0.12096
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "3:4",
+                "reference_videos": ""
+              },
+              "price": 0.121722
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "9:16",
+                "reference_videos": ""
+              },
+              "price": 0.12096
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "21:9",
+                "reference_videos": ""
+              },
+              "price": 0.121551
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (model dreamina-seedance-2-0-fast-260128), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs. A run with reference videos bills a lower rate plus a minimum that depends on the input video's length, so it's unpriced.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "dreamina-seedance-2-0-fast-260128 | For 480p and 720p outputs: Input without video: 5.6"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-video-bytedance-seedance-2-mini": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "second",
+          "priceParams": [
+            "aspect_ratio",
+            "reference_videos",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "16:9",
+                "reference_videos": ""
+              },
+              "price": 0.035154
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "4:3",
+                "reference_videos": ""
+              },
+              "price": 0.034545
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "1:1",
+                "reference_videos": ""
+              },
+              "price": 0.0336
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "3:4",
+                "reference_videos": ""
+              },
+              "price": 0.034545
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "9:16",
+                "reference_videos": ""
+              },
+              "price": 0.035154
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "aspect_ratio": "21:9",
+                "reference_videos": ""
+              },
+              "price": 0.035154
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "16:9",
+                "reference_videos": ""
+              },
+              "price": 0.0756
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "4:3",
+                "reference_videos": ""
+              },
+              "price": 0.076076
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "1:1",
+                "reference_videos": ""
+              },
+              "price": 0.0756
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "3:4",
+                "reference_videos": ""
+              },
+              "price": 0.076076
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "9:16",
+                "reference_videos": ""
+              },
+              "price": 0.0756
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "aspect_ratio": "21:9",
+                "reference_videos": ""
+              },
+              "price": 0.075969
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (model dreamina-seedance-2-0-mini-260615), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs. A run with reference videos bills a lower rate plus a minimum that depends on the input video's length, so it's unpriced.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "dreamina-seedance-2-0-mini-260615 | For 480p and 720p outputs: Input without video: 3.5"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-google-gemini-omni-flash-1-1": {
@@ -10819,6 +11723,2624 @@
         }
       ],
       "checked": "2026-10-14"
+    },
+    "seedance-1-0-t2v": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "video",
+          "priceParams": [
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "2"
+              },
+              "price": [
+                0.0468,
+                0.0486
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "3"
+              },
+              "price": [
+                0.0702,
+                0.0729
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "4"
+              },
+              "price": [
+                0.0936,
+                0.0972
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "5"
+              },
+              "price": [
+                0.117,
+                0.1215
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "6"
+              },
+              "price": [
+                0.1404,
+                0.1458
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "7"
+              },
+              "price": [
+                0.1638,
+                0.1701
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "8"
+              },
+              "price": [
+                0.1872,
+                0.1944
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "9"
+              },
+              "price": [
+                0.2106,
+                0.2187
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "10"
+              },
+              "price": [
+                0.234,
+                0.243
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "11"
+              },
+              "price": [
+                0.2574,
+                0.2673
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "12"
+              },
+              "price": [
+                0.2808,
+                0.2916
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "2"
+              },
+              "price": [
+                0.10296,
+                0.1128
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "3"
+              },
+              "price": [
+                0.15444,
+                0.1692
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "4"
+              },
+              "price": [
+                0.20592,
+                0.2256
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "5"
+              },
+              "price": [
+                0.2574,
+                0.282
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "6"
+              },
+              "price": [
+                0.30888,
+                0.3384
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "7"
+              },
+              "price": [
+                0.36036,
+                0.3948
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "8"
+              },
+              "price": [
+                0.41184,
+                0.4512
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "9"
+              },
+              "price": [
+                0.46332,
+                0.5076
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "10"
+              },
+              "price": [
+                0.5148,
+                0.564
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "11"
+              },
+              "price": [
+                0.56628,
+                0.6204
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "12"
+              },
+              "price": [
+                0.61776,
+                0.6768
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "2"
+              },
+              "price": [
+                0.23664,
+                0.2448
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "3"
+              },
+              "price": [
+                0.35496,
+                0.3672
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "4"
+              },
+              "price": [
+                0.47328,
+                0.4896
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "5"
+              },
+              "price": [
+                0.5916,
+                0.612
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "6"
+              },
+              "price": [
+                0.70992,
+                0.7344
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "7"
+              },
+              "price": [
+                0.82824,
+                0.8568
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "8"
+              },
+              "price": [
+                0.94656,
+                0.9792
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "9"
+              },
+              "price": [
+                1.06488,
+                1.1016
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "10"
+              },
+              "price": [
+                1.1832,
+                1.224
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "11"
+              },
+              "price": [
+                1.30152,
+                1.3464
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "12"
+              },
+              "price": [
+                1.41984,
+                1.4688
+              ]
+            }
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (seedance-1-0-pro-250528), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. Each price spans the documented output sizes for that resolution (a set ratio sits inside it); a duration of auto spans the model's shortest to longest video. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedance-1-0-pro-250528 | 2.5"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
+    "seedance-2-fast-i2v": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "video",
+          "priceParams": [
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "auto"
+              },
+              "price": [
+                0.21504,
+                0.843696
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "4"
+              },
+              "price": [
+                0.21504,
+                0.224986
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "5"
+              },
+              "price": [
+                0.2688,
+                0.281232
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "6"
+              },
+              "price": [
+                0.32256,
+                0.337478
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "8"
+              },
+              "price": [
+                0.43008,
+                0.449971
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "10"
+              },
+              "price": [
+                0.5376,
+                0.562464
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "12"
+              },
+              "price": [
+                0.64512,
+                0.674957
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "15"
+              },
+              "price": [
+                0.8064,
+                0.843696
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "auto"
+              },
+              "price": [
+                0.48384,
+                1.825834
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "4"
+              },
+              "price": [
+                0.48384,
+                0.486889
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "5"
+              },
+              "price": [
+                0.6048,
+                0.608611
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "6"
+              },
+              "price": [
+                0.72576,
+                0.730334
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "8"
+              },
+              "price": [
+                0.96768,
+                0.973778
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "10"
+              },
+              "price": [
+                1.2096,
+                1.217223
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "12"
+              },
+              "price": [
+                1.45152,
+                1.460668
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "15"
+              },
+              "price": [
+                1.8144,
+                1.825834
+              ]
+            }
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (dreamina-seedance-2-0-fast-260128), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. Each price spans the documented output sizes for that resolution (a set ratio sits inside it); a duration of auto spans the model's shortest to longest video. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "dreamina-seedance-2-0-fast-260128 | For 480p and 720p outputs: Input without video: 5.6"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
+    "seedance-2-fast-t2v": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "video",
+          "priceParams": [
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "auto"
+              },
+              "price": [
+                0.21504,
+                0.843696
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "4"
+              },
+              "price": [
+                0.21504,
+                0.224986
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "5"
+              },
+              "price": [
+                0.2688,
+                0.281232
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "6"
+              },
+              "price": [
+                0.32256,
+                0.337478
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "8"
+              },
+              "price": [
+                0.43008,
+                0.449971
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "10"
+              },
+              "price": [
+                0.5376,
+                0.562464
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "12"
+              },
+              "price": [
+                0.64512,
+                0.674957
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "15"
+              },
+              "price": [
+                0.8064,
+                0.843696
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "auto"
+              },
+              "price": [
+                0.48384,
+                1.825834
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "4"
+              },
+              "price": [
+                0.48384,
+                0.486889
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "5"
+              },
+              "price": [
+                0.6048,
+                0.608611
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "6"
+              },
+              "price": [
+                0.72576,
+                0.730334
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "8"
+              },
+              "price": [
+                0.96768,
+                0.973778
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "10"
+              },
+              "price": [
+                1.2096,
+                1.217223
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "12"
+              },
+              "price": [
+                1.45152,
+                1.460668
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "15"
+              },
+              "price": [
+                1.8144,
+                1.825834
+              ]
+            }
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (dreamina-seedance-2-0-fast-260128), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. Each price spans the documented output sizes for that resolution (a set ratio sits inside it); a duration of auto spans the model's shortest to longest video. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "dreamina-seedance-2-0-fast-260128 | For 480p and 720p outputs: Input without video: 5.6"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
+    "seedance-2-i2v": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "video",
+          "priceParams": [
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "auto"
+              },
+              "price": [
+                0.2688,
+                1.05462
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "4"
+              },
+              "price": [
+                0.2688,
+                0.281232
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "5"
+              },
+              "price": [
+                0.336,
+                0.35154
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "6"
+              },
+              "price": [
+                0.4032,
+                0.421848
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "8"
+              },
+              "price": [
+                0.5376,
+                0.562464
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "10"
+              },
+              "price": [
+                0.672,
+                0.70308
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "12"
+              },
+              "price": [
+                0.8064,
+                0.843696
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "15"
+              },
+              "price": [
+                1.008,
+                1.05462
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "auto"
+              },
+              "price": [
+                0.6048,
+                2.282293
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "4"
+              },
+              "price": [
+                0.6048,
+                0.608611
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "5"
+              },
+              "price": [
+                0.756,
+                0.760764
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "6"
+              },
+              "price": [
+                0.9072,
+                0.912917
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "8"
+              },
+              "price": [
+                1.2096,
+                1.217223
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "10"
+              },
+              "price": [
+                1.512,
+                1.521529
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "12"
+              },
+              "price": [
+                1.8144,
+                1.825835
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "15"
+              },
+              "price": [
+                2.268,
+                2.282293
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "auto"
+              },
+              "price": [
+                1.49688,
+                5.649239
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "4"
+              },
+              "price": [
+                1.49688,
+                1.506464
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "5"
+              },
+              "price": [
+                1.8711,
+                1.88308
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "6"
+              },
+              "price": [
+                2.24532,
+                2.259695
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "8"
+              },
+              "price": [
+                2.99376,
+                3.012927
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "10"
+              },
+              "price": [
+                3.7422,
+                3.766159
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "12"
+              },
+              "price": [
+                4.49064,
+                4.519391
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "15"
+              },
+              "price": [
+                5.6133,
+                5.649239
+              ]
+            }
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (dreamina-seedance-2-0-260128), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. Each price spans the documented output sizes for that resolution (a set ratio sits inside it); a duration of auto spans the model's shortest to longest video. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "dreamina-seedance-2-0-260128 | For 480p and 720p outputs: Input without video: 7.0 | For 1080p outputs: Input without video: 7.7 | For 4K outputs: Input without video: 4.0"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
+    "seedance-2-r2v": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "video",
+          "priceParams": [
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "auto"
+              },
+              "price": [
+                0.2688,
+                1.05462
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "4"
+              },
+              "price": [
+                0.2688,
+                0.281232
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "6"
+              },
+              "price": [
+                0.4032,
+                0.421848
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "8"
+              },
+              "price": [
+                0.5376,
+                0.562464
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "10"
+              },
+              "price": [
+                0.672,
+                0.70308
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "15"
+              },
+              "price": [
+                1.008,
+                1.05462
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "auto"
+              },
+              "price": [
+                0.6048,
+                2.282293
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "4"
+              },
+              "price": [
+                0.6048,
+                0.608611
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "6"
+              },
+              "price": [
+                0.9072,
+                0.912917
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "8"
+              },
+              "price": [
+                1.2096,
+                1.217223
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "10"
+              },
+              "price": [
+                1.512,
+                1.521529
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "15"
+              },
+              "price": [
+                2.268,
+                2.282293
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "auto"
+              },
+              "price": [
+                1.49688,
+                5.649239
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "4"
+              },
+              "price": [
+                1.49688,
+                1.506464
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "6"
+              },
+              "price": [
+                2.24532,
+                2.259695
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "8"
+              },
+              "price": [
+                2.99376,
+                3.012927
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "10"
+              },
+              "price": [
+                3.7422,
+                3.766159
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "15"
+              },
+              "price": [
+                5.6133,
+                5.649239
+              ]
+            }
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (dreamina-seedance-2-0-260128), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. Each price spans the documented output sizes for that resolution (a set ratio sits inside it); a duration of auto spans the model's shortest to longest video. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "dreamina-seedance-2-0-260128 | For 480p and 720p outputs: Input without video: 7.0 | For 1080p outputs: Input without video: 7.7 | For 4K outputs: Input without video: 4.0"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
+    "seedance-2-t2v": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "video",
+          "priceParams": [
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "auto"
+              },
+              "price": [
+                0.2688,
+                1.05462
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "4"
+              },
+              "price": [
+                0.2688,
+                0.281232
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "5"
+              },
+              "price": [
+                0.336,
+                0.35154
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "6"
+              },
+              "price": [
+                0.4032,
+                0.421848
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "8"
+              },
+              "price": [
+                0.5376,
+                0.562464
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "10"
+              },
+              "price": [
+                0.672,
+                0.70308
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "12"
+              },
+              "price": [
+                0.8064,
+                0.843696
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": "15"
+              },
+              "price": [
+                1.008,
+                1.05462
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "auto"
+              },
+              "price": [
+                0.6048,
+                2.282293
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "4"
+              },
+              "price": [
+                0.6048,
+                0.608611
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "5"
+              },
+              "price": [
+                0.756,
+                0.760764
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "6"
+              },
+              "price": [
+                0.9072,
+                0.912917
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "8"
+              },
+              "price": [
+                1.2096,
+                1.217223
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "10"
+              },
+              "price": [
+                1.512,
+                1.521529
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "12"
+              },
+              "price": [
+                1.8144,
+                1.825835
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": "15"
+              },
+              "price": [
+                2.268,
+                2.282293
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "auto"
+              },
+              "price": [
+                1.49688,
+                5.649239
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "4"
+              },
+              "price": [
+                1.49688,
+                1.506464
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "5"
+              },
+              "price": [
+                1.8711,
+                1.88308
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "6"
+              },
+              "price": [
+                2.24532,
+                2.259695
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "8"
+              },
+              "price": [
+                2.99376,
+                3.012927
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "10"
+              },
+              "price": [
+                3.7422,
+                3.766159
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "12"
+              },
+              "price": [
+                4.49064,
+                4.519391
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": "15"
+              },
+              "price": [
+                5.6133,
+                5.649239
+              ]
+            }
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (dreamina-seedance-2-0-260128), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. Each price spans the documented output sizes for that resolution (a set ratio sits inside it); a duration of auto spans the model's shortest to longest video. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "dreamina-seedance-2-0-260128 | For 480p and 720p outputs: Input without video: 7.0 | For 1080p outputs: Input without video: 7.7 | For 4K outputs: Input without video: 4.0"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
+    "seedance-v1-5": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "video",
+          "priceParams": [
+            "duration",
+            "generate_audio",
+            "model",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "4",
+                "generate_audio": true
+              },
+              "price": [
+                0.09216,
+                0.096422
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "4",
+                "generate_audio": false
+              },
+              "price": [
+                0.04608,
+                0.048211
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "5",
+                "generate_audio": true
+              },
+              "price": [
+                0.1152,
+                0.120528
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "5",
+                "generate_audio": false
+              },
+              "price": [
+                0.0576,
+                0.060264
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "6",
+                "generate_audio": true
+              },
+              "price": [
+                0.13824,
+                0.144634
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "6",
+                "generate_audio": false
+              },
+              "price": [
+                0.06912,
+                0.072317
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "7",
+                "generate_audio": true
+              },
+              "price": [
+                0.16128,
+                0.168739
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "7",
+                "generate_audio": false
+              },
+              "price": [
+                0.08064,
+                0.08437
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "8",
+                "generate_audio": true
+              },
+              "price": [
+                0.18432,
+                0.192845
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "8",
+                "generate_audio": false
+              },
+              "price": [
+                0.09216,
+                0.096422
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "9",
+                "generate_audio": true
+              },
+              "price": [
+                0.20736,
+                0.21695
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "9",
+                "generate_audio": false
+              },
+              "price": [
+                0.10368,
+                0.108475
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "10",
+                "generate_audio": true
+              },
+              "price": [
+                0.2304,
+                0.241056
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "10",
+                "generate_audio": false
+              },
+              "price": [
+                0.1152,
+                0.120528
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "11",
+                "generate_audio": true
+              },
+              "price": [
+                0.25344,
+                0.265162
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "11",
+                "generate_audio": false
+              },
+              "price": [
+                0.12672,
+                0.132581
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "12",
+                "generate_audio": true
+              },
+              "price": [
+                0.27648,
+                0.289267
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "480p",
+                "duration": "12",
+                "generate_audio": false
+              },
+              "price": [
+                0.13824,
+                0.144634
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "4",
+                "generate_audio": true
+              },
+              "price": [
+                0.20736,
+                0.208667
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "4",
+                "generate_audio": false
+              },
+              "price": [
+                0.10368,
+                0.104333
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "5",
+                "generate_audio": true
+              },
+              "price": [
+                0.2592,
+                0.260833
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "5",
+                "generate_audio": false
+              },
+              "price": [
+                0.1296,
+                0.130417
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "6",
+                "generate_audio": true
+              },
+              "price": [
+                0.31104,
+                0.313
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "6",
+                "generate_audio": false
+              },
+              "price": [
+                0.15552,
+                0.1565
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "7",
+                "generate_audio": true
+              },
+              "price": [
+                0.36288,
+                0.365167
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "7",
+                "generate_audio": false
+              },
+              "price": [
+                0.18144,
+                0.182583
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "8",
+                "generate_audio": true
+              },
+              "price": [
+                0.41472,
+                0.417334
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "8",
+                "generate_audio": false
+              },
+              "price": [
+                0.20736,
+                0.208667
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "9",
+                "generate_audio": true
+              },
+              "price": [
+                0.46656,
+                0.4695
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "9",
+                "generate_audio": false
+              },
+              "price": [
+                0.23328,
+                0.23475
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "10",
+                "generate_audio": true
+              },
+              "price": [
+                0.5184,
+                0.521667
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "10",
+                "generate_audio": false
+              },
+              "price": [
+                0.2592,
+                0.260833
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "11",
+                "generate_audio": true
+              },
+              "price": [
+                0.57024,
+                0.573834
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "11",
+                "generate_audio": false
+              },
+              "price": [
+                0.28512,
+                0.286917
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "12",
+                "generate_audio": true
+              },
+              "price": [
+                0.62208,
+                0.626
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "720p",
+                "duration": "12",
+                "generate_audio": false
+              },
+              "price": [
+                0.31104,
+                0.313
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "4",
+                "generate_audio": true
+              },
+              "price": [
+                0.46656,
+                0.469547
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "4",
+                "generate_audio": false
+              },
+              "price": [
+                0.23328,
+                0.234774
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "5",
+                "generate_audio": true
+              },
+              "price": [
+                0.5832,
+                0.586934
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "5",
+                "generate_audio": false
+              },
+              "price": [
+                0.2916,
+                0.293467
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "6",
+                "generate_audio": true
+              },
+              "price": [
+                0.69984,
+                0.704321
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "6",
+                "generate_audio": false
+              },
+              "price": [
+                0.34992,
+                0.35216
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "7",
+                "generate_audio": true
+              },
+              "price": [
+                0.81648,
+                0.821707
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "7",
+                "generate_audio": false
+              },
+              "price": [
+                0.40824,
+                0.410854
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "8",
+                "generate_audio": true
+              },
+              "price": [
+                0.93312,
+                0.939094
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "8",
+                "generate_audio": false
+              },
+              "price": [
+                0.46656,
+                0.469547
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "9",
+                "generate_audio": true
+              },
+              "price": [
+                1.04976,
+                1.056481
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "9",
+                "generate_audio": false
+              },
+              "price": [
+                0.52488,
+                0.52824
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "10",
+                "generate_audio": true
+              },
+              "price": [
+                1.1664,
+                1.173868
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "10",
+                "generate_audio": false
+              },
+              "price": [
+                0.5832,
+                0.586934
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "11",
+                "generate_audio": true
+              },
+              "price": [
+                1.28304,
+                1.291255
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "11",
+                "generate_audio": false
+              },
+              "price": [
+                0.64152,
+                0.645627
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "12",
+                "generate_audio": true
+              },
+              "price": [
+                1.39968,
+                1.408641
+              ]
+            },
+            {
+              "match": {
+                "model": "1.5",
+                "resolution": "1080p",
+                "duration": "12",
+                "generate_audio": false
+              },
+              "price": [
+                0.69984,
+                0.704321
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "480p",
+                "duration": "4"
+              },
+              "price": [
+                0.0936,
+                0.0972
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "480p",
+                "duration": "5"
+              },
+              "price": [
+                0.117,
+                0.1215
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "480p",
+                "duration": "6"
+              },
+              "price": [
+                0.1404,
+                0.1458
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "480p",
+                "duration": "7"
+              },
+              "price": [
+                0.1638,
+                0.1701
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "480p",
+                "duration": "8"
+              },
+              "price": [
+                0.1872,
+                0.1944
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "480p",
+                "duration": "9"
+              },
+              "price": [
+                0.2106,
+                0.2187
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "480p",
+                "duration": "10"
+              },
+              "price": [
+                0.234,
+                0.243
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "480p",
+                "duration": "11"
+              },
+              "price": [
+                0.2574,
+                0.2673
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "480p",
+                "duration": "12"
+              },
+              "price": [
+                0.2808,
+                0.2916
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "720p",
+                "duration": "4"
+              },
+              "price": [
+                0.20592,
+                0.2256
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "720p",
+                "duration": "5"
+              },
+              "price": [
+                0.2574,
+                0.282
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "720p",
+                "duration": "6"
+              },
+              "price": [
+                0.30888,
+                0.3384
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "720p",
+                "duration": "7"
+              },
+              "price": [
+                0.36036,
+                0.3948
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "720p",
+                "duration": "8"
+              },
+              "price": [
+                0.41184,
+                0.4512
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "720p",
+                "duration": "9"
+              },
+              "price": [
+                0.46332,
+                0.5076
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "720p",
+                "duration": "10"
+              },
+              "price": [
+                0.5148,
+                0.564
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "720p",
+                "duration": "11"
+              },
+              "price": [
+                0.56628,
+                0.6204
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "720p",
+                "duration": "12"
+              },
+              "price": [
+                0.61776,
+                0.6768
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "1080p",
+                "duration": "4"
+              },
+              "price": [
+                0.47328,
+                0.4896
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "1080p",
+                "duration": "5"
+              },
+              "price": [
+                0.5916,
+                0.612
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "1080p",
+                "duration": "6"
+              },
+              "price": [
+                0.70992,
+                0.7344
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "1080p",
+                "duration": "7"
+              },
+              "price": [
+                0.82824,
+                0.8568
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "1080p",
+                "duration": "8"
+              },
+              "price": [
+                0.94656,
+                0.9792
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "1080p",
+                "duration": "9"
+              },
+              "price": [
+                1.06488,
+                1.1016
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "1080p",
+                "duration": "10"
+              },
+              "price": [
+                1.1832,
+                1.224
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "1080p",
+                "duration": "11"
+              },
+              "price": [
+                1.30152,
+                1.3464
+              ]
+            },
+            {
+              "match": {
+                "model": "1.0",
+                "resolution": "1080p",
+                "duration": "12"
+              },
+              "price": [
+                1.41984,
+                1.4688
+              ]
+            }
+          ],
+          "notes": "BytePlus ModelArk online price for runs on the person's BYTEPLUS_API_KEY (seedance-1-5-pro-251215, seedance-1-0-pro-250528), from BytePlus's token estimate at 24 fps: width x height x 24 / 1024 tokens a second, times the duration. Each price spans the documented output sizes for that resolution (a set ratio sits inside it); a duration of auto spans the model's shortest to longest video. BytePlus bills the usage.completion_tokens it reports, which can differ a little, and doesn't bill failed runs.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedance-1-5-pro-251215 | Video with audio: 2.4 | Video without audio: 1.2"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedance-1-0-pro-250528 | 2.5"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/create-video-generation-task-api",
+              "quote": "Width and height pixel values corresponding to different aspect ratios: 720p | 16:9 | 1280x720 (Dreamina Seedance 2.5, 2.0 series, 1.5 pro) | 1248x704 (Seedance 1.0 series)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
+    "seedream-4-5": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "model",
+            "max_images"
+          ],
+          "rows": [
+            {
+              "match": {
+                "model": "4.5",
+                "max_images": 1
+              },
+              "price": 0.04
+            },
+            {
+              "match": {
+                "model": "4.5",
+                "max_images": 2
+              },
+              "price": [
+                0.04,
+                0.08
+              ]
+            },
+            {
+              "match": {
+                "model": "4.5",
+                "max_images": 3
+              },
+              "price": [
+                0.04,
+                0.12
+              ]
+            },
+            {
+              "match": {
+                "model": "4.5",
+                "max_images": 4
+              },
+              "price": [
+                0.04,
+                0.16
+              ]
+            },
+            {
+              "match": {
+                "model": "4.5",
+                "max_images": 5
+              },
+              "price": [
+                0.04,
+                0.2
+              ]
+            },
+            {
+              "match": {
+                "model": "4.5",
+                "max_images": 6
+              },
+              "price": [
+                0.04,
+                0.24
+              ]
+            },
+            {
+              "match": {
+                "model": "5.0-lite",
+                "max_images": 1
+              },
+              "price": 0.035
+            },
+            {
+              "match": {
+                "model": "5.0-lite",
+                "max_images": 2
+              },
+              "price": [
+                0.035,
+                0.07
+              ]
+            },
+            {
+              "match": {
+                "model": "5.0-lite",
+                "max_images": 3
+              },
+              "price": [
+                0.035,
+                0.105
+              ]
+            },
+            {
+              "match": {
+                "model": "5.0-lite",
+                "max_images": 4
+              },
+              "price": [
+                0.035,
+                0.14
+              ]
+            },
+            {
+              "match": {
+                "model": "5.0-lite",
+                "max_images": 5
+              },
+              "price": [
+                0.035,
+                0.175
+              ]
+            },
+            {
+              "match": {
+                "model": "5.0-lite",
+                "max_images": 6
+              },
+              "price": [
+                0.035,
+                0.21
+              ]
+            }
+          ],
+          "multiplyBy": [
+            "num_images"
+          ],
+          "notes": "BytePlus ModelArk pay-as-you-go price per output image, for runs on the person's BYTEPLUS_API_KEY (4.5: seedream-4-5-251128, 5.0 Lite: seedream-5-0-lite-260128). Input (reference) images are free. Each of num_images is its own request; max_images above 1 asks for a sequential batch of up to that many, and BytePlus bills \"the actual number of generated images\", so it's a range from one image to max_images. Failed images (content moderation) aren't billed. The fal route has no list price here.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedream-4-5-251128 | Free | 0.04"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedream-5-0-lite-260128 | Free | 0.035"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "For Seedream 5.0 lite, Seedream 4.5, and Seedream 4.0, sequential image generation is billed based on the actual number of generated images."
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
     },
     "veo-3": {
       "currency": "usd",
