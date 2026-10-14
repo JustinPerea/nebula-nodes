@@ -449,13 +449,13 @@ Frames are `id: <seq>` plus `data: <json>`; the event name is the JSON `event` f
 
 PR 1 depends on the token-file branch only for the docs snippet; the code doesn't.
 
-## Open questions for Justin
+## Decisions (Justin, 2026-10-14: "go with what you think is best")
 
-1. **Tie the Hermes chat to its Connect app** (one name, color and spending line)? Recommend yes.
-2. **Stop Hermes' run when the Nebula tab closes?** Recommend yes. The conversation stays and resumes.
-3. **Allow a non-loopback Hermes in v1?** Recommend no. Remote comes later with https.
-4. **Key: paste into Nebula, or let Nebula read `~/.hermes/.env`?** Recommend paste. Reading his env
-   file means reading every other secret in it.
+1. **The Hermes chat is tied to its Connect app:** one name, color and spending line.
+2. **Closing the Nebula tab stops Hermes' run.** The conversation stays and resumes on the next send.
+3. **Loopback only in v1.** A remote Hermes comes later, over https.
+4. **Justin pastes the API key into Nebula.** Nebula never reads `~/.hermes/.env`, because that file holds
+   his other secrets too.
 
 ## Sources
 
