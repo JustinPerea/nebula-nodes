@@ -172,16 +172,23 @@ def paths_overlap(a: Path, b: Path) -> bool:
 
 
 def protected_agent_dirs() -> list[Path]:
-    """Directories no agent may be granted or read directly: the Commons store.
+    """Directories no agent may be granted or read directly: the Commons store,
+    the Krea connector's vault and the token-file folders.
 
-    Its blobs and database hold quarantined and other brands' references; the
-    HTTP gate (scope + quarantine) is the only way agents may reach them.
+    The Commons blobs and database hold quarantined and other brands'
+    references; the HTTP gate (scope + quarantine) is the only way agents may
+    reach them. ``app-tokens`` and ``agent-tokens`` hold bearer tokens at
+    predictable paths (services/app_token_file.py, agent_token_file.py): only
+    the MCP server a token file was made for reads it, never a graph or media
+    path or an in-app agent.
     """
     from commons.paths import commons_root
+    from services import agent_token_file, app_token_file
 
     # Derive paths only; importing the connector would construct its real vault.
     state_root = Path(os.environ.get("NEBULA_STATE_DIR", Path.home() / ".nebula"))
-    return [commons_root(), state_root / "krea"]
+    return [commons_root(), state_root / "krea",
+            app_token_file.root(state_root), agent_token_file.root(state_root)]
 
 
 def agent_read_grants(*, output_root: Path, workdir: Path, protected: list[Path]) -> list[Path]:

@@ -571,7 +571,27 @@ body.app-slava-restraint .settings-apps__dot {
   transition: transform var(--sr-motion-fast), box-shadow var(--sr-motion-fast);
 }
 body.app-slava-restraint .settings-apps__swatch[style] { border-color: transparent; }
-body.app-slava-restraint .settings-apps__dot { width: 9px; height: 9px; cursor: default; flex: none; }
+body.app-slava-restraint .settings-apps__dot { width: 9px; height: 9px; flex: none; }
+/* A connected app's dot opens its color picker. */
+body.app-slava-restraint .settings-apps__dot-button {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  margin: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  flex: none;
+}
+body.app-slava-restraint .settings-apps__dot-button:disabled { cursor: default; }
+body.app-slava-restraint .settings-apps__dot-button:hover:not(:disabled) .settings-apps__dot { transform: scale(1.3); }
+body.app-slava-restraint .settings-apps__dot-button[aria-expanded="true"] .settings-apps__dot {
+  box-shadow: 0 0 0 2px var(--sr-canvas), 0 0 0 3px var(--sr-ink);
+}
+body.app-slava-restraint .settings-apps__dot-button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--sr-accent); }
 body.app-slava-restraint .settings-apps__swatch--auto {
   background: conic-gradient(#3FC1A5, #7AD3FF, #B392F0, #FF6B9A, #FF9F43, #F2C14E, #C3E86B, #3FC1A5);
   opacity: 0.55;

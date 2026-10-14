@@ -284,7 +284,9 @@ def test_claude_profile_denies_protected_dirs_and_blocks_reads_outside_grants(tm
 def test_protected_agent_dirs_follow_the_commons_root(tmp_path, monkeypatch):
     monkeypatch.delenv("NEBULA_COMMONS_ROOT", raising=False)
     monkeypatch.setenv("NEBULA_STATE_DIR", str(tmp_path / "state"))
-    assert agent_profiles.protected_agent_dirs() == [tmp_path / "state" / "commons", tmp_path / "state" / "krea"]
+    state = tmp_path / "state"
+    assert agent_profiles.protected_agent_dirs() == [
+        state / "commons", state / "krea", state / "app-tokens", state / "agent-tokens"]
 
 
 def _toml_overrides(args):

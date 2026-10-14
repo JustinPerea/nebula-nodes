@@ -76,7 +76,7 @@ MAX_MESSAGE_CHARS = 100_000
 # inherited from the shell that started it. Claude Code bills ANTHROPIC_API_KEY
 # ahead of the subscription login, and Codex OPENAI_API_KEY, so a terminal's
 # key would silently replace the plan the person set the agent up with.
-_AGENT_ENV_DROP = frozenset({"NEBULA_AGENT_TOKEN", "NEBULA_APP_TOKEN", agent_token_file.ENV_VAR}
+_AGENT_ENV_DROP = frozenset({"NEBULA_AGENT_TOKEN", "NEBULA_APP_TOKEN", "NEBULA_APP_TOKEN_FILE", agent_token_file.ENV_VAR}
                             | CREDENTIAL_PROVIDERS)
 
 PERSONAL_AGENT_PRIMER_TAIL = (

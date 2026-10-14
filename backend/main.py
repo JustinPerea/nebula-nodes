@@ -1689,8 +1689,9 @@ def _is_person_request() -> bool:
 
 
 agent_spend_ledger = agent_spend.SpendLedger(_STATE_DIR / "agent-spend.json")
-# Tokens the person made for outside apps (Settings > Agent spending).
-app_token_store = app_tokens.AppTokens(_STATE_DIR / "app-tokens.json")
+# Tokens the person made for outside apps (Settings > Agent spending), each
+# also in its own private file (services/app_token_file.py).
+app_token_store = app_tokens.AppTokens(_STATE_DIR / "app-tokens.json", token_dir=_STATE_DIR)
 app_tokens.install(app_token_store)
 
 
@@ -2158,9 +2159,12 @@ async def backend_address_proof(challenge: str = "") -> dict[str, str]:
 @app.on_event("startup")
 async def _personal_agents_startup() -> None:
     """Delete token files a dead backend left behind (services/agent_token_file.py).
-    Their tokens died with it; this only removes litter."""
+    Their tokens died with it; this only removes litter. Also delete app
+    token files whose app is no longer active (services/app_token_file.py):
+    revoked while the delete failed, say."""
     from services import agent_token_file
     await asyncio.to_thread(agent_token_file.clear_stale, _STATE_DIR)
+    await asyncio.to_thread(app_token_store.clear_unknown_files)
 
 
 @app.on_event("shutdown")
@@ -3221,12 +3225,16 @@ def _own_url(request: Request) -> str:
 
 @app.post("/api/agent/spend/apps")
 async def create_agent_app(body: dict[str, Any], request: Request) -> dict[str, Any]:
-    """Make a token for an outside app. The token is in this response only;
-    Nebula keeps a hash of it. The person's only.
+    """Make a token for an outside app. The person's only.
+
+    Nebula keeps a hash of it and writes the token to a private file
+    (services/app_token_file.py); ``tokenFile`` is that file's path. The token
+    itself is in this response too, for scripts that call this route; Settings
+    doesn't show it unless the person asks.
 
     With ``client`` (Settings > Connect your agent), the response also holds
-    ``setup``: the exact config for that client, with the token in it
-    (services/agent_connect.py). It is shown once, like the token."""
+    ``setup``: the exact config for that client (services/agent_connect.py),
+    which names the token file and never holds the token."""
     require_person(current_request_headers())
     client_id = body.get("client")
     paths = None
@@ -3241,11 +3249,13 @@ async def create_agent_app(body: dict[str, Any], request: Request) -> dict[str, 
                                                  client=client_id, color=body.get("color"))
     except app_tokens.AppTokenError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    result: dict[str, Any] = {"app": {**app_view, "spentUsd": 0.0, "kreaPlanRuns": 0}, "token": token}
-    if paths is not None:
+    token_file = app_token_store.token_file(app_view["id"])
+    result: dict[str, Any] = {"app": {**app_view, "spentUsd": 0.0, "kreaPlanRuns": 0}, "token": token,
+                              "tokenFile": str(token_file) if token_file else None}
+    if paths is not None and token_file is not None:
         address = _mcp_address(request)
         result["setup"] = agent_connect.render(client_id, paths=paths, url=address.get("url"),
-                                               url_file=address.get("urlFile"), token=token,
+                                               url_file=address.get("urlFile"), token_file=str(token_file),
                                                app_name=app_view["name"], daily_usd=app_view["dailyUsd"])
     return result
 
@@ -3277,8 +3287,9 @@ async def update_agent_app(app_id: str, body: dict[str, Any]) -> dict[str, Any]:
 
 @app.delete("/api/agent/spend/apps/{app_id}")
 async def revoke_agent_app(app_id: str) -> dict[str, Any]:
-    """Revoke an app's token: its requests are refused from now on. What it
-    spent stays counted in the outside budget. The person's only."""
+    """Revoke an app's token: its requests are refused from now on, and its
+    token file is deleted. What it spent stays counted in the outside budget.
+    The person's only."""
     require_person(current_request_headers())
     if not (app_tokens.valid_id(app_id) and app_token_store.revoke(app_id)):
         raise HTTPException(status_code=404, detail="No connected app with that id")

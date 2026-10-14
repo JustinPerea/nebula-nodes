@@ -21,7 +21,8 @@ from tests.conftest import FORGED_ORIGIN, PERSON  # noqa: E402
 
 PATHS = agent_connect.CheckoutPaths(python="/repo/backend/.venv/bin/python", server="/repo/backend/mcp_server.py")
 URL = "http://127.0.0.1:8000"
-TOKEN = "nebula_app_TESTTOKEN"
+TOKEN = "nebula_app_TESTTOKEN_0123456789abcdefghijklmnopqrstuvwxyzABCDEFG"
+TOKEN_FILE = "/state/app-tokens/0123456789ab.token"
 REPO = Path(__file__).resolve().parents[2]
 REAL_BACKEND_DIR = agent_connect._backend_dir
 
@@ -40,7 +41,13 @@ def fake_checkout(tmp_path_factory, monkeypatch):
 
 
 def setup(client_id, daily=None):
-    return agent_connect.render(client_id, paths=PATHS, url=URL, token=TOKEN, app_name="My Agent", daily_usd=daily)
+    return agent_connect.render(client_id, paths=PATHS, url=URL, token_file=TOKEN_FILE, app_name="My Agent",
+                                daily_usd=daily)
+
+
+def legacy_setup(client_id):
+    """A token pasted into the CLI, made before token files: no file to name."""
+    return agent_connect.render(client_id, paths=PATHS, url=URL, token=TOKEN, app_name="My Agent")
 
 
 # -- golden snippets -------------------------------------------------------------
@@ -52,12 +59,12 @@ GOLDEN = {
     args: ["/repo/backend/mcp_server.py"]
     env:
       NEBULA_URL: "http://127.0.0.1:8000"
-      NEBULA_APP_TOKEN: "nebula_app_TESTTOKEN"
+      NEBULA_APP_TOKEN_FILE: "/state/app-tokens/0123456789ab.token"
     trust: untrusted
 ''',
     "openclaw": ("openclaw mcp set nebula \\\n  '{\"command\": \"/repo/backend/.venv/bin/python\", \"args\": "
                  "[\"/repo/backend/mcp_server.py\"], \"env\": {\"NEBULA_URL\": \"http://127.0.0.1:8000\", "
-                 "\"NEBULA_APP_TOKEN\": \"nebula_app_TESTTOKEN\"}}'"),
+                 "\"NEBULA_APP_TOKEN_FILE\": \"/state/app-tokens/0123456789ab.token\"}}'"),
     "claude-desktop": '''{
   "mcpServers": {
     "nebula": {
@@ -67,7 +74,7 @@ GOLDEN = {
       ],
       "env": {
         "NEBULA_URL": "http://127.0.0.1:8000",
-        "NEBULA_APP_TOKEN": "nebula_app_TESTTOKEN"
+        "NEBULA_APP_TOKEN_FILE": "/state/app-tokens/0123456789ab.token"
       }
     }
   }
@@ -82,7 +89,7 @@ GOLDEN = {
       ],
       "env": {
         "NEBULA_URL": "http://127.0.0.1:8000",
-        "NEBULA_APP_TOKEN": "nebula_app_TESTTOKEN"
+        "NEBULA_APP_TOKEN_FILE": "/state/app-tokens/0123456789ab.token"
       }
     }
   }
@@ -90,14 +97,14 @@ GOLDEN = {
     "claude-code": """claude mcp add \\
   --scope user \\
   --env NEBULA_URL=http://127.0.0.1:8000 \\
-  --env NEBULA_APP_TOKEN=nebula_app_TESTTOKEN \\
+  --env NEBULA_APP_TOKEN_FILE=/state/app-tokens/0123456789ab.token \\
   --transport stdio nebula \\
   -- \\
   /repo/backend/.venv/bin/python \\
   /repo/backend/mcp_server.py""",
     "codex": """codex mcp add nebula \\
   --env NEBULA_URL=http://127.0.0.1:8000 \\
-  --env NEBULA_APP_TOKEN=nebula_app_TESTTOKEN \\
+  --env NEBULA_APP_TOKEN_FILE=/state/app-tokens/0123456789ab.token \\
   -- \\
   /repo/backend/.venv/bin/python \\
   /repo/backend/mcp_server.py""",
@@ -110,7 +117,7 @@ GOLDEN = {
       ],
       "env": {
         "NEBULA_URL": "http://127.0.0.1:8000",
-        "NEBULA_APP_TOKEN": "nebula_app_TESTTOKEN"
+        "NEBULA_APP_TOKEN_FILE": "/state/app-tokens/0123456789ab.token"
       }
     }
   }
@@ -124,7 +131,7 @@ tool_timeout_sec = 150
 
 [mcp_servers.nebula.env]
 NEBULA_URL = "http://127.0.0.1:8000"
-NEBULA_APP_TOKEN = "nebula_app_TESTTOKEN"
+NEBULA_APP_TOKEN_FILE = "/state/app-tokens/0123456789ab.token"
 '''
 
 
@@ -135,21 +142,79 @@ def test_each_client_gets_its_golden_snippet(client_id):
     assert result["label"] == agent_connect.CLIENTS[client_id].label
     # Every client is warned about unattended spending and where the token lives.
     assert any("scheduled jobs" in w and "while you aren't watching" in w for w in result["warnings"])
-    assert any("plain text" in w and "My Agent" in w for w in result["warnings"])
+    assert any(TOKEN_FILE in w and "only your macOS user" in w and "My Agent" in w and "deletes the file" in w
+               for w in result["warnings"])
+    # No token on any command line, so nothing about shell history.
+    assert not any("shell history" in w or "plain text" in w for w in result["warnings"])
+    assert result["tokenFile"] == TOKEN_FILE
+
+
+@pytest.mark.parametrize("client_id", list(agent_connect.CLIENTS))
+def test_no_setup_holds_the_token(client_id):
+    """The token file's path, never the token: snippets, steps, the
+    alternative, the warnings and the CLI line alike."""
+    result = setup(client_id)
+    text = json.dumps(result)
+    assert TOKEN not in text and "nebula_app_" not in text
+    assert TOKEN_FILE in result["snippet"]
+    if client_id == "codex":
+        assert TOKEN_FILE in result["alternative"]["snippet"]
+    assert "NEBULA_APP_TOKEN_FILE" in result["snippet"]
+    assert "NEBULA_APP_TOKEN=" not in result["snippet"] and '"NEBULA_APP_TOKEN"' not in result["snippet"]
+    assert not any("doctor" in step for step in result["steps"])
+    if agent_connect.CLIENTS[client_id].kind == "manual":
+        assert result["cli"] is None
+    else:
+        assert f"--token-file {TOKEN_FILE}" in result["cli"] and f"mcp connect {client_id}" in result["cli"]
+
+
+@pytest.mark.parametrize("client_id", list(agent_connect.CLIENTS))
+def test_a_pasted_token_still_renders_the_old_way(client_id):
+    result = legacy_setup(client_id)
+    assert TOKEN in result["snippet"] and "NEBULA_APP_TOKEN_FILE" not in result["snippet"]
+    assert result["tokenFile"] is None and result["cli"] is None
+    assert any("plain text" in w and "connect again" in w for w in result["warnings"])
+    assert any("shell history" in w for w in result["warnings"]) is (client_id in ("claude-code", "codex", "openclaw"))
+    assert any("doctor" in step for step in result["steps"]) is (client_id == "openclaw")
+
+
+def test_render_takes_exactly_one_credential():
+    with pytest.raises(ValueError):
+        agent_connect.render("cursor", paths=PATHS, url=URL, app_name="x")
+    with pytest.raises(ValueError):
+        agent_connect.render("cursor", paths=PATHS, url=URL, app_name="x", token=TOKEN, token_file=TOKEN_FILE)
+
+
+def test_the_settings_cli_line_runs_the_real_cli(tmp_path):
+    """The line Settings offers names this checkout's own CLI and works as typed."""
+    real = agent_connect.CheckoutPaths(python=sys.executable, server=str(REPO / "backend" / "mcp_server.py"))
+    line = agent_connect.cli_command("cursor", real, str(tmp_path / "missing.token"), url="http://127.0.0.1:9")
+    assert line.startswith(f"NEBULA_URL=http://127.0.0.1:9 {sys.executable} ")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("NEBULA_")}
+    env["HOME"] = str(tmp_path / "home")
+    done = subprocess.run(["/bin/sh", "-c", line + " --print"], env=env, capture_output=True, text=True, timeout=60)
+    # It reached `nebula mcp connect` and refused the missing file through the
+    # strict reader (CI has no backend/.venv: then the checkout is refused first).
+    expected = ("can't open the token file" if (REPO / "backend" / ".venv" / "bin" / "python").exists()
+                else "no backend virtualenv")
+    assert done.returncode == 1 and expected in done.stderr, done.stderr
+    desktop = agent_connect.cli_command("codex", real, "/s/t.token", url_file="/s/backend-url")
+    assert desktop.startswith("NEBULA_URL_FILE=/s/backend-url ") and "NEBULA_URL=" not in desktop
 
 
 def test_snippets_parse_in_their_own_format():
     import tomllib
 
     for client_id in ("claude-desktop", "cursor", "other"):
-        assert json.loads(setup(client_id)["snippet"])["mcpServers"]["nebula"]["env"]["NEBULA_APP_TOKEN"] == TOKEN
+        env = json.loads(setup(client_id)["snippet"])["mcpServers"]["nebula"]["env"]
+        assert env["NEBULA_APP_TOKEN_FILE"] == TOKEN_FILE
     toml = setup("codex")["alternative"]["snippet"]
     assert toml == CODEX_TOML
     parsed = tomllib.loads(toml)["mcp_servers"]["nebula"]
-    assert parsed["env"] == {"NEBULA_URL": URL, "NEBULA_APP_TOKEN": TOKEN} and parsed["tool_timeout_sec"] == 150
+    assert parsed["env"] == {"NEBULA_URL": URL, "NEBULA_APP_TOKEN_FILE": TOKEN_FILE} and parsed["tool_timeout_sec"] == 150
     yaml = pytest.importorskip("yaml")
     hermes = yaml.safe_load(setup("hermes")["snippet"])["mcp_servers"]["nebula"]
-    assert hermes["trust"] == "untrusted" and hermes["env"]["NEBULA_APP_TOKEN"] == TOKEN
+    assert hermes["trust"] == "untrusted" and hermes["env"]["NEBULA_APP_TOKEN_FILE"] == TOKEN_FILE
     assert hermes["command"] == PATHS.python and hermes["args"] == [PATHS.server]
 
 
@@ -158,8 +223,9 @@ def test_shell_snippets_run_as_the_exact_argv(client_id):
     """Pasted into a shell (paths with spaces and all), the command is the argv the CLI would run."""
     spaced = agent_connect.CheckoutPaths(python="/My Repo/backend/.venv/bin/python",
                                          server="/My Repo/backend/mcp_server.py")
-    snippet = agent_connect.render(client_id, paths=spaced, url=URL, token=TOKEN, app_name="x")["snippet"]
-    entry = agent_connect.server_entry(spaced, URL, TOKEN)
+    snippet = agent_connect.render(client_id, paths=spaced, url=URL, token_file="/My State/t.token",
+                                   app_name="x")["snippet"]
+    entry = agent_connect.server_entry(spaced, URL, token_file="/My State/t.token")
     expected = {"claude-code": agent_connect.claude_code_add_argv(entry), "codex": agent_connect.codex_add_argv(entry),
                 "openclaw": ["openclaw", "mcp", "set", "nebula", json.dumps(entry)]}[client_id]
     done = subprocess.run(["/bin/sh", "-c", "printf '%s\\n' " + snippet], capture_output=True, text=True, check=True)
@@ -192,24 +258,53 @@ def test_checkout_paths_keep_the_venv_symlink_and_refuse_an_app_bundle(tmp_path,
 # -- the CLI merging into JSON configs (temp HOME) -------------------------------
 
 def args(client_id, **overrides):
-    base = {"client": client_id, "url": URL, "name": None, "daily_usd": None, "print_only": False, "yes": True}
+    base = {"client": client_id, "url": URL, "name": None, "daily_usd": None, "print_only": False, "yes": True,
+            "token_file": None, "paste_token": False}
     return SimpleNamespace(**{**base, **overrides})
 
 
 @pytest.fixture
-def cli_env(monkeypatch):
+def app_file(tmp_path_factory):
+    """The token file Nebula wrote when Settings made the token (outside the temp HOME)."""
+    from services import app_token_file
+
+    return str(app_token_file.write(tmp_path_factory.mktemp("state"), "0123456789ab", TOKEN))
+
+
+@pytest.fixture
+def cli_env(monkeypatch, app_file):
+    """The default: Settings' command, with the token file in $NEBULA_APP_TOKEN_FILE."""
     monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
+    monkeypatch.delenv("NEBULA_APP_TOKEN", raising=False)
+    monkeypatch.setenv("NEBULA_APP_TOKEN_FILE", app_file)
+    seen = []
+
+    def check(url, token):
+        seen.append(token)
+        return {"budget": "app", "agent": "My Cursor", "limits": {"appDailyUsd": 2}}
+
+    monkeypatch.setattr(mcp_connect, "check_token", check)
+    return SimpleNamespace(file=app_file, checked=seen)
+
+
+@pytest.fixture
+def legacy_env(monkeypatch, cli_env):
+    """A token made before token files, given in $NEBULA_APP_TOKEN."""
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE")
     monkeypatch.setenv("NEBULA_APP_TOKEN", TOKEN)
-    monkeypatch.setattr(mcp_connect, "check_token", lambda url, token: {
-        "budget": "app", "agent": "My Cursor", "limits": {"appDailyUsd": 2}})
+    return cli_env
 
 
 def mode(path: Path) -> int:
     return stat.S_IMODE(path.stat().st_mode)
 
 
+@pytest.mark.parametrize("legacy", [False, True])
 @pytest.mark.parametrize("client_id", ["cursor", "claude-desktop"])
-def test_connect_merges_one_entry_with_a_backup_and_0600(tmp_path, cli_env, client_id, capsys):
+def test_connect_merges_one_entry_with_a_backup_and_0600(tmp_path, cli_env, client_id, capsys, legacy, monkeypatch):
+    if legacy:
+        monkeypatch.delenv("NEBULA_APP_TOKEN_FILE")
+        monkeypatch.setenv("NEBULA_APP_TOKEN", TOKEN)
     path = mcp_connect.config_path(client_id, tmp_path)
     assert str(path).startswith(str(tmp_path))
     path.parent.mkdir(parents=True)
@@ -223,7 +318,9 @@ def test_connect_merges_one_entry_with_a_backup_and_0600(tmp_path, cli_env, clie
     assert data["mcpServers"]["github"] == original["mcpServers"]["github"]
     assert data["globalShortcut"] == "Ctrl+Space"
     entry = data["mcpServers"]["nebula"]
-    assert entry["env"] == {"NEBULA_URL": URL, "NEBULA_APP_TOKEN": TOKEN}
+    assert entry["env"] == ({"NEBULA_URL": URL, "NEBULA_APP_TOKEN": TOKEN} if legacy
+                            else {"NEBULA_URL": URL, "NEBULA_APP_TOKEN_FILE": cli_env.file})
+    assert (TOKEN in path.read_text()) is legacy and cli_env.checked == [TOKEN]
     assert entry["command"].endswith("backend/.venv/bin/python") and entry["args"][0].endswith("backend/mcp_server.py")
     assert (entry.get("type") == "stdio") is (client_id == "cursor")
     assert mode(path) == 0o600
@@ -238,12 +335,14 @@ def test_connect_merges_one_entry_with_a_backup_and_0600(tmp_path, cli_env, clie
     capsys.readouterr()
     assert mcp_connect.run_disconnect(args(client_id), home=tmp_path) == 0
     out = capsys.readouterr().out
-    assert TOKEN not in out and "blanked out" in out
+    assert TOKEN not in out and ("blanked out" in out) is legacy
     # The backup it leaves has the old entry, minus a working token.
     backups = sorted(path.parent.glob(f"{path.name}.nebula-backup-*"))
     assert len(backups) == 2 and all(TOKEN not in b.read_text() for b in backups)
     newest = max(backups, key=lambda b: json.loads(b.read_text()).get("mcpServers", {}).get("nebula") is not None)
-    assert json.loads(newest.read_text())["mcpServers"]["nebula"]["env"]["NEBULA_APP_TOKEN"] == mcp_connect.REDACTED
+    old_env = json.loads(newest.read_text())["mcpServers"]["nebula"]["env"]
+    assert old_env.get("NEBULA_APP_TOKEN" if legacy else "NEBULA_APP_TOKEN_FILE") == (
+        mcp_connect.REDACTED if legacy else cli_env.file)
     data = json.loads(path.read_text())
     assert "nebula" not in data["mcpServers"] and data["mcpServers"]["github"] == original["mcpServers"]["github"]
     assert data["globalShortcut"] == "Ctrl+Space" and mode(path) == 0o600
@@ -252,11 +351,55 @@ def test_connect_merges_one_entry_with_a_backup_and_0600(tmp_path, cli_env, clie
 def test_connect_creates_a_missing_config_without_a_backup(tmp_path, cli_env, capsys):
     path = mcp_connect.config_path("cursor", tmp_path)
     assert mcp_connect.run_connect(args("cursor"), home=tmp_path) == 0
-    assert json.loads(path.read_text())["mcpServers"]["nebula"]["env"]["NEBULA_APP_TOKEN"] == TOKEN
+    assert json.loads(path.read_text())["mcpServers"]["nebula"]["env"]["NEBULA_APP_TOKEN_FILE"] == cli_env.file
     assert mode(path) == 0o600 and not list(path.parent.glob("*.nebula-backup-*"))
-    out = capsys.readouterr().out
-    # The diff shown before writing masks the token.
-    assert TOKEN not in out and "nebula_app_TEST…OKEN" in out
+    out = capsys.readouterr()
+    assert TOKEN not in out.out + out.err and cli_env.file in out.out and "no token file" not in out.err
+
+
+def test_a_pasted_token_is_masked_and_flagged(tmp_path, legacy_env, capsys):
+    path = mcp_connect.config_path("cursor", tmp_path)
+    assert mcp_connect.run_connect(args("cursor"), home=tmp_path) == 0
+    assert json.loads(path.read_text())["mcpServers"]["nebula"]["env"]["NEBULA_APP_TOKEN"] == TOKEN
+    out = capsys.readouterr()
+    # The diff shown before writing masks the token, and the CLI says how to move to a file.
+    assert TOKEN not in out.out and "nebula_app_TEST…DEFG" in out.out
+    assert "no token file" in out.err and "connect again" in out.err
+
+
+def test_the_token_file_is_read_strictly(tmp_path, cli_env, monkeypatch, capsys):
+    from services import app_token_file
+
+    loose = tmp_path / "loose.token"
+    loose.write_text(TOKEN)
+    os.chmod(loose, 0o644)
+    link = tmp_path / "link.token"
+    link.symlink_to(cli_env.file)
+    agent = tmp_path / "agent.token"
+    agent.write_text("an-agent-session-token-not-an-app-one")
+    os.chmod(agent, 0o600)
+    for bad, says in ((loose, "readable by other users"), (link, "can't open"), (tmp_path / "missing", "can't open"),
+                      (agent, "doesn't hold an app token")):
+        assert mcp_connect.run_connect(args("cursor", token_file=str(bad)), home=tmp_path / "home") == 1
+        assert says in capsys.readouterr().err
+    assert not (tmp_path / "home").exists() and cli_env.checked == []
+    # --token-file wins over $NEBULA_APP_TOKEN_FILE and a raw $NEBULA_APP_TOKEN.
+    other = app_token_file.write(tmp_path / "state2", "ba9876543210", TOKEN[:-1] + "Z")
+    monkeypatch.setenv("NEBULA_APP_TOKEN", "nebula_app_IGNORED_0123456789abcdef")
+    assert mcp_connect.run_connect(args("cursor", token_file=str(other)), home=tmp_path / "home") == 0
+    env = json.loads(mcp_connect.config_path("cursor", tmp_path / "home").read_text())["mcpServers"]["nebula"]["env"]
+    assert env == {"NEBULA_URL": URL, "NEBULA_APP_TOKEN_FILE": str(other)}
+    assert cli_env.checked == [TOKEN[:-1] + "Z"]
+
+
+def test_the_old_paste_prompt_needs_asking_for(tmp_path, cli_env, monkeypatch, capsys):
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE")
+    monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(TOKEN + "\n"))
+    assert mcp_connect.run_connect(args("cursor"), home=tmp_path) == 1
+    assert "--token-file" in capsys.readouterr().err
+    assert mcp_connect.run_connect(args("cursor", paste_token=True), home=tmp_path) == 0
+    env = json.loads(mcp_connect.config_path("cursor", tmp_path).read_text())["mcpServers"]["nebula"]["env"]
+    assert env["NEBULA_APP_TOKEN"] == TOKEN
 
 
 @pytest.mark.parametrize("content", ["{not json", "[1, 2]", '{"mcpServers": []}'])
@@ -277,7 +420,31 @@ def test_connect_asks_before_writing(tmp_path, cli_env, monkeypatch):
     assert path.exists()
 
 
-def test_connect_uses_the_clients_own_command(tmp_path, cli_env, monkeypatch):
+def test_connect_with_a_token_file_puts_only_its_path_on_argv(tmp_path, cli_env, monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        if argv[:3] == ["codex", "mcp", "add"]:
+            fake_codex_add(tmp_path / ".codex" / "config.toml", argv)
+        return subprocess.CompletedProcess(argv, 1 if argv[1:3] == ["mcp", "get"] else 0, "", "")
+
+    assert mcp_connect.run_connect(args("claude-code"), home=tmp_path, runner=runner) == 0
+    assert mcp_connect.run_connect(args("codex"), home=tmp_path, runner=runner) == 0
+    claude_argv, codex_argv = [argv for argv in calls if argv[2] == "add"]
+    for argv in (claude_argv, codex_argv):
+        assert f"NEBULA_APP_TOKEN_FILE={cli_env.file}" in argv and TOKEN not in " ".join(argv)
+    assert not any("PENDING" in part for part in codex_argv)
+    server = __import__("tomllib").loads((tmp_path / ".codex" / "config.toml").read_text())["mcp_servers"]["nebula"]
+    assert server["env"] == {"NEBULA_URL": URL, "NEBULA_APP_TOKEN_FILE": cli_env.file}
+    assert server["tool_timeout_sec"] == 150
+    out = capsys.readouterr()
+    assert TOKEN not in out.out + out.err and "process list" not in out.out
+
+
+def test_connect_uses_the_clients_own_command(tmp_path, legacy_env, monkeypatch):
     calls = []
     monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: f"/usr/bin/{name}")
 
@@ -344,7 +511,7 @@ def test_codex_entry_that_doesnt_parse_back_is_removed(tmp_path, cli_env, monkey
     assert TOKEN not in (tmp_path / "ch" / "config.toml").read_text() and "--print" in capsys.readouterr().err
 
 
-def test_a_refused_client_command_is_reported_without_the_token(tmp_path, cli_env, monkeypatch, capsys):
+def test_a_refused_client_command_is_reported_without_the_token(tmp_path, legacy_env, monkeypatch, capsys):
     monkeypatch.setattr(mcp_connect.shutil, "which", lambda name: f"/usr/bin/{name}")
 
     def runner(argv, **kwargs):
@@ -373,7 +540,7 @@ def test_an_existing_nebula_server_is_never_replaced(tmp_path, cli_env, monkeypa
 def test_manual_clients_only_print(tmp_path, cli_env, capsys):
     assert mcp_connect.run_connect(args("hermes"), home=tmp_path) == 0
     out = capsys.readouterr().out
-    assert "trust: untrusted" in out and TOKEN in out and "My Cursor" in out
+    assert "trust: untrusted" in out and cli_env.file in out and TOKEN not in out and "My Cursor" in out
     assert not list(tmp_path.rglob("*"))
 
 
@@ -387,11 +554,12 @@ def test_an_in_app_agent_cant_connect_apps(tmp_path, cli_env, monkeypatch):
 def test_connect_without_a_token_says_where_to_make_one(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
     monkeypatch.delenv("NEBULA_APP_TOKEN", raising=False)
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE", raising=False)
     monkeypatch.setattr(sys, "stdin", __import__("io").StringIO(""))
     assert mcp_connect.run_connect(args("cursor", name="Desk", daily_usd=5), home=tmp_path) == 1
     err = capsys.readouterr().err
     assert "Settings > Connect your agent" in err and "name it Desk" in err and "$5" in err
-    assert "can't make tokens" in err
+    assert "can't make tokens" in err and "--token-file" in err
 
 
 def test_replacing_a_nebula_entry_blanks_the_old_token_in_the_backup(tmp_path, cli_env, capsys):
@@ -407,6 +575,7 @@ def test_replacing_a_nebula_entry_blanks_the_old_token_in_the_backup(tmp_path, c
 
 def test_connect_refuses_to_write_when_nebula_cant_be_reached(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE", raising=False)
     monkeypatch.setenv("NEBULA_APP_TOKEN", TOKEN)
     monkeypatch.setattr(mcp_connect, "check_token", lambda url, token: None)
     assert mcp_connect.run_connect(args("cursor"), home=tmp_path) == 1
@@ -434,6 +603,7 @@ def test_check_token_refuses_what_isnt_nebula(monkeypatch):
 
 def test_the_cli_writes_the_address_nebula_reports(tmp_path, monkeypatch):
     monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
+    monkeypatch.delenv("NEBULA_APP_TOKEN_FILE", raising=False)
     monkeypatch.setenv("NEBULA_APP_TOKEN", TOKEN)
     url_file = str(tmp_path / "state" / "backend-url")
     monkeypatch.setattr(mcp_connect, "check_token", lambda url, token: {
@@ -461,7 +631,8 @@ def test_check_token_refuses_a_revoked_token(monkeypatch):
 
 
 def test_cli_print_mode_changes_nothing(tmp_path):
-    env = {k: v for k, v in os.environ.items() if k not in ("NEBULA_APP_TOKEN", "NEBULA_AGENT_TOKEN")}
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("NEBULA_APP_TOKEN", "NEBULA_APP_TOKEN_FILE", "NEBULA_AGENT_TOKEN")}
     env["HOME"] = str(tmp_path)
     done = subprocess.run([sys.executable, "-m", "nebula", "--url", "http://127.0.0.1:9", "mcp", "connect", "cursor",
                            "--print"], cwd=REPO, env=env, capture_output=True, text=True, timeout=60)
@@ -469,7 +640,8 @@ def test_cli_print_mode_changes_nothing(tmp_path):
     # the right answer is a refusal (the config would name a missing python).
     if (REPO / "backend" / ".venv" / "bin" / "python").exists():
         assert done.returncode == 0, done.stderr
-        assert agent_connect.TOKEN_PLACEHOLDER in done.stdout and '"type": "stdio"' in done.stdout
+        assert agent_connect.TOKEN_FILE_PLACEHOLDER in done.stdout and '"type": "stdio"' in done.stdout
+        assert '"NEBULA_APP_TOKEN_FILE"' in done.stdout and "nebula_app_" not in done.stdout
         assert '"NEBULA_URL": "http://127.0.0.1:9"' in done.stdout
     else:
         assert done.returncode == 1 and "no backend virtualenv" in done.stderr, done.stderr
@@ -485,10 +657,12 @@ def client(monkeypatch, tmp_path, person):
     import main
     from services import app_tokens
 
-    store = app_tokens.AppTokens(tmp_path / "app-tokens.json")
+    store = app_tokens.AppTokens(tmp_path / "app-tokens.json", token_dir=tmp_path)
     monkeypatch.setattr(main, "app_token_store", store)
     monkeypatch.setattr(app_tokens, "_store", store)
-    return TestClient(main.app)
+    test_client = TestClient(main.app)
+    test_client.state = tmp_path
+    return test_client
 
 
 def test_only_the_person_gets_a_token_and_its_setup(client, fake_checkout):
@@ -502,13 +676,30 @@ def test_only_the_person_gets_a_token_and_its_setup(client, fake_checkout):
     payload = response.json()
     token, app, setup_view = payload["token"], payload["app"], payload["setup"]
     assert app["client"] == "hermes" and app["color"] == "#3FC1A5" and app["dailyUsd"] == 3
-    assert setup_view["format"] == "yaml" and f'NEBULA_APP_TOKEN: "{token}"' in setup_view["snippet"]
+    # The token is in its own 0600 file; the setup names the file, never the token.
+    token_file = Path(payload["tokenFile"])
+    assert token_file == client.state / "app-tokens" / f"{app['id']}.token" and token_file.is_absolute()
+    assert token_file.read_text() == token and mode(token_file) == 0o600 and mode(token_file.parent) == 0o700
+    assert setup_view["format"] == "yaml" and f'NEBULA_APP_TOKEN_FILE: "{token_file}"' in setup_view["snippet"]
+    assert token not in json.dumps(setup_view) and setup_view["tokenFile"] == str(token_file)
     assert "trust: untrusted" in setup_view["snippet"] and "its $3 daily limit" in setup_view["warnings"][0]
     assert str(fake_checkout / ".venv" / "bin" / "python") in setup_view["snippet"]
     # The listing never repeats the token or the setup, and says what the picker offers.
     listing = client.get("/api/agent/spend/apps", headers=PERSON).json()
     assert token not in json.dumps(listing) and listing["connect"]["available"] is True
     assert [c["id"] for c in listing["connect"]["clients"]] == list(agent_connect.CLIENTS)
+    # Only the person revokes; revoking deletes the file.
+    as_app = {"Authorization": f"Agent {token}"}
+    assert client.delete(f"/api/agent/spend/apps/{app['id']}", headers=as_app).status_code == 403
+    assert token_file.exists()
+    assert client.delete(f"/api/agent/spend/apps/{app['id']}", headers=PERSON).status_code == 200
+    assert not token_file.exists()
+    assert client.get("/api/agent/spend", headers=as_app).status_code == 401
+
+
+def test_a_plain_token_also_gets_a_file(client):
+    made = client.post("/api/agent/spend/apps", json={"name": "Script"}, headers=PERSON).json()
+    assert "setup" not in made and Path(made["tokenFile"]).read_text() == made["token"]
 
 
 def test_a_bad_client_or_color_makes_no_token(client):
@@ -767,7 +958,8 @@ def test_desktop_configs_carry_the_url_file(client, monkeypatch, tmp_path):
     monkeypatch.setenv("NEBULA_DESKTOP_MODE", "1")
     made = client.post("/api/agent/spend/apps", json={"name": "Desk", "client": "cursor"}, headers=PERSON).json()
     env = json.loads(made["setup"]["snippet"])["mcpServers"]["nebula"]["env"]
-    assert env == {"NEBULA_URL_FILE": str(main._STATE_DIR / "backend-url"), "NEBULA_APP_TOKEN": made["token"]}
+    assert env == {"NEBULA_URL_FILE": str(main._STATE_DIR / "backend-url"), "NEBULA_APP_TOKEN_FILE": made["tokenFile"]}
+    assert made["setup"]["cli"].startswith(f"NEBULA_URL_FILE={main._STATE_DIR / 'backend-url'} ")
     status = client.get("/api/agent/spend", headers={"Authorization": f"Agent {made['token']}"}).json()
     assert status["mcpAddress"] == {"urlFile": str(main._STATE_DIR / "backend-url")}
     monkeypatch.delenv("NEBULA_DESKTOP_MODE")

@@ -1,0 +1,61 @@
+name: ACP adapter pins
+
+# Weekly check of the npx adapter pins in backend/services/personal_agents.py
+# against npm, under the 14-day package rule. When a newer stable release has
+# cleared the hold (or the pin is deprecated or gone), it opens one issue, or
+# updates the open one. It never changes a pin. See docs/PERSONAL-AGENTS.md.
+
+on:
+  schedule:
+    - cron: "17 14 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: adapter-pins
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check adapter pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      # The script only needs the standard library, so nothing is installed.
+      # Registry data stays in files; it never reaches a ${{ }} expression.
+      - name: Check the registry
+        id: check
+        env:
+          REPORT: ${{ runner.temp }}/adapter-pins.md
+        run: |
+          python backend/scripts/check_adapter_pins.py --report "$REPORT" --github-output "$GITHUB_OUTPUT"
+
+      - name: Add the report to the job summary
+        if: ${{ !cancelled() }}
+        env:
+          REPORT: ${{ runner.temp }}/adapter-pins.md
+        run: |
+          if [ -f "$REPORT" ]; then cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Open or update the issue
+        if: ${{ !cancelled() && steps.check.outputs.action_needed == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPORT: ${{ runner.temp }}/adapter-pins.md
+        run: |
+          python backend/scripts/check_adapter_pins.py --file-issue "$REPORT"

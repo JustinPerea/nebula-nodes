@@ -428,13 +428,16 @@ export const LAUNCH_SECRET_ENV_KEYS = Object.freeze([
  *   ANTHROPIC_API_KEY ahead of the subscription login), and becomes a silent
  *   fallback for provider SDKs that read their own variable.
  * - NEBULA_APP_TOKEN / NEBULA_AGENT_TOKEN: an outside app's spending token
- *   and an in-app chat turn's token. Present when Nebula.app is started from
- *   such a shell; the backend must not run as either.
+ *   and an in-app chat turn's token, and their _FILE forms (a path to a file
+ *   holding one). Present when Nebula.app is started from such a shell; the
+ *   backend must not run as either. devserver.py drops the same four.
  */
 export const INHERITED_CREDENTIAL_ENV_KEYS = Object.freeze([
   ...ALLOWED_PROVIDERS,
   'NEBULA_APP_TOKEN',
+  'NEBULA_APP_TOKEN_FILE',
   'NEBULA_AGENT_TOKEN',
+  'NEBULA_AGENT_TOKEN_FILE',
 ]);
 
 /** Every name startSidecar removes from the child's environment. */

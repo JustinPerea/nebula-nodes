@@ -17,7 +17,8 @@ the worker gives it to person_session before the app is imported.
 Provider keys come from Settings only (services/settings.py never falls back
 to the environment), so this strips every provider credential name
 (services/credential_catalog.py) and the NEBULA_APP_TOKEN /
-NEBULA_AGENT_TOKEN spending tokens from its own environment before any reload
+NEBULA_AGENT_TOKEN spending tokens (and their _FILE forms, which point at
+one) from its own environment before any reload
 worker starts. Otherwise a terminal's OPENAI_API_KEY or ANTHROPIC_API_KEY
 would reach every agent child the backend starts (Claude in -p mode bills an
 API key ahead of the subscription login) and act as a hidden fallback for
@@ -51,7 +52,9 @@ from services.credential_catalog import CREDENTIAL_PROVIDERS  # noqa: E402
 
 # Never inherited by the dev backend: keys come from Settings, and the backend
 # must not run as an outside app or an in-app chat turn.
-INHERITED_CREDENTIAL_ENV_KEYS = frozenset(CREDENTIAL_PROVIDERS | {"NEBULA_APP_TOKEN", "NEBULA_AGENT_TOKEN"})
+SPENDING_TOKEN_ENV_KEYS = frozenset({"NEBULA_APP_TOKEN", "NEBULA_APP_TOKEN_FILE",
+                                     "NEBULA_AGENT_TOKEN", "NEBULA_AGENT_TOKEN_FILE"})
+INHERITED_CREDENTIAL_ENV_KEYS = frozenset(CREDENTIAL_PROVIDERS | SPENDING_TOKEN_ENV_KEYS)
 
 
 def scrub_inherited_credentials(environ: MutableMapping[str, str]) -> list[str]:

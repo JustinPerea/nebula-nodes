@@ -1389,7 +1389,9 @@ describe('startSidecar — person token', () => {
     const env = { PATH: '/usr/bin:/bin', HOME: '/tmp/nebula-home', ANTHROPIC_DEFAULT_SONNET_MODEL: 'kept' };
     for (const name of ALLOWED_PROVIDERS) env[name] = `shell-leak-${name}`;
     env.NEBULA_APP_TOKEN = 'shell-leak-app-token';
+    env.NEBULA_APP_TOKEN_FILE = '/tmp/shell-leak-app-token-file';
     env.NEBULA_AGENT_TOKEN = 'shell-leak-agent-token';
+    env.NEBULA_AGENT_TOKEN_FILE = '/tmp/shell-leak-agent-token-file';
     const child = childWithStdin();
     const call = await start(child, { env, personToken: null });
     for (const name of SIDECAR_STRIPPED_ENV_KEYS) assert.equal(name in call.opts.env, false, name);

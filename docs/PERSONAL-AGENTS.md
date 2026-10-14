@@ -113,6 +113,33 @@ Nebula won't start a personal agent until you accept this:
 
 Commons (`NEBULA_COMMONS_ENABLED=1`) keeps chat to the built-in Claude and Codex, so personal agents are refused there.
 
+## Updating the adapter pins
+
+A GitHub Actions workflow (`.github/workflows/adapter-pins.yml`) checks the two npx adapter pins every Monday. It runs
+`backend/scripts/check_adapter_pins.py`, which reads the pins from `personal_agents.py` and asks registry.npmjs.org
+for each adapter's releases. It looks for the newest stable release (no prerelease tag, not deprecated) that is newer
+than the pin and was published at least 14 days ago. The 14-day rule is there because a bad release is usually
+caught and pulled within days.
+
+If there is one, or the pinned version is deprecated or gone from the registry, the workflow opens an issue titled
+"ACP adapter updates past the 14-day hold". If its own issue is already open, it updates it instead, and adds a comment
+when the versions changed. Only an issue opened by the workflow (author `github-actions`) counts: the repo is public, so
+anyone can open one with that title. Trust that issue's description, not its comments, and run the script yourself
+before bumping, since it re-checks the registry. When nothing is due it does nothing. The report also says when the next newer release
+clears the hold. You can run it any time from the Actions tab, or locally with
+`backend/.venv/bin/python backend/scripts/check_adapter_pins.py`.
+
+The workflow never changes a pin. To bump one:
+
+1. Change the version in the preset's args in `backend/services/personal_agents.py`, and the version, publish date and
+   check date in its docstring. Update the table above too.
+2. Run the ACP tests: `.venv/bin/python -m pytest -q tests/test_acp_client.py tests/test_acp_events.py
+   tests/test_acp_session.py tests/test_personal_agents.py tests/test_chat_personal_ws.py
+   tests/test_adapter_pins.py` from `backend/`.
+3. Do one real turn with that agent in the chat panel, by hand, and check that text, a tool call and an approval card
+   come through. The tests use a fake agent, so this is the only check against the real adapter.
+4. Close the issue once both pins are current.
+
 ## Not done yet
 
 Reattaching after a reconnect (`session/load`), Hermes profile setup, OpenClaw (it rejects client MCP servers), remote

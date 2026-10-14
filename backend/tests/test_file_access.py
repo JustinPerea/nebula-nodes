@@ -255,3 +255,20 @@ def test_graph_import_content_is_checked_before_clearing_graph(tmp_path, protect
     with pytest.raises(ProtectedPathError):
         graph.load(path)
     assert graph.get_state() == before
+
+
+@pytest.mark.parametrize("folder", ["app-tokens", "agent-tokens"])
+def test_token_file_folders_are_protected(tmp_path, monkeypatch, folder):
+    # Bearer tokens at predictable paths (services/app_token_file.py,
+    # agent_token_file.py): no graph or media path may read them.
+    from services import app_token_file
+    state = tmp_path / "state"
+    monkeypatch.setenv("NEBULA_STATE_DIR", str(state))
+    token_file = app_token_file.write(state, "abcdef123456", "fake-token-for-tests-0123456789abcdefghij")
+    candidate = token_file if folder == "app-tokens" else state / folder / "4242" / "sess.token"
+    with pytest.raises(ProtectedPathError):
+        require_allowed_path(candidate)
+    alias = tmp_path / "alias.token"
+    alias.symlink_to(token_file)
+    with pytest.raises(ProtectedPathError):
+        require_allowed_path(alias)
