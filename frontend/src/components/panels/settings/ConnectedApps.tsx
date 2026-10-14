@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   createConnectedApp,
   revokeConnectedApp,
+  setConnectedAppColor,
   setConnectedAppLimit,
   type AgentClientOption,
   type AgentSetup,
@@ -97,7 +98,7 @@ function CopyBlock({ label, where, text, onError }: {
   );
 }
 
-/** What to paste or run in the agent's app, with the token in it. Shown once. */
+/** What to paste or run in the agent's app. It names the token's file, never the token. */
 function SetupPanel({ name, setup, onDone, onError }: {
   name: string;
   setup: AgentSetup;
@@ -107,9 +108,12 @@ function SetupPanel({ name, setup, onDone, onError }: {
   return (
     <div className="settings-apps__setup" role="region" aria-label={`Set up ${name} in ${setup.label}`}>
       <p className="settings-apps__setup-title">Set up {name} in {setup.label}</p>
-      <p className="settings-hint">
-        This holds {name}&rsquo;s token. Nebula keeps only a fingerprint, so this is the only time it can show it.
-      </p>
+      {setup.tokenFile && (
+        <p className="settings-hint">
+          Nebula saved {name}&rsquo;s token in <code>{setup.tokenFile}</code>, which only your macOS user can read.
+          The config points at that file, so it holds no secret.
+        </p>
+      )}
       <ol className="settings-apps__steps">
         {setup.steps.map((step) => <li key={step}>{step}</li>)}
       </ol>
@@ -117,6 +121,11 @@ function SetupPanel({ name, setup, onDone, onError }: {
       {setup.alternative && (
         <CopyBlock label={`${setup.label} alternative config`} where={`Or: ${setup.alternative.where}`}
           text={setup.alternative.snippet} onError={onError} />
+      )}
+      {setup.cli && (
+        <CopyBlock label={`${setup.label} nebula command`}
+          where="Or let Nebula's CLI do it (it checks the token first and asks before changing anything)"
+          text={setup.cli} onError={onError} />
       )}
       <ul className="settings-apps__warnings" aria-label="Before you paste it">
         {setup.warnings.map((warning) => <li key={warning}>{warning}</li>)}
@@ -147,9 +156,11 @@ export function ConnectedApps({ view, loadError, onChanged }: {
   const [limit, setLimit] = useState<number | null>(5);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [made, setMade] = useState<{ name: string; token: string; setup?: AgentSetup } | null>(null);
+  const [made, setMade] = useState<{ name: string; token: string; tokenFile: string | null; setup?: AgentSetup } | null>(null);
+  const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [armed, setArmed] = useState<string | null>(null);
+  const [recoloring, setRecoloring] = useState<string | null>(null);
   const labelOf = (id: string | null | undefined) => clients.find((client) => client.id === id)?.label;
 
   const run = async (work: () => Promise<void>) => {
@@ -172,7 +183,8 @@ export function ConnectedApps({ view, loadError, onChanged }: {
 
   const create = () => run(async () => {
     const result = await createConnectedApp(name.trim(), limit, available ? { client: clientId, color } : { color });
-    setMade({ name: result.app.name, token: result.token, setup: result.setup });
+    setMade({ name: result.app.name, token: result.token, tokenFile: result.tokenFile ?? null, setup: result.setup });
+    setRevealed(false);
     setCopied(false);
     setNameTouched(false);
     setName(defaultName(clients.find((client) => client.id === clientId)));
@@ -209,8 +221,12 @@ export function ConnectedApps({ view, loadError, onChanged }: {
           <div className="settings-pref settings-model-limit" key={app.id} data-testid="settings-app-row">
             <span className="settings-pref__text">
               <span className="settings-pref__title settings-apps__app-name">
-                <span className={`settings-apps__dot${app.color ? '' : ' settings-apps__swatch--auto'}`} aria-hidden="true"
-                  style={app.color ? { ['--swatch' as string]: app.color } : undefined} />
+                <button type="button" className="settings-apps__dot-button" disabled={busy}
+                  aria-label={`Change the cursor color for ${app.name}`} aria-expanded={recoloring === app.id}
+                  onClick={() => setRecoloring(recoloring === app.id ? null : app.id)}>
+                  <span className={`settings-apps__dot${app.color ? '' : ' settings-apps__swatch--auto'}`} aria-hidden="true"
+                    style={app.color ? { ['--swatch' as string]: app.color } : undefined} />
+                </button>
                 {app.name}
               </span>
               <span className="settings-pref__description">
@@ -236,6 +252,15 @@ export function ConnectedApps({ view, loadError, onChanged }: {
                   aria-label={`Revoke the token for ${app.name}`} onClick={() => setArmed(app.id)}>Revoke</button>
               )}
             </span>
+            {recoloring === app.id && (
+              <span className="settings-model-limit__controls" role="group" aria-label={`Cursor color for ${app.name}`}>
+                <ColorPicker value={app.color ?? null} disabled={busy}
+                  onChange={(next) => void run(async () => {
+                    await setConnectedAppColor(app.id, next);
+                    setRecoloring(null);
+                  })} />
+              </span>
+            )}
           </div>
         ))}
         <form className="settings-pref settings-model-limit settings-apps__new"
@@ -269,16 +294,32 @@ export function ConnectedApps({ view, loadError, onChanged }: {
       )}
       {made && !made.setup && (
         <div className="settings-apps__token" role="status">
-          <p className="settings-hint">
-            Token for {made.name}. Copy it now: Nebula keeps only a fingerprint and can&rsquo;t show it again. Put it in
-            the app&rsquo;s Nebula MCP server config as <code>NEBULA_APP_TOKEN</code>.
-          </p>
-          <div className="settings-apps__token-row">
-            <input className="settings-folder__input" readOnly aria-label={`Token for ${made.name}`} value={made.token}
-              onFocus={(event) => event.target.select()} />
-            <button type="button" className="settings__button" onClick={() => void copyToken()}>{copied ? 'Copied' : 'Copy'}</button>
-            <button type="button" className="settings__button settings__button--ghost" onClick={() => setMade(null)}>Done</button>
-          </div>
+          {made.tokenFile ? (
+            <p className="settings-hint">
+              Nebula saved the token for {made.name} in <code>{made.tokenFile}</code>, which only your macOS user can
+              read. Give Nebula&rsquo;s MCP server that path as <code>NEBULA_APP_TOKEN_FILE</code>, or have a script
+              read the file. Revoking deletes it.
+            </p>
+          ) : (
+            <p className="settings-hint">Token for {made.name}. Nebula keeps only a fingerprint and can&rsquo;t show it again.</p>
+          )}
+          {/* An app that can't read a file needs the value itself. That copy is outside Nebula's
+              control, so it stays hidden until asked for. */}
+          {revealed || !made.tokenFile ? (
+            <div className="settings-apps__token-row">
+              <input className="settings-folder__input" readOnly aria-label={`Token for ${made.name}`} value={made.token}
+                onFocus={(event) => event.target.select()} />
+              <button type="button" className="settings__button" onClick={() => void copyToken()}>{copied ? 'Copied' : 'Copy'}</button>
+              <button type="button" className="settings__button settings__button--ghost" onClick={() => setMade(null)}>Done</button>
+            </div>
+          ) : (
+            <div className="settings-apps__token-row">
+              <button type="button" className="settings__button" onClick={() => setRevealed(true)}>
+                Show the token for an app that can&rsquo;t read a file
+              </button>
+              <button type="button" className="settings__button settings__button--ghost" onClick={() => setMade(null)}>Done</button>
+            </div>
+          )}
         </div>
       )}
       {error && <p className="settings-row__error" role="alert">{error}</p>}

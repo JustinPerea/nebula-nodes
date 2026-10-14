@@ -38,6 +38,7 @@ vi.mock('../src/lib/api', () => ({
   getOutsideSpend: (...args: unknown[]) => getOutsideSpendMock(...args),
   createConnectedApp: (...args: unknown[]) => createConnectedAppMock(...args),
   setConnectedAppLimit: (...args: unknown[]) => setConnectedAppLimitMock(...args),
+  setConnectedAppColor: vi.fn(),
   revokeConnectedApp: (...args: unknown[]) => revokeConnectedAppMock(...args),
   fetchPersonalAgents: (...args: unknown[]) => fetchPersonalAgentsMock(...args),
   updatePersonalAgent: (...args: unknown[]) => updatePersonalAgentMock(...args),
@@ -893,7 +894,7 @@ describe('Settings — preferences', () => {
     }));
   });
 
-  it('connects an agent, shows its setup once, and lists, limits and revokes connected agents', async () => {
+  it('connects an agent, shows its setup without the token, and lists, limits and revokes connected agents', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     const app = { id: 'a1b2c3d4e5f6', name: 'Claude Desktop', dailyUsd: 5, createdAt: 1, spentUsd: 0.4, kreaPlanRuns: 0,
@@ -901,11 +902,13 @@ describe('Settings — preferences', () => {
     const setup = {
       client: 'claude-desktop', label: 'Claude Desktop', kind: 'json', format: 'json',
       where: '~/Library/Application Support/Claude/claude_desktop_config.json',
-      snippet: '{"mcpServers": {"nebula": {"env": {"NEBULA_APP_TOKEN": "nebula_app_secret"}}}}',
+      snippet: '{"mcpServers": {"nebula": {"env": {"NEBULA_APP_TOKEN_FILE": "/state/app-tokens/a1b2c3d4e5f6.token"}}}}',
       steps: ['Quit Claude Desktop completely and open it again.'], alternative: null,
+      tokenFile: '/state/app-tokens/a1b2c3d4e5f6.token',
+      cli: 'NEBULA_URL=http://127.0.0.1:8000 /repo/backend/.venv/bin/python /repo/nebula mcp connect claude-desktop',
       warnings: ['Claude Desktop’s own scheduled jobs can run Nebula nodes with this token.'],
     };
-    createConnectedAppMock.mockResolvedValue({ app, token: 'nebula_app_secret', setup });
+    createConnectedAppMock.mockResolvedValue({ app, token: 'nebula_app_secret', tokenFile: setup.tokenFile, setup });
     setConnectedAppLimitMock.mockResolvedValue({ app: { ...app, dailyUsd: 10 } });
     await renderSettings({ apiKeys: {}, runCostConfirmUsd: 1, agentSpend: { sessionUsd: 10, models: {} } });
     openTab('Preferences');
@@ -920,8 +923,10 @@ describe('Settings — preferences', () => {
     await waitFor(() => expect(createConnectedAppMock).toHaveBeenCalledWith(
       'Claude Desktop', 5, { client: 'claude-desktop', color: null }));
     const panel = await screen.findByRole('region', { name: 'Set up Claude Desktop in Claude Desktop' });
-    expect(panel).toHaveTextContent('nebula_app_secret');
-    expect(panel).toHaveTextContent(/only time it can show it/);
+    expect(panel).not.toHaveTextContent('nebula_app_secret');
+    expect(panel).toHaveTextContent('/state/app-tokens/a1b2c3d4e5f6.token');
+    expect(panel).toHaveTextContent(/only your macOS user can read/);
+    expect(within(panel).getByRole('button', { name: 'Copy Claude Desktop nebula command' })).toBeInTheDocument();
     fireEvent.click(within(panel).getByRole('button', { name: 'Copy Claude Desktop config' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(setup.snippet));
     expect(await within(panel).findByRole('button', { name: 'Copy Claude Desktop config' })).toHaveTextContent('Copied');

@@ -689,12 +689,45 @@ def load_agent_token_file(environ: Any = None) -> bool:
     env = os.environ if environ is None else environ
     if env.get("NEBULA_AGENT_TOKEN"):
         return False
-    path = env.get(agent_token_file.ENV_VAR)
+    return _read_token_file(env, agent_token_file.ENV_VAR, "NEBULA_AGENT_TOKEN")
+
+
+def load_app_token_file(environ: Any = None) -> bool:
+    """A connected app's config names its token file (NEBULA_APP_TOKEN_FILE,
+    services/app_token_file.py) instead of holding the token. Read it into
+    this process's NEBULA_APP_TOKEN, failing closed like
+    load_agent_token_file. Returns whether a file was read.
+
+    Which token the server uses, first match wins:
+    1. NEBULA_AGENT_TOKEN: an in-app chat's turn token;
+    2. NEBULA_AGENT_TOKEN_FILE: a personal agent's session token;
+    3. NEBULA_APP_TOKEN_FILE: a connected app's token file. It replaces any
+       NEBULA_APP_TOKEN also set, and if it is set it must be good;
+    4. NEBULA_APP_TOKEN: the token itself, from a config made before token files.
+    With 1 or 2 set, the app file isn't read (nebula_api sends the agent token)."""
+    from services import agent_token_file, app_token_file
+
+    env = os.environ if environ is None else environ
+    if env.get("NEBULA_AGENT_TOKEN") or env.get(agent_token_file.ENV_VAR) is not None:
+        return False
+    return _read_token_file(env, app_token_file.ENV_VAR, "NEBULA_APP_TOKEN")
+
+
+def _read_token_file(env: Any, file_var: str, token_var: str) -> bool:
+    from services import agent_token_file
+
+    path = env.get(file_var)
     if path is None:
         return False
     if not path.strip():
-        raise agent_token_file.TokenFileError(f"{agent_token_file.ENV_VAR} is empty")
-    env["NEBULA_AGENT_TOKEN"] = agent_token_file.read(path)
+        raise agent_token_file.TokenFileError(f"{file_var} is empty")
+    try:
+        env[token_var] = agent_token_file.read(path)
+    except agent_token_file.TokenFileError as exc:
+        # Never act on a token left over from elsewhere when the file the
+        # config names is bad.
+        env.pop(token_var, None)
+        raise agent_token_file.TokenFileError(f"{file_var}: {exc}") from exc
     return True
 
 
@@ -725,6 +758,7 @@ if __name__ == "__main__":
         try:
             # Before the workspace check: that call needs the token.
             load_agent_token_file()
+            load_app_token_file()
             stack.enter_context(agent_workspace_scope())
         except (NebulaAPIError, ValueError) as exc:
             # Fail closed: an agent whose token can't be checked gets no Nebula tools.

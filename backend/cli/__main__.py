@@ -241,9 +241,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     mcp_connect_p = mcp_sub.add_parser(
         "connect", help="Add Nebula's MCP server to an app, with a token made in Settings > Connect your agent",
-        description=("The token comes from Settings > Connect your agent ($NEBULA_APP_TOKEN, or pasted at the "
-                     "prompt): only the Nebula canvas you opened from the launch link can make one."))
+        description=("The token comes from Settings > Connect your agent, which saves it to a private file and "
+                     "shows this command with --token-file: only the Nebula canvas you opened from the launch link "
+                     "can make one. The config names that file, never the token."))
     mcp_connect_p.add_argument("client", choices=list(CLIENTS))
+    mcp_connect_p.add_argument("--token-file", dest="token_file", default=None,
+                               help="The token file Settings shows (default: $NEBULA_APP_TOKEN_FILE)")
+    mcp_connect_p.add_argument("--paste-token", dest="paste_token", action="store_true",
+                               help="Paste a token made before token files at a hidden prompt (or set "
+                                    "$NEBULA_APP_TOKEN); the config then holds the token itself")
     mcp_connect_p.add_argument("--name", help="The name you gave the app in Settings (checked against the token)")
     mcp_connect_p.add_argument("--daily-usd", dest="daily_usd", type=float, default=None,
                                help="The daily limit you set in Settings (used in the steps when there's no token yet)")

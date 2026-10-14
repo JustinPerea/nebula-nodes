@@ -269,7 +269,8 @@ export interface OutsideSpend {
   personal?: Array<{ id: string; name: string; spentUsd: number; kreaPlanRuns: number }>;
 }
 
-/** The exact config for one agent app (backend services/agent_connect.py). Holds the token: shown once. */
+/** The exact config for one agent app (backend services/agent_connect.py). It names the token's
+ * file (tokenFile), never the token itself. */
 export interface AgentSetup {
   client: string;
   label: string;
@@ -279,6 +280,10 @@ export interface AgentSetup {
   snippet: string;
   steps: string[];
   alternative: { format: string; where: string; snippet: string } | null;
+  /** The 0600 file Nebula saved the token to; the snippet points at it. */
+  tokenFile: string | null;
+  /** The same setup as one `nebula mcp connect --token-file` command; null for apps it only prints for. */
+  cli: string | null;
   warnings: string[];
 }
 
@@ -296,12 +301,13 @@ export function getOutsideSpend(): Promise<OutsideSpend> {
   return agentAppsCall('/api/agent/spend/apps', undefined, 'Loading connected apps');
 }
 
-/** The token is in this response only; the backend keeps a hash. */
+/** The backend keeps a hash and writes the token to tokenFile (0600). The raw token is in this
+ * response too, for scripts; Settings shows it only when the person asks. */
 export function createConnectedApp(
   name: string,
   dailyUsd: number | null,
   options: { client?: string; color?: string | null } = {},
-): Promise<{ app: ConnectedApp; token: string; setup?: AgentSetup }> {
+): Promise<{ app: ConnectedApp; token: string; tokenFile: string | null; setup?: AgentSetup }> {
   return agentAppsCall('/api/agent/spend/apps', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, dailyUsd, ...options }),
