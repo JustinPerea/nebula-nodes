@@ -41,7 +41,7 @@ Notes that match the handler (`backend/handlers/elevenlabs.py`):
 
 **API-key setup.** Get a key from your ElevenLabs account dashboard (Profile → API Keys). Open Nebula **Settings** → **Providers**, choose **Add key** on the **ElevenLabs** row (`ELEVENLABS_API_KEY`), paste it and choose **Save key**. Saving checks the key without generating anything. Nebula stores it under `apiKeys.ELEVENLABS_API_KEY` in the project-root `settings.json`; no restart is required. Every ElevenLabs node uses this same key; if it is missing, the node fails with "ELEVENLABS_API_KEY is required."
 
-**Picking a voice.** The `voice_id` param defaults to Rachel (`21m00Tcm4TlvDq8ikWAM`). To use a different voice, paste its voice ID into the `voice_id` field. You find voice IDs in the ElevenLabs Voice Library / your Voices page on the ElevenLabs site — Nebula does not browse or list voices for you, so keep the IDs you want handy.
+**Picking a voice.** The `voice_id` param defaults to Rachel (`21m00Tcm4TlvDq8ikWAM`). To use a different voice, paste its voice ID into the `voice_id` field. You find voice IDs in the ElevenLabs Voice Library / your Voices page on the ElevenLabs site — Nebula does not browse or list voices for you, so keep the IDs you want handy. A voice ID is letters and digits (plus `_` or `-`); anything else (a `/`, `?`, `.` or `%`) is refused before any call, because the ID is part of the request URL. The same check covers the Krea and Runway copies on your ElevenLabs key.
 
 ### Example pipelines
 

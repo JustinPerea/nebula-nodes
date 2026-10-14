@@ -3606,3 +3606,30 @@ Eight nodes now run on ElevenLabs' own API when `ELEVENLABS_API_KEY` is saved, o
   After that, the `elevenlabs-music` price in `model_pricing.json` turned up as `2.6e-06`. None of my
   mutations wrote that value, so another process probably mutated this worktree. I set it back to
   `2.5e-06` (the catalog `--check` agrees) and re-ran every check.
+
+### Review fixes (2026-10-14, ElevenLabs lane)
+
+An independent review of `direct-elevenlabs` against the ElevenLabs, Krea and Runway pages (fetched
+2026-10-14: pricing/api, music compose, TTS convert, STS convert, legacy dubbing create, models, the Dubbing
+v1 language list, Krea's openapi.json, Runway's llms-full.txt). Model ids, endpoints, field names, the
+3000-600000 ms range, the $0.15/min Music price and the 28 Runway dubbing languages all matched.
+
+- **voice_id path injection (fixed).** The voice id is interpolated into `POST /v1/text-to-speech/{voice_id}`
+  and `/v1/speech-to-speech/{voice_id}`, and httpx resolves dot segments: a `voice_id` of `../../music`
+  became `https://api.elevenlabs.io/music`, and `a/../../../v1/voices/add` became `/v1/voices/add`, on the
+  person's key. Before this lane the Krea TTS `voice_id` only went into Krea's JSON body; now it and the new
+  Runway `voice_id` are free text in an ElevenLabs URL. `handlers/elevenlabs.py _voice_id` now refuses
+  anything but letters, digits, `_` and `-` before any call. It sits in the handler (not the translators)
+  so first-party `elevenlabs-tts` / `elevenlabs-sts` get the same check; a real ElevenLabs id always
+  passes. Test: 16 cases (4 bad ids x Krea TTS, Runway TTS, Runway STS, first-party TTS); all fail with the
+  check disabled.
+- **Route cases (added).** `route_cases.json` lacked Krea TTS on the API token, Krea music without the
+  ElevenLabs key, a cleared Runway `voice_id`, Runway STS on ElevenLabs (with its param split) and Runway
+  dubbing on Runway. Added; removing `runway-tts` from the frontend `DIRECT_REQUIRES` fails them.
+- **Source URL.** The dubbing language list was cited as a relative path; it now names
+  https://elevenlabs.io/docs/help-center/product/dubbing/which-languages-are-supported-in-dubbing.
+- **Checked and left as is.** A whitespace-only `voice_id` counts as set in `direct_block` (both sides), so
+  the run picks ElevenLabs and the translator refuses it before any call; no money moves, and changing the
+  shared rule would touch Ideogram too. A Runway STS run with only video wired and a `voice_id` set is
+  refused on the ElevenLabs route rather than sent to Runway (documented; ffmpeg extraction is the
+  follow-up). The legacy dubbing page gives no `watermark` default; the route stays unpriced either way.
