@@ -122,6 +122,20 @@ APPROVED_DUAL_ROUTE_SPLITS = {
               "falParams": ["output_format", "seed"], "order": _NANO_BANANA_FAL_ORDER}
     for node_id in ("nano-banana-fal", "nano-banana-fal-edit")
 }
+# Direct maker routes, xAI (2026-10-14): Grok Imagine's two fal copies also
+# run on xAI's own API with the person's XAI_API_KEY
+# (execution/maker_routes_xai.py). Same approved split: XAI_API_KEY joins
+# envKeyName and becomes directKeyName; output_format (fal-only, xAI has no
+# output-format field) is the only falParam; every param is unchanged and
+# rebuilt in its baseline order.
+APPROVED_DUAL_ROUTE_SPLITS.update({
+    "grok-imagine-image": {"envKeyName": ("FAL_KEY", ["XAI_API_KEY", "FAL_KEY"]), "directKeyName": "XAI_API_KEY",
+                           "falParams": ["output_format"],
+                           "order": ["num_images", "aspect_ratio", "resolution", "output_format"]},
+    "grok-imagine-image-edit": {"envKeyName": ("FAL_KEY", ["XAI_API_KEY", "FAL_KEY"]),
+                                "directKeyName": "XAI_API_KEY", "falParams": ["output_format"],
+                                "order": ["num_images", "resolution", "output_format"]},
+})
 # Direct maker routes, review fix (2026-10-14): Meshy's own image-to-3D API
 # takes texture_prompt ("Provide a text prompt to guide the texturing
 # process", https://docs.meshy.ai/en/api/image-to-3d), so it moves from

@@ -12006,7 +12006,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'xai/grok-imagine-image',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['XAI_API_KEY', 'FAL_KEY'],
+    directKeyName: 'XAI_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -12014,7 +12015,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'num_images',
         label: 'Number of Images',
@@ -12053,6 +12055,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '2K', value: '2k' },
         ],
       },
+    ],
+    falParams: [
       {
         key: 'output_format',
         label: 'Output Format',
@@ -12066,6 +12070,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
     ],
+    directParams: [],
   },
   'grok-imagine-image-edit': {
     id: 'grok-imagine-image-edit',
@@ -12073,7 +12078,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'xai/grok-imagine-image/edit',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['XAI_API_KEY', 'FAL_KEY'],
+    directKeyName: 'XAI_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -12082,7 +12088,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'num_images',
         label: 'Number of Images',
@@ -12103,6 +12110,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '2K', value: '2k' },
         ],
       },
+    ],
+    falParams: [
       {
         key: 'output_format',
         label: 'Output Format',
@@ -12116,6 +12125,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
     ],
+    directParams: [],
   },
   'esrgan-upscale': {
     id: 'esrgan-upscale',
@@ -16780,7 +16790,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/xai/grok-imagine-2",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "XAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -16949,7 +16962,143 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "XAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          }
+        ],
+        "default": "medium"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "2:1",
+            "value": "2:1"
+          },
+          {
+            "label": "20:9",
+            "value": "20:9"
+          },
+          {
+            "label": "19.5:9",
+            "value": "19.5:9"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "9:19.5",
+            "value": "9:19.5"
+          },
+          {
+            "label": "9:20",
+            "value": "9:20"
+          },
+          {
+            "label": "1:2",
+            "value": "1:2"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          }
+        ]
+      }
+    ],
+    "falParams": [
+      {
+        "key": "style_images",
+        "label": "Style images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-xai-image",
+      "model": "grok-imagine-image-2.0",
+      "blockedBy": [
+        "style_images"
+      ]
+    }
   },
   'krea-image-xai-grok-imagine-2-edit': {
     "id": "krea-image-xai-grok-imagine-2-edit",
@@ -16957,7 +17106,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/xai/grok-imagine-2-edit",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "XAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -17067,7 +17219,80 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "XAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          }
+        ],
+        "default": "medium"
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          }
+        ],
+        "default": "1K"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": true,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-xai-image",
+      "model": "grok-imagine-image-2.0"
+    }
   },
   'krea-image-meta-muse-image': {
     "id": "krea-image-meta-muse-image",
@@ -26470,7 +26695,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/xai/grok-video",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "XAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -26645,7 +26873,127 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "string"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "XAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "start_video",
+        "label": "Start video",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 15,
+        "step": 0.01,
+        "default": 6
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          }
+        ]
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "edit_video",
+        "label": "Edit video",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-xai-video",
+      "model": "grok-imagine-video"
+    }
   },
   'krea-video-xai-grok-video-1-5': {
     "id": "krea-video-xai-grok-video-1-5",
@@ -26653,7 +27001,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/xai/grok-video-1.5",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "XAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -26790,7 +27141,107 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "16:9"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "XAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 15,
+        "step": 0.01,
+        "default": 6
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          }
+        ],
+        "default": "16:9"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "start_video",
+        "label": "Start video",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-xai-video",
+      "model": "grok-imagine-video-1.5",
+      "blockedBy": [
+        "start_video"
+      ]
+    }
   },
   'krea-video-black-forest-labs-flux-3-video': {
     "id": "krea-video-black-forest-labs-flux-3-video",

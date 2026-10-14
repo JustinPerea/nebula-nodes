@@ -147,7 +147,9 @@ def test_generated_prices_keep_the_kling_multi_shot_guard_and_the_audio_note():
     assert kling["rows"] and all(row["match"]["multi_prompt"] == "" for row in kling["rows"])
     assert "multi_prompt" in kling["priceParams"] and "Multi-prompt runs are unpriced" in kling["notes"]
     assert any(source["url"].startswith("https://kling.ai/") for source in kling["sources"])
-    krea_prices = {node_id: entry["routes"]["krea"] if "routes" in entry else entry for node_id, entry in entries.items()}
+    # A maker-routed node Krea doesn't price (Grok Imagine 2.0) has only its maker's route.
+    krea_prices = {node_id: entry["routes"]["krea"] if "routes" in entry else entry for node_id, entry in entries.items()
+                   if "routes" not in entry or "krea" in entry["routes"]}
     audio_free = {node_id for node_id, entry in krea_prices.items()
                   if "doesn't vary with generate_audio" in entry["notes"]}
     assert audio_free == {
@@ -169,7 +171,14 @@ def test_direct_route_models_price_both_routes():
         if direct is None:
             assert entry is None or "routes" not in entry
             continue
-        assert set(entry["routes"]) == {"krea", direct["pricing"]["provider"]}
+        provider = direct["pricing"]["provider"]
+        # Krea's route is priced when Krea publishes a price for it.
+        assert set(entry["routes"]) - {"krea"} == {provider}
+        if provider != "google":
+            maker = entry["routes"][provider]
+            assert maker.get("provider", provider) == provider and maker["rows"] and maker["sources"]
+            assert all(source["url"].startswith("https://") and source["quote"] for source in maker["sources"])
+            continue
         google = entry["routes"]["google"]
         assert google.get("provider", "google") == "google"
         assert google["rows"] and google["checked"] == SYNC.GOOGLE_CHECKED

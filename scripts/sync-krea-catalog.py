@@ -174,6 +174,100 @@ DIRECT_ROUTES = {
 }
 
 
+# xAI (Grok Imagine) on the person's XAI_API_KEY (backend
+# execution/maker_routes_xai.py). Prices are xAI's own Imagine API table on
+# https://docs.x.ai/developers/pricing as the page renders it (checked
+# 2026-10-14; the .md copy lists only each model's lowest rate). Each route
+# entry is final here: no Google reference-image treatment.
+XAI_PRICING_URL = "https://docs.x.ai/developers/pricing"
+XAI_CHECKED = "2026-10-14"
+_XAI_IMAGE_2_QUOTE = ("grok-imagine-image-2.0 | Text, Image -> Image | $0.01 / img (media input) | 1K Low $0.04 / img | "
+                      "1.5K Low $0.05 / img | 2K Low $0.06 / img | 1K Medium $0.06 / img | 1.5K Medium $0.07 / img | "
+                      "2K Medium $0.08 / img")
+_XAI_IMAGE_2_OUTPUT = {("low", "1K"): 0.04, ("low", "2K"): 0.06, ("medium", "1K"): 0.06, ("medium", "2K"): 0.08}
+_XAI_IMAGE_2_INPUT = 0.01
+_XAI_EDIT_SOURCE = {"url": "https://docs.x.ai/developers/model-capabilities/imagine",
+                    "quote": "Image edits are billed for both the input image and the generated output image."}
+_XAI_QUALITY_SOURCE = {"url": "https://docs.x.ai/developers/model-capabilities/images/generation",
+                       "quote": "Images are billed at the quality they are served at"}
+
+
+def _xai_video_rows(rates, input_high, guards):
+    """Per-request rows for each whole-second duration Krea's node takes
+    (1-15): rate x duration, up to that plus the most input images the route
+    can send. A fractional duration matches no row (xAI takes whole seconds,
+    and the direct route refuses it)."""
+    return [{"match": {"resolution": resolution, "duration": seconds, **guards},
+             "price": [round(rate * seconds, 4), round(rate * seconds + input_high, 4)]}
+            for resolution, rate in rates.items() for seconds in range(1, 16)]
+
+
+XAI_DIRECT_ROUTES = {
+    "/generate/image/xai/grok-imagine-2": {
+        "directKeyName": "XAI_API_KEY", "translation": "krea-xai-image", "model": "grok-imagine-image-2.0",
+        "kreaOnly": ["style_images"], "directBlockedBy": ["style_images"], "directParams": [],
+        "pricing": {"provider": "xai", "per": "request", "priceParams": ["quality", "resolution"],
+                    "rows": [{"match": {"quality": quality, "resolution": resolution}, "price": price}
+                             for (quality, resolution), price in _XAI_IMAGE_2_OUTPUT.items()],
+                    # An unset resolution isn't sent, and xAI renders "`1k` (default when omitted)".
+                    "defaults": {"resolution": "1K"},
+                    "notes": "xAI list price for one grok-imagine-image-2.0 image on the person's XAI_API_KEY, by "
+                             "quality and resolution (unset renders at xAI's default, 1k). Style images keep the "
+                             "run on Krea (xAI has none).",
+                    "sources": [{"url": XAI_PRICING_URL, "quote": _XAI_IMAGE_2_QUOTE}, _XAI_QUALITY_SOURCE,
+                                {"url": "https://docs.x.ai/developers/model-capabilities/images/generation",
+                                 "quote": "`1k` (default when omitted)"}],
+                    "checked": XAI_CHECKED},
+    },
+    "/generate/image/xai/grok-imagine-2-edit": {
+        "directKeyName": "XAI_API_KEY", "translation": "krea-xai-image", "model": "grok-imagine-image-2.0",
+        "kreaOnly": [], "directParams": [],
+        "pricing": {"provider": "xai", "per": "request", "priceParams": ["quality", "resolution"],
+                    "rows": [{"match": {"quality": quality, "resolution": resolution},
+                              "price": [round(price + _XAI_IMAGE_2_INPUT, 4), round(price + 3 * _XAI_IMAGE_2_INPUT, 4)]}
+                             for (quality, resolution), price in _XAI_IMAGE_2_OUTPUT.items()],
+                    "notes": "xAI list price for one grok-imagine-image-2.0 edit on the person's XAI_API_KEY: the "
+                             "output image by quality and resolution, plus $0.01 per source image (1 to 3, this "
+                             "node's limit).",
+                    "sources": [{"url": XAI_PRICING_URL, "quote": _XAI_IMAGE_2_QUOTE}, _XAI_EDIT_SOURCE,
+                                _XAI_QUALITY_SOURCE],
+                    "checked": XAI_CHECKED},
+    },
+    "/generate/video/xai/grok-video": {
+        "directKeyName": "XAI_API_KEY", "translation": "krea-xai-video", "model": "grok-imagine-video",
+        "kreaOnly": [], "directParams": [],
+        "pricing": {"provider": "xai", "per": "request", "priceParams": ["duration", "edit_video", "resolution",
+                                                                        "start_video"],
+                    "rows": _xai_video_rows({"480p": 0.05, "720p": 0.07}, 7 * 0.002,
+                                            {"start_video": "", "edit_video": ""}),
+                    "notes": "xAI list price for grok-imagine-video on the person's XAI_API_KEY: per second by "
+                             "resolution, up to that plus $0.002 per input image (a start image, or up to 7 "
+                             "reference images). Edits and extensions (edit_video, start_video) bill the source "
+                             "video at $0.01/sec and their output length depends on it, so they are unpriced.",
+                    "sources": [{"url": XAI_PRICING_URL,
+                                 "quote": "grok-imagine-video | Text, Image, Video -> Video | $0.01 / sec | $0.002 / "
+                                          "img (media input) | 480p $0.05 / sec | 720p $0.07 / sec"}],
+                    "checked": XAI_CHECKED},
+    },
+    "/generate/video/xai/grok-video-1.5": {
+        "directKeyName": "XAI_API_KEY", "translation": "krea-xai-video", "model": "grok-imagine-video-1.5",
+        "kreaOnly": ["start_video"], "directBlockedBy": ["start_video"], "directParams": [],
+        "pricing": {"provider": "xai", "per": "request", "priceParams": ["duration", "resolution"],
+                    "rows": _xai_video_rows({"480p": 0.08, "720p": 0.14, "1080p": 0.25}, 0.01, {}),
+                    "notes": "xAI list price for grok-imagine-video-1.5 on the person's XAI_API_KEY: per second by "
+                             "resolution, up to that plus $0.01 for a start image. A start video keeps the run on "
+                             "Krea (xAI extends videos on grok-imagine-video only).",
+                    "sources": [{"url": XAI_PRICING_URL,
+                                 "quote": "grok-imagine-video-1.5 | Text, Image, Audio -> Video | $0.01 / img (media "
+                                          "input) | 480p $0.08 / sec | 720p $0.14 / sec | 1080p $0.25 / sec"},
+                                {"url": "https://docs.x.ai/developers/model-capabilities/video/extension",
+                                 "quote": "Model | `grok-imagine-video`"}],
+                    "checked": XAI_CHECKED},
+    },
+}
+DIRECT_ROUTES.update(XAI_DIRECT_ROUTES)
+
+
 def direct_route_definition(endpoint, params):
     """The dual-route fields a Krea node with a maker route adds (DIRECT_ROUTES)."""
     route = DIRECT_ROUTES.get(endpoint)
@@ -210,6 +304,9 @@ def direct_route_pricing(endpoint):
         return None
     pricing = dict(route["pricing"])
     provider = pricing.pop("provider")
+    if provider != "google":
+        # A complete entry in the overlay (notes, sources, checked included).
+        return provider, {"currency": "usd", **pricing}
     model = route["model"]
     pricing["rows"] = [{**row, "price": with_references(row["price"], model)} for row in pricing["rows"]]
     pricing["sources"] = [*pricing["sources"], _GOOGLE_INPUT_SOURCES[model], _REFERENCE_LIMIT_SOURCE]

@@ -32,6 +32,9 @@ MAKER_ROUTED = {
     "nano-banana-fal", "nano-banana-fal-edit", "meshy-text-to-3d", "meshy-image-to-3d",
     "krea-image-google-nano-banana-2", "krea-image-google-nano-banana-pro",
     "krea-image-google-nano-banana-flash-lite", "krea-image-google-nano-banana",
+    # xAI (execution/maker_routes_xai.py)
+    "grok-imagine-image", "grok-imagine-image-edit", "krea-image-xai-grok-imagine-2",
+    "krea-image-xai-grok-imagine-2-edit", "krea-video-xai-grok-video", "krea-video-xai-grok-video-1-5",
 }
 
 

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import copy
 import json
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Any, Awaitable, Callable, Mapping
 
 from execution.missing_credential import MissingCredentialError
@@ -66,7 +66,9 @@ def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | Non
 
     async def _route(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str]) -> dict[str, Any]:
         definition = definition_for(node.definition_id)
-        route = node_route.select_route(definition, node.params, api_keys)
+        wired = {port for port, value in inputs.items() if value is not None and value.value not in (None, "", [])}
+        route = node_route.select_route(definition, node_route.with_wired_blockers(definition, node.params, wired),
+                                        api_keys)
         if route.kind == node_route.UNSET:
             raise MissingCredentialError(f"{' or '.join(node_route.env_keys(definition))} is required")
         if route.kind == node_route.DIRECT:
@@ -252,10 +254,19 @@ KREA_TRANSLATIONS: dict[str, tuple[Handler, Callable[[str], Translate]]] = {
     "krea-nano-banana": (krea_google_nano_banana, krea_nano_banana_to_google),
 }
 
+from execution import maker_routes_xai  # noqa: E402  (registers below; imports nothing from here at load)
 
-def krea_router(definition_id: str, fallback: Handler) -> Handler | None:
+KREA_TRANSLATIONS.update({
+    "krea-xai-image": (maker_routes_xai.krea_xai_image, maker_routes_xai.krea_grok_image_to_xai),
+    "krea-xai-video": (maker_routes_xai.krea_xai_video, maker_routes_xai.krea_grok_video_to_xai),
+})
+
+
+def krea_router(definition_id: str, fallback: Handler, emit: Any = None) -> Handler | None:
     """The dual-route handler for a generated Krea node with a maker route, or
-    None when it has none (it stays on the Krea gateway alone)."""
+    None when it has none (it stays on the Krea gateway alone). A direct
+    handler marked ``takes_emit`` (a polled video job) gets the run's
+    ``emit`` for progress."""
     definition = _definitions().get(definition_id) or {}
     spec = definition.get("directRoute")
     if not isinstance(spec, Mapping) or not node_route.direct_keys(definition):
@@ -264,4 +275,6 @@ def krea_router(definition_id: str, fallback: Handler) -> Handler | None:
     if translation is None:
         raise ValueError(f"{definition_id}: unknown direct translation {spec.get('translation')!r}")
     direct, make_translate = translation
+    if getattr(direct, "takes_emit", False):
+        direct = partial(direct, emit=emit)
     return dual_route(direct=direct, fallback=fallback, translate=make_translate(str(spec.get("model"))))

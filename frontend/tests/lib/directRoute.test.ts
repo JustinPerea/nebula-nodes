@@ -4,7 +4,7 @@ import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { buildDefaultParamsForUi, resolveCreateParamDefinitions } from '../../src/lib/createParams';
 import {
   configuredDirectKey, directBlock, directKeyNames, fallbackProvider, paramDefinitionsForRun, routeParamDefinitions,
-  selectRoute,
+  selectRoute, WIRED, withWiredBlockers,
 } from '../../src/lib/directRoute';
 import { runRouteProvider } from '../../src/lib/modelDiscovery';
 
@@ -35,6 +35,18 @@ describe('selectRoute (cases shared with backend services/node_route.py)', () =>
       }
     });
   }
+});
+
+describe('withWiredBlockers (node_route.with_wired_blockers)', () => {
+  it('marks only Krea-only blockers that arrive by wire and have no saved value', () => {
+    const grok15 = NODE_DEFINITIONS['krea-video-xai-grok-video-1-5'];
+    expect(withWiredBlockers(grok15, { prompt: 'p' }, ['start_video', 'start_image'])).toEqual({ prompt: 'p', start_video: WIRED });
+    expect(withWiredBlockers(grok15, { start_video: 'x' }, ['start_video'])).toEqual({ start_video: 'x' });
+    expect(withWiredBlockers(NODE_DEFINITIONS['grok-imagine-image'], {}, ['prompt'])).toEqual({});
+    const keys = { XAI_API_KEY: 'k', KREA_API_TOKEN: 'k' };
+    expect(selectRoute(grok15, withWiredBlockers(grok15, {}, ['start_video']), keys).kind).toBe('fallback');
+    expect(selectRoute(grok15, {}, keys).kind).toBe('direct');
+  });
 });
 
 describe('maker routes for fal and Krea copies', () => {
