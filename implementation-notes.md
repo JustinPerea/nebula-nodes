@@ -3024,3 +3024,97 @@ Two reviewers checked 5eba86fc. Concurrency said ship, with one older gap; the t
 
 - **Personal agents now use the agent guardian.** `_spawn()` calls `spawn_agent_process`, so a SIGKILLed backend no longer leaves an agent's grandchildren running: the guardian kills the group, as it does for in-app chats. New test `test_the_agent_guardian_watches_every_personal_agent` (fails with the old `create_subprocess_exec` call). PERSONAL-AGENTS.md drops the "doesn't use the guardian yet" caveat.
 - **Conflicts, all additive:** `OutsideSpend` keeps main's `connect` and adds `personal`. `PERSON_READ_PREFIXES` keeps main's comment and adds `/api/personal-agents`. MCP-SETUP.md puts "Personal agents' session tokens" before main's "Connect your agent". This file keeps main's entries first, then the ACP ones.
+
+## 2026-10-14 — Connect: token files and color picker
+
+Connected apps now get a token file instead of the token. Settings > Connect your agent writes the new app's token
+to `<state>/app-tokens/<app id>.token` (folder 0700, file 0600) and every client's config names that file as
+`NEBULA_APP_TOKEN_FILE`. The rows in the connected-apps list also got a color picker.
+
+- **One strict reader, shared helpers.** `services/agent_token_file.py` now holds the generic pieces:
+  `write_private` (0700 folders, O_EXCL|O_NOFOLLOW create), `unlink_private`, `sweep` (what `clear_stale` used to do
+  inline) and `read`. The new `services/app_token_file.py` is a thin layer over them: `write`, `remove`,
+  `clear_unknown`, and `read` is the same function. The reader's messages now say "the token file" rather than "the
+  agent token file", and `mcp_server.py` puts the variable name in front (`NEBULA_APP_TOKEN_FILE: can't open the
+  token file (...)`). One existing test asserted the old wording and was updated.
+- **Folder descriptors, not paths, where the OS has them.** Writes, deletes and sweeps open the token folder with
+  O_DIRECTORY|O_NOFOLLOW, check owner and type on the descriptor, then create, unlink or scan relative to it. This
+  closes the gap between a check and the use that the old path-based `_private_dir` + `os.open(path)` had. The agent
+  token writer moved onto the same code. Where `dir_fd` isn't supported (Windows), it falls back to the old
+  path-based checks, and `sweep` removes nothing, as `clear_stale` did before.
+- **The store owns the file lifecycle.** `AppTokens(path, token_dir=...)` writes the file inside `create()` under the
+  store lock, before saving. If the file can't be written, no app is saved and the route returns 400 with the
+  reason. If the save fails, the new file is removed. `revoke()` saves first and then deletes the file: the token
+  is dead either way, and a missed delete is cleaned up at startup by `clear_unknown_files()`, which runs in the
+  existing `_personal_agents_startup` hook next to `clear_stale`. `token_dir=None` (budget tests) writes nothing.
+  The brief said "written in create_agent_app / deleted in revoke_agent_app"; those routes call the store, so this is
+  the same moment with fewer ways to get out of step.
+- **The raw `token` stays in the POST response.** Scripts that call the route and the backend tests use it, and
+  removing it would only move the same secret one hop (the person can read the file anyway). Settings never shows
+  it for a client setup. For a plain token (no client, or the packaged app) Settings shows the file path and a
+  "Show the token for an app that can't read a file" button. That is the one case that may need the value: an
+  outside script or app config that takes a token value and can't read a file. It is behind an explicit click.
+- **Precedence in `mcp_server.py`** (documented in `load_app_token_file` and MCP-SETUP.md): `NEBULA_AGENT_TOKEN`,
+  then `NEBULA_AGENT_TOKEN_FILE`, then `NEBULA_APP_TOKEN_FILE`, then `NEBULA_APP_TOKEN`. When an agent token or agent
+  token file is set, the app file isn't read at all. When the app file is set it must be good. If it is bad, the
+  loader also drops any `NEBULA_APP_TOKEN` beside it before raising, so nothing can fall back to an old raw token.
+  `nebula_api.py` and the `nebula` CLI's own commands still read only the env tokens, as the brief asked.
+- **`NEBULA_APP_TOKEN_FILE` is scrubbed from children.** Added to `services/child_env.py` `SECRET_ENV_KEYS` and
+  `acp_session._AGENT_ENV_DROP`. The path isn't the token, but a child's own Nebula MCP server would read it and spend
+  as that app. Not added to `devserver.INHERITED_CREDENTIAL_ENV_KEYS` or the desktop sidecar's list. Those strip the
+  backend's own env, and a test pins devserver's set to the credential catalog. `child_env` already covers every
+  process the backend starts.
+- **OpenClaw doctor step removed for token files.** Checked OpenClaw's source (`src/cli/mcp-cli.ts`,
+  `SENSITIVE_KEY_PATTERN = /(?:^|[_-])(api[_-]?key|authorization|bearer|password|secret|token)$/i`, main at
+  3d9637ef, 2026-10-14). The key has to end in token, so `NEBULA_APP_TOKEN_FILE` isn't flagged. The step is kept
+  for a pasted raw token.
+- **CLI.** `nebula mcp connect <client> --token-file <path>` (or `$NEBULA_APP_TOKEN_FILE`) reads the file with the
+  strict reader, requires the `nebula_app_` prefix, checks the token with Nebula as before, and writes configs that
+  name the file. Codex no longer needs the placeholder swap in file mode: the path goes straight on `codex mcp add`'s
+  argv, then `fill_codex_token(..., placeholder=None, ..., key=NEBULA_APP_TOKEN_FILE)` only adds the timeout and
+  checks the parse. The old paste flow still works but isn't the default: `$NEBULA_APP_TOKEN` is still honored
+  (scripts and old docs use it), and the hidden prompt now needs `--paste-token`. With no token at all, connect
+  fails and points to Settings' `--token-file` command. A pasted token prints a note that the config will hold the
+  token and how to move to a file. Precedence: `--token-file`, then `$NEBULA_APP_TOKEN_FILE`, then
+  `$NEBULA_APP_TOKEN`, then `--paste-token`.
+- **The command Settings offers.** `setup.cli` is `NEBULA_URL=<url> <venv python> <repo>/nebula mcp connect <client>
+  --token-file <file>` (or `NEBULA_URL_FILE=` for the desktop app). It runs the `nebula` package directory directly,
+  so it works without `nebula` on PATH and from any cwd. The address goes in as an env prefix because `--url` is a
+  top-level option and would have to sit before `mcp`. It is offered only for the clients the CLI writes for (Claude
+  Code, Codex, Claude Desktop, Cursor). Hermes, OpenClaw and other only print, so the line would add nothing.
+- **`--print` placeholder.** `TOKEN_PLACEHOLDER` (`nebula_app_PASTE_YOUR_TOKEN`) is gone. `--print` with no token
+  file renders the file form with `TOKEN_FILE_PLACEHOLDER` (`/PASTE/THE/TOKEN/FILE/PATH/FROM/SETTINGS.token`), and the
+  warning then says "its token file" instead of the placeholder.
+- **`render()` takes exactly one of `token_file` / `token`**, and `server_entry()`'s token argument is now
+  keyword-only (`token_file=` or `token=`). The legacy `token=` path renders the old way, with the plain-text and
+  shell-history warnings plus "revoke and connect again". The setup also returns `tokenFile` and `cli`.
+- **Color picker (Task 2).** Each connected row's color dot is now a button ("Change the cursor color for X",
+  `aria-expanded`). It opens the existing `ColorPicker` on its own line in the row. A pick goes through the row's
+  existing `run()`, so it shares the pending state (every control disabled while saving) and the error line with
+  limit editing. The picker closes on success and stays open on failure. `setConnectedAppColor` already existed in
+  `api.ts`. CSS adds `.settings-apps__dot-button`, which keeps the 9px dot visually and has a ~17px hit area.
+
+Tradeoffs and surprises:
+
+- **The plaintext moved; it didn't vanish.** Before, the token sat in each app's config (and, for Claude Code,
+  Codex and OpenClaw, in shell history and briefly in `ps`). Now it sits in one 0600 file in Nebula's state dir. Any
+  program running as the person can still read it, as before. What improved: one place, deleted on revoke, never on
+  argv or in history, not copied around in configs, backups or dotfile repos.
+- **Old connections keep their raw tokens** until revoked and reconnected. Nebula stores only hashes, so it can't
+  make files for them. This is documented in MCP-SETUP.md and in the CLI's note.
+- **The token file path appears in configs and on argv.** It isn't a secret, but it tells a reader where the token is.
+  That reader would need to run as the person to open it.
+- **Mutation-checked:** reader following symlinks; reader skipping the mode check; a bad app file leaving the old
+  raw token in place; the server never loading the app file; revoke keeping the file; the startup sweep following a
+  symlinked folder; startup skipping the app sweep; the writer following a symlinked folder; the route putting the
+  token in the setup; and a snippet carrying a raw token env beside the file. Each made its target tests fail and
+  was restored. The first try at the last one targeted the wrong test (the legacy render, where the token is
+  expected) and passed. It was retargeted at `test_no_setup_holds_the_token` and failed as it should.
+- **Live check** (scratch backend on :8342, scratch NEBULA_* paths, person token over stdin): created a claude-code
+  app as the person. The file was 0600 in a 0700 folder, owned by the user and holding the token. The setup named
+  the file and didn't contain the token. `backend/mcp_server.py` over stdio with only `NEBULA_APP_TOKEN_FILE` +
+  `NEBULA_URL` (plus PATH/HOME) answered `get_spend_limits` with `budget: app`. Then the CLI checks against a temp
+  HOME: `nebula mcp connect claude-code --print` (placeholder), with `--token-file --print`, `cursor --token-file
+  --yes` (wrote a 0600 mcp.json naming the file, no token), and the Settings line itself with `--print`. Then
+  revoke: the file was gone, a fresh server exited 1 with "NEBULA_APP_TOKEN_FILE: can't open the token file", and the
+  token got 401. The backend was stopped afterwards.

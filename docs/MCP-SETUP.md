@@ -254,8 +254,8 @@ spending limits. The person isn't limited.
 Every process the backend starts (agents, the Commons reader, ffmpeg, the
 Remotion renderer, git, `open`, `ps`, `sips`, `brctl`) gets the backend's
 environment minus `NEBULA_PERSON_TOKEN`, `NEBULA_CONNECTOR_ENCRYPTION_KEY`,
-`NEBULA_INJECTED_KEYS`, `NEBULA_CONNECTOR_SESSION` and `NEBULA_APP_TOKEN`
-(`services/child_env.py`). The desktop app no longer sets
+`NEBULA_INJECTED_KEYS`, `NEBULA_CONNECTOR_SESSION`, `NEBULA_APP_TOKEN` and
+`NEBULA_APP_TOKEN_FILE` (`services/child_env.py`). The desktop app no longer sets
 the vault key or the injected keys in the backend's environment at all; the
 scrub catches a hand-started backend that does.
 
@@ -560,24 +560,45 @@ the canvas it is a cursor with the name and color you gave it.
 
 ```mermaid
 flowchart LR
-  S["Settings > Connect your agent<br/>pick app, name, color, daily limit"] -->|"POST /api/agent/spend/apps<br/>(person only)"| T["App token<br/>shown once, with the exact config"]
-  T -->|paste or run| C["Agent app config<br/>(config.yaml, mcp.json, claude mcp add...)"]
-  C -->|starts over stdio| M["backend/mcp_server.py<br/>NEBULA_URL or NEBULA_URL_FILE<br/>+ NEBULA_APP_TOKEN"]
+  S["Settings > Connect your agent<br/>pick app, name, color, daily limit"] -->|"POST /api/agent/spend/apps<br/>(person only)"| T["App token<br/>saved to state/app-tokens/id.token (0600)"]
+  T -->|"Settings shows the exact config<br/>(names the file, not the token)"| C["Agent app config<br/>(config.yaml, mcp.json, claude mcp add...)"]
+  C -->|starts over stdio| M["backend/mcp_server.py<br/>NEBULA_URL or NEBULA_URL_FILE<br/>+ NEBULA_APP_TOKEN_FILE"]
+  T -.->|read at startup| M
   M -->|"Authorization: Agent token"| B["Nebula backend<br/>its own spending line + named cursor"]
 ```
 
 **In Settings.** Settings > Preferences > Agent spending > **Connect your
 agent**: pick the app, name the agent, pick a cursor color (or keep the
-automatic one) and a daily limit, then Connect. Nebula makes a token and shows
-the exact config for that app, with the token in it, once. Nebula keeps only
-the token's SHA-256, in `app-tokens.json` in its state dir (`~/.nebula` for a dev
-backend; mode 600). Each config
-starts this checkout's server the same way:
+automatic one) and a daily limit, then Connect. Nebula makes a token, writes
+it to `<state dir>/app-tokens/<app id>.token` (`~/.nebula` for a dev backend;
+the folder 0700, the file 0600, created without following symlinks and never
+over an existing file; `services/app_token_file.py`), and shows the exact
+config for that app. The config names the token file. It never holds the
+token, so the token isn't in the app's config file, on a command line, in your
+shell history or on the Settings screen. The store, `app-tokens.json` (mode
+600), keeps only the token's SHA-256. Revoking the app deletes its token file;
+at startup the backend also deletes any file whose app is no longer active
+(revoked while the delete failed, say).
+
+To change a connected agent's cursor color later, click the color dot beside
+its name in the list and pick another (or the automatic one).
+
+Settings also shows the same setup as one `nebula mcp connect <app>
+--token-file <file>` command for the apps the CLI can set up (Claude Code,
+Codex, Claude Desktop, Cursor). See "From the terminal" below.
+
+The `POST` response still carries the raw `token` field, for scripts that
+call the route. Settings doesn't display it. For a plain token (no app picked,
+or a packaged app) it shows the file's path and offers a "Show the token"
+button for an app that can't read a file.
+
+Each config starts this checkout's server the same way:
 
 - command: `<repo>/backend/.venv/bin/python` (the venv's own path, not the
   interpreter it links to);
 - args: `<repo>/backend/mcp_server.py`;
-- env: `NEBULA_APP_TOKEN`, and where to find Nebula:
+- env: `NEBULA_APP_TOKEN_FILE` (the token file's absolute path), and where to
+  find Nebula:
   - a dev backend (`backend/devserver.py`, uvicorn) has a port you chose, so
     the config has `NEBULA_URL`, the address the request arrived on;
   - the desktop app's sidecar gets a new port every launch, so the config has
@@ -608,8 +629,15 @@ app running from this checkout is fine: its configs use `NEBULA_URL_FILE`.
 - The agent's own scheduled jobs, cron tasks and automations can run Nebula
   nodes with this token while you aren't watching, up to its daily limit and
   the shared outside budget.
-- The token sits in plain text in that app's config file. Anything that can
-  read the file can spend as the agent until you revoke the token.
+- The token is in its token file, which only your macOS user can read, and the
+  config holds just the path. Any program running as you can still read the
+  file and spend as the agent until you revoke the token. Revoking deletes the
+  file.
+
+**Connected before token files?** An app connected before this change has the
+token itself in its config (`NEBULA_APP_TOKEN`), and it keeps working. Nebula
+has only that token's hash, so it can't make a file for it. To move the app to
+a token file, revoke it in Settings and connect it again.
 
 #### Per app
 
@@ -619,7 +647,8 @@ Formats checked against each app's docs on 2026-10-13.
   Add the entry under `mcp_servers` in `~/.hermes/config.yaml`, then run
   `/reload-mcp`. Nebula sets `trust: untrusted`, so Hermes asks you before any
   Nebula tool without `readOnlyHint` (everything that edits, runs or
-  proposes). `hermes mcp add` has no env flag, so it can't carry the token.
+  proposes). `hermes mcp add` has no env flag, so it can't carry the token
+  file's path.
 
   ```yaml
   mcp_servers:
@@ -628,7 +657,7 @@ Formats checked against each app's docs on 2026-10-13.
       args: ["<repo>/backend/mcp_server.py"]
       env:
         NEBULA_URL: "http://127.0.0.1:8000"
-        NEBULA_APP_TOKEN: "nebula_app_..."
+        NEBULA_APP_TOKEN_FILE: "/Users/you/.nebula/app-tokens/<app id>.token"
       trust: untrusted
   ```
 
@@ -638,22 +667,25 @@ Formats checked against each app's docs on 2026-10-13.
   refuses while the local Gateway runs: stop the Gateway, run it, start it
   again. With the Gateway running, use Control UI > Settings > MCP > Add
   server > Stdio instead and enter the command line; add the two environment
-  variables if the form offers them. `openclaw mcp doctor` flags the literal
-  token in `env`; that is expected. A remote Gateway would need an HTTP
+  variables if the form offers them. `openclaw mcp doctor` doesn't flag
+  `NEBULA_APP_TOKEN_FILE`: it warns only about env keys ending in token,
+  secret, password, api key and the like (it would flag an older config's
+  `NEBULA_APP_TOKEN`). A remote Gateway would need an HTTP
   transport, which Nebula's MCP server doesn't have yet.
 - **Claude Desktop** ([connect local servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers)).
   Claude menu > Settings > Developer > Edit Config opens
   `~/Library/Application Support/Claude/claude_desktop_config.json`. Add the
   `nebula` entry inside `mcpServers`, then quit and reopen Claude Desktop.
 - **Claude Code** ([MCP](https://code.claude.com/docs/en/mcp)).
-  `claude mcp add --scope user --env NEBULA_URL=... --env NEBULA_APP_TOKEN=...
-  --transport stdio nebula -- <python> <mcp_server.py>`. An option has to sit
+  `claude mcp add --scope user --env NEBULA_URL=... --env
+  NEBULA_APP_TOKEN_FILE=... --transport stdio nebula -- <python>
+  <mcp_server.py>`. An option has to sit
   between `--env` and the name, or Claude Code reads the name as another
   `KEY=value`. User scope is stored in `~/.claude.json`.
 - **Cursor** ([MCP](https://cursor.com/docs/context/mcp)). The `nebula` entry
   inside `mcpServers` in `~/.cursor/mcp.json`, with `"type": "stdio"`.
 - **Codex** ([MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)).
-  `codex mcp add nebula --env NEBULA_URL=... --env NEBULA_APP_TOKEN=... --
+  `codex mcp add nebula --env NEBULA_URL=... --env NEBULA_APP_TOKEN_FILE=... --
   <python> <mcp_server.py>`, or the `[mcp_servers.nebula]` table in
   `~/.codex/config.toml`. Add `tool_timeout_sec = 150` there: a run can take
   longer than Codex's 60-second default (`nebula mcp connect codex` sets it
@@ -661,22 +693,32 @@ Formats checked against each app's docs on 2026-10-13.
 - **Other MCP clients**: the usual `{"mcpServers": {"nebula": {command, args,
   env}}}` block.
 
-Running a printed command (Claude Code, Codex, OpenClaw) leaves the token in
-your shell history, and while it runs any program of yours can read it in the
-process list.
+The printed commands (Claude Code, Codex, OpenClaw) carry only the file's
+path, so running one leaves no token in your shell history or the process
+list.
 
 #### From the terminal: `nebula mcp connect`
 
 ```bash
-nebula mcp connect <hermes|openclaw|claude-desktop|claude-code|cursor|codex|other> [--name N] [--daily-usd N] [--print] [--yes]
+nebula mcp connect <hermes|openclaw|claude-desktop|claude-code|cursor|codex|other> --token-file <file> [--print] [--yes]
+nebula mcp connect <client> --paste-token [--name N] [--daily-usd N] [--print] [--yes]
 nebula mcp disconnect <client> [--yes]
 ```
 
 The CLI can't make tokens. Making one is the person's alone, and only the
 canvas opened from the launch link holds the person token; the CLI is also
-what agents run. So make the token in Settings, then give it to the CLI in
-`NEBULA_APP_TOKEN` or paste it at the hidden prompt. The CLI checks it with
-Nebula and refuses a revoked token, one that isn't an app token, or an address
+what agents run. So make the token in Settings and run the command it shows:
+`--token-file` with the file Nebula saved the token to (or set
+`$NEBULA_APP_TOKEN_FILE`). The CLI reads the file with the MCP server's own
+strict reader (a regular file, not a symlink, owned by you, mode 600 or
+tighter, holding one app token) and writes a config that names the file.
+
+A token from before token files has no file. Give it in `$NEBULA_APP_TOKEN` or
+pass `--paste-token` for a hidden prompt. That still works, but the config
+then holds the token itself and the CLI says so. Without a token file, a
+token or `--paste-token`, connect stops and says where to get one.
+
+The CLI checks the token with Nebula and refuses a revoked token, one that isn't an app token, or an address
 where something other than Nebula answers. If nothing answers, it writes
 nothing (`--print` still prints). It finds Nebula at `--url`, else
 `$NEBULA_URL`, else the address in `$NEBULA_URL_FILE` (for the desktop app, the
@@ -688,13 +730,13 @@ config gets `NEBULA_URL_FILE` even if you passed this launch's `--url`. Then:
   a server named `nebula` (checked with `mcp get`, which looks in every
   scope), it stops and asks you to disconnect first, since `codex mcp add`
   would silently replace it.
-  - Codex: the token never goes on `codex mcp add`'s command line. It gets a
-    one-off placeholder, and the CLI then swaps the token in for it in
-    `config.toml` (keeping its mode), adds `tool_timeout_sec = 150`, and checks
+  - With a token file only its path is on the command line. Codex: the CLI then
+    adds `tool_timeout_sec = 150` to `config.toml` (keeping its mode) and checks
     the file parses back. If it doesn't, it removes the half-made entry.
-  - Claude Code: `claude mcp add` can only take the token on its command line,
-    so it is visible in the process list for the second the command runs. The
-    CLI says so before it runs.
+  - With a pasted token: Codex gets a one-off placeholder on its command line,
+    which the CLI swaps for the token in `config.toml`. `claude mcp add` can
+    only take the token on its command line, so it is visible in the process
+    list for the second the command runs; the CLI says so first.
 - **Claude Desktop, Cursor**: shows the change as a diff (token masked), asks,
   copies the old file to `<file>.nebula-backup-<timestamp>` (mode 600) and
   writes the merged file with mode 600. Only `mcpServers.nebula` changes; a
@@ -705,8 +747,9 @@ config gets `NEBULA_URL_FILE` even if you passed this launch's `--url`. Then:
   doesn't rewrite Hermes's YAML (it would lose your comments), and
   OpenClaw's own command needs its Gateway stopped.
 
-`--print` only prints (with a placeholder if there's no token). `--name` and
-`--daily-usd` fill in the Settings steps when you don't have a token yet.
+`--print` only prints (with a placeholder path if there's no token file).
+`--name` and `--daily-usd` fill in the Settings steps when you don't have a
+token yet.
 `disconnect` removes the entry the same way (Claude Code: `claude mcp remove
 nebula` with no `--scope`, so an older local-scope entry goes too; or it prints
 the app's remove command) and reminds you to revoke the token in Settings. Both refuse to run
@@ -717,9 +760,25 @@ from this checkout is supported, through `NEBULA_URL_FILE`.
 #### Under the hood
 
 The MCP server and the `nebula` CLI send the token as `Authorization: Agent
-<token>` (an in-app chat's `NEBULA_AGENT_TOKEN` wins if both are set; the
-backend scrubs `NEBULA_APP_TOKEN` from every process it starts, so an in-app
-chat never spends as an app). The agent shows by its name and color on the
+<token>`. The MCP server reads its token files at startup (`backend/mcp_server.py`
+`load_agent_token_file`, `load_app_token_file`). The first of these that is set
+wins:
+
+1. `NEBULA_AGENT_TOKEN`: an in-app chat's turn token.
+2. `NEBULA_AGENT_TOKEN_FILE`: a personal agent's session token file.
+3. `NEBULA_APP_TOKEN_FILE`: a connected app's token file. It replaces a
+   `NEBULA_APP_TOKEN` set beside it. If it is set, it must be good: missing,
+   unreadable, a symlink, open to other users or malformed, and the server
+   prints why and exits instead of falling back to the raw token or to no
+   token. That is what happens after a revoke.
+4. `NEBULA_APP_TOKEN`: the token itself, from a config made before token files.
+
+With 1 or 2 set, the app file isn't read. The backend scrubs
+`NEBULA_APP_TOKEN` and `NEBULA_APP_TOKEN_FILE` from every process it starts,
+so an in-app chat never spends as an app. The `nebula` CLI reads only
+`NEBULA_AGENT_TOKEN` and `NEBULA_APP_TOKEN`, as before.
+
+The agent shows by its name and color on the
 canvas, and `get_spend_limits` reports `budget: "app"` with its
 `appDailyUsd`. Settings lists what it spent in the last 24 hours. Revoking the
 token makes its requests fail with 401; what it spent stays in the outside
@@ -728,15 +787,20 @@ total.
 Routes, all person-only: `GET /api/agent/spend/apps` (the outside total, each
 app, and `connect`: the clients on offer and whether this backend can point
 them at a checkout), `POST /api/agent/spend/apps` `{name, dailyUsd, client?,
-color?}` (returns the token once, plus `setup` when `client` is given), `PUT
+color?}` (returns the token, `tokenFile`, and `setup` when `client` is given),
+`PUT
 /api/agent/spend/apps/{id}` `{dailyUsd?, color?}`, `DELETE
 /api/agent/spend/apps/{id}`. The config text comes from
 `backend/services/agent_connect.py`, shared by Settings and the CLI.
 
-Remaining risk: the token is a bearer secret in the app's config file, and an
-agent with its own shell can read it from there or from its MCP child's
-environment. Anything that can read it can spend as the app, inside the app's
-limit and the shared outside budget, until the person revokes it.
+Remaining risk: the token is still a bearer secret, now in one file in
+Nebula's state dir instead of in each app's config. Mode 600 keeps other
+macOS accounts out, not your own programs: an agent with its own shell can
+read the file, or its MCP child's environment once the server has loaded it.
+Anything that can read it can spend as the app, inside the app's limit and
+the shared outside budget, until the person revokes it, which deletes the
+file. Apps connected before token files keep the token in their config until
+they are revoked and connected again.
 
 ### Building and running over MCP
 

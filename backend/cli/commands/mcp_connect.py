@@ -3,18 +3,26 @@
 The CLI can't make the token. Making one is the person's alone
 (POST /api/agent/spend/apps needs this launch's person token, which only the
 canvas holds, and the CLI is also what agents run), so the person makes it in
-Settings > Connect your agent and the CLI takes it from $NEBULA_APP_TOKEN or a
-hidden prompt. The CLI then checks it with Nebula, and:
+Settings > Connect your agent. Nebula writes it to a private file
+(services/app_token_file.py) and Settings shows this command with
+`--token-file <that file>` (or $NEBULA_APP_TOKEN_FILE). The CLI reads the file
+with the MCP server's own strict reader, checks the token with Nebula, and
+writes a config that names the file, never the token:
 
-- Claude Code, Codex: runs the client's own `mcp add` / `mcp remove`. For
-  Codex the token never goes on argv: `codex mcp add` gets a one-off
-  placeholder, which is then swapped for the token in config.toml.
+- Claude Code, Codex: runs the client's own `mcp add` / `mcp remove`. Only the
+  file's path is on argv.
 - Claude Desktop, Cursor: merges one `nebula` entry into the JSON config after
   showing the change, keeping a timestamped backup; other entries are never
   touched; files are written 0600.
 - Hermes, OpenClaw, other: prints the config and where it goes (Hermes keeps
   comments in its YAML, which a rewrite would lose; OpenClaw's own command
   needs its Gateway stopped).
+
+A token made before token files exist has no file (Nebula keeps only its
+hash). It still works the old way, from $NEBULA_APP_TOKEN or `--paste-token`
+(a hidden prompt): the config then holds the token itself, and for Codex a
+one-off placeholder goes on argv and is swapped for the token in config.toml.
+Revoking it and connecting again moves the app to a token file.
 
 `--print` only prints. An in-app agent (NEBULA_AGENT_TOKEN set) is refused:
 wiring other apps to Nebula is the person's call.
@@ -36,8 +44,8 @@ from typing import Any, Callable
 
 import httpx
 
-from services import agent_connect
-from services.agent_connect import SERVER_NAME
+from services import agent_connect, agent_token_file, app_tokens
+from services.agent_connect import SERVER_NAME, TOKEN_ENV, TOKEN_FILE_ENV
 
 
 def config_path(client_id: str, home: Path | None = None) -> Path:
@@ -142,16 +150,38 @@ def _confirm(question: str, yes: bool, ask: Callable[[str], str]) -> bool:
     return ask(f"{question} [y/N] ").strip().lower() in ("y", "yes")
 
 
-def _token(print_only: bool) -> str | None:
-    token = os.environ.get("NEBULA_APP_TOKEN", "").strip()
+class TokenSourceError(RuntimeError):
+    pass
+
+
+def _token_file(args: Any) -> str | None:
+    value = getattr(args, "token_file", None) or os.environ.get(TOKEN_FILE_ENV, "").strip()
+    return os.path.abspath(os.path.expanduser(value)) if value else None
+
+
+def _token(args: Any) -> tuple[str | None, str | None]:
+    """(token, token file). With a token file (--token-file or
+    $NEBULA_APP_TOKEN_FILE), the token is read from it, strictly; the config
+    will name the file. Otherwise the older ways, for tokens made before
+    token files: $NEBULA_APP_TOKEN, or --paste-token's hidden prompt."""
+    path = _token_file(args)
+    if path is not None:
+        try:
+            token = agent_token_file.read(path)
+        except agent_token_file.TokenFileError as exc:
+            raise TokenSourceError(f"{path}: {exc}. Use the path Settings > Connect your agent shows.") from exc
+        if not token.startswith(app_tokens.TOKEN_PREFIX):
+            raise TokenSourceError(f"{path} doesn't hold an app token from Settings > Connect your agent.")
+        return token, path
+    token = os.environ.get(TOKEN_ENV, "").strip()
     if token:
-        return token
-    if print_only:
-        return None
+        return token, None
+    if args.print_only or not getattr(args, "paste_token", False):
+        return None, None
     if not sys.stdin.isatty():
         line = sys.stdin.readline().strip()
-        return line or None
-    return getpass.getpass("Token from Settings > Connect your agent (hidden): ").strip() or None
+        return line or None, None
+    return getpass.getpass("Token from Settings > Connect your agent (hidden): ").strip() or None, None
 
 
 def check_token(url: str, token: str) -> dict[str, Any] | None:
@@ -223,18 +253,21 @@ def _rewrite_keeping_mode(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def fill_codex_token(path: Path, placeholder: str, token: str) -> bool:
-    """Swap the one-off placeholder `codex mcp add` wrote for the real token,
-    and set tool_timeout_sec (which `codex mcp add` can't), so the token never
-    sat on any process's argv. Returns whether the timeout was set; raises
-    MergeError if the file isn't what `codex mcp add` should have left."""
+def fill_codex_token(path: Path, placeholder: str | None, value: str, key: str = TOKEN_ENV) -> bool:
+    """Finish the entry `codex mcp add` just wrote: set tool_timeout_sec
+    (which `codex mcp add` can't), and with a ``placeholder`` (a pasted token,
+    kept off argv), swap the real token in for it. Checks env[key] is ``value``
+    afterwards. Returns whether the timeout was set; raises MergeError if the
+    file isn't what `codex mcp add` should have left."""
+    token = value
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise MergeError(f"can't read {path}: {exc}") from exc
-    if text.count(placeholder) != 1:
-        raise MergeError(f"{path} doesn't hold the entry `codex mcp add` just wrote")
-    text = text.replace(placeholder, token)
+    if placeholder is not None:
+        if text.count(placeholder) != 1:
+            raise MergeError(f"{path} doesn't hold the entry `codex mcp add` just wrote")
+        text = text.replace(placeholder, token)
 
     def nebula_server(candidate: str) -> dict[str, Any] | None:
         try:
@@ -245,8 +278,8 @@ def fill_codex_token(path: Path, placeholder: str, token: str) -> bool:
 
     server = nebula_server(text)
     env = (server or {}).get("env")
-    if not isinstance(env, dict) or env.get("NEBULA_APP_TOKEN") != token:
-        raise MergeError(f"{path} didn't parse back with the token in place")
+    if not isinstance(env, dict) or env.get(key) != token:
+        raise MergeError(f"{path} didn't parse back with the {'token' if key == TOKEN_ENV else 'token file'} in place")
     timeout_set = False
     header = f"[mcp_servers.{SERVER_NAME}]\n"
     lines = text.splitlines(keepends=True)
@@ -255,7 +288,7 @@ def fill_codex_token(path: Path, placeholder: str, token: str) -> bool:
         candidate = "".join(lines)
         after = nebula_server(candidate)
         if after is not None and after.get("tool_timeout_sec") == agent_connect.CODEX_TOOL_TIMEOUT_SEC \
-                and (after.get("env") or {}).get("NEBULA_APP_TOKEN") == token:
+                and (after.get("env") or {}).get(key) == token:
             text, timeout_set = candidate, True
     _rewrite_keeping_mode(path, text)
     return timeout_set
@@ -268,7 +301,7 @@ def _bundle_refusal(paths_error: Exception) -> int:
 
 def _entry_token(entry: Any) -> str | None:
     env = entry.get("env") if isinstance(entry, dict) else None
-    token = env.get("NEBULA_APP_TOKEN") if isinstance(env, dict) else None
+    token = env.get(TOKEN_ENV) if isinstance(env, dict) else None
     return token if isinstance(token, str) and token else None
 
 
@@ -291,13 +324,18 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         return _bundle_refusal(exc)
 
     print_only = bool(args.print_only)
-    token = _token(print_only)
+    try:
+        token, token_file = _token(args)
+    except TokenSourceError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     if token is None and not print_only:
         print("error: no token. Make one in Settings > Connect your agent "
               f"(pick {client.label}{', name it ' + args.name if args.name else ''}"
-              f"{', daily limit $' + format(args.daily_usd, 'g') if args.daily_usd else ''}), then run this again and "
-              "paste it, or set NEBULA_APP_TOKEN. The CLI can't make tokens: only the Nebula canvas you opened "
-              "from the launch link can.", file=sys.stderr)
+              f"{', daily limit $' + format(args.daily_usd, 'g') if args.daily_usd else ''}), then run the command "
+              "it shows, with --token-file and the file Nebula saved the token to. The CLI can't make tokens: only "
+              "the Nebula canvas you opened from the launch link can. (A token made before token files: set "
+              "NEBULA_APP_TOKEN or pass --paste-token.)", file=sys.stderr)
         return 1
 
     # args.url is None when the desktop app's backend-url file failed its
@@ -329,12 +367,19 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
     if url_file is None and not status and os.environ.get("NEBULA_URL_FILE") and not os.environ.get("NEBULA_URL"):
         url_file = os.environ["NEBULA_URL_FILE"]
     url = None if url_file else args.url
-    setup = agent_connect.render(client.id, paths=paths, url=url, url_file=url_file,
-                                 token=token or agent_connect.TOKEN_PLACEHOLDER, app_name=app_name, daily_usd=daily)
+    # A pasted token has no file: its config holds the token itself.
+    legacy = token is not None and token_file is None
+    credential = {"token": token} if legacy else {"token_file": token_file or agent_connect.TOKEN_FILE_PLACEHOLDER}
+    setup = agent_connect.render(client.id, paths=paths, url=url, url_file=url_file, **credential,
+                                 app_name=app_name, daily_usd=daily)
+    if legacy:
+        print(f"note: this token has no token file, so {client.label}'s config will hold the token itself. Revoke it "
+              "in Settings > Connect your agent and connect again to keep it in a token file instead.",
+              file=sys.stderr)
     if print_only or client.kind == "manual":
         if not token:
-            print("# No token given: replace nebula_app_PASTE_YOUR_TOKEN with the one Settings > Connect your agent "
-                  "shows you. The CLI can't make tokens.\n")
+            print(f"# No token file given: replace {agent_connect.TOKEN_FILE_PLACEHOLDER} with the token file "
+                  "Settings > Connect your agent shows you. The CLI can't make tokens.\n")
         _print_setup(setup)
         return 0
 
@@ -342,19 +387,22 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
     for warning in setup["warnings"]:
         if "shell history" not in warning:
             print(f"! {warning}")
-    if client.id == "claude-code":
+    if client.id == "claude-code" and legacy:
         print("! While `claude mcp add` runs (about a second), any program of yours can see the token in the "
               "process list: Claude Code has no other way to take it.")
-    entry = agent_connect.server_entry(paths, url, token, url_file=url_file)
+    entry = agent_connect.server_entry(paths, url, url_file=url_file, **credential)
     if client.kind == "command":
         placeholder = None
         if client.id == "claude-code":
-            # `claude mcp add` has no way to take the token except argv
-            # (the warning above says so); it's there for about a second.
+            # With a pasted token, `claude mcp add` has no way to take it
+            # except argv (the warning above says so); it's there for about a
+            # second. With a token file only its path is.
             argv = agent_connect.claude_code_add_argv(entry)
-        else:
+        elif legacy:
             placeholder = f"nebula_app_PENDING_{secrets.token_hex(16)}"
-            argv = agent_connect.codex_add_argv({**entry, "env": {**entry["env"], "NEBULA_APP_TOKEN": placeholder}})
+            argv = agent_connect.codex_add_argv({**entry, "env": {**entry["env"], TOKEN_ENV: placeholder}})
+        else:
+            argv = agent_connect.codex_add_argv(entry)
         if shutil.which(argv[0]) is None:
             print(f"error: `{argv[0]}` isn't on PATH. Run this yourself once it is:", file=sys.stderr)
             print(setup["snippet"])
@@ -376,10 +424,11 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
                   f"`nebula mcp disconnect {client.id}` first.", file=sys.stderr)
             return 1
         steps = setup["steps"][1:]
-        if placeholder is not None:
+        if client.id == "codex":
             toml_path = codex_config_path(home)
             try:
-                timeout_set = fill_codex_token(toml_path, placeholder, token)
+                timeout_set = (fill_codex_token(toml_path, placeholder, token) if legacy
+                               else fill_codex_token(toml_path, None, token_file, TOKEN_FILE_ENV))
             except MergeError as exc:
                 runner(agent_connect.remove_argv(client.id), capture_output=True, text=True)
                 print(f"error: {exc}; removed the half-made entry. Paste the config.toml block from "

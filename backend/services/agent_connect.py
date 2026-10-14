@@ -4,17 +4,28 @@ Settings > Connect your agent (POST /api/agent/spend/apps with ``client``) and
 ``nebula mcp connect`` both render their snippets here, so the two can't
 drift. Every client gets the same stdio server: this checkout's
 ``backend/.venv/bin/python`` running ``backend/mcp_server.py``, with
-``NEBULA_APP_TOKEN`` and Nebula's address in its environment: ``NEBULA_URL``
-for a dev backend on a fixed port, or ``NEBULA_URL_FILE`` for the desktop app,
-whose port changes every launch (services/backend_address.py).
+``NEBULA_APP_TOKEN_FILE`` and Nebula's address in its environment:
+``NEBULA_URL`` for a dev backend on a fixed port, or ``NEBULA_URL_FILE`` for
+the desktop app, whose port changes every launch (services/backend_address.py).
+
+The token itself never goes into a config, a command line or the Settings
+screen: Nebula writes it to ``<state>/app-tokens/<id>.token`` (0600,
+services/app_token_file.py) and the config names that file. A token pasted
+into ``nebula mcp connect`` (made before token files existed, so Nebula has
+only its hash) still renders the old way, as ``NEBULA_APP_TOKEN``, with the
+old warnings.
 
 Formats were checked against each client's own docs on 2026-10-13:
 
 - Hermes: ``~/.hermes/config.yaml`` ``mcp_servers`` (command, args, env,
   ``trust: untrusted``), then ``/reload-mcp``. ``hermes mcp add`` has no env
-  flag, so it can't carry the token.
+  flag, so it can't carry the token file's path.
 - OpenClaw: ``openclaw mcp set <name> '<json>'`` (refuses while the local
-  Gateway runs), or Control UI Settings > MCP > Add server > Stdio.
+  Gateway runs), or Control UI Settings > MCP > Add server > Stdio. Its
+  ``mcp doctor`` warns about literal values only for env keys ending in
+  token, secret, password, api key and the like (src/cli/mcp-cli.ts,
+  SENSITIVE_KEY_PATTERN, checked 2026-10-14), so ``NEBULA_APP_TOKEN_FILE`` isn't
+  flagged.
 - Claude Desktop: ``claude_desktop_config.json`` ``mcpServers``; quit and
   reopen the app.
 - Claude Code: ``claude mcp add --scope user --env K=V --transport stdio
@@ -37,7 +48,11 @@ from pathlib import Path
 from typing import Any
 
 SERVER_NAME = "nebula"
-TOKEN_PLACEHOLDER = "nebula_app_PASTE_YOUR_TOKEN"
+TOKEN_ENV = "NEBULA_APP_TOKEN"
+TOKEN_FILE_ENV = "NEBULA_APP_TOKEN_FILE"
+# `nebula mcp connect --print` with no token file: the person swaps in the
+# path Settings shows.
+TOKEN_FILE_PLACEHOLDER = "/PASTE/THE/TOKEN/FILE/PATH/FROM/SETTINGS.token"
 # Same as the in-app Codex registration (services/krea_agent_mcp.py): runs can
 # outlast Codex's 60-second default tool timeout.
 CODEX_TOOL_TIMEOUT_SEC = 150
@@ -50,7 +65,7 @@ class Client:
     # command: the client's own CLI adds the server. json: one entry merged
     # into a JSON file. manual: Nebula prints, the person pastes.
     kind: str
-    # Where the token ends up, as the person would recognize it.
+    # The config file, as the person would recognize it.
     stored_in: str
 
 
@@ -109,7 +124,17 @@ def checkout_paths(backend_dir: Path | None = None) -> CheckoutPaths:
     return CheckoutPaths(python=str(python), server=str(server))
 
 
-def server_entry(paths: CheckoutPaths, url: str | None, token: str, *, url_file: str | None = None) -> dict[str, Any]:
+def _credential(token_file: str | None, token: str | None) -> dict[str, str]:
+    """The one env entry that lets the server act as the app: the token
+    file's path, or (a token pasted into the CLI, from before token files) the
+    token itself."""
+    if (token_file is None) == (token is None):
+        raise ValueError("give exactly one of token_file and token")
+    return {TOKEN_FILE_ENV: token_file} if token_file is not None else {TOKEN_ENV: token}
+
+
+def server_entry(paths: CheckoutPaths, url: str | None, *, token_file: str | None = None, token: str | None = None,
+                 url_file: str | None = None) -> dict[str, Any]:
     """The stdio server every client starts. With ``url_file`` (the desktop
     app, whose port changes every launch; services/backend_address.py) the
     server reads Nebula's address from that file on each call instead of a
@@ -120,7 +145,7 @@ def server_entry(paths: CheckoutPaths, url: str | None, token: str, *, url_file:
         where = {"NEBULA_URL": url.rstrip("/")}
     else:
         raise ConnectError("need Nebula's address (a URL or its backend-url file)")
-    return {"command": paths.python, "args": [paths.server], "env": {**where, "NEBULA_APP_TOKEN": token}}
+    return {"command": paths.python, "args": [paths.server], "env": {**where, **_credential(token_file, token)}}
 
 
 def _json(value: Any) -> str:
@@ -207,25 +232,56 @@ def _limit_text(daily_usd: float | None) -> str:
     return f"its {amount} daily limit (and the shared budget for agents outside Nebula chats)"
 
 
-def warnings(c: Client, app_name: str, daily_usd: float | None) -> list[str]:
+def warnings(c: Client, app_name: str, daily_usd: float | None, *, token_file: str | None = None) -> list[str]:
+    """What to know before connecting. ``token_file`` None means the config
+    holds the token itself (a token pasted into the CLI)."""
     found = [
         f"{c.label if c.id != 'other' else 'The app'}'s own scheduled jobs, cron tasks and automations can run Nebula "
         f"nodes with this token while you aren't watching, up to {_limit_text(daily_usd)}.",
-        f"The token is saved in plain text in {c.stored_in}. Anything that can read that file can spend as "
-        f"{app_name} until you revoke it in Settings > Connect your agent.",
     ]
+    if token_file is not None:
+        where = "its token file" if token_file == TOKEN_FILE_PLACEHOLDER else token_file
+        found.append(
+            f"The token is saved in {where}, which only your macOS user can read; the config holds just that "
+            f"path. Any program running as you can still read the file and spend as {app_name} until you revoke it "
+            "in Settings > Connect your agent. Revoking deletes the file.")
+        return found
+    found.append(f"The token is saved in plain text in {c.stored_in}. Anything that can read that file can spend as "
+                 f"{app_name} until you revoke it in Settings > Connect your agent. Revoke it and connect again to "
+                 "keep it in a token file instead.")
     if c.id in ("claude-code", "codex", "openclaw"):
         found.append("Running the command also leaves the token in your shell history, and while it runs any "
                      "program of yours can see it in the process list.")
     return found
 
 
-def render(client_id: str, *, paths: CheckoutPaths, url: str | None, token: str, app_name: str,
-           daily_usd: float | None = None, url_file: str | None = None) -> dict[str, Any]:
-    """What the person pastes or runs for one client: steps, a main snippet,
-    an optional alternative, and the warnings to show beside them."""
+def cli_command(client_id: str, paths: CheckoutPaths, token_file: str, *, url: str | None = None,
+                url_file: str | None = None) -> str | None:
+    """The `nebula mcp connect` line that does the same setup from a
+    terminal (it checks the token with Nebula first and, for Claude Code and
+    Codex, refuses to replace an existing nebula server). None for the
+    clients the CLI only prints for."""
     c = client(client_id)
-    entry = server_entry(paths, url, token, url_file=url_file)
+    if c.kind == "manual":
+        return None
+    cli = str(Path(paths.server).parent.parent / "nebula")
+    q = shlex.quote
+    line = " \\\n  ".join([q(paths.python), f"{q(cli)} mcp connect {c.id}", f"--token-file {q(token_file)}"])
+    if url_file:
+        return f"NEBULA_URL_FILE={shlex.quote(url_file)} {line}"
+    return f"NEBULA_URL={shlex.quote(url.rstrip('/'))} {line}" if url else line
+
+
+def render(client_id: str, *, paths: CheckoutPaths, url: str | None, app_name: str, token_file: str | None = None,
+           token: str | None = None, daily_usd: float | None = None, url_file: str | None = None) -> dict[str, Any]:
+    """What the person pastes or runs for one client: steps, a main snippet,
+    an optional alternative, and the warnings to show beside them.
+
+    Give ``token_file`` (the path Nebula wrote the token to). ``token`` is
+    only for a token pasted into the CLI that has no file; that config holds
+    the token itself."""
+    c = client(client_id)
+    entry = server_entry(paths, url, token_file=token_file, token=token, url_file=url_file)
     alternative: dict[str, str] | None = None
     if c.id == "hermes":
         main = {"format": "yaml", "where": "~/.hermes/config.yaml", "snippet": hermes_yaml(entry)}
@@ -239,8 +295,9 @@ def render(client_id: str, *, paths: CheckoutPaths, url: str | None, token: str,
                  "Run the command, then start the Gateway again.",
                  "Or, with the Gateway running: Control UI > Settings > MCP > Add server, name it nebula, pick "
                  "Stdio and enter the command line from the second block. Then add "
-                 f"{' and '.join(entry['env'])} from the command above as environment variables if the form offers them.",
-                 "openclaw mcp doctor will flag the token as a literal env value; that is expected."]
+                 f"{' and '.join(entry['env'])} from the command above as environment variables if the form offers them."]
+        if token is not None:
+            steps.append("openclaw mcp doctor will flag the token as a literal env value; that is expected.")
         alternative = {"format": "text", "where": "Settings > MCP > Stdio command",
                        "snippet": " ".join(shlex.quote(part) for part in [entry["command"], *entry["args"]])}
     elif c.id == "claude-desktop":
@@ -270,4 +327,6 @@ def render(client_id: str, *, paths: CheckoutPaths, url: str | None, token: str,
         steps = ["Most MCP clients take this mcpServers shape. Otherwise give the app a stdio server with this "
                  "command, argument and environment."]
     return {"client": c.id, "label": c.label, "kind": c.kind, **main, "steps": steps,
-            "alternative": alternative, "warnings": warnings(c, app_name, daily_usd)}
+            "alternative": alternative, "tokenFile": token_file,
+            "cli": cli_command(c.id, paths, token_file, url=url, url_file=url_file) if token_file else None,
+            "warnings": warnings(c, app_name, daily_usd, token_file=token_file)}
