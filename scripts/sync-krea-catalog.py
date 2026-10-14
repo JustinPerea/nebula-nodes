@@ -126,6 +126,98 @@ def with_references(price, model):
     return [price, math.ceil((price + MAX_REFERENCE_IMAGES * per_image) * 1e5) / 1e5]
 
 
+# Krea's Ideogram and Runway copies on the makers' own APIs
+# (execution/maker_routes_ideogram_runway.py). Prices from each maker's own
+# page, read 2026-10-14. Not routed: ideogram-4.5 (Ideogram doesn't publish the
+# 4.5 text-to-image size presets Krea's aspect_ratio would need) and
+# runway/gen-4-video (Krea doesn't name its upstream Runway model).
+IDEOGRAM_PRICING_URL = "https://ideogram.ai/pricing/?pricing_tab=api"
+RUNWAY_PRICING_URL = "https://docs.dev.runwayml.com/guides/pricing.md"
+MAKER_CHECKED = "2026-10-14"
+_RUNWAY_CREDIT = {"url": RUNWAY_PRICING_URL, "quote": "Credits can be purchased for $0.01 per credit"}
+IDEOGRAM_RUNWAY_DIRECT_ROUTES = {
+    "/generate/image/ideogram/ideogram-4.5-precise": {
+        "directKeyName": "IDEOGRAM_API_KEY", "translation": "krea-ideogram-precise-edit", "model": "ideogram-4-5",
+        "kreaOnly": [], "directParams": [],
+        "pricing": {"provider": "ideogram", "per": "image", "priceParams": ["quality"],
+                    "rows": [{"match": {"quality": "very_low"}, "price": 0.008},
+                             {"match": {"quality": "low"}, "price": 0.03},
+                             {"match": {"quality": "medium"}, "price": 0.06},
+                             {"match": {"quality": "high"}, "price": 0.22}],
+                    "notes": "Ideogram API price for runs on the person's IDEOGRAM_API_KEY "
+                             "(POST /v2/image/precise-edit/ideogram-4-5, one image per run). Same at 1K and 2K.",
+                    "sources": [{"url": IDEOGRAM_PRICING_URL, "quote": "Ideogram 4.5 Precise Edit Very Low 1K — US $0.008"},
+                                {"url": IDEOGRAM_PRICING_URL, "quote": "Ideogram 4.5 Precise Edit Low 2K — US $0.03"},
+                                {"url": IDEOGRAM_PRICING_URL, "quote": "Ideogram 4.5 Precise Edit Medium 2K — US $0.06"},
+                                {"url": IDEOGRAM_PRICING_URL, "quote": "Ideogram 4.5 Precise Edit High 2K — US $0.22"}],
+                    "checked": MAKER_CHECKED},
+    },
+    "/generate/image/ideogram/ideogram-3": {
+        # Krea's style_images carry a per-image `strength` Ideogram's API has
+        # no field for, so a recipe that sets them stays on Krea.
+        "directKeyName": "IDEOGRAM_API_KEY", "translation": "krea-ideogram-3", "model": "ideogram-v3",
+        "kreaOnly": ["style_images"], "directBlockedBy": ["style_images"], "directParams": [],
+        "pricing": {"provider": "ideogram", "per": "image", "priceParams": [],
+                    "rows": [{"match": {}, "price": [0.06, 0.15]}],
+                    "notes": "Ideogram API price for runs on the person's IDEOGRAM_API_KEY "
+                             "(POST /v1/ideogram-v3/generate at rendering_speed DEFAULT, one image per run). "
+                             "The low end is a run without a character reference, the high end one with it "
+                             "(a wired reference is only known at run time).",
+                    "sources": [{"url": IDEOGRAM_PRICING_URL, "quote": "Ideogram 3.0 Default — US $0.06"},
+                                {"url": IDEOGRAM_PRICING_URL,
+                                 "quote": "Ideogram 3.0 Default with Character Reference — US $0.15"}],
+                    "checked": MAKER_CHECKED},
+    },
+    "/generate/image/ideogram/ideogram-2-turbo": {
+        # Krea's own docs call this model "Ideogram 2.0A Turbo", and Krea's
+        # $0.025 matches Ideogram's 2a Turbo price ($0.05 is 2.0 Turbo).
+        "directKeyName": "IDEOGRAM_API_KEY", "translation": "krea-ideogram-2a", "model": "ideogram-2a",
+        "kreaOnly": [], "directParams": [],
+        "pricing": {"provider": "ideogram", "per": "image", "priceParams": [],
+                    "rows": [{"match": {}, "price": 0.025}],
+                    "notes": "Ideogram API price for runs on the person's IDEOGRAM_API_KEY "
+                             "(POST /v2/image/generate/ideogram-2a, rendering_speed turbo, one image per run).",
+                    "sources": [{"url": IDEOGRAM_PRICING_URL, "quote": "Ideogram 2a Turbo — US $0.025"}],
+                    "checked": MAKER_CHECKED},
+    },
+    "/generate/image/runway/gen-4-image": {
+        "directKeyName": "RUNWAY_API_KEY", "translation": "krea-runway-gen4-image", "model": "gen4_image",
+        "kreaOnly": [], "directParams": [],
+        "pricing": {"provider": "runway", "per": "image", "priceParams": [],
+                    "rows": [{"match": {}, "price": [0.05, 0.08]}],
+                    "notes": "Runway API price for runs on the person's RUNWAY_API_KEY (gen4_image on "
+                             "POST /v1/text_to_image). width/height snap to the nearest gen4_image ratio; Runway "
+                             "names only 720p and 1080p tiers, so the price is the range between them.",
+                    "sources": [{"url": RUNWAY_PRICING_URL,
+                                 "quote": "`gen4_image` | 5 credits per 720p image, or 8 credits per 1080p image"},
+                                _RUNWAY_CREDIT],
+                    "checked": MAKER_CHECKED},
+    },
+    "/generate/video/runway/gen-4.5": {
+        "directKeyName": "RUNWAY_API_KEY", "translation": "krea-runway-gen4-5", "model": "gen4.5",
+        "kreaOnly": [], "directParams": [],
+        "pricing": {"provider": "runway", "per": "request", "priceParams": ["duration"],
+                    # Runway bills whole seconds; a fractional duration is
+                    # rounded before the run, so only whole seconds are priced.
+                    "rows": [{"match": {"duration": seconds}, "price": round(0.12 * seconds, 2)}
+                             for seconds in range(2, 11)],
+                    "notes": "Runway API price for runs on the person's RUNWAY_API_KEY (gen4.5 on "
+                             "POST /v1/image_to_video or /v1/text_to_video): 12 credits per second at $0.01 each. "
+                             "A fractional duration is rounded to whole seconds before the run and stays unpriced.",
+                    "sources": [{"url": RUNWAY_PRICING_URL, "quote": "`gen4.5` | 12 credits per second"},
+                                _RUNWAY_CREDIT],
+                    "checked": MAKER_CHECKED},
+    },
+    "/generate/enhance/runway/ruby": {
+        # Unpriced on Runway too: "ruby | 20 credits per second; 40 credits
+        # per second when the source is larger than 4 megapixels", and both
+        # the length and the size of the source are only known at run time.
+        "directKeyName": "RUNWAY_API_KEY", "translation": "krea-runway-ruby", "model": "ruby",
+        "kreaOnly": [], "directParams": [], "pricing": None,
+    },
+}
+
+
 DIRECT_ROUTES = {
     "/generate/image/google/nano-banana-2": {
         "directKeyName": "GOOGLE_API_KEY", "translation": "krea-nano-banana", "model": "gemini-3.1-flash-image",
@@ -171,6 +263,7 @@ DIRECT_ROUTES = {
                                           "to $0.039 per image."},
                                 {"url": GOOGLE_PRICING_URL, "quote": "Input price | Not available | $0.30 (text / image)"}]},
     },
+    **IDEOGRAM_RUNWAY_DIRECT_ROUTES,
 }
 
 
@@ -206,10 +299,13 @@ def direct_route_definition(endpoint, params):
 
 def direct_route_pricing(endpoint):
     route = DIRECT_ROUTES.get(endpoint)
-    if not route:
+    if not route or not route.get("pricing"):
         return None
     pricing = dict(route["pricing"])
     provider = pricing.pop("provider")
+    if provider != "google":
+        # Other makers' entries are complete as written (notes, sources, checked).
+        return provider, {"currency": "usd", **pricing}
     model = route["model"]
     pricing["rows"] = [{**row, "price": with_references(row["price"], model)} for row in pricing["rows"]]
     pricing["sources"] = [*pricing["sources"], _GOOGLE_INPUT_SOURCES[model], _REFERENCE_LIMIT_SOURCE]
@@ -406,13 +502,15 @@ def pricing_entries(catalog):
     for node_id, model in catalog["models"].items():
         krea_entry(node_id, model, catalog, entries, skipped)
         direct = direct_route_pricing(model["endpoint"])
-        if direct:
-            # A dual-route node prices each route; the Krea plan stays unpriced.
+        if direct or (model["endpoint"] in DIRECT_ROUTES and node_id in entries):
+            # A dual-route node prices each route; the Krea plan stays unpriced,
+            # and so does a maker route without a price.
             routes = {}
             if node_id in entries:
                 entries[node_id].pop("generatedBy")
                 routes["krea"] = entries[node_id]
-            routes[direct[0]] = direct[1]
+            if direct:
+                routes[direct[0]] = direct[1]
             entries[node_id] = {"routes": routes, "generatedBy": PRICING_GENERATOR}
     return entries, skipped
 

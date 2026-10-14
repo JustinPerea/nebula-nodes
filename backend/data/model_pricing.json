@@ -2158,74 +2158,185 @@
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-ideogram-ideogram-2-turbo": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token"
-          },
-          "price": 0.025
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token"
+              },
+              "price": 0.025
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/image/ideogram/ideogram-2-turbo (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
+        },
+        "ideogram": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": 0.025
+            }
+          ],
+          "notes": "Ideogram API price for runs on the person's IDEOGRAM_API_KEY (POST /v2/image/generate/ideogram-2a, rendering_speed turbo, one image per run).",
+          "sources": [
+            {
+              "url": "https://ideogram.ai/pricing/?pricing_tab=api",
+              "quote": "Ideogram 2a Turbo — US $0.025"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/image/ideogram/ideogram-2-turbo (spec sha256 9d5dd91a9e81)"
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-ideogram-ideogram-3": {
+      "routes": {
+        "ideogram": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": [
+                0.06,
+                0.15
+              ]
+            }
+          ],
+          "notes": "Ideogram API price for runs on the person's IDEOGRAM_API_KEY (POST /v1/ideogram-v3/generate at rendering_speed DEFAULT, one image per run). The low end is a run without a character reference, the high end one with it (a wired reference is only known at run time).",
+          "sources": [
+            {
+              "url": "https://ideogram.ai/pricing/?pricing_tab=api",
+              "quote": "Ideogram 3.0 Default — US $0.06"
+            },
+            {
+              "url": "https://ideogram.ai/pricing/?pricing_tab=api",
+              "quote": "Ideogram 3.0 Default with Character Reference — US $0.15"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-ideogram-ideogram-4-5-precise": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "quality"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "quality": "very_low"
-          },
-          "price": 0.008
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "quality"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "quality": "very_low"
+              },
+              "price": 0.008
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "quality": "low"
+              },
+              "price": 0.03
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "quality": "medium"
+              },
+              "price": 0.06
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "quality": "high"
+              },
+              "price": 0.22
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/image/ideogram/ideogram-4.5-precise (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "quality": "low"
-          },
-          "price": 0.03
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "quality": "medium"
-          },
-          "price": 0.06
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "quality": "high"
-          },
-          "price": 0.22
+        "ideogram": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "quality"
+          ],
+          "rows": [
+            {
+              "match": {
+                "quality": "very_low"
+              },
+              "price": 0.008
+            },
+            {
+              "match": {
+                "quality": "low"
+              },
+              "price": 0.03
+            },
+            {
+              "match": {
+                "quality": "medium"
+              },
+              "price": 0.06
+            },
+            {
+              "match": {
+                "quality": "high"
+              },
+              "price": 0.22
+            }
+          ],
+          "notes": "Ideogram API price for runs on the person's IDEOGRAM_API_KEY (POST /v2/image/precise-edit/ideogram-4-5, one image per run). Same at 1K and 2K.",
+          "sources": [
+            {
+              "url": "https://ideogram.ai/pricing/?pricing_tab=api",
+              "quote": "Ideogram 4.5 Precise Edit Very Low 1K — US $0.008"
+            },
+            {
+              "url": "https://ideogram.ai/pricing/?pricing_tab=api",
+              "quote": "Ideogram 4.5 Precise Edit Low 2K — US $0.03"
+            },
+            {
+              "url": "https://ideogram.ai/pricing/?pricing_tab=api",
+              "quote": "Ideogram 4.5 Precise Edit Medium 2K — US $0.06"
+            },
+            {
+              "url": "https://ideogram.ai/pricing/?pricing_tab=api",
+              "quote": "Ideogram 4.5 Precise Edit High 2K — US $0.22"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/image/ideogram/ideogram-4.5-precise (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-meta-muse-image": {
@@ -2298,6 +2409,37 @@
         }
       ],
       "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-runway-gen-4-image": {
+      "routes": {
+        "runway": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": [
+                0.05,
+                0.08
+              ]
+            }
+          ],
+          "notes": "Runway API price for runs on the person's RUNWAY_API_KEY (gen4_image on POST /v1/text_to_image). width/height snap to the nearest gen4_image ratio; Runway names only 720p and 1080p tiers, so the price is the range between them.",
+          "sources": [
+            {
+              "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+              "quote": "`gen4_image` | 5 credits per 720p image, or 8 credits per 1080p image"
+            },
+            {
+              "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+              "quote": "Credits can be purchased for $0.01 per credit"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-alibaba-wan-2-2": {
@@ -5601,85 +5743,164 @@
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-runway-gen-4-5": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "duration"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "duration": 2
-          },
-          "price": 0.24
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "duration"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "duration": 2
+              },
+              "price": 0.24
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "duration": 3
+              },
+              "price": 0.36
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "duration": 4
+              },
+              "price": 0.48
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "duration": 5
+              },
+              "price": 0.6
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "duration": 6
+              },
+              "price": 0.72
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "duration": 7
+              },
+              "price": 0.84
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "duration": 8
+              },
+              "price": 0.96
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "duration": 9
+              },
+              "price": 1.08
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "duration": 10
+              },
+              "price": 1.2
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/video/runway/gen-4.5 (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "duration": 3
-          },
-          "price": 0.36
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "duration": 4
-          },
-          "price": 0.48
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "duration": 5
-          },
-          "price": 0.6
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "duration": 6
-          },
-          "price": 0.72
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "duration": 7
-          },
-          "price": 0.84
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "duration": 8
-          },
-          "price": 0.96
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "duration": 9
-          },
-          "price": 1.08
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "duration": 10
-          },
-          "price": 1.2
+        "runway": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "duration"
+          ],
+          "rows": [
+            {
+              "match": {
+                "duration": 2
+              },
+              "price": 0.24
+            },
+            {
+              "match": {
+                "duration": 3
+              },
+              "price": 0.36
+            },
+            {
+              "match": {
+                "duration": 4
+              },
+              "price": 0.48
+            },
+            {
+              "match": {
+                "duration": 5
+              },
+              "price": 0.6
+            },
+            {
+              "match": {
+                "duration": 6
+              },
+              "price": 0.72
+            },
+            {
+              "match": {
+                "duration": 7
+              },
+              "price": 0.84
+            },
+            {
+              "match": {
+                "duration": 8
+              },
+              "price": 0.96
+            },
+            {
+              "match": {
+                "duration": 9
+              },
+              "price": 1.08
+            },
+            {
+              "match": {
+                "duration": 10
+              },
+              "price": 1.2
+            }
+          ],
+          "notes": "Runway API price for runs on the person's RUNWAY_API_KEY (gen4.5 on POST /v1/image_to_video or /v1/text_to_video): 12 credits per second at $0.01 each. A fractional duration is rounded to whole seconds before the run and stays unpriced.",
+          "sources": [
+            {
+              "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+              "quote": "`gen4.5` | 12 credits per second"
+            },
+            {
+              "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+              "quote": "Credits can be purchased for $0.01 per credit"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/video/runway/gen-4.5 (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-runway-gen-4-video": {

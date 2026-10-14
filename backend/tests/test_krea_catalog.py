@@ -147,7 +147,8 @@ def test_generated_prices_keep_the_kling_multi_shot_guard_and_the_audio_note():
     assert kling["rows"] and all(row["match"]["multi_prompt"] == "" for row in kling["rows"])
     assert "multi_prompt" in kling["priceParams"] and "Multi-prompt runs are unpriced" in kling["notes"]
     assert any(source["url"].startswith("https://kling.ai/") for source in kling["sources"])
-    krea_prices = {node_id: entry["routes"]["krea"] if "routes" in entry else entry for node_id, entry in entries.items()}
+    krea_prices = {node_id: entry["routes"]["krea"] if "routes" in entry else entry for node_id, entry in entries.items()
+                   if "krea" in entry.get("routes", {"krea": entry})}
     audio_free = {node_id for node_id, entry in krea_prices.items()
                   if "doesn't vary with generate_audio" in entry["notes"]}
     assert audio_free == {
@@ -169,7 +170,21 @@ def test_direct_route_models_price_both_routes():
         if direct is None:
             assert entry is None or "routes" not in entry
             continue
-        assert set(entry["routes"]) == {"krea", direct["pricing"]["provider"]}
+        if not direct.get("pricing"):
+            # Unpriced on the maker (Runway Ruby bills by the source's length and size).
+            assert entry is None or set(entry["routes"]) == {"krea"}
+            continue
+        provider = direct["pricing"]["provider"]
+        krea_alone: dict = {}
+        SYNC.krea_entry(node_id, model, CATALOG, krea_alone, {})
+        krea = {"krea"} if node_id in krea_alone else set()
+        assert set(entry["routes"]) == krea | {provider}
+        if provider != "google":
+            maker = entry["routes"][provider]
+            assert maker["rows"] and maker["checked"] == SYNC.MAKER_CHECKED and maker["notes"]
+            assert all(source["url"] in (SYNC.IDEOGRAM_PRICING_URL, SYNC.RUNWAY_PRICING_URL)
+                       for source in maker["sources"])
+            continue
         google = entry["routes"]["google"]
         assert google.get("provider", "google") == "google"
         assert google["rows"] and google["checked"] == SYNC.GOOGLE_CHECKED

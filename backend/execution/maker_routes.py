@@ -251,6 +251,10 @@ async def krea_google_nano_banana(node: GraphNode, inputs: dict[str, PortValueDi
 KREA_TRANSLATIONS: dict[str, tuple[Handler, Callable[[str], Translate]]] = {
     "krea-nano-banana": (krea_google_nano_banana, krea_nano_banana_to_google),
 }
+# Krea's Ideogram and Runway copies (execution/maker_routes_ideogram_runway.py).
+from execution.maker_routes_ideogram_runway import TRANSLATIONS as _IDEOGRAM_RUNWAY  # noqa: E402
+
+KREA_TRANSLATIONS.update(_IDEOGRAM_RUNWAY)
 
 
 def krea_router(definition_id: str, fallback: Handler) -> Handler | None:
