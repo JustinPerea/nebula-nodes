@@ -3528,3 +3528,73 @@ Banana (`nano-banana-fal`, `nano-banana-fal-edit`, and the Krea copies `krea-ima
 - **Engine cache test.** `test_node_route.py` now runs `execute_graph` end to end: fal run, same keys hit the
   cache, adding GOOGLE_API_KEY misses and calls the direct handler. Verified it fails with the `_route` tag
   disabled.
+
+## 2026-10-14 — Direct maker routes, OpenAI lane (GPT Image's fal and Krea copies on your OpenAI key)
+
+With `OPENAI_API_KEY` saved, seven copies run on OpenAI's Images API: `gpt-image-1-5`/`-edit` (fal) ->
+`gpt-image-1.5`; `gpt-image-2-fal-generate`/`-edit` (fal) -> `gpt-image-2`; `krea-image-openai-gpt-image-2`,
+`-2-5-flare`, `-2-5-sunburst` -> `gpt-image-2`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`. Vendor pages
+read 2026-10-14 (as `.md` from developers.openai.com): model pages for all four ids, the deprecations table, the
+image-generation guide, the pricing page and the Images API reference.
+
+- **New module** `backend/execution/maker_routes_openai.py` (translators, body builder, direct handlers). Shared
+  files got registration lines only: `maker_routes.KREA_TRANSLATIONS["krea-openai-image"]`, four `dual_route`
+  registrations in `sync_runner.py`, three `DIRECT_ROUTES` entries in the sync overlay.
+- **Requests reuse the existing direct handlers** (`handlers/openai_image_v2.py`: streamed generations, multipart
+  `image[]` edits) with a per-model `build_body`. Two small changes there: the edit form now forwards
+  `input_fidelity` (only gpt-image-1.5 sends it; the reference says "For `gpt-image-2`, omit this parameter"), and
+  `MAX_EDIT_IMAGES` went from 10 to 16 ("For GPT image models, you can provide up to 16 images."). This also lifts
+  the cap on the existing `gpt-image-2-edit`/`-2-5-edit` nodes; docs updated.
+- **fal nodes: no param split.** Every fal param has an OpenAI field, so `params` stays exactly as it was and the
+  nodes only gain `envKeyName: ["OPENAI_API_KEY", "FAL_KEY"]` + `directKeyName` (the `veo-3-flf` shape).
+  Fingerprint approval `APPROVED_DIRECT_KEY_ADDITIONS` normalizes only those two fields; params are still hashed.
+- **New route rule piece: `DIRECT_BLOCKED_VALUES`** (node_route.py, mirrored in directRoute.ts). fal's
+  gpt-image-2 presets Square (512x512), Portrait 16:9 (576x1024) and Landscape 16:9 (1024x576) are under OpenAI's
+  655,360-pixel minimum. Rather than silently enlarge them, those *values* keep the run on fal (reason `blocked`,
+  own readiness line: "This recipe's image_size has no OpenAI equivalent..."). `directBlockedBy` couldn't do it:
+  it blocks on "is set", and `image_size` has a default. The other presets map to the size their label names
+  (Square HD 1024x1024, 4:3 768x1024 / 1024x768). The pixel sizes of fal's presets for gpt-image-2 are the node
+  labels' claim; fal's schema doesn't document them (NOT CONFIRMED with fal).
+- **gpt-image-1.5 retires Dec 1, 2026** ("Dec 1, 2026 | `gpt-image-1.5` | `gpt-image-2.5-sunburst` or
+  `gpt-image-2.5-flare`"): `DIRECT_RETIRES` on both sides; from that day the run goes back to fal. fal's
+  `fal-ai/gpt-image-1.5` presumably proxies OpenAI and will stop too; whether to migrate these nodes to 2.5 is
+  Justin's call (not done).
+- **Krea sizes.** Krea documents `resolution` only as "Resolution scale. One of: 1K, 2K, 4K", not pixels, so the
+  table `KREA_OPENAI_SIZES` is mine: exact ratio, edges multiples of 16, within OpenAI's limits; 1K = OpenAI's
+  standard size where one exists (1024x1024, 1536x1024, 1024x1536, also what Krea's ChatGPT Image page lists),
+  else a 1,024 long edge raised to the pixel minimum (16:9 -> 1280x720); 2K = 2,048 long edge; 4K = OpenAI's
+  largest (3840 edge or the 8,294,400-pixel cap, 2880x2880 square). 4K is "experimental" per OpenAI. Krea's own
+  rendered pixels may differ. On GPT Image 2 (both optional) one set alone means 1:1 / 1K; neither = OpenAI auto.
+  GPT Image 2's free-number `width`/`height` are kreaOnly + `directBlockedBy` (as Nano Banana) rather than
+  "exact when valid": a conditional block would have needed more shared code in both route modules; follow-up.
+- **References.** Krea `image_urls` and fal `images` values are made local for the multipart edit: `/api/outputs/`
+  refs resolve, public https URLs are fetched through `services.public_url.fetch_public_media` (SSRF-checked,
+  no credentials, 50 MB cap from the guide's "less than 50MB"), data URIs are written into the run dir.
+- **Count.** `num_images` -> that many streamed calls, first image on `image` (fal shows the first too and bills
+  each). The existing code says OpenAI rejects `n>1` with `stream=true`; today's reference doesn't say either way
+  (NOT CONFIRMED), so I kept streaming and looped rather than sending `n`.
+- **Pricing.** gpt-image-1.5 OpenAI route: OpenAI's per-image table (model page; low $0.009/$0.013, medium
+  $0.034/$0.05, high $0.133/$0.2), times Count; edit 'auto' size = range across the three sizes; reference input
+  tokens are `plus: input images`. **Unpriced on purpose:** gpt-image-2 copies (OpenAI's per-image table covers
+  only 1024x1024/1024x1536/1536x1024; the fal default 1024x768 and Krea's unset size aren't in it, and the
+  `pricing.test.ts` invariant requires every entry to price at defaults, so I didn't add a partial entry) and the
+  2.5 copies (model pages: "The GPT Image 2 calculator does not estimate GPT Image 2.5 token consumption"). No fal
+  route price exists for these fal nodes either (unchanged).
+- **Flag for Justin (not changed, not my nodes):** the existing `gpt-image-2-5-generate`/`-edit` price rows were
+  computed "per OpenAI's image-cost calculator"; today's 2.5 model pages say that calculator doesn't estimate 2.5.
+  Those rows look unsupported by the current docs.
+- **Transparency.** Forwarded on gpt-image-1.5 (OpenAI: "Transparent backgrounds are available for supported GPT
+  Image models"; 1.5 isn't named explicitly, so NOT CONFIRMED; a refusal is a 400 before billing). A transparent
+  JPEG is refused locally before any request or download.
+- **Behavior changes to know:** a saved Krea GPT Image 2 / 2.5 node on `api-token` now runs on OpenAI (billed by
+  OpenAI) once an OpenAI key is saved; with no keys, setup points at the OpenAI key (the Nano Banana rule). The
+  Krea plan choice still wins. In the Node Library and model picker the provider filter now lists GPT Image 2
+  (Krea) under OpenAI too; tests that used it as a "Krea-only" example now use `krea-image-openai-gpt-image`.
+- **Skipped:** `sora-2`, `sora-2-i2v` (retired; "There is no one-to-one replacement API"),
+  `krea-image-openai-gpt-image` (Krea: "Original ChatGPT image model"; the OpenAI id isn't named, likely
+  gpt-image-1, which shuts down 2026-10-23).
+- **Tests:** `test_maker_routes_openai.py` (respx for OpenAI, mocks for fal/Krea; 18 tests) plus shared route cases
+  and readiness/directRoute cases. Mutation-checked: disabling the value block, the 1.5 retirement, the
+  input_fidelity form field, the preset map, the Count loop and the URL download each fails a test.
+- **Docs:** someone else's edit to `docs/api-guides/openai.md` (a section on these copies, 10 -> 16 refs) appeared
+  in this worktree while I worked; it matched the code, so I kept it instead of adding my own section.

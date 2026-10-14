@@ -12,9 +12,11 @@ OpenAI's `gpt-image-2` (released 2026-04-21, snapshot `gpt-image-2-2026-04-21`) 
 | Node ID | Path | BYOK key | When to pick |
 |---|---|---|---|
 | `gpt-image-2-generate` | OpenAI direct | `OPENAI_API_KEY` | Text→image, full streaming previews, need partial frames in canvas |
-| `gpt-image-2-edit` | OpenAI direct | `OPENAI_API_KEY` | Image edit / inpainting with up to 10 reference images + optional mask |
-| `gpt-image-2-fal-generate` | FAL proxy | `FAL_KEY` | Text→image, no OpenAI org-verification needed, pay-per-image |
-| `gpt-image-2-fal-edit` | FAL proxy | `FAL_KEY` | Edit via FAL |
+| `gpt-image-2-edit` | OpenAI direct | `OPENAI_API_KEY` | Image edit / inpainting with up to 16 reference images + optional mask |
+| `gpt-image-2-fal-generate` | OpenAI direct with `OPENAI_API_KEY`, else FAL proxy | `OPENAI_API_KEY` or `FAL_KEY` | Text→image; on FAL no OpenAI org-verification needed |
+| `gpt-image-2-fal-edit` | OpenAI direct with `OPENAI_API_KEY`, else FAL proxy | `OPENAI_API_KEY` or `FAL_KEY` | Edit |
+
+**FAL copies on your OpenAI key (2026-10-14).** With `OPENAI_API_KEY` saved, the two FAL nodes call OpenAI's own Images API (`gpt-image-2`). Their presets map to the size their label names (Square HD 1024x1024, Portrait 4:3 768x1024, Landscape 4:3 1024x768); Square (512x512) and the 16:9 presets are under OpenAI's 655,360-pixel minimum, so those stay on FAL. Count makes that many streamed calls (first image shown); Preview Frames are sent as `partial_images` (100 extra output tokens each). The OpenAI route is unpriced at the default Landscape 4:3: OpenAI's per-image table covers only 1024x1024, 1024x1536 and 1536x1024.
 
 All four use `executionPattern: "stream"`. Partial previews render in the canvas as they arrive.
 
@@ -30,7 +32,11 @@ All four use `executionPattern: "stream"`. Partial previews render in the canvas
 | `output_compression` | 0–100 | 90 | Only applied when format != png |
 | `moderation` | `auto`, `low` | `auto` | `low` is less restrictive |
 
-Edit node also accepts: `images` (Image, multiple, up to 10), `mask` (alpha-channel PNG, same size + format as first image).
+Edit node also accepts: `images` (Image, multiple, up to 16), `mask` (alpha-channel PNG, same size + format as first image).
+
+## The FAL nodes on your OpenAI key (since 2026-10-14)
+
+With `OPENAI_API_KEY` saved, `gpt-image-2-fal-generate` / `-edit` run on OpenAI's own API (`gpt-image-2`), billed by OpenAI, with the same params: `image_size` becomes `size` (`square_hd` 1024x1024, `portrait_4_3` 768x1024, `landscape_4_3` 1024x768), `num_images` becomes that many streamed calls (first image shown), `partial_images` is sent as is. `square` (512x512) and the two 16:9 presets (576x1024, 1024x576) are below OpenAI's 655,360-pixel minimum, so a node set to one stays on FAL. Without an OpenAI key they run on FAL as before. Details: the OpenAI skill's "Your OpenAI key on the fal and Krea copies".
 
 ## FAL-routed params
 
@@ -59,6 +65,6 @@ If the user asks Codex to write or refine a prompt that will feed into `gpt-imag
 - OpenAI direct requires Organization Verification — if the user gets "org isn't verified" errors, direct them to https://platform.openai.com/settings/organization/general.
 - FAL path uses different param names: `image_size` not `size`, `num_images` not `n`.
 - Mask is prompt-guided — the prompt must describe the **full** desired image, not just the masked region.
-- Up to 10 reference images in the edit endpoint; the mask applies to the **first** image when supplied.
+- Up to 16 reference images in the edit endpoint ("For GPT image models, you can provide up to 16 images"); the mask applies to the **first** image when supplied.
 - Streaming: enable `partial_images` (default 2) to see preview frames in the canvas as the image renders. Set to 0 for final-only.
 - SSE event namespaces differ by endpoint: `/v1/images/generations` emits `image_generation.completed` / `image_generation.partial_image`, but `/v1/images/edits` emits `image_edit.completed` / `image_edit.partial_image`. Our parser accepts both. OpenAI's docs don't highlight this distinction — discovered during UAT 2026-04-22.
