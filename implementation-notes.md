@@ -3024,3 +3024,40 @@ Two reviewers checked 5eba86fc. Concurrency said ship, with one older gap; the t
 
 - **Personal agents now use the agent guardian.** `_spawn()` calls `spawn_agent_process`, so a SIGKILLed backend no longer leaves an agent's grandchildren running: the guardian kills the group, as it does for in-app chats. New test `test_the_agent_guardian_watches_every_personal_agent` (fails with the old `create_subprocess_exec` call). PERSONAL-AGENTS.md drops the "doesn't use the guardian yet" caveat.
 - **Conflicts, all additive:** `OutsideSpend` keeps main's `connect` and adds `personal`. `PERSON_READ_PREFIXES` keeps main's comment and adds `/api/personal-agents`. MCP-SETUP.md puts "Personal agents' session tokens" before main's "Connect your agent". This file keeps main's entries first, then the ACP ones.
+
+## 2026-10-14 — ACP adapter pin watch
+
+Justin asked for a check about every two weeks that finds the newest stable adapter release at least 14 days old and
+hands him the bump. Session schedulers don't persist, so it lives in the repo as a GitHub Actions workflow.
+
+- **Weekly, not every two weeks.** Cron can't say "every other Monday" cleanly, and the run is idempotent: it updates
+  the one open issue rather than opening another. A weekly run also means a release that clears the hold shows up
+  within a week. `17 14 * * 1` (Monday 14:17 UTC), off the top of the hour.
+- **An issue, not a PR.** The bump needs one real adapter turn by hand (the tests drive a fake agent), so a bot PR
+  would only look ready. The issue holds the report; Justin makes the one-line change. The workflow gets
+  `contents: read` and `issues: write` only, and no step can push.
+- **Python, in `backend/scripts/check_adapter_pins.py`.** It imports `PRESETS` and `PACKAGE_AGE_DAYS` from
+  `services/personal_agents.py`, so the pins and the 14-day number have one home. That import chain is stdlib only,
+  so the workflow installs nothing. The logic is covered by `tests/test_adapter_pins.py`, which the CI backend job
+  already runs.
+- **Version choice.** Strict semver parse; anything with a prerelease tag, a missing publish time, or a `deprecated`
+  field is skipped. Compare is on integer tuples (0.10.0 > 0.9.0). The cutoff is `now - 14 days` to the minute,
+  the same instant `npx_env()` uses for `npm_config_before`. "Next newer release" is the earliest-published stable
+  release above the candidate (or the pin) that is still held, and its clear date is publish time + 14 days.
+- **What counts as "action needed":** a candidate exists, or the pin is deprecated, or the pin is missing from the
+  registry. A pin published inside the hold is noted in the report but doesn't open an issue on its own.
+- **Untrusted registry data.** Versions only reach the report if they match the strict semver regex. Deprecation
+  messages are flattened to one line, backticks swapped out, capped at 200 characters and shown in a code span. The
+  report goes from file to `gh --body-file`; no `${{ }}` expression ever holds registry data, and the only output
+  read by an `if:` is the script's own `true`/`false`.
+- **Failures.** A fetch error is reported in the table and the job summary and fails the run (exit 1), so a broken
+  check shows red in Actions. The issue step still runs if the other adapter needs action (`!cancelled()`).
+- **Duplicate guard.** The issue step lists open issues (up to 500) and matches the exact title; no labels, no search
+  index lag. The report ends with an HTML comment holding a signature (package=candidate). If the signature matches
+  the open issue's, the body is refreshed quietly; if it changed, the body is replaced and a comment is added so
+  Justin gets a notification. `concurrency: adapter-pins` stops two runs racing to create the issue.
+- **Testability.** `file_issue()` takes the gh runner as a parameter, and `--dry-run` prints the write commands
+  (the `gh issue list` read still runs). `main()` takes the fetch function, so the network-failure path is tested.
+- **First real run (2026-10-14):** claude-agent-acp 0.84.0 is current (0.85.0, published 2026-10-01, clears
+  2026-10-15). codex-acp has 2.0.1 (published 2026-09-29) past the hold; 2.1.0 (2026-10-01) clears 2026-10-15.
+  Pins not changed in this branch, as asked.
