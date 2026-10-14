@@ -6979,8 +6979,12 @@
             "value": "standard"
           },
           {
-            "label": "Low Poly",
+            "label": "Low Poly (retires Oct 30, 2026)",
             "value": "lowpoly"
+          },
+          {
+            "label": "Smart Topology (Meshy T2)",
+            "value": "smart-topology"
           }
         ]
       },
@@ -7076,16 +7080,12 @@
         "default": "latest",
         "options": [
           {
-            "label": "Latest (Meshy 6)",
+            "label": "Latest (Meshy 7.1)",
             "value": "latest"
           },
           {
             "label": "Meshy 6",
             "value": "meshy-6"
-          },
-          {
-            "label": "Meshy 5",
-            "value": "meshy-5"
           }
         ]
       },
@@ -7272,16 +7272,12 @@
         "default": "latest",
         "options": [
           {
-            "label": "Latest (Meshy 6)",
+            "label": "Latest (Meshy 7.1)",
             "value": "latest"
           },
           {
             "label": "Meshy 6",
             "value": "meshy-6"
-          },
-          {
-            "label": "Meshy 5",
-            "value": "meshy-5"
           }
         ]
       },
@@ -7297,8 +7293,12 @@
             "value": "standard"
           },
           {
-            "label": "Low Poly",
+            "label": "Low Poly (retires Oct 30, 2026)",
             "value": "lowpoly"
+          },
+          {
+            "label": "Smart Topology (Meshy T2)",
+            "value": "smart-topology"
           }
         ]
       },
@@ -7390,16 +7390,12 @@
         "default": "latest",
         "options": [
           {
-            "label": "Latest (Meshy 6)",
+            "label": "Latest (Meshy 7.1)",
             "value": "latest"
           },
           {
             "label": "Meshy 6",
             "value": "meshy-6"
-          },
-          {
-            "label": "Meshy 5",
-            "value": "meshy-5"
           }
         ]
       },
@@ -7555,16 +7551,12 @@
         "default": "latest",
         "options": [
           {
-            "label": "Latest (Meshy 6)",
+            "label": "Latest (Meshy 7)",
             "value": "latest"
           },
           {
             "label": "Meshy 6",
             "value": "meshy-6"
-          },
-          {
-            "label": "Meshy 5",
-            "value": "meshy-5"
           }
         ]
       },

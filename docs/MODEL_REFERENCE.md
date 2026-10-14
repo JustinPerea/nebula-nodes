@@ -4941,8 +4941,8 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| AI Model | enum | latest | Latest (Meshy 6), Meshy 6, Meshy 5 |
-| Mesh Type | enum | standard | Standard, Low Poly |
+| AI Model | enum | latest | Latest (Meshy 7.1), Meshy 6 |
+| Mesh Type | enum | standard | Standard, Low Poly (retires Oct 30, 2026), Smart Topology (Meshy T2) |
 | HD Texture (4K) | bool | false | — |
 | Image Enhancement | bool | true | — |
 | Remove Lighting | bool | true | — |
@@ -4965,7 +4965,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| AI Model | enum | latest | Latest (Meshy 6), Meshy 6, Meshy 5 |
+| AI Model | enum | latest | Latest (Meshy 7.1), Meshy 6 |
 | Remesh | bool | false | — |
 | Topology | enum | triangle | Triangle, Quad |
 | Polycount | int | 30000 | 100–300000 |
@@ -5017,7 +5017,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| AI Model | enum | latest | Latest (Meshy 6), Meshy 6, Meshy 5 |
+| AI Model | enum | latest | Latest (Meshy 7), Meshy 6 |
 | Keep Original UV | bool | true | — |
 | PBR Materials | bool | false | — |
 | Remove Lighting | bool | true | — |
@@ -5061,7 +5061,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Mode | enum | full | Preview, Full |
-| Mesh Type | enum | standard | Standard, Low Poly |
+| Mesh Type | enum | standard | Standard, Low Poly (retires Oct 30, 2026), Smart Topology (Meshy T2) |
 | Remesh | bool | false | — |
 | Topology | enum | triangle | Triangle, Quad |
 | Polycount | int | 30000 | 100–300000 |
@@ -5082,7 +5082,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| AI Model | enum | latest | Latest (Meshy 6), Meshy 6, Meshy 5 |
+| AI Model | enum | latest | Latest (Meshy 7.1), Meshy 6 |
 | HD Texture (4K) | bool | false | — |
 | Remove Lighting | bool | true | — |
 | Output Formats | string | glb | — |

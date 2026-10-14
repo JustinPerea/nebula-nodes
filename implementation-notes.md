@@ -3263,3 +3263,26 @@ deprecations/model pages/image guide, Meshy openapi.yaml and llms.txt, Gemini sp
   would have needed a new "hidden definition" concept across ~25 frontend consumers.
 - Left alone: the fal catalog mirror files `.agents/skills/fal/skills/fal-ai__sora-2__*.md` (they describe fal's
   catalog, not Nebula nodes), historical research docs, and `docs/flora-gap-matrix.md`'s history entries.
+
+### Meshy (meshy-text-to-3d, meshy-image-to-3d, meshy-multi-image-to-3d, meshy-retexture)
+
+- Meshy's openapi.yaml (2026-10-14) no longer lists `meshy-5` in any `ai_model` enum, so it's gone from all four
+  nodes and saved nodes move to `meshy-6` right away (not date-gated: it's already unavailable). Option order and
+  the `latest` default are unchanged; only the `latest` label moved to "Meshy 7.1" (Retexture: "Meshy 7", since
+  Retexture rejects 7.1).
+- `lowpoly` retires 2026-10-30. Kept the option (relabelled "Low Poly (retires Oct 30, 2026)") and appended
+  "Smart Topology (Meshy T2)". Date-gated migration from 10-30: lowpoly → smart-topology, quad → triangle, polycount
+  capped at 15,000 (smart topology's max). A lowpoly node with no saved polycount gets 15,000 explicitly, because
+  the node default (30,000) would otherwise fail. Tradeoff: lowpoly ignored polycount, so 15,000 isn't "what they
+  had", just the closest valid value; Meshy's own lower T2 default (4,000 per fal's page) isn't in Meshy's docs.
+- Didn't add `meshy-t2` as an ai_model option: Meshy says smart-topology "implies the meshy-t2 model family" and
+  meshy-t2 "requires model_type: smart-topology", so the direct handler sets it whenever smart-topology is picked.
+  That avoids an option that errors with every other mesh type. The handler also drops image_enhancement /
+  remove_lighting (not supported under smart topology; both default on in the node) and refuses quad or >15,000
+  faces with a message before spending credits. The text-to-3d refine omits ai_model so it inherits meshy-t2.
+- Surprise: with the default polycount 30,000, picking Smart Topology fails until Polycount is lowered. The error
+  says exactly that; I didn't silently clamp a value the person can see.
+- Not done: meshy-6-lite / meshy-7.1 pinned options (new features, not retirements), seed forwarding on direct
+  text-to-3d, smart-topology on the fal image-to-3d route (model_type is a direct-only param there). Meshy says
+  7/7.1/T2 need account entitlement while `latest` (the default) resolves to 7.1; couldn't verify what an
+  unentitled account gets without a real call.

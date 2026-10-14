@@ -52,7 +52,7 @@ remesh/retexture/rigging/animation chaining, or native parameter control.
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `ai_model` | `latest`, `meshy-6`, `meshy-5` | `latest` | Meshy model. |
+| `ai_model` | `latest`, `meshy-6` | `latest` | Meshy model. `latest` is Meshy 7.1 (Meshy 7 on Retexture). |
 | `should_remesh` | boolean | `false` | Native Meshy remesh toggle. |
 | `topology` | `triangle`, `quad` | `triangle` | Mesh topology. |
 | `target_polycount` | 100-300000 | `30000` | Target count. |
@@ -163,6 +163,14 @@ after remesh/retexture. Humanoid characters may continue into rigging/animation.
   agent identity files.
 
 ## Audit Log
+
+### 2026-10-14 — Retirements (meshy-5, lowpoly)
+
+Sources: `https://docs.meshy.ai/openapi.yaml` and `https://docs.meshy.ai/llms.txt` (2026-10-14).
+
+- `ai_model` enums no longer list `meshy-5`. Removed from all four nodes; saved nodes move to `meshy-6` (`backend/services/retired_nodes.py`). `latest` is now `meshy-7.1` on text/image/multi-image and `meshy-7` on Retexture; labels updated.
+- `model_type: lowpoly` "is deprecated and will be retired on 2026-10-30; after that date it returns an error. Use `smart-topology` (Meshy T2) instead." Added `smart-topology` to text-to-3d (shared: fal accepts it too) and image-to-3d (direct). From 2026-10-30 saved lowpoly nodes move to smart-topology, quad becomes triangle, polycount is capped at 15,000.
+- Direct handler under smart-topology sends `ai_model: meshy-t2`, drops `image_enhancement`/`remove_lighting` ("Not supported under smart-topology"), omits `ai_model` on the text-to-3d refine so it inherits the preview's model, and refuses quad or >15,000 faces before submitting.
 
 ### 2026-06-03 — Re-verification audit
 

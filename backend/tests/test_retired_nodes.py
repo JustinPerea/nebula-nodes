@@ -113,3 +113,41 @@ def test_sora_retirement_message_names_the_alternatives(definition_id):
         assert f"'{alternative}'" in message
         assert alternative in NodeRegistry().get_all()
     assert definition_id not in NodeRegistry().get_all(), "hidden for new graphs"
+
+
+@pytest.mark.parametrize("definition_id", [
+    "meshy-text-to-3d", "meshy-image-to-3d", "meshy-multi-image-to-3d", "meshy-retexture",
+])
+def test_saved_meshy_5_moves_to_meshy_6_now(definition_id):
+    with _on(date(2026, 10, 14)):
+        assert migrate_node(definition_id, {"ai_model": "meshy-5", "enable_pbr": True})[1] == {
+            "ai_model": "meshy-6", "enable_pbr": True,
+        }
+
+
+@pytest.mark.parametrize("definition_id", ["meshy-text-to-3d", "meshy-image-to-3d"])
+def test_meshy_lowpoly_moves_to_smart_topology_from_its_retirement(definition_id):
+    saved = {"model_type": "lowpoly", "topology": "quad", "target_polycount": 30000, "ai_model": "latest"}
+    with _on(date(2026, 10, 29)):
+        assert migrate_node(definition_id, saved)[1] == saved, "it still works until 2026-10-30"
+    with _on(date(2026, 10, 30)):
+        params = migrate_node(definition_id, saved)[1]
+    assert params == {"model_type": "smart-topology", "topology": "triangle",
+                      "target_polycount": 15000, "ai_model": "latest"}
+    with _on(date(2026, 10, 30)):
+        assert migrate_node(definition_id, {"model_type": "lowpoly", "target_polycount": 5000})[1] == {
+            "model_type": "smart-topology", "target_polycount": 5000,
+        }
+        assert migrate_node(definition_id, {"model_type": "standard"})[1] == {"model_type": "standard"}
+
+
+def test_meshy_migration_targets_are_node_options():
+    from services.node_registry import NodeRegistry
+
+    defs = NodeRegistry().get_all()
+    for definition_id in ("meshy-text-to-3d", "meshy-image-to-3d", "meshy-multi-image-to-3d", "meshy-retexture"):
+        params = [p for group in ("params", "sharedParams", "directParams") for p in defs[definition_id].get(group, [])]
+        values = {p["key"]: {o["value"] for o in p.get("options", [])} for p in params}
+        assert "meshy-6" in values["ai_model"] and "meshy-5" not in values["ai_model"]
+        if "model_type" in values:
+            assert "smart-topology" in values["model_type"]

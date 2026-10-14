@@ -24,7 +24,7 @@
 
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
-| Meshy Multi-Image-to-3D | `meshy-multi-image-to-3d` | 3d-gen | `images` (1–4 images, required) | `ai_model` (latest/meshy-6/meshy-5), `should_remesh`, `topology`, `target_polycount` (100–300k), `should_texture`, `enable_pbr`, `pose_mode`, `hd_texture` (4K), `image_enhancement`, `remove_lighting` | Building a textured 3D model from a few photos of the same object |
+| Meshy Multi-Image-to-3D | `meshy-multi-image-to-3d` | 3d-gen | `images` (1–4 images, required) | `ai_model` (latest = Meshy 7.1 / meshy-6; meshy-5 removed 2026-10-14), `should_remesh`, `topology`, `target_polycount` (100–300k), `should_texture`, `enable_pbr`, `pose_mode`, `hd_texture` (4K), `image_enhancement`, `remove_lighting` | Building a textured 3D model from a few photos of the same object |
 | Meshy Retexture | `meshy-retexture` | 3d-gen | `model_url` (text, required), `prompt` (style, optional) | `ai_model`, `enable_original_uv`, `enable_pbr`, `remove_lighting` | Giving an existing model a new texture/material from a text style prompt |
 | Meshy Auto-Rig | `meshy-rigging` | 3d-gen | `model_url` (text, required) | `height_meters` (0.1–5, default 1.7) | Adding a skeleton to a textured humanoid GLB so it can be animated; outputs a **Rig Task ID** |
 | Meshy Animate | `meshy-animate` | 3d-gen | `rig_task_id` (text, required — from Auto-Rig) | `action_id` (Idle/Walking/Running/Jumping/Dancing/Waving/Sitting/Clapping/Punching/Kicking/Sword Swing), `fps` (24/25/30/60) | Applying a library animation to a rigged character |

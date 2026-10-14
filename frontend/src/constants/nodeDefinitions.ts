@@ -4145,7 +4145,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'standard',
         options: [
           { label: 'Standard', value: 'standard' },
-          { label: 'Low Poly', value: 'lowpoly' },
+          { label: 'Low Poly (retires Oct 30, 2026)', value: 'lowpoly' },
+          { label: 'Smart Topology (Meshy T2)', value: 'smart-topology' },
         ],
       },
       {
@@ -4215,9 +4216,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Latest (Meshy 7.1)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 5', value: 'meshy-5' },
         ],
       },
       {
@@ -4366,9 +4366,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Latest (Meshy 7.1)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 5', value: 'meshy-5' },
         ],
       },
       {
@@ -4379,7 +4378,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'standard',
         options: [
           { label: 'Standard', value: 'standard' },
-          { label: 'Low Poly', value: 'lowpoly' },
+          { label: 'Low Poly (retires Oct 30, 2026)', value: 'lowpoly' },
+          { label: 'Smart Topology (Meshy T2)', value: 'smart-topology' },
         ],
       },
       {
@@ -4459,9 +4459,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Latest (Meshy 7.1)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 5', value: 'meshy-5' },
         ],
       },
       {
@@ -4577,9 +4576,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Latest (Meshy 7)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 5', value: 'meshy-5' },
         ],
       },
       {

@@ -16,6 +16,30 @@ from execution.missing_credential import MissingCredentialError
 
 MESHY_API_BASE = "https://api.meshy.ai/openapi"
 
+# Smart topology runs on Meshy T2: triangles only, at most 15,000 faces, and no
+# image enhancement or lighting removal (https://docs.meshy.ai/openapi.yaml,
+# https://docs.meshy.ai/llms.txt, checked 2026-10-14).
+SMART_TOPOLOGY_MAX_POLYCOUNT = 15000
+_SMART_TOPOLOGY_UNSUPPORTED = ("image_enhancement", "remove_lighting")
+
+
+def _apply_smart_topology(body: dict[str, Any]) -> None:
+    """Shape a request body for ``model_type: smart-topology``, or explain why it can't run."""
+    if body.get("model_type") != "smart-topology":
+        return
+    if body.get("topology") == "quad":
+        raise ValueError("Smart Topology makes triangles only. Set Topology to Triangle.")
+    polycount = body.get("target_polycount")
+    if isinstance(polycount, (int, float)) and polycount > SMART_TOPOLOGY_MAX_POLYCOUNT:
+        raise ValueError(
+            f"Smart Topology makes at most {SMART_TOPOLOGY_MAX_POLYCOUNT:,} faces. "
+            f"Set Polycount to {SMART_TOPOLOGY_MAX_POLYCOUNT:,} or less."
+        )
+    # Meshy: smart-topology "implies the meshy-t2 model family"; meshy-t2 is the only model for it.
+    body["ai_model"] = "meshy-t2"
+    for key in _SMART_TOPOLOGY_UNSUPPORTED:
+        body.pop(key, None)
+
 
 def _log(msg: str) -> None:
     print(f"[meshy] {msg}", file=sys.stderr, flush=True)
@@ -73,6 +97,7 @@ async def handle_meshy_image_to_3d(
             body[k] = [f.strip() for f in v.split(",") if f.strip()]
         else:
             body[k] = v
+    _apply_smart_topology(body)
 
     async def noop_emit(event: ExecutionEvent) -> None:
         pass
@@ -161,6 +186,7 @@ async def handle_meshy_text_to_3d(
                 body[k] = [f.strip() for f in v.split(",") if f.strip()]
             else:
                 body[k] = v
+    _apply_smart_topology(body)
 
     async def noop_emit(event: ExecutionEvent) -> None:
         pass
@@ -193,8 +219,10 @@ async def handle_meshy_text_to_3d(
                 "mode": "refine",
                 "preview_task_id": task_id,
             }
+            # Without ai_model a refine "inherits the preview task's model", meshy-t2 under smart topology.
+            refine_keys = REFINE_KEYS - {"ai_model"} if body.get("model_type") == "smart-topology" else REFINE_KEYS
             for k, v in node.params.items():
-                if k in REFINE_KEYS and v is not None and v != "":
+                if k in refine_keys and v is not None and v != "":
                     if k == "target_formats" and isinstance(v, str):
                         refine_body[k] = [f.strip() for f in v.split(",") if f.strip()]
                     else:

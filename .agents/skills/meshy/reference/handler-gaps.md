@@ -14,7 +14,7 @@ This is an **actionable list** of Meshy capabilities that exist in the API but a
 - `target_formats` — user can't limit output to specific formats (saves time)
 - `moderation` (bool) — content screening
 - `auto_size` + `origin_at` — AI-estimated real-world sizing
-- `ai_model` — no UI to pick meshy-5 vs meshy-6 vs latest; handler defaults to `latest` silently
+- ~~`ai_model`~~ — exposed since (latest / meshy-6; meshy-5 removed 2026-10-14)
 
 ### Missing in refine mode
 - `texture_prompt` — can't give text guidance for texture generation
@@ -100,7 +100,7 @@ If you extend nodes incrementally, here's my ranking:
 2. **Add `input_task_id` chaining to retexture, rigging, remesh** — huge for pipeline workflows; avoids re-upload churn
 3. **Add `texture_prompt` + `texture_image_url` to image-to-3d and multi-image-to-3d** — massively improves output control for users with existing style references
 4. **Add animation library picker UI for meshy-animate** — users can't use 580+ animations if they have to memorize IDs
-5. **Add `ai_model` picker to text-to-3d and image-to-3d** — lets cost-conscious users pick meshy-5 (~4× cheaper)
+5. ~~**Add `ai_model` picker to text-to-3d and image-to-3d**~~ — done; a cheap `meshy-6-lite` option is still missing
 6. **Add `decimation_mode` option to remesh + text-to-3d + image-to-3d** — better for complex geometry than flat polycount
 7. **Add `target_formats` picker** — reduces task completion time when user knows which format they want
 8. **Add `image_style_url` to retexture** — image-driven retexturing is the most common retexture use case

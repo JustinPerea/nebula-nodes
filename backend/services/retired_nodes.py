@@ -34,6 +34,14 @@ Some nodes stay but lose a model option (``RETIRED_PARAMS``):
   model for high-quality, everyday image generation") on the generate node and
   Sunburst ("for workflows where editing precision matters most") on the edit
   node. Its sizes and qualities all exist on 2.5.
+- Meshy no longer lists ``meshy-5`` (``ai_model`` enums in
+  https://docs.meshy.ai/openapi.yaml, checked 2026-10-14), so a saved Meshy
+  node on it moves to ``meshy-6``, "the previous generation".
+- Meshy retires ``model_type: lowpoly`` on 2026-10-30 ("after that date it
+  returns an error. Use ``smart-topology`` (Meshy T2) instead"). From that date
+  a saved lowpoly node moves to smart-topology. Smart topology makes triangles
+  only, at most 15,000 faces, so quad becomes triangle and a larger polycount
+  becomes 15,000.
 
 A migration for a shutdown that is still ahead is date-gated (``_today``):
 until the shutdown the saved value keeps working and stays as it is.
@@ -147,11 +155,34 @@ def _model_after(shutdown: date, models: dict[str, str]):
 
 
 GPT_IMAGE_1_SHUTDOWN = date(2026, 10, 23)
+MESHY_LOWPOLY_SHUTDOWN = date(2026, 10, 30)
+MESHY_SMART_TOPOLOGY_MAX_POLYCOUNT = 15000
+
+
+def _meshy_params(params: dict[str, Any]) -> dict[str, Any]:
+    migrated = dict(params)
+    if migrated.get("ai_model") == "meshy-5":
+        migrated["ai_model"] = "meshy-6"
+    if migrated.get("model_type") == "lowpoly" and _today() >= MESHY_LOWPOLY_SHUTDOWN:
+        migrated["model_type"] = "smart-topology"
+        if migrated.get("topology") == "quad":
+            migrated["topology"] = "triangle"
+        try:
+            polycount = int(migrated.get("target_polycount"))
+        except (TypeError, ValueError):
+            polycount = None
+        if polycount is None or polycount > MESHY_SMART_TOPOLOGY_MAX_POLYCOUNT:
+            migrated["target_polycount"] = MESHY_SMART_TOPOLOGY_MAX_POLYCOUNT
+    return migrated
 
 RETIRED_PARAMS: dict[str, Any] = {
     "veo-3": _veo_params,
     "gpt-image-1-generate": _model_after(GPT_IMAGE_1_SHUTDOWN, {"gpt-image-1": "gpt-image-2.5-flare"}),
     "gpt-image-1-edit": _model_after(GPT_IMAGE_1_SHUTDOWN, {"gpt-image-1": "gpt-image-2.5-sunburst"}),
+    "meshy-text-to-3d": _meshy_params,
+    "meshy-image-to-3d": _meshy_params,
+    "meshy-multi-image-to-3d": _meshy_params,
+    "meshy-retexture": _meshy_params,
 }
 
 
