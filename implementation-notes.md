@@ -3528,3 +3528,50 @@ Banana (`nano-banana-fal`, `nano-banana-fal-edit`, and the Krea copies `krea-ima
 - **Engine cache test.** `test_node_route.py` now runs `execute_graph` end to end: fal run, same keys hit the
   cache, adding GOOGLE_API_KEY misses and calls the direct handler. Verified it fails with the `_route` tag
   disabled.
+
+## 2026-10-14 — BytePlus ModelArk provider + Seedream direct routes
+
+Step 1 of 2 on `byteplus-provider` (Seedance video is step 2). Vendor facts were read from docs.byteplus.com
+on 2026-10-14 and are quoted in `backend/handlers/byteplus.py`, `backend/execution/maker_routes_byteplus.py`
+and `docs/api-guides/byteplus.md`. No live calls, keys or paid runs; tests use a fake ModelArk (httpx.MockTransport).
+
+- **Provider id reuses `bytedance`.** `KEY_PROVIDERS["BYTEPLUS_API_KEY"] = "bytedance"` (the APIProvider that already
+  existed) instead of a new `byteplus` id, so fewer shared enums change. User-facing text says "BytePlus" through the
+  key label. Key name `BYTEPLUS_API_KEY`, distinct from Volcengine's `ARK_API_KEY`.
+- **Asia Pacific only.** Base URL `https://ark.ap-southeast.bytepluses.com/api/v3`; keys and activation are per region.
+  No region setting (follow-up). EU Seedream support is NOT CONFIRMED: the model list and region-availability disagree.
+- **US terms are shown, not enforced.** The Settings row's new `caveat` quotes the Service Specific Terms ("not
+  available in the United States") and the activation step. Nebula doesn't geo-check anything.
+- **`directRoute.setup: 'fallback'`** (new, additive): with no key saved, readiness points first-time setup at the fal or
+  Krea key, not BytePlus, so a US user isn't sent to a service they can't use.
+- **New shared `size` block reason** (`node_route.py` `_size_block`/`size_fits`, mirrored in `directRoute.ts`).
+  `directRoute.size` names a size param (or width/height pair) plus min/max pixels and max aspect; a value outside them
+  keeps the run on the copy, worded in readiness. Chose "block" over "nearest valid size" because the rules say never
+  change a recipe to fit.
+- **fal shaped presets map to ModelArk's 2K-table size for that aspect** (square_hd 2048x2048, 4:3 2304x1728,
+  16:9 2848x1600, and portraits). fal doesn't publish its presets' pixel sizes, so the aspect is exact but the pixel
+  count may differ from what fal renders. `square` (512x512) stays on fal. If Justin prefers the strict reading,
+  add every shaped preset to `size.unsupported`.
+- **`auto_*` → tiers 2K/3K/4K.** `auto_3K` on model 4.5 stays on fal (4.5 has no 3K tier).
+- **num_images = N separate requests; max_images > 1 = `sequential_image_generation: auto`.** Matches fal's own
+  definitions ("separate model generations" / "up to max_images"). The price is per generated image, so the estimate
+  is a range from 1 to max_images, times num_images. The port shows the first image; every image is saved.
+- **seed.** fal `seed` is a blocker (ModelArk has none). It also blocks for model 5.0-lite, where fal itself omits it;
+  a minor edge case. Krea's `seed` has a default (1337), so it can't be a blocker; it's kreaOnly and dropped on direct.
+- **Krea `style_images` is a blocker** (per-image `strength` has no ModelArk field), so the Krea direct route is
+  text-to-image only; a wired one raises if it ever reaches the translator.
+- **Seedream 5 Pro priced as [0.045, 0.09]** because price rows can't read width x height (the price changes at 2.61 MP).
+  Its Krea price stays unmapped, so only the `bytedance` route is priced.
+- **Key never probed.** BytePlus documents no free read-only check, so `PROVIDER_CHECKS["BytePlus"]` has no URL and
+  the key stays `configured_unverified`.
+- **`QuotaExceeded` is still classified as rate_limit (retryable)** by the shared error classifier, although BytePlus
+  also uses it for an exhausted free trial. The message explains both meanings; changing the classifier was out of scope.
+- **Step 2 hooks.** `handlers/byteplus.request()` is generic (method, path, json) for
+  `POST /contents/generations/tasks` and `GET`/`DELETE /contents/generations/tasks/{id}`; `explain()` already covers
+  Seedance's USD 30 activation rule.
+- **Sync generator** (`scripts/sync-krea-catalog.py`): the overlay now emits `directRoute.size` and `setup`, validates
+  that size param names are shared fields, and `direct_route_pricing` passes a non-Google overlay price through as-is.
+- **Desktop tests** pinned 18 providers; now 19. `sidecar.test.mjs` needs `ws`, which the worktree's `desktop/` has
+  no `node_modules` for; it passed with a temporary symlink to the main checkout's, removed afterwards.
+- **Not mirrored to `.claude/skills/`**: that tree is already a stale copy of `.agents/skills/` (fal and krea differ),
+  and nothing syncs it.

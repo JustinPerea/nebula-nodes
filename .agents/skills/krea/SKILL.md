@@ -53,6 +53,19 @@ So an `api-token` node runs on Google once a Google key is saved; a person
 who wants Krea's API for it removes the key or picks the Krea plan. On the
 Google route the node fills `image`, `images` and `artifacts` (no Krea `job`).
 
+## Maker routes (Seedream on your BytePlus key)
+
+The Seedream copies `krea-image-bytedance-seedream-4` (`seedream-4-0-250828`),
+`-seedream-5-lite` (`seedream-5-0-lite-260128`) and `-seedream-5-pro`
+(`dola-seedream-5-0-pro-260628`) also run on BytePlus ModelArk with the
+person's `BYTEPLUS_API_KEY`, same precedence as above (Krea plan, then the
+maker key, then `KREA_API_TOKEN`). Also from the `DIRECT_ROUTES` overlay:
+`style_images` is a blocker (set ones stay on Krea), `seed` is Krea-only and
+dropped on BytePlus, and `directRoute.size` keeps a width x height outside
+ModelArk's pixel limits on Krea. `directRoute.setup: "fallback"` keeps
+first-time setup on the Krea token, because BytePlus isn't offered in the
+United States. Details: the `byteplus` skill.
+
 ## Gateway Model Nodes
 
 The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108) included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.
