@@ -216,7 +216,8 @@ RUNWAY_DUBBING_PARAMS = {
 def runway_dubbing_to_elevenlabs(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[GraphNode, dict[str, PortValueDict]]:
     """runway-dubbing -> handle_elevenlabs_dubbing: a rename only. Runway's 28
     target languages are all in ElevenLabs' Dubbing v1 list
-    (help-center/product/dubbing/which-languages-are-supported-in-dubbing)."""
+    (https://elevenlabs.io/docs/help-center/product/dubbing/which-languages-are-supported-in-dubbing,
+    "Dubbing v1 supports the same languages as the Eleven v3 model")."""
     params = {theirs: _value(node, ours) for ours, theirs in RUNWAY_DUBBING_PARAMS.items()}
     return _copy(node, params), ({"audio": inputs["audio"]} if "audio" in inputs else {})
 

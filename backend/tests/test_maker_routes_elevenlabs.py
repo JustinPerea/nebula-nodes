@@ -191,6 +191,31 @@ async def test_first_party_tts_still_sends_its_voice_settings():
     assert client.post.call_args.kwargs["json"]["voice_settings"]["stability"] == 0.5
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("voice", ["../../music", "a/../../../v1/voices/add", "abc?output_format=pcm_44100",
+                                   "%2e%2e/music"])
+@pytest.mark.parametrize("node_id,inputs", [
+    ("krea-audio-elevenlabs-tts", {"prompt": PortValueDict(type="Text", value="hi")}),
+    ("runway-tts", {"text": PortValueDict(type="Text", value="hi")}),
+    ("runway-sts", "audio"),
+    ("elevenlabs-tts", {"text": PortValueDict(type="Text", value="hi")}),
+])
+async def test_a_voice_id_that_is_not_one_path_segment_is_refused_before_any_call(node_id, inputs, voice):
+    """voice_id goes into the URL path: "../../music" would POST to /music on
+    the person's key (httpx resolves the dot segments)."""
+    if inputs == "audio":
+        inputs = {"audio": _audio_file()}
+    node = GraphNode(id="v", definitionId=node_id, params={"_kreaAuth": "api-token", "voice_id": voice})
+    with patch("handlers.elevenlabs.httpx.AsyncClient") as eleven, \
+            patch("handlers.krea_gateway.handle_krea_gateway", AsyncMock()) as gateway, \
+            patch("handlers.runway.async_poll_execute", new_callable=AsyncMock) as poll, \
+            pytest.raises(ValueError, match="ElevenLabs voice ID"):
+        await _run(node, inputs, {**ELEVEN, **KREA, **RUNWAY})
+    eleven.assert_not_called()
+    gateway.assert_not_called()
+    poll.assert_not_called()
+
+
 # -- Runway's ElevenLabs models ----------------------------------------------------
 
 @pytest.mark.asyncio
@@ -287,7 +312,8 @@ async def test_runway_dubbing_without_the_elevenlabs_key_stays_on_runway():
 
 
 def test_every_runway_dubbing_language_is_an_elevenlabs_dubbing_language():
-    """Dubbing v1 languages (ElevenLabs help center, read 2026-10-14)."""
+    """Dubbing v1 languages, read 2026-10-14 from
+    https://elevenlabs.io/docs/help-center/product/dubbing/which-languages-are-supported-in-dubbing."""
     v1 = set("af ar hy as ast az be bn bs bg my yue ca ceb ny zh hr cs da nl en et fil fi fr gl ka de el gu ha he hi "
              "hu is id ga it ja jv kn kk ko ky lv ln lt lb mk ms ml mt mi mr mn ne no oc or ps fa pl pt pa ro ru sr "
              "sd sk sl so es sw sv tl tg ta te th tr uk ur uz vi cy yo".split())

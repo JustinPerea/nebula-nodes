@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
+import re
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -16,6 +17,23 @@ from execution.missing_credential import MissingCredentialError
 
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1/text-to-speech"
 DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel
+
+# The voice id is one URL path segment ("POST
+# https://api.elevenlabs.io/v1/text-to-speech/{voice_id}", "ID of the voice to
+# be used"; the same for /v1/speech-to-speech/{voice_id}). ElevenLabs' ids are
+# letters and digits (21m00Tcm4TlvDq8ikWAM). A pasted value with "/", "..",
+# "?" or "%" would send the request, on the person's key, to another endpoint
+# ("../../music" resolves to /music), so anything else is refused before any
+# call. The Krea and Runway copies routed here
+# (execution/maker_routes_elevenlabs.py) take voice_id as free text.
+_VOICE_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
+
+
+def _voice_id(node: GraphNode) -> str:
+    voice = str(node.params.get("voice_id") or DEFAULT_VOICE_ID).strip()
+    if not _VOICE_ID.fullmatch(voice):
+        raise ValueError(f"voice_id must be an ElevenLabs voice ID (letters and digits), received {voice!r}")
+    return voice
 
 
 async def handle_elevenlabs_tts(
@@ -42,7 +60,7 @@ async def handle_elevenlabs_tts(
     if not api_key:
         raise MissingCredentialError("ELEVENLABS_API_KEY is required")
 
-    voice_id = node.params.get("voice_id", DEFAULT_VOICE_ID) or DEFAULT_VOICE_ID
+    voice_id = _voice_id(node)
     model_id = node.params.get("model_id", "eleven_multilingual_v2")
     stability = float(node.params.get("stability", 0.5))
     similarity_boost = float(node.params.get("similarity_boost", 0.75))
@@ -247,7 +265,7 @@ async def handle_elevenlabs_sts(
     if not api_key:
         raise MissingCredentialError("ELEVENLABS_API_KEY is required")
 
-    voice_id = node.params.get("voice_id", DEFAULT_VOICE_ID) or DEFAULT_VOICE_ID
+    voice_id = _voice_id(node)
     output_format = node.params.get("output_format", "mp3_44100_128")
 
     # Read audio file
