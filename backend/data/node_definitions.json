@@ -7339,6 +7339,13 @@
             "value": "t-pose"
           }
         ]
+      },
+      {
+        "key": "texture_prompt",
+        "label": "Texture Prompt",
+        "type": "string",
+        "required": false,
+        "placeholder": "Guide the texturing process"
       }
     ],
     "directParams": [
@@ -7411,13 +7418,6 @@
       }
     ],
     "falParams": [
-      {
-        "key": "texture_prompt",
-        "label": "Texture Prompt",
-        "type": "string",
-        "required": false,
-        "placeholder": "Guide the texturing process"
-      },
       {
         "key": "enable_safety_checker",
         "label": "Safety Checker",

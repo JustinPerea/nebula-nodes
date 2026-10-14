@@ -4416,6 +4416,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'T-Pose', value: 't-pose' },
         ],
       },
+      {
+        key: 'texture_prompt',
+        label: 'Texture Prompt',
+        type: 'string',
+        required: false,
+        placeholder: 'Guide the texturing process',
+      },
     ],
     directParams: [
       {
@@ -4472,13 +4479,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
     ],
     falParams: [
-      {
-        key: 'texture_prompt',
-        label: 'Texture Prompt',
-        type: 'string',
-        required: false,
-        placeholder: 'Guide the texturing process',
-      },
       {
         key: 'enable_safety_checker',
         label: 'Safety Checker',

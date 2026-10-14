@@ -89,7 +89,7 @@ One-stage workflow. Single reference image → textured 3D model.
 | `model_type` | string | | `"standard"` | `"standard"` or `"lowpoly"` |
 | `should_texture` | boolean | | `true` | Skip texture phase with `false` — returns mesh only |
 | `enable_pbr` | boolean | | `false` | Metallic + roughness + normal maps |
-| `texture_prompt` | string | | — | Max 600 chars. Guide texture with text. Costs 10 additional credits |
+| `texture_prompt` | string | | — | Max 800 chars (docs.meshy.ai, checked 2026-10-14; fal's copy caps it at 600). Guide texture with text. Costs 10 additional credits. In Nebula `meshy-image-to-3d` sends it on both routes |
 | `texture_image_url` | string | | — | 2D image URL/data URI to guide texture. Costs 10 additional credits |
 | `should_remesh` | boolean | | `false` on meshy-6; `true` on others | Remesh phase |
 | `topology` | string | | `"triangle"` | `"quad"` or `"triangle"` — only when `should_remesh=true` |

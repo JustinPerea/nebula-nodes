@@ -122,6 +122,15 @@ APPROVED_DUAL_ROUTE_SPLITS = {
               "falParams": ["output_format", "seed"], "order": _NANO_BANANA_FAL_ORDER}
     for node_id in ("nano-banana-fal", "nano-banana-fal-edit")
 }
+# Direct maker routes, review fix (2026-10-14): Meshy's own image-to-3D API
+# takes texture_prompt ("Provide a text prompt to guide the texturing
+# process", https://docs.meshy.ai/en/api/image-to-3d), so it moves from
+# falParams to the end of sharedParams and reaches both routes. The param
+# itself is unchanged; normalizing moves it back to its baseline slot
+# (group, index), so any edit to it still fails the fingerprint.
+APPROVED_PARAM_GROUP_MOVES = {
+    "meshy-image-to-3d": {"texture_prompt": ("sharedParams", "falParams", 0)},
+}
 APPROVED_LEADING_PARAM_ADDITIONS = {
     "krea-2-generate": _KREA_AUTH_PARAM,
     "krea-style-search": _KREA_AUTH_PARAM,
@@ -218,6 +227,11 @@ def _remove_approved_fields(container: dict[str, Any], additions: dict[str, Any]
 def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any]:
     """Normalize exact approved deltas without mutating shared fixture data."""
     normalized = deepcopy(node)
+    for key, (now_in, baseline_in, index) in APPROVED_PARAM_GROUP_MOVES.get(node_id, {}).items():
+        moved = [param for param in normalized.get(now_in) or [] if param.get("key") == key]
+        assert len(moved) == 1, f"unapproved param move: {node_id}.{key}"
+        normalized[now_in] = [param for param in normalized[now_in] if param.get("key") != key]
+        normalized.setdefault(baseline_in, []).insert(index, moved[0])
     split = APPROVED_DUAL_ROUTE_SPLITS.get(node_id)
     if split is not None:
         baseline_env, current_env = split["envKeyName"]

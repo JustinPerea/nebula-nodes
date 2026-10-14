@@ -5012,12 +5012,12 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Texture | bool | true | — |
 | PBR Materials | bool | false | — |
 | Pose Mode | enum | — | None, A-Pose, T-Pose |
+| Texture Prompt | string | — | — |
 
 **FAL Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Texture Prompt | string | — | — |
 | Safety Checker | bool | true | — |
 | Seed | int | — | — |
 
