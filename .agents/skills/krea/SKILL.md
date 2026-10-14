@@ -53,6 +53,21 @@ So an `api-token` node runs on Google once a Google key is saved; a person
 who wants Krea's API for it removes the key or picks the Krea plan. On the
 Google route the node fills `image`, `images` and `artifacts` (no Krea `job`).
 
+### Ideogram and Runway copies (2026-10-14)
+
+Same rule, other makers (`execution/maker_routes_ideogram_runway.py`):
+`krea-image-ideogram-ideogram-4-5-precise` (`/v2/image/precise-edit/ideogram-4-5`),
+`-ideogram-3` (`/v1/ideogram-v3/generate`, DEFAULT speed, one character ref) and
+`-ideogram-2-turbo` (`/v2/image/generate/ideogram-2a`, turbo) on
+`IDEOGRAM_API_KEY`; `krea-image-runway-gen-4-image` (`gen4_image`),
+`krea-video-runway-gen-4-5` (`gen4.5`) and `krea-enhance-runway-ruby` (`ruby`,
+`/v1/video_to_hdr`) on `RUNWAY_API_KEY`. width/height snap to the maker's
+nearest shape. Ideogram 3 `style_images` (per-image strength) keep a run on
+Krea; wired ones fail on the Ideogram route with a message. Gen-4.5 rejects
+Krea's 672:1584 on Runway. `krea-image-ideogram-ideogram-4-5` and
+`krea-video-runway-gen-4-video` stay Krea-only (size presets / upstream model
+not confirmed).
+
 ## Gateway Model Nodes
 
 The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108) included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.

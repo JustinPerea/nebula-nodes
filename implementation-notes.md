@@ -3528,3 +3528,55 @@ Banana (`nano-banana-fal`, `nano-banana-fal-edit`, and the Krea copies `krea-ima
 - **Engine cache test.** `test_node_route.py` now runs `execute_graph` end to end: fal run, same keys hit the
   cache, adding GOOGLE_API_KEY misses and calls the direct handler. Verified it fails with the `_route` tag
   disabled.
+
+## 2026-10-14 — Direct maker routes: Ideogram and Runway (Krea copies)
+
+Six generated Krea nodes now run on the maker's API with the maker's key (Krea plan, then maker key, then
+`KREA_API_TOKEN`, all via `node_route.select_route`). Handlers: `backend/execution/maker_routes_ideogram_runway.py`
+(registered with one `KREA_TRANSLATIONS.update` line); overlay: `IDEOGRAM_RUNWAY_DIRECT_ROUTES` in
+`scripts/sync-krea-catalog.py`, spread into `DIRECT_ROUTES`. No sync_runner change: `krea_router` already wraps every
+generated node that has a `directRoute`.
+
+- **Done:** `krea-image-ideogram-ideogram-4-5-precise` -> `/v2/image/precise-edit/ideogram-4-5`;
+  `-ideogram-3` -> `/v1/ideogram-v3/generate`; `-ideogram-2-turbo` -> `/v2/image/generate/ideogram-2a` (turbo);
+  `krea-image-runway-gen-4-image` -> `gen4_image`; `krea-video-runway-gen-4-5` -> `gen4.5` (through
+  `handle_runway_video`); `krea-enhance-runway-ruby` -> `ruby` on `/v1/video_to_hdr`.
+- **Skipped `krea-image-ideogram-ideogram-4-5` (generate).** Ideogram's page: without source images "an exact size
+  must be one of the supported 1K/2K presets (for example 1024x1024, 2048x2048 or 1440x2880)", and no page lists
+  the presets (the v2 OpenAPI URL serves HTML; Ideogram's docs search says they aren't listed). Krea's 8
+  `aspect_ratio` values can't be mapped to confirmed sizes, so it stays Krea-only. Unblock: confirm the presets
+  (Ideogram support, or a `dry_run=true` request on Justin's key, which validates and prices without billing).
+- **Skipped `krea-video-runway-gen-4-video`** as instructed (upstream not confirmed; Krea runs it text-only,
+  which `gen4_turbo` can't do).
+- **One read of a recipe.** Each direct handler first builds the body Krea's gateway would send
+  (`krea_gateway._request_body`: params, wired ports over them, JSON params decoded), then maps it. Missing values
+  get Krea's schema defaults (width/height 1024, quality high, duration 5, output_format hdr10).
+- **width/height snap** (Ideogram 3, 2a, gen4_image) to the maker's nearest shape, then nearest pixel count. They
+  can't be `directBlockedBy` (they default to 1024 and the generator refuses defaulted blockers), and the makers
+  only take fixed shapes, so Krea must snap too. Defaults map exactly (1x1, 1024:1024).
+- **Ideogram 3 uses v1, not v2.** The v2 ideogram-3 page lists no values for `resolution`/`aspect_ratio`/
+  `rendering_speed`; the v1 page (and Nebula's own `ideogram-character`) shows them, takes the character reference
+  in the same call, and Ideogram's pricing says v1 endpoints are "Still available at these prices". Speed is
+  fixed at DEFAULT (Krea exposes none). One character reference max ("currently only supports 1").
+- **Krea `style_images` keep Ideogram 3 on Krea** (`kreaOnly` + `directBlockedBy`): each carries a `strength`
+  Ideogram has no field for. Wired style images can't be seen by route selection, so the direct handler refuses
+  them with a message instead of dropping the strengths. Follow-up: a value/port-aware blocker would let these
+  (and gen4.5's 672:1584) fall back to Krea instead of erroring.
+- **Gen-4.5:** duration rounds to whole seconds (Runway: "Must be an integer from 2 to 10"); prices are rows per
+  whole second, so a fractional duration shows unpriced. Krea's 672:1584 and non-1280:720/720:1280 text-to-video
+  ratios fail before submit (existing `handle_runway_video` checks).
+- **Gen-4 Image:** Krea's `reference_images` `[{url, tag}]` -> `referenceImages [{uri, tag}]` (tags kept so
+  `@tag` prompts still work); own submit in the new module rather than changing `handle_runway_image`.
+- **Ruby:** local videos go as a data URI under 5MB, else `/v1/uploads` (Runway's schema: data URIs "up to 5MB").
+  `proresProfile` only with `hdr_prores`; .mov for ProRes. Unpriced on both routes ("20 credits per second; 40
+  credits per second when the source is larger than 4 megapixels" depends on the source).
+- **Prices** (read 2026-10-14): Ideogram's API pricing tab rendered in Playwright this time ("Current prices
+  loaded") — Precise Edit $0.008/$0.03/$0.06/$0.22; 3.0 Default $0.06, with Character Reference $0.15 (shown as
+  the range [0.06, 0.15]); 2a Turbo $0.025. Runway guides/pricing.md: gen4_image 5/8 credits (range
+  [$0.05, $0.08]; Runway doesn't say which ratios are 720p vs 1080p), gen4.5 12 credits/s, $0.01 per credit.
+  Krea-2-Turbo = 2a Turbo is backed by Krea's "Ideogram 2.0A Turbo" label and its identical $0.025.
+- **Generator changes (shared, small):** `direct_route_pricing` passes non-Google entries through as written, and a
+  `pricing: None` route is allowed; a dual-route node with only a Krea price still gets a `routes` entry.
+  `test_direct_route_models_price_both_routes` and the audio-note test now handle maker-only and Krea-less routes.
+- **Behavior change:** a saved Krea node of these six on `api-token` runs on Ideogram/Runway once that key is saved
+  (same as the Nano Banana pilot).
