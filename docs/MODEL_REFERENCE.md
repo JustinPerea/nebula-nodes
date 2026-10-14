@@ -6157,7 +6157,7 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | sync |
 | **Inputs** | Context (Text), Images (Image ×n) |
 | **Outputs** | Answer (Text), Pass (Text), Probability (Text), Confidence (Text), Probabilities (JSON) (Text), Report (Text) |
-| **Audited** | — |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|

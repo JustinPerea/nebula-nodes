@@ -1,6 +1,6 @@
 # Nebula Nodes - API Guides
 
-Nebula integrates **17 external AI/media API families** (image, video, audio, 3D/world, text/LLM, and SVG). This directory holds the **user-facing guide** for each provider plus a **coverage + agent-skill audit** measuring how much of each provider's API surface Nebula actually wires up, and whether an agent skill exists to drive those nodes.
+Nebula integrates **18 external AI/media API families** (image, video, audio, 3D/world, text/LLM, SVG, and typed decisions). This directory holds the **user-facing guide** for each provider plus a **coverage + agent-skill audit** measuring how much of each provider's API surface Nebula actually wires up, and whether an agent skill exists to drive those nodes.
 
 Per-provider guides live alongside this file at `./<provider>.md` (e.g. [`./fal.md`](./fal.md)).
 
@@ -27,6 +27,7 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 | [Nous Portal (Hermes)](./nous.md) | 1 | ~70% | complete | Legacy POST /completions endpoint (and `<think>` prefill via it) not exposed |
 | [Higgsfield](./higgsfield.md) | 1 | ~25% | complete | DoP motion/camera presets (getMotions()) — Higgsfield's headline feature — not surfaced |
 | [Anthropic (Claude)](./anthropic.md) | 1 | ~20% | complete | Tool use / function calling — both custom client tools and Anthropic server tools entirely unexposed |
+| [TypeSafe (Jev)](./typesafe.md) | 1 | ~50% | complete | Box questions and multi-question requests (Pick Best and Box nodes come next) |
 
 ## Agent skill gaps
 

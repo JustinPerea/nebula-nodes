@@ -1,0 +1,190 @@
+# TypeSafe Jev in Nebula Nodes
+
+```mermaid
+flowchart LR
+  B[Brief<br/>Text] --> G[Image generator<br/>several candidates]
+  G -->|candidates| PB[Jev Pick Best]
+  B --> PB
+  PB -->|winner| D[Jev Decide<br/>'on brief?']
+  B --> D
+  D -->|pass true / false / unsure| N[Next step]
+  PB -->|winner| BX[Jev Box<br/>experimental]
+  BX -->|crop, mask| E[Inpaint / upscale]
+```
+
+> Jev, from TypeSafe, is a decision model. You ask it typed questions (yes or no, pick one, rate on a scale, where is it) and it returns probabilities, never prose. In Nebula it sits between generators as a cheap judge. Vendor docs: [docs.typesafe.ai](https://docs.typesafe.ai).
+
+## Nodes
+
+| Node | ID | Status | Use it for |
+|---|---|---|---|
+| Jev Decide (judge / classify / yes-no) | `jev-decide` | shipped | One question about text and images: yes/no, pick an option, or a score |
+| Jev Pick Best | `jev-pick-best` | contract only (next change) | Pick the best of several candidate images |
+| Jev Box (experimental) | `jev-box` | contract only (next change) | Find one thing in an image: box, crop and mask |
+
+All three are `analyzer` nodes, `sync` (one request), and need `TYPESAFE_API_KEY`.
+
+## Setup
+
+1. Create a key in the TypeSafe console (`console.typesafe.ai/keys`).
+2. In Nebula, open **Settings** → **Providers**, add it on the **TypeSafe** row (`TYPESAFE_API_KEY`) and save. TypeSafe has no free key-check call, so health shows the key as *configured, unverified* until a node runs.
+3. Your own key only. Nebula has no hosted or shared Jev key, and always calls `https://api.typesafe.ai/v1/systemone` directly, never through an aggregator.
+
+Whether TypeSafe may analyze your requests to improve its models is an organization setting in your TypeSafe console. Nebula can't see or change it.
+
+## Experimental parts
+
+TypeSafe marks image input and Box questions as not production-ready: the request format, limits and accuracy can change between releases. Nebula sends images anyway, and says so:
+
+- Decide shows a capability note, and its report has an `Images: N (experimental)` line whenever images were sent.
+- Box is labelled *(experimental)* in its name.
+- Text-only questions are TypeSafe's production surface.
+
+## Jev Decide
+
+Inputs:
+
+| Port | Type | Notes |
+|---|---|---|
+| `state` (Context) | Text, optional | What to judge, or the brief to judge against |
+| `images` (Images) | Image, optional, up to 16 | Sent with the context in one request |
+
+At least one of the two must be connected. With no images the context goes as plain text. With images, the request holds `{"context": ..., "image": ...}` for one image or `{"context": ..., "images": [...]}` for several, so a question can point at `image` or `images[1]`.
+
+Params:
+
+| Param | Default | Meaning |
+|---|---|---|
+| `model` | `jev-1.14.0` | Pinned ids `jev-1.14.0`, `jev-1.13.0`; aliases `jev-latest`, `jev-preview` move to new versions, so thresholds tuned on one may shift |
+| `answer_type` | `yes_no` | `yes_no`, `choice` or `score` |
+| `question` | required | One atomic question |
+| `yes_means`, `no_means` | empty | Optional definitions of yes and no (yes/no only) |
+| `options` | empty | Choice options, one per line (2 to 255) |
+| `pass_when` | empty | Choice options that count as a pass, one per line |
+| `levels` | empty | Score levels, low to high, one per line (2 to 10) |
+| `threshold` | 0.5 | Pass when the yes-probability (yes/no) or normalized score (score) is at least this |
+| `min_confidence` | 0.5 | Below this, `pass` is `unsure` |
+| `long_context` | false | Raises the context limit; slower and less accurate |
+
+Choice options go to Jev under neutral keys (`a`, `b`, `c`, ...) with your wording as their description, and come back as your wording. A loaded option name can steer the answer; a neutral key can't.
+
+Outputs (all Text):
+
+| Port | Format | Example |
+|---|---|---|
+| `answer` | `yes` / `no`; the chosen option; or the most likely score level, in your words (ties go to the lower level) | `Product photo` |
+| `pass` | `true`, `false` or `unsure` | `unsure` |
+| `probability` | number: yes-probability (yes/no), winner probability (choice), score normalized to 0..1 (score) | `0.93` |
+| `confidence` | number. Yes/no: `|2p - 1|` (Jev gives no confidence for yes/no). Choice and score: Jev's own | `0.86` |
+| `probabilities` | JSON object, label → number, in option order. Yes/no uses `yes` and `no` | `{"yes": 0.93, "no": 0.07}` |
+| `report` | report text, below | |
+
+How `pass` is decided:
+
+- yes/no: probability ≥ `threshold`.
+- choice: the answer is one of `pass_when`. With `pass_when` empty, `pass` only says whether the answer is confident enough to use (`true` or `unsure`, never `false`).
+- score: normalized score ≥ `threshold`.
+- Then, for all three, `unsure` whenever confidence < `min_confidence`.
+
+## Jev Pick Best (contract)
+
+Inputs: `candidates` (Image, multiple, required), `brief` (Text, optional). Outputs:
+
+| Port | Type | Format |
+|---|---|---|
+| `winner` | Image | The winning candidate's value, unchanged (the same reference that came in) |
+| `index` | Text | 0-based position among the candidates, as an integer: `1` |
+| `probabilities` | Text | JSON keyed `"0"`, `"1"`, ... in candidate order: `{"0": 0.08, "1": 0.87, "2": 0.05}` |
+| `confidence` | Text | number, Jev's Choice confidence. Low means the candidates are close and any would do |
+| `report` | Text | report text |
+
+## Jev Box (contract)
+
+Inputs: `image` (Image, required), `target` (Text, optional; overrides the `target` param). Every request pairs the Box question with a yes/no "is it there?" question, because a Box answer always returns a box, even for something that isn't in the image.
+
+| Port | Type | When | Format |
+|---|---|---|---|
+| `found` | Text | always | `true`, `false` or `unsure`, from the presence question |
+| `box` | Text | always | JSON below, or the text `null` when `found` is `false` |
+| `crop` | Image | `found` is `true` | The box cut from the original image |
+| `mask` | Mask | `found` is `true` | White rectangle on black, original image size |
+| `annotated` | Image | `found` is `true` or `unsure` | The original with the box drawn |
+| `report` | Text | always | report text |
+
+`box` JSON:
+
+```json
+{"top": 0.25, "bottom": 0.82, "left": 0.44, "right": 0.84, "confidence": 0.92,
+ "px": {"x": 450, "y": 192, "w": 411, "h": 438}, "image": {"w": 1024, "h": 768}}
+```
+
+- Edges are fractions (0..1, from the top-left) of the **original** image: decoded, first frame, EXIF rotation applied (what a browser shows). Any resizing or padding Nebula did before sending is undone.
+- `px` is the integer pixel rectangle in that image; `image` is its size.
+- `confidence` is `null` (never 0) when TypeSafe doesn't report one.
+- When `found` is `unsure`, `box` holds the model's guess but there is no crop or mask.
+
+## Number and report formats (all nodes)
+
+- Numbers are plain decimals in 0..1 with at most four places and no trailing zeros or exponent: `0.93`, `1`, `0`.
+- The report is plain text. Line 1 is the title (`Jev Decide (yes/no)`). Then one `Key: value` per line. `Model:` (the versioned id that answered, plus `(asked for jev-latest)` when you picked an alias) and `Input tokens:` (an integer, or `unknown`) are always there. Optional `Images:` and `Request id:` lines follow, then zero or more `Note: ...` lines.
+
+```
+Jev Decide (yes/no)
+Question: Is the product on a plain white background?
+Answer: yes
+Pass: true
+Probability: 0.93
+Confidence: 0.86
+Model: jev-1.14.0
+Input tokens: 312
+```
+
+`frontend/src/lib/jev.ts` parses all of this (`parseJevOutputs`, `parseJevReport`); `backend/services/jev_outputs.py` writes and checks it. Both test against `backend/tests/fixtures/jev_outputs.json`.
+
+## Errors
+
+Every message names the fix and never contains the key. TypeSafe's request id is appended when it sends one.
+
+| Status | What you see |
+|---|---|
+| no key | `TYPESAFE_API_KEY is required` (before any request) |
+| 400 `max_tokens_exceeded` | Too long for the context: send fewer or smaller images, shorten the context, or turn on Long context |
+| 400 image or asset | An image was rejected: re-export it as PNG or JPEG |
+| 400 other | TypeSafe's own message |
+| 401 / 403 | The key was rejected: check it in Settings → TypeSafe |
+| 413 | Request too large (32 MiB per request, 16 MiB per image) |
+| 415 / 422 | Encoding problem / the field TypeSafe says is invalid |
+| 408, 429, 5xx (incl. 529) | Retried twice with backoff (Retry-After honoured, up to 10 s), then a clear rate-limit, overloaded or server-error message |
+
+## Images
+
+Nebula prepares every image before sending, because TypeSafe rejects images outside its limits instead of resizing them:
+
+- Loads local files, `/api/outputs/...` references, data URIs and public https URLs through Nebula's usual path and URL checks.
+- Applies EXIF rotation, takes the first frame of an animation, and converts WebP, GIF and other formats to PNG (when there is transparency, or the input was PNG) or JPEG.
+- Shrinks the long side to 1568 px, and pads (never stretches) small images up to 256 px a side and 78,400 px in total.
+- Keeps each image under 16 MiB and the whole request under 32 MiB, re-encoding as smaller JPEGs if it must. Inputs over 64 MiB or 64 megapixels are refused.
+
+## Cost
+
+TypeSafe charges per input token ($0.042 per million) and nothing for output; images count as input tokens, and the per-image count isn't published yet. A request can't be longer than the context limit, so Nebula prices each run at that ceiling: up to **$0.0027** (64k tokens) by default and up to **$0.011** (262k) with Long context. Most questions cost a small fraction of that. Re-running an unchanged node replays from Nebula's cache for free.
+
+## Limits
+
+- One question per Decide node. Keep it atomic; ask several narrow questions rather than one compound one.
+- Box needs Jev 1.14 (`jev-1.14.0` or `jev-preview`).
+- Rate limits are set per organization in the TypeSafe console.
+- Graphs can't branch on `pass` yet; it is information for people, agents and prompts until the engine gains skip support.
+
+## For developers
+
+`backend/services/typesafe_client.py` is shared by every Jev node:
+
+- `await prepare_images(values, label="Image", max_images=16) -> list[PreparedImage]`: each has `placeholder` (fresh uuid4), `part`, `data`, `format`, `mime`, `source` and `transform` (`ImageTransform`, with `to_original_box(top=, bottom=, left=, right=)`).
+- `await system_one(api_key, *, model, state, questions, images=(), long_context=False) -> JevResult`: every placeholder must appear exactly once in `state` and `questions`. `JevResult` has `model`, `requested_model`, `answers`, `input_tokens`, `output_tokens`, `request_id` and `answer(question_id, kind)`.
+- `ChoiceOptions.from_labels(labels)` (`criteria()`, `read(answer)`), `score_criteria(levels)`, `read_score(answer, levels)`, `noul_confidence(p)`, `neutral_keys(n)`, `split_lines(text)`, `check_model(model)`.
+- Errors are `TypeSafeError` (a `ValueError`) with `status`, `code` and `request_id`.
+
+`backend/services/jev_outputs.py` writes the formats above (`format_number`, `verdict`, `probabilities_json`, `box_json`, `report`, `text`) and checks them (`validate_outputs(definition_id, outputs)`).
+
+Pricing: `backend/data/model_pricing.json` prices `jev-decide` `per: "request"` with a `[low, high]` range, a `long_context` row first, `plus: "input images"`, and cases in `backend/tests/fixtures/pricing_cases.json`. A new Jev node copies that entry under its own id.
