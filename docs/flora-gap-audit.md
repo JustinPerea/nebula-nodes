@@ -60,7 +60,7 @@ Audit of what Flora (app.flora.ai, 369 models via MCP `client.models.list`) offe
 
 ## Audio gaps
 
-Nebula is *richer* than Flora here (Runway/OpenAI/ElevenLabs suites, Lyria 3, ACE-Step, Stable Audio 2.5, Demucs). Only Flora exclusive: **ElevenLabs Music v1** as a dedicated model.
+Nebula is *richer* than Flora here (Runway/OpenAI/ElevenLabs suites, Lyria 3, ACE-Step, Stable Audio 2.5, Demucs). Only Flora exclusive: **ElevenLabs Music v1** as a dedicated model. **Closed 2026-10-14:** `krea-audio-elevenlabs-music` is Music v1 (plus `-music-v2`, `-music-v2-5`), and `elevenlabs-music` runs `music_v1` / `music_v2` / `music_v2_5` on ElevenLabs' own API with your ElevenLabs key (fal without it).
 
 ## Text / analysis gaps
 
