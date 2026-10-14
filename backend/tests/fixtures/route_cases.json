@@ -2380,6 +2380,349 @@
         "reason": "blocked",
         "param": "end_image"
       }
+    },
+    {
+      "name": "Krea's 672:1584 ratio keeps Gen-4.5 on Krea",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "672:1584",
+        "start_image": "https://example.com/i.png"
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "aspect_ratio",
+        "detail": "aspect_ratio 672:1584"
+      }
+    },
+    {
+      "name": "Gen-4.5 text-to-video at 960:960 stays on Krea",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "960:960"
+      },
+      "wired": [
+        "prompt"
+      ],
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "aspect_ratio",
+        "detail": "text-to-video at 960:960"
+      }
+    },
+    {
+      "name": "Gen-4.5 text-to-video at 1584:672 with only a Runway key: no route",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "1584:672"
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Gen-4.5 at 960:960 with a saved start image runs on Runway",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "960:960",
+        "start_image": "https://example.com/i.png"
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "Gen-4.5 at 1104:832 with a wired start image runs on Runway",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "1104:832"
+      },
+      "wired": [
+        "start_image"
+      ],
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "a blank start image is no start image on Gen-4.5",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "832:1104",
+        "start_image": "  "
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "aspect_ratio",
+        "detail": "text-to-video at 832:1104"
+      }
+    },
+    {
+      "name": "Gen-4.5 text-to-video at 720:1280 runs on Runway",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "720:1280"
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "a saved start image and reference images keep Grok Imagine on Krea",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "start_image": "https://example.com/i.png",
+        "reference_images": [
+          "https://example.com/r.png"
+        ]
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "start_image",
+        "detail": "a start image with reference images"
+      }
+    },
+    {
+      "name": "a wired start image and wired reference images keep Grok Imagine on Krea",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {},
+      "wired": [
+        "start_image",
+        "reference_images"
+      ],
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "start_image",
+        "detail": "a start image with reference images"
+      }
+    },
+    {
+      "name": "a fractional duration on Grok Imagine 1.5 stays on Krea",
+      "nodeId": "krea-video-xai-grok-video-1-5",
+      "params": {
+        "duration": 6.5
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "duration",
+        "detail": "duration 6.5"
+      }
+    },
+    {
+      "name": "a fractional duration with only an xAI key: no route",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "duration": 6.5
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "wired Krea style images with only an Ideogram key: no route",
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "params": {},
+      "wired": [
+        "style_images"
+      ],
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Runway speech-to-speech with only a video wired stays on Runway",
+      "nodeId": "runway-sts",
+      "params": {
+        "voice_id": "pNInz6obpgDQGcFmaJgB"
+      },
+      "wired": [
+        "video"
+      ],
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "video",
+        "detail": "a video input without an audio input"
+      }
+    },
+    {
+      "name": "Runway speech-to-speech with audio and video wired runs on ElevenLabs",
+      "nodeId": "runway-sts",
+      "params": {
+        "voice_id": "pNInz6obpgDQGcFmaJgB"
+      },
+      "wired": [
+        "video",
+        "audio"
+      ],
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "Runway speech-to-speech with only a video and only the ElevenLabs key: no route",
+      "nodeId": "runway-sts",
+      "params": {
+        "voice_id": "pNInz6obpgDQGcFmaJgB"
+      },
+      "wired": [
+        "video"
+      ],
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "runway",
+        "key": null
+      }
+    },
+    {
+      "name": "a blank ElevenLabs voice_id keeps Runway speech-to-speech on Runway",
+      "nodeId": "runway-sts",
+      "params": {
+        "voice_id": "   "
+      },
+      "wired": [
+        "audio"
+      ],
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "block": {
+        "reason": "requires",
+        "param": "voice_id"
+      }
+    },
+    {
+      "name": "a blank ElevenLabs voice_id keeps Runway TTS on Runway",
+      "nodeId": "runway-tts",
+      "params": {
+        "voice_id": " \t"
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "block": {
+        "reason": "requires",
+        "param": "voice_id"
+      }
     }
   ]
 }

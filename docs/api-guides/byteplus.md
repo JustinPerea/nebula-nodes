@@ -23,7 +23,7 @@ flowchart LR
 |---|---|---|---|---|
 | Seedream 4.5 (model 4.5) | `seedream-4-5` | fal | `seedream-4-5-251128` | `seed` is set; the safety checker is switched off; size is `square` (512x512), `auto_3K`, or a custom size outside the limits |
 | Seedream 4.5 (model 5.0 lite) | `seedream-4-5` | fal | `seedream-5-0-lite-260128` | `seed` is set; the safety checker is switched off; size is `square` or a custom size outside the limits |
-| Cinema Scene (default base) | `cinema-scene` | fal, through `seedream-4-5` | as above | as above, for the scene's computed size |
+| Cinema Scene (default base) | `cinema-scene` | fal, through `seedream-4-5` | as above | as above, for the scene's computed size. A Character bundle's seed isn't sent on the BytePlus route (BytePlus takes no seed for Seedream 4.5), so the shots run where the price says |
 | Krea Seedream 4 | `krea-image-bytedance-seedream-4` | Krea | `seedream-4-0-250828` | Krea plan; `style_images` set; width x height outside the limits |
 | Krea Seedream 5 Lite | `krea-image-bytedance-seedream-5-lite` | Krea | `seedream-5-0-lite-260128` | Krea plan; `style_images` set; width x height outside the limits |
 | Krea Seedream 5 Pro | `krea-image-bytedance-seedream-5-pro` | Krea | `dola-seedream-5-0-pro-260628` | Krea plan; `style_images` set; width x height outside the limits |
@@ -121,6 +121,8 @@ Local images and audio are read only after the file policy check and BytePlus's 
 Start/end frames and references can't be combined: BytePlus calls them "mutually exclusive scenarios". A recipe that wires both, or wires in a Krea-only input (`start_video`, `effects`, references on 1.0), gets a clear error before any request is sent instead of a silent fallback.
 
 **Cancelling.** Stopping a run sends `DELETE /contents/generations/tasks/{id}`. BytePlus cancels a task that is still queued; "a running task can't be cancelled", so it finishes and, if it succeeds, BytePlus bills it. Nebula stops waiting after about 65 minutes and sends the same DELETE.
+
+**Poll errors.** A poll that gets a 5xx or loses the connection is retried after 2, 4, 8 and 16 seconds (about 30 seconds in all; `backend/execution/poll_retry.py`, shared by every async video poller). A 4xx isn't retried. If the poll still fails, the run fails and Nebula sends the DELETE, so a task that is still queued doesn't start.
 
 ### Seedance pricing (model-pricing, read 2026-10-14)
 

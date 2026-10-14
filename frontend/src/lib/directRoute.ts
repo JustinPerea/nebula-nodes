@@ -120,8 +120,11 @@ export function configuredDirectKey(
   return directKeyNames(definition).find((key) => isSet(apiKeys, key));
 }
 
+/** A param counts as set when it isn't undefined, null, "" or only
+ * whitespace (node_route._has_value). */
 function hasValue(value: unknown): boolean {
-  return value !== undefined && value !== null && value !== '';
+  if (typeof value === 'string') return value.trim() !== '';
+  return value !== undefined && value !== null;
 }
 
 /** Today's local date as YYYY-MM-DD, as Python's date.today() reads it. */
@@ -134,15 +137,19 @@ function todayIso(): string {
 /** A rejectsWhen value that matches a param that is set: saved non-empty, or
  * wired into its port (node_route.SET). */
 export const SET = '(set)';
+/** A rejectsWhen value that matches a param that is NOT set: not saved (or
+ * blank) and not wired (node_route.NOT_SET). */
+export const NOT_SET = '(unset)';
 /** A param that arrives by wire rather than saved (node_route.WIRED). */
 export const WIRED = '(wired)';
 
 /** The params a rule counts as set when they arrive by wire: `blockedBy` and
- * every rejectsWhen entry matching "(set)" (node_route.wired_rule_params). */
+ * every rejectsWhen entry matching "(set)" or "(unset)": a wired port isn't
+ * unset (node_route.wired_rule_params). */
 export function wiredRuleParams(definition: Pick<ModelNodeDefinition, 'directRoute'>): Set<string> {
   const named = new Set(definition.directRoute?.blockedBy ?? []);
   for (const rule of definition.directRoute?.rejectsWhen ?? []) {
-    for (const [key, want] of Object.entries(rule.match)) if (want === SET) named.add(key);
+    for (const [key, want] of Object.entries(rule.match)) if (want === SET || want === NOT_SET) named.add(key);
   }
   return named;
 }
@@ -229,9 +236,11 @@ export function valueAccepted(value: unknown, rule: DirectAcceptRule): boolean {
 }
 
 /** One entry of a rejectsWhen `match` (node_route._matches): "(set)" means
- * saved non-empty or wired; any other value is compared with the run's value. */
+ * saved non-empty or wired, "(unset)" neither; any other value is compared
+ * with the run's value. */
 function matches(definition: ModelNodeDefinition, params: Record<string, unknown>, key: string, want: unknown): boolean {
   if (want === SET) return hasValue(params[key]);
+  if (want === NOT_SET) return !hasValue(params[key]);
   return matchValue(effectiveValue(definition, params, key)) === matchValue(want);
 }
 
@@ -267,7 +276,7 @@ function unsupportedBlock(definition: ModelNodeDefinition, params: Record<string
  * the saved params plus the wired ports a rule reads (withWiredBlockers). */
 export function directBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
   const needed = Object.hasOwn(DIRECT_REQUIRES, definition.id) ? DIRECT_REQUIRES[definition.id] : undefined;
-  if (needed && !params[needed]) return { reason: 'requires', param: needed, on: null };
+  if (needed && !hasValue(params[needed])) return { reason: 'requires', param: needed, on: null };
   for (const key of definition.directRoute?.blockedBy ?? []) {
     if (hasValue(params[key])) return { reason: 'blocked', param: key, on: null };
   }

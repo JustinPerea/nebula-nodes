@@ -2529,6 +2529,17 @@
       "RUNWAY_API_KEY"
     ],
     "directKeyName": "ELEVENLABS_API_KEY",
+    "directRoute": {
+      "rejectsWhen": [
+        {
+          "match": {
+            "video": "(set)",
+            "audio": "(unset)"
+          },
+          "label": "a video input without an audio input"
+        }
+      ]
+    },
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -39932,7 +39943,42 @@
     "directParams": [],
     "directRoute": {
       "translation": "krea-runway-gen4-5",
-      "model": "gen4.5"
+      "model": "gen4.5",
+      "rejects": {
+        "aspect_ratio": [
+          "672:1584"
+        ]
+      },
+      "rejectsWhen": [
+        {
+          "match": {
+            "aspect_ratio": "1104:832",
+            "start_image": "(unset)"
+          },
+          "label": "text-to-video at 1104:832"
+        },
+        {
+          "match": {
+            "aspect_ratio": "832:1104",
+            "start_image": "(unset)"
+          },
+          "label": "text-to-video at 832:1104"
+        },
+        {
+          "match": {
+            "aspect_ratio": "960:960",
+            "start_image": "(unset)"
+          },
+          "label": "text-to-video at 960:960"
+        },
+        {
+          "match": {
+            "aspect_ratio": "1584:672",
+            "start_image": "(unset)"
+          },
+          "label": "text-to-video at 1584:672"
+        }
+      ]
     }
   },
   "krea-video-xai-grok-video": {

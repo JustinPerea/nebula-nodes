@@ -17,6 +17,7 @@ from services.media_input import read_local_media
 from services.public_url import fetch_public_media
 from services.provider_capabilities import enforce_gemini_omni_capabilities
 from execution.missing_credential import MissingCredentialError
+from execution.poll_retry import UpstreamTask, poll_request
 
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 FILES_URL = "https://generativelanguage.googleapis.com/v1beta/files"
@@ -148,7 +149,7 @@ async def _wait_for_file_active(
     file_id = file_uri.rstrip("/").split("/files/")[-1].split(":")[0]
     poll_url = f"{FILES_URL}/{file_id}"
     for _ in range(max_polls):
-        resp = await client.get(poll_url, headers={"x-goog-api-key": api_key})
+        resp = await poll_request(lambda: client.get(poll_url, headers={"x-goog-api-key": api_key}))
         if resp.status_code != 200:
             raise RuntimeError(f"Gemini file poll failed ({resp.status_code}): {resp.text}")
         state = str(resp.json().get("state", "")).upper()
@@ -169,16 +170,19 @@ async def _poll_interaction(
     *,
     max_polls: int = 300,
     poll_interval: float = 3.0,
+    upstream: UpstreamTask | None = None,
 ) -> dict[str, Any]:
     poll_url = f"{INTERACTIONS_URL}/{interaction_id}"
     for poll_num in range(1, max_polls + 1):
         await asyncio.sleep(poll_interval)
-        resp = await client.get(poll_url, headers={"x-goog-api-key": api_key})
+        resp = await poll_request(lambda: client.get(poll_url, headers={"x-goog-api-key": api_key}))
         if resp.status_code != 200:
             raise RuntimeError(f"Gemini Omni poll failed ({resp.status_code}): {resp.text}")
         data = resp.json()
         status = str(data.get("status", "")).lower()
         await emit(ProgressEvent(node_id=node_id, value=min(poll_num / max_polls, 0.99)))
+        if status in {"completed", "failed", "cancelled", "canceled"} and upstream is not None:
+            upstream.finished = True
         if status == "completed":
             return data
         if status in {"failed", "cancelled", "canceled"}:
@@ -280,15 +284,13 @@ async def handle_gemini_omni(
         if status not in {"completed", "succeeded"}:
             if not interaction_id:
                 raise RuntimeError(f"Gemini Omni did not return interaction id: {data}")
-            try:
+            # Transient poll errors are retried; polling that stops before a
+            # terminal state cancels the interaction (execution/poll_retry.py).
+            with UpstreamTask(lambda: _cancel_interaction(interaction_id, api_key),
+                              schedule_detached_cancel) as upstream:
                 data = await _poll_interaction(
-                    client, interaction_id, api_key, node.id, _emit
+                    client, interaction_id, api_key, node.id, _emit, upstream=upstream
                 )
-            except asyncio.CancelledError:
-                schedule_detached_cancel(
-                    lambda: _cancel_interaction(interaction_id, api_key)
-                )
-                raise
             interaction_id = str(data.get("id") or interaction_id)
 
         video_bytes, video_uri = _video_from_interaction(data)

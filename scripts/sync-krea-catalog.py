@@ -201,6 +201,18 @@ IDEOGRAM_RUNWAY_DIRECT_ROUTES = {
     "/generate/video/runway/gen-4.5": {
         "directKeyName": "RUNWAY_API_KEY", "translation": "krea-runway-gen4-5", "model": "gen4.5",
         "kreaOnly": [], "directParams": [],
+        # Runway's gen4.5 request schema (sdk-python image_to_video_create_params /
+        # text_to_video_create_params, read 2026-10-14): image-to-video ratio
+        # "1280:720", "720:1280", "1104:832", "960:960", "832:1104", "1584:672";
+        # text-to-video "1280:720", "720:1280". Runway's guide ("Gen-4.5
+        # Image-to-Video supports ... Portrait 720:1280 832:1104 672:1584",
+        # llms-full.txt) also lists Krea's 672:1584, but the schema refuses it, so
+        # that ratio stays on Krea, and so does text-to-video at Krea's other ratios.
+        "directRejects": {"aspect_ratio": ["672:1584"]},
+        "directRejectsWhen": [
+            {"match": {"aspect_ratio": ratio, "start_image": "(unset)"}, "label": f"text-to-video at {ratio}"}
+            for ratio in ("1104:832", "832:1104", "960:960", "1584:672")
+        ],
         "pricing": {"provider": "runway", "per": "request", "priceParams": ["duration"],
                     # Runway bills whole seconds; a fractional duration is
                     # rounded before the run, so only whole seconds are priced.
@@ -863,6 +875,7 @@ def _route_rules(endpoint, route, params):
         if not match or not rule.get("label"):
             raise ValueError(f"DIRECT_ROUTES {endpoint}: a directRejectsWhen rule needs a match and a label: {rule}")
         if all((defaults.get(key) is not None) if want == rules.SET
+               else (defaults.get(key) is None) if want == rules.NOT_SET
                else rules.match_value(defaults.get(key)) == rules.match_value(want) for key, want in match.items()):
             raise ValueError(f"DIRECT_ROUTES {endpoint}: directRejectsWhen refuses the defaults: {rule}")
     size = route.get("directSize")

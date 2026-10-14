@@ -188,9 +188,12 @@ def runway_tts_to_elevenlabs(node: GraphNode, inputs: dict[str, PortValueDict]) 
 def runway_sts_to_elevenlabs(node: GraphNode, inputs: dict[str, PortValueDict]) -> tuple[GraphNode, dict[str, PortValueDict]]:
     """runway-sts -> handle_elevenlabs_sts: eleven_multilingual_sts_v2, the
     ElevenLabs voice_id, removeBackgroundNoise -> remove_background_noise.
-    ElevenLabs' speech-to-speech takes an ``audio`` file only (its reference
-    names no video), so a run with only Runway's video input is refused before
-    any call rather than guessed at."""
+    ElevenLabs' speech-to-speech takes an ``audio`` file only ("The audio file
+    which holds the content and emotion that will control the generated
+    speech", api-reference/speech-to-speech/convert, read 2026-10-14), so a
+    run with only Runway's video input stays on Runway: the definition's
+    directRoute rejectsWhen ``{video: "(set)", audio: "(unset)"}``. The check
+    below is the guard if a caller skips select_route."""
     audio = inputs.get("audio")
     if audio is None or audio.value in (None, ""):
         if inputs.get("video") is not None and inputs["video"].value not in (None, ""):

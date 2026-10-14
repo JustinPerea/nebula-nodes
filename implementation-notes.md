@@ -4433,3 +4433,83 @@ Not done / for Justin:
   can't be checked without a live run, so it is flagged, not changed.
 - Runway's ephemeral upload POSTs the file to the `uploadUrl` Runway returns (no key sent); trusted as Runway's.
 - xAI and the Interactions API document no input byte limit; the bounds there are Nebula's.
+
+### Round 2 stage 3: follow-ups from the lane reviews
+
+**1. Poll errors no longer abandon a billed task.** New `backend/execution/poll_retry.py`, used by every async
+video poller on the branch:
+
+- `poll_request(send)` retries a transport error (connect/read/write failure, timeout, protocol error) or an HTTP
+  5xx after 2, 4, 8 and 16 s (`POLL_RETRY_DELAYS`, 30 s in all). A 4xx is never retried, 429 included: the brief
+  said so, and it is the maker's answer, not an outage. A 5xx that outlasts the retries is returned, so each
+  handler's own "poll failed (503): ..." message still reports it; a transport error is re-raised.
+- `UpstreamTask(cancel, schedule)` wraps each poll loop. If the loop exits with any exception before the maker
+  reported a terminal state (a cancelled run, a poll error after the retries, a 4xx, the poll limit), it schedules
+  the maker's cancel on a detached task. A task that succeeded or failed on its own isn't cancelled. `schedule` is
+  passed in so each handler's module-level `schedule_detached_cancel` stays the patch point its tests use.
+- Wired into: `execution/async_poll_runner.poll_until_terminal` (Runway incl. Ruby and the Krea Gen-4.5 route,
+  Replicate), `handlers/byteplus.run_video_task` (DELETE; replaces its own timeout cancel), `handlers/minimax_v2`
+  (DELETE), `handlers/grok_video.run_xai_video` (retry only: xAI documents no cancel), `handlers/veo` on the
+  Gemini API and on Vertex (`:cancel`), `handlers/gemini_omni` (interaction poll with `/cancel`, file-activation
+  poll with retry only). They were separate loops with the same weakness, so the fix is a shared helper rather
+  than one shared loop.
+- Not changed: Meshy (3D, not video; its DELETE removes the task and Meshy doesn't say whether that stops a running
+  one) and Hailuo v1 (`handlers/minimax.py`, not added on this branch).
+- Tests: `tests/test_poll_retry.py` (29): the helper (5xx/network retried, 4xx incl. 429 not, bounded, other errors
+  and cancellation not retried, BytePlusError 5xx only), the guard, and per poller a transient-then-success run and a
+  give-up run that cancels (runner: 4xx, persistent 5xx, persistent network, poll limit; BytePlus: same plus a task
+  that failed on its own isn't DELETEd). Mutation-checked: no retry on responses, no retry on exceptions, 4xx
+  treated as transient, guard never cancels, guard cancels after a terminal state, and in each of the seven call
+  sites the retry or the cancel removed; every one fails a test. One equivalent mutant: not marking `finished` on
+  BytePlus success survives because the success path returns without an exception.
+
+**2. Runs the maker refuses stay on the copy.**
+
+- New rejectsWhen value `"(unset)"` (`node_route.NOT_SET`, `directRoute.ts NOT_SET`): the param is neither saved
+  (non-blank) nor wired. `wired_rule_params` / `wiredRuleParams` now include `"(unset)"` entries so a wired port
+  isn't read as unset. `sync-krea-catalog.py _route_rules` refuses an `"(unset)"` rule whose field has no default
+  only if the whole rule matches the defaults, as before.
+- Runway Gen-4.5 (Krea copy): `directRejects {aspect_ratio: [672:1584]}` and four `directRejectsWhen` rules,
+  `{aspect_ratio: R, start_image: "(unset)"}` for 1104:832, 832:1104, 960:960, 1584:672 ("text-to-video at R").
+  Vendor check today: Runway's official SDK (sdk-python `image_to_video_create_params.py`, gen4.5) lists ratio
+  `"1280:720", "720:1280", "1104:832", "960:960", "832:1104", "1584:672"` and text-to-video `"1280:720",
+  "720:1280"`. **Conflict:** Runway's guide (llms-full.txt, "Aspect ratios and auto-cropping") says "Gen-4.5
+  Image-to-Video supports ... Portrait `720:1280` `832:1104` `672:1584`". The request schema decides what the API
+  validates, so 672:1584 stays on Krea; if Runway adds it to the schema, drop the `directRejects` entry and add the
+  ratio to `_GEN4_VIDEO_RATIOS` in `handlers/runway.py`.
+- xAI (fractional duration; start image plus references) and Ideogram 3 wired style images were already rules after
+  stage 1. Added cases for what wasn't covered: saved start image + saved references, both wired, Grok 1.5 at
+  6.5 s, 6.5 s with only the xAI key (no route), wired style images with only the Ideogram key.
+
+**3. ElevenLabs.**
+
+- Blank means unset, in the shared value check on both sides: `_has_value` / `hasValue` treat a whitespace-only
+  string as unset, and `DIRECT_REQUIRES` now goes through it (it used plain truthiness, which counted `"  "` as
+  set). This also covers Ideogram Reframe's `resolution` (the reviewer's worry): a blank resolution now falls to the
+  fal copy (or names FAL_KEY) instead of reaching the Ideogram translator and failing there. No other lane's tests
+  changed. `_effective` already fell back to the default for a blank value, and now does for whitespace too.
+- Runway STS with only the video wired now stays on Runway: `runway-sts` gets `directRoute.rejectsWhen [{video:
+  "(set)", audio: "(unset)"}]` ("a video input without an audio input"). ElevenLabs' speech-to-speech body
+  (api-reference/speech-to-speech/convert, read today) has one file field, `audio`, "The audio file which holds the
+  content and emotion that will control the generated speech"; no video. With only the ElevenLabs key the run
+  names `RUNWAY_API_KEY` and the reason. The translator keeps its refusal as a guard (unit-tested). Fingerprint
+  approval added in `test_reference_roles.py`.
+
+**4. Cinema scene with a Character bundle on BytePlus.** Chose to keep the shots on BytePlus: the handler no
+longer injects the bundle seed when the base would run on the maker's direct route without it and a seed would
+move it to the copy (`_seed_leaves_maker_route`, which asks `select_route` with the shot's own params and inputs).
+Why this rather than pricing the fal route: the estimate (`cinema_scene_base`, no seed) then matches what runs; a
+person with only a BytePlus key gets images instead of "FAL_KEY is required" on every shot; and BytePlus documents
+no seed for Seedream 4.5, so the seed could not have been honored there anyway. Identity still comes from the
+bundle's trait string and reference views. With a fal key only, the seed is injected as before. The variations
+path's explicit `_seedOverride` is still applied (it is an explicit seeded request); such a shot runs on fal, and
+with only a BytePlus key it still needs FAL_KEY. Tests in `test_cinema_scene.py`, mutation-checked.
+
+**5. Skill mirrors.** `.claude/skills/krea/SKILL.md` is not a mirror of `.agents/skills/krea/SKILL.md`: on main
+they were already different documents (the `.claude` one is the older Krea 2 skill), as are fal, gemini,
+gpt-image-2, ideogram, meshy, openai and runway. The one section they share, "Maker routes (MiniMax and Meshy)",
+had drifted: the `.claude` copy lacked the ElevenLabs subsection. It now matches, plus a pointer to the `.agents`
+skill for the other maker routes.
+
+Docs updated: `docs/api-guides/runway.md`, `docs/api-guides/elevenlabs.md`, `docs/api-guides/byteplus.md`,
+`.agents/skills/krea/SKILL.md`, `.agents/skills/byteplus/SKILL.md`.

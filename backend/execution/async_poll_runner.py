@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 import httpx
 
+from execution.poll_retry import UpstreamTask, poll_request
 from models.events import ExecutionEvent, ProgressEvent
 from services.cancellation import schedule_detached_cancel
 
@@ -35,7 +36,8 @@ class AsyncPollConfig:
     poll_interval: float = 2.0
     max_polls: int = 300
     timeout: float = 30.0
-    # Cancellation (best-effort, fired on CancelledError). Default: DELETE the poll URL
+    # Cancellation (best-effort, fired when polling stops before a terminal
+    # state: a cancelled run, a poll error, the poll limit). Default: DELETE the poll URL
     # (correct for Runway, whose cancel is DELETE /v1/tasks/{id} = the poll URL). Providers
     # whose cancel differs (e.g. Replicate's POST .../cancel) set these.
     cancel_url_template: str | None = None
@@ -92,28 +94,31 @@ async def poll_until_terminal(
     poll_url = config.poll_url_template.format(task_id=segment)
     cancel_url = config.cancel_url_template.format(task_id=segment) if config.cancel_url_template else poll_url
 
-    for poll_num in range(1, config.max_polls + 1):
-        try:
+    # A transient poll error is retried; if polling ends before the task is
+    # terminal (cancelled run, a poll error that outlasted the retries, a 4xx,
+    # the poll limit), the task is cancelled upstream (execution/poll_retry.py).
+    with UpstreamTask(lambda: _cancel_async_poll(cancel_url, config.cancel_method, config.headers),
+                      schedule_detached_cancel) as task:
+        for poll_num in range(1, config.max_polls + 1):
             await asyncio.sleep(config.poll_interval)
-            poll_resp = await client.get(poll_url, headers=config.headers)
-        except asyncio.CancelledError:
-            # User/engine cancelled — stop the provider job upstream, then re-raise.
-            schedule_detached_cancel(lambda: _cancel_async_poll(cancel_url, config.cancel_method, config.headers))
-            raise
-        if poll_resp.status_code != 200:
-            raise RuntimeError(f"Poll request failed ({poll_resp.status_code}): {poll_resp.text}")
+            poll_resp = await poll_request(lambda: client.get(poll_url, headers=config.headers))
+            if poll_resp.status_code != 200:
+                raise RuntimeError(f"Poll request failed ({poll_resp.status_code}): {poll_resp.text}")
 
-        poll_data = poll_resp.json()
-        status = str(_get_nested(poll_data, config.status_path))
+            poll_data = poll_resp.json()
+            status = str(_get_nested(poll_data, config.status_path))
 
-        progress = min(poll_num / config.max_polls, 0.99)
-        await emit(ProgressEvent(node_id=node_id, value=progress))
+            progress = min(poll_num / config.max_polls, 0.99)
+            await emit(ProgressEvent(node_id=node_id, value=progress))
 
-        if status in config.terminal_success:
-            return poll_data
+            if status in config.terminal_success:
+                task.finished = True
+                return poll_data
 
-        if status in config.terminal_failure:
-            error_msg = poll_data.get("error", poll_data.get("failure", f"Job failed with status: {status}"))
-            raise RuntimeError(f"Async job failed: {error_msg}")
+            if status in config.terminal_failure:
+                task.finished = True
+                error_msg = poll_data.get("error", poll_data.get("failure", f"Job failed with status: {status}"))
+                raise RuntimeError(f"Async job failed: {error_msg}")
 
-    raise RuntimeError(f"Async job timed out after {config.max_polls} polls ({config.max_polls * config.poll_interval:.0f}s)")
+        raise RuntimeError(
+            f"Async job timed out after {config.max_polls} polls ({config.max_polls * config.poll_interval:.0f}s)")

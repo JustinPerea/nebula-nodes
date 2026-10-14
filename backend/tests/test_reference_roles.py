@@ -249,6 +249,11 @@ APPROVED_DIRECT_KEY_ADDITIONS = {
 for _node_id in ("gpt-image-2-fal-generate", "gpt-image-2-fal-edit"):
     APPROVED_TOP_LEVEL_FIELD_ADDITIONS[_node_id] = {
         "directRoute": {"rejects": {"image_size": ["square", "portrait_16_9", "landscape_16_9"]}}}
+# Runway speech-to-speech with only a video wired stays on Runway: ElevenLabs'
+# speech-to-speech takes an audio file only (execution/maker_routes_elevenlabs.py
+# runway_sts_to_elevenlabs). The rule is the only new field.
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["runway-sts"] = {"directRoute": {"rejectsWhen": [
+    {"match": {"video": "(set)", "audio": "(unset)"}, "label": "a video input without an audio input"}]}}
 APPROVED_LEADING_PARAM_ADDITIONS = {
     "krea-2-generate": _KREA_AUTH_PARAM,
     "krea-style-search": _KREA_AUTH_PARAM,

@@ -71,7 +71,7 @@ Hard facts:
 - Frames (`first_frame`, `last_frame`) and references (`reference_image`/`_video`/`_audio`) "cannot be mixed". Last frame isn't on 1.0 pro fast. References: 2.0 series 9 images / 3 videos / 3 audio; 2.5 30 / 10 / 10; none on 1.x. 2.0 rejects audio-only input.
 - Reference videos are "Video URL or asset ID" only: a local file is refused before the request. Images and audio go as data URIs when local.
 - A setting the recipe never saved uses the node's own default (the value its price reads), not BytePlus's: an unsaved `duration` on `seedance-v1-5` / `seedance-1-0-t2v` is 5 s, never `-1`, and an unsaved ratio is 16:9 (1.0 text-to-video doesn't take `adaptive`).
-- Tasks are async: create, poll every 5 s, save `video_url` at once (valid 24 h). Nebula sends `watermark: false` and `execution_expires_after: 3600`. DELETE cancels only a queued task; a running one finishes and is billed.
+- Tasks are async: create, poll every 5 s, save `video_url` at once (valid 24 h). Nebula sends `watermark: false` and `execution_expires_after: 3600`. DELETE cancels only a queued task; a running one finishes and is billed. A 5xx or network error on a poll is retried (2/4/8/16 s, `execution/poll_retry.py`); a 4xx or a retry that runs out fails the run and sends the DELETE.
 - Price: tokens = (input video s + output s) x width x height x 24 / 1024, times the per-million rate (2.5 10.70 / 11.7 at 1080p; 2.0 7.0 / 7.7 / 4.0 at 4K; 2.0 fast 5.6; mini 3.5; 1.5 pro 2.4 with audio, 1.2 silent; 1.0 pro 2.5; 1.0 pro fast 1). Runs with reference videos are unpriced. Code: `backend/execution/byteplus_seedance_prices.py`.
 - 1.5 pro is "Retiring" (replacement: 2.0 mini) with no date published.
 

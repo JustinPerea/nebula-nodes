@@ -41,14 +41,14 @@ Three Krea copies of Runway's models also run on Runway's own API when
 | Krea node | Runway model and endpoint | Notes |
 |---|---|---|
 | `krea-image-runway-gen-4-image` | `gen4_image`, POST `/v1/text_to_image` | width/height snap to the nearest gen4_image ratio; reference images keep their tags. 5 credits (720p) or 8 credits (1080p) per image, shown as $0.05-0.08. |
-| `krea-video-runway-gen-4-5` | `gen4.5`, `/v1/image_to_video` or `/v1/text_to_video` | Duration rounds to whole seconds (Runway takes 2-10). Krea's 672:1584 isn't a Runway ratio, and text-to-video takes only 1280:720 or 720:1280; both stop before submit. 12 credits per second. |
+| `krea-video-runway-gen-4-5` | `gen4.5`, `/v1/image_to_video` or `/v1/text_to_video` | Duration rounds to whole seconds (Runway takes 2-10). Krea's 672:1584 isn't in Runway's gen4.5 request schema, and text-to-video takes only 1280:720 or 720:1280; both runs stay on Krea (route rules), and the handler still refuses them before submit if called directly. 12 credits per second. |
 | `krea-enhance-runway-ruby` | `ruby`, POST `/v1/video_to_hdr` | hdr10 / hlg (.mp4) or hdr_prores (.mov, `proresProfile` only there). Local videos over the 5MB data URI cap go up through `/v1/uploads`. Unpriced: 20 credits per second, 40 above 4 MP, and the source's length and size are only known at run time. |
 
 Not routed: `krea-video-runway-gen-4-video`. Krea calls it "Runway Gen-4" and
 runs it from text alone, but Runway's only Gen-4 video model, `gen4_turbo`,
 needs an image, so the upstream model isn't confirmed.
 
-**Voice nodes on your ElevenLabs key (2026-10-14).** Runway's voice nodes are ElevenLabs models, so with an ElevenLabs key saved they can run on ElevenLabs directly, billed by ElevenLabs. `runway-dubbing` switches as soon as the key is saved. `runway-tts` and `runway-sts` switch only when you set an **ElevenLabs voice ID** (the Inspector shows the field once the key is saved): Runway's preset voices (Maya, Arjun, ...) have no ElevenLabs equivalent Nebula can look up, so a recipe with only a preset keeps running on Runway. Readiness says which route runs. Details: [the ElevenLabs guide](elevenlabs.md).
+**Voice nodes on your ElevenLabs key (2026-10-14).** Runway's voice nodes are ElevenLabs models, so with an ElevenLabs key saved they can run on ElevenLabs directly, billed by ElevenLabs. `runway-dubbing` switches as soon as the key is saved. `runway-tts` and `runway-sts` switch only when you set an **ElevenLabs voice ID** (the Inspector shows the field once the key is saved): Runway's preset voices (Maya, Arjun, ...) have no ElevenLabs equivalent Nebula can look up, so a recipe with only a preset keeps running on Runway (a blank voice ID counts as unset). `runway-sts` with only the video input wired also stays on Runway: ElevenLabs' speech-to-speech takes an audio file only. Readiness says which route runs. Details: [the ElevenLabs guide](elevenlabs.md).
 
 ## How to use it in Nebula
 

@@ -32,6 +32,7 @@ from urllib.parse import quote
 import httpx
 
 from execution.missing_credential import MissingCredentialError
+from execution.poll_retry import UpstreamTask, poll_request
 from handlers.minimax import submit_task
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
@@ -176,26 +177,29 @@ async def handle_minimax_video_v2(
             raise RuntimeError(f"MiniMax H3 returned no task_id: {response.text}")
         _log(f"task {task_id} on {base}")
         query = f"{base}/v2/query/video_generation/{quote(task_id, safe='')}"
-        for poll in range(1, MAX_POLLS + 1):
-            try:
+        cancel_url = f"{base}/v2/video_generation/{quote(task_id, safe='')}"
+        poll_headers = {"Authorization": f"Bearer {api_key}"}
+        # Transient poll errors are retried; polling that stops before a
+        # terminal state cancels the task (execution/poll_retry.py).
+        with UpstreamTask(lambda: _cancel(cancel_url, api_key), schedule_detached_cancel) as upstream:
+            for poll in range(1, MAX_POLLS + 1):
                 await asyncio.sleep(POLL_INTERVAL)
-                polled = await client.get(query, headers={"Authorization": f"Bearer {api_key}"})
-            except asyncio.CancelledError:
-                schedule_detached_cancel(lambda: _cancel(f"{base}/v2/video_generation/{quote(task_id, safe='')}", api_key))
-                raise
-            if polled.status_code != 200:
-                raise RuntimeError(f"MiniMax H3 poll failed ({polled.status_code}): {_error_text(polled)}")
-            task = (polled.json() or {}).get("task") or {}
-            status = task.get("status")
-            await _emit(ProgressEvent(node_id=node.id, value=min(poll / MAX_POLLS, 0.99)))
-            if status == "succeeded":
-                url = str((task.get("content") or {}).get("url") or "")
-                if not url:
-                    raise RuntimeError("MiniMax H3 succeeded without a video URL")
-                path = await save_video_from_url(url, get_run_dir())
-                return {"video": {"type": "Video", "value": str(path)}}
-            if status in ("failed", "cancelled"):
-                error = task.get("error") or {}
-                code = f" ({error['code']})" if error.get("code") else ""
-                raise RuntimeError(f"MiniMax H3 task {status}: {error.get('message') or 'no reason given'}{code}")
-        raise RuntimeError(f"MiniMax H3 task timed out after {MAX_POLLS} polls")
+                polled = await poll_request(lambda: client.get(query, headers=poll_headers))
+                if polled.status_code != 200:
+                    raise RuntimeError(f"MiniMax H3 poll failed ({polled.status_code}): {_error_text(polled)}")
+                task = (polled.json() or {}).get("task") or {}
+                status = task.get("status")
+                await _emit(ProgressEvent(node_id=node.id, value=min(poll / MAX_POLLS, 0.99)))
+                if status == "succeeded":
+                    upstream.finished = True
+                    url = str((task.get("content") or {}).get("url") or "")
+                    if not url:
+                        raise RuntimeError("MiniMax H3 succeeded without a video URL")
+                    path = await save_video_from_url(url, get_run_dir())
+                    return {"video": {"type": "Video", "value": str(path)}}
+                if status in ("failed", "cancelled"):
+                    upstream.finished = True
+                    error = task.get("error") or {}
+                    code = f" ({error['code']})" if error.get("code") else ""
+                    raise RuntimeError(f"MiniMax H3 task {status}: {error.get('message') or 'no reason given'}{code}")
+            raise RuntimeError(f"MiniMax H3 task timed out after {MAX_POLLS} polls")

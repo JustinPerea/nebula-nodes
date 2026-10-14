@@ -109,8 +109,10 @@ Same rule, other makers (`execution/maker_routes_ideogram_runway.py`):
 `krea-video-runway-gen-4-5` (`gen4.5`) and `krea-enhance-runway-ruby` (`ruby`,
 `/v1/video_to_hdr`) on `RUNWAY_API_KEY`. width/height snap to the maker's
 nearest shape. Ideogram 3 `style_images` (per-image strength) keep a run on
-Krea; wired ones fail on the Ideogram route with a message. Gen-4.5 rejects
-Krea's 672:1584 on Runway. `krea-image-ideogram-ideogram-4-5` and
+Krea, saved or wired. Gen-4.5 stays on Krea at Krea's 672:1584 (not in Runway's
+gen4.5 request schema) and for text-to-video (no start image, saved or wired) at
+any ratio but 1280:720 / 720:1280 (`directRoute.rejects` and `rejectsWhen` with
+`"(unset)"`). `krea-image-ideogram-ideogram-4-5` and
 `krea-video-runway-gen-4-video` stay Krea-only (size presets / upstream model
 not confirmed).
 

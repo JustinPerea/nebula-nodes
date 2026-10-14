@@ -165,7 +165,12 @@ def _today() -> str:
 
 
 def _has_value(value: Any) -> bool:
-    return value is not None and value != ""
+    """A param counts as set when it isn't None, "" or only whitespace (a
+    voice_id of "  " is unset, as the translators read it). directRoute.ts
+    hasValue is the same."""
+    if isinstance(value, str):
+        return value.strip() != ""
+    return value is not None
 
 
 class DirectBlock(NamedTuple):
@@ -180,6 +185,10 @@ class DirectBlock(NamedTuple):
 # A rejectsWhen value that matches a param that is set: saved non-empty, or
 # wired into its port (with_wired_blockers).
 SET = "(set)"
+# A rejectsWhen value that matches a param that is NOT set: not saved (or
+# blank) and not wired. Gen-4.5's text-to-video ratios need it: a ratio is
+# refused only when no start image comes with it.
+NOT_SET = "(unset)"
 # A param that arrives by wire rather than saved (with_wired_blockers).
 WIRED = "(wired)"
 
@@ -253,10 +262,12 @@ def _size_block(definition: Mapping[str, Any], params: Mapping[str, Any], limits
 
 def _matches(definition: Mapping[str, Any], params: Mapping[str, Any], key: str, want: Any) -> bool:
     """One entry of a rejectsWhen ``match``: SET means saved non-empty or
-    wired; any other value is compared with the run's value (saved, else the
-    definition default)."""
+    wired, NOT_SET ("(unset)") neither; any other value is compared with the run's value
+    (saved, else the definition default)."""
     if want == SET:
         return _has_value(params.get(key))
+    if want == NOT_SET:
+        return not _has_value(params.get(key))
     return match_value(_effective(definition, params, key)) == match_value(want)
 
 
@@ -267,8 +278,8 @@ def _unsupported(definition: Mapping[str, Any], params: Mapping[str, Any], spec:
     - ``accepts`` ``{param: {values?, min?, max?, integer?}}``: the values
       the maker takes; any other set value blocks.
     - ``rejects`` ``{param: [values]}``: values the maker doesn't take.
-    - ``rejectsWhen`` ``[{match: {param: value | "(set)"}, label}]``: a
-      combination the maker doesn't take; every entry must match."""
+    - ``rejectsWhen`` ``[{match: {param: value | "(set)" | "(unset)"}, label}]``:
+      a combination the maker doesn't take; every entry must match."""
     accepts = spec.get("accepts")
     for key, rule in (accepts.items() if isinstance(accepts, Mapping) else []):
         value = _effective(definition, params, str(key))
@@ -316,7 +327,7 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
     values = params or {}
     node_id = str(definition.get("id") or "")
     needed = DIRECT_REQUIRES.get(node_id)
-    if needed and not values.get(needed):
+    if needed and not _has_value(values.get(needed)):
         return DirectBlock(REQUIRES, needed)
     spec = definition.get("directRoute")
     spec = spec if isinstance(spec, Mapping) else {}
@@ -336,14 +347,16 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
 
 def wired_rule_params(definition: Mapping[str, Any]) -> set[str]:
     """The params a rule counts as set when they arrive by wire: ``blockedBy``
-    and every ``rejectsWhen`` entry matching ``"(set)"``."""
+    and every ``rejectsWhen`` entry matching ``"(set)"`` or ``"(unset)"`` (a
+    wired port isn't unset)."""
     spec = definition.get("directRoute")
     if not isinstance(spec, Mapping):
         return set()
     named = {str(key) for key in spec.get("blockedBy") or []}
     for rule in spec.get("rejectsWhen") or []:
         match = rule.get("match") if isinstance(rule, Mapping) else None
-        named |= {str(key) for key, want in (match.items() if isinstance(match, Mapping) else []) if want == SET}
+        entries = match.items() if isinstance(match, Mapping) else []
+        named |= {str(key) for key, want in entries if want in (SET, NOT_SET)}
     return named
 
 

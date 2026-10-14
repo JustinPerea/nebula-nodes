@@ -157,7 +157,8 @@ export interface ModelNodeDefinition {
    *  - `blockedBy`: copy-only params the maker can't honor, set or wired;
    *  - `accepts`: the values the maker takes for a param (any other blocks);
    *  - `rejects`: values of a param the maker doesn't take;
-   *  - `rejectsWhen`: combinations it doesn't take ("(set)" = set or wired);
+   *  - `rejectsWhen`: combinations it doesn't take ("(set)" = set or wired,
+   *    "(unset)" = neither);
    *  - `size`: the maker's documented output size limits.
    *  A rule never blocks a param's default. `setup: 'fallback'` points setup
    *  at the copy's key when no key is set (BytePlus, which doesn't serve the
@@ -189,7 +190,8 @@ export interface DirectAcceptRule {
 
 /** A combination of param values the maker doesn't take
  * (directRoute.rejectsWhen): it blocks when every `match` entry holds, where
- * "(set)" means saved non-empty or wired into its port. `label` says what it
+ * "(set)" means saved non-empty or wired into its port and "(unset)" means
+ * neither. `label` says what it
  * is in readiness ("1080p at 10 seconds"). */
 export interface DirectRejectsWhenRule {
   match: Readonly<Record<string, string | number | boolean>>;

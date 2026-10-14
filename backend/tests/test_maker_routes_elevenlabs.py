@@ -268,12 +268,37 @@ async def test_runway_sts_runs_on_elevenlabs_with_the_multilingual_voice_changer
 
 
 @pytest.mark.asyncio
-async def test_runway_sts_video_only_is_refused_before_any_elevenlabs_call():
+async def test_runway_sts_with_only_a_video_stays_on_runway():
+    """ElevenLabs' speech-to-speech takes audio only: with an ElevenLabs voice_id
+    and only Runway's video input, the run goes to Runway instead of failing."""
     node = GraphNode(id="s", definitionId="runway-sts", params={"voice_id": VOICE})
     video = PortValueDict(type="Video", value="/tmp/in.mp4")
-    with patch("handlers.elevenlabs.httpx.AsyncClient") as eleven, pytest.raises(ValueError, match="audio, not video"):
+    with patch("handlers.elevenlabs.httpx.AsyncClient") as eleven, \
+            patch("handlers.runway.async_poll_execute", new_callable=AsyncMock) as poll, \
+            patch("handlers.runway._local_media_uri", new_callable=AsyncMock, return_value="data:video/mp4;base64,AA"), \
+            patch("handlers.runway._save_audio_from_url", new_callable=AsyncMock, return_value="/tmp/x.mp3"):
+        poll.return_value = {"output": ["https://example.com/a.mp3"]}
         await _run(node, {"video": video}, {**ELEVEN, **RUNWAY})
     eleven.assert_not_called()
+    poll.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_runway_sts_with_only_a_video_and_only_the_elevenlabs_key_says_why():
+    node = GraphNode(id="s", definitionId="runway-sts", params={"voice_id": VOICE})
+    video = PortValueDict(type="Video", value="/tmp/in.mp4")
+    with patch("handlers.elevenlabs.httpx.AsyncClient") as eleven, \
+            pytest.raises(MissingCredentialError, match="RUNWAY_API_KEY is required.*a video input without an audio"):
+        await _run(node, {"video": video}, ELEVEN)
+    eleven.assert_not_called()
+
+
+def test_the_sts_translator_still_refuses_video_only():
+    from execution.maker_routes_elevenlabs import runway_sts_to_elevenlabs
+
+    node = GraphNode(id="s", definitionId="runway-sts", params={"voice_id": VOICE})
+    with pytest.raises(ValueError, match="audio, not video"):
+        runway_sts_to_elevenlabs(node, {"video": PortValueDict(type="Video", value="/tmp/in.mp4")})
 
 
 @pytest.mark.asyncio

@@ -20,6 +20,7 @@ from services.output import get_run_dir
 from services.media_input import read_local_media
 from services.public_url import fetch_public_media
 from execution.missing_credential import MissingCredentialError
+from execution.poll_retry import UpstreamTask, poll_request
 
 VEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -256,15 +257,14 @@ async def handle_veo(
         max_polls = 300
         poll_interval = 3.0
 
-        try:
+        # If polling stops before the operation is done (a cancelled run, a
+        # poll error that outlasted the retries, a timeout), fire a best-effort
+        # upstream cancel on a detached task (this task's client is being torn
+        # down), then re-raise (execution/poll_retry.py).
+        with UpstreamTask(lambda: _cancel_veo_operation(op_name, api_key), schedule_detached_cancel) as upstream:
             return await _poll_veo_operation(
-                client, node, poll_url, api_key, max_polls, poll_interval, _emit
+                client, node, poll_url, api_key, max_polls, poll_interval, _emit, upstream
             )
-        except asyncio.CancelledError:
-            # User/engine cancelled — fire a best-effort upstream cancel on a
-            # detached task (this task's client is being torn down), then re-raise.
-            schedule_detached_cancel(lambda: _cancel_veo_operation(op_name, api_key))
-            raise
 
 
 async def _poll_veo_operation(
@@ -275,11 +275,12 @@ async def _poll_veo_operation(
     max_polls: int,
     poll_interval: float,
     _emit: Callable[[ExecutionEvent], Awaitable[None]],
+    upstream: UpstreamTask | None = None,
 ) -> dict[str, Any]:
     for poll_num in range(1, max_polls + 1):
         await asyncio.sleep(poll_interval)
 
-        poll_resp = await client.get(poll_url, headers={"x-goog-api-key": api_key})
+        poll_resp = await poll_request(lambda: client.get(poll_url, headers={"x-goog-api-key": api_key}))
         if poll_resp.status_code != 200:
             _log(f"poll FAILED: {poll_resp.status_code}")
             raise RuntimeError(with_vertex_hint(f"Veo poll failed ({poll_resp.status_code}): {poll_resp.text}"))
@@ -294,6 +295,8 @@ async def _poll_veo_operation(
             _log(f"poll #{poll_num}: done={done}")
 
         if done:
+            if upstream is not None:
+                upstream.finished = True
             response = poll_data.get("response", {})
             videos = response.get("generateVideoResponse", {}).get("generatedSamples", [])
             if not videos:
@@ -420,13 +423,10 @@ async def run_vertex_veo(
         op_name = resp.json().get("name")
         if not op_name:
             raise RuntimeError(f"Veo (Vertex) did not return an operation name: {resp.text[:300]}")
-        try:
+        with UpstreamTask(lambda: _cancel_vertex_operation(op_name, credentials), schedule_detached_cancel) as upstream:
             return await _poll_vertex_operation(
-                client, node, project_id, model, op_name, headers, _emit,
+                client, node, project_id, model, op_name, headers, _emit, upstream=upstream,
             )
-        except asyncio.CancelledError:
-            schedule_detached_cancel(lambda: _cancel_vertex_operation(op_name, credentials))
-            raise
 
 
 async def _poll_vertex_operation(
@@ -439,17 +439,21 @@ async def _poll_vertex_operation(
     _emit: Callable[[ExecutionEvent], Awaitable[None]],
     max_polls: int = 300,
     poll_interval: float = 3.0,
+    upstream: UpstreamTask | None = None,
 ) -> dict[str, Any]:
     poll_url = model_url(project_id, model, "fetchPredictOperation")
     for poll_num in range(1, max_polls + 1):
         await asyncio.sleep(poll_interval)
-        poll_resp = await client.post(poll_url, json={"operationName": op_name}, headers=headers)
+        poll_resp = await poll_request(
+            lambda: client.post(poll_url, json={"operationName": op_name}, headers=headers))
         if poll_resp.status_code != 200:
             raise RuntimeError(f"Veo (Vertex) poll failed ({poll_resp.status_code}): {poll_resp.text}")
         data = poll_resp.json()
         await _emit(ProgressEvent(node_id=node.id, value=min(poll_num / max_polls, 0.99)))
         if not data.get("done"):
             continue
+        if upstream is not None:
+            upstream.finished = True
         if data.get("error"):
             raise RuntimeError(f"Veo (Vertex) failed: {data['error']}")
         response = data.get("response") or {}

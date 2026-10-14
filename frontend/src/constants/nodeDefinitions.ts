@@ -760,6 +760,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: '/v1/speech_to_speech',
     envKeyName: ['ELEVENLABS_API_KEY', 'RUNWAY_API_KEY'],
     directKeyName: 'ELEVENLABS_API_KEY',
+    // ElevenLabs' speech-to-speech takes only an `audio` file ("The audio file
+    // which holds the content and emotion that will control the generated
+    // speech", api-reference/speech-to-speech/convert, read 2026-10-14), so a
+    // run with only Runway's video input stays on Runway.
+    directRoute: {
+      rejectsWhen: [{ match: { video: '(set)', audio: '(unset)' }, label: 'a video input without an audio input' }],
+    },
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
@@ -29864,7 +29871,42 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "directParams": [],
     "directRoute": {
       "translation": "krea-runway-gen4-5",
-      "model": "gen4.5"
+      "model": "gen4.5",
+      "rejects": {
+        "aspect_ratio": [
+          "672:1584"
+        ]
+      },
+      "rejectsWhen": [
+        {
+          "match": {
+            "aspect_ratio": "1104:832",
+            "start_image": "(unset)"
+          },
+          "label": "text-to-video at 1104:832"
+        },
+        {
+          "match": {
+            "aspect_ratio": "832:1104",
+            "start_image": "(unset)"
+          },
+          "label": "text-to-video at 832:1104"
+        },
+        {
+          "match": {
+            "aspect_ratio": "960:960",
+            "start_image": "(unset)"
+          },
+          "label": "text-to-video at 960:960"
+        },
+        {
+          "match": {
+            "aspect_ratio": "1584:672",
+            "start_image": "(unset)"
+          },
+          "label": "text-to-video at 1584:672"
+        }
+      ]
     }
   },
   'krea-video-xai-grok-video': {

@@ -28,6 +28,7 @@ from uuid import uuid4
 import httpx
 
 from execution.missing_credential import MissingCredentialError
+from execution.poll_retry import poll_request
 from handlers.xai_image import XAI_API_BASE, xai_image_url
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
@@ -83,9 +84,12 @@ async def run_xai_video(
         _log(f"polling generation {gen_id}")
         # xAI exposes no documented cancel endpoint: a cancel stops here only
         # (CancelledError propagates at the awaits; the upstream job runs on).
+        # A transient poll error (5xx, network) is retried with bounded backoff
+        # (execution/poll_retry.py) so one bad poll doesn't abandon the job.
+        poll_url = f"{XAI_API_BASE}/videos/{quote(str(gen_id), safe='')}"
         for poll_num in range(1, MAX_POLLS + 1):
             await asyncio.sleep(POLL_INTERVAL)
-            poll_resp = await client.get(f"{XAI_API_BASE}/videos/{quote(str(gen_id), safe='')}", headers=headers)
+            poll_resp = await poll_request(lambda: client.get(poll_url, headers=headers))
             if poll_resp.status_code not in (200, 202):
                 raise RuntimeError(f"Grok poll failed ({poll_resp.status_code}): {poll_resp.text}")
 

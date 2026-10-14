@@ -217,12 +217,6 @@ async def cancel_video_task(key: str, task_id: str) -> None:
         pass
 
 
-def _schedule_cancel(key: str, task_id: str) -> None:
-    from services.cancellation import schedule_detached_cancel
-
-    schedule_detached_cancel(lambda: cancel_video_task(key, task_id))
-
-
 async def run_video_task(
     key: str, body: dict[str, Any], *, node_id: str = "", emit: Any = None,
     poll_interval: float | None = None, timeout: float | None = None,
@@ -230,9 +224,15 @@ async def run_video_task(
     """Create a Seedance task and poll it to ``succeeded``; returns the task.
 
     A failed, cancelled or expired task raises with BytePlus's error and what
-    to do about it. If the run is cancelled (or polling times out), the task
-    is DELETEd so a queued one never starts."""
+    to do about it. A transient poll error (a 5xx or a network failure) is
+    retried with bounded backoff (execution/poll_retry.py); a 4xx isn't. If
+    polling stops before the task is terminal (the run is cancelled, a poll
+    error outlasts the retries, or polling times out), the task is DELETEd so a
+    queued one never starts."""
     import asyncio
+
+    from execution.poll_retry import UpstreamTask, poll_request
+    from services.cancellation import schedule_detached_cancel
 
     model = str(body.get("model") or "")
     poll_interval = POLL_INTERVAL if poll_interval is None else poll_interval
@@ -242,30 +242,28 @@ async def run_video_task(
         loop = asyncio.get_running_loop()
         started = loop.time()
         polls = 0
-        while True:
-            try:
+        with UpstreamTask(lambda: cancel_video_task(key, task_id), schedule_detached_cancel) as upstream:
+            while True:
                 await asyncio.sleep(poll_interval)
-                task = await get_video_task(key, task_id, client=client)
-            except asyncio.CancelledError:
-                _schedule_cancel(key, task_id)
-                raise
-            polls += 1
-            status = str(task.get("status") or "")
-            if status == TASK_SUCCEEDED:
-                return task
-            if status in TASK_FAILED:
-                error = task.get("error") if isinstance(task.get("error"), dict) else {}
-                code, message = str(error.get("code") or ""), str(error.get("message") or f"task {status}")
-                raise BytePlusError(200, code, message, explain(200, code, message, model))
-            if emit is not None:
-                from models.events import ProgressEvent
+                task = await poll_request(lambda: get_video_task(key, task_id, client=client))
+                polls += 1
+                status = str(task.get("status") or "")
+                if status == TASK_SUCCEEDED:
+                    upstream.finished = True
+                    return task
+                if status in TASK_FAILED:
+                    upstream.finished = True
+                    error = task.get("error") if isinstance(task.get("error"), dict) else {}
+                    code, message = str(error.get("code") or ""), str(error.get("message") or f"task {status}")
+                    raise BytePlusError(200, code, message, explain(200, code, message, model))
+                if emit is not None:
+                    from models.events import ProgressEvent
 
-                # BytePlus reports no percentage; creep toward done.
-                await emit(ProgressEvent(node_id=node_id, value=min(0.95, polls / (polls + 20))))
-            if loop.time() - started > timeout:
-                _schedule_cancel(key, task_id)
-                raise RuntimeError(
-                    f"BytePlus ModelArk task {task_id} ({model}) was still {status or 'pending'} after "
-                    f"{int(timeout // 60)} minutes; Nebula stopped waiting and asked BytePlus to cancel it "
-                    f"(a task that has started can't be cancelled; it expires {TASK_EXPIRES_AFTER // 60} minutes "
-                    "after creation).")
+                    # BytePlus reports no percentage; creep toward done.
+                    await emit(ProgressEvent(node_id=node_id, value=min(0.95, polls / (polls + 20))))
+                if loop.time() - started > timeout:
+                    raise RuntimeError(
+                        f"BytePlus ModelArk task {task_id} ({model}) was still {status or 'pending'} after "
+                        f"{int(timeout // 60)} minutes; Nebula stopped waiting and asked BytePlus to cancel it "
+                        f"(a task that has started can't be cancelled; it expires {TASK_EXPIRES_AFTER // 60} minutes "
+                        "after creation).")
