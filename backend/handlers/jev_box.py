@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import io
 import math
 import re
 from pathlib import Path
@@ -39,6 +38,7 @@ from services.typesafe_client import (
     check_model,
     load_image_source,
     noul_confidence,
+    open_image,
     prepare_images,
     system_one,
 )
@@ -108,8 +108,8 @@ def crop_rect(mapped: Mapping[str, Any], pad: float) -> tuple[int, int, int, int
 
 def open_original(data: bytes) -> Image.Image:
     """The image as a browser shows it: first frame, EXIF rotation applied.
-    The bytes were already size-checked by prepare_images."""
-    image = Image.open(io.BytesIO(data))
+    The bytes were already size- and format-checked by prepare_images."""
+    image = open_image(data)
     if int(getattr(image, "n_frames", 1) or 1) > 1:
         image.seek(0)
     image.load()

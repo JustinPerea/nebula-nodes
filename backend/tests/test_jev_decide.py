@@ -159,6 +159,21 @@ async def test_long_context_and_model_are_passed_through(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("raw", [True, "true", "yes", "1", 1, "on", "TRUE", False, None])
+async def test_long_context_turns_on_exactly_when_it_is_priced_as_long_context(monkeypatch, raw):
+    from services import model_pricing
+    from services.node_registry import NodeRegistry
+
+    definition = NodeRegistry().get_all()["jev-decide"]
+    entry = model_pricing.load_pricing()["nodes"]["jev-decide"]
+    priced = model_pricing.estimate_node(entry, definition, {"long_context": raw})
+    _, calls = await _run(monkeypatch, {"question": "?", "long_context": raw},
+                          _response({"type": "noul", "noul": 0.95}))
+    sent_long = calls[0].headers.get(ts.LONG_CONTEXT_HEADER) == "true"
+    assert sent_long == (priced["high"] == 0.011)
+
+
+@pytest.mark.asyncio
 async def test_padded_images_are_noted_in_the_report(monkeypatch):
     outputs, _ = await _run(monkeypatch, {"question": "?"}, _response({"type": "noul", "noul": 0.95}),
                             images=[_png(size=(100, 100))])

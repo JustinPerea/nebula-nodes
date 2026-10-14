@@ -362,10 +362,10 @@
     {
       "name": "a moving alias reports the version that answered",
       "params": {
-        "question": "Does this convey urgency?",
+        "question": "Is the caption written in English?",
         "model": "jev-latest"
       },
-      "context": "Help! My payouts have been failing for 3 days.",
+      "context": "Caption: Fresh sourdough, baked every morning before sunrise.",
       "response": {
         "model": "jev-1.13.0",
         "answers": {
@@ -402,7 +402,7 @@
         },
         "report": {
           "type": "Text",
-          "value": "Jev Decide (yes/no)\nQuestion: Does this convey urgency?\nAnswer: yes\nPass: true\nProbability: 0.95\nConfidence: 0.9\nModel: jev-1.13.0 (asked for jev-latest)\nInput tokens: 296"
+          "value": "Jev Decide (yes/no)\nQuestion: Is the caption written in English?\nAnswer: yes\nPass: true\nProbability: 0.95\nConfidence: 0.9\nModel: jev-1.13.0 (asked for jev-latest)\nInput tokens: 296"
         },
         "on_pass": {
           "type": "Text",
@@ -427,7 +427,7 @@
         "report": {
           "title": "Jev Decide (yes/no)",
           "fields": {
-            "Question": "Does this convey urgency?",
+            "Question": "Is the caption written in English?",
             "Answer": "yes",
             "Pass": "true",
             "Probability": "0.95",

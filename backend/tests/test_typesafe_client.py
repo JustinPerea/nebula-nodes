@@ -481,3 +481,104 @@ async def test_missing_files_and_escaping_references_fail_loudly(tmp_path):
         await ts.load_image_source(str(tmp_path / "missing.png"))
     with pytest.raises(ValueError, match="escapes"):
         await ts.load_image_source("/api/outputs/../../etc/passwd")
+
+
+# -- hardening -------------------------------------------------------------------
+
+
+EPS = (b"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 300 300\n"
+       b"newpath 0 0 moveto 300 300 lineto stroke showpage\n%%EOF\n")
+
+
+@pytest.mark.asyncio
+async def test_only_png_jpeg_webp_and_gif_reach_a_decoder(monkeypatch):
+    # Pillow opens EPS by default and decodes it by running Ghostscript. An
+    # image input from a URL or data URI must never get that far.
+    from PIL import EpsImagePlugin
+
+    def no_ghostscript(*args, **kwargs):
+        raise AssertionError("Ghostscript was invoked on an untrusted image")
+
+    monkeypatch.setattr(EpsImagePlugin.EpsImageFile, "load", no_ghostscript)
+    for fmt, payload in (("EPS", EPS), ("BMP", None), ("TIFF", None)):
+        if payload is None:
+            buffer = io.BytesIO()
+            Image.new("RGB", (300, 300), "red").save(buffer, format=fmt)
+            payload = buffer.getvalue()
+        uri = "data:image/png;base64," + base64.b64encode(payload).decode()
+        with pytest.raises(ValueError, match="isn't an image Nebula can read"):
+            await ts.prepare_images([uri])
+
+
+@pytest.mark.asyncio
+async def test_camera_multi_picture_jpegs_still_load():
+    buffer = io.BytesIO()
+    Image.new("RGB", (300, 300), "red").save(buffer, format="MPO", save_all=True,
+                                             append_images=[Image.new("RGB", (300, 300), "blue")])
+    [image] = await ts.prepare_images(["data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode()])
+    assert image.transform.source_format == "MPO" and image.transform.frames == 2
+
+
+@pytest.mark.asyncio
+async def test_protected_paths_are_refused_before_they_are_sized(monkeypatch, tmp_path):
+    from services.file_access import ProtectedPathError
+
+    secret = tmp_path / "secret.png"
+    secret.write_bytes(b"x" * 10)
+    sized = []
+    real_stat = type(secret).stat
+
+    def watch_stat(self, *args, **kwargs):
+        if self.name == "secret.png":
+            sized.append(self)
+        return real_stat(self, *args, **kwargs)
+
+    def refuse(value):
+        raise ProtectedPathError("Protected file access is not allowed")
+
+    monkeypatch.setattr(type(secret), "stat", watch_stat)
+    monkeypatch.setattr("services.file_access.require_allowed_path", refuse)
+    with pytest.raises(ValueError, match="Protected"):
+        await ts.load_image_source(str(secret))
+    assert sized == []
+
+
+@pytest.mark.asyncio
+async def test_the_images_of_one_request_have_a_total_size_cap(monkeypatch):
+    monkeypatch.setattr(ts, "MAX_TOTAL_SOURCE_BYTES", 1000)
+    picture = _data_uri(Image.effect_noise((300, 300), 90).convert("RGB"))
+    with pytest.raises(ValueError, match="before resizing"):
+        await ts.prepare_images([picture, picture])
+
+
+@pytest.mark.asyncio
+async def test_a_slow_remote_image_has_an_overall_deadline(monkeypatch):
+    import asyncio
+
+    async def drip(url, *, label, max_bytes, timeout=300.0):
+        await asyncio.sleep(60)
+        return b"", ""
+
+    monkeypatch.setattr("services.public_url.fetch_public_media", drip)
+    monkeypatch.setattr(ts, "URL_FETCH_DEADLINE", 0.01)
+    with pytest.raises(ValueError, match="took longer than"):
+        await ts.load_image_source("https://cdn.example.com/slow.png")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("key", ["ts-test\nkey-123", f"{KEY} extra", "ts-test-k’y"])
+async def test_a_malformed_key_is_reported_as_a_key_problem_without_the_key(monkeypatch, key):
+    calls, _ = _install(monkeypatch, lambda request, n: httpx.Response(200, json=NOUL))
+    with pytest.raises(ts.TypeSafeError, match="character a key can't have") as raised:
+        await ts.system_one(key, model="jev-1.14.0", state="x",
+                            questions={"q": {"type": "noul", "instructions": "y?"}})
+    assert calls == []
+    assert KEY not in str(raised.value) and KEY not in repr(raised.value)
+
+
+@pytest.mark.asyncio
+async def test_surrounding_whitespace_on_a_key_is_trimmed(monkeypatch):
+    calls, _ = _install(monkeypatch, lambda request, n: httpx.Response(200, json=NOUL))
+    await ts.system_one(f"  {KEY}\n", model="jev-1.14.0", state="x",
+                        questions={"q": {"type": "noul", "instructions": "y?"}})
+    assert calls[0].headers["authorization"] == f"Bearer {KEY}"

@@ -56,7 +56,10 @@ def _fraction(raw: Any, default: float, name: str) -> float:
 
 
 def _flag(raw: Any) -> bool:
-    return raw is True or str(raw).strip().lower() in {"true", "1", "yes", "on"}
+    """On only for the values the price table reads as on (model_pricing's
+    row match: True or "true"). Anything looser ("yes", 1) would send the
+    long-context header while the spend check priced the cheaper row."""
+    return raw is True or raw == "true"
 
 
 def _context_text(inputs: dict[str, PortValueDict]) -> str:

@@ -30,7 +30,6 @@ import math
 import random
 import re
 import uuid
-import warnings
 from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
 from datetime import datetime, timezone
@@ -73,6 +72,14 @@ DEFAULT_MAX_IMAGES = 16
 # rather than decoded: a small file can still claim a huge canvas.
 MAX_SOURCE_BYTES = 64 * 1024 * 1024
 MAX_SOURCE_PIXELS = 64_000_000
+# All the images of one request together, as read (before any resizing).
+MAX_TOTAL_SOURCE_BYTES = 256 * 1024 * 1024
+# A remote image has this long in total, however slowly the host sends it.
+URL_FETCH_DEADLINE = 120.0
+# The only formats Pillow may parse. Without a list it tries every plugin it
+# has on bytes nobody vetted, and some hand the file to another program (EPS
+# runs Ghostscript). "JPEG" also covers the multi-picture JPEGs cameras save.
+DECODE_FORMATS = ("PNG", "JPEG", "WEBP", "GIF")
 
 MAX_RETRIES = 2
 RETRY_STATUSES = frozenset({408, 429, *range(500, 600)})
@@ -221,6 +228,7 @@ async def load_image_source(value: str, *, label: str = "Image") -> bytes:
       services.image_input.load_local_image (protected paths, existence,
       supported suffix).
     """
+    from services.file_access import require_allowed_path
     from services.image_input import load_local_image
     from services.output import resolve_output_ref
     from services.public_url import fetch_public_media
@@ -240,52 +248,68 @@ async def load_image_source(value: str, *, label: str = "Image") -> bytes:
             raise ValueError(f"{label} has invalid base64 data") from exc
     if raw.startswith(("http://", "https://")) and _is_local_output_url(raw):
         raw = urlsplit(raw).path
+    too_big = ValueError(f"{label} is larger than {MAX_SOURCE_BYTES // (1024 * 1024)} MiB")
     if raw.startswith(("http://", "https://")):
-        content, _type = await fetch_public_media(raw, label=label, max_bytes=MAX_SOURCE_BYTES, timeout=60.0)
+        try:
+            content, _type = await asyncio.wait_for(
+                fetch_public_media(raw, label=label, max_bytes=MAX_SOURCE_BYTES, timeout=60.0),
+                URL_FETCH_DEADLINE)
+        except asyncio.TimeoutError:
+            raise ValueError(f"{label} took longer than {URL_FETCH_DEADLINE:.0f} s to download") from None
         return content
     local = resolve_output_ref(raw)
     if raw.startswith("/api/outputs/") and local == raw:
         raise ValueError(f"{label} reference escapes Nebula's output directory")
-    path = Path(local).expanduser()
+    # The allowed-path policy runs before anything about the file is looked
+    # at, so a protected path can't even be sized.
+    path = require_allowed_path(local)
     try:
         size = path.stat().st_size
     except OSError:
         size = 0  # load_local_image explains a missing file
     if size > MAX_SOURCE_BYTES:
-        raise ValueError(f"{label} is larger than {MAX_SOURCE_BYTES // (1024 * 1024)} MiB")
+        raise too_big
     _mime, b64 = load_local_image(str(path))
-    return base64.b64decode(b64)
+    data = base64.b64decode(b64)
+    if len(data) > MAX_SOURCE_BYTES:  # the file grew after it was sized
+        raise too_big
+    return data
+
+
+def open_image(data: bytes) -> Image.Image:
+    """Image.open limited to DECODE_FORMATS (raises UnidentifiedImageError otherwise)."""
+    return Image.open(io.BytesIO(data), formats=DECODE_FORMATS)
 
 
 def _open_first_frame(data: bytes, label: str) -> tuple[Image.Image, str, int, int, int, int]:
-    """Decode with a pixel cap. Returns (image, format, frames, w, h, orientation)."""
-    with warnings.catch_warnings():
-        # Pillow only warns between MAX_IMAGE_PIXELS and twice that; treat the
-        # warning as the error it is for an input nobody vetted.
-        warnings.simplefilter("error", Image.DecompressionBombWarning)
+    """Decode with a pixel cap. Returns (image, format, frames, w, h, orientation).
+
+    The cap is checked from the header before decoding. It sits below
+    Pillow's own MAX_IMAGE_PIXELS, so no warnings filter is needed (one would
+    be process-wide, and this runs in a worker thread)."""
+    try:
+        image = open_image(data)
+        width, height = image.size
+        if width <= 0 or height <= 0 or width * height > MAX_SOURCE_PIXELS:
+            raise ValueError(
+                f"{label} is {width}x{height}, over Nebula's {MAX_SOURCE_PIXELS // 1_000_000} megapixel "
+                "input limit; downscale it first")
+        source_format = (image.format or "unknown").upper()
+        frames = int(getattr(image, "n_frames", 1) or 1)
+        if frames > 1:
+            image.seek(0)
+        orientation = 1
         try:
-            image = Image.open(io.BytesIO(data))
-            width, height = image.size
-            if width <= 0 or height <= 0 or width * height > MAX_SOURCE_PIXELS:
-                raise ValueError(
-                    f"{label} is {width}x{height}, over Nebula's {MAX_SOURCE_PIXELS // 1_000_000} megapixel "
-                    "input limit; downscale it first")
-            source_format = (image.format or "unknown").upper()
-            frames = int(getattr(image, "n_frames", 1) or 1)
-            if frames > 1:
-                image.seek(0)
+            orientation = int(image.getexif().get(0x0112, 1) or 1)
+        except Exception:  # noqa: BLE001 - unreadable EXIF just means upright
             orientation = 1
-            try:
-                orientation = int(image.getexif().get(0x0112, 1) or 1)
-            except Exception:  # noqa: BLE001 - unreadable EXIF just means upright
-                orientation = 1
-            image.load()
-        except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
-            raise ValueError(f"{label} is too large to decode safely") from exc
-        except UnidentifiedImageError as exc:
-            raise ValueError(f"{label} isn't an image Nebula can read (PNG, JPEG, WebP or GIF)") from exc
-        except OSError as exc:
-            raise ValueError(f"{label} is damaged or incomplete: {exc}") from exc
+        image.load()
+    except Image.DecompressionBombError as exc:
+        raise ValueError(f"{label} is too large to decode safely") from exc
+    except UnidentifiedImageError as exc:
+        raise ValueError(f"{label} isn't an image Nebula can read (PNG, JPEG, WebP or GIF)") from exc
+    except OSError as exc:
+        raise ValueError(f"{label} is damaged or incomplete: {exc}") from exc
     return image, source_format, frames, width, height, orientation
 
 
@@ -434,8 +458,16 @@ async def prepare_images(values: Iterable[Any], *, label: str = "Image",
     items = [str(value) for value in values if value not in (None, "")]
     if len(items) > max_images:
         raise ValueError(f"{len(items)} images connected; this node takes at most {max_images}")
-    loaded = [(item, await load_image_source(item, label=f"{label} {index + 1}"))
-              for index, item in enumerate(items)]
+    loaded: list[tuple[str, bytes]] = []
+    total = 0
+    for index, item in enumerate(items):
+        data = await load_image_source(item, label=f"{label} {index + 1}")
+        total += len(data)
+        if total > MAX_TOTAL_SOURCE_BYTES:
+            raise ValueError(
+                f"The images come to more than {MAX_TOTAL_SOURCE_BYTES // (1024 * 1024)} MiB before resizing. "
+                "Send fewer or smaller images.")
+        loaded.append((item, data))
     if not loaded:
         return []
     return await asyncio.to_thread(_prepare_all, loaded, label, MAX_REQUEST_BYTES - _REQUEST_MARGIN, max_side)
@@ -776,7 +808,7 @@ def _error_for(response: httpx.Response, api_key: str, *, attempts: int, has_ima
     tries = f" after {attempts} tries" if attempts > 1 else ""
     lowered = f"{detail} {code or ''}".lower()
     if status == 400 and "max_tokens_exceeded" in lowered:
-        message = ("TypeSafe: the request is longer than the model's context (400 max_tokens_exceeded). "
+        message = ("TypeSafe: the request doesn't fit in the model's context (400 max_tokens_exceeded). "
                    "Send fewer or smaller images, shorten the context, or turn on Long context.")
     elif status == 400 and "not turned on" in lowered:
         message = (f"TypeSafe refused the images (400){said}. This build sends the images header, so "
@@ -853,6 +885,13 @@ async def system_one(api_key: str, *, model: str, state: Any, questions: Mapping
     if not api_key:
         from execution.missing_credential import MissingCredentialError
         raise MissingCredentialError(f"{CREDENTIAL} is required")
+    api_key = api_key.strip()
+    if not api_key or not all("!" <= character <= "~" for character in api_key):
+        # Checked here so a pasted space, line break or curly quote reads as
+        # a key problem instead of a failed connection, and the key never
+        # rides into an encoding error.
+        raise TypeSafeError(f"{CREDENTIAL} has a character a key can't have (a space, line break or "
+                            "non-ASCII letter). Paste it again in Settings → TypeSafe.")
     headers, kwargs = build_request(model=model, state=state, questions=questions, images=images,
                                     long_context=long_context)
     headers["Authorization"] = f"Bearer {api_key}"
