@@ -3029,3 +3029,45 @@ Two reviewers checked 5eba86fc. Concurrency said ship, with one older gap; the t
 
 - **The early-exit integration test needed the same skip as the other three launch tests (628d35f8).** The app fails on a missing `frontend/dist-desktop` before it starts the sidecar (7cf754a1), so unbuilt the test can only see the renderer error. It still "passed" in the earlier scratch run because its last fallback was `message.includes('7')` and the scratch path contains one (`…-be74-…`). In the acp-host worktree, whose path has none, it failed.
 - **The assertion now checks the sidecar's own error:** `type === 'early_exit'`, `exitCode === 7`, and the fixture's `DISTINCTIVE_EARLY_EXIT_MARKER` in the message. With `FIXTURE_EXIT_CODE` changed to 9 it fails. Built: integration 4/4, desktop suite 354/354. Unbuilt: the four launch tests skip. CI doesn't run the desktop suite, so nothing there changes.
+
+## 2026-10-14 — ACP adapter pin watch
+
+Justin asked for a check about every two weeks that finds the newest stable adapter release at least 14 days old and
+hands him the bump. Session schedulers don't persist, so it lives in the repo as a GitHub Actions workflow.
+
+- **Weekly, not every two weeks.** Cron can't say "every other Monday" cleanly, and the run is idempotent: it updates
+  the one open issue rather than opening another. A weekly run also means a release that clears the hold shows up
+  within a week. `17 14 * * 1` (Monday 14:17 UTC), off the top of the hour.
+- **An issue, not a PR.** The bump needs one real adapter turn by hand (the tests drive a fake agent), so a bot PR
+  would only look ready. The issue holds the report; Justin makes the one-line change. The workflow gets
+  `contents: read` and `issues: write` only, and no step can push.
+- **Python, in `backend/scripts/check_adapter_pins.py`.** It imports `PRESETS` and `PACKAGE_AGE_DAYS` from
+  `services/personal_agents.py`, so the pins and the 14-day number have one home. That import chain is stdlib only,
+  so the workflow installs nothing. The logic is covered by `tests/test_adapter_pins.py`, which the CI backend job
+  already runs.
+- **Version choice.** Strict semver parse; anything with a prerelease tag, a missing publish time, or a non-empty
+  `deprecated` field is skipped. An empty `deprecated` string is what `npm deprecate pkg@x ""` leaves behind to
+  un-deprecate, and npm's resolver checks truthiness, so we treat any falsy value as not deprecated. Compare is on integer tuples (0.10.0 > 0.9.0). The cutoff is `now - 14 days` to the minute,
+  the same instant `npx_env()` uses for `npm_config_before`. "Next newer release" is the earliest-published stable
+  release above the candidate (or the pin) that is still held, and its clear date is publish time + 14 days.
+- **What counts as "action needed":** a candidate exists, or the pin is deprecated, or the pin is missing from the
+  registry. A pin published inside the hold is noted in the report but doesn't open an issue on its own.
+- **Untrusted registry data.** Versions only reach the report if they match the strict semver regex. Deprecation
+  messages and error text are flattened to one line, backticks swapped out, angle brackets dropped, capped, and shown
+  in a code span, so they can't leave it or fake the signature comment (which is also read from the end of the body). The
+  report goes from file to `gh --body-file`; no `${{ }}` expression ever holds registry data, and the only output
+  read by an `if:` is the script's own `true`/`false`.
+- **Failures.** A fetch error is reported in the table and the job summary and fails the run (exit 1), so a broken
+  check shows red in Actions. The issue step still runs if the other adapter needs action (`!cancelled()`).
+- **Duplicate guard.** The issue step lists open issues (up to 500) and matches the exact title *and* the workflow's
+  own author (`gh` reports it as `{"login": "app/github-actions", "is_bot": true}`, checked against a real bot issue;
+  no user login can contain "/"). Title alone wasn't enough: the repo is public, so anyone could open an issue with
+  that title first, the workflow would write its report into it, and the opener could then edit the versions or add
+  instructions to the issue I act on. No labels, no search index lag. The report ends with an HTML comment holding a signature (package=candidate). If the signature matches
+  the open issue's, the body is refreshed quietly; if it changed, the body is replaced and a comment is added so
+  Justin gets a notification. `concurrency: adapter-pins` stops two runs racing to create the issue.
+- **Testability.** `file_issue()` takes the gh runner as a parameter, and `--dry-run` prints the write commands
+  (the `gh issue list` read still runs). `main()` takes the fetch function, so the network-failure path is tested.
+- **First real run (2026-10-14):** claude-agent-acp 0.84.0 is current (0.85.0, published 2026-10-01, clears
+  2026-10-15). codex-acp has 2.0.1 (published 2026-09-29) past the hold; 2.1.0 (2026-10-01) clears 2026-10-15.
+  Pins not changed in this branch, as asked.
