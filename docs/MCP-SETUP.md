@@ -152,6 +152,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `edge.added` / `edge.removed` | wired / unwired | source, target and handles |
 | `selection.changed` | the selected set changed | `nodeIds`, `count` |
 | `run.started` / `run.finished` / `run.failed` / `run.cancelled` | per node, attributed to whoever started the run | `runId`, `error` |
+| `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
 | `canvas.replaced` | import, project opened or created; node ids restart | `reason` |
 | `canvas.cleared` | Clear canvas | |
 | `pin.added` / `pin.removed` | the person left or deleted a note | `pinId`, `text`, `anchor` |

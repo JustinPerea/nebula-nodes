@@ -156,10 +156,11 @@ All events: `backend/models/events.py`
 | `stream_delta` | Token stream chunk |
 | `stream_partial_image` | Image preview frame |
 | `stream_partial_svg` | SVG preview |
-| `executed` | Success + output map |
+| `executed` | Success + output map (+ `withheld` ports of a gate) |
+| `skipped` | A gate upstream withheld the node's input; it never started ([gate ports](./01-node-schema.md#gate-ports-conditional-true)) |
 | `error` | Failure |
 | `validation_error` | Pre-run port validation |
-| `graph_complete` | Full graph done |
+| `graph_complete` | Full graph done (`nodes_executed`, `nodes_skipped`) |
 
 Ports should not assume events they do not emit (e.g. sync nodes never send `stream_partial_image`).
 
@@ -211,3 +212,4 @@ Golden files under `contracts/fixtures/` — web pytest is oracle; Swift/TS port
 | Date | Change |
 |------|--------|
 | 2026-07-01 | Initial handler patterns |
+| 2026-10-14 | `skipped` event and gate withholding |

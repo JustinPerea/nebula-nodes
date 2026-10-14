@@ -108,6 +108,7 @@ interface Port {
   required: boolean;
   multiple?: boolean;      // input: accept many connections → list value
   maxConnections?: number; // optional cap
+  conditional?: true;      // output only: a gate port, see "Gate ports" below
 }
 ```
 
@@ -136,6 +137,19 @@ Return map port id → `PortValueDict`:
   "image": { "type": "Image", "value": "/absolute/path.png" }
 }
 ```
+
+A port the handler leaves out is just missing downstream: the next node still runs, without that input.
+
+### Gate ports (`conditional: true`)
+
+A gate node lets a graph branch. Its conditional output ports carry a value on some runs and are *withheld* on others. Today the only gate is `jev-decide` (`on_pass` / `on_fail`).
+
+- **Withholding.** The handler returns `execution.gating.withheld(reason)` for the port: `{"type": "Any", "value": null, "withheld": "Jev Decide failed (answered no, 0.12)"}`. Only conditional ports can be withheld; withholding any other port fails the node. A conditional port the handler leaves out counts as withheld, so a buggy gate fails closed.
+- **The rule.** A node runs only if none of its inbound edges comes from a withheld port or a skipped node. Otherwise it is **skipped**: no `executing` event, no provider call, no cache entry, no charge. It gets a `skipped` event with the gate's reason, and its descendants follow the same rule.
+- **Both branches into one node.** A node wired to both `on_pass` and `on_fail` of the same gate is always skipped, since one of them is always withheld. A "first available" merge node is a possible follow-up.
+- **Iterators.** The rule applies per item. Below an iterator, a node runs for the items whose gate passed and is skipped for the rest; it is marked skipped only when every item was.
+- **Cache.** The withheld entries stay in the cached outputs, so a cache hit skips the same nodes. They never reach port values, events, manifests or the canvas: the engine strips them (`gating.split_outputs`).
+- **Events.** `executed` carries `withheld` (port → reason) so the canvas can draw those wires as inactive; `skipped` carries `reason` and `gate_node_id`.
 
 ---
 
@@ -216,3 +230,4 @@ Full vertical slices (registry + handler + events):
 | Date | Change |
 |------|--------|
 | 2026-07-01 | Initial node schema |
+| 2026-10-14 | Gate ports (`conditional: true`) and the skip rule |
