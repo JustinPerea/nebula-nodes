@@ -196,10 +196,13 @@ def ideogram_3_request(body: Mapping[str, Any]) -> tuple[dict[str, Any], list[st
     """Krea Ideogram 3 -> POST /v1/ideogram-v3/generate (multipart): the
     fields, and the character reference to upload.
 
-    The v1 endpoint is the one Nebula's own ideogram-character node uses,
-    whose request enums the v1 page shows (aspect_ratio "1x1",
-    rendering_speed "TURBO"); the v2 ideogram-3 page lists no values for
-    them. v1 takes the character reference in the same call ("Generations
+    The v1 endpoint is the one Nebula's own ideogram-character node uses.
+    Its page (v1/api-reference/generate-images/generate-v3, read
+    2026-10-14) defines RenderingSpeed FLASH / TURBO / DEFAULT / QUALITY,
+    default DEFAULT, and the same 15 aspect ratios as IDEOGRAM_ASPECT_RATIOS;
+    the v2 ideogram-3 page lists no values for them. Pricing: "Every
+    Ideogram 4.0 and 3.0 model endpoint bills the model rate above"
+    (Ideogram 3.0 Default US $0.06, with Character Reference US $0.15). v1 takes the character reference in the same call ("Generations
     with character reference are subject to the character reference
     pricing ... currently only supports 1 character reference image").
     rendering_speed DEFAULT (Krea exposes none); width/height -> aspect_ratio;
@@ -234,9 +237,13 @@ def ideogram_precise_edit_request(body: Mapping[str, Any]) -> tuple[dict[str, An
     (multipart): fields, image, mask, reference images.
 
     Krea's fields map one to one: image_url -> image, mask_url -> mask
-    ("Black marks the area to edit"; Krea's convention too), reference_images
-    -> reference_images (4, or 3 with a mask), quality (Krea default high),
-    seed. The output keeps the image's own size, on both routes."""
+    (Ideogram: "Black marks the area to edit and white the area to keep";
+    the mask is sent as given, as Nebula's own ideogram-edit node does.
+    Krea's catalog doesn't state its mask convention: NOT CONFIRMED that
+    Krea passes it through unchanged), reference_images -> reference_images
+    (4, or 3 with a mask), quality (Krea default high), seed. The output
+    keeps the image's own size ("The output always matches this image's
+    width and height")."""
     image = body.get("image_url")
     if not image:
         raise ValueError("Image is required for Ideogram 4.5 Precise Edit")
