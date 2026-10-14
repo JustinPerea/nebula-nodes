@@ -6989,6 +6989,822 @@
       ],
       "checked": "2026-10-10"
     },
+    "runway-image": {
+      "currency": "usd",
+      "per": "image",
+      "priceParams": [
+        "model",
+        "ratio"
+      ],
+      "rows": [
+        {
+          "match": {
+            "model": "gen4_image",
+            "ratio": "1280:720"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "gen4_image",
+            "ratio": "720:1280"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "gen4_image",
+            "ratio": "720:720"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "gen4_image",
+            "ratio": "960:720"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "gen4_image",
+            "ratio": "720:960"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "gen4_image",
+            "ratio": "1680:720"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "gen4_image",
+            "ratio": "1920:1080"
+          },
+          "price": 0.08
+        },
+        {
+          "match": {
+            "model": "gen4_image",
+            "ratio": "1080:1920"
+          },
+          "price": 0.08
+        },
+        {
+          "match": {
+            "model": "gen4_image",
+            "ratio": "1080:1080"
+          },
+          "price": 0.08
+        },
+        {
+          "match": {
+            "model": "gen4_image",
+            "ratio": "1440:1080"
+          },
+          "price": 0.08
+        },
+        {
+          "match": {
+            "model": "gen4_image",
+            "ratio": "1080:1440"
+          },
+          "price": 0.08
+        },
+        {
+          "match": {
+            "model": "gen4_image"
+          },
+          "price": [
+            0.05,
+            0.08
+          ]
+        },
+        {
+          "match": {
+            "model": "gen4_image_turbo"
+          },
+          "price": 0.02
+        },
+        {
+          "match": {
+            "model": "gemini_image3_pro",
+            "ratio": "4096:4096"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "gemini_image3_pro",
+            "ratio": "3392:5056"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "gemini_image3_pro",
+            "ratio": "5056:3392"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "gemini_image3_pro",
+            "ratio": "3584:4800"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "gemini_image3_pro",
+            "ratio": "4800:3584"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "gemini_image3_pro",
+            "ratio": "3712:4608"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "gemini_image3_pro",
+            "ratio": "4608:3712"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "gemini_image3_pro",
+            "ratio": "3072:5504"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "gemini_image3_pro",
+            "ratio": "5504:3072"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "gemini_image3_pro",
+            "ratio": "6336:2688"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "gemini_image3_pro"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "2048:880"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "1920:1088"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "1920:1280"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "1920:1440"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "1920:1536"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "1920:1920"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "1536:1920"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "1440:1920"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "1280:1920"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "1088:1920"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "3840:1648"
+          },
+          "price": 0.41
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "3840:2160"
+          },
+          "price": 0.41
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "3504:2336"
+          },
+          "price": 0.41
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "3264:2448"
+          },
+          "price": 0.41
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "3200:2560"
+          },
+          "price": 0.41
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "2880:2880"
+          },
+          "price": 0.41
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "2560:3200"
+          },
+          "price": 0.41
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "2448:3264"
+          },
+          "price": 0.41
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "2336:3504"
+          },
+          "price": 0.41
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "2160:3840"
+          },
+          "price": 0.41
+        },
+        {
+          "match": {
+            "model": "gpt_image_2",
+            "ratio": "auto"
+          },
+          "price": 0.41
+        },
+        {
+          "match": {
+            "model": "gpt_image_2"
+          },
+          "price": [
+            0.2,
+            0.41
+          ]
+        },
+        {
+          "match": {
+            "model": "gemini_2.5_flash"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "seedream5_pro",
+            "ratio": "1024:1024"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "seedream5_pro",
+            "ratio": "1184:896"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "seedream5_pro",
+            "ratio": "896:1184"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "seedream5_pro",
+            "ratio": "1376:768"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "seedream5_pro",
+            "ratio": "768:1376"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "seedream5_pro",
+            "ratio": "1296:864"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "seedream5_pro",
+            "ratio": "864:1296"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "seedream5_pro",
+            "ratio": "auto_1k"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "seedream5_pro"
+          },
+          "price": 0.09
+        },
+        {
+          "match": {
+            "model": "seedream5_lite"
+          },
+          "price": 0.04
+        }
+      ],
+      "notes": "Runway credits at $0.01 each, one image per run. Runway prices some models by tier (Gen-4 Image 720p/1080p, Nano Banana Pro 1K-2K/4K, GPT Image 2 1K-2K/4K, Seedream 5.0 Pro 1K/2K) but doesn't say which ratio is which tier. Ratios whose pixel size makes the tier plain are priced at it (e.g. 1280:720 as 720p, 4096:4096 as 4K, 1024:1024 as 1K); the rest are a range. GPT Image 2 is priced at Runway's default quality, high, and 'auto' at the 4K tier as Runway bills it.",
+      "sources": [
+        {
+          "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+          "quote": "Credits can be purchased for $0.01 per credit in the developer portal for a project."
+        },
+        {
+          "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+          "quote": "`gen4_image` | 5 credits per 720p image, or 8 credits per 1080p image; `gen4_image_turbo` | 2 credits per image, any resolution"
+        },
+        {
+          "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+          "quote": "`gemini_image3_pro` | 20 credits per 1K or 2K image, 40 credits per 4K image; `gemini_2.5_flash` | 5 credits per image, any resolution"
+        },
+        {
+          "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+          "quote": "`gpt_image_2` is billed as credits per image × `outputCount`. The `auto` resolution is billed at the 4K tier. Default quality is `high`. ... `high` | 20 | 41"
+        },
+        {
+          "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+          "quote": "`seedream5_pro` | 5 credits per 1K image, 9 credits per 2K image; `seedream5_lite` | 4 credits per image, any resolution"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
+    "runway-video": {
+      "currency": "usd",
+      "per": "second",
+      "priceParams": [
+        "model",
+        "ratio",
+        "resolution",
+        "audio",
+        "duration"
+      ],
+      "multiplyBy": [
+        "duration"
+      ],
+      "rows": [
+        {
+          "match": {
+            "model": "gen4.5"
+          },
+          "price": 0.12
+        },
+        {
+          "match": {
+            "model": "gen4_turbo"
+          },
+          "price": 0.05
+        },
+        {
+          "match": {
+            "model": "veo3.1",
+            "audio": false
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "veo3.1"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "veo3.1_fast",
+            "audio": false
+          },
+          "price": 0.1
+        },
+        {
+          "match": {
+            "model": "veo3.1_fast"
+          },
+          "price": 0.15
+        },
+        {
+          "match": {
+            "model": "seedance2",
+            "ratio": "2206:946"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "seedance2",
+            "ratio": "1920:1080"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "seedance2",
+            "ratio": "1664:1248"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "seedance2",
+            "ratio": "1440:1440"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "seedance2",
+            "ratio": "1248:1664"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "seedance2",
+            "ratio": "1080:1920"
+          },
+          "price": 0.4
+        },
+        {
+          "match": {
+            "model": "seedance2",
+            "ratio": "3840:1646"
+          },
+          "price": 1.5
+        },
+        {
+          "match": {
+            "model": "seedance2",
+            "ratio": "3840:2160"
+          },
+          "price": 1.5
+        },
+        {
+          "match": {
+            "model": "seedance2",
+            "ratio": "3840:2880"
+          },
+          "price": 1.5
+        },
+        {
+          "match": {
+            "model": "seedance2",
+            "ratio": "3840:3840"
+          },
+          "price": 1.5
+        },
+        {
+          "match": {
+            "model": "seedance2",
+            "ratio": "2880:3840"
+          },
+          "price": 1.5
+        },
+        {
+          "match": {
+            "model": "seedance2",
+            "ratio": "2160:3840"
+          },
+          "price": 1.5
+        },
+        {
+          "match": {
+            "model": "seedance2"
+          },
+          "price": 0.36
+        },
+        {
+          "match": {
+            "model": "seedance2_fast"
+          },
+          "price": 0.29
+        },
+        {
+          "match": {
+            "model": "seedance2_mini"
+          },
+          "price": 0.16
+        },
+        {
+          "match": {
+            "model": "seedance2_5",
+            "ratio": "992:432"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "seedance2_5",
+            "ratio": "854:480"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "seedance2_5",
+            "ratio": "752:560"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "seedance2_5",
+            "ratio": "640:640"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "seedance2_5",
+            "ratio": "560:752"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "seedance2_5",
+            "ratio": "480:854"
+          },
+          "price": 0.2
+        },
+        {
+          "match": {
+            "model": "seedance2_5",
+            "ratio": "2206:946"
+          },
+          "price": 0.68
+        },
+        {
+          "match": {
+            "model": "seedance2_5",
+            "ratio": "1920:1080"
+          },
+          "price": 0.68
+        },
+        {
+          "match": {
+            "model": "seedance2_5",
+            "ratio": "1664:1248"
+          },
+          "price": 0.68
+        },
+        {
+          "match": {
+            "model": "seedance2_5",
+            "ratio": "1440:1440"
+          },
+          "price": 0.68
+        },
+        {
+          "match": {
+            "model": "seedance2_5",
+            "ratio": "1248:1664"
+          },
+          "price": 0.68
+        },
+        {
+          "match": {
+            "model": "seedance2_5",
+            "ratio": "1080:1920"
+          },
+          "price": 0.68
+        },
+        {
+          "match": {
+            "model": "seedance2_5"
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "model": "happyhorse_1_0",
+            "resolution": "1080p",
+            "ratio": "1920:1080"
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "model": "happyhorse_1_0",
+            "resolution": "1080p",
+            "ratio": "1080:1920"
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "model": "happyhorse_1_0",
+            "resolution": "1080p",
+            "ratio": "1440:1440"
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "model": "happyhorse_1_0",
+            "resolution": "1080p",
+            "ratio": "1662:1248"
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "model": "happyhorse_1_0",
+            "resolution": "1080p",
+            "ratio": "1248:1662"
+          },
+          "price": 0.3
+        },
+        {
+          "match": {
+            "model": "happyhorse_1_0",
+            "resolution": "1080p"
+          },
+          "price": [
+            0.15,
+            0.3
+          ]
+        },
+        {
+          "match": {
+            "model": "happyhorse_1_0",
+            "ratio": "1920:1080"
+          },
+          "price": [
+            0.15,
+            0.3
+          ]
+        },
+        {
+          "match": {
+            "model": "happyhorse_1_0",
+            "ratio": "1080:1920"
+          },
+          "price": [
+            0.15,
+            0.3
+          ]
+        },
+        {
+          "match": {
+            "model": "happyhorse_1_0",
+            "ratio": "1440:1440"
+          },
+          "price": [
+            0.15,
+            0.3
+          ]
+        },
+        {
+          "match": {
+            "model": "happyhorse_1_0",
+            "ratio": "1662:1248"
+          },
+          "price": [
+            0.15,
+            0.3
+          ]
+        },
+        {
+          "match": {
+            "model": "happyhorse_1_0",
+            "ratio": "1248:1662"
+          },
+          "price": [
+            0.15,
+            0.3
+          ]
+        },
+        {
+          "match": {
+            "model": "happyhorse_1_0"
+          },
+          "price": 0.15
+        }
+      ],
+      "notes": "Runway credits at $0.01 each, per second of the node's duration. Seedance and HappyHorse tiers (480p/720p/1080p/4K) are read from the ratio's pixel size; Runway's pricing table names tiers and the request schema names ratios, without a table joining them. HappyHorse image-to-video bills by the Resolution setting and text-to-video by the ratio, so settings that disagree price as a range. Duration 'auto' is billed at the model's maximum up front and refunded after, so it is unpriced. Runway's per-generation minimums (Seedance 2.0 Mini 64 credits, Seedance 2.5 80) equal the 4 s price, the shortest duration those models take, so they never raise a run. Seedance 2.5's input/reference-video surcharge doesn't apply: this node sends no video.",
+      "sources": [
+        {
+          "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+          "quote": "Credits can be purchased for $0.01 per credit in the developer portal for a project."
+        },
+        {
+          "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+          "quote": "`gen4.5` | 12 credits per second; `gen4_turbo` | 5 credits per second"
+        },
+        {
+          "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+          "quote": "`veo3.1 (audio)` | 40 credits per second; `veo3.1 (no audio)` | 20 credits per second; `veo3.1_fast (audio)` | 15 credits per second; `veo3.1_fast (no audio)` | 10 credits per second"
+        },
+        {
+          "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+          "quote": "`seedance2` (480p/720p) | 36 credits per second; `seedance2` (1080p) | 40 credits per second; `seedance2` (4K) | 150 credits per second; `seedance2_fast` (480p/720p) | 29 credits per second"
+        },
+        {
+          "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+          "quote": "`seedance2_mini` (480p/720p) | 16 credits per second (64 credit minimum per generation)"
+        },
+        {
+          "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+          "quote": "`seedance2_5` (480p) | 20 credits per second of output ... (720p) | 30 credits per second of output ... (1080p) | 68 credits per second of output ... (80 credit minimum per generation)"
+        },
+        {
+          "url": "https://docs.dev.runwayml.com/guides/pricing.md",
+          "quote": "`happyhorse_1_0` (720p) | 15 credits per second; `happyhorse_1_0` (1080p) | 30 credits per second"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
     "veo-3": {
       "currency": "usd",
       "per": "second",
