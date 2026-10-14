@@ -164,29 +164,37 @@ def test_direct_route_models_price_both_routes():
     """A Krea node its maker also sells carries Krea's price and the maker's,
     so the estimate follows the route the run takes (maker key wins, the Krea
     plan wins over both)."""
-    entries, skipped = SYNC.pricing_entries(CATALOG)
+    entries, _ = SYNC.pricing_entries(CATALOG)
     for node_id, model in CATALOG["models"].items():
         direct = SYNC.DIRECT_ROUTES.get(model["endpoint"])
         entry = entries.get(node_id)
         if direct is None:
             assert entry is None or "routes" not in entry
             continue
-        if direct["pricing"] is None:
-            # A maker route OpenAI publishes no default price for (GPT Image 2 / 2.5) stays unpriced.
-            assert entry is None or "routes" not in entry, node_id
+        if not direct.get("pricing"):
+            # Unpriced on the maker (OpenAI GPT Image 2 / 2.5, Runway Ruby):
+            # the entry holds only Krea's own price, if Krea publishes one.
+            assert entry is None or set(entry["routes"]) == {"krea"}, node_id
             continue
         provider = direct["pricing"]["provider"]
-        # Krea's own route is priced unless Krea publishes no price for it
+        # Krea's own route is priced when Krea's price maps onto the request
         # (Gemini Omni Flash 1.1 has no x-krea-pricing block; Grok Imagine
-        # 2.0's Krea price depends on a count the request doesn't set).
-        krea_priced = bool(model.get("pricing")) and node_id not in skipped
-        assert set(entry["routes"]) == ({"krea"} if krea_priced else set()) | {provider}, node_id
-        if krea_priced:
+        # 2.0's depends on a count the request doesn't set).
+        krea_alone: dict = {}
+        SYNC.krea_entry(node_id, model, CATALOG, krea_alone, {})
+        krea = {"krea"} if node_id in krea_alone else set()
+        assert set(entry["routes"]) == krea | {provider}, node_id
+        if krea:
             assert entry["routes"]["krea"].get("provider", "krea") == "krea"
         if provider != "google":
             maker = entry["routes"][provider]
-            assert maker.get("provider", provider) == provider and maker["rows"] and maker["sources"]
-            assert all(source["url"].startswith("https://") and source["quote"] for source in maker["sources"])
+            assert maker.get("provider", provider) == provider, node_id
+            assert maker["rows"] and maker["notes"] and maker["sources"], node_id
+            assert all(source["url"].startswith("https://") and source["quote"] for source in maker["sources"]), node_id
+            if provider in ("ideogram", "runway"):
+                assert maker["checked"] == SYNC.MAKER_CHECKED
+                assert all(source["url"] in (SYNC.IDEOGRAM_PRICING_URL, SYNC.RUNWAY_PRICING_URL)
+                           for source in maker["sources"])
             continue
         google = entry["routes"]["google"]
         assert google.get("provider", "google") == "google"

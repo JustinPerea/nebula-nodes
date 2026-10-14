@@ -1137,6 +1137,183 @@
         "provider": "krea",
         "key": null
       }
+    },
+    {
+      "name": "an Ideogram key runs Krea's Ideogram 3 on Ideogram, without Krea's style images",
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "ideogram",
+        "key": "IDEOGRAM_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "character_reference_images",
+        "height",
+        "prompt",
+        "seed",
+        "width"
+      ]
+    },
+    {
+      "name": "Krea style images keep Ideogram 3 on Krea",
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "params": {
+        "style_images": "[{\"url\":\"https://example.com/s.png\",\"strength\":1}]"
+      },
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "character_reference_images",
+        "height",
+        "prompt",
+        "seed",
+        "style_images",
+        "width"
+      ]
+    },
+    {
+      "name": "Krea style images with only an Ideogram key need the Krea token",
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "params": {
+        "style_images": "[{\"url\":\"https://example.com/s.png\",\"strength\":1}]"
+      },
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "an Ideogram key runs Krea's Ideogram 4.5 Precise on Ideogram",
+      "nodeId": "krea-image-ideogram-ideogram-4-5-precise",
+      "params": {},
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "ideogram",
+        "key": "IDEOGRAM_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "image_url",
+        "mask_url",
+        "prompt",
+        "quality",
+        "reference_images",
+        "seed"
+      ]
+    },
+    {
+      "name": "the Krea plan wins over an Ideogram key",
+      "nodeId": "krea-image-ideogram-ideogram-2-turbo",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "a Runway key runs Krea's Gen-4.5 on Runway",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "duration",
+        "prompt",
+        "seed",
+        "start_image"
+      ]
+    },
+    {
+      "name": "the Krea plan wins over a Runway key",
+      "nodeId": "krea-enhance-runway-ruby",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Krea runs Gen-4 Image without a Runway key",
+      "nodeId": "krea-image-runway-gen-4-image",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "height",
+        "prompt",
+        "reference_images",
+        "seed",
+        "width"
+      ]
+    },
+    {
+      "name": "Krea's Gen-4 video copy has no maker route",
+      "nodeId": "krea-video-runway-gen-4-video",
+      "params": {},
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "only",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
     }
   ]
 }

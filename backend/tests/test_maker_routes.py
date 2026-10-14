@@ -42,6 +42,10 @@ MAKER_ROUTED = {
     # xAI (execution/maker_routes_xai.py)
     "grok-imagine-image", "grok-imagine-image-edit", "krea-image-xai-grok-imagine-2",
     "krea-image-xai-grok-imagine-2-edit", "krea-video-xai-grok-video", "krea-video-xai-grok-video-1-5",
+    # Ideogram and Runway (tests/test_maker_routes_ideogram_runway.py)
+    "krea-image-ideogram-ideogram-4-5-precise", "krea-image-ideogram-ideogram-3",
+    "krea-image-ideogram-ideogram-2-turbo", "krea-image-runway-gen-4-image", "krea-video-runway-gen-4-5",
+    "krea-enhance-runway-ruby",
 }
 
 

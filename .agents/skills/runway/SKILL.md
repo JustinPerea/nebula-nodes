@@ -34,6 +34,11 @@ description: Runway API — Gen-4.5 / Gen-4 Turbo, Veo 3.1 pass-through, Seedanc
 | Text → speech | `POST /v1/text_to_speech` | eleven_multilingual_v2 | `runway-tts` |
 | Audio/video → restyled speech | `POST /v1/speech_to_speech` | eleven_multilingual_sts_v2 | `runway-sts` |
 | Dub audio to another language | `POST /v1/voice_dubbing` | eleven_voice_dubbing | `runway-dubbing` |
+| SDR video → HDR | `POST /v1/video_to_hdr` | ruby | `krea-enhance-runway-ruby` (Runway route) |
+
+Krea copies on the Runway key (2026-10-14): `krea-image-runway-gen-4-image` (gen4_image),
+`krea-video-runway-gen-4-5` (gen4.5) and `krea-enhance-runway-ruby` (ruby) run on Runway when
+`RUNWAY_API_KEY` is saved, unless the node uses the Krea plan. See `docs/api-guides/runway.md`.
 
 ## Detailed references
 

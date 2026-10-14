@@ -91,6 +91,10 @@ Connecting `mask → edit` **auto-wires** `upstream image → edit.image` when t
 | `ideogram-character` | One `character_reference_images` per request |
 | `ideogram-upscale` | Upscale with optional prompt |
 
+Krea copies on the Ideogram key (2026-10-14): `krea-image-ideogram-ideogram-4-5-precise`,
+`-ideogram-3` and `-ideogram-2-turbo` run on Ideogram's own API when `IDEOGRAM_API_KEY`
+is saved (unless the node uses the Krea plan). See `docs/api-guides/ideogram.md`.
+
 ## Live smoke (backend)
 
 ```bash

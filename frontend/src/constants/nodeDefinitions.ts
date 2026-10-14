@@ -15924,7 +15924,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/ideogram/ideogram-2-turbo",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "IDEOGRAM_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -16013,7 +16016,67 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": 1337
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "IDEOGRAM_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "min": 512,
+        "max": 8192,
+        "step": 0.01,
+        "default": 1024
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "min": 512,
+        "max": 8192,
+        "step": 0.01,
+        "default": 1024
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-ideogram-2a",
+      "model": "ideogram-2a"
+    }
   },
   'krea-image-ideogram-ideogram-3': {
     "id": "krea-image-ideogram-ideogram-3",
@@ -16021,7 +16084,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/ideogram/ideogram-3",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "IDEOGRAM_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -16138,7 +16204,85 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "IDEOGRAM_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "min": 512,
+        "max": 8192,
+        "step": 0.01,
+        "default": 1024
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "min": 512,
+        "max": 8192,
+        "step": 0.01,
+        "default": 1024
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "character_reference_images",
+        "label": "Character reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "style_images",
+        "label": "Style images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-ideogram-3",
+      "model": "ideogram-v3",
+      "blockedBy": [
+        "style_images"
+      ]
+    }
   },
   'krea-image-runway-gen-4-image': {
     "id": "krea-image-runway-gen-4-image",
@@ -16146,7 +16290,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/runway/gen-4-image",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "RUNWAY_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -16250,7 +16397,74 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "RUNWAY_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "min": 512,
+        "max": 8192,
+        "step": 0.01,
+        "default": 1024
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "min": 512,
+        "max": 8192,
+        "step": 0.01,
+        "default": 1024
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": true,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-runway-gen4-image",
+      "model": "gen4_image"
+    }
   },
   'krea-image-openai-gpt-image': {
     "id": "krea-image-openai-gpt-image",
@@ -27602,7 +27816,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/runway/gen-4.5",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "RUNWAY_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -27729,7 +27946,99 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "step": 0.01
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "RUNWAY_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1280:720",
+            "value": "1280:720"
+          },
+          {
+            "label": "720:1280",
+            "value": "720:1280"
+          },
+          {
+            "label": "1104:832",
+            "value": "1104:832"
+          },
+          {
+            "label": "832:1104",
+            "value": "832:1104"
+          },
+          {
+            "label": "960:960",
+            "value": "960:960"
+          },
+          {
+            "label": "1584:672",
+            "value": "1584:672"
+          },
+          {
+            "label": "672:1584",
+            "value": "672:1584"
+          }
+        ],
+        "default": "1280:720"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 2,
+        "max": 10,
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-runway-gen4-5",
+      "model": "gen4.5"
+    }
   },
   'krea-video-xai-grok-video': {
     "id": "krea-video-xai-grok-video",
@@ -30376,7 +30685,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "transform",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/enhance/runway/ruby",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "RUNWAY_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -30478,7 +30790,80 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ]
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "RUNWAY_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "output_format",
+        "label": "Output format",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "hdr10",
+            "value": "hdr10"
+          },
+          {
+            "label": "hlg",
+            "value": "hlg"
+          },
+          {
+            "label": "hdr_prores",
+            "value": "hdr_prores"
+          }
+        ],
+        "default": "hdr10"
+      },
+      {
+        "key": "video_url",
+        "label": "Video URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "prores_profile",
+        "label": "Prores profile",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "422",
+            "value": "422"
+          },
+          {
+            "label": "4444",
+            "value": "4444"
+          },
+          {
+            "label": "422 HQ",
+            "value": "422 HQ"
+          }
+        ]
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-runway-ruby",
+      "model": "ruby"
+    }
   },
   'krea-3d-tencent-hunyuan3d-3-1-pro': {
     "id": "krea-3d-tencent-hunyuan3d-3-1-pro",
@@ -31811,7 +32196,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/ideogram/ideogram-4.5-precise",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "IDEOGRAM_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -31946,7 +32334,93 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "[]"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "IDEOGRAM_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "integer",
+        "min": 0,
+        "max": 2147483647,
+        "step": 1
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "very_low",
+            "value": "very_low"
+          },
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          }
+        ],
+        "default": "high"
+      },
+      {
+        "key": "image_url",
+        "label": "Image URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "mask_url",
+        "label": "Mask URL",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-ideogram-precise-edit",
+      "model": "ideogram-4-5"
+    }
   },
   'krea-image-bytedance-seededit': {
     "id": "krea-image-bytedance-seededit",

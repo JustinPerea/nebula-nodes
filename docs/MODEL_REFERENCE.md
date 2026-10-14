@@ -1181,7 +1181,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-ideogram-ideogram-2-turbo` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | IDEOGRAM_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/ideogram/ideogram-2-turbo` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text) |
@@ -1204,12 +1204,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-ideogram-ideogram-3` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | IDEOGRAM_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/ideogram/ideogram-3` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Character reference images (Image ×n), Style images (Any ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1219,6 +1221,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Height | float | 1024 | 512–8192 |
 | Seed | float | 1337 | — |
 | Character reference images (JSON) | textarea | — | — |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Style images (JSON) | textarea | — | — |
 
 ---
@@ -1256,7 +1263,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-ideogram-ideogram-4-5-precise` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | IDEOGRAM_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/ideogram/ideogram-4.5-precise` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URL (Image), Mask URL (Mask), Reference images (Image ×n) |
@@ -1582,7 +1589,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-runway-gen-4-image` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | RUNWAY_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/runway/gen-4-image` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Reference images (Any ×n) |
@@ -3174,7 +3181,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-runway-gen-4-5` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | RUNWAY_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/runway/gen-4.5` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image) |
@@ -5581,7 +5588,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-enhance-runway-ruby` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | RUNWAY_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/enhance/runway/ruby` |
 | **Execution** | async-poll |
 | **Inputs** | Video URL (Video) |
