@@ -3078,7 +3078,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-minimax-hailuo-02` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | MINIMAX_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/minimax/hailuo-02` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image) |
@@ -3103,12 +3103,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-minimax-hailuo-2-3` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | MINIMAX_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/minimax/hailuo-2.3` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3116,9 +3118,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Prompt | textarea | — | — |
 | Start image | string | — | — |
 | Expand prompt | bool | true | — |
-| End image | string | — | — |
 | Resolution | enum | 768p | 768p, 1080p |
 | Duration | enum | 6 | 6, 10 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| End image | string | — | — |
 
 ---
 
@@ -3128,12 +3135,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-minimax-hailuo-2-3-fast` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | MINIMAX_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/minimax/hailuo-2.3-fast` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3141,9 +3150,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Prompt | textarea | — | — |
 | Start image | string | — | — |
 | Expand prompt | bool | true | — |
-| End image | string | — | — |
 | Resolution | enum | 768p | 768p, 1080p |
 | Duration | enum | 6 | 6, 10 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| End image | string | — | — |
 
 ---
 
@@ -3153,12 +3167,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-minimax-hailuo-3` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | MINIMAX_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/minimax/hailuo-3` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image), Reference images (Image ×n), Reference videos (Video ×n), Reference audios (Audio ×n) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3169,9 +3185,20 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | End image | string | — | — |
 | Reference images (JSON) | textarea | — | — |
 | Reference videos (JSON) | textarea | — | — |
-| Reference video seconds | float | — | 0–15 |
 | Reference audios (JSON) | textarea | — | — |
 | Duration | int | 5 | 5–15 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Reference video seconds | float | — | 0–15 |
+
+**Direct Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Resolution | enum | 2K | 2K, 768P |
 
 ---
 
@@ -4764,7 +4791,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-3d-meshy-meshy-7` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | MESHY_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/3d/meshy/meshy-7` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |

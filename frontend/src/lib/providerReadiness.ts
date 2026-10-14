@@ -164,6 +164,7 @@ function directBlockNote(def: ModelNodeDefinition, block: DirectBlock, params: R
     return `This recipe sets ${block.param}, which only ${fallbackName} takes, so it runs on ${fallbackName}. Clear it to run on ${directName}.`;
   }
   if (block.reason === 'unsupported') {
+    if (block.detail) return `${directName}'s own API doesn't take ${block.detail}, so it runs on ${fallbackName}.`;
     const value = block.param ? (params[block.param] ?? 'its default') : 'this setting';
     return `${directName}'s own API can't run ${block.param} ${String(value)} for this model, so it runs on ${fallbackName}.`;
   }

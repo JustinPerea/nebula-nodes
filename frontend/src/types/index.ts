@@ -4,6 +4,7 @@ import type {
   PointCloud, SensorRig, SensorStream, SpatialSessionMetadata, WorldValueV2,
 } from './spatial';
 import type { PaperSourceSnapshot } from '../lib/paperSource';
+import type { UnsupportedRule } from '../lib/directRoute';
 
 export type PortDataType =
   | 'Text'
@@ -154,10 +155,13 @@ export interface ModelNodeDefinition {
    *  `blockedBy` lists Krea-only params that keep a run on Krea when set
    *  (the maker can't honor them; lib/directRoute.ts directBlock).
    *  `blockedWhen` maps a shared param to values the maker can't render
-   *  (Veo 3.1 Fast at 4K on Vertex); a run with one stays on Krea. */
+   *  (Veo 3.1 Fast at 4K on Vertex); a run with one stays on Krea.
+   *  `unsupported` lists values the maker's API rejects, which keep a run on
+   *  Krea too (MiniMax: 6 or 10 seconds only). */
   directRoute?: {
     translation: string; model: string; blockedBy?: string[];
     blockedWhen?: Record<string, ReadonlyArray<string | number | boolean>>;
+    unsupported?: UnsupportedRule[];
   };
   docUrl?: string;
   /** A local (utility) node that still calls a provider. `utility` only means

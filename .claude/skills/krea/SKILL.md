@@ -123,6 +123,36 @@ The submit body is `{model, type, name, urls}` plus optional `trigger_word`, `ma
 2. Run it. When training completes it emits `style_id` (Text) and a `style` object on `style`.
 3. Wire the `style` output into a `krea-2-generate` node's `styles` port (or paste the `style_id` into the `style_id` param), set `style_strength`, add a `prompt`, and generate. Optionally toggle `share_with_workspace` on the train node to make the style available to your whole API workspace.
 
+## Maker routes (MiniMax and Meshy on your own keys)
+
+Since 2026-10-14 five more Krea copies run on the maker's own API when the
+maker key is saved (same precedence as Nano Banana: the Krea plan first, then
+the maker key, then `KREA_API_TOKEN`; overlay `MINIMAX_MESHY_ROUTES` in
+`scripts/sync-krea-catalog.py`, translations in
+`backend/execution/maker_routes_minimax_meshy.py`):
+
+| Krea node | Maker key | Maker model / endpoint | Stays on Krea when |
+|---|---|---|---|
+| `krea-video-minimax-hailuo-02` | `MINIMAX_API_KEY` | `MiniMax-Hailuo-02`, `POST /v1/video_generation` (T2V, I2V, first+last frame) | duration isn't 6 or 10; 1080p at 10 s |
+| `krea-video-minimax-hailuo-2-3` | `MINIMAX_API_KEY` | `MiniMax-Hailuo-2.3` | a saved `end_image`; 1080p at 10 s |
+| `krea-video-minimax-hailuo-2-3-fast` | `MINIMAX_API_KEY` | `MiniMax-Hailuo-2.3-Fast` (image-to-video only) | a saved `end_image`; 1080p at 10 s |
+| `krea-video-minimax-hailuo-3` | `MINIMAX_API_KEY` | `MiniMax-H3`, `POST /v2/video_generation` | a saved `reference_video_seconds` |
+| `krea-3d-meshy-meshy-7` | `MESHY_API_KEY` | `ai_model: meshy-7` on text-to-3D / image-to-3D / multi-image-to-3D | (none) |
+
+What route selection can't see (a wired port) is refused before any call, with
+the fix: an end image wired into Hailuo 2.3 / 2.3 Fast, 2.3 Fast with no start
+image, Hailuo 02 at 512p without a start image (or with an end image), H3
+text-to-video with `aspect_ratio: adaptive`, H3 frames mixed with references,
+and Meshy image mode with more than 4 images. To keep any of these on Krea,
+pick the Krea plan or remove the maker key.
+
+H3's direct route adds `resolution` (`2K` default, matching Krea's H3 price;
+or `768P`). MiniMax says H3 needs its pay-as-you-go API (or an M Plan
+Explore/Build Subscription Key); Video Packages don't cover it, and the error
+says so. Not routed: `krea-video-minimax-hailuo` (upstream model not
+confirmed), `-h3-max` and `-h3-max-turbo` (which Krea node is MiniMax's
+`MiniMax-H3-Max` is ambiguous), `-h3-max-camera-controls` (no maker field).
+
 ## In the nebula_nodes context
 
 - **Node IDs (provider `krea`):** `krea-2-generate`, `krea-style-search`, `krea-style-train`. All three set `envKeyName: KREA_API_TOKEN`. In the palette, **Krea 2** and **Krea Style Train** sit under image-gen; **Krea Style Search** is an analyzer node.

@@ -277,6 +277,10 @@ KREA_TRANSLATIONS.update({
     "krea-xai-video": (maker_routes_xai.krea_xai_video, maker_routes_xai.krea_grok_video_to_xai),
 })
 
+from execution.maker_routes_minimax_meshy import TRANSLATIONS as _MINIMAX_MESHY  # noqa: E402
+
+KREA_TRANSLATIONS.update(_MINIMAX_MESHY)
+
 
 def krea_router(definition_id: str, fallback: Handler, emit: Any = None) -> Handler | None:
     """The dual-route handler for a generated Krea node with a maker route, or
@@ -294,5 +298,6 @@ def krea_router(definition_id: str, fallback: Handler, emit: Any = None) -> Hand
         raise ValueError(f"{definition_id}: unknown direct translation {spec.get('translation')!r}")
     direct, make_translate = translation
     if emit is not None and getattr(direct, "takes_emit", False):
+        # A long maker job (video, 3D) reports progress like the Krea gateway does.
         direct = partial(direct, emit=emit)
     return dual_route(direct=direct, fallback=fallback, translate=make_translate(str(spec.get("model"))))

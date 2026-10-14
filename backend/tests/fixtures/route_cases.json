@@ -1314,6 +1314,152 @@
         "provider": "krea",
         "key": "KREA_API_TOKEN"
       }
+    },
+    {
+      "name": "a MiniMax key runs Krea's Hailuo 02 on MiniMax",
+      "nodeId": "krea-video-minimax-hailuo-02",
+      "params": {
+        "_kreaAuth": "api-token",
+        "resolution": "1080p",
+        "duration": 6
+      },
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "minimax",
+        "key": "MINIMAX_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "duration",
+        "end_image",
+        "expand_prompt",
+        "prompt",
+        "resolution",
+        "start_image"
+      ]
+    },
+    {
+      "name": "a duration MiniMax doesn't sell stays on Krea",
+      "nodeId": "krea-video-minimax-hailuo-02",
+      "params": {
+        "duration": 8
+      },
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "1080p at 10 seconds stays on Krea",
+      "nodeId": "krea-video-minimax-hailuo-2-3",
+      "params": {
+        "resolution": "1080p",
+        "duration": 10
+      },
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "a saved end image keeps Hailuo 2.3 Fast on Krea",
+      "nodeId": "krea-video-minimax-hailuo-2-3-fast",
+      "params": {
+        "end_image": "https://example.com/end.png"
+      },
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "H3 on MiniMax shows the direct resolution, not Krea's reference seconds",
+      "nodeId": "krea-video-minimax-hailuo-3",
+      "params": {},
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "minimax",
+        "key": "MINIMAX_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "duration",
+        "end_image",
+        "prompt",
+        "reference_audios",
+        "reference_images",
+        "reference_videos",
+        "resolution",
+        "start_image"
+      ]
+    },
+    {
+      "name": "H3 reference seconds with only a MiniMax key has no route",
+      "nodeId": "krea-video-minimax-hailuo-3",
+      "params": {
+        "reference_video_seconds": 3
+      },
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "the Krea plan keeps Meshy 7 on Krea over a Meshy key",
+      "nodeId": "krea-3d-meshy-meshy-7",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "MESHY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "a Meshy key runs Krea's Meshy 7 on Meshy",
+      "nodeId": "krea-3d-meshy-meshy-7",
+      "params": {},
+      "apiKeys": {
+        "MESHY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "meshy",
+        "key": "MESHY_API_KEY"
+      }
     }
   ]
 }

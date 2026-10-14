@@ -22066,7 +22066,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/minimax/hailuo-02",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "MINIMAX_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -22189,7 +22192,106 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": 6
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "MINIMAX_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "expand_prompt",
+        "label": "Expand prompt",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "512p",
+            "value": "512p"
+          },
+          {
+            "label": "768p",
+            "value": "768p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "768p"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 6,
+        "max": 10,
+        "step": 0.01,
+        "default": 6
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-minimax-hailuo",
+      "model": "MiniMax-Hailuo-02",
+      "unsupported": [
+        {
+          "param": "duration",
+          "allowed": [
+            6,
+            10
+          ],
+          "label": "durations other than 6 or 10 seconds"
+        },
+        {
+          "match": {
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "label": "1080p at 10 seconds"
+        }
+      ]
+    }
   },
   'krea-video-minimax-hailuo-2-3': {
     "id": "krea-video-minimax-hailuo-2-3",
@@ -22197,7 +22299,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/minimax/hailuo-2.3",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "MINIMAX_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -22323,7 +22428,105 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": 6
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "MINIMAX_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "expand_prompt",
+        "label": "Expand prompt",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "768p",
+            "value": "768p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "768p"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "6",
+            "value": 6
+          },
+          {
+            "label": "10",
+            "value": 10
+          }
+        ],
+        "default": 6
+      }
+    ],
+    "falParams": [
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-minimax-hailuo",
+      "model": "MiniMax-Hailuo-2.3",
+      "blockedBy": [
+        "end_image"
+      ],
+      "unsupported": [
+        {
+          "match": {
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "label": "1080p at 10 seconds"
+        }
+      ]
+    }
   },
   'krea-video-minimax-hailuo-2-3-fast': {
     "id": "krea-video-minimax-hailuo-2-3-fast",
@@ -22331,7 +22534,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/minimax/hailuo-2.3-fast",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "MINIMAX_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -22457,7 +22663,105 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": 6
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "MINIMAX_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "expand_prompt",
+        "label": "Expand prompt",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "768p",
+            "value": "768p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "768p"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "6",
+            "value": 6
+          },
+          {
+            "label": "10",
+            "value": 10
+          }
+        ],
+        "default": 6
+      }
+    ],
+    "falParams": [
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-minimax-hailuo",
+      "model": "MiniMax-Hailuo-2.3-Fast",
+      "blockedBy": [
+        "end_image"
+      ],
+      "unsupported": [
+        {
+          "match": {
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "label": "1080p at 10 seconds"
+        }
+      ]
+    }
   },
   'krea-video-minimax-hailuo-3': {
     "id": "krea-video-minimax-hailuo-3",
@@ -22465,7 +22769,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/minimax/hailuo-3",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "MINIMAX_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -22651,7 +22958,150 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": 5
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "MINIMAX_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "adaptive",
+            "value": "adaptive"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_videos",
+        "label": "Reference videos (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_audios",
+        "label": "Reference audios (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "integer",
+        "min": 5,
+        "max": 15,
+        "step": 1,
+        "default": 5
+      }
+    ],
+    "falParams": [
+      {
+        "key": "reference_video_seconds",
+        "label": "Reference video seconds",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 15,
+        "step": 0.01
+      }
+    ],
+    "directParams": [
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "label": "2K",
+            "value": "2K"
+          },
+          {
+            "label": "768P",
+            "value": "768P"
+          }
+        ],
+        "default": "2K"
+      }
+    ],
+    "directRoute": {
+      "translation": "krea-minimax-h3",
+      "model": "MiniMax-H3",
+      "blockedBy": [
+        "reference_video_seconds"
+      ]
+    }
   },
   'krea-video-minimax-h3-max': {
     "id": "krea-video-minimax-h3-max",
@@ -31944,7 +32394,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "3d-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/3d/meshy/meshy-7",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "MESHY_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -32066,7 +32519,93 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "[]"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "MESHY_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "input_mode",
+        "label": "Input mode",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "image",
+            "value": "image"
+          },
+          {
+            "label": "text",
+            "value": "text"
+          }
+        ],
+        "default": "image"
+      },
+      {
+        "key": "generate_texture",
+        "label": "Generate texture",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "target_polycount",
+        "label": "Target polycount",
+        "required": false,
+        "type": "float",
+        "min": 100,
+        "max": 300000,
+        "step": 0.01
+      },
+      {
+        "key": "enable_pbr",
+        "label": "Enable pbr",
+        "required": false,
+        "type": "boolean"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-meshy",
+      "model": "meshy-7"
+    }
   },
   'krea-3d-microsoft-trellis': {
     "id": "krea-3d-microsoft-trellis",

@@ -512,6 +512,108 @@ XAI_DIRECT_ROUTES = {
 DIRECT_ROUTES.update(XAI_DIRECT_ROUTES)
 
 
+# MiniMax (MINIMAX_API_KEY) and Meshy (MESHY_API_KEY) copies; backend
+# execution/maker_routes_minimax_meshy.py translates them. Model ids, fields
+# and limits: platform.minimax.io/docs/api-reference/video-generation-{t2v,i2v,
+# fl2v,v2-create}.md and docs.meshy.ai/openapi.yaml, read 2026-10-14.
+# `directUnsupported` lists values MiniMax rejects, which keep a run on Krea:
+# "duration ... `6` or `10`" and 1080P "`6`" only (i2v.md, t2v.md, fl2v.md).
+# Rules that depend on a wired port (2.3 Fast needs a start image, 512P needs
+# one, H3 text-to-video needs a concrete ratio) can't be seen by route
+# selection, so the translation refuses those before any call.
+MINIMAX_PRICING_URL = "https://platform.minimax.io/docs/pricing/overview"
+MINIMAX_CHECKED = "2026-10-14"
+_MINIMAX_NOTE = ("MiniMax pay-as-you-go list price (Global platform, USD), for runs on the person's MINIMAX_API_KEY "
+                 "(model {model}). Video Packages deduct video points instead, and a Mainland China key "
+                 "(api.minimaxi.com) bills that platform's own rates; neither is priced here.")
+_MINIMAX_10S_1080P = {"match": {"resolution": "1080p", "duration": 10}, "label": "1080p at 10 seconds"}
+
+
+def _hailuo_pricing(model, rows):
+    return {"provider": "minimax", "per": "video", "priceParams": ["duration", "resolution"],
+            "rows": [{"match": {"resolution": res, "duration": dur}, "price": price} for res, dur, price, _ in rows],
+            "sources": [{"url": MINIMAX_PRICING_URL, "quote": f"| {model} | {quote} |"} for _, _, _, quote in rows],
+            "notes": _MINIMAX_NOTE.format(model=model), "checked": MINIMAX_CHECKED}
+
+
+def _h3_pricing():
+    """MiniMax H3, billed per second of output: "768P | Billed per second | $0.08 / second", "2K | ... $0.13 /
+    second". The high end adds the most reference input MiniMax takes: 9 reference images ("First 5 images
+    free; $0.04 per additional image", so 4 billed) and 15 s of reference video ("total <= 15 s", billed "by
+    input video duration and output video resolution"). Audio input is free."""
+    rows = []
+    for res, rate in (("2K", 0.13), ("768P", 0.08)):
+        for seconds in range(5, 16):
+            low = round(seconds * rate, 4)
+            rows.append({"match": {"resolution": res, "duration": seconds},
+                         "price": [low, round(low + 4 * 0.04 + 15 * rate, 4)]})
+    return {"provider": "minimax", "per": "video", "priceParams": ["duration", "resolution"], "rows": rows,
+            "sources": [
+                {"url": MINIMAX_PRICING_URL, "quote": "| MiniMax-H3 | 768P | Billed per second | $0.08 / second |"},
+                {"url": MINIMAX_PRICING_URL, "quote": "| MiniMax-H3 | 2K | Billed per second | $0.13 / second |"},
+                {"url": MINIMAX_PRICING_URL,
+                 "quote": "| MiniMax-H3 | Image | First 5 images free; $0.04 per additional image |"},
+                {"url": MINIMAX_PRICING_URL, "quote": "| MiniMax-H3 | Video | Billed by input video duration and "
+                                                      "output video resolution: 2K $0.13/sec, 768P $0.08/sec |"},
+                {"url": "https://platform.minimax.io/docs/api-reference/video-generation-v2-create",
+                 "quote": "Count | first frame <= 1, last frame <= 1, reference images <= 9 ... Per-clip duration "
+                          "| [2, 15] s; total <= 15 s"}],
+            "notes": (_MINIMAX_NOTE.format(model="MiniMax-H3") + " The low end is the output video alone; the "
+                      "high end adds 4 billed reference images (of 9) and 15 s of reference video. Video Packages "
+                      "don't cover H3 (MiniMax: \"MiniMax H3 is not supported yet\"); M Plan Explore/Build "
+                      "Subscription Keys deduct the same list price from plan usage."),
+            "checked": MINIMAX_CHECKED}
+
+
+MINIMAX_MESHY_ROUTES = {
+    "/generate/video/minimax/hailuo-02": {
+        "directKeyName": "MINIMAX_API_KEY", "translation": "krea-minimax-hailuo", "model": "MiniMax-Hailuo-02",
+        "kreaOnly": [], "directParams": [],
+        "directUnsupported": [{"param": "duration", "allowed": [6, 10], "label": "durations other than 6 or 10 seconds"},
+                              _MINIMAX_10S_1080P],
+        "pricing": _hailuo_pricing("MiniMax-Hailuo-02", [
+            ("512p", 6, 0.10, "$0.10 per 512P, 6s video"), ("512p", 10, 0.15, "$0.15 per 512P, 10s video"),
+            ("768p", 6, 0.28, "$0.28 per 768P, 6s video"), ("768p", 10, 0.56, "$0.56 per 768P, 10s video"),
+            ("1080p", 6, 0.49, "$0.49 per 1080P, 6s video")]),
+    },
+    "/generate/video/minimax/hailuo-2.3": {
+        "directKeyName": "MINIMAX_API_KEY", "translation": "krea-minimax-hailuo", "model": "MiniMax-Hailuo-2.3",
+        # First & last frame is Hailuo 02 only (fl2v.md: "Supported values: `MiniMax-Hailuo-02`").
+        "kreaOnly": ["end_image"], "directBlockedBy": ["end_image"], "directParams": [],
+        "directUnsupported": [_MINIMAX_10S_1080P],
+        "pricing": _hailuo_pricing("MiniMax-Hailuo-2.3", [
+            ("768p", 6, 0.28, "$0.28 per 768P, 6s video"), ("768p", 10, 0.56, "$0.56 per 768P, 10s video"),
+            ("1080p", 6, 0.49, "$0.49 per 1080P, 6s video")]),
+    },
+    "/generate/video/minimax/hailuo-2.3-fast": {
+        "directKeyName": "MINIMAX_API_KEY", "translation": "krea-minimax-hailuo",
+        "model": "MiniMax-Hailuo-2.3-Fast",
+        "kreaOnly": ["end_image"], "directBlockedBy": ["end_image"], "directParams": [],
+        "directUnsupported": [_MINIMAX_10S_1080P],
+        "pricing": _hailuo_pricing("MiniMax-Hailuo-2.3-Fast", [
+            ("768p", 6, 0.19, "$0.19 per 768P, 6s video"), ("768p", 10, 0.32, "$0.32 per 768P, 10s video"),
+            ("1080p", 6, 0.33, "$0.33 per 1080P, 6s video")]),
+    },
+    "/generate/video/minimax/hailuo-3": {
+        "directKeyName": "MINIMAX_API_KEY", "translation": "krea-minimax-h3", "model": "MiniMax-H3",
+        # V2 has no field for how much of a reference video to use.
+        "kreaOnly": ["reference_video_seconds"], "directBlockedBy": ["reference_video_seconds"],
+        # V2 requires resolution; Krea's H3 bills $0.65 for 5 s = MiniMax's 2K rate x 5, so 2K is the default.
+        "directParams": [{"key": "resolution", "label": "Resolution", "type": "enum", "required": False,
+                          "options": [{"label": "2K", "value": "2K"}, {"label": "768P", "value": "768P"}],
+                          "default": "2K"}],
+        "pricing": _h3_pricing(),
+    },
+    "/generate/3d/meshy/meshy-7": {
+        # Meshy prices in credits (docs.meshy.ai/api/pricing) and publishes no USD rate per API credit, so
+        # the Meshy route stays unpriced, like the other Meshy nodes.
+        "directKeyName": "MESHY_API_KEY", "translation": "krea-meshy", "model": "meshy-7",
+        "kreaOnly": [], "directParams": [],
+    },
+}
+DIRECT_ROUTES.update(MINIMAX_MESHY_ROUTES)
+
+
 def direct_route_definition(endpoint, params):
     """The dual-route fields a Krea node with a maker route adds (DIRECT_ROUTES)."""
     route = DIRECT_ROUTES.get(endpoint)
@@ -539,6 +641,11 @@ def direct_route_definition(endpoint, params):
     clash = sorted(keys & {param["key"] for param in route["directParams"]})
     if clash:
         raise ValueError(f"DIRECT_ROUTES {endpoint}: directParams repeat Krea fields: {clash}")
+    unsupported = route.get("directUnsupported") or []
+    for rule in unsupported:
+        named = set(rule.get("match") or {}) | ({rule["param"]} if "param" in rule else set())
+        if not named or named - keys or "label" not in rule or ("allowed" in rule) == ("match" in rule):
+            raise ValueError(f"DIRECT_ROUTES {endpoint}: bad directUnsupported rule {rule}")
     return {
         "envKeyName": [route["directKeyName"], "KREA_API_TOKEN"],
         "directKeyName": route["directKeyName"],
@@ -547,7 +654,8 @@ def direct_route_definition(endpoint, params):
         "directParams": list(route["directParams"]),
         "directRoute": {"translation": route["translation"], "model": route["model"],
                         **({"blockedBy": list(blocked)} if blocked else {}),
-                        **({"blockedWhen": {k: list(v) for k, v in blocked_when.items()}} if blocked_when else {})},
+                        **({"blockedWhen": {k: list(v) for k, v in blocked_when.items()}} if blocked_when else {}),
+                        **({"unsupported": [dict(rule) for rule in unsupported]} if unsupported else {})},
     }
 
 

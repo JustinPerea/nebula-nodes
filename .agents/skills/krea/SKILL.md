@@ -111,6 +111,36 @@ Krea's 672:1584 on Runway. `krea-image-ideogram-ideogram-4-5` and
 `krea-video-runway-gen-4-video` stay Krea-only (size presets / upstream model
 not confirmed).
 
+## Maker routes (MiniMax and Meshy on your own keys)
+
+Since 2026-10-14 five more Krea copies run on the maker's own API when the
+maker key is saved (same precedence as Nano Banana: the Krea plan first, then
+the maker key, then `KREA_API_TOKEN`; overlay `MINIMAX_MESHY_ROUTES` in
+`scripts/sync-krea-catalog.py`, translations in
+`backend/execution/maker_routes_minimax_meshy.py`):
+
+| Krea node | Maker key | Maker model / endpoint | Stays on Krea when |
+|---|---|---|---|
+| `krea-video-minimax-hailuo-02` | `MINIMAX_API_KEY` | `MiniMax-Hailuo-02`, `POST /v1/video_generation` (T2V, I2V, first+last frame) | duration isn't 6 or 10; 1080p at 10 s |
+| `krea-video-minimax-hailuo-2-3` | `MINIMAX_API_KEY` | `MiniMax-Hailuo-2.3` | a saved `end_image`; 1080p at 10 s |
+| `krea-video-minimax-hailuo-2-3-fast` | `MINIMAX_API_KEY` | `MiniMax-Hailuo-2.3-Fast` (image-to-video only) | a saved `end_image`; 1080p at 10 s |
+| `krea-video-minimax-hailuo-3` | `MINIMAX_API_KEY` | `MiniMax-H3`, `POST /v2/video_generation` | a saved `reference_video_seconds` |
+| `krea-3d-meshy-meshy-7` | `MESHY_API_KEY` | `ai_model: meshy-7` on text-to-3D / image-to-3D / multi-image-to-3D | (none) |
+
+What route selection can't see (a wired port) is refused before any call, with
+the fix: an end image wired into Hailuo 2.3 / 2.3 Fast, 2.3 Fast with no start
+image, Hailuo 02 at 512p without a start image (or with an end image), H3
+text-to-video with `aspect_ratio: adaptive`, H3 frames mixed with references,
+and Meshy image mode with more than 4 images. To keep any of these on Krea,
+pick the Krea plan or remove the maker key.
+
+H3's direct route adds `resolution` (`2K` default, matching Krea's H3 price;
+or `768P`). MiniMax says H3 needs its pay-as-you-go API (or an M Plan
+Explore/Build Subscription Key); Video Packages don't cover it, and the error
+says so. Not routed: `krea-video-minimax-hailuo` (upstream model not
+confirmed), `-h3-max` and `-h3-max-turbo` (which Krea node is MiniMax's
+`MiniMax-H3-Max` is ambiguous), `-h3-max-camera-controls` (no maker field).
+
 ## Gateway Model Nodes
 
 The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108) included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.

@@ -46,6 +46,9 @@ MAKER_ROUTED = {
     "krea-image-ideogram-ideogram-4-5-precise", "krea-image-ideogram-ideogram-3",
     "krea-image-ideogram-ideogram-2-turbo", "krea-image-runway-gen-4-image", "krea-video-runway-gen-4-5",
     "krea-enhance-runway-ruby",
+    # MiniMax and Meshy copies (tests/test_maker_routes_minimax_meshy.py)
+    "krea-video-minimax-hailuo-02", "krea-video-minimax-hailuo-2-3", "krea-video-minimax-hailuo-2-3-fast",
+    "krea-video-minimax-hailuo-3", "krea-3d-meshy-meshy-7",
 }
 
 

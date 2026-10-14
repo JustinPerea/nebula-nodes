@@ -3909,3 +3909,107 @@ three things were fixed.
   missing price don't settle which model Krea runs, so the direct route follows Krea's "Gen-4 Image" label and
   prices `gen4_image`. Ruby downloads its output with the shared `save_video_from_url`, which reads the whole
   file into memory; a long 4K ProRes 4444 clip could be large.
+
+## 2026-10-14 — Direct maker routes: MiniMax and Meshy
+
+Five Krea copies now run on the maker's own API when that key is saved (route rule unchanged: Krea plan
+connection > maker key > Krea key). Translations live in `backend/execution/maker_routes_minimax_meshy.py`,
+the H3 handler in `backend/handlers/minimax_v2.py`, and the overlay in `scripts/sync-krea-catalog.py`
+(`MINIMAX_MESHY_ROUTES`). Vendor facts were read 2026-10-14 from platform.minimax.io/docs, docs.meshy.ai
+(openapi.yaml, pricing, changelog) and meshy.ai/pricing. Each fact is quoted in the module docstrings.
+
+| Node | Maker model | Endpoint |
+|---|---|---|
+| krea-video-minimax-hailuo-02 | MiniMax-Hailuo-02 | POST /v1/video_generation (T2V, I2V, FL2V) |
+| krea-video-minimax-hailuo-2-3 | MiniMax-Hailuo-2.3 | /v1/video_generation (T2V, I2V) |
+| krea-video-minimax-hailuo-2-3-fast | MiniMax-Hailuo-2.3-Fast | /v1/video_generation (I2V only) |
+| krea-video-minimax-hailuo-3 | MiniMax-H3 | POST /v2/video_generation |
+| krea-3d-meshy-meshy-7 | meshy-7 | /v2/text-to-3d, /v1/image-to-3d, /v1/multi-image-to-3d |
+
+Decisions:
+- **New `directRoute.unsupported` rule** (node_route.py, directRoute.ts, providerReadiness.ts). blockedBy only
+  fires when a param is set. MiniMax rejects some values outright: Hailuo takes 6 or 10 seconds, and 1080P
+  only at 6. A rule is `{param, allowed, label}` or `{match, label}` and is read against the effective value,
+  defaults included. A blocked run stays on Krea, and readiness says "MiniMax's own API doesn't take <label>,
+  so it runs on Krea." `DirectBlock` gained an optional 4th field, `detail`.
+- **Wired-port cases are refused in translation, before any call.** Route selection only sees params, not
+  wired ports. Those cases are an end image on 2.3, no start image on 2.3 Fast, and 512P without a start image
+  or with an end image. I didn't add a run-time fallback to Krea because the spend gate and the price shown
+  were computed for the MiniMax route. Each error says how to run it on Krea instead.
+- **Hailuo 2.3 / 2.3 Fast `end_image`** is kreaOnly and in directBlockedBy, because MiniMax's FL2V is Hailuo 02 only.
+- **MiniMax region fallback.** `handlers/minimax.py` `submit_task` tries Mainland (api.minimaxi.com, the
+  existing default) first, then Global (api.minimax.io) on a key rejection (HTTP 401, base_resp 1004/2049, or a
+  V2 message ending "(1004)"). Keys are region-bound, so trying the other host never bills a different account.
+  Prices are Global USD list prices. A Mainland key bills Mainland rates, which aren't priced here.
+- **FL2V branch** added to `handle_minimax_video` on the `last_frame_image` input (the first frame is optional).
+  `prompt_optimizer` is sent when the param is a bool. `_resolve_image_url` resolves /api/outputs refs first.
+- **H3.** There's a direct-only `resolution` param, defaulting to 2K: Krea's $0.65 for 5 s equals 5 x $0.13,
+  MiniMax's 2K rate. `reference_video_seconds` has no V2 field, so it is kreaOnly and in directBlockedBy. The
+  price is a range: low = duration x rate, high = that + 4 extra reference images x $0.04 + 15 s of reference
+  video at the rate. A 401/402/403 error adds MiniMax's plan rule: pay-as-you-go or an M Plan Explore/Build
+  Subscription Key; Video Packages don't cover H3. Cancelling a queued task sends DELETE /v2/video_generation/{id}
+  ("no charge").
+- **Meshy sends `meshy-7`, not 7.1.** The node is named Meshy 7, and Meshy says it "keeps working unchanged" at
+  7.1's price. Sending 7.1 would silently swap the model. Seed is sent in text mode only (the only endpoint that
+  documents it). A prompt in image mode is dropped, since what Krea does with it is undocumented. More than 4
+  images is refused. A 401/402/403 error quotes "require[s] account entitlement" and the Pro-and-above API rule.
+  Meshy 7 is unpriced on both routes: Meshy lists credits but no USD per API credit, and Krea lists no price.
+- **Hailuo prices** come from MiniMax Global pay-as-you-go ("Legacy Models"): 02 512P 6s $0.10 / 10s $0.15,
+  768P 6s $0.28 / 10s $0.56, 1080P 6s $0.49; 2.3 768P $0.28 / $0.56, 1080P $0.49; 2.3 Fast 768P $0.19 / $0.32,
+  1080P $0.33. (Krea's own 02 768p/6s is $0.27.)
+- **`emit` reaches the direct handlers.** `krea_router(definition_id, fallback, emit)` binds it when the handler
+  sets `takes_emit`, so progress shows. sync_runner passes it.
+- `direct_route_pricing` in the generator returns None for a route without a "pricing" key and passes
+  non-Google pricing through unchanged.
+
+Skipped:
+- `krea-video-minimax-hailuo`: Krea doesn't say which upstream model it is.
+- `krea-video-minimax-h3-max` and `krea-video-minimax-h3-max-turbo`: MiniMax calls H3-Max the "fast generation variant",
+  so which Krea copy is which MiniMax model is ambiguous. Needs Justin's call.
+- `krea-video-minimax-h3-max-camera-controls`: no maker route.
+
+NOT CONFIRMED (no live calls were made):
+- whether /v2 exists on the Mainland host;
+- the exact error a Video Package key gets on H3;
+- Meshy's entitlement error code;
+- what Krea does with a prompt in Meshy image mode;
+- Meshy's USD per credit;
+- whether Krea's 1080p/10 s Hailuo runs are actually 6 s.
+
+Follow-ups:
+- The Settings MiniMax key check (services/settings.py) only probes api.minimaxi.com, so a Global key may show
+  as rejected even though runs work.
+- `minimax-t2v` offers MiniMax-Hailuo-2.3-Fast, which MiniMax's T2V API doesn't accept. This bug predates the branch.
+- `meshy-text-to-3d` / `meshy-image-to-3d` still list `meshy-5`, and "lowpoly" retires 2026-10-30.
+
+Incident: the session scratchpad is shared between lanes, and this lane's mutation backups at first used
+the same `mut/bak` path as the ElevenLabs lane. Files crossed between worktrees. The content was rebuilt and
+checked against a recovered copy. Mutation backups now live in `scratchpad/minimax-meshy-mut/`, one per mutation.
+
+### Review fixes (MiniMax and Meshy, 2026-10-14)
+
+An independent review re-read MiniMax's pricing, V2 create/query/delete, T2V, I2V, FL2V and error-code pages,
+Meshy's openapi.yaml and the MiniMax MCP README on 2026-10-14. The model IDs, endpoints, limits and every
+Hailuo and H3 price in the overlay match those pages.
+
+- **Region fallback now also moves on a 404.** MiniMax's Mainland reference documents `/v2/video_generation`
+  on `api.minimax.cn` (platform.minimax.cn/docs/api-reference/video-generation-v2-create.md), and its Global
+  reference on `api.minimax.io`. Neither puts it on `api.minimaxi.com`, which Nebula tries first. Before this
+  fix, a 404 there was returned as is, so a Global key could never reach Global for H3. `submit_task` now
+  tries the next host on a 404 as well as on a rejected key. A 404 creates no task, so it never bills. Test:
+  `test_h3_runs_on_global_when_the_mainland_host_has_no_v2_route` (mutation-checked).
+- **Meshy 7 now resolves saved `/api/outputs/...` refs.** The Krea route resolves them, but the Meshy handlers
+  only read plain local paths. A saved graph's `image_urls` JSON therefore failed on the Meshy route with
+  "Image file not found". The translation now resolves them first, and the handlers send the files as data
+  URIs, behind `require_allowed_path`. Test: `test_meshy_7_sends_saved_output_refs_as_data_uris`, which failed
+  before the fix.
+- Checked and refuted: route precedence and its frontend/backend mirror, per-route param filtering,
+  `unsupported` rule parity (Python `_match_value` and TS `matchValue` agree on 6 / 6.0 / "6"), the H3 high
+  bound (9 reference images with 5 free, plus 15 s of reference video at the output rate, with audio free,
+  which is MiniMax's maximum billable input), emit binding, cancel, and output ports.
+- Left as is (judgment, recorded): in Meshy image mode a set `prompt` or `seed` is dropped rather than
+  blocking the direct route. Meshy's image endpoints have no seed, and what Krea does with a prompt there is
+  undocumented. A route rule can't express "prompt set and input_mode image", and a prompt can arrive on a
+  wire. The price is the same either way (unpriced).
+- Still open: a Mainland key bills Mainland rates, but the spend gate shows Global USD, because the key's region
+  isn't known before the run.
