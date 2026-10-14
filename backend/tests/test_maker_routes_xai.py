@@ -341,3 +341,20 @@ def test_xai_route_prices(node_id, params, keys, expected):
 def test_xai_video_edits_and_fractional_durations_are_unpriced(params, wired):
     item = {"id": "n", "definitionId": "krea-video-xai-grok-video", "params": params}
     assert model_pricing.estimate_run([item], PRICING, DEFINITIONS, XAI, None, wired)["unpriced"] == ["n"]
+
+
+# -- review fixes ------------------------------------------------------------------
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("images", [None, PortValueDict(type="Image", value=[]), PortValueDict(type="Image", value="")])
+async def test_fal_grok_edit_without_a_source_never_bills_a_generation_on_xai(images):
+    """handle_xai_image picks /images/edits only when sources arrive; an edit
+    node with none must fail, not silently run (and bill) text-to-image."""
+    node = GraphNode(id="g", definitionId="grok-imagine-image-edit", params={"num_images": 1})
+    inputs = dict(PROMPT)
+    if images is not None:
+        inputs["images"] = images
+    with patch("handlers.xai_image.httpx.AsyncClient") as xai, pytest.raises(ValueError, match="source image"):
+        await _run(node, inputs, XAI)
+    xai.assert_not_called()
+

@@ -89,8 +89,17 @@ def fal_grok_image_to_xai(node: GraphNode, inputs: dict[str, PortValueDict]) -> 
     1k/2k are all in xAI's enums). The edit node's ``images`` port reaches xAI
     as the edit's source images. Dropped: output_format (fal-only, falParams;
     xAI has no output-format field and returns JPEG unless the quality
-    produces PNG)."""
+    produces PNG).
+
+    The edit node needs a source image: handle_xai_image picks the edits
+    endpoint only when images arrive, so an edit run without one would bill
+    a text-to-image generation on xAI (fal refuses it instead)."""
     params = node.params
+    if node.definition_id == "grok-imagine-image-edit":
+        sources = inputs.get("images")
+        values = sources.value if sources is not None else None
+        if not _list(values, "images"):
+            raise ValueError("Grok Imagine Image Edit needs at least one source image")
     out: dict[str, Any] = {"model": GROK_IMAGE_1, "n": params.get("num_images", 1)}
     for key in ("aspect_ratio", "resolution"):
         if _present(params.get(key)):
