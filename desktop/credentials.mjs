@@ -23,7 +23,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 // ---------------------------------------------------------------------------
 
 /**
- * The 18 provider keys that may be stored in the credential service.
+ * The 19 provider keys that may be stored in the credential service.
  * Mirrors backend/services/credential_catalog.py CREDENTIAL_PROVIDERS
  * (desktop/tests/sidecar.test.mjs checks they match). sidecar.mjs also strips
  * these names from the sidecar's environment.
@@ -43,6 +43,7 @@ export const ALLOWED_PROVIDERS = Object.freeze([
   'QUIVER_API_KEY',
   'REPLICATE_API_TOKEN',
   'RUNWAY_API_KEY',
+  'TYPESAFE_API_KEY',
   'XAI_API_KEY',
   'WORLDLABS_API_KEY',
   'KREA_USAGE_KEY',

@@ -298,6 +298,13 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
         "",
         lambda key: {"Authorization": f"Key {key}"},
     ),
+    # TypeSafe documents no key-check endpoint, and every System One call is
+    # billed, so health reports the key as configured but unverified.
+    "TypeSafe": ProviderCheck(
+        ("TYPESAFE_API_KEY",),
+        "",
+        lambda key: {"Authorization": f"Bearer {key}"},
+    ),
     # Authenticated, non-billable balance lookup. A successful response is a
     # CreditsResponse containing remaining_credits; provider health only needs
     # the status code to validate the credential and never starts generation.

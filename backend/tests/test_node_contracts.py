@@ -50,6 +50,7 @@ VALID_PROVIDERS = {
     "krea",
     "nous",
     "worldlabs",
+    "typesafe",
     "utility",
 }
 VALID_EXECUTION_PATTERNS = {"sync", "async-poll", "stream"}

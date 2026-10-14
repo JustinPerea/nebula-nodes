@@ -85,6 +85,19 @@ def test_real_table_prices_veo_by_model_and_resolution():
     assert model_pricing.estimate_node(entry, veo, {}, "fal") is None
 
 
+def test_real_table_prices_jev_at_its_context_ceiling():
+    """Jev bills input tokens only, so one request costs at most its context
+    limit: 64k tokens ($0.0027) by default, 262k ($0.011) with Long context.
+    The spend gate budgets the high end, so agent runs need no approval."""
+    decide = NodeRegistry().get_all()["jev-decide"]
+    entry = model_pricing.load_pricing()["nodes"]["jev-decide"]
+    default = model_pricing.estimate_node(entry, decide, {}, "typesafe")
+    assert default["high"] == pytest.approx(0.0027) and default["plus"] == "input images"
+    long = model_pricing.estimate_node(entry, decide, {"long_context": True}, "typesafe")
+    assert long["high"] == pytest.approx(0.011)
+    assert model_pricing.route_provider(decide, {"TYPESAFE_API_KEY": "set"}) == "typesafe"
+
+
 def test_run_multipliers_follow_the_nearest_batch_or_iterator():
     nodes = [
         {"id": "b", "definitionId": "batch", "params": {"items_text": "one\n\ntwo\nthree"}},

@@ -69,6 +69,7 @@ const PROVIDER_LABELS = {
   meshy: 'Meshy',
   krea: 'Krea',
   nous: 'Nous',
+  typesafe: 'TypeSafe',
   utility: 'Utility',
 };
 

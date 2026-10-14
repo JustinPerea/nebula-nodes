@@ -51,6 +51,7 @@ PROVIDER_KEYS = {
     "Krea usage": "KREA_USAGE_KEY",
     "Google Vertex": "GOOGLE_VERTEX_CREDENTIALS",
     "Higgsfield": "HIGGSFIELD_API_KEY",
+    "TypeSafe": "TYPESAFE_API_KEY",
     "World Labs": "WORLDLABS_API_KEY",
     # Nous has no settings.json key — it resolves an OAuth credential from
     # Hermes auth files via services.nous_auth.load_nous_credential().
@@ -58,7 +59,7 @@ PROVIDER_KEYS = {
 
 ALL_PROVIDERS = list(PROVIDER_KEYS) + ["Nous"]
 # Providers health never probes over HTTP (presence-only or offline-validated).
-NO_HTTP_PROBE = {"Higgsfield", "Google Vertex"}
+NO_HTTP_PROBE = {"Higgsfield", "TypeSafe", "Google Vertex"}
 
 ALLOWED_STATUSES = {
     "not_configured",

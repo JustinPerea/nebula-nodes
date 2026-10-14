@@ -278,7 +278,7 @@ CREDENTIAL_PROVIDERS: dict[str, str] = {
     "MESHY_API_KEY": "meshy", "RUNWAY_API_KEY": "runway", "ELEVENLABS_API_KEY": "elevenlabs",
     "MINIMAX_API_KEY": "minimax", "XAI_API_KEY": "xai", "HIGGSFIELD_API_KEY": "higgsfield",
     "QUIVER_API_KEY": "quiver", "KREA_API_TOKEN": "krea", "IDEOGRAM_API_KEY": "ideogram",
-    "WORLDLABS_API_KEY": "worldlabs",
+    "WORLDLABS_API_KEY": "worldlabs", "TYPESAFE_API_KEY": "typesafe",
     # Vertex bills Veo at the same listed amounts as the Gemini API.
     "GOOGLE_VERTEX_CREDENTIALS": "google",
 }

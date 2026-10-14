@@ -36,6 +36,7 @@ CREDENTIAL_PROVIDERS: frozenset[str] = frozenset({
     "QUIVER_API_KEY",
     "REPLICATE_API_TOKEN",
     "RUNWAY_API_KEY",
+    "TYPESAFE_API_KEY",
     "XAI_API_KEY",
     "WORLDLABS_API_KEY",
 })

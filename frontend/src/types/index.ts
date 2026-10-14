@@ -71,6 +71,7 @@ export type APIProvider =
   | 'krea'
   | 'worldlabs'
   | 'nous'
+  | 'typesafe'
   | 'utility';
 
 export interface PortDefinition {
@@ -125,6 +126,9 @@ export interface ParamDefinition {
 export interface ModelNodeDefinition {
   id: string;
   displayName: string;
+  /** What the node does, in words people and agents search for. The agent
+   *  find_nodes tool matches against it (backend/main.py agent_find_nodes). */
+  description?: string;
   category: NodeCategory;
   apiProvider: APIProvider;
   apiEndpoint: string;

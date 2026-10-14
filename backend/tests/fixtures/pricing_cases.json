@@ -166,6 +166,28 @@
           "id": "multi_prompt"
         }
       ]
+    },
+    "judge": {
+      "id": "judge",
+      "apiProvider": "typesafe",
+      "params": [
+        {
+          "key": "model",
+          "default": "jev-1.14.0",
+          "options": [
+            {
+              "value": "jev-1.14.0"
+            },
+            {
+              "value": "jev-1.13.0"
+            }
+          ]
+        },
+        {
+          "key": "long_context",
+          "default": false
+        }
+      ]
     }
   },
   "pricing": {
@@ -375,6 +397,36 @@
           }
         ],
         "checked": "2026-10-12"
+      },
+      "judge": {
+        "currency": "usd",
+        "per": "request",
+        "rows": [
+          {
+            "match": {
+              "long_context": true
+            },
+            "price": [
+              1e-05,
+              0.011
+            ]
+          },
+          {
+            "match": {},
+            "price": [
+              1e-05,
+              0.0027
+            ]
+          }
+        ],
+        "plus": "input images",
+        "sources": [
+          {
+            "url": "https://example.com/judge",
+            "quote": "$0.042 per Mtok input"
+          }
+        ],
+        "checked": "2026-10-14"
       }
     }
   },
@@ -675,6 +727,44 @@
         "currency": "usd",
         "low": 1.0,
         "high": 1.0
+      }
+    },
+    {
+      "name": "a per-request ceiling at the default context",
+      "nodeId": "judge",
+      "params": {},
+      "expected": {
+        "currency": "usd",
+        "low": 1e-05,
+        "high": 0.0027,
+        "plus": "input images"
+      }
+    },
+    {
+      "name": "a boolean setting picks the long-context ceiling",
+      "nodeId": "judge",
+      "params": {
+        "long_context": true
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 1e-05,
+        "high": 0.011,
+        "plus": "input images"
+      }
+    },
+    {
+      "name": "a boolean setting left off keeps the default ceiling",
+      "nodeId": "judge",
+      "params": {
+        "long_context": false,
+        "model": "jev-1.13.0"
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 1e-05,
+        "high": 0.0027,
+        "plus": "input images"
       }
     }
   ]

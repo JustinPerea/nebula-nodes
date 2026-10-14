@@ -21,6 +21,7 @@ from handlers.krea import (
     handle_krea_style,
     handle_krea_style_search,
 )
+from handlers.jev_decide import handle_jev_decide
 from handlers.moodboard import handle_moodboard_node
 from handlers.paper_source import handle_paper_source
 
@@ -53,6 +54,7 @@ SYNC_HANDLERS: dict[
     "krea-style": handle_krea_style,
     "krea-style-search": handle_krea_style_search,
     "nebula-moodboard": handle_moodboard_node,
+    "jev-decide": handle_jev_decide,
 }
 
 

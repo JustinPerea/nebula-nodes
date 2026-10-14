@@ -47,6 +47,7 @@ const VALID_PROVIDERS = new Set([
   'krea',
   'nous',
   'worldlabs',
+  'typesafe',
   'utility',
 ]);
 const VALID_EXECUTION_PATTERNS = new Set(['sync', 'async-poll', 'stream']);

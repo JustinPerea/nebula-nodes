@@ -22,7 +22,7 @@ const PROVIDER_LABELS: Record<APIProvider, string> = {
   bytedance: 'ByteDance', minimax: 'MiniMax', luma: 'Luma', xai: 'xAI',
   recraft: 'Recraft', ideogram: 'Ideogram', openrouter: 'OpenRouter', bfl: 'Black Forest Labs',
   higgsfield: 'Higgsfield', meshy: 'Meshy', quiver: 'QuiverAI', krea: 'Krea',
-  worldlabs: 'World Labs', nous: 'Nous', utility: 'Local tools',
+  worldlabs: 'World Labs', nous: 'Nous', typesafe: 'TypeSafe', utility: 'Local tools',
 };
 
 export function providerLabel(provider: string): string {
@@ -36,7 +36,7 @@ const CREDENTIAL_PROVIDER_IDS: Readonly<Record<string, APIProvider>> = {
   MESHY_API_KEY: 'meshy', RUNWAY_API_KEY: 'runway', ELEVENLABS_API_KEY: 'elevenlabs',
   MINIMAX_API_KEY: 'minimax', XAI_API_KEY: 'xai', HIGGSFIELD_API_KEY: 'higgsfield',
   QUIVER_API_KEY: 'quiver', KREA_API_TOKEN: 'krea', IDEOGRAM_API_KEY: 'ideogram',
-  WORLDLABS_API_KEY: 'worldlabs',
+  WORLDLABS_API_KEY: 'worldlabs', TYPESAFE_API_KEY: 'typesafe',
 };
 
 /** Discovery includes every declared provider route, regardless of which

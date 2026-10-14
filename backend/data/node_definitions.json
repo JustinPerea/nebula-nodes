@@ -20394,6 +20394,222 @@
     ],
     "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision" }
   },
+  "jev-decide": {
+    "id": "jev-decide",
+    "displayName": "Jev Decide (judge / classify / yes-no)",
+    "description": "Judge, classify or score text and images with one typed question: yes/no, pick one option, or rate on a scale. Returns the answer, its probability, confidence and a pass / fail / unsure verdict. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.",
+    "category": "analyzer",
+    "apiProvider": "typesafe",
+    "apiEndpoint": "/v1/systemone",
+    "envKeyName": "TYPESAFE_API_KEY",
+    "executionPattern": "sync",
+    "capabilityNote": "Image input is experimental at TypeSafe: the request format and accuracy can change between releases.",
+    "docUrl": "docs/api-guides/typesafe.md",
+    "inputPorts": [
+      {
+        "id": "state",
+        "label": "Context",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "images",
+        "label": "Images",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true,
+        "maxConnections": 16
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "answer",
+        "label": "Answer",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "pass",
+        "label": "Pass",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "probability",
+        "label": "Probability",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "confidence",
+        "label": "Confidence",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "probabilities",
+        "label": "Probabilities (JSON)",
+        "dataType": "Text",
+        "required": false
+      },
+      {
+        "id": "report",
+        "label": "Report",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "model",
+        "label": "Model",
+        "type": "enum",
+        "required": false,
+        "default": "jev-1.14.0",
+        "options": [
+          {
+            "label": "Jev 1.14.0 (pinned)",
+            "value": "jev-1.14.0"
+          },
+          {
+            "label": "Jev 1.13.0 (pinned)",
+            "value": "jev-1.13.0"
+          },
+          {
+            "label": "jev-latest (moves; re-check thresholds)",
+            "value": "jev-latest"
+          },
+          {
+            "label": "jev-preview (moves)",
+            "value": "jev-preview"
+          }
+        ]
+      },
+      {
+        "key": "answer_type",
+        "label": "Answer Type",
+        "type": "enum",
+        "required": false,
+        "default": "yes_no",
+        "options": [
+          {
+            "label": "Yes / No",
+            "value": "yes_no"
+          },
+          {
+            "label": "Pick one option",
+            "value": "choice"
+          },
+          {
+            "label": "Score on a scale",
+            "value": "score"
+          }
+        ]
+      },
+      {
+        "key": "question",
+        "label": "Question",
+        "type": "textarea",
+        "required": true,
+        "placeholder": "Is the product on a plain white background?"
+      },
+      {
+        "key": "yes_means",
+        "label": "Yes Means (optional)",
+        "type": "string",
+        "required": false,
+        "default": "",
+        "visibleWhen": {
+          "answer_type": [
+            "yes_no"
+          ]
+        }
+      },
+      {
+        "key": "no_means",
+        "label": "No Means (optional)",
+        "type": "string",
+        "required": false,
+        "default": "",
+        "visibleWhen": {
+          "answer_type": [
+            "yes_no"
+          ]
+        }
+      },
+      {
+        "key": "options",
+        "label": "Options (one per line)",
+        "type": "textarea",
+        "required": false,
+        "default": "",
+        "placeholder": "Product photo\nLifestyle shot\nIllustration",
+        "visibleWhen": {
+          "answer_type": [
+            "choice"
+          ]
+        }
+      },
+      {
+        "key": "pass_when",
+        "label": "Passing Options (one per line)",
+        "type": "textarea",
+        "required": false,
+        "default": "",
+        "visibleWhen": {
+          "answer_type": [
+            "choice"
+          ]
+        }
+      },
+      {
+        "key": "levels",
+        "label": "Levels, Low to High (one per line)",
+        "type": "textarea",
+        "required": false,
+        "default": "",
+        "placeholder": "Off brief\nPartly on brief\nOn brief",
+        "visibleWhen": {
+          "answer_type": [
+            "score"
+          ]
+        }
+      },
+      {
+        "key": "threshold",
+        "label": "Pass Threshold",
+        "type": "float",
+        "required": false,
+        "default": 0.5,
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "visibleWhen": {
+          "answer_type": [
+            "yes_no",
+            "score"
+          ]
+        }
+      },
+      {
+        "key": "min_confidence",
+        "label": "Minimum Confidence",
+        "type": "float",
+        "required": false,
+        "default": 0.5,
+        "min": 0,
+        "max": 1,
+        "step": 0.05
+      },
+      {
+        "key": "long_context",
+        "label": "Long Context (slower, less accurate)",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      }
+    ]
+  },
   "worldlabs-environment": {
     "id": "worldlabs-environment",
     "displayName": "World Labs Environment",
