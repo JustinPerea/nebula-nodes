@@ -167,6 +167,16 @@ describe('provider readiness without generation', () => {
     expect(googleOnly).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
   });
 
+  it('keeps a Hailuo duration MiniMax does not sell on Krea and says why', () => {
+    const definition = NODE_DEFINITIONS['krea-video-minimax-hailuo-02'];
+    const keys = { MINIMAX_API_KEY: TOKEN, KREA_API_TOKEN: TOKEN };
+    const ready = modelReadiness(definition, freeze({ duration: 8 }), credentials({ apiKeys: keys }), health());
+    expect(ready).toMatchObject({ connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+    expect(ready.detail).toContain("MiniMax's own API doesn't take durations other than 6 or 10 seconds, so it runs on Krea.");
+    const direct = modelReadiness(definition, freeze({ duration: 6 }), credentials({ apiKeys: keys }), health());
+    expect(direct.detail).toContain("Runs on MiniMax's own API with your MiniMax key, billed by MiniMax.");
+  });
+
   it('moves Nano Banana (2.5) to fal from Google\'s shutdown date and says so', () => {
     const definition = NODE_DEFINITIONS['nano-banana-fal'];
     const cache = credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN, FAL_KEY: TOKEN } });

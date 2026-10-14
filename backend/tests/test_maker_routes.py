@@ -32,6 +32,9 @@ MAKER_ROUTED = {
     "nano-banana-fal", "nano-banana-fal-edit", "meshy-text-to-3d", "meshy-image-to-3d",
     "krea-image-google-nano-banana-2", "krea-image-google-nano-banana-pro",
     "krea-image-google-nano-banana-flash-lite", "krea-image-google-nano-banana",
+    # MiniMax and Meshy copies (tests/test_maker_routes_minimax_meshy.py)
+    "krea-video-minimax-hailuo-02", "krea-video-minimax-hailuo-2-3", "krea-video-minimax-hailuo-2-3-fast",
+    "krea-video-minimax-hailuo-3", "krea-3d-meshy-meshy-7",
 }
 
 

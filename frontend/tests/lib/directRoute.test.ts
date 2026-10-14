@@ -127,4 +127,17 @@ describe('when the direct route can\'t take a run', () => {
     expect(directBlock(NODE_DEFINITIONS['krea-image-google-nano-banana'], {}))
       .toEqual({ reason: 'retired', param: null, on: '2027-03-15' });
   });
+
+  it('keeps values the maker rejects on the copy (directRoute.unsupported)', () => {
+    const hailuo = NODE_DEFINITIONS['krea-video-minimax-hailuo-02'];
+    // The defaults (768p, 6 s) are values MiniMax takes.
+    expect(directBlock(hailuo, {})).toBeNull();
+    expect(directBlock(hailuo, { duration: 10 })).toBeNull();
+    expect(directBlock(hailuo, { duration: 7.5 })).toEqual({
+      reason: 'unsupported', param: 'duration', on: null, detail: 'durations other than 6 or 10 seconds' });
+    expect(directBlock(hailuo, { resolution: '1080p', duration: 10 })).toEqual({
+      reason: 'unsupported', param: 'resolution', on: null, detail: '1080p at 10 seconds' });
+    expect(selectRoute(hailuo, { duration: 8 }, { MINIMAX_API_KEY: 'k', KREA_API_TOKEN: 'k' }))
+      .toEqual({ kind: 'fallback', provider: 'krea', key: 'KREA_API_TOKEN' });
+  });
 });

@@ -147,7 +147,9 @@ def test_generated_prices_keep_the_kling_multi_shot_guard_and_the_audio_note():
     assert kling["rows"] and all(row["match"]["multi_prompt"] == "" for row in kling["rows"])
     assert "multi_prompt" in kling["priceParams"] and "Multi-prompt runs are unpriced" in kling["notes"]
     assert any(source["url"].startswith("https://kling.ai/") for source in kling["sources"])
-    krea_prices = {node_id: entry["routes"]["krea"] if "routes" in entry else entry for node_id, entry in entries.items()}
+    krea_prices = {node_id: entry["routes"].get("krea") if "routes" in entry else entry
+                   for node_id, entry in entries.items()}
+    krea_prices = {node_id: entry for node_id, entry in krea_prices.items() if entry}
     audio_free = {node_id for node_id, entry in krea_prices.items()
                   if "doesn't vary with generate_audio" in entry["notes"]}
     assert audio_free == {
@@ -169,7 +171,19 @@ def test_direct_route_models_price_both_routes():
         if direct is None:
             assert entry is None or "routes" not in entry
             continue
-        assert set(entry["routes"]) == {"krea", direct["pricing"]["provider"]}
+        if "pricing" not in direct:
+            # Meshy prices in credits only, and Krea lists no price for Meshy 7: both routes unpriced.
+            assert entry is None
+            continue
+        provider = direct["pricing"]["provider"]
+        krea_priced = bool(model.get("pricing")) and not model.get("pricingUnmapped")
+        assert set(entry["routes"]) == {provider} | ({"krea"} if krea_priced else set())
+        if krea_priced:
+            assert entry["routes"]["krea"].get("provider", "krea") == "krea"
+        if provider != "google":
+            maker = entry["routes"][provider]
+            assert maker["rows"] and maker["sources"] and maker["checked"] and maker["currency"] == "usd"
+            continue
         google = entry["routes"]["google"]
         assert google.get("provider", "google") == "google"
         assert google["rows"] and google["checked"] == SYNC.GOOGLE_CHECKED
