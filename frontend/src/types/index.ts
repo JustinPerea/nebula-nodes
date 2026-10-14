@@ -154,12 +154,14 @@ export interface ModelNodeDefinition {
    *  translation and the maker's model id; a fal node may carry only the
    *  rules. `blockedBy` lists copy-only params that keep a run on the copy
    *  when set (the maker can't honor them), and `size` the maker's documented
-   *  output size limits (lib/directRoute.ts directBlock). `setup: 'fallback'`
+   *  output size limits, and `accepts` the values the maker takes for a
+   *  param (lib/directRoute.ts directBlock). `setup: 'fallback'`
    *  points setup at the copy's key when no key is set (BytePlus, which
    *  doesn't serve the United States and needs each model activated, is not
    *  the key to suggest first; lib/providerReadiness.ts). */
   directRoute?: {
     translation?: string; model?: string; blockedBy?: string[]; size?: DirectSizeLimits; setup?: 'fallback';
+    accepts?: Record<string, DirectAcceptRule>;
   };
   docUrl?: string;
   /** A local (utility) node that still calls a provider. `utility` only means
@@ -167,6 +169,15 @@ export interface ModelNodeDefinition {
    *  missing-key badge, the run estimate and the agent surfaces all read it
    *  (lib/nodeKeys.ts, backend services/node_readiness.py). */
   providerVia?: ProviderVia;
+}
+
+/** The values a maker takes for one param (directRoute.accepts); any other
+ * saved or default value keeps the run on the copy. */
+export interface DirectAcceptRule {
+  values?: readonly (string | number | boolean)[];
+  min?: number;
+  max?: number;
+  integer?: boolean;
 }
 
 /** A maker's documented output size rules for its direct route

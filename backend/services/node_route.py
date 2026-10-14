@@ -23,6 +23,7 @@ Stdlib only, so the engine and the scripts can import it cheaply.
 """
 from __future__ import annotations
 
+import math
 from datetime import date
 from typing import Any, Mapping, NamedTuple
 
@@ -69,6 +70,7 @@ REQUIRES = "requires"  # DIRECT_REQUIRES: the direct route needs a param that is
 BLOCKED = "blocked"    # a copy-only param is set that the maker can't honor (directRoute.blockedBy)
 RETIRED = "retired"    # DIRECT_RETIRES: the maker shut this model down on its API
 SIZE = "size"          # the recipe's size is one the maker can't render exactly (directRoute.size)
+VALUE = "value"        # a param's value is one the maker doesn't take (directRoute.accepts)
 
 LOCAL = "local"        # a utility node: no provider
 PLAN = "plan"          # the signed-in Krea plan
@@ -169,7 +171,12 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
       limits; a recipe whose size the maker can't render exactly (too few or
       too many pixels, too extreme a ratio, a fractional size, or a size
       choice it has no equivalent for) stays on the copy instead of being
-      silently resized (Seedream on BytePlus, maker_routes_byteplus.py)."""
+      silently resized (Seedream on BytePlus, maker_routes_byteplus.py).
+    - VALUE: ``directRoute.accepts`` names params whose value the maker
+      takes only within limits (a list of values, or a whole number in a
+      range); any other saved or default value stays on the copy (Seedance
+      on BytePlus: Krea's 9:21 ratio, a fractional duration, Krea's upscale
+      or prompt enhancer switched on; maker_routes_byteplus_seedance.py)."""
     values = params or {}
     node_id = str(definition.get("id") or "")
     needed = DIRECT_REQUIRES.get(node_id)
@@ -182,12 +189,43 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
     size = _size_block(definition, values, spec.get("size") if isinstance(spec, Mapping) else None)
     if size is not None:
         return size
+    accepts = spec.get("accepts") if isinstance(spec, Mapping) else None
+    for key, rule in (accepts.items() if isinstance(accepts, Mapping) else []):
+        value = _effective(definition, values, str(key))
+        if _has_value(value) and isinstance(rule, Mapping) and not value_accepted(value, rule):
+            return DirectBlock(VALUE, str(key))
     retires = DIRECT_RETIRES.get(node_id)
     if retires and _today() >= retires["on"]:
         param = retires.get("param")
         if not param or _effective(definition, values, param) in retires.get("values", []):
             return DirectBlock(RETIRED, param, retires["on"])
     return None
+
+
+def _same(a: Any, b: Any) -> bool:
+    """Equal and of the same kind (True is not 1), as directRoute.ts compares with ===."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool) and a == b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b
+    return type(a) is type(b) and a == b
+
+
+def value_accepted(value: Any, rule: Mapping[str, Any]) -> bool:
+    """A set value the maker takes (``directRoute.accepts``): one of ``values``,
+    and/or a number (``integer``: whole) within ``min``..``max``."""
+    if "values" in rule and not any(_same(value, allowed) for allowed in rule.get("values") or []):
+        return False
+    if any(key in rule for key in ("min", "max", "integer")):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return False
+        if rule.get("integer") and not float(value).is_integer():
+            return False
+        if "min" in rule and value < rule["min"]:
+            return False
+        if "max" in rule and value > rule["max"]:
+            return False
+    return True
 
 
 def size_fits(width: Any, height: Any, limits: Mapping[str, Any]) -> bool:

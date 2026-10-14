@@ -187,6 +187,19 @@ describe('provider readiness without generation', () => {
       expect(none.detail).toContain('Runs on BytePlus with your BytePlus key, or on');
     });
 
+  it.each([
+    ['krea-video-bytedance-seedance-2', freeze({ upscale: true }), 'upscale'],
+    ['krea-video-bytedance-seedance-2-5', freeze({ duration: 7.5 }), 'duration'],
+    ['krea-video-bytedance-seedance-1-0-pro', freeze({ aspect_ratio: '9:21' }), 'aspect_ratio'],
+  ])('keeps %s on Krea for a %s value BytePlus doesn\'t take, and says which setting', (id, params, param) => {
+    const definition = NODE_DEFINITIONS[id];
+    const keys = credentials({ apiKeys: { BYTEPLUS_API_KEY: TOKEN, KREA_API_TOKEN: TOKEN } });
+    expect(modelReadiness(definition, freeze({}), keys, health()).connectionLabel).toBe('BytePlus API');
+    const kept = modelReadiness(definition, params, keys, health());
+    expect(kept.setupTarget).toEqual({ kind: 'api-key', key: 'KREA_API_TOKEN' });
+    expect(kept.detail).toContain(`BytePlus doesn't take this recipe's ${param} setting, so it runs on Krea.`);
+  });
+
   it('moves Nano Banana (2.5) to fal from Google\'s shutdown date and says so', () => {
     const definition = NODE_DEFINITIONS['nano-banana-fal'];
     const cache = credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN, FAL_KEY: TOKEN } });

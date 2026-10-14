@@ -139,9 +139,9 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
   // With none of a multi-route node's keys set, setup points at the maker's
   // key, unless this recipe can't take the direct route (directBlock: Ideogram
   // Reframe saved without a direct resolution, a Krea copy with explicit
-  // width/height, a size the maker can't render exactly, or a model the
-  // maker has retired), or the node asks to suggest the copy's key first
-  // (directRoute.setup: BytePlus Seedream).
+  // width/height, a size the maker can't render exactly, a value the maker
+  // doesn't take, or a model the maker has retired), or the node asks to
+  // suggest the copy's key first (directRoute.setup: BytePlus Seedream).
   const route = selectRoute(def, params, cache.loaded ? cache.apiKeys : {});
   const block = keys.length > 1 && directKeyNames(def).length ? directBlock(def, params) : null;
   const directOk = block === null;
@@ -165,6 +165,9 @@ function directBlockNote(def: ModelNodeDefinition, block: DirectBlock): string {
   }
   if (block.reason === 'size') {
     return `${directName} can't render this recipe's ${block.param} exactly, so it runs on ${fallbackName}. Pick a size ${directName} takes to run on ${directName}.`;
+  }
+  if (block.reason === 'value') {
+    return `${directName} doesn't take this recipe's ${block.param} setting, so it runs on ${fallbackName}. Change it to run on ${directName}.`;
   }
   return `${directName} retires this model on its own API from ${block.on}, so it runs on ${fallbackName}.`;
 }

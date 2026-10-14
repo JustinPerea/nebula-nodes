@@ -1,4 +1,4 @@
-import type { APIProvider, DirectSizeLimits, ModelNodeDefinition, ParamDefinition } from '../types';
+import type { APIProvider, DirectAcceptRule, DirectSizeLimits, ModelNodeDefinition, ParamDefinition } from '../types';
 import { usesKreaAccount } from './kreaConnection';
 
 /**
@@ -45,10 +45,11 @@ export const DIRECT_RETIRES: Readonly<Record<string, DirectRetirement>> = {
 /** Why the direct route can't take a run (node_route.direct_block):
  * `requires` a direct param that isn't set (DIRECT_REQUIRES), `blocked` by a
  * copy-only param that is set (directRoute.blockedBy: a Krea copy's explicit
- * width/height), `retired` by the maker on `on` (DIRECT_RETIRES), or `size`:
- * the recipe's size is one the maker can't render exactly (directRoute.size). */
+ * width/height), `retired` by the maker on `on` (DIRECT_RETIRES), `size`:
+ * the recipe's size is one the maker can't render exactly (directRoute.size),
+ * or `value`: a param's value is one the maker doesn't take (directRoute.accepts). */
 export interface DirectBlock {
-  reason: 'requires' | 'blocked' | 'retired' | 'size';
+  reason: 'requires' | 'blocked' | 'retired' | 'size' | 'value';
   param: string | null;
   on: string | null;
 }
@@ -158,6 +159,19 @@ function sizeBlock(definition: ModelNodeDefinition, params: Record<string, unkno
   return null;
 }
 
+/** A set value the maker takes (node_route.value_accepted): one of `values`,
+ * and/or a number (`integer`: whole) within `min`..`max`. */
+export function valueAccepted(value: unknown, rule: DirectAcceptRule): boolean {
+  if (rule.values && !rule.values.some((allowed) => allowed === value)) return false;
+  if (rule.min !== undefined || rule.max !== undefined || rule.integer !== undefined) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return false;
+    if (rule.integer && !Number.isInteger(value)) return false;
+    if (rule.min !== undefined && value < rule.min) return false;
+    if (rule.max !== undefined && value > rule.max) return false;
+  }
+  return true;
+}
+
 /** Why the direct route can't take a run with these params, or null when it can. */
 export function directBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
   const needed = Object.hasOwn(DIRECT_REQUIRES, definition.id) ? DIRECT_REQUIRES[definition.id] : undefined;
@@ -167,6 +181,10 @@ export function directBlock(definition: ModelNodeDefinition, params: Record<stri
   }
   const size = sizeBlock(definition, params);
   if (size) return size;
+  for (const [key, rule] of Object.entries(definition.directRoute?.accepts ?? {})) {
+    const value = effectiveValue(definition, params, key);
+    if (hasValue(value) && !valueAccepted(value, rule)) return { reason: 'value', param: key, on: null };
+  }
   const retires = Object.hasOwn(DIRECT_RETIRES, definition.id) ? DIRECT_RETIRES[definition.id] : undefined;
   if (retires && todayIso() >= retires.on) {
     const value = retires.param ? effectiveValue(definition, params, retires.param) : undefined;
