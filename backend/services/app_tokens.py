@@ -92,6 +92,10 @@ class AppTokens:
         self._token_dir = token_dir
         self._lock = threading.Lock()
         self._apps: list[dict[str, Any]] | None = None
+        # True when the store file exists but couldn't be read or parsed. The
+        # empty list it leaves is "unknown", not "no apps", so nothing may act
+        # on it as a list of active apps (see clear_unknown_files).
+        self._load_failed = False
 
     def _load(self) -> list[dict[str, Any]]:
         if self._apps is None:
@@ -100,13 +104,16 @@ class AppTokens:
                 try:
                     data = json.loads(self._path.read_text(encoding="utf-8"))
                     apps = data.get("apps") if isinstance(data, dict) else None
-                    self._apps = [app for app in apps or [] if isinstance(app, dict)
+                    if not isinstance(apps, list):
+                        raise ValueError("app-tokens.json has no apps list")
+                    self._apps = [app for app in apps if isinstance(app, dict)
                                   and isinstance(app.get("id"), str) and isinstance(app.get("hash"), str)
                                   and isinstance(app.get("name"), str)]
                 except (OSError, ValueError):
                     # Unreadable: no app token matches, so every caller falls
                     # to the shared budget or is refused (fail closed).
                     self._apps = []
+                    self._load_failed = True
         return self._apps
 
     def _save(self) -> None:
@@ -166,11 +173,18 @@ class AppTokens:
         return Path(os.path.abspath(app_token_file.path_for(self._token_dir, app_id)))
 
     def clear_unknown_files(self) -> int:
-        """At startup: delete token files of apps that are no longer active."""
+        """At startup: delete token files of apps that are no longer active.
+
+        Does nothing when the store couldn't be read: its apps are unknown,
+        not gone, and a file deleted here can't be made again (the store
+        keeps only hashes). Leftovers wait for a start that reads it."""
         if self._token_dir is None:
             return 0
         with self._lock:
-            return app_token_file.clear_unknown(self._token_dir, [app["id"] for app in self._load()])
+            active = [app["id"] for app in self._load()]
+            if self._load_failed:
+                return 0
+            return app_token_file.clear_unknown(self._token_dir, active)
 
     def list(self) -> list[dict[str, Any]]:
         with self._lock:

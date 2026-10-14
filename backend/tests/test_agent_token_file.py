@@ -243,6 +243,34 @@ def test_startup_removes_files_of_apps_no_longer_active(tmp_path):
     assert reloaded.clear_unknown_files() == 1 and victim.exists()
 
 
+@pytest.mark.parametrize("damage", ["unreadable", "corrupt", "wrong shape"])
+def test_startup_keeps_every_file_when_the_store_cant_be_read(tmp_path, damage):
+    # The store keeps only hashes, so a deleted file can't be made again:
+    # an unreadable store means "apps unknown", never "no apps".
+    store_path = tmp_path / "app-tokens.json"
+    store = app_tokens.AppTokens(store_path, token_dir=tmp_path)
+    first, token = store.create("First")
+    store.create("Second")
+    base = app_token_file.root(tmp_path)
+    before = sorted(p.name for p in base.iterdir())
+    original = store_path.read_text()
+    if damage == "unreadable":
+        store_path.chmod(0)
+    elif damage == "corrupt":
+        store_path.write_text("{not json")
+    else:
+        store_path.write_text('{"apps": {"x": 1}}')
+    try:
+        assert app_tokens.AppTokens(store_path, token_dir=tmp_path).clear_unknown_files() == 0
+    finally:
+        store_path.chmod(0o600)
+    assert sorted(p.name for p in base.iterdir()) == before
+    store_path.write_text(original)
+    readable = app_tokens.AppTokens(store_path, token_dir=tmp_path)
+    assert readable.lookup(token)["id"] == first["id"]
+    assert app_token_file.read(readable.token_file(first["id"])) == token
+
+
 def test_the_startup_sweep_never_follows_a_symlinked_folder(tmp_path):
     victim = tmp_path / "victim"
     victim.mkdir()

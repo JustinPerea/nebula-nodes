@@ -578,7 +578,9 @@ token, so the token isn't in the app's config file, on a command line, in your
 shell history or on the Settings screen. The store, `app-tokens.json` (mode
 600), keeps only the token's SHA-256. Revoking the app deletes its token file;
 at startup the backend also deletes any file whose app is no longer active
-(revoked while the delete failed, say).
+(revoked while the delete failed, say). If it can't read `app-tokens.json` at
+startup, it deletes nothing. The `app-tokens` folder is protected like the
+Commons store: graph and media paths and in-app agents can't read it.
 
 To change a connected agent's cursor color later, click the color dot beside
 its name in the list and pick another (or the automatic one).

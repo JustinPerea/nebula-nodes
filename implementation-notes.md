@@ -3118,3 +3118,20 @@ Tradeoffs and surprises:
   --yes` (wrote a 0600 mcp.json naming the file, no token), and the Settings line itself with `--print`. Then
   revoke: the file was gone, a fresh server exited 1 with "NEBULA_APP_TOKEN_FILE: can't open the token file", and the
   token got 401. The backend was stopped afterwards.
+- **Review fixes.** Two findings from review, both fixed with tests that fail without the fix:
+  - *An unreadable store emptied the folder.* `_load()` fails closed to an empty app list, and the startup sweep
+    took that list as "no active apps" and deleted every token file. Nebula keeps only hashes, so those files
+    couldn't be made again and every app would need reconnecting. `AppTokens` now records whether the store
+    existed but couldn't be read or parsed (an OSError, bad JSON, or no `apps` list), and `clear_unknown_files()`
+    then does nothing. A missing store still counts as "no apps". Test:
+    `test_startup_keeps_every_file_when_the_store_cant_be_read` (mode 000, corrupt JSON, wrong shape).
+    Mutation-checked by dropping the guard (all three fail) and the shape check (the wrong-shape case fails).
+  - *The token folders weren't protected.* `protected_agent_dirs()` now also lists `<state>/app-tokens` and
+    `<state>/agent-tokens`, so the graph/media path guard, the in-app Claude read-deny rules and the Codex
+    filesystem deny list all cover them. No grant overlaps: agent workspaces live in a sibling folder, and in-app
+    agents get their token through env, not a file. ACP personal agents read their file through their own MCP
+    server, which isn't under these rules. Test: `test_token_file_folders_are_protected` (direct path and a
+    symlink alias). Mutation-checked by removing the two entries.
+  - *Not fixed, noted:* after a failed load, a later `create()` or limit change still saves the empty list plus the
+    change over `app-tokens.json`, which drops the other apps. That predates this branch and is a separate fix
+    (refuse writes while the load has failed).
