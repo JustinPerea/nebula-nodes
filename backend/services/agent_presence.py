@@ -38,7 +38,7 @@ MAX_VIEW_NODES = 2000
 MAX_SNAPSHOT_NODES = 300
 
 ACTIONS = ("move", "click", "drag", "look")
-NODE_STATES = ("idle", "queued", "executing", "complete", "error")
+NODE_STATES = ("idle", "queued", "executing", "complete", "error", "skipped")
 
 _KNOWN_AGENTS = {
     "claude": ("Claude", "#E8825A"),

@@ -164,14 +164,16 @@ function formatEnvKey(envKeyName) {
 }
 
 /**
- * Format ports list for display: "Label (DataType)*" with * on required.
+ * Format ports list for display: "Label (DataType)*" with * on required, and
+ * "gate" on a conditional output (nodes wired to it are skipped when it's withheld).
  */
 function formatPorts(ports) {
   if (!Array.isArray(ports) || ports.length === 0) return '—';
   return ports.map((p) => {
     const suffix = p.required ? '*' : '';
     const multi = p.multiple ? ' ×n' : '';
-    return `${escapeCell(p.label)} (${p.dataType}${multi})${suffix}`;
+    const gate = p.conditional ? ', gate' : '';
+    return `${escapeCell(p.label)} (${p.dataType}${multi}${gate})${suffix}`;
   }).join(', ');
 }
 

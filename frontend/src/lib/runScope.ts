@@ -28,6 +28,10 @@ export interface RunScopeSummary {
   paid: string[];
   /** Present once the price table has loaded. */
   cost?: RunCost;
+  /** Paid nodes behind a gate (downstream of a conditional port, such as Jev
+   *  Decide's On Pass / On Fail). The estimate still counts them, though the
+   *  run may skip them, and a skipped node costs nothing. */
+  gated?: string[];
 }
 
 export interface RunCostContext {
@@ -38,6 +42,33 @@ export interface RunCostContext {
 export type RunScope = { kind: 'graph' } | { kind: 'node'; nodeId: string } | { kind: 'cluster'; nodeIds: string[] };
 
 const FANOUT_IDS = new Set(['batch', 'iterator-image', 'iterator-text']);
+
+/** Ids of nodes downstream of a gate port (a conditional output) within these
+ * nodes and edges: the ones a run may skip (backend execution/gating.py). */
+export function nodesBehindGates(nodes: Node<NodeData>[], edges: Edge[]): Set<string> {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const behind = new Set<string>();
+  const queue: string[] = [];
+  for (const edge of edges) {
+    const source = byId.get(edge.source);
+    if (!source || !byId.has(edge.target) || !edge.sourceHandle) continue;
+    const port = NODE_DEFINITIONS[source.data?.definitionId]?.outputPorts.find((p) => p.id === edge.sourceHandle);
+    if (port?.conditional && !behind.has(edge.target)) {
+      behind.add(edge.target);
+      queue.push(edge.target);
+    }
+  }
+  while (queue.length) {
+    const id = queue.pop()!;
+    for (const edge of edges) {
+      if (edge.source === id && byId.has(edge.target) && !behind.has(edge.target)) {
+        behind.add(edge.target);
+        queue.push(edge.target);
+      }
+    }
+  }
+  return behind;
+}
 
 /**
  * How many times each node runs, as [low, high]. Everything downstream of a
@@ -157,6 +188,8 @@ export function summarizeRunScope(
   // upstream Batch, and a cluster run sends only its own nodes and edges.
   const multipliers = pricing ? runMultipliers(included, edges) : null;
   const wired = wiredPorts(included, edges);
+  const behindGates = nodesBehindGates(included, edges);
+  const gated: string[] = [];
   for (const node of included) {
     let definition = node.data?.definitionId ? NODE_DEFINITIONS[node.data.definitionId] : undefined;
     let params = (node.data?.params ?? {}) as Record<string, unknown>;
@@ -181,6 +214,7 @@ export function summarizeRunScope(
       noPrice = true;
     }
     paid.push(name);
+    if (behindGates.has(node.id)) gated.push(name);
     if (!pricing || !multipliers) continue;
     if (noPrice) {
       cost.unpriced.push(name);
@@ -207,7 +241,9 @@ export function summarizeRunScope(
     cost.high += line.high;
     if (estimate.plus && !cost.plus.includes(estimate.plus)) cost.plus.push(estimate.plus);
   }
-  return pricing ? { total: included.length, paid, cost } : { total: included.length, paid };
+  const summary: RunScopeSummary = pricing ? { total: included.length, paid, cost } : { total: included.length, paid };
+  if (gated.length) summary.gated = gated;
+  return summary;
 }
 
 /** The Run chip: "~$0.04", "$0.0047–0.43", "$0.04+" when part of the run
@@ -233,7 +269,7 @@ function runsLabel([low, high]: [number, number]): string {
 
 /** "Runs 2 nodes · 1 calls a paid provider: GPT Image 2.5", then the
  * estimate per node when the price table has loaded. */
-export function describeRunScope({ total, paid, cost }: RunScopeSummary): string {
+export function describeRunScope({ total, paid, cost, gated }: RunScopeSummary): string {
   const nodes = `${total} ${total === 1 ? 'node' : 'nodes'}`;
   if (paid.length === 0) return `Runs ${nodes} · no paid providers`;
   const parts = [`Runs ${nodes} · ${paid.length} ${paid.length === 1 ? 'calls a paid provider' : 'call paid providers'}: ${nameList(paid)}`];
@@ -245,14 +281,22 @@ export function describeRunScope({ total, paid, cost }: RunScopeSummary): string
   if (cost?.plus.length) parts.push(`Not included: ${cost.plus.join(', ')}`);
   if (cost?.unpriced.length) parts.push(`No list price for ${nameList(cost.unpriced)}`);
   if (cost?.plan.length) parts.push(`Billed to your Krea plan: ${nameList(cost.plan)}`);
+  if (gated?.length) parts.push(gatedNote(gated));
   return parts.join('. ');
 }
 
+/** The estimate counts every node; say so when a gate may skip some. */
+function gatedNote(gated: string[]): string {
+  const them = gated.length === 1 ? 'it' : 'them';
+  return `A gate may skip ${nameList(gated)}. The estimate still counts ${them}, and a skipped node costs nothing`;
+}
+
 /** The confirm text when a run's estimate reaches the user's threshold. */
-export function runCostConfirmMessage({ cost }: RunScopeSummary): string {
+export function runCostConfirmMessage({ cost, gated }: RunScopeSummary): string {
   if (!cost) return 'Run it?';
   const lines = cost.lines.map((line) => `• ${line.name}: ${formatUsdRange(line.low, line.high)}${runsLabel(line.runs)}`);
   const notes: string[] = [];
+  if (gated?.length) notes.push(`${gatedNote(gated)}.`);
   if (cost.plus.length) notes.push(`Not included: ${cost.plus.join(', ')}.`);
   if (cost.unpriced.length) notes.push(`No list price for ${nameList(cost.unpriced)}, so it may cost more.`);
   return [

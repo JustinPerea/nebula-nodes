@@ -5,6 +5,12 @@ Jev returns probabilities rather than prose, so the node reports the answer,
 how likely it is, how confident Jev is, and a pass verdict that turns
 "unsure" below ``min_confidence`` instead of passing silently.
 
+It is also a gate. Whatever is wired into ``through`` comes out of exactly
+one of ``on_pass`` / ``on_fail`` (the pass verdict when nothing is wired),
+and the other port is withheld, so the engine skips the nodes wired to it
+(execution/gating.py). ``when_unsure`` picks the branch for an unsure
+verdict: fail (default), pass, or neither (both withheld).
+
 Output formats are the shared Jev contract in services/jev_outputs.py and
 docs/api-guides/typesafe.md. Request building, image preparation, retries
 and error messages live in services/typesafe_client.py.
@@ -13,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
 
+from execution.gating import withheld
 from execution.missing_credential import MissingCredentialError
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
@@ -32,6 +39,8 @@ from services.typesafe_client import (
 
 ANSWER_TYPES = {"yes_no": "yes/no", "choice": "choice", "score": "score"}
 QUESTION_ID = "decide"
+WHEN_UNSURE = ("fail", "pass", "neither")
+NAME = "Jev Decide"
 
 
 def _fraction(raw: Any, default: float, name: str) -> float:
@@ -65,6 +74,29 @@ def _image_values(inputs: dict[str, PortValueDict]) -> list[Any]:
     if entry is None or entry.value in (None, ""):
         return []
     return list(entry.value) if isinstance(entry.value, list) else [entry.value]
+
+
+def gate_outputs(verdict: str, when_unsure: str, through: PortValueDict | None, *,
+                 answer: str, probability: str, confidence: str, min_confidence: str) -> dict[str, Any]:
+    """``on_pass`` and ``on_fail``: one carries ``through`` (or the verdict
+    text), the other is withheld with a reason naming the decision."""
+    if verdict == "unsure":
+        reason = f"{NAME} was unsure (confidence {confidence}, below {min_confidence})"
+        branch = when_unsure
+        if branch != "neither":
+            reason += f"; unsure counts as {branch}"
+    else:
+        branch = "pass" if verdict == "true" else "fail"
+        shown = answer if len(answer) <= 60 else answer[:59] + "…"
+        reason = f"{NAME} {'passed' if branch == 'pass' else 'failed'} (answered {shown}, {probability})"
+    if through is not None and through.value is not None:
+        carried = {"type": through.type, "value": through.value}
+    else:
+        carried = out.text(verdict)
+    return {
+        "on_pass": carried if branch == "pass" else withheld(reason),
+        "on_fail": carried if branch == "fail" else withheld(reason),
+    }
 
 
 def build_state(context: str, images: list[PreparedImage]) -> Any:
@@ -104,6 +136,9 @@ async def handle_jev_decide(
     threshold = _fraction(params.get("threshold"), 0.5, "threshold")
     min_confidence = _fraction(params.get("min_confidence"), 0.5, "min_confidence")
     long_context = _flag(params.get("long_context"))
+    when_unsure = str(params.get("when_unsure") or "fail")
+    if when_unsure not in WHEN_UNSURE:
+        raise ValueError(f"when_unsure must be one of {', '.join(WHEN_UNSURE)}, got {when_unsure!r}")
 
     question: dict[str, Any] = {"instructions": question_text}
     choice: ChoiceOptions | None = None
@@ -178,6 +213,11 @@ async def handle_jev_decide(
         if transform.transposed or transform.frames > 1 or transform.padded:
             notes.append(f"Image {index + 1}: {transform.describe()}.")
 
+    gate = gate_outputs(
+        verdict, when_unsure, inputs.get("through"), answer=answer,
+        probability=out.format_number(probability), confidence=out.format_number(confidence),
+        min_confidence=out.format_number(min_confidence),
+    )
     return {
         "answer": out.text(answer),
         "pass": out.text(verdict),
@@ -190,4 +230,5 @@ async def handle_jev_decide(
             input_tokens=result.input_tokens, images=len(images),
             request_id=result.request_id, notes=notes,
         )),
+        **gate,
     }

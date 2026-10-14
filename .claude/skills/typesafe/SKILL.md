@@ -32,7 +32,20 @@ Use `claude-chat` or another LLM node when you need words back (captions, critiq
 - `probability`: yes-probability, winner probability, or normalized score (0..1).
 - `confidence`: for yes/no it is `|2p - 1|`; for choice and score it is Jev's own.
 - `report` names the model that actually answered and the input tokens. Quote it when you explain a decision.
-- Graphs can't branch on `pass` yet. Read it via the run results and decide the next step yourself, or propose the change.
+- To act on `pass` inside the graph, use the gate ports below. Outside the graph, read it from the run results.
+
+## Branching a graph (gate)
+
+`jev-decide` is also a gate. Wire the thing to pass along (usually the image being judged) into **`through`**, then wire **`on_pass`** to the next step and, if you want one, **`on_fail`** to a fallback.
+
+- After deciding, `through`'s value comes out of exactly one of `on_pass` / `on_fail`, unchanged (or the `pass` text when `through` isn't wired). The other port is withheld.
+- Every node wired to a withheld port is **skipped**, and so is everything below it. Skipped nodes never call their provider and cost nothing. Run results list them under `skipped` with the reason ("Jev Decide failed (answered no, 0.12)"); `nebula run` prints `<id>: skipped — <reason>`.
+- `when_unsure` picks the branch for an `unsure` verdict: `fail` (default), `pass`, or `neither` (both withheld, so nothing below runs).
+- A node wired to both `on_pass` and `on_fail` is always skipped. Don't join the branches into one node.
+- The other outputs (`answer`, `pass`, `report`, ...) always flow, so a report or log node still runs on either branch.
+- Inside an iterator each item is gated on its own: the next step runs only for the items that passed.
+- A cached decision replays the same branch.
+- The run's cost estimate still counts the nodes a gate may skip (it's an upper bound).
 
 ## Models
 
@@ -56,7 +69,7 @@ A Box answer always contains a box, even when the target isn't there. Always rea
 
 ## Recipes
 
-1. **Gate a generation on the brief.** Text Input (brief) → image generator → `jev-decide` (`state` = brief, `images` = generated image, question "Does `image` show a red mug on a plain white background?"). Act on `pass`.
+1. **Only upscale what's on brief.** Text Input (brief) → image generator → `jev-decide` (`state` = brief, `images` and `through` = the generated image, question "Does `image` show a red mug on a plain white background?") → `on_pass` → upscaler. Off-brief images stop at the gate and the upscaler is skipped.
 2. **Classify inputs.** `jev-decide` with `answer_type: choice`, options one per line, `pass_when` listing the acceptable ones.
 3. **Rate on a rubric.** `answer_type: score`, levels low to high, `threshold` 0.6 to pass the top part of the scale.
 

@@ -188,7 +188,7 @@ def wait_for_canvas_change(
 
     Returns `events`, each with `kind` (node.added, node.params, node.moved,
     node.renamed, edge.added, selection.changed, run.finished,
-    canvas.replaced, ...), the `actor` who did it (`person`, an `agent`,
+    run.skipped, canvas.replaced, ...), the `actor` who did it (`person`, an `agent`,
     or `anonymous`), `nodeId`, `data` and a one-line `summary`. Your own
     edits are skipped unless `include_self`; that only covers your
     `nebula` CLI calls too when NEBULA_AGENT_NAME is set, because without
@@ -447,6 +447,9 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
         shown["outputs"] = {node: _brief_outputs(outputs) for node, outputs in payload["results"].items()}
     if payload.get("errors"):
         shown["errors"] = payload["errors"]
+    if payload.get("skipped"):
+        # Node id -> why: a gate upstream (Jev Decide) withheld their input.
+        shown["skipped"] = payload["skipped"]
     if status == "running":
         shown["next"] = (f"Still running. get_run('{payload.get('runId')}', wait_seconds=...) collects it; "
                          "cancel_run stops it.")
@@ -479,8 +482,10 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     The run is checked against the person's spending limits first. If it is
     over one, or a node has no list price, it is refused with what to do:
     usually send the same nodes as propose_change with `run`. Waits up to
-    `wait_seconds` (max 300). Finished: outputs per node, errors, and small
-    previews of images and videos. Still going: status "running" and a runId;
+    `wait_seconds` (max 300). Finished: outputs per node, errors, `skipped`
+    (nodes a gate such as Jev Decide's On Pass / On Fail withheld, with
+    the reason; they never ran and cost nothing), and small previews of
+    images and videos. Still going: status "running" and a runId;
     it keeps running, so call get_run(runId) or cancel_run(runId). To run
     several separate nodes, run the canvas or call this once per node.
     """

@@ -51,13 +51,14 @@ from models.events import (
     QueuedEvent,
     ExecutingEvent,
     ExecutedEvent,
+    SkippedEvent,
     ErrorEvent,
     ValidationErrorDetail,
     GraphCompleteEvent,
     execution_run_id,
     execution_variant,
 )
-from execution import provider_calls
+from execution import gating, provider_calls
 from execution.missing_credential import MissingCredentialError
 
 CycleError = _GraphlibCycleError
@@ -922,6 +923,12 @@ async def _execute_graph(
     batch_variants: dict[str, list[dict[str, Any]]] = {}
     axis_items: dict[InvocationContext, Any] = {}
     invocation_results: dict[str, list[_InvocationResult]] = {}
+    # Gates (execution/gating.py): the ports each invocation withheld, and
+    # the invocations that were skipped, each with (reason, gate node id).
+    withheld_outputs: dict[str, dict[InvocationContext, dict[str, str]]] = {}
+    shown_withheld: dict[str, dict[str, str]] = {}
+    skipped_invocations: dict[str, dict[InvocationContext, tuple[str, str]]] = {}
+    skipped_nodes: set[str] = set()
     order = topological_sort(nodes, edges)
     order_index = {nid: index for index, nid in enumerate(order)}
     concurrency = max(1, max_parallel_nodes)
@@ -952,11 +959,16 @@ async def _execute_graph(
         for nid in list(ready):
             await queue_ready_node(nid)
 
+    def parent_contexts(parent: str) -> set[InvocationContext]:
+        # A skipped invocation still has a context, so its children are
+        # visited (and skipped) instead of silently never existing.
+        return set(invocation_outputs.get(parent, {})) | set(skipped_invocations.get(parent, {}))
+
     def invocation_contexts(nid: str) -> list[InvocationContext]:
         parents = list(dict.fromkeys(edge.source for edge in incoming_edges[nid]))
         if not parents:
             return [()]
-        contexts = {context for parent in parents for context in invocation_outputs.get(parent, {})}
+        contexts = {context for parent in parents for context in parent_contexts(parent)}
         # An outer context broadcasts to its nested children; sibling branches
         # of the same iterator join on the exact item context.
         leaves = [context for context in contexts if not any(
@@ -964,9 +976,25 @@ async def _execute_graph(
         )]
         return sorted(context for context in leaves if all(
             any(context[:len(parent_context)] == parent_context
-                for parent_context in invocation_outputs.get(parent, {}))
+                for parent_context in parent_contexts(parent))
             for parent in parents
         ))
+
+    def skip_cause(nid: str, context: InvocationContext) -> tuple[str, str] | None:
+        """(reason, gate node id) when an inbound edge of this invocation comes
+        from a withheld port or a skipped invocation; None when it may run."""
+        for edge in incoming_edges[nid]:
+            skips = skipped_invocations.get(edge.source, {})
+            compatible = [key for key in parent_contexts(edge.source) if context[:len(key)] == key]
+            if not compatible:
+                continue
+            key = max(compatible, key=len)
+            if key in skips:
+                return skips[key]
+            held = withheld_outputs.get(edge.source, {}).get(key, {})
+            if edge.source_handle and edge.source_handle in held:
+                return held[edge.source_handle], edge.source
+        return None
 
     def resolve_inputs(nid: str, context: InvocationContext) -> dict[str, PortValueDict]:
         node = node_map[nid]
@@ -1011,9 +1039,17 @@ async def _execute_graph(
 
     async def record_outputs(
         nid: str, context: InvocationContext, node_outputs: dict[str, Any],
-        effective_params: dict[str, Any],
+        effective_params: dict[str, Any], withheld: dict[str, str] | None = None,
     ) -> None:
         snapshot = copy.deepcopy(node_outputs)
+        held = dict(withheld or {})
+        withheld_outputs.setdefault(nid, {})[context] = held
+        # Repeated invocations show a port as withheld only while every one
+        # of them withheld it: a wire some items used still looks live.
+        previous = shown_withheld.get(nid)
+        shown_withheld[nid] = held if previous is None else {
+            port: reason for port, reason in previous.items() if port in held
+        }
         typed = {key: PortValueDict(type=value.get("type", "Any"), value=value.get("value"))
                  for key, value in snapshot.items()}
         scope = variant_scope(nid, context)
@@ -1031,6 +1067,7 @@ async def _execute_graph(
             if context or node_map[nid].definition_id in _FANOUT_NODE_IDS else None,
             variant=scope,
             batch_variants=copy.deepcopy(batch_variants[nid]) if scope is not None else None,
+            withheld=dict(shown_withheld[nid]) or None,
         ))
 
     async def run_invocation(
@@ -1084,7 +1121,13 @@ async def _execute_graph(
                     ) else None,
                 )
                 cached_outputs = cache.get(cache_key)
+                cached_withheld: dict[str, str] = {}
                 if cached_outputs is not None:
+                    # A cached gate replays the ports it withheld, so the
+                    # same nodes downstream are skipped as on the first run.
+                    cached_outputs, cached_withheld = gating.split_outputs(
+                        cached_outputs, registered_node_def,
+                    )
                     # A cache hit describes the original artifact, including
                     # handler-selected settings. Do not replace the submitted
                     # recipe/live node params with historical cache metadata.
@@ -1108,7 +1151,7 @@ async def _execute_graph(
                         cache.delete(cache_key)
                     else:
                         if rebound_cached_outputs != cached_outputs:
-                            cache.set(cache_key, rebound_cached_outputs,
+                            cache.set(cache_key, gating.join_outputs(rebound_cached_outputs, cached_withheld),
                                       effective_params=effective_params)
                         cached_outputs = rebound_cached_outputs
                         if node.definition_id == "cinema-scene":
@@ -1138,7 +1181,7 @@ async def _execute_graph(
                                     runtime = {"status": "error", "error": "Cached shot produced no image"}
                                 node._cinema_produced_outputs[shot_id] = runtime
                         await _maybe_probe_video_output(node, cached_outputs)
-                        await record_outputs(nid, context, cached_outputs, effective_params)
+                        await record_outputs(nid, context, cached_outputs, effective_params, cached_withheld)
                         return nid, True, 1
 
             if handler is None:
@@ -1367,6 +1410,7 @@ async def _execute_graph(
                 handler_calls[nid] = handler_calls.get(nid, 0) + 1
                 node_outputs = await handler(node, resolved_inputs, api_keys)
 
+            node_outputs, withheld = gating.split_outputs(node_outputs, registered_node_def)
             validate_file_references(node_outputs)
             if handler is not None and materialize_provider_outputs:
                 node_outputs = await _materialize_media_outputs(
@@ -1378,9 +1422,10 @@ async def _execute_graph(
             await _maybe_probe_video_output(node, node_outputs)
 
             if cache_enabled and cache is not None and cache_key is not None and handler is not None:
-                cache.set(cache_key, node_outputs, effective_params=node.params)
+                cache.set(cache_key, gating.join_outputs(node_outputs, withheld),
+                          effective_params=node.params)
 
-            await record_outputs(nid, context, node_outputs, node.params)
+            await record_outputs(nid, context, node_outputs, node.params, withheld)
             return nid, True, 1
 
         except Exception as exc:
@@ -1400,8 +1445,23 @@ async def _execute_graph(
 
     async def run_node(nid: str) -> tuple[str, bool, int]:
         node = node_map[nid]
-        contexts = invocation_contexts(nid)
+        all_contexts = invocation_contexts(nid)
         invocation_outputs[nid] = {}
+        skipped_here = skipped_invocations.setdefault(nid, {})
+        contexts: list[InvocationContext] = []
+        for context in all_contexts:
+            cause = skip_cause(nid, context)
+            if cause is None:
+                contexts.append(context)
+            else:
+                skipped_here[context] = cause
+        if all_contexts and not contexts:
+            # Never started: no ExecutingEvent, no provider call, no cache
+            # write. Its descendants are skipped through skipped_invocations.
+            reason, gate_node_id = skipped_here[all_contexts[0]]
+            skipped_nodes.add(nid)
+            await emit(SkippedEvent(node_id=nid, reason=reason, gate_node_id=gate_node_id))
+            return nid, True, 0
         if node.definition_id in _FANOUT_NODE_IDS:
             await emit(ExecutingEvent(node_id=nid))
             try:
@@ -1546,7 +1606,8 @@ async def _execute_graph(
 
     # Terminal success is emitted last: once the frontend sees this event the
     # run directory and best-effort manifest lifecycle are already settled.
-    await emit(GraphCompleteEvent(duration=round(duration, 3), nodes_executed=nodes_executed))
+    await emit(GraphCompleteEvent(duration=round(duration, 3), nodes_executed=nodes_executed,
+                                  nodes_skipped=len(skipped_nodes)))
 
 
 def _owned_output_path(value: Any) -> Path | None:

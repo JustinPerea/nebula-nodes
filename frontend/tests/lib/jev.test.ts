@@ -54,6 +54,15 @@ describe('Jev parsers never throw', () => {
     expect(parseJevOutputs(JEV_DECIDE, bare)).toEqual(sample.parsed);
   });
 
+  it('reads the gate branch from what the canvas receives (withheld ports dropped)', () => {
+    const sample = fixture.decide[0];
+    const delivered = Object.fromEntries(Object.entries(sample.outputs).filter(([, entry]) =>
+      !(entry && typeof entry === 'object' && 'withheld' in entry)));
+    expect(parseJevOutputs(JEV_DECIDE, delivered)).toMatchObject({ branch: 'pass' });
+    const older = Object.fromEntries(Object.entries(sample.outputs).filter(([port]) => !port.startsWith('on_')));
+    expect(parseJevOutputs(JEV_DECIDE, older)).toMatchObject({ kind: 'decide', branch: null });
+  });
+
   it('keeps the result when only the report is unreadable', () => {
     const sample = fixture.decide[0];
     const result = parseJevOutputs(JEV_DECIDE, { ...sample.outputs, report: { type: 'Text', value: 'no fields here\noops' } });
@@ -90,8 +99,11 @@ describe('Jev node definitions', () => {
 
   it('declare the contract ports', () => {
     const decide = NODE_DEFINITIONS[JEV_DECIDE];
-    expect(decide.outputPorts.map((port) => port.id)).toEqual(['answer', 'pass', 'probability', 'confidence', 'probabilities', 'report']);
-    expect(decide.outputPorts.every((port) => port.dataType === 'Text')).toBe(true);
+    expect(decide.outputPorts.map((port) => port.id)).toEqual(['answer', 'pass', 'probability', 'confidence', 'probabilities', 'report', 'on_pass', 'on_fail']);
+    const gate = decide.outputPorts.filter((port) => port.conditional);
+    expect(gate.map((port) => [port.id, port.dataType])).toEqual([['on_pass', 'Any'], ['on_fail', 'Any']]);
+    expect(decide.outputPorts.filter((port) => !port.conditional).every((port) => port.dataType === 'Text')).toBe(true);
+    expect(decide.inputPorts.find((port) => port.id === 'through')).toMatchObject({ dataType: 'Any', required: false });
     expect(decide.envKeyName).toBe('TYPESAFE_API_KEY');
     expect(decide.description).toMatch(/judge/i);
   });

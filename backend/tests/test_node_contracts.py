@@ -136,6 +136,9 @@ def _port_errors(node_id: str, field: str, ports: Any) -> list[str]:
             errors.append(f"{node_id}.{field}.{port_id}.multiple must be bool when present")
         if "maxConnections" in port and not isinstance(port["maxConnections"], int):
             errors.append(f"{node_id}.{field}.{port_id}.maxConnections must be int when present")
+        # Gate ports (execution/gating.py) exist only on outputs.
+        if "conditional" in port and (field != "outputPorts" or port["conditional"] is not True):
+            errors.append(f"{node_id}.{field}.{port_id}.conditional must be true and only on an output port")
     return errors
 
 

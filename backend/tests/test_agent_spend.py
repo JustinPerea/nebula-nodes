@@ -538,6 +538,38 @@ def test_a_node_after_a_failed_one_gives_its_count_back(client, fake_providers):
     assert spent(client) == pytest.approx(0.4)  # the failed call still counts, the editor's 0.3 doesn't
 
 
+def test_a_node_a_gate_skipped_gives_its_count_back(client, fake_providers, monkeypatch):
+    import main
+    from execution.gating import withheld
+
+    calls, _ = fake_providers
+    gated_registry = main.get_handler_registry
+
+    def registry(**kwargs):
+        handlers = gated_registry(**kwargs)
+
+        async def gate(node, inputs, api_keys):
+            calls.append(node.id)
+            return {"on_pass": withheld("Jev Decide failed (answered no, 0.12)"), "on_fail": inputs["through"].model_dump()}
+        handlers["jev-decide"] = gate
+        return handlers
+
+    monkeypatch.setattr(main, "get_handler_registry", registry)
+    PRICES["nodes"]["jev-decide"] = {"currency": "usd", "rows": [{"match": {}, "price": 0.0027}]}
+    prompt = client.post("/api/graph/node", json={"definitionId": FREE, "params": {"value": "a cat"}}).json()["id"]
+    gate = client.post("/api/graph/node", json={"definitionId": "jev-decide", "params": {"question": "Cat?"}}).json()["id"]
+    edit = client.post("/api/graph/node", json={"definitionId": EDIT, "params": {}}).json()["id"]
+    for source, port, target, handle in ((prompt, "text", gate, "state"), (prompt, "text", gate, "through"),
+                                         (gate, "on_pass", edit, "prompt")):
+        wired = client.post("/api/graph/connect", json={"source": source, "sourceHandle": port,
+                                                        "target": target, "targetHandle": handle})
+        assert wired.status_code == 200, wired.text
+    result = client.post("/api/graph/run", json={"targetNodeId": edit}).json()
+    assert result["skipped"] == {edit: "Jev Decide failed (answered no, 0.12)"}
+    assert calls == [gate]  # the editor never ran
+    assert spent(client) == pytest.approx(0.0027)  # the editor's 0.3 was held, then given back
+
+
 def test_every_node_that_ran_still_counts(client, fake_providers):
     calls, _ = fake_providers
     _first, second = _chain(client)

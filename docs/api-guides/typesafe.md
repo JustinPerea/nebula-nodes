@@ -7,7 +7,8 @@ flowchart LR
   B --> PB
   PB -->|winner| D[Jev Decide<br/>'on brief?']
   B --> D
-  D -->|pass true / false / unsure| N[Next step]
+  D -->|on_pass| UP[Upscale]
+  D -.->|on_fail| RE[Regenerate]
   PB -->|winner| BX[Jev Box<br/>experimental]
   BX -->|crop, mask| E[Inpaint / upscale]
 ```
@@ -48,6 +49,7 @@ Inputs:
 |---|---|---|
 | `state` (Context) | Text, optional | What to judge, or the brief to judge against |
 | `images` (Images) | Image, optional, up to 16 | Sent with the context in one request |
+| `through` (Through) | Any, optional | Not sent to Jev. Comes out of `on_pass` or `on_fail` unchanged ([gate](#gate-branching-a-graph)) |
 
 At least one of the two must be connected. With no images the context goes as plain text. With images, the request holds `{"context": ..., "image": ...}` for one image or `{"context": ..., "images": [...]}` for several, so a question can point at `image` or `images[1]`.
 
@@ -64,11 +66,12 @@ Params:
 | `levels` | empty | Score levels, low to high, one per line (2 to 10) |
 | `threshold` | 0.5 | Pass when the yes-probability (yes/no) or normalized score (score) is at least this |
 | `min_confidence` | 0.5 | Below this, `pass` is `unsure` |
+| `when_unsure` | `fail` | Which gate branch an `unsure` verdict takes: `fail`, `pass`, or `neither` |
 | `long_context` | false | Raises the context limit; slower and less accurate |
 
 Choice options go to Jev under neutral keys (`a`, `b`, `c`, ...) with your wording as their description, and come back as your wording. A loaded option name can steer the answer; a neutral key can't.
 
-Outputs (all Text):
+Outputs (Text, plus the two gate ports):
 
 | Port | Format | Example |
 |---|---|---|
@@ -78,6 +81,8 @@ Outputs (all Text):
 | `confidence` | number. Yes/no: `|2p - 1|` (Jev gives no confidence for yes/no). Choice and score: Jev's own | `0.86` |
 | `probabilities` | JSON object, label → number, in option order. Yes/no uses `yes` and `no` | `{"yes": 0.93, "no": 0.07}` |
 | `report` | report text, below | |
+| `on_pass` | gate port: `through`'s value (its own type), or the `pass` text when `through` isn't wired. Withheld unless the verdict takes the pass branch | |
+| `on_fail` | gate port: the same, for the fail branch | |
 
 How `pass` is decided:
 
@@ -85,6 +90,21 @@ How `pass` is decided:
 - choice: the answer is one of `pass_when`. With `pass_when` empty, `pass` only says whether the answer is confident enough to use (`true` or `unsure`, never `false`).
 - score: normalized score ≥ `threshold`.
 - Then, for all three, `unsure` whenever confidence < `min_confidence`.
+
+### Gate: branching a graph
+
+Decide can stop the paid steps after it. `true` takes the pass branch and `false` the fail branch; `unsure` follows `when_unsure`. The chosen gate port carries `through`, and the other is withheld (both, for `neither`).
+
+The engine then applies one rule: **a node runs only if none of its inbound edges comes from a withheld port or a skipped node.** Otherwise the node is *skipped*: it never starts, calls no provider, writes no cache entry and costs nothing, and its descendants follow the same rule.
+
+- The reason names the decision: `Jev Decide failed (answered no, 0.12)`, `Jev Decide passed (answered yes, 0.93)`, or `Jev Decide was unsure (confidence 0.2, below 0.5); unsure counts as fail`. The canvas shows it as a *Skipped* chip on the node; `nebula run` prints `<id>: skipped — <reason>`; MCP run results list it under `skipped`; the canvas journal records `run.skipped`.
+- Only the gate ports are ever withheld. `answer`, `pass`, `report` and the rest always flow, so nodes reading them run on either branch.
+- A node wired to both `on_pass` and `on_fail` is always skipped, because one of them is always withheld. (A "first available" merge node could join branches later.)
+- Inside an iterator, each item is gated on its own.
+- A cache hit replays the same branch, so the same nodes are skipped.
+- The pre-run cost estimate still counts nodes behind the gate. It is an upper bound; skipped nodes are given back from the agent spending limits when the run ends.
+
+The engine side is documented in `docs/contracts/01-node-schema.md` (gate ports).
 
 ## Jev Pick Best (contract)
 
@@ -174,7 +194,6 @@ TypeSafe charges per input token ($0.042 per million) and nothing for output; im
 - One question per Decide node. Keep it atomic; ask several narrow questions rather than one compound one.
 - Box needs Jev 1.14 (`jev-1.14.0` or `jev-preview`).
 - Rate limits are set per organization in the TypeSafe console.
-- Graphs can't branch on `pass` yet; it is information for people, agents and prompts until the engine gains skip support.
 
 ## For developers
 
@@ -186,5 +205,7 @@ TypeSafe charges per input token ($0.042 per million) and nothing for output; im
 - Errors are `TypeSafeError` (a `ValueError`) with `status`, `code` and `request_id`.
 
 `backend/services/jev_outputs.py` writes the formats above (`format_number`, `verdict`, `probabilities_json`, `box_json`, `report`, `text`) and checks them (`validate_outputs(definition_id, outputs)`).
+
+Gate ports: a port with `"conditional": true` in its definition may be withheld. Return `execution.gating.withheld(reason)` for it; `jev_decide.gate_outputs(...)` builds both for Decide.
 
 Pricing: `backend/data/model_pricing.json` prices `jev-decide` `per: "request"` with a `[low, high]` range, a `long_context` row first, `plus: "input images"`, and cases in `backend/tests/fixtures/pricing_cases.json`. A new Jev node copies that entry under its own id.

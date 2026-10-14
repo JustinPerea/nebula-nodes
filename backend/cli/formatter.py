@@ -66,7 +66,9 @@ def format_node_detail(node: dict[str, Any]) -> str:
     if outputs:
         lines.append("OUTPUTS:")
         for p in outputs:
-            lines.append(f"  {p['id']:<16}{p['dataType']}")
+            # A gate output is withheld on some runs; nodes wired to it are then skipped.
+            gate = "gate" if p.get("conditional") else ""
+            lines.append(f"  {p['id']:<16}{p['dataType']:<10}{gate}".rstrip())
         lines.append("")
 
     params = node.get("params", [])
@@ -325,6 +327,10 @@ def format_run_results(results: dict[str, Any], node_defs: dict[str, dict[str, A
     for nid, err in errors.items():
         lines.append(f"{nid}: ERROR — {err}")
 
+    # A gate upstream withheld these nodes' input, so they never ran (and cost nothing).
+    for nid, reason in (results.get("skipped") or {}).items():
+        lines.append(f"{nid}: skipped — {reason}")
+
     if duration is not None:
         lines.append(f"\nCompleted in {duration}s")
     return "\n".join(lines)
@@ -506,6 +512,8 @@ def format_event(event: dict[str, Any]) -> str:
         summary = f"{summary}: {shown}"
     elif kind == "run.failed" and data.get("error"):
         summary = f"{summary}: {_brief(data['error'], 100)}"
+    elif kind == "run.skipped" and data.get("reason"):
+        summary = f"{summary}: {_brief(data['reason'], 100)}"
     elif kind == "pin.added" and data.get("pinId"):
         summary = f"{summary} — nebula pin resolve {data['pinId']} --say \"...\" when done"
     elif kind == "pin.resolved" and data.get("pinId"):

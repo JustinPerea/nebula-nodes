@@ -44,7 +44,9 @@ export type NodeCategory =
   | 'character'
   | 'moodboard';
 
-export type NodeState = 'idle' | 'queued' | 'executing' | 'complete' | 'error';
+/** `skipped`: the run reached this node, but a gate upstream withheld its
+ *  input, so it never started and cost nothing. */
+export type NodeState = 'idle' | 'queued' | 'executing' | 'complete' | 'error' | 'skipped';
 
 export type ExecutionPattern = 'sync' | 'async-poll' | 'stream';
 
@@ -89,6 +91,10 @@ export interface PortDefinition {
   /** Advisory reference weight, 0.0-1.0. Absent behaves as 1.0. Displayed as a
    *  filled bar indicator; consumed by reference-bundle packing. */
   weight?: number;
+  /** Output ports only: a gate port that carries a value on some runs and is
+   *  withheld on others. Nodes wired to a withheld port are skipped
+   *  (backend/execution/gating.py). */
+  conditional?: boolean;
 }
 
 export interface ParamOption {
@@ -421,6 +427,13 @@ export interface NodeData {
    *  still holds the raw provider string for the expandable debug details. */
   errorCategory?: string;
   errorFriendly?: string;
+  /** UI-only: why the latest run skipped this node, e.g. "Jev Decide failed
+   *  (answered no, 0.12)", and the gate node that caused it. */
+  skipReason?: string;
+  skipGateNodeId?: string;
+  /** UI-only: output ports the latest run withheld (port -> reason). Wires
+   *  from them draw as inactive. */
+  withheldPorts?: Record<string, string>;
   keyStatus?: 'ok' | 'missing';
   streamingText?: string;
   streamingPartials?: { index: number; src: string }[];

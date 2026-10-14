@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from cli.commands.canvas import run_watch
 from cli.formatter import format_event, format_snapshot
-from models.events import ErrorEvent, ExecutedEvent, ExecutingEvent
+from models.events import ErrorEvent, ExecutedEvent, ExecutingEvent, SkippedEvent
 from services.agent_presence import AgentPresence
 from services.canvas_events import (
     MAX_EVENT_BYTES,
@@ -399,6 +399,19 @@ def test_execution_events_carry_the_run_starters_identity(api):
         ("run.started", CODEX), ("run.finished", CODEX), ("run.failed", CODEX),
     ]
     assert events[2]["data"] == {"runId": "r1", "error": "Out of credits"}
+
+
+def test_a_node_a_gate_skipped_is_journaled_with_the_reason(api):
+    _client, graph, journal, main_module = api
+    gate = graph.add_node("text-input", {"value": "x"})
+    node = graph.add_node("text-input", {"value": "y"})
+    journal.note_run("r2", CODEX)
+    asyncio.run(main_module._emit_and_sync(SkippedEvent(
+        node_id=node, run_id="r2", reason="Jev Decide failed (answered no, 0.12)", gate_node_id=gate)))
+    [event] = journal.read(after=0)["events"]
+    assert event["kind"] == "run.skipped" and event["actor"] == CODEX
+    assert event["data"] == {"runId": "r2", "reason": "Jev Decide failed (answered no, 0.12)", "gateNodeId": gate}
+    assert event["summary"].endswith("skipped")
 
 
 def test_snapshot_gives_the_cursor(api):

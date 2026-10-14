@@ -13,6 +13,7 @@ import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from './MaskPainterModal';
 import { configuredDirectKey } from '../../lib/directRoute';
+import { skippedLabel } from '../../lib/gating';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
 
@@ -1096,6 +1097,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
         <div className="inspector__section inspector__section--separated">
           <div className="inspector__label">State</div>
           <div className="inspector__state-value">{nodeData.state}</div>
+          {nodeData.state === 'skipped' && (
+            <div className="inspector__state-value inspector__state-reason">{skippedLabel(nodeData.skipReason)}</div>
+          )}
         </div>
 
         {/* Actions */}
