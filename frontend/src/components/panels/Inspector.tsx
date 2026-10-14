@@ -12,6 +12,8 @@ import { fetchOpenRouterModels, fetchNousModels, fetchQuiverModels, getSettings,
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from './MaskPainterModal';
+import { JevResultDetails } from './JevResultDetails';
+import { isJevNode, parseJevOutputs } from '../../lib/jev';
 import { configuredDirectKey } from '../../lib/directRoute';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
@@ -1009,6 +1011,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
             </div>
           </div>
         )}
+
+        {/* A Jev node's result comes first: it's what the node is for. */}
+        {nodeData.state === 'complete' && isJevNode(nodeData.definitionId) && (() => {
+          const jevResult = parseJevOutputs(nodeData.definitionId, nodeData.outputs);
+          return jevResult ? <JevResultDetails result={jevResult} params={nodeData.params} /> : null;
+        })()}
 
         {visibleParams.map((param) => renderParamSection(param, 'definition'))}
 
