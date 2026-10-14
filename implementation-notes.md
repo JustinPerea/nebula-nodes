@@ -3575,3 +3575,44 @@ and `docs/api-guides/byteplus.md`. No live calls, keys or paid runs; tests use a
   no `node_modules` for; it passed with a temporary symlink to the main checkout's, removed afterwards.
 - **Not mirrored to `.claude/skills/`**: that tree is already a stale copy of `.agents/skills/` (fal and krea differ),
   and nothing syncs it.
+
+## 2026-10-14 — BytePlus Seedance direct routes
+
+Step 2 of the BytePlus lane. Seven fal Seedance nodes (`seedance-2-t2v`, `-2-i2v`, `-2-r2v`, `-2-fast-t2v`,
+`-2-fast-i2v`, `seedance-v1-5` for both its 1.5 and 1.0 choices, `seedance-1-0-t2v`) and six Krea copies
+(`krea-video-bytedance-seedance-1-0-pro`, `-1-0-pro-fast`, `-2`, `-2-fast`, `-2-mini`, `-2-5`) gained a direct route
+on ModelArk video tasks. `runway-video`'s Seedance options were left alone (Runway is a reseller). No live calls.
+
+- **New route reason `value` (`directRoute.accepts`).** Krea's `upscale`, `enhance_prompt` and `draft` default to
+  `False`, so they can't be `blockedBy` blockers (blockers can't have defaults); Krea offers a 9:21 ratio BytePlus
+  lacks; Krea durations are floats. `accepts` lists the values (or integer min/max) the direct route takes; any
+  other value keeps the run on the copy, worded in readiness ("doesn't take this recipe's X setting"). Added to
+  `services/node_route.py`, mirrored in `frontend/src/lib/directRoute.ts`, emitted by the sync script's overlay
+  (`directAccepts`), which checks that the keys are Krea fields and the defaults are accepted.
+- **Seed on 2.x stays on the copy.** BytePlus lists `seed`/`camera_fixed` for "Seedance 1.5 pro, 1.0 pro, 1.0 pro
+  fast" only. So `seed` is a fal-only blocker on the five 2.0 fal nodes and a Krea-only blocker on the 2.x copies,
+  and the translator never sends a seed to 2.x. On 1.x (`seedance-v1-5`) seed and camera_fixed are shared.
+- **Inputs a route check can't see raise instead of falling back.** `select_route` reads params, not wired ports, so
+  a wired `start_video`/`effects`, references on 1.0, frames mixed with references ("cannot be mixed"), too many
+  references, audio-only input on 2.0, and a local reference video (the API takes "Video URL or asset ID" only) raise
+  a clear error before any request. Same precedent as Seedream's wired `style_images`.
+- **Seedance 2.5 frame runs send ratio `adaptive`**, the only value BytePlus takes for them. How Krea treats the
+  recipe's ratio there isn't known.
+- **Task lifetime.** Every task sends `execution_expires_after: 3600` (allowed 3600–259200) and `watermark: false`.
+  Polling every 5 s, giving up after 3900 s with a DELETE. DELETE only cancels a queued task; a running one finishes
+  and is billed if it succeeds. The `video_url` (24 h) is saved as soon as the task succeeds.
+- **`krea_router` gained an optional `emit`** passed to handlers marked `takes_emit`, so Krea Seedance runs report
+  progress. Progress is a heuristic; BytePlus reports no percentage.
+- **Prices from the token formula** (model-pricing), per video, using the API's size table at 24 fps. Each row is a
+  range over the documented ratio sizes; fal `auto` duration spans the model's range; runs with reference videos are
+  unpriced (different rate plus a minimum). The adaptive-ratio assumption is that output keeps the tier's pixel count
+  (NOT CONFIRMED). The fal route stays unpriced, as before. `usage.completion_tokens` is only logged; recording actual
+  cost is a follow-up.
+- **No DIRECT_RETIRES entry for Seedance 1.5 pro**: the model list says "Retiring" with no date.
+- **Dropped on direct:** `generate_audio` on 1.0 (silent model), `enable_safety_checker` on `seedance-1-0-t2v`
+  (fal-only, like Seedream).
+- **NOT CONFIRMED:** seed on 2.x; the `mp3` token in `data:audio/mp3;base64,` (docs: `data:audio/<audio format>`);
+  the exact HTTP error envelope; adaptive output size; live behavior.
+- **Tests touched in shared suites:** `test_krea_catalog.py` (`krea_priced` also needs a `pricing` block; the Krea
+  Seedance 1.0 Pro entry has none), `test_maker_routes.py` (13 more maker-routed nodes), `test_reference_roles.py`
+  (approvals for the seven fal splits), `route_cases.json` (12 cases).

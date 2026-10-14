@@ -51,10 +51,10 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 | Luma Ray 2 Flash Modify | `luma-ray2-flash-modify` | video-gen | video, prompt, image | `mode` | Restyle / modify an existing clip |
 | Wan 2.6 R2V | `wan-2-6-r2v` | video-gen | prompt, video1, video2, video3 | `duration`, `resolution`, `aspect_ratio`, `negative_prompt`, `seed`, `enable_prompt_expansion`, `multi_shots`, `enable_safety_checker` | Reference-to-video from up to 3 clips |
 | PixVerse V4.5 | `pixverse-v4-5` | video-gen | prompt, image | `duration`, `aspect_ratio`, `resolution`, `style`, `negative_prompt`, `seed` | Stylized text/image-to-video |
-| Seedance V1.5 Pro (I2V) | `seedance-v1-5` | video-gen | prompt, image, end_image | `duration`, `aspect_ratio`, `resolution`, `generate_audio`, `camera_fixed`, `seed` | High-quality image-to-video |
+| Seedance V1.5 Pro (I2V) | `seedance-v1-5` | video-gen | prompt, image, end_image | `duration`, `aspect_ratio`, `resolution`, `generate_audio`, `camera_fixed`, `seed` | High-quality image-to-video. Runs on BytePlus ModelArk when `BYTEPLUS_API_KEY` is saved ([byteplus.md](./byteplus.md)) |
 | Kling Omni 3 | `kling-o3` | video-gen | image, prompt, end_image | `duration`, `aspect_ratio`, `generate_audio`, `negative_prompt`, `cfg_scale`, `shot_type` | Image-to-video, newest Kling |
 | LTX 2.3 | `ltx-2-3` | video-gen | image, prompt, end_image, audio | `duration`, `resolution`, `aspect_ratio`, `fps`, `generate_audio` | Image-to-video; can take an audio track |
-| Seedance 2.0 Text-to-Video | `seedance-2-t2v` | video-gen | prompt | `aspect_ratio`, `duration`, `resolution`, `generate_audio`, `seed` | Text-to-video, ByteDance Seedance 2 |
+| Seedance 2.0 Text-to-Video | `seedance-2-t2v` | video-gen | prompt | `aspect_ratio`, `duration`, `resolution`, `generate_audio`, `seed` | Text-to-video, ByteDance Seedance 2. All five Seedance 2.0 nodes run on BytePlus ModelArk when `BYTEPLUS_API_KEY` is saved; a set `seed` keeps them on fal ([byteplus.md](./byteplus.md)) |
 | Seedance 2.0 I2V | `seedance-2-i2v` | video-gen | image, prompt, end_image | `aspect_ratio`, `duration`, `resolution`, `generate_audio`, `seed` | Image-to-video (start + end frame) |
 | Seedance 2.0 R2V | `seedance-2-r2v` | video-gen | prompt, images | `aspect_ratio`, `duration`, `resolution`, `generate_audio`, `seed` | Reference-to-video from an image set |
 | Seedance 2.0 Fast T2V | `seedance-2-fast-t2v` | video-gen | prompt | `aspect_ratio`, `duration`, `resolution`, `generate_audio`, `seed` | Faster/cheaper text-to-video |

@@ -1,6 +1,6 @@
 ---
 name: byteplus
-description: BytePlus ModelArk in Nebula — ByteDance's own API for Seedream images, used as the direct route for the fal Seedream node (seedream-4-5, and cinema-scene through it) and the Krea Seedream copies (krea-image-bytedance-seedream-4, -5-lite, -5-pro) when BYTEPLUS_API_KEY is saved. Activate when the user asks about BytePlus, ModelArk, running Seedream on ByteDance's API, a ModelNotOpen or BytePlus error, or which route a Seedream node takes. Sourced from docs.byteplus.com (image-generation-api, model-pricing, error-codes, region-availability, Service Specific Terms) on 2026-10-14; user guide at docs/api-guides/byteplus.md.
+description: BytePlus ModelArk in Nebula — ByteDance's own API for Seedream images and Seedance video, used as the direct route for the fal Seedream node (seedream-4-5, and cinema-scene through it), the Krea Seedream copies (krea-image-bytedance-seedream-4, -5-lite, -5-pro), the fal Seedance nodes (seedance-2-t2v, -2-i2v, -2-r2v, -2-fast-t2v, -2-fast-i2v, seedance-v1-5, seedance-1-0-t2v) and the Krea Seedance copies (krea-video-bytedance-seedance-1-0-pro, -1-0-pro-fast, -2, -2-fast, -2-mini, -2-5) when BYTEPLUS_API_KEY is saved. Activate when the user asks about BytePlus, ModelArk, running Seedream or Seedance on ByteDance's API, a ModelNotOpen or BytePlus error, or which route a Seedream or Seedance node takes. Sourced from docs.byteplus.com (image-generation-api, create-video-generation-task-api, model-pricing, model-list, error-codes, region-availability, Service Specific Terms) on 2026-10-14; user guide at docs/api-guides/byteplus.md.
 ---
 
 # BytePlus ModelArk
@@ -47,7 +47,35 @@ Only successful images are billed. On `seedream-4-5`, `num_images` sends that ma
 
 `backend/handlers/byteplus.py` `explain()` adds the fix to BytePlus's code: `AuthenticationError` (check the key and region), `ModelNotOpen` / `InvalidEndpointOrModel.*` / `OperationDenied.ServiceNotOpen` (activate the model), `AccountOverdueError` (top up), `QuotaExceeded` (free-trial quota used up or too many queued tasks), other 429 (rate limit), `*SensitiveContentDetected` (change the prompt or inputs).
 
+## Seedance video
+
+Same three-step route order. Runway's Seedance options (`runway-video`) are not routed (Runway resells them).
+
+| Node | ModelArk id | Stays on its copy when |
+|---|---|---|
+| `seedance-2-t2v`, `-2-i2v`, `-2-r2v` | `dreamina-seedance-2-0-260128` | `seed` set |
+| `seedance-2-fast-t2v`, `-2-fast-i2v` | `dreamina-seedance-2-0-fast-260128` | `seed` set |
+| `seedance-v1-5` (`model` 1.5 / 1.0) | `seedance-1-5-pro-251215` / `seedance-1-0-pro-250528` | never |
+| `seedance-1-0-t2v` | `seedance-1-0-pro-250528` | never (`enable_safety_checker` is fal-only, dropped) |
+| `krea-video-bytedance-seedance-1-0-pro` | `seedance-1-0-pro-250528` | `start_video` or `reference_images` set |
+| `krea-video-bytedance-seedance-1-0-pro-fast` | `seedance-1-0-pro-fast-251015` | `start_video` set |
+| `krea-video-bytedance-seedance-2`, `-2-fast` | 2.0 / 2.0 fast | `seed` or `effects` set; `upscale` or `enhance_prompt` on |
+| `krea-video-bytedance-seedance-2-mini` | `dreamina-seedance-2-0-mini-260615` | `seed` set |
+| `krea-video-bytedance-seedance-2-5` | `dreamina-seedance-2-5-260628` | `seed` or `effects` set; `enhance_prompt` or `draft` on |
+
+Krea copies also stay on Krea for an `aspect_ratio` outside 16:9, 4:3, 1:1, 3:4, 9:16, 21:9, or a duration that isn't whole seconds in range (1.0: 2–12, 2.0: 4–15, 2.5: 4–30). That's `directRoute.accepts` (route reason `value`), for settings that have defaults and so can't be `blockedBy` blockers.
+
+Hard facts:
+
+- `seed` and `camera_fixed` are documented for 1.5 pro, 1.0 pro and 1.0 pro fast only. Never send a seed to 2.x.
+- Frames (`first_frame`, `last_frame`) and references (`reference_image`/`_video`/`_audio`) "cannot be mixed". Last frame isn't on 1.0 pro fast. References: 2.0 series 9 images / 3 videos / 3 audio; 2.5 30 / 10 / 10; none on 1.x. 2.0 rejects audio-only input.
+- Reference videos are "Video URL or asset ID" only: a local file is refused before the request. Images and audio go as data URIs when local.
+- Tasks are async: create, poll every 5 s, save `video_url` at once (valid 24 h). Nebula sends `watermark: false` and `execution_expires_after: 3600`. DELETE cancels only a queued task; a running one finishes and is billed.
+- Price: tokens = (input video s + output s) x width x height x 24 / 1024, times the per-million rate (2.5 10.70 / 11.7 at 1080p; 2.0 7.0 / 7.7 / 4.0 at 4K; 2.0 fast 5.6; mini 3.5; 1.5 pro 2.4 with audio, 1.2 silent; 1.0 pro 2.5; 1.0 pro fast 1). Runs with reference videos are unpriced. Code: `backend/execution/byteplus_seedance_prices.py`.
+- 1.5 pro is "Retiring" (replacement: 2.0 mini) with no date published.
+
+Code: `backend/execution/maker_routes_byteplus_seedance.py` (translations, handlers), `backend/handlers/byteplus.py` (`run_video_task`).
+
 ## Not wired yet
 
-- Seedance video on ModelArk (`POST /contents/generations/tasks`, `GET`/`DELETE /contents/generations/tasks/{id}`); the client's `request()` is ready for it.
 - Seedream 5.0 flash, and a region setting (eu-west-1 Seedream support is not confirmed).

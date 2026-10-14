@@ -66,6 +66,15 @@ ModelArk's pixel limits on Krea. `directRoute.setup: "fallback"` keeps
 first-time setup on the Krea token, because BytePlus isn't offered in the
 United States. Details: the `byteplus` skill.
 
+The Seedance copies `krea-video-bytedance-seedance-1-0-pro`, `-1-0-pro-fast`,
+`-2`, `-2-fast`, `-2-mini` and `-2-5` take the same BytePlus route (ModelArk
+video tasks). Blockers: `seed` (2.x), `effects` (2.0, 2.0 fast, 2.5),
+`start_video` (1.0), `reference_images` (1.0 pro). `directRoute.accepts`
+keeps Krea-only values on Krea: an `aspect_ratio` ModelArk lacks (9:21), a
+non-whole or out-of-range `duration`, and `upscale` / `enhance_prompt` /
+`draft` switched on. On BytePlus the node fills `video`, `videos` and
+`artifacts`, with no Krea `job`.
+
 ## Gateway Model Nodes
 
 The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108) included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.

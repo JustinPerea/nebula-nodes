@@ -1,10 +1,10 @@
 # BytePlus ModelArk in Nebula Nodes
 
-> BytePlus ModelArk is ByteDance's own international API for its Seedream image models (and Seedance video, coming next). With a BytePlus key saved, Nebula's Seedream nodes run on ByteDance's API and ByteDance bills you, instead of going through fal or Krea.
+> BytePlus ModelArk is ByteDance's own international API for its Seedream image models and Seedance video models. With a BytePlus key saved, Nebula's Seedream and Seedance nodes run on ByteDance's API and ByteDance bills you, instead of going through fal or Krea.
 
 ```mermaid
 flowchart LR
-  N[Seedream node] --> P{Krea node set to the Krea plan?}
+  N[Seedream or Seedance node] --> P{Krea node set to the Krea plan?}
   P -- yes --> K[Krea plan]
   P -- no --> B{BYTEPLUS_API_KEY saved, and the recipe fits ModelArk?}
   B -- yes --> M[BytePlus ModelArk<br/>ap-southeast-1]
@@ -17,7 +17,7 @@ flowchart LR
 - **Asia Pacific keys only.** Nebula calls `https://ark.ap-southeast.bytepluses.com/api/v3` ("Data plane API", base-url-and-authentication). BytePlus says "Platform-level resources, such as API keys and model activation status, are isolated by region", so a key from the EU (eu-west-1) console won't work. There's no region setting yet.
 - **Activate each model first.** A new account has to switch on each model on the ModelArk console's Model activation page (https://ai.byteplus.com/ark/region:ap-southeast-1/openManagement). Until then BytePlus answers 404 `ModelNotOpen`: "Your account %s has not activated the model %s. Please activate the model service in the Ark Console." Seedance 2.x video also needs USD 30 of credits, a USD 30 AI Savings Plan or a USD 30 resource pack before it can be activated (seedance-model-activation-usage-and-refund).
 
-## Nodes that can run on BytePlus (5)
+## Seedream nodes that can run on BytePlus (5)
 
 | Node | Node ID | Copy | ModelArk model | Runs on BytePlus unless |
 |---|---|---|---|---|
@@ -71,6 +71,75 @@ Nebula's run estimate on the BytePlus route:
 - Krea Seedream 5 Pro: shown as $0.045–$0.09, since the price rows can't read width × height.
 - Free-trial quota isn't modelled.
 
+## Seedance video nodes that can run on BytePlus (13)
+
+Runway's Seedance options (`runway-video`) aren't routed: Runway resells them on its own key.
+
+| Node | Node ID | Copy | ModelArk model | Runs on BytePlus unless |
+|---|---|---|---|---|
+| Seedance 2.0 Text-to-Video | `seedance-2-t2v` | fal | `dreamina-seedance-2-0-260128` | `seed` is set |
+| Seedance 2.0 I2V | `seedance-2-i2v` | fal | `dreamina-seedance-2-0-260128` | `seed` is set |
+| Seedance 2.0 R2V | `seedance-2-r2v` | fal | `dreamina-seedance-2-0-260128` | `seed` is set |
+| Seedance 2.0 Fast T2V | `seedance-2-fast-t2v` | fal | `dreamina-seedance-2-0-fast-260128` | `seed` is set |
+| Seedance 2.0 Fast I2V | `seedance-2-fast-i2v` | fal | `dreamina-seedance-2-0-fast-260128` | `seed` is set |
+| Seedance V1.5 Pro (model 1.5) | `seedance-v1-5` | fal | `seedance-1-5-pro-251215` | never (all settings map) |
+| Seedance V1.5 Pro (model 1.0) | `seedance-v1-5` | fal | `seedance-1-0-pro-250528` | never |
+| Seedance 1.0 Text-to-Video | `seedance-1-0-t2v` | fal | `seedance-1-0-pro-250528` | never (`enable_safety_checker` is fal-only and dropped) |
+| Krea Seedance 1.0 Pro | `krea-video-bytedance-seedance-1-0-pro` | Krea | `seedance-1-0-pro-250528` | Krea plan; `start_video` or `reference_images` set; a ratio or duration ModelArk lacks |
+| Krea Seedance 1.0 Pro Fast | `krea-video-bytedance-seedance-1-0-pro-fast` | Krea | `seedance-1-0-pro-fast-251015` | Krea plan; `start_video` set; a ratio or duration ModelArk lacks |
+| Krea Seedance 2.0 | `krea-video-bytedance-seedance-2` | Krea | `dreamina-seedance-2-0-260128` | Krea plan; `seed` or `effects` set; `upscale` or `enhance_prompt` on; a ratio or duration ModelArk lacks |
+| Krea Seedance 2.0 Fast | `krea-video-bytedance-seedance-2-fast` | Krea | `dreamina-seedance-2-0-fast-260128` | as Seedance 2.0 |
+| Krea Seedance 2.0 Mini | `krea-video-bytedance-seedance-2-mini` | Krea | `dreamina-seedance-2-0-mini-260615` | Krea plan; `seed` set; a ratio or duration ModelArk lacks |
+| Krea Seedance 2.5 | `krea-video-bytedance-seedance-2-5` | Krea | `dreamina-seedance-2-5-260628` | Krea plan; `seed` or `effects` set; `enhance_prompt` or `draft` on; a ratio or duration ModelArk lacks |
+
+"A ratio or duration ModelArk lacks" means an `aspect_ratio` outside 16:9, 4:3, 1:1, 3:4, 9:16 and 21:9 (Krea's 9:21, for example), or a duration that isn't a whole number of seconds in the model's range (1.0: 2–12 s; 2.0 series: 4–15 s; 2.5: 4–30 s). These are value checks (`directRoute.accepts`): the readiness line names the setting and says to change it to run on BytePlus.
+
+**Seed on the 2.x models.** BytePlus lists `seed` and `camera_fixed` for "Seedance 1.5 pro, 1.0 pro, 1.0 pro fast" only, so a set seed keeps a 2.x run on its copy, and Nebula never sends one to a 2.x model.
+
+### How each Seedance setting maps (create-video-generation-task-api, read 2026-10-14)
+
+Request: `POST /contents/generations/tasks`, then `GET /contents/generations/tasks/{id}` every 5 seconds until `succeeded`, `failed`, `cancelled` or `expired`. Every task is sent with `watermark: false` and `execution_expires_after: 3600` (BytePlus allows 3600 to 259200 seconds), so a task stuck in the queue expires after an hour instead of waiting up to 48 hours. The finished `video_url` is "valid for 24 hours", so Nebula saves the video as soon as the task succeeds.
+
+| Nebula setting | ModelArk field | Notes |
+|---|---|---|
+| prompt | text `content` item | |
+| `image` / `start_image` | `image_url` with role `first_frame` | Local images are sent as `data:image/<fmt>;base64,` |
+| `end_image` | `image_url` with role `last_frame` | Needs a start image. Not on 1.0 pro fast. |
+| `images` (fal R2V), `reference_images` (Krea) | `image_url` with role `reference_image` | 2.0 series 1–9, 2.5 1–30; not on 1.0 or 1.5 |
+| `reference_videos` (Krea) | `video_url` with role `reference_video` | "Video URL or asset ID" only: a public http(s) URL or `asset://`. A local file is refused before the request. 2.0 series 0–3, 2.5 0–10. |
+| `reference_audios` (Krea) | `audio_url` with role `reference_audio` | URL or `data:audio/<fmt>;base64,` (wav or mp3). 2.0 needs an image or video alongside; audio-only is 2.5. |
+| `aspect_ratio` | `ratio` | fal's `auto` becomes `adaptive`. Seedance 2.5 frame runs send `adaptive`, the only ratio it takes there. |
+| `duration` | `duration` | fal's `auto` becomes `-1` (the model picks a length in its range) |
+| `resolution` | `resolution` | 2.0: 480p, 720p, 1080p, 4k; 2.0 fast and mini: 480p, 720p; 2.5, 1.5 and 1.0: 480p, 720p, 1080p |
+| `generate_audio` | `generate_audio` | 2.x and 1.5 pro only; 1.0 makes silent video |
+| `camera_fixed`, `seed` | `camera_fixed`, `seed` | 1.x only |
+| `enable_safety_checker` (fal) | none | fal only; ModelArk always runs its own filter |
+
+Start/end frames and references can't be combined: BytePlus calls them "mutually exclusive scenarios". A recipe that wires both, or wires in a Krea-only input (`start_video`, `effects`, references on 1.0), gets a clear error before any request is sent instead of a silent fallback.
+
+**Cancelling.** Stopping a run sends `DELETE /contents/generations/tasks/{id}`. BytePlus cancels a task that is still queued; "a running task can't be cancelled", so it finishes and, if it succeeds, BytePlus bills it. Nebula stops waiting after about 65 minutes and sends the same DELETE.
+
+### Seedance pricing (model-pricing, read 2026-10-14)
+
+BytePlus bills video by tokens: "Estimated token consumption = (Input video duration + Output video duration) x Output video width x Output video height x Output video frame rate / 1024", at 24 fps, with width and height from the API's size table for the chosen resolution and ratio. USD per million tokens (online inference, input without video):
+
+| Model | 480p / 720p | 1080p | 4K |
+|---|---|---|---|
+| Seedance 2.5 | 10.70 | 11.7 | |
+| Seedance 2.0 | 7.0 | 7.7 | 4.0 |
+| Seedance 2.0 fast | 5.6 | | |
+| Seedance 2.0 mini | 3.5 | | |
+| Seedance 1.5 pro | 2.4 with audio, 1.2 silent | same | |
+| Seedance 1.0 pro | 2.5 | 2.5 | |
+| Seedance 1.0 pro fast | 1 | 1 | |
+
+Nebula's run estimate on the BytePlus route:
+
+- Each estimate is a range over the documented ratios' sizes (they differ by a few percent), and with fal's `auto` duration a range from the shortest to the longest length.
+- A run with a reference video is left unpriced: BytePlus bills it at a different rate with a minimum token charge.
+- With `adaptive`, Nebula assumes the output keeps the tier's pixel count (NOT CONFIRMED).
+- The actual `usage.completion_tokens` BytePlus reports is written to the run log, not yet to the cost record.
+
 ## Errors and what to do
 
 | BytePlus answer | Meaning | Fix Nebula shows |
@@ -81,6 +150,7 @@ Nebula's run estimate on the BytePlus route:
 | 429 `QuotaExceeded` | free-trial quota used up, or too many queued tasks | Activate the model, or wait for tasks to finish |
 | 429 other | rate limit | Wait and run again |
 | 400 `*SensitiveContentDetected` | content filter | Change the prompt or inputs |
+| task `failed` / `expired` | the video task ended without a video | Nebula shows BytePlus's error code and message with the same fixes; an expired task sat in the queue for over an hour |
 
 In a sequential batch, images that failed (`data[].error`) are skipped and the rest are kept.
 
@@ -88,11 +158,14 @@ In a sequential batch, images that failed (`data[].error`) are skipped and the r
 
 - Whether Seedream runs in eu-west-1: the model list says "seedream-5-0-lite models are also supported in the eu-west-1 region", but region-availability lists only seed-2-0-lite there.
 - The full JSON shape of a synchronous HTTP error (the docs show only `error {code, message}`); the client parses defensively.
+- Seedance: whether the 2.x models take `seed` (not listed for them); whether the `mp3` token in `data:audio/mp3;base64,` is what BytePlus expects (the docs say `data:audio/<audio format>;base64,`); the pixel size of an `adaptive` output.
+- Seedance 1.5 pro is marked "Retiring" on the model list ("Recommended replacement: dreamina-seedance-2-0-mini-260615") with no date, so Nebula shows no retirement date for it yet.
 - Nothing here was tried against the live API: no keys or paid runs were used while building it.
 
 ## Code
 
-- Client and error text: `backend/handlers/byteplus.py` (`request()` also serves the Seedance tasks API: `POST /contents/generations/tasks`, `GET`/`DELETE /contents/generations/tasks/{id}`).
-- Translations and direct handlers: `backend/execution/maker_routes_byteplus.py`.
-- Route rules: `backend/services/node_route.py` and `frontend/src/lib/directRoute.ts` (`directRoute.size`, `directRoute.setup: 'fallback'`).
+- Client and error text: `backend/handlers/byteplus.py` (`request()` is shared by the image and video calls).
+- Translations and direct handlers: `backend/execution/maker_routes_byteplus.py` (Seedream) and `backend/execution/maker_routes_byteplus_seedance.py` (Seedance; prices and sizes in `backend/execution/byteplus_seedance_prices.py`).
+- Seedance task client: `create_video_task`, `get_video_task`, `cancel_video_task` and `run_video_task` in `backend/handlers/byteplus.py`.
+- Route rules: `backend/services/node_route.py` and `frontend/src/lib/directRoute.ts` (`directRoute.size`, `directRoute.accepts`, `directRoute.setup: 'fallback'`).
 - Krea copies: generated by `scripts/sync-krea-catalog.py` from its `DIRECT_ROUTES` overlay; don't hand-edit them.
