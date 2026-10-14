@@ -1447,6 +1447,48 @@
       ],
       "checked": "2026-10-10"
     },
+    "jev-decide": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "long_context"
+      ],
+      "rows": [
+        {
+          "match": {
+            "long_context": true
+          },
+          "price": [
+            1e-05,
+            0.011
+          ]
+        },
+        {
+          "match": {},
+          "price": [
+            1e-05,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "TypeSafe bills input tokens only ($0.042 per million; output is free) and images as input tokens, with no published per-image count yet. One request can't exceed the context limit, so the high end is that limit: 64k tokens by default, 262k with Long context. The low end is a short text-only question (~250 tokens). Failed requests are assumed not to bill.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Long context header: 262k per request and per question, same price per token"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
     "kling-v3": {
       "currency": "usd",
       "per": "second",
@@ -7078,48 +7120,6 @@
         }
       ],
       "checked": "2026-10-10"
-    },
-    "jev-decide": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "long_context"
-      ],
-      "rows": [
-        {
-          "match": {
-            "long_context": true
-          },
-          "price": [
-            1e-05,
-            0.011
-          ]
-        },
-        {
-          "match": {},
-          "price": [
-            1e-05,
-            0.0027
-          ]
-        }
-      ],
-      "plus": "input images",
-      "notes": "TypeSafe bills input tokens only ($0.042 per million; output is free) and images as input tokens, with no published per-image count yet. One request can't exceed the context limit, so the high end is that limit: 64k tokens by default, 262k with Long context. The low end is a short text-only question (~250 tokens). Failed requests are assumed not to bill.",
-      "sources": [
-        {
-          "url": "https://docs.typesafe.ai/models",
-          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
-        },
-        {
-          "url": "https://docs.typesafe.ai/models",
-          "quote": "Long context header: 262k per request and per question, same price per token"
-        },
-        {
-          "url": "https://docs.typesafe.ai/images",
-          "quote": "Image tokens are billed at the input token price; no separate image charge"
-        }
-      ],
-      "checked": "2026-10-14"
     }
   }
 }

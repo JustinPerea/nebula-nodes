@@ -3195,3 +3195,24 @@ Tradeoffs and surprises:
   the sidecar test that sets all four from a shell (fails with the old list).
 - **Left for later:** the `nebula` CLI's own commands still read only `NEBULA_APP_TOKEN`, not the file. Connect
   only sets up the MCP server, so nothing needs it yet.
+
+## Jev nodes (2026-10-14): foundation
+
+Shared base for the TypeSafe Jev nodes: client, Decide node, BYOK provider, output contract, pricing, docs. Pick Best, Box, graph branching, the canvas result UI and the QC Jev mode build on it in their own changes.
+
+- **Raw httpx, no SDK.** `typesafe-sdk` needs pydantic>=2.12 and the backend pins 2.11.3, so `backend/services/typesafe_client.py` calls `https://api.typesafe.ai/v1/systemone` directly. Source-direct, BYOK only (`TYPESAFE_API_KEY`); there is no hosted or shared key path.
+- **Key check is configured_unverified.** TypeSafe has no documented free key-check call (`GET /v1/models` is unconfirmed), so `PROVIDER_CHECKS["TypeSafe"]` has an empty url and health reports the key as configured, unverified.
+- **One handler file per node.** `backend/handlers/jev_decide.py` holds only Decide. Pick Best and Box should go in `jev_pick_best.py` / `jev_box.py` so the lanes don't edit the same file; shared formats live in `backend/services/jev_outputs.py`.
+- **Separate `levels` param.** Score levels have their own textarea rather than sharing `options` with Choice, so switching `answer_type` never reinterprets what the user typed. `pass_when` is a textarea too (one option per line).
+- **Choice with no `pass_when`.** `pass` then only says whether the answer is confident enough to use: `true` or `unsure`, never `false`. There is nothing to fail against.
+- **Neutral option keys.** Choice options go out as `a`, `b`, `c` with the user's wording as the description, then come back as the wording. Score uses TypeSafe's criteria array; the word "levels" is ours.
+- **Images.** Pad, never stretch. Black padding, transparent when the image has alpha. PNG when there is alpha or the source was PNG, else JPEG q90, stepping down to q60 to fit the 16 MiB / 32 MiB budgets. Box coordinates are mapped back to the original upright image via `ImageTransform.to_original_box`. Pad versus upscale for tiny images is a judgment call; padding keeps the pixels honest.
+- **Report format.** Title line, `Key: value` lines (Model and Input tokens always), then `Note:` lines. The frontend parses it (`frontend/src/lib/jev.ts`), so changing it means changing both sides and the fixture.
+- **Fixture.** `backend/tests/fixtures/jev_outputs.json` is the shared contract. Decide outputs come from the real handler (`JEV_FIXTURE_WRITE=1` refreshes them); Pick Best and Box samples are hand-written until those handlers exist. The `parsed` field on each sample is hand-maintained: update it when outputs change.
+- **JSON key order.** `probabilities` is a JSON object in option order. JavaScript reorders integer-like keys ("0", "1", ...) numerically, which matches Pick Best's order, but a Choice option literally named "2" would move ahead of "yes". Avoid relying on key order for user labels.
+- **Pricing at the ceiling.** TypeSafe charges per input token and doesn't publish the per-image count, so `model_pricing.json` prices a request at the context ceiling: $0.0027 (64k) by default, $0.011 with `long_context`. The source quotes in the entry are paraphrased, because TypeSafe's terms treat their docs as confidential and this repo is public.
+- **Docs in our own words.** `docs/api-guides/typesafe.md`, `docs/model-providers/typesafe/_provider.md` and the agent skill (`.agents/skills/typesafe/`, mirrored in `.claude/skills/typesafe/`) are written from scratch and link docs.typesafe.ai; nothing is copied from TypeSafe's docs.
+- **Counts.** Credential catalog 18 → 19 keys (desktop tests and the injection test follow). Node count pin 302 → 303 (`test_video_qc_nodes`, AGENTS.md). Pick Best and Box will move it again.
+- **Undocumented upstream.** Error body shape, whether failed requests are billed, when Box confidence is null, deprecation policy and per-org rate limits aren't documented; the client handles errors defensively and redacts the key from every message.
+- **Tooling surprise.** In a worktree with a symlinked `node_modules`, vitest's cache lands in the main checkout's `node_modules/.vite`. Harmless, but don't be surprised by it.
+- **Pricing entries stay sorted.** `scripts/sync-krea-catalog.py --check` (run by `test_krea_catalog.py`) rewrites `model_pricing.json` with `nodes` sorted by id, so a hand-added entry must sit in alphabetical order. Run `python scripts/sync-krea-catalog.py` (offline without `--refresh`) after adding one.
