@@ -53,6 +53,24 @@ So an `api-token` node runs on Google once a Google key is saved; a person
 who wants Krea's API for it removes the key or picks the Krea plan. On the
 Google route the node fills `image`, `images` and `artifacts` (no Krea `job`).
 
+Google lane (2026-10-14, `backend/execution/maker_routes_google.py`):
+
+- `krea-image-google-nano-banana-2-1` -> `gemini-nano-banana-2.1` on
+  `GOOGLE_API_KEY` (Interactions API); `thinking_level` reaches Google.
+  `width`/`height` keep it on Krea.
+- `krea-video-google-veo-3-1` / `-fast` / `-lite` -> Vertex
+  `veo-3.1-*-generate-001` on `GOOGLE_VERTEX_CREDENTIALS` only (a Gemini API
+  key alone leaves them on Krea). `directRoute.blockedWhen` keeps Fast at
+  `resolution: 4K` on Krea (Vertex: Fast is 720p/1080p). Reference images run
+  on Vertex only at duration 8, not at 4K and not with start/end frames;
+  other combinations are refused before any request.
+- `krea-video-google-gemini-omni-flash-1-1` -> `gemini-omni-1.1-flash` on
+  `GOOGLE_API_KEY`; `duration` -> `response_format.duration` ("8s"); start
+  image -> `image_to_video`, references -> `reference_to_video`; both
+  together is refused.
+- No maker route: Veo 2 / 3 / 3 Fast (retired 2026-06-30) and Gemini Omni
+  Flash 1.0 (preview ends 2026-10-22).
+
 ## Gateway Model Nodes
 
 The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108) included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.

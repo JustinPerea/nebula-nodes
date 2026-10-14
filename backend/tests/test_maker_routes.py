@@ -32,6 +32,9 @@ MAKER_ROUTED = {
     "nano-banana-fal", "nano-banana-fal-edit", "meshy-text-to-3d", "meshy-image-to-3d",
     "krea-image-google-nano-banana-2", "krea-image-google-nano-banana-pro",
     "krea-image-google-nano-banana-flash-lite", "krea-image-google-nano-banana",
+    # Google lane (execution/maker_routes_google.py)
+    "identity-edit", "krea-image-google-nano-banana-2-1", "krea-video-google-veo-3-1",
+    "krea-video-google-veo-3-1-fast", "krea-video-google-veo-3-1-lite", "krea-video-google-gemini-omni-flash-1-1",
 }
 
 

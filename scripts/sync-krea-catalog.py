@@ -97,6 +97,9 @@ REFERENCE_IMAGE_COST = {
     "gemini-3-pro-image": (0.0011, "$0.0011 per reference image"),
     "gemini-3.1-flash-image": (1120 * 0.50 / 1e6, "1,120 tokens per reference image at $0.50 per 1M"),
     "gemini-3.1-flash-lite-image": (1120 * 0.25 / 1e6, "1,120 tokens per reference image at $0.25 per 1M"),
+    # gemini-nano-banana-2.1 is a Gemini 3 image model ("An update to Nano
+    # Banana 2 (Gemini 3.1 Flash Image)"), read at the same 1,120 tokens.
+    "gemini-nano-banana-2.1": (1120 * 1.50 / 1e6, "1,120 tokens per reference image at $1.50 per 1M"),
     "gemini-2.5-flash-image": (8 * 258 * 0.30 / 1e6,
                                "up to 8 tiles of 258 tokens per reference image (up to 21:9) at $0.30 per 1M"),
 }
@@ -111,6 +114,8 @@ _GOOGLE_INPUT_SOURCES = {
                                "quote": "`unspecified` (Default) | 1120 | ... (Gemini 3 models, Image)"},
     "gemini-3.1-flash-lite-image": {"url": "https://ai.google.dev/gemini-api/docs/media-resolution",
                                     "quote": "`unspecified` (Default) | 1120 | ... (Gemini 3 models, Image)"},
+    "gemini-nano-banana-2.1": {"url": "https://ai.google.dev/gemini-api/docs/media-resolution",
+                               "quote": "`unspecified` (Default) | 1120 | ... (Gemini 3 models, Image)"},
     "gemini-2.5-flash-image": {"url": "https://ai.google.dev/gemini-api/docs/image-understanding",
                                "quote": "Larger images are tiled into 768x768 pixel tiles, each costing 258 tokens."},
 }
@@ -174,6 +179,126 @@ DIRECT_ROUTES = {
 }
 
 
+# -- Google lane (2026-10-14): Nano Banana 2.1, Veo 3.1 on Vertex, Gemini Omni Flash 1.1 ---------
+# Translations live in backend/execution/maker_routes_google.py. Every price
+# below was read on the maker's own page on 2026-10-14 (quotes in `sources`).
+VERTEX_PRICING_URL = "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing"
+VERTEX_VEO_MODEL_URL = "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/veo/3-1-generate"
+_VERTEX_VEO_NOTE = ("Vertex AI (Gemini Enterprise Agent Platform) list price for runs on the person's "
+                    "GOOGLE_VERTEX_CREDENTIALS (model {model}), per second of the node's duration. Vertex lists "
+                    "Veo per \"count\" without saying what a count is; it is read as per second, the higher "
+                    "reading and the Gemini API's unit for the same amounts. {audio}")
+_VEO_STANDARD_SOURCES = [
+    {"url": VERTEX_PRICING_URL, "quote": "Veo 3.1 Video + Audio generation ... 720p, 1080p $0.40 / 1 count 4k $0.60 / 1 count"},
+    {"url": VERTEX_PRICING_URL, "quote": "Video generation ... Video 720p, 1080p $0.20 / 1 count 4k $0.40 / 1 count"},
+    {"url": GOOGLE_PRICING_URL, "quote": "Veo 3.1 Standard video with audio price (default) | Not available | "
+                                         "$0.40 (720p and 1080p) $0.60 (4k)"},
+]
+_VEO_FAST_SOURCES = [
+    {"url": VERTEX_PRICING_URL, "quote": "Veo 3.1 Fast Video + Audio generation ... 720p $0.10 / 1 count 1080p "
+                                         "$0.12 / 1 count 4k $0.30 / 1 count"},
+    {"url": VERTEX_PRICING_URL, "quote": "Video generation ... Video 720p $0.08 / 1 count 1080p $0.10 / 1 count "
+                                         "4k $0.25 / 1 count"},
+    {"url": VERTEX_VEO_MODEL_URL, "quote": "veo-3.1-fast-generate-001 ... Supported output resolutions: 720p, 1080p"},
+]
+_VEO_LITE_SOURCES = [
+    {"url": VERTEX_PRICING_URL, "quote": "Veo 3.1 Lite ... Video generation ... Video 720p $0.03 / 1 count 1080p "
+                                         "$0.05 / 1 count"},
+    {"url": VERTEX_VEO_MODEL_URL, "quote": "veo-3.1-lite-generate-001 - Launch stage: Preview"},
+]
+
+
+def _veo_rows(prices):
+    """{(resolution, generate_audio): price} -> rows, audio-on first."""
+    return [{"match": {"resolution": resolution, "generate_audio": audio}, "price": price}
+            for (resolution, audio), price in prices.items()]
+
+
+GOOGLE_LANE_ROUTES = {
+    "/generate/image/google/nano-banana-2.1": {
+        "directKeyName": "GOOGLE_API_KEY", "translation": "krea-nano-banana-2-1", "model": "gemini-nano-banana-2.1",
+        "kreaOnly": ["width", "height"], "directBlockedBy": ["width", "height"], "directParams": [],
+        "pricing": {"provider": "google", "per": "image", "priceParams": ["resolution"],
+                    "rows": [{"match": {"resolution": "1K"}, "price": 0.0336},
+                             {"match": {"resolution": "2K"}, "price": 0.0504},
+                             {"match": {"resolution": "4K"}, "price": 0.113}],
+                    "plus": "thinking tokens",
+                    "noteExtra": " Thinking tokens bill extra at $7.50 per 1M (Google: \"thinking tokens are billed by "
+                                 "default for thinking models\"; 2.1 defaults to medium) and can't be counted ahead, "
+                                 "so the estimate is open-ended.",
+                    "sources": [{"url": GOOGLE_PRICING_URL,
+                                 "quote": "$30.00 (images) Equivalent to $0.0336 per 1K image*, $0.0504 per 2K image*, "
+                                          "and $0.113 per 4K image*."},
+                                {"url": GOOGLE_PRICING_URL,
+                                 "quote": "Input price | Not available | $1.50 (text/image/video)"},
+                                {"url": GOOGLE_PRICING_URL,
+                                 "quote": "Output price | Not available | $7.50 (text and thinking)"}]},
+    },
+    "/generate/video/google/veo-3.1": {
+        "directKeyName": "GOOGLE_VERTEX_CREDENTIALS", "translation": "krea-veo-vertex", "model": "veo-3.1-generate-001",
+        "kreaOnly": [], "directParams": [],
+        "pricing": {"provider": "google", "per": "second", "priceParams": ["resolution", "generate_audio"],
+                    "rows": _veo_rows({("720p", True): 0.40, ("1080p", True): 0.40, ("4K", True): 0.60,
+                                       ("720p", False): 0.20, ("1080p", False): 0.20, ("4K", False): 0.40}),
+                    "multiplyBy": ["duration"],
+                    "notes": _VERTEX_VEO_NOTE.format(model="veo-3.1-generate-001",
+                                                     audio="generate_audio picks the Video + Audio or Video row."),
+                    "sources": _VEO_STANDARD_SOURCES},
+    },
+    "/generate/video/google/veo-3.1-fast": {
+        # Vertex's model card lists Fast at 720p and 1080p only (its pricing
+        # page still lists a 4k price), so a 4K run stays on Krea.
+        "directKeyName": "GOOGLE_VERTEX_CREDENTIALS", "translation": "krea-veo-vertex",
+        "model": "veo-3.1-fast-generate-001", "kreaOnly": [], "directParams": [],
+        "directBlockedWhen": {"resolution": ["4K"]},
+        "pricing": {"provider": "google", "per": "second", "priceParams": ["resolution", "generate_audio"],
+                    "rows": _veo_rows({("720p", True): 0.10, ("1080p", True): 0.12,
+                                       ("720p", False): 0.08, ("1080p", False): 0.10}),
+                    "multiplyBy": ["duration"],
+                    "notes": _VERTEX_VEO_NOTE.format(
+                        model="veo-3.1-fast-generate-001",
+                        audio="generate_audio picks the Video + Audio or Video row. 4K runs stay on Krea."),
+                    "sources": _VEO_FAST_SOURCES},
+    },
+    "/generate/video/google/veo-3.1-lite": {
+        # Krea's Lite takes no generate_audio and prices it at Google's
+        # video-only rate, so the Vertex run sends generateAudio false.
+        "directKeyName": "GOOGLE_VERTEX_CREDENTIALS", "translation": "krea-veo-vertex",
+        "model": "veo-3.1-lite-generate-001", "kreaOnly": [], "directParams": [],
+        "pricing": {"provider": "google", "per": "second", "priceParams": ["resolution"],
+                    "rows": [{"match": {"resolution": "720p"}, "price": 0.03},
+                             {"match": {"resolution": "1080p"}, "price": 0.05}],
+                    "multiplyBy": ["duration"],
+                    "notes": _VERTEX_VEO_NOTE.format(
+                        model="veo-3.1-lite-generate-001",
+                        audio="Sent with generateAudio false (the node has no audio choice), so the Video row."),
+                    "sources": _VEO_LITE_SOURCES},
+    },
+    "/generate/video/google/gemini-omni-flash-1.1": {
+        "directKeyName": "GOOGLE_API_KEY", "translation": "krea-gemini-omni", "model": "gemini-omni-1.1-flash",
+        "kreaOnly": [], "directParams": [],
+        "pricing": {"provider": "google", "per": "second", "priceParams": [],
+                    # 5,792 output tokens per second of 720p video x $17.50 per 1M.
+                    "rows": [{"match": {}, "price": 0.10136}],
+                    "multiplyBy": ["duration"],
+                    "plus": "input media and thinking tokens",
+                    "notes": "Gemini API standard (paid tier) price for runs on the person's GOOGLE_API_KEY (model "
+                             "gemini-omni-1.1-flash): 5,792 output tokens per second of 720p video (the resolution "
+                             "the run uses) at $17.50 per 1M, times the node's duration. Input media (start image, "
+                             "reference images and videos) at $1.50 per 1M and thinking tokens at $9.00 per 1M bill "
+                             "extra; Google doesn't publish their token counts for Omni, so they aren't counted.",
+                    "sources": [{"url": GOOGLE_PRICING_URL,
+                                 "quote": "Output price (including thinking tokens) | Not available | $9.00 (text) "
+                                          "$17.50 (video)*"},
+                                {"url": GOOGLE_PRICING_URL,
+                                 "quote": "Billing is based on total output token consumption, calculated at a rate "
+                                          "of 5,792 tokens per second of 720p video."},
+                                {"url": GOOGLE_PRICING_URL,
+                                 "quote": "Input price | Not available | $1.50 (text / image / video / audio)"}]},
+    },
+}
+DIRECT_ROUTES.update(GOOGLE_LANE_ROUTES)
+
 def direct_route_definition(endpoint, params):
     """The dual-route fields a Krea node with a maker route adds (DIRECT_ROUTES)."""
     route = DIRECT_ROUTES.get(endpoint)
@@ -190,6 +315,14 @@ def direct_route_definition(endpoint, params):
     if defaulted:
         # A default would block the maker route for every new node.
         raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedBy fields have defaults: {defaulted}")
+    blocked_when = route.get("directBlockedWhen") or {}
+    for key, values in blocked_when.items():
+        param = next((p for p in params if p["key"] == key), None)
+        if param is None or key in route["kreaOnly"]:
+            raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedWhen names {key!r}, not a shared Krea field")
+        if param.get("default") in values:
+            # The default would block the maker route for every new node.
+            raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedWhen blocks {key}'s default")
     clash = sorted(keys & {param["key"] for param in route["directParams"]})
     if clash:
         raise ValueError(f"DIRECT_ROUTES {endpoint}: directParams repeat Krea fields: {clash}")
@@ -200,7 +333,8 @@ def direct_route_definition(endpoint, params):
         "falParams": [param for param in params if param["key"] in route["kreaOnly"]],
         "directParams": list(route["directParams"]),
         "directRoute": {"translation": route["translation"], "model": route["model"],
-                        **({"blockedBy": list(blocked)} if blocked else {})},
+                        **({"blockedBy": list(blocked)} if blocked else {}),
+                        **({"blockedWhen": {k: list(v) for k, v in blocked_when.items()}} if blocked_when else {})},
     }
 
 
@@ -211,9 +345,13 @@ def direct_route_pricing(endpoint):
     pricing = dict(route["pricing"])
     provider = pricing.pop("provider")
     model = route["model"]
+    note_extra = pricing.pop("noteExtra", "")
+    if model not in REFERENCE_IMAGE_COST:
+        # Video routes carry their own notes and sources.
+        return provider, {"currency": "usd", **pricing, "checked": GOOGLE_CHECKED}
     pricing["rows"] = [{**row, "price": with_references(row["price"], model)} for row in pricing["rows"]]
     pricing["sources"] = [*pricing["sources"], _GOOGLE_INPUT_SOURCES[model], _REFERENCE_LIMIT_SOURCE]
-    note = _GOOGLE_NOTE.format(model=model, refs=MAX_REFERENCE_IMAGES, ref_cost=REFERENCE_IMAGE_COST[model][1])
+    note = _GOOGLE_NOTE.format(model=model, refs=MAX_REFERENCE_IMAGES, ref_cost=REFERENCE_IMAGE_COST[model][1]) + note_extra
     return provider, {"currency": "usd", **pricing, "notes": note, "checked": GOOGLE_CHECKED}
 
 

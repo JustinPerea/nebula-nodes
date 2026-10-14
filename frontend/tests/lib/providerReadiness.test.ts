@@ -167,6 +167,17 @@ describe('provider readiness without generation', () => {
     expect(googleOnly).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
   });
 
+  it('keeps Veo 3.1 Fast at 4K on Krea (Vertex renders Fast at 1080p at most) and says why', () => {
+    const definition = NODE_DEFINITIONS['krea-video-google-veo-3-1-fast'];
+    const keys = { GOOGLE_VERTEX_CREDENTIALS: TOKEN, KREA_API_TOKEN: TOKEN };
+    const ready = modelReadiness(definition, freeze({ _kreaAuth: 'api-token', resolution: '4K' }), credentials({ apiKeys: keys }), health());
+    expect(ready).toMatchObject({ connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+    expect(ready.detail).toContain("Google Vertex's own API can't run resolution 4K for this model, so it runs on Krea.");
+    const hd = modelReadiness(definition, freeze({ _kreaAuth: 'api-token', resolution: '1080p' }), credentials({ apiKeys: keys }), health());
+    expect(hd).toMatchObject({ setupTarget: { kind: 'api-key', key: 'GOOGLE_VERTEX_CREDENTIALS' } });
+    expect(hd.detail).toContain("Runs on Google Vertex's own API");
+  });
+
   it('moves Nano Banana (2.5) to fal from Google\'s shutdown date and says so', () => {
     const definition = NODE_DEFINITIONS['nano-banana-fal'];
     const cache = credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN, FAL_KEY: TOKEN } });

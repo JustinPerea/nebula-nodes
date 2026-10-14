@@ -44,6 +44,17 @@ runs take the fal or Krea copy, and pricing, readiness and the cache key move
 with them. A Krea copy with an explicit `width`/`height` stays on Krea (Google
 can't render an exact size).
 
+Also on this handler (2026-10-14, `backend/execution/maker_routes_google.py`):
+`identity-edit` runs on `gemini-3.1-flash-image` with `GOOGLE_API_KEY`
+(resolution 1024/2048 -> `imageSize` 1K/2K; thinking low -> minimal,
+medium/high -> high; the Character bundle and mask refusal are shared with
+the fal route; a seed reaches fal only), and
+`krea-image-google-nano-banana-2-1` runs on `gemini-nano-banana-2.1` via the
+Interactions API, sending `thinking_level` as
+`generation_config.thinking_level` (Google: minimal / medium / high, default
+medium). Thinking tokens bill extra at $7.50 per 1M, so its Google estimate
+carries an open "thinking tokens" add-on.
+
 ## Core prompting principle
 
 > **Describe the scene in a narrative paragraph. Don't list keywords.**

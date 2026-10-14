@@ -80,15 +80,18 @@ async def _load_bytes(value: str) -> tuple[bytes, str]:
 async def _build_input_parts(
     prompt: str,
     image_values: list[str],
-    video_value: str | None,
+    video_value: str | list[str] | None,
 ) -> str | list[dict[str, Any]]:
     parts: list[dict[str, Any]] = []
 
-    if video_value:
-        if "generativelanguage.googleapis.com" in video_value and "/files/" in video_value:
-            parts.append({"type": "document", "uri": video_value})
+    # One clip to edit, or up to three reference clips (the Krea copy's
+    # reference_videos; "Video references support a maximum of 3 clips").
+    clips = [video_value] if isinstance(video_value, str) else list(video_value or [])
+    for clip in clips:
+        if "generativelanguage.googleapis.com" in clip and "/files/" in clip:
+            parts.append({"type": "document", "uri": clip})
         else:
-            data, mime = await _load_bytes(video_value)
+            data, mime = await _load_bytes(clip)
             parts.append({
                 "type": "video",
                 "mime_type": mime,
@@ -202,10 +205,11 @@ async def handle_gemini_omni(
         raw = images_input.value
         image_values = [str(v) for v in raw if v] if isinstance(raw, list) else [str(raw)]
 
-    video_value = None
+    video_value: str | list[str] | None = None
     video_input = inputs.get("video")
     if video_input and video_input.value:
-        video_value = str(video_input.value)
+        raw_video = video_input.value
+        video_value = [str(v) for v in raw_video if v] if isinstance(raw_video, list) else str(raw_video)
 
     previous_input = inputs.get("previous_interaction_id")
     previous_id = (
@@ -240,6 +244,17 @@ async def handle_gemini_omni(
     aspect_ratio = node.params.get("aspect_ratio") or node.params.get("aspectRatio")
     if aspect_ratio:
         request_body["response_format"]["aspect_ratio"] = str(aspect_ratio)
+
+    # The Krea copy's duration (3-10 s): VideoResponseFormat "duration string
+    # (optional) The duration for the video output"
+    # (https://ai.google.dev/api/interactions-api), written "8s" as Google's
+    # Vertex page for the same API does. The gemini-omni-flash node has none.
+    duration = node.params.get("duration")
+    if duration not in (None, ""):
+        seconds = int(str(duration).rstrip("s"))
+        if not 3 <= seconds <= 10:
+            raise ValueError(f"Gemini Omni makes 3-10 second videos (got {seconds})")
+        request_body["response_format"]["duration"] = f"{seconds}s"
 
     if task:
         request_body["generation_config"] = {"video_config": {"task": str(task)}}

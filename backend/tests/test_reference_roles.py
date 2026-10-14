@@ -122,6 +122,14 @@ APPROVED_DUAL_ROUTE_SPLITS = {
               "falParams": ["output_format", "seed"], "order": _NANO_BANANA_FAL_ORDER}
     for node_id in ("nano-banana-fal", "nano-banana-fal-edit")
 }
+# Direct maker routes, Google lane (2026-10-14): identity-edit also runs on
+# the Gemini API (gemini-3.1-flash-image) with GOOGLE_API_KEY. Same approved
+# split as the Nano Banana fal copies; its three params all move, unchanged
+# and in order, to sharedParams (none are route-only).
+APPROVED_DUAL_ROUTE_SPLITS["identity-edit"] = {
+    "envKeyName": ("FAL_KEY", ["GOOGLE_API_KEY", "FAL_KEY"]), "directKeyName": "GOOGLE_API_KEY",
+    "falParams": [], "order": ["resolution", "thinking_level", "identity_strength"],
+}
 # Direct maker routes, review fix (2026-10-14): Meshy's own image-to-3D API
 # takes texture_prompt ("Provide a text prompt to guide the texturing
 # process", https://docs.meshy.ai/en/api/image-to-3d), so it moves from
@@ -461,7 +469,8 @@ def test_approved_art_direction_normalization_preserves_fixture_and_other_fields
     ("cinema-scene", None, None, "capabilityNote", "Native camera control"),
     ("seedream-4-5", "inputPorts", "images", "maxConnections", 14),
     ("character", "params", "strength_override", "disabledReason", "Strength works"),
-    ("identity-edit", "params", "identity_strength", "disabledReason", "Strength works"),
+    # identity-edit's params live in sharedParams since its Google route (2026-10-14).
+    ("identity-edit", "sharedParams", "identity_strength", "disabledReason", "Strength works"),
     ("reference-set", "params", "style_weight", "label", "Style Strength"),
     ("seedream-4-5", "params", "seed", "visibleWhen", {"model": ["4.5", "5.0-lite"]}),
     ("identity-edit", "inputPorts", "mask", "label", "Mask"),
@@ -469,7 +478,7 @@ def test_approved_art_direction_normalization_preserves_fixture_and_other_fields
 def test_approved_art_direction_values_cannot_drift(definitions, node_id, section, selector, field, value):
     changed = deepcopy(definitions[node_id])
     target = changed if section is None else _sole_entry(
-        changed[section], "key" if section == "params" else "id", selector,
+        changed[section], "key" if section in ("params", "sharedParams") else "id", selector,
     )
     target[field] = value
     with pytest.raises(AssertionError):

@@ -43,9 +43,11 @@ export const DIRECT_RETIRES: Readonly<Record<string, DirectRetirement>> = {
 /** Why the direct route can't take a run (node_route.direct_block):
  * `requires` a direct param that isn't set (DIRECT_REQUIRES), `blocked` by a
  * copy-only param that is set (directRoute.blockedBy: a Krea copy's explicit
- * width/height), or `retired` by the maker on `on` (DIRECT_RETIRES). */
+ * width/height), `unsupported` by a shared param's value the maker can't
+ * render (directRoute.blockedWhen: Veo 3.1 Fast at 4K on Vertex), or
+ * `retired` by the maker on `on` (DIRECT_RETIRES). */
 export interface DirectBlock {
-  reason: 'requires' | 'blocked' | 'retired';
+  reason: 'requires' | 'blocked' | 'unsupported' | 'retired';
   param: string | null;
   on: string | null;
 }
@@ -127,6 +129,11 @@ export function directBlock(definition: ModelNodeDefinition, params: Record<stri
   if (needed && !params[needed]) return { reason: 'requires', param: needed, on: null };
   for (const key of definition.directRoute?.blockedBy ?? []) {
     if (hasValue(params[key])) return { reason: 'blocked', param: key, on: null };
+  }
+  for (const [key, unsupported] of Object.entries(definition.directRoute?.blockedWhen ?? {})) {
+    if (unsupported.includes(effectiveValue(definition, params, key) as string | number | boolean)) {
+      return { reason: 'unsupported', param: key, on: null };
+    }
   }
   const retires = Object.hasOwn(DIRECT_RETIRES, definition.id) ? DIRECT_RETIRES[definition.id] : undefined;
   if (retires && todayIso() >= retires.on) {

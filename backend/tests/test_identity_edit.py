@@ -309,7 +309,9 @@ def test_node_definition_shape() -> None:
     assert ndef["category"] == "image-gen"
     assert ndef["apiProvider"] == "fal"
     assert ndef["apiEndpoint"] == "fal-ai/nano-banana-2/edit"
-    assert ndef["envKeyName"] == "FAL_KEY"
+    # fal, or Google's own API with a Google key (execution/maker_routes_google.py).
+    assert ndef["envKeyName"] == ["GOOGLE_API_KEY", "FAL_KEY"]
+    assert ndef["directKeyName"] == "GOOGLE_API_KEY"
     assert ndef["executionPattern"] == "async-poll"
 
     inputs = {p["id"]: p for p in ndef["inputPorts"]}
@@ -323,8 +325,10 @@ def test_node_definition_shape() -> None:
     assert set(outputs) == {"image"}
     assert outputs["image"]["dataType"] == "Image"
 
-    params = {p["key"]: p for p in ndef["params"]}
-    assert set(params) == {"resolution", "thinking_level", "identity_strength"}
+    # Both routes read the same three params.
+    assert ndef["params"] == [] and ndef["falParams"] == [] and ndef["directParams"] == []
+    params = {p["key"]: p for p in ndef["sharedParams"]}
+    assert list(params) == ["resolution", "thinking_level", "identity_strength"]
 
     resolution_values = {o["value"] for o in params["resolution"]["options"]}
     assert resolution_values == {"1024", "2048"}
