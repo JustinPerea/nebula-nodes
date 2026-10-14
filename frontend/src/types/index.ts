@@ -166,10 +166,13 @@ export interface ModelNodeDefinition {
  *    this list to them.
  *  - `param`: one param picks local or provider work. Only the values in
  *    `freeWhen` run locally; any other value (including an empty or unknown
- *    one) needs one of `anyKey` and has no list price. */
+ *    one) needs one of `anyKey`. `byValue` gives a value its own keys and
+ *    provider (QC Jev mode: TYPESAFE_API_KEY). A paid value has a list price
+ *    only when the node's price entry has a row for it (lib/pricing.ts). */
 export type ProviderVia =
   | { kind: 'model'; path: string[]; models: string[]; default: string; fallbackFor: string[] }
-  | { kind: 'param'; param: string; freeWhen: string[]; anyKey: string[]; provider: string };
+  | { kind: 'param'; param: string; freeWhen: string[]; anyKey: string[]; provider: string;
+      byValue?: Record<string, { anyKey: string[]; provider: string }> };
 
 /** A single shot within a cinema-scene storyboard. Each shot carries its own
  *  prompt and (optionally) overrides the shared palette/look, and produces one

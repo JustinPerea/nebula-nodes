@@ -334,6 +334,20 @@ function validateProviderVia() {
         if (envExample.includes(`${key}=`)) errors.push(`.env.example must not advertise provider credential ${key}`);
       }
       if (typeof via.provider !== 'string' || !via.provider) errors.push(`${where}.provider must name what it calls`);
+      // A value with its own keys and provider (QC mode jev -> TypeSafe).
+      if (via.byValue !== undefined && (!via.byValue || typeof via.byValue !== 'object' || Array.isArray(via.byValue))) {
+        errors.push(`${where}.byValue must be an object of value -> {anyKey, provider}`);
+      }
+      for (const [value, route] of Object.entries(via.byValue ?? {})) {
+        if (!values.has(value)) errors.push(`${where}.byValue ${value} is not an option of ${via.param}`);
+        if ((via.freeWhen ?? []).includes(value)) errors.push(`${where}.byValue ${value} runs locally (freeWhen)`);
+        if (!Array.isArray(route?.anyKey) || !route.anyKey.length) errors.push(`${where}.byValue.${value}.anyKey must list the keys`);
+        for (const key of route?.anyKey ?? []) {
+          if (!settingsKeys.has(key)) errors.push(`${where}.byValue.${value}.anyKey ${key} is missing from settings.example.json apiKeys`);
+          if (envExample.includes(`${key}=`)) errors.push(`.env.example must not advertise provider credential ${key}`);
+        }
+        if (typeof route?.provider !== 'string' || !route.provider) errors.push(`${where}.byValue.${value}.provider must name what it calls`);
+      }
     } else {
       errors.push(`${where}.kind must be 'model' or 'param'`);
     }

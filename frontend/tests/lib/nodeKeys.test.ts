@@ -45,6 +45,14 @@ describe('local nodes that call a provider', () => {
     expect(nodeKeyStatus(qc, { mode: 'vision-llm' }, { loaded: false, apiKeys: {} })).toBeUndefined();
   });
 
+  it('badges a QC node in Jev mode on the TypeSafe key alone', () => {
+    expect(nodeKeyStatus(qc, { mode: 'jev' }, keys({}))).toBe('missing');
+    expect(nodeKeyStatus(qc, { mode: 'jev' }, keys({ OPENAI_API_KEY: '***o' }))).toBe('missing');
+    expect(nodeKeyStatus(qc, { mode: 'jev' }, keys({ TYPESAFE_API_KEY: '***t' }))).toBeUndefined();
+    expect(nodeKeyStatus(qc, { mode: 'vision-llm' }, keys({ TYPESAFE_API_KEY: '***t' }))).toBe('missing');
+    expect(missingKeyTitle(qc, { mode: 'jev' })).toBe('Needs TYPESAFE_API_KEY for mode jev');
+  });
+
   it('reads the QC mode exactly like the handler: only heuristic and opencv run locally', () => {
     for (const [params, calls] of [
       [{}, false], [{ mode: 'heuristic' }, false], [{ mode: 'opencv' }, false], [{ mode: 'vision-llm' }, true],

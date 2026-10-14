@@ -227,7 +227,7 @@ def test_definitions_and_frontend_mirror_match_contract() -> None:
         assert definition["inputPorts"][0]["dataType"] == "Video"
         assert {port["dataType"] for port in definition["outputPorts"]} == {"Image", "Text"}
         mode = next(param for param in definition["params"] if param["key"] == "mode")
-        assert {option["value"] for option in mode["options"]} == {"heuristic", "vision-llm", "opencv"}
+        assert {option["value"] for option in mode["options"]} == {"heuristic", "vision-llm", "opencv", "jev"}
         assert f"'{definition_id}':" in frontend
 
 

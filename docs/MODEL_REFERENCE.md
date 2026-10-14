@@ -6424,8 +6424,10 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Analysis Mode | enum | heuristic | Heuristic, Vision LLM, OpenCV |
+| Analysis Mode | enum | heuristic | Heuristic, Vision LLM, OpenCV, Jev (TypeSafe, experimental) |
 | Expected Angle | string | — | — |
+| Jev Model | enum | jev-1.14.0 | Jev 1.14.0 (pinned), Jev 1.13.0 (pinned), jev-latest (moves; re-check thresholds), jev-preview (moves) |
+| Jev Minimum Confidence | float | 0.5 | 0–1 |
 
 ---
 
@@ -6443,8 +6445,10 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Analysis Mode | enum | heuristic | Heuristic, Vision LLM, OpenCV |
+| Analysis Mode | enum | heuristic | Heuristic, Vision LLM, OpenCV, Jev (TypeSafe, experimental) |
 | Sample Density | int | 5 | 2–12 |
+| Jev Model | enum | jev-1.14.0 | Jev 1.14.0 (pinned), Jev 1.13.0 (pinned), jev-latest (moves; re-check thresholds), jev-preview (moves) |
+| Jev Minimum Confidence | float | 0.5 | 0–1 |
 
 ---
 
@@ -6462,9 +6466,11 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Analysis Mode | enum | heuristic | Heuristic, Vision LLM, OpenCV |
+| Analysis Mode | enum | heuristic | Heuristic, Vision LLM, OpenCV, Jev (TypeSafe, experimental) |
 | Samples Per Second | float | 1 | 0.1–4 |
 | Track Faces | bool | true | — |
+| Jev Model | enum | jev-1.14.0 | Jev 1.14.0 (pinned), Jev 1.13.0 (pinned), jev-latest (moves; re-check thresholds), jev-preview (moves) |
+| Jev Minimum Confidence | float | 0.5 | 0–1 |
 
 ---
 
@@ -6482,8 +6488,10 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Analysis Mode | enum | heuristic | Heuristic, Vision LLM, OpenCV |
+| Analysis Mode | enum | heuristic | Heuristic, Vision LLM, OpenCV, Jev (TypeSafe, experimental) |
 | Sample Density | int | 5 | 2–12 |
+| Jev Model | enum | jev-1.14.0 | Jev 1.14.0 (pinned), Jev 1.13.0 (pinned), jev-latest (moves; re-check thresholds), jev-preview (moves) |
+| Jev Minimum Confidence | float | 0.5 | 0–1 |
 
 ---
 

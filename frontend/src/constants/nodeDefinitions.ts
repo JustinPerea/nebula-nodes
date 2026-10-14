@@ -1,4 +1,23 @@
-import type { ModelNodeDefinition } from '../types';
+import type { ModelNodeDefinition, ParamDefinition, ProviderVia } from '../types';
+
+// The Video QC nodes run locally in heuristic and opencv mode. Vision LLM mode
+// calls the first vision model with a key set (backend services/vision_llm.py
+// VISION_PROVIDERS) and has no list price; Jev mode asks TypeSafe Jev one typed
+// question per check (backend services/qc_jev.py), priced per request.
+const QC_PROVIDER_VIA: ProviderVia = {
+  kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'],
+  anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision',
+  byValue: { jev: { anyKey: ['TYPESAFE_API_KEY'], provider: 'typesafe' } },
+};
+const QC_JEV_PARAMS: ParamDefinition[] = [
+  { key: 'model', label: 'Jev Model', type: 'enum', required: false, default: 'jev-1.14.0', options: [
+    { label: 'Jev 1.14.0 (pinned)', value: 'jev-1.14.0' },
+    { label: 'Jev 1.13.0 (pinned)', value: 'jev-1.13.0' },
+    { label: 'jev-latest (moves; re-check thresholds)', value: 'jev-latest' },
+    { label: 'jev-preview (moves)', value: 'jev-preview' },
+  ], visibleWhen: { mode: ['jev'] } },
+  { key: 'min_confidence', label: 'Jev Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05, visibleWhen: { mode: ['jev'] } },
+];
 
 export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'paper-source': {
@@ -12710,12 +12729,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       { key: 'mode', label: 'Analysis Mode', type: 'enum', required: false, default: 'heuristic', options: [
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
+        { label: 'Jev (TypeSafe, experimental)', value: 'jev' },
       ] },
       { key: 'sample_density', label: 'Sample Density', type: 'integer', required: false, default: 5, min: 2, max: 12, step: 1 },
+      ...QC_JEV_PARAMS,
     ],
-    // Vision LLM mode calls the first vision model with a key set
-    // (backend services/vision_llm.py VISION_PROVIDERS); it has no list price.
-    providerVia: { kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'], anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision' },
+    providerVia: QC_PROVIDER_VIA,
   },
   'qc-frame-review': {
     id: 'qc-frame-review', displayName: 'QC Frame Review', category: 'analyzer',
@@ -12728,13 +12747,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       { key: 'mode', label: 'Analysis Mode', type: 'enum', required: false, default: 'heuristic', options: [
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
+        { label: 'Jev (TypeSafe, experimental)', value: 'jev' },
       ] },
       { key: 'sample_rate', label: 'Samples Per Second', type: 'float', required: false, default: 1, min: 0.1, max: 4, step: 0.1 },
       { key: 'track_faces', label: 'Track Faces', type: 'boolean', required: false, default: true },
+      ...QC_JEV_PARAMS,
     ],
-    // Vision LLM mode calls the first vision model with a key set
-    // (backend services/vision_llm.py VISION_PROVIDERS); it has no list price.
-    providerVia: { kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'], anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision' },
+    providerVia: QC_PROVIDER_VIA,
   },
   'qc-composited-look': {
     id: 'qc-composited-look', displayName: 'QC Composited Look', category: 'analyzer',
@@ -12747,12 +12766,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       { key: 'mode', label: 'Analysis Mode', type: 'enum', required: false, default: 'heuristic', options: [
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
+        { label: 'Jev (TypeSafe, experimental)', value: 'jev' },
       ] },
       { key: 'sample_density', label: 'Sample Density', type: 'integer', required: false, default: 5, min: 2, max: 12, step: 1 },
+      ...QC_JEV_PARAMS,
     ],
-    // Vision LLM mode calls the first vision model with a key set
-    // (backend services/vision_llm.py VISION_PROVIDERS); it has no list price.
-    providerVia: { kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'], anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision' },
+    providerVia: QC_PROVIDER_VIA,
   },
   'qc-camera-geometry': {
     id: 'qc-camera-geometry', displayName: 'QC Camera Geometry', category: 'analyzer',
@@ -12768,12 +12787,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       { key: 'mode', label: 'Analysis Mode', type: 'enum', required: false, default: 'heuristic', options: [
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
+        { label: 'Jev (TypeSafe, experimental)', value: 'jev' },
       ] },
       { key: 'expected_angle', label: 'Expected Angle', type: 'string', required: false, default: '', placeholder: 'e.g. low-angle push-in' },
+      ...QC_JEV_PARAMS,
     ],
-    // Vision LLM mode calls the first vision model with a key set
-    // (backend services/vision_llm.py VISION_PROVIDERS); it has no list price.
-    providerVia: { kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'], anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision' },
+    providerVia: QC_PROVIDER_VIA,
   },
 
   // TypeSafe Jev answers typed questions with probabilities and writes no text.

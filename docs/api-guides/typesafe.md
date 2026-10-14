@@ -176,6 +176,12 @@ TypeSafe charges per input token ($0.042 per million) and nothing for output; im
 - Rate limits are set per organization in the TypeSafe console.
 - Graphs can't branch on `pass` yet; it is information for people, agents and prompts until the engine gains skip support.
 
+## Jev mode in the Video QC nodes
+
+`qc-loop-safety`, `qc-frame-review`, `qc-composited-look` and `qc-camera-geometry` have `mode: jev`. Each check the node makes becomes one atomic question (yes/no, Choice or Score) over the sampled frames, all in one request, priced per request like Decide. The node keeps its ports and report keys, adds a `jev` object with every check's probabilities, confidence and verdict, and passes only when every must-pass check passes (the minimum, not an average). An unsure check is never reported as a pass. `model` and `min_confidence` appear only in Jev mode.
+
+Frames: at most 8, 768 px on the long side, each sent once in the state and named in the questions, so they fit the 32k-token per-question limit. The full check list, and which measurements stay local, is in [`docs/video-qc-validation-contract.md`](../video-qc-validation-contract.md#jev-mode).
+
 ## For developers
 
 `backend/services/typesafe_client.py` is shared by every Jev node:

@@ -49,8 +49,14 @@ describe('the shipped price table', () => {
   it('prices every entry at its default settings', () => {
     // Every curated or generated entry must resolve at the node's defaults,
     // or the chip would read "unpriced" for a fresh node.
+    // A local node priced only in a paid mode (QC Jev) is free at its
+    // defaults, so it must resolve in that mode instead.
     const missing = Object.entries(nodes)
-      .filter(([id, entry]) => estimateNode(entry, catalog[id] ?? {}, {}, entry.provider) === null)
+      .filter(([id, entry]) => {
+        const local = catalog[id]?.apiProvider === 'utility';
+        const params = local ? { ...(entry.rows[0]?.match ?? {}) } : {};
+        return estimateNode(entry, catalog[id] ?? {}, params, entry.provider) === null;
+      })
       .map(([id]) => id);
     expect(missing).toEqual([]);
   });

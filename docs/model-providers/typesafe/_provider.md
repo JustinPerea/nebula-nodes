@@ -42,6 +42,7 @@ on and what to re-check. Written in our own words from the vendor docs
 | Node | Handler | Status |
 |---|---|---|
 | `jev-decide` | `backend/handlers/jev_decide.py` | shipped 2026-10-14 |
+| QC nodes, `mode: jev` | `backend/services/qc_jev.py` + the four `backend/handlers/qc_*.py` | shipped 2026-10-14 |
 
 ## Known gaps and re-checks
 

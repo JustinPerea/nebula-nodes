@@ -112,9 +112,12 @@ def test_local_nodes_that_call_a_provider_say_what_they_need(nebula, monkeypatch
     qc_row = next(row for row in mcp_server.find_nodes(query="qc frame")["nodes"] if row["id"] == "qc-frame-review")
     assert qc_row["runsWith"] == "free" and qc_row["price"] == "free"
     assert "mode=vision-llm" in qc_row["needsKeyFor"] and "no list price" in qc_row["needsKeyFor"]
+    assert "mode=jev needs TYPESAFE_API_KEY and is priced per run" in qc_row["needsKeyFor"]
     qc = mcp_server.describe_node("qc-frame-review")
     assert qc["runsWith"] == "free" and qc["price"] == "free" and "no list price" in qc["priceNote"]
-    assert qc["runsWithOptions"]["options"] == {"heuristic": "free", "vision-llm": None, "opencv": "free"}
+    assert qc["runsWithOptions"]["options"] == {"heuristic": "free", "vision-llm": None, "opencv": "free",
+                                                "jev": None}
+    assert qc["pricedWhen"]["rows"] == [{"mode": "jev", "usd": [0.00001, 0.0027]}]
 
     keys.update({"GOOGLE_API_KEY": "g"})
     cinema = mcp_server.describe_node("cinema-scene")

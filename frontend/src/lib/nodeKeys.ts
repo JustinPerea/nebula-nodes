@@ -33,6 +33,22 @@ export function paramCallsProvider(def: ModelNodeDefinition, params: Params | un
   return !(typeof value === 'string' && via.freeWhen.includes(value));
 }
 
+/** The value a `param` node's params pick: the param, or its default. */
+export function paramValue(def: ModelNodeDefinition, params: Params | undefined): unknown {
+  const via = def.providerVia;
+  if (via?.kind !== 'param') return undefined;
+  const given = params ?? {};
+  return given[via.param] === undefined ? paramDefault(def, via.param) : given[via.param];
+}
+
+/** The keys and provider one value of a `param` node calls: its `byValue`
+ * entry, else the node's `anyKey` / `provider`. Mirrors param_route in
+ * backend services/node_readiness.py. */
+export function paramRoute(via: Extract<ProviderVia, { kind: 'param' }>, value: unknown): { anyKey: string[]; provider: string } {
+  const own = typeof value === 'string' && via.byValue && Object.hasOwn(via.byValue, value) ? via.byValue[value] : undefined;
+  return own ?? { anyKey: via.anyKey, provider: via.provider };
+}
+
 /** For a `model` node: the model these params run, normalized the way the
  * handler guard does (an empty or fallback value runs the default), or null
  * when the value can't be read or isn't one of its models. A missing level
@@ -75,8 +91,9 @@ export function keysNeeded(def: ModelNodeDefinition, params: Params | undefined,
   if (!via) return [{ definition: def, params: params ?? {} }];
   if (via.kind === 'param') {
     if (!paramCallsProvider(def, params)) return [];
-    const value = (params ?? {})[via.param] ?? paramDefault(def, via.param);
-    return [{ definition: { ...def, envKeyName: via.anyKey, providerVia: undefined }, params: {}, reason: `${via.param} ${String(value)}` }];
+    const value = paramValue(def, params);
+    const route = paramRoute(via, value);
+    return [{ definition: { ...def, envKeyName: route.anyKey, providerVia: undefined }, params: {}, reason: `${via.param} ${String(value)}` }];
   }
   const model = modelChoice(def, params);
   const target = model ? defs[model] : undefined;

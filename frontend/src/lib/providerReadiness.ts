@@ -2,7 +2,7 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../types';
 import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
 import { configuredDirectKey, directKeyNames } from './directRoute';
-import { modelChoice, paramCallsProvider } from './nodeKeys';
+import { modelChoice, paramCallsProvider, paramRoute, paramValue } from './nodeKeys';
 
 export type ProviderSetupTarget =
   | { kind: 'api-key'; key: string }
@@ -123,13 +123,21 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
   }
   if (def.providerVia?.kind === 'param') {
     const via = def.providerVia;
-    if (!paramCallsProvider(def, params)) return { label: 'No API key required', tone: 'neutral',
-      detail: `This ${via.param} runs locally. Other ${via.param} values call a ${via.provider} model and need ${via.anyKey.join(', ')}.` };
-    // The handler calls the first vision model whose key is set.
-    const key = via.anyKey.find((candidate) => cache.apiKeys[candidate]?.trim()) ?? via.anyKey[0];
+    if (!paramCallsProvider(def, params)) {
+      const own = Object.entries(via.byValue ?? {}).map(([value, route]) => `; ${via.param} ${value} calls ${route.provider} with ${route.anyKey.join(' or ')}`).join('');
+      return { label: 'No API key required', tone: 'neutral',
+        detail: `This ${via.param} runs locally. Other ${via.param} values call a ${via.provider} model and need ${via.anyKey.join(', ')}${own}.` };
+    }
+    const value = paramValue(def, params);
+    const route = paramRoute(via, value);
+    // The price, when there is one, is the run estimate's (lib/runScope.ts).
+    const own = typeof value === 'string' && Boolean(via.byValue && Object.hasOwn(via.byValue, value));
+    // The handler calls the first model whose key is set.
+    const key = route.anyKey.find((candidate) => cache.apiKeys[candidate]?.trim()) ?? route.anyKey[0];
     const ready = keyReadiness(key, cache, health);
+    const how = route.anyKey.length > 1 ? `the first of ${route.anyKey.join(', ')} that is set` : route.anyKey[0];
     return { ...ready, connectionLabel: `${PROVIDER_KEY_LABELS[key] ?? key} API`,
-      detail: `Calls a ${via.provider} model with the first of ${via.anyKey.join(', ')} that is set; no list price. ${ready.detail}` };
+      detail: `Calls a ${route.provider} model with ${how}${own ? '' : '; no list price'}. ${ready.detail}` };
   }
   const keys = (Array.isArray(def.envKeyName) ? def.envKeyName : [def.envKeyName]).filter(Boolean);
   if (!keys.length) return { label: 'No API key required', tone: 'neutral',

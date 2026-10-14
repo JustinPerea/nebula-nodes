@@ -14,6 +14,7 @@ Jev returns probabilities, not prose. Treat it as a cheap, fast judge between ge
 | One yes/no check, a classification, or a 2-10 level rating of text and/or images | `jev-decide` | `answer_type`: `yes_no`, `choice`, `score` |
 | Keep the best of N candidate images | `jev-pick-best` | Not shipped yet. Until then, run `jev-decide` per image (iterator) and compare `probability` |
 | Where something is in an image (crop, mask for inpainting) | `jev-box` | Not shipped yet. Experimental; always paired with a presence check |
+| Typed QC of a video (loop seam, identity drift, compositing, camera angle) | `qc-*` nodes with `mode: jev` | One question per check over the sampled frames; read `jev.verdict` and `jev.checks` in the `text` report |
 
 Use `claude-chat` or another LLM node when you need words back (captions, critiques, rewrites). Use Jev when you need a decision a graph or agent can act on.
 
@@ -33,6 +34,14 @@ Use `claude-chat` or another LLM node when you need words back (captions, critiq
 - `confidence`: for yes/no it is `|2p - 1|`; for choice and score it is Jev's own.
 - `report` names the model that actually answered and the input tokens. Quote it when you explain a decision.
 - Graphs can't branch on `pass` yet. Read it via the run results and decide the next step yourself, or propose the change.
+
+## QC nodes in Jev mode
+
+- Set `mode` to `jev` on `qc-loop-safety`, `qc-frame-review`, `qc-composited-look` or `qc-camera-geometry`. It needs `TYPESAFE_API_KEY`; the default `heuristic` mode stays free.
+- The `text` report keeps its usual keys and adds `jev`: `verdict` (`true` / `false` / `unsure`, or `null` when no must-pass check applied), `min_pass_probability`, and `checks.<id>` with the question, answer, probabilities, confidence and verdict.
+- Act on `jev.verdict`, not on one score. `unsure` means a check fell below `min_confidence`; look at `jev.unsure` and check by eye or rerun with another sample density.
+- Camera geometry only gates when you set `expected_angle` or wire a `reference` frame.
+- At most 8 frames go to Jev; `jev.frames.sent` lists which samples.
 
 ## Models
 

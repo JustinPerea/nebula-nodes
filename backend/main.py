@@ -3316,15 +3316,26 @@ def _cinema_price_note() -> str:
 
 
 def _keyed_mode_hint(definition: Mapping[str, Any]) -> str | None:
-    """find_nodes' short form of a param-picked provider call (vision-llm QC)."""
+    """find_nodes' short form of a param-picked provider call (vision-llm or
+    Jev QC): which keys each paid value needs, and whether it has a list price."""
     via = node_readiness.provider_via(definition)
     if not via or via.get("kind") != "param":
         return None
     free = set(via.get("freeWhen") or [])
     paid = [option.get("value") for param in definition.get("params") or [] if param.get("key") == via.get("param")
             for option in param.get("options") or [] if isinstance(option, dict) and option.get("value") not in free]
-    return (f"{via.get('param')}={'/'.join(str(v) for v in paid)} needs {' or '.join(via.get('anyKey') or [])} "
-            "and has no list price")
+    try:
+        entry = (model_pricing.load_pricing().get("nodes") or {}).get(definition.get("id"))
+    except (OSError, ValueError):
+        entry = None
+    groups: dict[tuple[str, bool], list[str]] = {}
+    for value in paid:
+        keys, _ = node_readiness.param_route(via, value)
+        priced = model_pricing.estimate_node(entry, definition, {via.get("param"): value}) is not None
+        groups.setdefault((" or ".join(keys), priced), []).append(str(value))
+    return "; ".join(f"{via.get('param')}={'/'.join(values)} needs {keys} and "
+                     f"{'is priced per run (describe_node)' if priced else 'has no list price'}"
+                     for (keys, priced), values in groups.items())
 
 
 @app.get("/api/agent/nodes")
@@ -3464,6 +3475,16 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         if options and options.get("note"):
             # Free at its defaults; the other values of that param are not.
             result["priceNote"] = f"Free at its defaults. {options['note']}"
+        try:
+            entry = (model_pricing.load_pricing().get("nodes") or {}).get(definition["id"])
+        except (OSError, ValueError):
+            entry = None
+        if entry:
+            # A paid value with its own rows (QC mode jev): what a run in it costs.
+            result["pricedWhen"] = {
+                "per": entry.get("per"), "dependsOn": entry.get("priceParams") or [],
+                "rows": [{**row.get("match", {}), "usd": row.get("price")} for row in entry.get("rows") or []][:40],
+            }
     elif definition.get("apiProvider") == "utility":
         result["price"] = None
         result["priceNote"] = (options or {}).get("note") or (

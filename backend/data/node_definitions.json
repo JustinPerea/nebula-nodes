@@ -20298,12 +20298,25 @@
         "options": [
           { "label": "Heuristic", "value": "heuristic" },
           { "label": "Vision LLM", "value": "vision-llm" },
-          { "label": "OpenCV", "value": "opencv" }
+          { "label": "OpenCV", "value": "opencv" },
+          { "label": "Jev (TypeSafe, experimental)", "value": "jev" }
         ]
       },
-      { "key": "sample_density", "label": "Sample Density", "type": "integer", "required": false, "default": 5, "min": 2, "max": 12, "step": 1 }
+      { "key": "sample_density", "label": "Sample Density", "type": "integer", "required": false, "default": 5, "min": 2, "max": 12, "step": 1 },
+      {
+        "key": "model", "label": "Jev Model", "type": "enum", "required": false, "default": "jev-1.14.0",
+        "options": [
+          { "label": "Jev 1.14.0 (pinned)", "value": "jev-1.14.0" },
+          { "label": "Jev 1.13.0 (pinned)", "value": "jev-1.13.0" },
+          { "label": "jev-latest (moves; re-check thresholds)", "value": "jev-latest" },
+          { "label": "jev-preview (moves)", "value": "jev-preview" }
+        ],
+        "visibleWhen": { "mode": ["jev"] }
+      },
+      { "key": "min_confidence", "label": "Jev Minimum Confidence", "type": "float", "required": false, "default": 0.5, "min": 0, "max": 1, "step": 0.05, "visibleWhen": { "mode": ["jev"] } }
     ],
-    "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision" }
+    "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision",
+      "byValue": { "jev": { "anyKey": ["TYPESAFE_API_KEY"], "provider": "typesafe" } } }
   },
   "qc-frame-review": {
     "id": "qc-frame-review",
@@ -20327,13 +20340,26 @@
         "options": [
           { "label": "Heuristic", "value": "heuristic" },
           { "label": "Vision LLM", "value": "vision-llm" },
-          { "label": "OpenCV", "value": "opencv" }
+          { "label": "OpenCV", "value": "opencv" },
+          { "label": "Jev (TypeSafe, experimental)", "value": "jev" }
         ]
       },
       { "key": "sample_rate", "label": "Samples Per Second", "type": "float", "required": false, "default": 1.0, "min": 0.1, "max": 4.0, "step": 0.1 },
-      { "key": "track_faces", "label": "Track Faces", "type": "boolean", "required": false, "default": true }
+      { "key": "track_faces", "label": "Track Faces", "type": "boolean", "required": false, "default": true },
+      {
+        "key": "model", "label": "Jev Model", "type": "enum", "required": false, "default": "jev-1.14.0",
+        "options": [
+          { "label": "Jev 1.14.0 (pinned)", "value": "jev-1.14.0" },
+          { "label": "Jev 1.13.0 (pinned)", "value": "jev-1.13.0" },
+          { "label": "jev-latest (moves; re-check thresholds)", "value": "jev-latest" },
+          { "label": "jev-preview (moves)", "value": "jev-preview" }
+        ],
+        "visibleWhen": { "mode": ["jev"] }
+      },
+      { "key": "min_confidence", "label": "Jev Minimum Confidence", "type": "float", "required": false, "default": 0.5, "min": 0, "max": 1, "step": 0.05, "visibleWhen": { "mode": ["jev"] } }
     ],
-    "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision" }
+    "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision",
+      "byValue": { "jev": { "anyKey": ["TYPESAFE_API_KEY"], "provider": "typesafe" } } }
   },
   "qc-composited-look": {
     "id": "qc-composited-look",
@@ -20357,12 +20383,25 @@
         "options": [
           { "label": "Heuristic", "value": "heuristic" },
           { "label": "Vision LLM", "value": "vision-llm" },
-          { "label": "OpenCV", "value": "opencv" }
+          { "label": "OpenCV", "value": "opencv" },
+          { "label": "Jev (TypeSafe, experimental)", "value": "jev" }
         ]
       },
-      { "key": "sample_density", "label": "Sample Density", "type": "integer", "required": false, "default": 5, "min": 2, "max": 12, "step": 1 }
+      { "key": "sample_density", "label": "Sample Density", "type": "integer", "required": false, "default": 5, "min": 2, "max": 12, "step": 1 },
+      {
+        "key": "model", "label": "Jev Model", "type": "enum", "required": false, "default": "jev-1.14.0",
+        "options": [
+          { "label": "Jev 1.14.0 (pinned)", "value": "jev-1.14.0" },
+          { "label": "Jev 1.13.0 (pinned)", "value": "jev-1.13.0" },
+          { "label": "jev-latest (moves; re-check thresholds)", "value": "jev-latest" },
+          { "label": "jev-preview (moves)", "value": "jev-preview" }
+        ],
+        "visibleWhen": { "mode": ["jev"] }
+      },
+      { "key": "min_confidence", "label": "Jev Minimum Confidence", "type": "float", "required": false, "default": 0.5, "min": 0, "max": 1, "step": 0.05, "visibleWhen": { "mode": ["jev"] } }
     ],
-    "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision" }
+    "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision",
+      "byValue": { "jev": { "anyKey": ["TYPESAFE_API_KEY"], "provider": "typesafe" } } }
   },
   "qc-camera-geometry": {
     "id": "qc-camera-geometry",
@@ -20387,12 +20426,25 @@
         "options": [
           { "label": "Heuristic", "value": "heuristic" },
           { "label": "Vision LLM", "value": "vision-llm" },
-          { "label": "OpenCV", "value": "opencv" }
+          { "label": "OpenCV", "value": "opencv" },
+          { "label": "Jev (TypeSafe, experimental)", "value": "jev" }
         ]
       },
-      { "key": "expected_angle", "label": "Expected Angle", "type": "string", "required": false, "default": "", "placeholder": "e.g. low-angle push-in" }
+      { "key": "expected_angle", "label": "Expected Angle", "type": "string", "required": false, "default": "", "placeholder": "e.g. low-angle push-in" },
+      {
+        "key": "model", "label": "Jev Model", "type": "enum", "required": false, "default": "jev-1.14.0",
+        "options": [
+          { "label": "Jev 1.14.0 (pinned)", "value": "jev-1.14.0" },
+          { "label": "Jev 1.13.0 (pinned)", "value": "jev-1.13.0" },
+          { "label": "jev-latest (moves; re-check thresholds)", "value": "jev-latest" },
+          { "label": "jev-preview (moves)", "value": "jev-preview" }
+        ],
+        "visibleWhen": { "mode": ["jev"] }
+      },
+      { "key": "min_confidence", "label": "Jev Minimum Confidence", "type": "float", "required": false, "default": 0.5, "min": 0, "max": 1, "step": 0.05, "visibleWhen": { "mode": ["jev"] } }
     ],
-    "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision" }
+    "providerVia": { "kind": "param", "param": "mode", "freeWhen": ["heuristic", "opencv"], "anyKey": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"], "provider": "vision",
+      "byValue": { "jev": { "anyKey": ["TYPESAFE_API_KEY"], "provider": "typesafe" } } }
   },
   "jev-decide": {
     "id": "jev-decide",
