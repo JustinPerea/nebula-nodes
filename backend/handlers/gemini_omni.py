@@ -11,9 +11,9 @@ import httpx
 
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
-from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
+from services.media_input import read_local_media
 from services.public_url import fetch_public_media
 from services.provider_capabilities import enforce_gemini_omni_capabilities
 from execution.missing_credential import MissingCredentialError
@@ -74,7 +74,7 @@ async def _load_bytes(value: str) -> tuple[bytes, str]:
     path = Path(value)
     if not path.exists():
         raise ValueError(f"Media not found: {value}")
-    return require_allowed_path(path).read_bytes(), _mime_for_path(path)
+    return read_local_media(path, label="Gemini Omni input", max_bytes=MAX_INPUT_BYTES)[1], _mime_for_path(path)
 
 
 async def _build_input_parts(

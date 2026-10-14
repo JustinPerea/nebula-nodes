@@ -4348,3 +4348,88 @@ Still open:
   added here because it needs Runway's current ratio list re-read first.
 - Security follow-ups #1, #2, #4, #5 (Ideogram SSRF, URL-download sweep, MiniMax media size cap, ElevenLabs
   `voice_id` path quoting) are for the next stage.
+
+### Round 2 stage 2: security (SSRF, local reads, URL injection)
+
+Fixes the background review's follow-ups #1, #2, #4 and #5 at the shared code, then sweeps every reader and
+fetcher the branch adds or touches.
+
+- **One reader for uploads, `services/media_input.py`.** `load_media(value, label, max_bytes)` is the single path
+  for a media value the backend itself reads: a data URI is decoded (refused before decoding when it can't fit);
+  an owned output (`/api/outputs/...`, or a loopback URL to one: `127.0.0.1`, `127.1`, `[::1]`, `*.localhost`) is
+  its file under OUTPUT_ROOT; any other URL goes through `public_url.fetch_public_media` (public https only, every
+  redirect hop DNS-checked, no credentials, byte cap); a local path goes through `read_local_media`
+  (`require_allowed_path`, `is_file`, a `stat` size check before any byte, then a read bounded to `max_bytes + 1`
+  in case the file grew). An `/api/outputs/` ref that escapes the outputs folder is now an error instead of being
+  treated as a plain path.
+- **#1 SSRF, Ideogram.** `handlers/ideogram._load_binary` is now `load_media` with Ideogram's 25 MB cap ("max size
+  25MB", edit-v3 reference, read today). This covers the Krea copies (`maker_routes_ideogram_runway`) and the
+  first-party Ideogram nodes. Behavior change: first-party Ideogram nodes no longer fetch `http://` URLs or any
+  private/loopback host; a public https URL, an owned output, a data URI or a local file still work.
+  `media_ref` now uses the same loopback test as the reader (it was a three-name set).
+- **#2 sweep, server-side fetches of param/port URLs.** In the branch's code only two other places fetch a
+  param URL themselves: OpenAI references (`maker_routes_openai.local_images`, already `fetch_public_media`; now
+  also resolves loopback owned outputs and caps data URIs at 50 MB) and Gemini Omni / Veo (already public-only).
+  Runway, MiniMax, BytePlus, xAI, Meshy and Google `generateContent`/Interactions pass https URLs to the maker,
+  which fetches them; that isn't a fetch from this machine. **Provider result downloads were left as the repo's
+  convention has them** (plain GET of the maker's own result URL, as Runway, Meshy, MiniMax, Veo and Ideogram
+  results already do); the public fetcher is used where the URL can be chosen by someone else (Krea answers,
+  inputs). One exception, below: the ElevenLabs dubbing redirect.
+- **#4 and #3 of the brief, local reads with caps** (every cap is the maker's documented limit where one exists,
+  read today; otherwise Nebula's own bound, said so in the code):
+  - MiniMax H3 `media_url`: image 30 MB, video 50 MB, audio 15 MB, and the whole request 64 MB once encoded
+    (video-generation-v2-create.md). Owned output URLs on loopback become data URIs (MiniMax can't fetch them).
+  - BytePlus Seedance: image 30 MB, audio 15 MB, request 64 MB (create-video-generation-task-api); Seedream
+    references 30 MB (ModelArk/1541523). The BytePlus docs are a JS app; the quotes were read from the page's
+    embedded document JSON with curl, since WebFetch and Firecrawl returned only the shell.
+  - Meshy images 20 MB ("Maximum file size: 20 MB", docs.meshy.ai image-to-3d) via `image_to_data_uri(max_bytes=)`.
+  - OpenAI edits 50 MB (`openai_image_v2` edit, `openai_image_edit`), the guide figure the OpenAI lane already
+    cited.
+  - xAI: no byte limit documented for image or video input (checked the images and videos REST references), so
+    images use the shared default and local `.mp4` clips a 100 MB Nebula bound.
+  - Gemini Omni (100 MB) and Veo (frames 20 MB, clips 100 MB) local reads now use the caps they already applied
+    to URLs.
+  - Shared helpers got a default bound so no caller reads an unbounded file: `load_local_image` and
+    `image_to_data_uri` take `max_bytes` (default 100 MB, `image_input.DEFAULT_MAX_IMAGE_BYTES`). No vision or
+    image API takes a larger image, so this only stops a wrong path to a huge file.
+  - ElevenLabs speech-to-speech reads at most 250 MB (Nebula's bound; ElevenLabs gives "Maximum segment length:
+    5 minutes", no byte limit). Dubbing now streams its file from disk to ElevenLabs instead of reading it, with
+    ElevenLabs' "3 GB per source file via the API". Isolation and STT were not changed (not routed by this branch).
+- **#5 and URL path/query injection.**
+  - ElevenLabs `voice_id` is now letters and digits only (`[A-Za-z0-9]{1,64}`; the lane allowed `_` and `-`,
+    ElevenLabs' ids are like `JBFqnCBsd6RMkjVDRZzb`) and is `quote(..., safe="")`-escaped. `output_format` was
+    appended to the query unescaped from a saved param; it must now look like `codec_sample_rate[_bitrate]` and
+    is escaped. Dubbing ids and `target_lang` are escaped in the poll and download paths. Test fixtures that used
+    `voice-test` now use `voiceTest`.
+  - Provider task ids escaped as one path segment: the shared `async_poll_runner` (Runway, Replicate), BytePlus
+    tasks, MiniMax H3 query/cancel, MiniMax file retrieve, xAI video polls, Meshy polls, Ideogram dataset/model ids.
+- **#5 credentials and memory.**
+  - The ElevenLabs dubbing download used `follow_redirects=True` with `xi-api-key`. httpx strips only
+    `Authorization` on a cross-origin redirect (checked in the installed httpx `_redirect_headers`), so a custom
+    key header would follow a redirect to another host. A redirect within `api.elevenlabs.io` keeps the key; one
+    elsewhere is fetched without it through the public fetcher (1 GB bound).
+  - `services/output.save_video_from_url` streams to disk in chunks (Runway Ruby's 4K ProRes was read whole into
+    memory) and removes a partial file when the download fails. The shared test mock gained `client.stream`.
+  - No API key appears in a URL, log line or error message in the swept code (grep of every touched module).
+- **Tests:** `tests/test_media_input_security.py` (44): private IP, `127.1`, `0.0.0.0`, `[::1]`, metadata IP, DNS to
+  a private address, http scheme, redirect to private, no credentials on public fetch, remote/local/data caps
+  (base64 and percent-encoded), a file that grows after the check, owned outputs local (ref and loopback URLs),
+  escaping refs, the Krea Ideogram route refusing before Ideogram, file policy before bytes on the new readers,
+  MiniMax per-kind and request caps, BytePlus caps and loopback videos, xAI/OpenAI/Google caps, voice_id traversal
+  (`../../music`, `a/b`, `%2F`, `?`, `-`, `_`, space), output_format injection, dubbing redirect without the key,
+  task-id escaping, streamed video download and no partial file. **Mutation-checked:** 28 mutations, one per
+  behavior (each check removed, loosened or reverted to the old code); every one made a test fail. Five survived
+  the first pass because two layers covered the same behavior (stat check plus bounded read, pre/post decode
+  checks, an error before any partial file existed); tests were added for each layer until all failed.
+
+- `test_node_readiness.py` pins the direct imports of `services.output` (the paid-API walk stops there). It now
+  also imports `services.image_input` and `services.media_input`; neither calls a provider (media_input's only
+  network use is the credential-free public https fetch), so the pin was updated with that reason.
+
+Not done / for Justin:
+
+- Veo and Gemini Omni downloads of Google result files send `x-goog-api-key` with `follow_redirects=True`, the
+  same httpx header behavior as the dubbing fix. The redirect target is Google's own storage, and changing it
+  can't be checked without a live run, so it is flagged, not changed.
+- Runway's ephemeral upload POSTs the file to the `uploadUrl` Runway returns (no key sent); trusted as Runway's.
+- xAI and the Interactions API document no input byte limit; the bounds there are Nebula's.

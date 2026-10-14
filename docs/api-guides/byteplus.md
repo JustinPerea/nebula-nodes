@@ -116,6 +116,8 @@ Request: `POST /contents/generations/tasks`, then `GET /contents/generations/tas
 | `camera_fixed`, `seed` | `camera_fixed`, `seed` | 1.x only |
 | `enable_safety_checker` (fal) | none | fal only; ModelArk always runs its own filter, so switched off it keeps `seedream-4-5` and `seedance-1-0-t2v` on fal (`directRoute.accepts`) |
 
+Local images and audio are read only after the file policy check and BytePlus's own limits (create-video-generation-task-api, read 2026-10-14): "Single image must be less than 30 MB", "Each audio file must not exceed 15 MB", and the request body "does not exceed 64 MB" (Seedream references: "Size: Up to 30 MB"). A file or a request over them is refused before any call. Reference video URLs on this machine (`localhost`, any loopback address) are refused, since BytePlus can't fetch them.
+
 Start/end frames and references can't be combined: BytePlus calls them "mutually exclusive scenarios". A recipe that wires both, or wires in a Krea-only input (`start_video`, `effects`, references on 1.0), gets a clear error before any request is sent instead of a silent fallback.
 
 **Cancelling.** Stopping a run sends `DELETE /contents/generations/tasks/{id}`. BytePlus cancels a task that is still queued; "a running task can't be cancelled", so it finishes and, if it succeeds, BytePlus bills it. Nebula stops waiting after about 65 minutes and sends the same DELETE.

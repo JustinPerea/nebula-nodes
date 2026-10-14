@@ -27,6 +27,7 @@ import mimetypes
 import sys
 from pathlib import Path
 from typing import Any, Awaitable, Callable
+from urllib.parse import quote
 
 import httpx
 
@@ -35,8 +36,7 @@ from handlers.minimax import submit_task
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.cancellation import schedule_detached_cancel
-from services.file_access import require_allowed_path
-from services.output import get_run_dir, resolve_output_ref, save_video_from_url
+from services.output import get_run_dir, save_video_from_url
 
 MAX_REFERENCE_IMAGES = 9
 MAX_REFERENCE_VIDEOS = 3
@@ -49,6 +49,11 @@ PLAN_HINT = (
     "Explore/Build Subscription Key; Video Packages don't cover H3 yet "
     "(https://platform.minimax.io/docs/pricing/overview#models/video)."
 )
+# MiniMax's per-file and body limits (video-generation-v2-create.md, read
+# 2026-10-14): image "≤ 30 MB", video "≤ 50 MB", audio "≤ 15 MB", and "total
+# request body ≤ 64 MB; use public URLs for large files, avoid Base64".
+MAX_FILE_BYTES = {"image": 30_000_000, "video": 50_000_000, "audio": 15_000_000}
+MAX_BODY_BYTES = 64_000_000
 _MEDIA_KINDS = {"image": "image_url", "video": "video_url", "audio": "audio_url"}
 
 
@@ -58,17 +63,18 @@ def _log(msg: str) -> None:
 
 def media_url(value: str, kind: str) -> str:
     """A URL MiniMax can read: a public URL, an mm_file:// id or a data URI.
-    Local files and /api/outputs refs become data URIs (the request body may
-    be up to 64 MB)."""
-    value = resolve_output_ref(str(value))
+    Owned outputs (/api/outputs refs, or loopback URLs to them) and local
+    files become data URIs, after the file policy and MiniMax's per-file cap
+    (MAX_FILE_BYTES) are checked and before any byte is read."""
+    from services.media_input import owned_output_value, read_local_media
+
+    value = owned_output_value(str(value))
     if value.startswith(("https://", "http://", "data:", "mm_file://")):
         return value
-    path = require_allowed_path(Path(value))
-    if not path.exists():
-        raise ValueError(f"{kind.capitalize()} file not found: {value}")
-    mime = mimetypes.guess_type(path.name)[0] or {"image": "image/png", "video": "video/mp4",
-                                                 "audio": "audio/mpeg"}[kind]
-    return f"data:{mime};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}"
+    path, data = read_local_media(Path(value), label=f"MiniMax H3 {kind} input", max_bytes=MAX_FILE_BYTES[kind])
+    mime = (mimetypes.guess_type(path.name)[0] or {"image": "image/png", "video": "video/mp4",
+                                                  "audio": "audio/mpeg"}[kind]).lower()
+    return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
 
 def _values(port: PortValueDict | None) -> list[str]:
@@ -104,6 +110,11 @@ def build_content(inputs: dict[str, PortValueDict]) -> tuple[list[dict[str, Any]
         for value in values:
             field = _MEDIA_KINDS[kind]
             content.append({"type": field, field: {"url": media_url(value, kind)}, "role": role})
+    inline = sum(len(item[item["type"]]["url"]) for item in content[1:] if item[item["type"]]["url"].startswith("data:"))
+    if inline > MAX_BODY_BYTES:
+        raise ValueError(f"MiniMax H3 takes a request of up to {MAX_BODY_BYTES // 1_000_000} MB, and these local "
+                         f"files make it about {inline // 1_000_000} MB once encoded. Use public URLs for the "
+                         "larger files.")
     return content, "i2v" if has_frames else "r2v" if has_refs else "t2v"
 
 
@@ -164,13 +175,13 @@ async def handle_minimax_video_v2(
         if not task_id:
             raise RuntimeError(f"MiniMax H3 returned no task_id: {response.text}")
         _log(f"task {task_id} on {base}")
-        query = f"{base}/v2/query/video_generation/{task_id}"
+        query = f"{base}/v2/query/video_generation/{quote(task_id, safe='')}"
         for poll in range(1, MAX_POLLS + 1):
             try:
                 await asyncio.sleep(POLL_INTERVAL)
                 polled = await client.get(query, headers={"Authorization": f"Bearer {api_key}"})
             except asyncio.CancelledError:
-                schedule_detached_cancel(lambda: _cancel(f"{base}/v2/video_generation/{task_id}", api_key))
+                schedule_detached_cancel(lambda: _cancel(f"{base}/v2/video_generation/{quote(task_id, safe='')}", api_key))
                 raise
             if polled.status_code != 200:
                 raise RuntimeError(f"MiniMax H3 poll failed ({polled.status_code}): {_error_text(polled)}")

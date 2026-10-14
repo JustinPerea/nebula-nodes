@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import base64
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -204,14 +205,14 @@ async def create_video_task(key: str, body: dict[str, Any], *, client: httpx.Asy
 
 
 async def get_video_task(key: str, task_id: str, *, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
-    return await request("GET", f"{VIDEO_TASKS_PATH}/{task_id}", key, client=client)
+    return await request("GET", f"{VIDEO_TASKS_PATH}/{quote(task_id, safe='')}", key, client=client)
 
 
 async def cancel_video_task(key: str, task_id: str) -> None:
     """Best effort: DELETE a task Nebula no longer waits for (only a queued task
     can be cancelled). Runs on a detached task with its own client."""
     try:
-        await request("DELETE", f"{VIDEO_TASKS_PATH}/{task_id}", key)
+        await request("DELETE", f"{VIDEO_TASKS_PATH}/{quote(task_id, safe='')}", key)
     except Exception:  # noqa: BLE001 - fire and forget
         pass
 

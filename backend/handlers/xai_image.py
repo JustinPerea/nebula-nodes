@@ -35,7 +35,8 @@ import httpx
 from execution.missing_credential import MissingCredentialError
 from models.graph import GraphNode, PortValueDict
 from services.image_input import is_remote_or_data_uri, load_local_image
-from services.output import get_run_dir, resolve_output_ref, save_base64_image
+from services.media_input import owned_output_value
+from services.output import get_run_dir, save_base64_image
 
 XAI_API_BASE = "https://api.x.ai/v1"
 GENERATIONS_URL = f"{XAI_API_BASE}/images/generations"
@@ -44,6 +45,9 @@ MAX_EDIT_IMAGES = 5
 MAX_IMAGES_PER_REQUEST = 10
 # Only grok-imagine-image-2.0 takes `quality` (images/generation guide).
 QUALITY_MODELS = {"grok-imagine-image-2.0"}
+# xAI's videos reference gives no byte limit for a base64 video, so this is
+# Nebula's own bound on one local clip read into memory and encoded.
+MAX_VIDEO_BYTES = 100_000_000
 _EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
 
 
@@ -58,9 +62,10 @@ def xai_image_url(value: Any) -> str:
     text = str(value or "").strip()
     if not text:
         raise ValueError("Image input is empty")
+    text = owned_output_value(text)
     if is_remote_or_data_uri(text):
         return text
-    mime, data = load_local_image(resolve_output_ref(text))
+    mime, data = load_local_image(text)
     return f"data:{mime};base64,{data}"
 
 
@@ -68,19 +73,19 @@ def xai_video_url(value: Any) -> str:
     """A video input as xAI takes it: a public URL or data URI as is, a local
     .mp4 (or served /api/outputs ref) as a base64 data URL. xAI: "The video
     must have the `.mp4` file extension" (videos REST reference)."""
-    from services.file_access import require_allowed_path
+    from services.media_input import read_local_media
 
     text = str(value or "").strip()
     if not text:
         raise ValueError("Video input is empty")
+    text = owned_output_value(text)
     if is_remote_or_data_uri(text):
         return text
-    path = Path(require_allowed_path(resolve_output_ref(text)))
-    if not path.is_file():
-        raise ValueError(f"Video input not found: {text!r}. It was NOT sent to xAI.")
-    if path.suffix.lower() != ".mp4":
-        raise ValueError(f"xAI takes .mp4 video input, not {path.suffix or 'a file without an extension'} ({text!r})")
-    return "data:video/mp4;base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+    suffix = Path(text).suffix
+    if suffix.lower() != ".mp4":
+        raise ValueError(f"xAI takes .mp4 video input, not {suffix or 'a file without an extension'} ({text!r})")
+    _path, data = read_local_media(text, label="Video input", max_bytes=MAX_VIDEO_BYTES)
+    return "data:video/mp4;base64," + base64.b64encode(data).decode("ascii")
 
 
 def _image_values(port: PortValueDict | None) -> list[Any]:

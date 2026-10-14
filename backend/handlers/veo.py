@@ -14,10 +14,10 @@ import httpx
 
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
-from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.google_vertex import VERTEX_REGION, access_token, model_url
 from services.output import get_run_dir
+from services.media_input import read_local_media
 from services.public_url import fetch_public_media
 from execution.missing_credential import MissingCredentialError
 
@@ -114,7 +114,8 @@ async def _image_to_veo_payload(img_str: str) -> dict[str, Any]:
     else:
         img_path = Path(img_str)
         if img_path.exists():
-            b64_data = base64.b64encode(require_allowed_path(img_path).read_bytes()).decode("ascii")
+            b64_data = base64.b64encode(
+                read_local_media(img_path, label="Veo frame", max_bytes=MAX_FRAME_BYTES)[1]).decode("ascii")
             suffix = img_path.suffix.lstrip(".").lower()
             mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
             return {"bytesBase64Encoded": b64_data, "mimeType": mime_map.get(suffix, "image/png")}
@@ -391,7 +392,7 @@ async def _vertex_video_payload(value: str) -> dict[str, Any]:
         path = Path(value)
         if not path.exists():
             raise ValueError(f"Video not found: {value}")
-        data = require_allowed_path(path).read_bytes()
+        data = read_local_media(path, label="Veo clip", max_bytes=MAX_CLIP_BYTES)[1]
     return {"bytesBase64Encoded": base64.b64encode(data).decode("ascii"), "mimeType": "video/mp4"}
 
 

@@ -28,14 +28,14 @@ from __future__ import annotations
 
 import base64
 import json
-from pathlib import Path
 from typing import Any, Awaitable, Callable
+from urllib.parse import quote, urlsplit
 
 import httpx
 
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
-from services.file_access import require_allowed_path
+from services.media_input import load_media
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
 
@@ -71,6 +71,10 @@ IDEOGRAM_V3_RESOLUTIONS = frozenset(
 IDEOGRAM_DIRECT_RENDERING_SPEEDS = frozenset({"TURBO", "DEFAULT", "QUALITY"})
 IDEOGRAM_CHARACTER_STYLES = frozenset({"AUTO", "REALISTIC", "FICTION"})
 
+# "The image being edited (max size 25MB)"; reference images "max size 25MB
+# per image" (developer.ideogram.ai edit-v3 reference, read 2026-10-14).
+MAX_INPUT_IMAGE_BYTES = 25_000_000
+
 _MIME_BY_SUFFIX = {
     "png": "image/png",
     "jpg": "image/jpeg",
@@ -87,22 +91,19 @@ def _require_key(api_keys: dict[str, str]) -> str:
 
 
 async def _load_binary(value: str) -> tuple[bytes, str]:
-    """Resolve an image reference (data URI / URL / local path) to (bytes, mime)."""
-    if value.startswith("data:"):
-        header, _, b64_data = value.partition(",")
-        mime = header.split(":", 1)[1].split(";", 1)[0] if ":" in header else "image/png"
-        return base64.b64decode(b64_data), mime
-    if value.startswith(("http://", "https://")):
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.get(value, follow_redirects=True)
-            resp.raise_for_status()
-        mime = resp.headers.get("content-type", "image/png").split(";", 1)[0]
-        return resp.content, mime
-    path = Path(value)
-    if not path.exists():
-        raise ValueError(f"Image file not found: {value}")
-    mime = _MIME_BY_SUFFIX.get(path.suffix.lstrip(".").lower(), "image/png")
-    return require_allowed_path(path).read_bytes(), mime
+    """Resolve an image reference (data URI / URL / owned output / local path) to (bytes, mime).
+
+    Shared by the first-party Ideogram nodes and the Krea copies routed here
+    (execution/maker_routes_ideogram_runway.py), whose URLs come from saved
+    params. services.media_input.load_media fetches a URL only from a public
+    https host (each redirect re-checked), resolves /api/outputs refs to their
+    files, and checks local paths against the file policy and the size cap
+    before reading."""
+    content, mime = await load_media(value, label="Ideogram image input", max_bytes=MAX_INPUT_IMAGE_BYTES)
+    if not mime.startswith("image/"):
+        suffix = urlsplit(value).path.rsplit(".", 1)[-1].lower() if not value.startswith("data:") else ""
+        mime = _MIME_BY_SUFFIX.get(suffix, "image/png")
+    return content, mime
 
 
 async def _file_part(field: str, value: str) -> tuple[str, tuple[str, bytes, str]]:
@@ -641,7 +642,7 @@ async def handle_ideogram_train_model(
 
     # 2. Upload the training assets (repeated `files` parts).
     files = [await _file_part("files", ref) for ref in refs]
-    upload = await _post_multipart(f"/datasets/{dataset_id}/upload_assets", api_key, {}, files)
+    upload = await _post_multipart(f"/datasets/{quote(str(dataset_id), safe='')}/upload_assets", api_key, {}, files)
     if upload.get("success_count", 0) == 0:
         raise RuntimeError(f"Ideogram asset upload failed: {upload}")
 
@@ -661,7 +662,7 @@ async def handle_ideogram_train_model(
         for poll_num in range(1, max_polls + 1):
             await asyncio.sleep(poll_interval)
             resp = await client.get(
-                f"{IDEOGRAM_API_BASE}/models/{model_id}", headers={"Api-Key": api_key}
+                f"{IDEOGRAM_API_BASE}/models/{quote(str(model_id), safe='')}", headers={"Api-Key": api_key}
             )
             if resp.status_code != 200:
                 raise RuntimeError(f"Ideogram model poll failed ({resp.status_code}): {resp.text}")

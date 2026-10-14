@@ -354,14 +354,26 @@ def krea_to_byteplus(model: str):
 
 # -- request ---------------------------------------------------------------------
 
+# Create-video-generation-task reference (docs.byteplus.com/en/docs/ModelArk/
+# create-video-generation-task-api, read 2026-10-14): "Single image must be
+# less than 30 MB", "Each audio file must not exceed 15 MB", "Request body
+# size does not exceed 64 MB".
+MAX_IMAGE_BYTES = 30_000_000
+MAX_AUDIO_BYTES = 15_000_000
+MAX_BODY_BYTES = 64_000_000
+
+
 def _image(value: str) -> str:
-    """An image as ModelArk takes it: a URL, an asset URI or a data URI."""
+    """An image as ModelArk takes it: a URL, an asset URI or a data URI.
+    Owned outputs and local files are read (file policy, then the 30 MB cap)."""
+    from services.media_input import owned_output_value
+
+    value = owned_output_value(value)
     if value.startswith(("http://", "https://", "data:", "asset://")):
         return value
     from services.image_input import load_local_image
-    from services.output import resolve_output_ref
 
-    mime, b64 = load_local_image(resolve_output_ref(value))
+    mime, b64 = load_local_image(value, max_bytes=MAX_IMAGE_BYTES)
     return f"data:{mime.lower()};base64,{b64}"
 
 
@@ -373,8 +385,15 @@ def _video(value: str) -> str:
     URL or asset ID"; no Base64 is documented), so a local file can't go."""
     if value.startswith("asset://"):
         return value
-    if value.startswith(("http://", "https://")) and (urlparse(value).hostname or "") not in _LOCAL_HOSTS:
-        return value
+    if value.startswith(("http://", "https://")):
+        from services.media_input import is_loopback_host
+
+        try:
+            host = urlparse(value).hostname or ""
+        except ValueError:
+            host = ""
+        if host and host not in _LOCAL_HOSTS and not is_loopback_host(host):
+            return value
     raise ValueError(
         "BytePlus takes reference videos only as a public URL (or a ModelArk asset ID), and this one is a local "
         "file. Use a video at a public URL, or remove the BytePlus key (or choose the Krea plan) to run this on "
@@ -387,18 +406,18 @@ _AUDIO_FORMATS = {"wav": "wav", "mp3": "mp3"}
 def _audio(value: str) -> str:
     """Reference audio: a URL, an asset URI, or a local wav/mp3 as
     "data:audio/<audio format>;base64,<Base64 encoding>"."""
+    from services.media_input import owned_output_value, read_local_media
+
+    value = owned_output_value(value)
     if value.startswith(("http://", "https://", "data:", "asset://")):
         return value
     from pathlib import Path
 
-    from services.file_access import require_allowed_path
-    from services.output import resolve_output_ref
-
-    path = require_allowed_path(resolve_output_ref(value))
-    fmt = _AUDIO_FORMATS.get(Path(path).suffix.lstrip(".").lower())
+    fmt = _AUDIO_FORMATS.get(Path(value).suffix.lstrip(".").lower())
     if fmt is None:
-        raise ValueError(f"BytePlus takes reference audio as wav or mp3 (received {Path(path).name!r})")
-    return f"data:audio/{fmt};base64,{base64.b64encode(Path(path).read_bytes()).decode('ascii')}"
+        raise ValueError(f"BytePlus takes reference audio as wav or mp3 (received {Path(value).name!r})")
+    _path, data = read_local_media(value, label="BytePlus reference audio", max_bytes=MAX_AUDIO_BYTES)
+    return f"data:audio/{fmt};base64,{base64.b64encode(data).decode('ascii')}"
 
 
 def task_body(node: GraphNode, inputs: Mapping[str, PortValueDict]) -> dict[str, Any]:
@@ -422,6 +441,12 @@ def task_body(node: GraphNode, inputs: Mapping[str, PortValueDict]) -> dict[str,
         raise ValueError("Seedance needs a prompt or an image")
     from handlers.byteplus import TASK_EXPIRES_AFTER
 
+    inline = sum(len(item[item["type"]]["url"]) for item in content
+                 if item["type"] != "text" and item[item["type"]]["url"].startswith("data:"))
+    if inline > MAX_BODY_BYTES:
+        raise ValueError(f"BytePlus takes a request of up to {MAX_BODY_BYTES // 1_000_000} MB, and these local "
+                         f"files make it about {inline // 1_000_000} MB once encoded. Use public URLs for the "
+                         "larger files.")
     return {**params, "content": content, "watermark": False, "execution_expires_after": TASK_EXPIRES_AFTER}
 
 

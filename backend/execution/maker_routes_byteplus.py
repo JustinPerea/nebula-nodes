@@ -197,14 +197,22 @@ def krea_seedream_to_byteplus(model: str):
     return translate
 
 
+# Image generation reference (docs.byteplus.com/en/docs/ModelArk/1541523, read
+# 2026-10-14), reference images: "Size: Up to 30 MB".
+MAX_REFERENCE_BYTES = 30_000_000
+
+
 def _reference(value: str) -> str:
-    """A reference image as ModelArk takes it: a URL or a data URI."""
+    """A reference image as ModelArk takes it: a URL or a data URI. Owned
+    outputs and local files are read (file policy, then the 30 MB cap)."""
+    from services.media_input import owned_output_value
+
+    value = owned_output_value(value)
     if value.startswith(("http://", "https://", "data:")):
         return value
     from services.image_input import load_local_image
-    from services.output import resolve_output_ref
 
-    mime, b64 = load_local_image(resolve_output_ref(value))
+    mime, b64 = load_local_image(value, max_bytes=MAX_REFERENCE_BYTES)
     return f"data:{mime};base64,{b64}"
 
 

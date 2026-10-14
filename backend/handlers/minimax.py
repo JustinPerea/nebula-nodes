@@ -4,6 +4,7 @@ import asyncio
 import sys
 from pathlib import Path
 from typing import Any, Awaitable, Callable
+from urllib.parse import quote
 
 import httpx
 
@@ -223,7 +224,7 @@ async def handle_minimax_video(
 
                 # Step 3: Retrieve download URL
                 retrieve_resp = await client.get(
-                    f"{api_base}/v1/files/retrieve/{file_id}",
+                    f"{api_base}/v1/files/retrieve/{quote(str(file_id), safe='')}",
                     headers={"Authorization": f"Bearer {api_key}"},
                 )
                 if retrieve_resp.status_code != 200:

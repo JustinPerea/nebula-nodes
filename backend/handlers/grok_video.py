@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from typing import Any, Awaitable, Callable
+from urllib.parse import quote
 from uuid import uuid4
 
 import httpx
@@ -84,7 +85,7 @@ async def run_xai_video(
         # (CancelledError propagates at the awaits; the upstream job runs on).
         for poll_num in range(1, MAX_POLLS + 1):
             await asyncio.sleep(POLL_INTERVAL)
-            poll_resp = await client.get(f"{XAI_API_BASE}/videos/{gen_id}", headers=headers)
+            poll_resp = await client.get(f"{XAI_API_BASE}/videos/{quote(str(gen_id), safe='')}", headers=headers)
             if poll_resp.status_code not in (200, 202):
                 raise RuntimeError(f"Grok poll failed ({poll_resp.status_code}): {poll_resp.text}")
 

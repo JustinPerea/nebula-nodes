@@ -33,9 +33,6 @@ from models.graph import GraphNode, PortValueDict
 
 # -- shared -------------------------------------------------------------------
 
-_LOOPBACK = {"localhost", "127.0.0.1", "::1"}
-
-
 async def krea_request(node: GraphNode, inputs: dict[str, PortValueDict]) -> dict[str, Any]:
     """The request body the Krea gateway would build for this run."""
     from handlers.krea_gateway import _model, _request_body
@@ -47,21 +44,23 @@ def media_ref(value: Any, what: str) -> str:
     """A media value a maker handler can read: an owned output (served
     ``/api/outputs/...`` ref or a loopback URL to one) becomes its file path;
     https/data URIs and local paths pass through. A maker can't fetch a URL
-    on this machine, so any other loopback URL is refused."""
-    from services.output import resolve_output_ref
+    on this machine, so any other loopback URL (127.1, [::1], *.localhost
+    included) is refused. URLs the backend fetches itself go through
+    services.media_input.load_media (public https only)."""
+    from services.media_input import is_loopback_host, owned_output_value
 
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{what} is required")
     value = value.strip()
     try:
         parts = urlsplit(value)
+        hostname = parts.hostname or ""
     except ValueError as exc:
         raise ValueError(f"{what} is not a valid URL") from exc
-    if parts.scheme in {"http", "https"} and (parts.hostname or "").lower().rstrip(".") in _LOOPBACK:
+    if parts.scheme in {"http", "https"} and is_loopback_host(hostname):
         if not parts.path.startswith("/api/outputs/") or parts.query or parts.fragment:
             raise ValueError(f"{what} points at this machine; connect the output itself or use a public URL")
-        value = parts.path
-    return resolve_output_ref(value)
+    return owned_output_value(value)
 
 
 def _number(value: Any, label: str) -> float:

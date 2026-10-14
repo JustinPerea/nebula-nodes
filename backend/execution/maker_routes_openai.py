@@ -252,22 +252,24 @@ async def local_images(values: list[Any], run_dir: Path) -> list[str]:
     /api/outputs/ ref resolves to its file, a public https URL or a data: URI
     is saved into the run (fetched without credentials, SSRF-checked), a
     local path is checked by the edit handler."""
-    from services.output import materialize_media_value, resolve_output_ref, write_media_bytes
+    from services.media_input import decode_data_uri, owned_output_value
+    from services.output import write_media_bytes
     from services.public_url import fetch_public_media
 
     if len(values) > MAX_REFERENCE_IMAGES:
         raise ValueError(f"OpenAI image edits take up to {MAX_REFERENCE_IMAGES} images; got {len(values)}")
     paths: list[str] = []
     for value in values:
-        text = str(value)
+        text = owned_output_value(str(value))
         if text.startswith(("http://", "https://")):
             payload, content_type = await fetch_public_media(
                 text, label="Reference image", max_bytes=MAX_REFERENCE_BYTES)
             paths.append(str(await write_media_bytes(payload, content_type, "Image", run_dir, text)))
         elif text.startswith("data:"):
-            paths.append(str(await materialize_media_value(text, "Image", run_dir)))
+            payload, content_type = decode_data_uri(text, label="Reference image", max_bytes=MAX_REFERENCE_BYTES)
+            paths.append(str(await write_media_bytes(payload, content_type, "Image", run_dir)))
         else:
-            paths.append(resolve_output_ref(text))
+            paths.append(text)
     return paths
 
 

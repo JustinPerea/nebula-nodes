@@ -66,6 +66,14 @@ All direct endpoints are **synchronous multipart/form-data** POSTs with an
 `Api-Key` header. Result URLs are **ephemeral** — the handler downloads them
 into the run dir immediately.
 
+Image inputs are read by Nebula and uploaded (`handlers/ideogram._load_binary`,
+through `services/media_input.load_media`): an `/api/outputs/` ref or a
+loopback URL to one is its saved file; any other URL is fetched only from a
+public **https** host, with every redirect re-checked and no credentials (a
+private, loopback or `http://` URL is refused); a local path must pass the file
+policy. Each input is capped at Ideogram's 25 MB ("max size 25MB", edit-v3
+reference, read 2026-10-14) before it is read.
+
 ### Krea copies on your Ideogram key (2026-10-14)
 
 Three Krea copies of Ideogram's models also run on Ideogram's own API when

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
+from urllib.parse import quote
 
 import httpx
 
@@ -85,8 +86,11 @@ async def poll_until_terminal(
     response first (e.g. Replicate checking ``urls.stream``) can submit itself and
     still reuse the shared poll/cancel loop for the non-streaming path.
     """
-    poll_url = config.poll_url_template.format(task_id=task_id)
-    cancel_url = config.cancel_url_template.format(task_id=task_id) if config.cancel_url_template else poll_url
+    # The id comes from the provider's response and lands in a URL path, so it
+    # is escaped as one segment (a "/" or ".." can't reach another endpoint).
+    segment = quote(str(task_id), safe="")
+    poll_url = config.poll_url_template.format(task_id=segment)
+    cancel_url = config.cancel_url_template.format(task_id=segment) if config.cancel_url_template else poll_url
 
     for poll_num in range(1, config.max_polls + 1):
         try:

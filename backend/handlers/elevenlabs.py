@@ -5,12 +5,14 @@ import json as _json
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 from uuid import uuid4
 
 import httpx
 
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
+from services.media_input import checked_local_file, read_local_media
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
@@ -24,16 +26,38 @@ DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel
 # letters and digits (21m00Tcm4TlvDq8ikWAM). A pasted value with "/", "..",
 # "?" or "%" would send the request, on the person's key, to another endpoint
 # ("../../music" resolves to /music), so anything else is refused before any
-# call. The Krea and Runway copies routed here
+# call, and the id is still percent-quoted as one segment. The Krea and Runway copies routed here
 # (execution/maker_routes_elevenlabs.py) take voice_id as free text.
-_VOICE_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
+_VOICE_ID = re.compile(r"[A-Za-z0-9]{1,64}")
+# output_format is a query value "Formatted as codec_sample_rate_bitrate"
+# (mp3_44100_128, pcm_16000, wav_44100, ulaw_8000; text-to-speech reference,
+# read 2026-10-14). A saved recipe's value is not limited to the node's enum.
+_OUTPUT_FORMAT = re.compile(r"[a-z0-9]+(?:_[a-z0-9]+){0,3}")
+# Speech-to-speech: "Maximum segment length: 5 minutes" (voice-changer docs),
+# no byte limit given, so this is Nebula's own bound on one file read into
+# memory. Dubbing: "3 GB per source file via the API" (dubbing docs, read
+# 2026-10-14); that file is streamed from disk, never read whole.
+MAX_STS_AUDIO_BYTES = 250_000_000
+MAX_DUBBING_FILE_BYTES = 3_000_000_000
+# The dubbed track Nebula downloads: its own bound (the public fetcher's 1 GB, as for Krea media).
+MAX_DUBBED_AUDIO_BYTES = 1_000_000_000
 
 
 def _voice_id(node: GraphNode) -> str:
+    """The voice id, checked and escaped as one URL path segment."""
     voice = str(node.params.get("voice_id") or DEFAULT_VOICE_ID).strip()
     if not _VOICE_ID.fullmatch(voice):
         raise ValueError(f"voice_id must be an ElevenLabs voice ID (letters and digits), received {voice!r}")
-    return voice
+    return quote(voice, safe="")
+
+
+def _with_output_format(url: str, output_format: Any) -> str:
+    if not output_format:
+        return url
+    value = str(output_format)
+    if not _OUTPUT_FORMAT.fullmatch(value):
+        raise ValueError(f"output_format must be an ElevenLabs format like mp3_44100_128, received {value!r}")
+    return f"{url}?output_format={quote(value, safe='')}"
 
 
 async def handle_elevenlabs_tts(
@@ -86,11 +110,7 @@ async def handle_elevenlabs_tts(
     if seed is not None and seed != "":
         body["seed"] = int(seed)
 
-    url = f"{ELEVENLABS_API_BASE}/{voice_id}"
-
-    # Append output_format as query param
-    if output_format:
-        url += f"?output_format={output_format}"
+    url = _with_output_format(f"{ELEVENLABS_API_BASE}/{voice_id}", output_format)
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
@@ -151,7 +171,7 @@ async def _cancel_dubbing(dubbing_id: str, api_key: str) -> None:
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             await client.delete(
-                f"https://api.elevenlabs.io/v1/dubbing/{dubbing_id}",
+                f"https://api.elevenlabs.io/v1/dubbing/{quote(str(dubbing_id), safe='')}",
                 headers={"xi-api-key": api_key},
             )
     except Exception:
@@ -169,7 +189,7 @@ async def _poll_dubbing(
     for _ in range(120):
         await asyncio.sleep(5)
         status_resp = await client.get(
-            f"https://api.elevenlabs.io/v1/dubbing/{dubbing_id}",
+            f"https://api.elevenlabs.io/v1/dubbing/{quote(str(dubbing_id), safe='')}",
             headers={"xi-api-key": api_key},
         )
         if status_resp.status_code != 200:
@@ -185,10 +205,24 @@ async def _poll_dubbing(
         status_data = status_resp.json()
         if status_data.get("status") == "dubbed":
             dl_resp = await client.get(
-                f"https://api.elevenlabs.io/v1/dubbing/{dubbing_id}/audio/{target_lang}",
+                f"https://api.elevenlabs.io/v1/dubbing/{quote(str(dubbing_id), safe='')}"
+                f"/audio/{quote(str(target_lang), safe='')}",
                 headers={"xi-api-key": api_key},
-                follow_redirects=True,
             )
+            location = dl_resp.headers.get("location") if dl_resp.status_code in (301, 302, 303, 307, 308) else None
+            if location:
+                target = dl_resp.url.join(location)
+                if target.scheme == "https" and target.host == "api.elevenlabs.io":
+                    dl_resp = await client.get(target, headers={"xi-api-key": api_key})
+                else:
+                    # httpx keeps custom headers such as xi-api-key on a
+                    # redirect to another host, so a file elsewhere is fetched
+                    # without the key, and only from a public https host.
+                    from services.public_url import fetch_public_media
+
+                    content, _type = await fetch_public_media(
+                        str(target), label="ElevenLabs dubbing audio", max_bytes=MAX_DUBBED_AUDIO_BYTES)
+                    return {"audio": {"type": "Audio", "value": _save_audio(content, "mp3_44100_128")}}
             if dl_resp.status_code == 200:
                 file_path = _save_audio(dl_resp.content, "mp3_44100_128")
                 return {"audio": {"type": "Audio", "value": file_path}}
@@ -235,9 +269,7 @@ async def handle_elevenlabs_sfx(
     if loop:
         body["loop"] = True
 
-    url = f"https://api.elevenlabs.io/v1/sound-generation"
-    if output_format:
-        url += f"?output_format={output_format}"
+    url = _with_output_format("https://api.elevenlabs.io/v1/sound-generation", output_format)
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
@@ -268,15 +300,13 @@ async def handle_elevenlabs_sts(
     voice_id = _voice_id(node)
     output_format = node.params.get("output_format", "mp3_44100_128")
 
+    url = _with_output_format(f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_id}", output_format)
+
     # Read audio file
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
         raise ValueError(f"Audio file not found: {audio_path}")
-    audio_bytes = require_allowed_path(audio_path).read_bytes()
-
-    url = f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_id}"
-    if output_format:
-        url += f"?output_format={output_format}"
+    _checked, audio_bytes = read_local_media(audio_path, label="Speech-to-speech audio", max_bytes=MAX_STS_AUDIO_BYTES)
 
     # STS uses multipart/form-data
     files = {"audio": (audio_path.name, audio_bytes, "audio/mpeg")}
@@ -375,9 +405,8 @@ async def handle_elevenlabs_dubbing(
     audio_path = Path(str(audio_input.value))
     if not audio_path.exists():
         raise ValueError(f"Audio file not found: {audio_path}")
-    audio_bytes = require_allowed_path(audio_path).read_bytes()
+    checked = checked_local_file(audio_path, label="Dubbing audio", max_bytes=MAX_DUBBING_FILE_BYTES)
 
-    files = {"file": (audio_path.name, audio_bytes, "audio/mpeg")}
     data: dict[str, str] = {
         "target_lang": target_lang,
     }
@@ -399,13 +428,14 @@ async def handle_elevenlabs_dubbing(
         data["disable_voice_cloning"] = "true"
 
     async with httpx.AsyncClient(timeout=300.0) as client:
-        # Step 1: Submit dubbing job
-        resp = await client.post(
-            "https://api.elevenlabs.io/v1/dubbing",
-            headers={"xi-api-key": api_key},
-            files=files,
-            data=data,
-        )
+        # Step 1: Submit dubbing job (the file streams from disk)
+        with checked.open("rb") as handle:
+            resp = await client.post(
+                "https://api.elevenlabs.io/v1/dubbing",
+                headers={"xi-api-key": api_key},
+                files={"file": (audio_path.name, handle, "audio/mpeg")},
+                data=data,
+            )
         if resp.status_code != 200:
             raise RuntimeError(f"ElevenLabs Dubbing submit error {resp.status_code}: {resp.text}")
 
