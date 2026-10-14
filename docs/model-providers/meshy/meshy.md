@@ -52,7 +52,7 @@ remesh/retexture/rigging/animation chaining, or native parameter control.
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `ai_model` | `latest`, `meshy-6` | `latest` | Meshy model. `latest` is Meshy 7.1 (Meshy 7 on Retexture). |
+| `ai_model` | `latest`, `meshy-6`, `meshy-6-lite`, `meshy-7.1` (Retexture: `meshy-7` instead of 7.1) | `latest` | Meshy model. `latest` is Meshy 7.1 (Meshy 7 on Retexture). 7/7.1 need a Meshy entitlement; 6 Lite is 2K textures only. |
 | `should_remesh` | boolean | `false` | Native Meshy remesh toggle. |
 | `topology` | `triangle`, `quad` | `triangle` | Mesh topology. |
 | `target_polycount` | 100-300000 | `30000` | Target count. |
@@ -171,6 +171,7 @@ Sources: `https://docs.meshy.ai/openapi.yaml` and `https://docs.meshy.ai/llms.tx
 - `ai_model` enums no longer list `meshy-5`. Removed from all four nodes; saved nodes move to `meshy-6` (`backend/services/retired_nodes.py`). `latest` is now `meshy-7.1` on text/image/multi-image and `meshy-7` on Retexture; labels updated.
 - `model_type: lowpoly` "is deprecated and will be retired on 2026-10-30; after that date it returns an error. Use `smart-topology` (Meshy T2) instead." Added `smart-topology` to text-to-3d (shared: fal accepts it too) and image-to-3d (direct). From 2026-10-30 saved lowpoly nodes move to smart-topology, quad becomes triangle, polycount is capped at 15,000.
 - Direct handler under smart-topology sends `ai_model: meshy-t2`, drops `image_enhancement`/`remove_lighting` ("Not supported under smart-topology"), omits `ai_model` on the text-to-3d refine so it inherits the preview's model, and refuses quad or >15,000 faces before submitting.
+- Review fixes: appended `meshy-6-lite` and `meshy-7.1` (Retexture: `meshy-6-lite`, `meshy-7`) per each endpoint's `ai_model` enum; Lite + HD Texture is refused before submitting. `seed` moved to a shared param on `meshy-text-to-3d` and is sent on the direct preview (TextTo3DRequest has it; the image endpoints don't). The fal text-to-3d fallback now gets the same smart-topology checks.
 
 ### 2026-06-03 — Re-verification audit
 

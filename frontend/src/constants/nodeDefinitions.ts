@@ -4209,6 +4209,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'T-Pose', value: 't-pose' },
         ],
       },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
     ],
     directParams: [
       {
@@ -4220,6 +4227,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Latest (Meshy 7.1)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
+          { label: 'Meshy 6 Lite (2K textures)', value: 'meshy-6-lite' },
+          { label: 'Meshy 7.1 (needs Meshy entitlement)', value: 'meshy-7.1' },
         ],
       },
       {
@@ -4266,13 +4275,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'boolean',
         required: false,
         default: true,
-      },
-      {
-        key: 'seed',
-        label: 'Seed',
-        type: 'integer',
-        required: false,
-        placeholder: 'Random',
       },
     ],
   },
@@ -4370,6 +4372,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Latest (Meshy 7.1)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
+          { label: 'Meshy 6 Lite (2K textures)', value: 'meshy-6-lite' },
+          { label: 'Meshy 7.1 (needs Meshy entitlement)', value: 'meshy-7.1' },
         ],
       },
       {
@@ -4463,6 +4467,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Latest (Meshy 7.1)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
+          { label: 'Meshy 6 Lite (2K textures)', value: 'meshy-6-lite' },
+          { label: 'Meshy 7.1 (needs Meshy entitlement)', value: 'meshy-7.1' },
         ],
       },
       {
@@ -4580,6 +4586,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Latest (Meshy 7)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
+          { label: 'Meshy 6 Lite', value: 'meshy-6-lite' },
+          { label: 'Meshy 7 (needs Meshy entitlement)', value: 'meshy-7' },
         ],
       },
       {

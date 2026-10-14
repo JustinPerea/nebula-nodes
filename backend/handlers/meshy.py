@@ -23,18 +23,34 @@ SMART_TOPOLOGY_MAX_POLYCOUNT = 15000
 _SMART_TOPOLOGY_UNSUPPORTED = ("image_enhancement", "remove_lighting")
 
 
-def _apply_smart_topology(body: dict[str, Any]) -> None:
-    """Shape a request body for ``model_type: smart-topology``, or explain why it can't run."""
-    if body.get("model_type") != "smart-topology":
+def check_smart_topology(params: dict[str, Any]) -> None:
+    """Refuse a smart-topology request Meshy would reject, before any credits are spent.
+
+    Used on the direct route and before the fal fallback, whose schema has the
+    same limit ("smart topology accepts at most 15,000")."""
+    if params.get("model_type") != "smart-topology":
         return
-    if body.get("topology") == "quad":
+    if params.get("topology") == "quad":
         raise ValueError("Smart Topology makes triangles only. Set Topology to Triangle.")
-    polycount = body.get("target_polycount")
+    polycount = params.get("target_polycount")
     if isinstance(polycount, (int, float)) and polycount > SMART_TOPOLOGY_MAX_POLYCOUNT:
         raise ValueError(
             f"Smart Topology makes at most {SMART_TOPOLOGY_MAX_POLYCOUNT:,} faces. "
             f"Set Polycount to {SMART_TOPOLOGY_MAX_POLYCOUNT:,} or less."
         )
+
+
+def check_model_options(params: dict[str, Any]) -> None:
+    """Meshy 6 Lite makes "``2k`` texture only" (https://docs.meshy.ai/llms.txt, checked 2026-10-14)."""
+    if params.get("ai_model") == "meshy-6-lite" and params.get("hd_texture") is True:
+        raise ValueError("Meshy 6 Lite makes 2K textures only. Turn off HD Texture (4K) or pick another model.")
+
+
+def _apply_smart_topology(body: dict[str, Any]) -> None:
+    """Shape a request body for ``model_type: smart-topology``, or explain why it can't run."""
+    if body.get("model_type") != "smart-topology":
+        return
+    check_smart_topology(body)
     # Meshy: smart-topology "implies the meshy-t2 model family"; meshy-t2 is the only model for it.
     body["ai_model"] = "meshy-t2"
     for key in _SMART_TOPOLOGY_UNSUPPORTED:
@@ -86,6 +102,7 @@ async def handle_meshy_image_to_3d(
         "Content-Type": "application/json",
     }
 
+    check_model_options(node.params)
     body: dict[str, Any] = {"image_url": image_value}
 
     # Map node params — skip phantom params not in the API
@@ -162,15 +179,16 @@ async def handle_meshy_text_to_3d(
     }
 
     mode = node.params.get("mode", "preview")
+    check_model_options(node.params)
 
     # Preview-only params
     PREVIEW_KEYS = {"prompt", "model_type", "ai_model", "should_remesh", "topology",
                     "target_polycount", "symmetry_mode", "pose_mode", "target_formats",
-                    "moderation", "auto_size", "origin_at"}
+                    "moderation", "auto_size", "origin_at", "seed"}
     # Refine-only params
     REFINE_KEYS = {"enable_pbr", "topology", "target_polycount", "ai_model",
                    "hd_texture", "remove_lighting", "target_formats"}
-    SKIP_KEYS = {"endpoint_id", "mode", "enable_rigging", "seed"}
+    SKIP_KEYS = {"endpoint_id", "mode", "enable_rigging"}
 
     body: dict[str, Any] = {
         "mode": "preview",
@@ -324,6 +342,7 @@ async def handle_meshy_multi_image_to_3d(
         "Content-Type": "application/json",
     }
 
+    check_model_options(node.params)
     body: dict[str, Any] = {"image_urls": image_urls}
 
     INTERNAL_KEYS = {"endpoint_id"}

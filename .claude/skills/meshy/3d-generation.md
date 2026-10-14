@@ -109,7 +109,9 @@ One-stage workflow. Single reference image → textured 3D model.
 
 **Lowpoly caveat:** `model_type="lowpoly"` retires 2026-10-30. Until then it ignores `ai_model`, `topology`, `target_polycount`, `should_remesh`, `save_pre_remeshed_model`. Nebula moves saved lowpoly nodes to `smart-topology` from that date (`backend/services/retired_nodes.py`).
 
-**Smart topology:** the direct handler sends `ai_model: "meshy-t2"` and drops `image_enhancement`/`remove_lighting`; it refuses `topology: "quad"` and `target_polycount` above 15,000 before calling Meshy.
+**Smart topology:** the direct handler sends `ai_model: "meshy-t2"` and drops `image_enhancement`/`remove_lighting`; it refuses `topology: "quad"` and `target_polycount` above 15,000 before calling Meshy. The fal fallback (`fal-ai/meshy/v6/text-to-3d`, same limits) is checked the same way before it bills.
+
+**Seed:** `meshy-text-to-3d` sends `seed` on the preview request on both routes (Meshy's TextTo3DRequest has it; image-to-3d and multi-image-to-3d don't, so there it stays fal-only). **Meshy 6 Lite** makes 2K textures only, so the handlers refuse it with `hd_texture: true`.
 
 **PBR dependency:** `enable_pbr=true` requires `should_texture=true`. The API returns 400 otherwise.
 

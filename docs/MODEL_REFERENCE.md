@@ -4941,7 +4941,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| AI Model | enum | latest | Latest (Meshy 7.1), Meshy 6 |
+| AI Model | enum | latest | Latest (Meshy 7.1), Meshy 6, Meshy 6 Lite (2K textures), Meshy 7.1 (needs Meshy entitlement) |
 | Mesh Type | enum | standard | Standard, Low Poly (retires Oct 30, 2026), Smart Topology (Meshy T2) |
 | HD Texture (4K) | bool | false | — |
 | Image Enhancement | bool | true | — |
@@ -4965,7 +4965,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| AI Model | enum | latest | Latest (Meshy 7.1), Meshy 6 |
+| AI Model | enum | latest | Latest (Meshy 7.1), Meshy 6, Meshy 6 Lite (2K textures), Meshy 7.1 (needs Meshy entitlement) |
 | Remesh | bool | false | — |
 | Topology | enum | triangle | Triangle, Quad |
 | Polycount | int | 30000 | 100–300000 |
@@ -5017,7 +5017,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| AI Model | enum | latest | Latest (Meshy 7), Meshy 6 |
+| AI Model | enum | latest | Latest (Meshy 7), Meshy 6, Meshy 6 Lite, Meshy 7 (needs Meshy entitlement) |
 | Keep Original UV | bool | true | — |
 | PBR Materials | bool | false | — |
 | Remove Lighting | bool | true | — |
@@ -5068,6 +5068,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Symmetry | enum | auto | Off, Auto, On |
 | PBR Materials | bool | false | — |
 | Pose Mode | enum | — | None, A-Pose, T-Pose |
+| Seed | int | — | — |
 
 **FAL Parameters**
 
@@ -5076,13 +5077,12 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Texture Prompt | string | — | — |
 | Enhance Prompt | bool | false | — |
 | Safety Checker | bool | true | — |
-| Seed | int | — | — |
 
 **Direct Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| AI Model | enum | latest | Latest (Meshy 7.1), Meshy 6 |
+| AI Model | enum | latest | Latest (Meshy 7.1), Meshy 6, Meshy 6 Lite (2K textures), Meshy 7.1 (needs Meshy entitlement) |
 | HD Texture (4K) | bool | false | — |
 | Remove Lighting | bool | true | — |
 | Output Formats | string | glb | — |

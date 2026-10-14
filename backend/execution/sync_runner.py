@@ -647,6 +647,9 @@ def get_handler_registry(
             if api_keys.get("MESHY_API_KEY"):
                 from handlers.meshy import handle_meshy_text_to_3d
                 return await handle_meshy_text_to_3d(node, inputs, api_keys, emit=emit)
+            # fal takes smart-topology too, with Meshy's limits; refuse before it bills.
+            from handlers.meshy import check_smart_topology
+            check_smart_topology(node.params)
             node.params.setdefault("endpoint_id", "fal-ai/meshy/v6/text-to-3d")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 

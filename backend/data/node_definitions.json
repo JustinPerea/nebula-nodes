@@ -7077,6 +7077,13 @@
             "value": "t-pose"
           }
         ]
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "type": "integer",
+        "required": false,
+        "placeholder": "Random"
       }
     ],
     "directParams": [
@@ -7094,6 +7101,14 @@
           {
             "label": "Meshy 6",
             "value": "meshy-6"
+          },
+          {
+            "label": "Meshy 6 Lite (2K textures)",
+            "value": "meshy-6-lite"
+          },
+          {
+            "label": "Meshy 7.1 (needs Meshy entitlement)",
+            "value": "meshy-7.1"
           }
         ]
       },
@@ -7141,13 +7156,6 @@
         "type": "boolean",
         "required": false,
         "default": true
-      },
-      {
-        "key": "seed",
-        "label": "Seed",
-        "type": "integer",
-        "required": false,
-        "placeholder": "Random"
       }
     ]
   },
@@ -7286,6 +7294,14 @@
           {
             "label": "Meshy 6",
             "value": "meshy-6"
+          },
+          {
+            "label": "Meshy 6 Lite (2K textures)",
+            "value": "meshy-6-lite"
+          },
+          {
+            "label": "Meshy 7.1 (needs Meshy entitlement)",
+            "value": "meshy-7.1"
           }
         ]
       },
@@ -7404,6 +7420,14 @@
           {
             "label": "Meshy 6",
             "value": "meshy-6"
+          },
+          {
+            "label": "Meshy 6 Lite (2K textures)",
+            "value": "meshy-6-lite"
+          },
+          {
+            "label": "Meshy 7.1 (needs Meshy entitlement)",
+            "value": "meshy-7.1"
           }
         ]
       },
@@ -7565,6 +7589,14 @@
           {
             "label": "Meshy 6",
             "value": "meshy-6"
+          },
+          {
+            "label": "Meshy 6 Lite",
+            "value": "meshy-6-lite"
+          },
+          {
+            "label": "Meshy 7 (needs Meshy entitlement)",
+            "value": "meshy-7"
           }
         ]
       },
