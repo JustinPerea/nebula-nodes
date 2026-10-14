@@ -3616,3 +3616,49 @@ on ModelArk video tasks. `runway-video`'s Seedance options were left alone (Runw
 - **Tests touched in shared suites:** `test_krea_catalog.py` (`krea_priced` also needs a `pricing` block; the Krea
   Seedance 1.0 Pro entry has none), `test_maker_routes.py` (13 more maker-routed nodes), `test_reference_roles.py`
   (approvals for the seven fal splits), `route_cases.json` (12 cases).
+
+### BytePlus lane: review fixes (2026-10-14)
+
+An independent review of the whole lane (`direct-maker-routes...byteplus-provider`). Vendor pages were re-read
+today from docs.byteplus.com (model-pricing, image-generation-api, create-video-generation-task-api, model-list,
+base-url-and-authentication). They're a JS app, so the MDContent markdown was pulled from each page's
+`_ROUTER_DATA`. Every price, size window, ratio list, duration range and model id the lane relies on matched. The
+pricing page's own worked examples (Seedance 2.0 4K 0.78/s, 2.5 480p 0.514 per 5 s video, 1.5 pro 0.12, 1.0 pro
+token counts) reproduce from the token formula and size tables.
+
+Fixed (each with a test that fails when the fix is reverted):
+
+- **An unsaved Seedance setting read BytePlus's default, not the node's.** `fal_to_byteplus` filled a missing
+  `duration` with `-1` and a missing `aspect_ratio` with `adaptive`. A node added by the CLI or an agent can save only
+  some params, and the price (`model_pricing.effective_params`) reads the definition defaults. So `seedance-v1-5`
+  saved with only `model` was quoted for 5 s but asked BytePlus for `-1`, which lets 1.5 pro run up to 12 s (2.4x the
+  spend gate's high bound). On `seedance-1-0-t2v` it sent `-1` (1.0 takes `[2, 12]` only) and `adaptive` (1.0
+  text-to-video "Does not support `adaptive`"), a refused request. Both translators now read a missing setting from
+  the node definition (`_setting`). The new test checks the request and that the estimate's high bound covers it.
+- **Seedream sent `sequential_image_generation: disabled` on every single-image request**, including Krea's Seedream
+  5.0 pro, which doesn't take the field ("Single image generation: **sequential_image_generation** is not
+  supported"; its supported models are 5.0 lite, 4.5 and 4.0). `disabled` is the default, so the field now goes only
+  with a batch (`max_images` > 1, fal 4.5 / 5.0 lite).
+- **fal's safety checker switched off was dropped silently.** `enable_safety_checker` defaults to true, so it can't
+  be a blocker, but ModelArk always runs its own content filter and can't honor `false`. `seedream-4-5` and
+  `seedance-1-0-t2v` gain `directRoute.accepts: {enable_safety_checker: {values: [true]}}`, so a recipe that turned
+  it off stays on fal (readiness: "BytePlus doesn't take this recipe's enable_safety_checker setting"). Approvals in
+  `test_reference_roles.py` name the exact rule; three route cases cover both nodes.
+- The BytePlus Settings row said "Seedream on ByteDance's own API" after Seedance landed; it now names both.
+
+Refuted or left as the builder decided:
+
+- Krea Seedream's `seed` stays dropped on BytePlus. Krea's spec ships a random example seed as the default and the
+  graph saves defaults, so a set seed can't be told from the default, and an `accepts` pin to 1337 would break on the
+  next spec refresh.
+- Route precedence (Krea plan, then maker key, then copy) matches on both sides and is covered by
+  `route_cases.json`; size and accepts rules were mutation-checked on both sides.
+- 2.0 4K at 4.0 per million tokens looks low but is BytePlus's figure, and its 4K example (0.78 USD/s) confirms it.
+
+Open (not fixed here):
+
+- A transient error on a Seedance poll (`GET` 5xx or network) fails the run while the task keeps running and is
+  billed. The shared `async_poll_runner` behaves the same for other providers; a retry belongs there too.
+- A Cinema scene with a Character bundle injects a seed per shot, which keeps that shot on fal. The scene's price is
+  read from the base params, which have no seed, so with a BytePlus key it's quoted at the BytePlus price while the
+  shot bills fal (unpriced). With only a BytePlus key the shot fails with a missing FAL_KEY.

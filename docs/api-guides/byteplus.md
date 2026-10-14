@@ -21,8 +21,8 @@ flowchart LR
 
 | Node | Node ID | Copy | ModelArk model | Runs on BytePlus unless |
 |---|---|---|---|---|
-| Seedream 4.5 (model 4.5) | `seedream-4-5` | fal | `seedream-4-5-251128` | `seed` is set; size is `square` (512x512), `auto_3K`, or a custom size outside the limits |
-| Seedream 4.5 (model 5.0 lite) | `seedream-4-5` | fal | `seedream-5-0-lite-260128` | `seed` is set; size is `square` or a custom size outside the limits |
+| Seedream 4.5 (model 4.5) | `seedream-4-5` | fal | `seedream-4-5-251128` | `seed` is set; the safety checker is switched off; size is `square` (512x512), `auto_3K`, or a custom size outside the limits |
+| Seedream 4.5 (model 5.0 lite) | `seedream-4-5` | fal | `seedream-5-0-lite-260128` | `seed` is set; the safety checker is switched off; size is `square` or a custom size outside the limits |
 | Cinema Scene (default base) | `cinema-scene` | fal, through `seedream-4-5` | as above | as above, for the scene's computed size |
 | Krea Seedream 4 | `krea-image-bytedance-seedream-4` | Krea | `seedream-4-0-250828` | Krea plan; `style_images` set; width x height outside the limits |
 | Krea Seedream 5 Lite | `krea-image-bytedance-seedream-5-lite` | Krea | `seedream-5-0-lite-260128` | Krea plan; `style_images` set; width x height outside the limits |
@@ -49,7 +49,8 @@ Request: `POST /images/generations` with `watermark: false` (BytePlus's default 
 | reference images | `image` (URL or `data:image/<fmt>;base64,`) | Up to 10 (the node's port); ModelArk takes 14 on 4.0, 4.5 and 5.0 lite and 10 on 5.0 pro |
 | `num_images` (fal) | separate requests | fal: "Number of separate model generations" |
 | `max_images` > 1 (fal) | `sequential_image_generation: auto` + `max_images` | "The model determines whether to return multiple images and how many"; references + outputs ≤ 15 |
-| `seed` (fal), `enable_safety_checker` (fal) | none | fal only. A set `seed` keeps the run on fal. |
+| `max_images` 1, and every Krea copy | `sequential_image_generation` left out | BytePlus's default is `disabled` (one image), and Seedream 5.0 pro doesn't take the field: "Single image generation: **sequential_image_generation** is not supported" |
+| `seed` (fal), `enable_safety_checker` (fal) | none | fal only. A set `seed`, or the safety checker switched off (ModelArk always runs its own content filter), keeps the run on fal. |
 | `seed` (Krea) | none | Krea fills a default (1337), so it can't decide the route; it's dropped on BytePlus |
 | `style_images` (Krea) | none | Krea's per-image `strength` has no ModelArk field; set ones keep the run on Krea |
 
@@ -84,7 +85,7 @@ Runway's Seedance options (`runway-video`) aren't routed: Runway resells them on
 | Seedance 2.0 Fast I2V | `seedance-2-fast-i2v` | fal | `dreamina-seedance-2-0-fast-260128` | `seed` is set |
 | Seedance V1.5 Pro (model 1.5) | `seedance-v1-5` | fal | `seedance-1-5-pro-251215` | never (all settings map) |
 | Seedance V1.5 Pro (model 1.0) | `seedance-v1-5` | fal | `seedance-1-0-pro-250528` | never |
-| Seedance 1.0 Text-to-Video | `seedance-1-0-t2v` | fal | `seedance-1-0-pro-250528` | never (`enable_safety_checker` is fal-only and dropped) |
+| Seedance 1.0 Text-to-Video | `seedance-1-0-t2v` | fal | `seedance-1-0-pro-250528` | `enable_safety_checker` switched off (ModelArk always runs its own filter; left on, it isn't sent) |
 | Krea Seedance 1.0 Pro | `krea-video-bytedance-seedance-1-0-pro` | Krea | `seedance-1-0-pro-250528` | Krea plan; `start_video` or `reference_images` set; a ratio or duration ModelArk lacks |
 | Krea Seedance 1.0 Pro Fast | `krea-video-bytedance-seedance-1-0-pro-fast` | Krea | `seedance-1-0-pro-fast-251015` | Krea plan; `start_video` set; a ratio or duration ModelArk lacks |
 | Krea Seedance 2.0 | `krea-video-bytedance-seedance-2` | Krea | `dreamina-seedance-2-0-260128` | Krea plan; `seed` or `effects` set; `upscale` or `enhance_prompt` on; a ratio or duration ModelArk lacks |
@@ -109,11 +110,11 @@ Request: `POST /contents/generations/tasks`, then `GET /contents/generations/tas
 | `reference_videos` (Krea) | `video_url` with role `reference_video` | "Video URL or asset ID" only: a public http(s) URL or `asset://`. A local file is refused before the request. 2.0 series 0–3, 2.5 0–10. |
 | `reference_audios` (Krea) | `audio_url` with role `reference_audio` | URL or `data:audio/<fmt>;base64,` (wav or mp3). 2.0 needs an image or video alongside; audio-only is 2.5. |
 | `aspect_ratio` | `ratio` | fal's `auto` becomes `adaptive`. Seedance 2.5 frame runs send `adaptive`, the only ratio it takes there. |
-| `duration` | `duration` | fal's `auto` becomes `-1` (the model picks a length in its range) |
+| `duration` | `duration` | fal's `auto` becomes `-1` (the model picks a length in its range). A setting the recipe never saved (a node added by the CLI or an agent) uses the node's own default, the value its price is read at, not BytePlus's: `seedance-v1-5` and `seedance-1-0-t2v` run 5 s at 16:9, never `-1` (up to 12 s on 1.5 pro) or `adaptive` (Seedance 1.0 text-to-video "Does not support `adaptive`") |
 | `resolution` | `resolution` | 2.0: 480p, 720p, 1080p, 4k; 2.0 fast and mini: 480p, 720p; 2.5, 1.5 and 1.0: 480p, 720p, 1080p |
 | `generate_audio` | `generate_audio` | 2.x and 1.5 pro only; 1.0 makes silent video |
 | `camera_fixed`, `seed` | `camera_fixed`, `seed` | 1.x only |
-| `enable_safety_checker` (fal) | none | fal only; ModelArk always runs its own filter |
+| `enable_safety_checker` (fal) | none | fal only; ModelArk always runs its own filter, so switched off it keeps `seedream-4-5` and `seedance-1-0-t2v` on fal (`directRoute.accepts`) |
 
 Start/end frames and references can't be combined: BytePlus calls them "mutually exclusive scenarios". A recipe that wires both, or wires in a Krea-only input (`start_video`, `effects`, references on 1.0), gets a clear error before any request is sent instead of a silent fallback.
 
