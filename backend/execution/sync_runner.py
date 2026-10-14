@@ -1219,8 +1219,15 @@ def get_handler_registry(
         registry["kling-o3-ref"] = _kling_o3_ref_handler
         registry["kling-motion"] = _kling_motion_handler
         registry["topaz-video-upscale"] = _topaz_video_upscale_handler
-        registry["grok-imagine-image"] = _grok_imagine_image_handler
-        registry["grok-imagine-image-edit"] = _grok_imagine_image_edit_handler
+        # Grok Imagine's fal copies run on xAI's own API when XAI_API_KEY is
+        # set (execution/maker_routes_xai.py translates fal's params), else on fal.
+        from execution import maker_routes_xai
+        for _grok_id, _grok_fal in (("grok-imagine-image", _grok_imagine_image_handler),
+                                    ("grok-imagine-image-edit", _grok_imagine_image_edit_handler)):
+            registry[_grok_id] = maker_routes.dual_route(
+                direct=maker_routes_xai.xai_image_for_fal, fallback=_grok_fal,
+                translate=maker_routes_xai.fal_grok_image_to_xai,
+            )
         registry["veo-3-flf"] = _veo3_flf_handler
         registry["ltx-2-3"] = _ltx_23_handler
         registry["grok-imagine-video"] = _grok_video_handler

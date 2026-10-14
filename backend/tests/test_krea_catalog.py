@@ -175,12 +175,19 @@ def test_direct_route_models_price_both_routes():
             # A maker route OpenAI publishes no default price for (GPT Image 2 / 2.5) stays unpriced.
             assert entry is None or "routes" not in entry, node_id
             continue
+        provider = direct["pricing"]["provider"]
         # Krea's own route is priced unless Krea publishes no price for it
-        # (Gemini Omni Flash 1.1 has no x-krea-pricing block).
+        # (Gemini Omni Flash 1.1 has no x-krea-pricing block; Grok Imagine
+        # 2.0's Krea price depends on a count the request doesn't set).
         krea_priced = bool(model.get("pricing")) and node_id not in skipped
-        assert set(entry["routes"]) == ({"krea"} if krea_priced else set()) | {direct["pricing"]["provider"]}, node_id
+        assert set(entry["routes"]) == ({"krea"} if krea_priced else set()) | {provider}, node_id
         if krea_priced:
             assert entry["routes"]["krea"].get("provider", "krea") == "krea"
+        if provider != "google":
+            maker = entry["routes"][provider]
+            assert maker.get("provider", provider) == provider and maker["rows"] and maker["sources"]
+            assert all(source["url"].startswith("https://") and source["quote"] for source in maker["sources"])
+            continue
         google = entry["routes"]["google"]
         assert google.get("provider", "google") == "google"
         assert google["rows"] and google["checked"] == SYNC.GOOGLE_CHECKED

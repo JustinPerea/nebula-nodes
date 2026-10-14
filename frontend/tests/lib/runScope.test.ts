@@ -117,6 +117,21 @@ describe('run cost', () => {
     expect(viaFal.cost?.unpriced).toHaveLength(1);
   });
 
+  it('keeps a run on Krea when a Krea-only setting arrives by wire, as the router does', () => {
+    // Grok Imagine 1.5's start video is Krea-only (directRoute.blockedBy).
+    const routed: PricingTable = { ...pricing, nodes: { 'krea-video-xai-grok-video-1-5': { routes: {
+      krea: { currency: 'usd', per: 'request', rows: [{ match: {}, price: 1 }] },
+      xai: { currency: 'usd', per: 'request', rows: [{ match: {}, price: 2 }] },
+    } } } as PricingTable['nodes'] };
+    const keys = { XAI_API_KEY: 'set', KREA_API_TOKEN: 'set' };
+    const graph = [priced('src', 'text-input'), priced('v', 'krea-video-xai-grok-video-1-5', { _kreaAuth: 'api-token' })];
+    const unwired = summarizeRunScope(graph, [], { kind: 'graph' }, { pricing: routed, apiKeys: keys });
+    expect(unwired.cost?.high).toBe(2);
+    const wire: Edge[] = [{ id: 'w', source: 'src', target: 'v', targetHandle: 'start_video' }];
+    const wired = summarizeRunScope(graph, wire, { kind: 'graph' }, { pricing: routed, apiKeys: keys });
+    expect(wired.cost?.high).toBe(1);
+  });
+
   it('lists Krea account runs as billed to the plan, not as unpriced', () => {
     const summary = summarizeRunScope(
       [priced('k', 'krea-2-generate', { _kreaAuth: 'mcp' }, 'Krea shot')], [], { kind: 'graph' }, context,

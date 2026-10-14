@@ -39,6 +39,9 @@ MAKER_ROUTED = {
     "gpt-image-1-5", "gpt-image-1-5-edit", "gpt-image-2-fal-generate", "gpt-image-2-fal-edit",
     "krea-image-openai-gpt-image-2", "krea-image-openai-gpt-image-2-5-flare",
     "krea-image-openai-gpt-image-2-5-sunburst",
+    # xAI (execution/maker_routes_xai.py)
+    "grok-imagine-image", "grok-imagine-image-edit", "krea-image-xai-grok-imagine-2",
+    "krea-image-xai-grok-imagine-2-edit", "krea-video-xai-grok-video", "krea-video-xai-grok-video-1-5",
 }
 
 

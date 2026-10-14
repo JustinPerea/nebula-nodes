@@ -334,7 +334,8 @@ async def test_i2v_request_body_uses_image_field() -> None:
 
     body = mock_client.post.call_args.kwargs["json"]
     assert "image" in body, "Expected 'image' key in body for Grok I2V"
-    assert body["image"] == "https://example.com/frame.jpg"
+    # xAI's REST reference defines `image` as an object: {"url": "..."}.
+    assert body["image"] == {"url": "https://example.com/frame.jpg"}
     assert "image_url" not in body, "Body must not contain 'image_url' — Grok uses 'image'"
 
 

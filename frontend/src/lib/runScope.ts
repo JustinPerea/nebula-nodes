@@ -2,6 +2,7 @@ import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
 import { batchSizeCap, parseBatchItems } from './batch';
+import { withWiredBlockers } from './directRoute';
 import { usesKreaAccount } from './kreaConnection';
 import { runRouteProvider } from './modelDiscovery';
 import { cinemaSceneBase, isLocalRun } from './nodeKeys';
@@ -190,9 +191,11 @@ export function summarizeRunScope(
       cost.plan.push(name);
       continue;
     }
+    // A Krea-only setting that arrives by wire keeps the run on Krea
+    // (directRoute.withWiredBlockers), as the backend router does.
     const estimate = estimateNode(
       pricing.nodes[definition.id], definition, params,
-      runRouteProvider(definition, costContext.apiKeys, params), ports,
+      runRouteProvider(definition, costContext.apiKeys, withWiredBlockers(definition, params, ports)), ports,
     );
     if (!estimate || estimate.currency !== 'usd') {
       cost.unpriced.push(name);

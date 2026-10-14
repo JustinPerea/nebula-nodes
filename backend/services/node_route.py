@@ -212,6 +212,39 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
     return None
 
 
+# A blocker that arrives by wire rather than as a saved param.
+WIRED = "(wired)"
+
+
+def with_wired_blockers(
+    definition: Mapping[str, Any], params: Mapping[str, Any] | None, wired: Any,
+) -> dict[str, Any]:
+    """``params`` plus a marker for each ``directRoute.blockedBy`` field that
+    arrives on a wired input port (a Krea copy's style images), so
+    :func:`direct_block` keeps that run on the copy just as it would for the
+    saved param. ``wired`` are the input port ids with a value (the router)
+    or with an edge into them (the run estimate). Other params are unchanged."""
+    values = dict(params or {})
+    spec = definition.get("directRoute")
+    ports = set(wired or ())
+    for key in (spec.get("blockedBy") or []) if isinstance(spec, Mapping) else []:
+        if key in ports and not _has_value(values.get(key)):
+            values[key] = WIRED
+    return values
+
+
+def filled_ports(inputs: Mapping[str, Any] | None) -> set[str]:
+    """The input ports of a run that carry a value (PortValueDict-like objects
+    with ``.value``), as the router and the engine's cache key read wired
+    blockers: the same set in both, so the cache key names the route that ran."""
+    filled: set[str] = set()
+    for port, item in (inputs or {}).items():
+        value = getattr(item, "value", None)
+        if value is not None and value != "" and value != []:
+            filled.add(str(port))
+    return filled
+
+
 def _effective(definition: Mapping[str, Any], params: Mapping[str, Any], key: str) -> Any:
     """A param's value as a run reads it: the saved value, else the definition default."""
     if _has_value(params.get(key)):

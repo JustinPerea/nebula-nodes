@@ -412,18 +412,25 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `grok-imagine-image` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | XAI_API_KEY, FAL_KEY |
 | **Endpoint** | `xai/grok-imagine-image` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Number of Images | int | 1 | 1–4 |
 | Aspect Ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 2:1, … |
 | Resolution | enum | 1k | 1K, 2K |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Output Format | enum | jpeg | JPEG, PNG, WebP |
 
 ---
@@ -434,17 +441,24 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `grok-imagine-image-edit` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | XAI_API_KEY, FAL_KEY |
 | **Endpoint** | `xai/grok-imagine-image/edit` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Source Images (Image ×n)* |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Number of Images | int | 1 | 1–10 |
 | Resolution | enum | 1k | 1K, 2K |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Output Format | enum | jpeg | JPEG, PNG, WebP |
 
 ---
@@ -1592,12 +1606,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-xai-grok-imagine-2` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | XAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/xai/grok-imagine-2` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Style images (Any ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1606,6 +1622,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Quality | enum | medium | low, medium |
 | Aspect ratio | enum | — | 2:1, 20:9, 19.5:9, 16:9, 3:2, 4:3, 1:1, 3:4, … |
 | Resolution | enum | — | 1K, 2K |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Style images (JSON) | textarea | — | — |
 
 ---
@@ -1616,7 +1637,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-xai-grok-imagine-2-edit` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | XAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/xai/grok-imagine-2-edit` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
@@ -3228,24 +3249,31 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-xai-grok-video` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | XAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/xai/grok-video` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), Start video (Video), Reference images (Image ×n), Edit video (Video) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
 | Start image | string | — | — |
-| Start video | string | — | — |
 | Duration | float | 6 | 1–15 |
 | Resolution | enum | 720p | 480p, 720p |
 | Aspect ratio | enum | — | 16:9, 9:16, 1:1, 4:3, 3:4, 3:2, 2:3 |
 | Reference images (JSON) | textarea | — | — |
 | Edit video | string | — | — |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Start video | string | — | — |
 
 ---
 
@@ -3255,22 +3283,29 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-xai-grok-video-1-5` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | XAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/xai/grok-video-1.5` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), Start video (Video) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
 | Start image | string | — | — |
-| Start video | string | — | — |
 | Duration | float | 6 | 1–15 |
 | Resolution | enum | 720p | 480p, 720p, 1080p |
 | Aspect ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Start video | string | — | — |
 
 ---
 

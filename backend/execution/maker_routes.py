@@ -66,8 +66,16 @@ def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | Non
 
     async def _route(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str]) -> dict[str, Any]:
         definition = definition_for(node.definition_id)
-        route = node_route.select_route(definition, node.params, api_keys)
+        routed_params = node_route.with_wired_blockers(definition, node.params, node_route.filled_ports(inputs))
+        route = node_route.select_route(definition, routed_params, api_keys)
         if route.kind == node_route.UNSET:
+            block = node_route.direct_block(definition, routed_params)
+            if block is not None and block.reason == node_route.BLOCKED and any(
+                    isinstance(api_keys.get(k), str) and api_keys[k].strip() for k in node_route.direct_keys(definition)):
+                # The maker key is saved, but this run can only go to the copy.
+                raise MissingCredentialError(
+                    f"{' or '.join(node_route.fallback_keys(definition))} is required: {block.param} is only "
+                    f"supported on the {node_route.fallback_provider(definition) or 'copy'} route")
             raise MissingCredentialError(f"{' or '.join(node_route.env_keys(definition))} is required")
         if route.kind == node_route.DIRECT:
             routed = route_node(node, node_route.route_param_keys(definition, node_route.DIRECT))
@@ -257,6 +265,13 @@ from execution import maker_routes_openai  # noqa: E402  (stdlib + models only; 
 KREA_TRANSLATIONS["krea-openai-image"] = (
     maker_routes_openai.krea_openai_image, maker_routes_openai.krea_openai_image_to_openai,
 )
+
+from execution import maker_routes_xai  # noqa: E402  (registers below; imports nothing from here at load)
+
+KREA_TRANSLATIONS.update({
+    "krea-xai-image": (maker_routes_xai.krea_xai_image, maker_routes_xai.krea_grok_image_to_xai),
+    "krea-xai-video": (maker_routes_xai.krea_xai_video, maker_routes_xai.krea_grok_video_to_xai),
+})
 
 
 def krea_router(definition_id: str, fallback: Handler, emit: Any = None) -> Handler | None:

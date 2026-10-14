@@ -83,6 +83,19 @@ URLs are fetched first). Their OpenAI route is unpriced: OpenAI publishes no
 per-image price for these models' default sizes. `krea-image-openai-gpt-image`
 has no maker route (its OpenAI model isn't confirmed).
 
+## Maker routes (Grok Imagine on your xAI key)
+
+Since 2026-10-14 four Krea copies also run on xAI's own API with the
+person's `XAI_API_KEY` (`backend/execution/maker_routes_xai.py`):
+`krea-image-xai-grok-imagine-2` and `-2-edit` (`grok-imagine-image-2.0`),
+`krea-video-xai-grok-video` (`grok-imagine-video`) and
+`krea-video-xai-grok-video-1-5` (`grok-imagine-video-1.5`). Same
+precedence as Nano Banana: the Krea plan, else the xAI key, else
+`KREA_API_TOKEN`. Krea-only fields that keep a run on Krea, whether saved or
+wired into the port: Grok 2.0's `style_images` (xAI has no style references)
+and `start_video` on both Grok video copies (Krea doesn't say what it
+means, so it isn't mapped to xAI's extensions). The overlay is `XAI_DIRECT_ROUTES` in `scripts/sync-krea-catalog.py`.
+
 ## Gateway Model Nodes
 
 The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108) included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.

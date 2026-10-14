@@ -1662,6 +1662,117 @@
       ],
       "checked": "2026-10-10"
     },
+    "grok-imagine-image": {
+      "routes": {
+        "fal": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": 0.02
+            }
+          ],
+          "multiplyBy": [
+            "num_images"
+          ],
+          "notes": "fal list price per image for xai/grok-imagine-image.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/xai/grok-imagine-image/llms.txt",
+              "quote": "Price: $0.02 per images"
+            }
+          ],
+          "checked": "2026-10-14"
+        },
+        "xai": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": 0.02
+            }
+          ],
+          "multiplyBy": [
+            "num_images"
+          ],
+          "notes": "xAI list price per grok-imagine-image (1.0) image on the person's XAI_API_KEY; 1K and 2K cost the same. xAI makes all num_images in one request.",
+          "sources": [
+            {
+              "url": "https://docs.x.ai/developers/pricing",
+              "quote": "grok-imagine-image | Text, Image -> Image | $0.002 / img (media input) | 1K $0.02 / img | 2K $0.02 / img"
+            },
+            {
+              "url": "https://docs.x.ai/developers/models/grok-imagine-image",
+              "quote": "Output: $0.02 per image"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
+    "grok-imagine-image-edit": {
+      "routes": {
+        "fal": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": 0.022
+            }
+          ],
+          "multiplyBy": [
+            "num_images"
+          ],
+          "notes": "fal list price per edited image (output plus one input image) for xai/grok-imagine-image/edit, which takes up to 3 source images.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/xai/grok-imagine-image/edit/llms.txt",
+              "quote": "Your request will cost $0.022 per image ($0.02 for image output + $0.002 for image input)."
+            }
+          ],
+          "checked": "2026-10-14"
+        },
+        "xai": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": [
+                0.02,
+                0.03
+              ]
+            }
+          ],
+          "multiplyBy": [
+            "num_images"
+          ],
+          "notes": "xAI list price for a grok-imagine-image (1.0) edit on the person's XAI_API_KEY: $0.02 per output image plus $0.002 per source image (up to 5). xAI doesn't say whether a request with several outputs bills the sources once or per output, so the high end counts 5 sources per output image and the low end none.",
+          "sources": [
+            {
+              "url": "https://docs.x.ai/developers/pricing",
+              "quote": "grok-imagine-image | Text, Image -> Image | $0.002 / img (media input) | 1K $0.02 / img | 2K $0.02 / img"
+            },
+            {
+              "url": "https://docs.x.ai/developers/model-capabilities/imagine",
+              "quote": "Image edits are billed for both the input image and the generated output image."
+            },
+            {
+              "url": "https://docs.x.ai/developers/model-capabilities/images/multi-image-editing",
+              "quote": "Use up to five source images for a single image edit."
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
     "identity-edit": {
       "routes": {
         "google": {
@@ -2632,6 +2743,139 @@
         }
       ],
       "checked": "2026-10-10",
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-xai-grok-imagine-2": {
+      "routes": {
+        "xai": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "quality",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "quality": "low",
+                "resolution": "1K"
+              },
+              "price": 0.04
+            },
+            {
+              "match": {
+                "quality": "low",
+                "resolution": "2K"
+              },
+              "price": 0.06
+            },
+            {
+              "match": {
+                "quality": "medium",
+                "resolution": "1K"
+              },
+              "price": 0.06
+            },
+            {
+              "match": {
+                "quality": "medium",
+                "resolution": "2K"
+              },
+              "price": 0.08
+            }
+          ],
+          "defaults": {
+            "resolution": "1K"
+          },
+          "notes": "xAI list price for one grok-imagine-image-2.0 image on the person's XAI_API_KEY, by quality and resolution (unset renders at xAI's default, 1k). Style images keep the run on Krea (xAI has none).",
+          "sources": [
+            {
+              "url": "https://docs.x.ai/developers/pricing",
+              "quote": "grok-imagine-image-2.0 | Text, Image -> Image | $0.01 / img (media input) | 1K Low $0.04 / img | 1.5K Low $0.05 / img | 2K Low $0.06 / img | 1K Medium $0.06 / img | 1.5K Medium $0.07 / img | 2K Medium $0.08 / img"
+            },
+            {
+              "url": "https://docs.x.ai/developers/model-capabilities/images/generation",
+              "quote": "Images are billed at the quality they are served at"
+            },
+            {
+              "url": "https://docs.x.ai/developers/model-capabilities/images/generation",
+              "quote": "`1k` (default when omitted)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-xai-grok-imagine-2-edit": {
+      "routes": {
+        "xai": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "quality",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "quality": "low",
+                "resolution": "1K"
+              },
+              "price": [
+                0.05,
+                0.07
+              ]
+            },
+            {
+              "match": {
+                "quality": "low",
+                "resolution": "2K"
+              },
+              "price": [
+                0.07,
+                0.09
+              ]
+            },
+            {
+              "match": {
+                "quality": "medium",
+                "resolution": "1K"
+              },
+              "price": [
+                0.07,
+                0.09
+              ]
+            },
+            {
+              "match": {
+                "quality": "medium",
+                "resolution": "2K"
+              },
+              "price": [
+                0.09,
+                0.11
+              ]
+            }
+          ],
+          "notes": "xAI list price for one grok-imagine-image-2.0 edit on the person's XAI_API_KEY: the output image by quality and resolution, plus $0.01 per source image (1 to 3, this node's limit).",
+          "sources": [
+            {
+              "url": "https://docs.x.ai/developers/pricing",
+              "quote": "grok-imagine-image-2.0 | Text, Image -> Image | $0.01 / img (media input) | 1K Low $0.04 / img | 1.5K Low $0.05 / img | 2K Low $0.06 / img | 1K Medium $0.06 / img | 1.5K Medium $0.07 / img | 2K Medium $0.08 / img"
+            },
+            {
+              "url": "https://docs.x.ai/developers/model-capabilities/imagine",
+              "quote": "Image edits are billed for both the input image and the generated output image."
+            },
+            {
+              "url": "https://docs.x.ai/developers/model-capabilities/images/generation",
+              "quote": "Images are billed at the quality they are served at"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-alibaba-wan-2-2": {
@@ -6666,643 +6910,1468 @@
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-xai-grok-video": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "duration",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 1
-          },
-          "price": 0.05
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 1
+              },
+              "price": 0.05
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 1
+              },
+              "price": 0.07
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 2
+              },
+              "price": 0.1
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 2
+              },
+              "price": 0.14
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 3
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 4
+              },
+              "price": 0.2
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 3
+              },
+              "price": 0.21
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 5
+              },
+              "price": 0.25
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 4
+              },
+              "price": 0.28
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 6
+              },
+              "price": 0.3
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 7
+              },
+              "price": 0.35
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 5
+              },
+              "price": 0.35
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 8
+              },
+              "price": 0.4
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 6
+              },
+              "price": 0.42
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 9
+              },
+              "price": 0.45
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 7
+              },
+              "price": 0.49
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 10
+              },
+              "price": 0.5
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 11
+              },
+              "price": 0.55
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 8
+              },
+              "price": 0.56
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 12
+              },
+              "price": 0.6
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 9
+              },
+              "price": 0.63
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 13
+              },
+              "price": 0.65
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 14
+              },
+              "price": 0.7
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 10
+              },
+              "price": 0.7
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 15
+              },
+              "price": 0.75
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 11
+              },
+              "price": 0.77
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 12
+              },
+              "price": 0.84
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 13
+              },
+              "price": 0.91
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 14
+              },
+              "price": 0.98
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 15
+              },
+              "price": 1.05
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/video/xai/grok-video (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 1
-          },
-          "price": 0.07
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 2
-          },
-          "price": 0.1
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 2
-          },
-          "price": 0.14
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 3
-          },
-          "price": 0.15
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 4
-          },
-          "price": 0.2
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 3
-          },
-          "price": 0.21
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 5
-          },
-          "price": 0.25
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 4
-          },
-          "price": 0.28
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 6
-          },
-          "price": 0.3
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 7
-          },
-          "price": 0.35
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 5
-          },
-          "price": 0.35
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 8
-          },
-          "price": 0.4
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 6
-          },
-          "price": 0.42
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 9
-          },
-          "price": 0.45
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 7
-          },
-          "price": 0.49
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 10
-          },
-          "price": 0.5
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 11
-          },
-          "price": 0.55
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 8
-          },
-          "price": 0.56
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 12
-          },
-          "price": 0.6
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 9
-          },
-          "price": 0.63
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 13
-          },
-          "price": 0.65
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 14
-          },
-          "price": 0.7
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 10
-          },
-          "price": 0.7
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 15
-          },
-          "price": 0.75
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 11
-          },
-          "price": 0.77
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 12
-          },
-          "price": 0.84
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 13
-          },
-          "price": 0.91
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 14
-          },
-          "price": 0.98
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 15
-          },
-          "price": 1.05
+        "xai": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "duration",
+            "edit_video",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 1,
+                "edit_video": ""
+              },
+              "price": [
+                0.05,
+                0.064
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 2,
+                "edit_video": ""
+              },
+              "price": [
+                0.1,
+                0.114
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 3,
+                "edit_video": ""
+              },
+              "price": [
+                0.15,
+                0.164
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 4,
+                "edit_video": ""
+              },
+              "price": [
+                0.2,
+                0.214
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 5,
+                "edit_video": ""
+              },
+              "price": [
+                0.25,
+                0.264
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 6,
+                "edit_video": ""
+              },
+              "price": [
+                0.3,
+                0.314
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 7,
+                "edit_video": ""
+              },
+              "price": [
+                0.35,
+                0.364
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 8,
+                "edit_video": ""
+              },
+              "price": [
+                0.4,
+                0.414
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 9,
+                "edit_video": ""
+              },
+              "price": [
+                0.45,
+                0.464
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 10,
+                "edit_video": ""
+              },
+              "price": [
+                0.5,
+                0.514
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 11,
+                "edit_video": ""
+              },
+              "price": [
+                0.55,
+                0.564
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 12,
+                "edit_video": ""
+              },
+              "price": [
+                0.6,
+                0.614
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 13,
+                "edit_video": ""
+              },
+              "price": [
+                0.65,
+                0.664
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 14,
+                "edit_video": ""
+              },
+              "price": [
+                0.7,
+                0.714
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 15,
+                "edit_video": ""
+              },
+              "price": [
+                0.75,
+                0.764
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 1,
+                "edit_video": ""
+              },
+              "price": [
+                0.07,
+                0.084
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 2,
+                "edit_video": ""
+              },
+              "price": [
+                0.14,
+                0.154
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 3,
+                "edit_video": ""
+              },
+              "price": [
+                0.21,
+                0.224
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 4,
+                "edit_video": ""
+              },
+              "price": [
+                0.28,
+                0.294
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 5,
+                "edit_video": ""
+              },
+              "price": [
+                0.35,
+                0.364
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 6,
+                "edit_video": ""
+              },
+              "price": [
+                0.42,
+                0.434
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 7,
+                "edit_video": ""
+              },
+              "price": [
+                0.49,
+                0.504
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 8,
+                "edit_video": ""
+              },
+              "price": [
+                0.56,
+                0.574
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 9,
+                "edit_video": ""
+              },
+              "price": [
+                0.63,
+                0.644
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 10,
+                "edit_video": ""
+              },
+              "price": [
+                0.7,
+                0.714
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 11,
+                "edit_video": ""
+              },
+              "price": [
+                0.77,
+                0.784
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 12,
+                "edit_video": ""
+              },
+              "price": [
+                0.84,
+                0.854
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 13,
+                "edit_video": ""
+              },
+              "price": [
+                0.91,
+                0.924
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 14,
+                "edit_video": ""
+              },
+              "price": [
+                0.98,
+                0.994
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 15,
+                "edit_video": ""
+              },
+              "price": [
+                1.05,
+                1.064
+              ]
+            }
+          ],
+          "notes": "xAI list price for grok-imagine-video on the person's XAI_API_KEY: per second by resolution, up to that plus $0.002 per input image (a start image, or up to 7 reference images). An edit (edit_video) bills the source video at $0.01/sec and returns a clip as long as the source, so it is unpriced. A start video keeps the run on Krea.",
+          "sources": [
+            {
+              "url": "https://docs.x.ai/developers/pricing",
+              "quote": "grok-imagine-video | Text, Image, Video -> Video | $0.01 / sec | $0.002 / img (media input) | 480p $0.05 / sec | 720p $0.07 / sec"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/video/xai/grok-video (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-xai-grok-video-1-5": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "duration",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 1
-          },
-          "price": 0.08
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 1
+              },
+              "price": 0.08
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 1
+              },
+              "price": 0.14
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 2
+              },
+              "price": 0.16
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 3
+              },
+              "price": 0.24
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 1
+              },
+              "price": 0.25
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 2
+              },
+              "price": 0.28
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 4
+              },
+              "price": 0.32
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 5
+              },
+              "price": 0.4
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 3
+              },
+              "price": 0.42
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 6
+              },
+              "price": 0.48
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 2
+              },
+              "price": 0.5
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 7
+              },
+              "price": 0.56
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 4
+              },
+              "price": 0.56
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 8
+              },
+              "price": 0.64
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 5
+              },
+              "price": 0.7
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 9
+              },
+              "price": 0.72
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 3
+              },
+              "price": 0.75
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 10
+              },
+              "price": 0.8
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 6
+              },
+              "price": 0.84
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 11
+              },
+              "price": 0.88
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 12
+              },
+              "price": 0.96
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 7
+              },
+              "price": 0.98
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 4
+              },
+              "price": 1
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 13
+              },
+              "price": 1.04
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 14
+              },
+              "price": 1.12
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 8
+              },
+              "price": 1.12
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "480p",
+                "duration": 15
+              },
+              "price": 1.2
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 5
+              },
+              "price": 1.25
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 9
+              },
+              "price": 1.26
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 10
+              },
+              "price": 1.4
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 6
+              },
+              "price": 1.5
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 11
+              },
+              "price": 1.54
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 12
+              },
+              "price": 1.68
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 7
+              },
+              "price": 1.75
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 13
+              },
+              "price": 1.82
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 14
+              },
+              "price": 1.96
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 8
+              },
+              "price": 2
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 15
+              },
+              "price": 2.1
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 9
+              },
+              "price": 2.25
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 10
+              },
+              "price": 2.5
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 11
+              },
+              "price": 2.75
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 12
+              },
+              "price": 3
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 13
+              },
+              "price": 3.25
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 14
+              },
+              "price": 3.5
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 15
+              },
+              "price": 3.75
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/video/xai/grok-video-1.5 (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 1
-          },
-          "price": 0.14
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 2
-          },
-          "price": 0.16
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 3
-          },
-          "price": 0.24
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 1
-          },
-          "price": 0.25
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 2
-          },
-          "price": 0.28
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 4
-          },
-          "price": 0.32
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 5
-          },
-          "price": 0.4
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 3
-          },
-          "price": 0.42
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 6
-          },
-          "price": 0.48
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 2
-          },
-          "price": 0.5
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 7
-          },
-          "price": 0.56
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 4
-          },
-          "price": 0.56
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 8
-          },
-          "price": 0.64
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 5
-          },
-          "price": 0.7
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 9
-          },
-          "price": 0.72
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 3
-          },
-          "price": 0.75
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 10
-          },
-          "price": 0.8
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 6
-          },
-          "price": 0.84
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 11
-          },
-          "price": 0.88
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 12
-          },
-          "price": 0.96
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 7
-          },
-          "price": 0.98
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 4
-          },
-          "price": 1
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 13
-          },
-          "price": 1.04
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 14
-          },
-          "price": 1.12
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 8
-          },
-          "price": 1.12
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "480p",
-            "duration": 15
-          },
-          "price": 1.2
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 5
-          },
-          "price": 1.25
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 9
-          },
-          "price": 1.26
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 10
-          },
-          "price": 1.4
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 6
-          },
-          "price": 1.5
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 11
-          },
-          "price": 1.54
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 12
-          },
-          "price": 1.68
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 7
-          },
-          "price": 1.75
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 13
-          },
-          "price": 1.82
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 14
-          },
-          "price": 1.96
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 8
-          },
-          "price": 2
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 15
-          },
-          "price": 2.1
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 9
-          },
-          "price": 2.25
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 10
-          },
-          "price": 2.5
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 11
-          },
-          "price": 2.75
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 12
-          },
-          "price": 3
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 13
-          },
-          "price": 3.25
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 14
-          },
-          "price": 3.5
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 15
-          },
-          "price": 3.75
+        "xai": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 1
+              },
+              "price": [
+                0.08,
+                0.09
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 2
+              },
+              "price": [
+                0.16,
+                0.17
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 3
+              },
+              "price": [
+                0.24,
+                0.25
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 4
+              },
+              "price": [
+                0.32,
+                0.33
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 5
+              },
+              "price": [
+                0.4,
+                0.41
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 6
+              },
+              "price": [
+                0.48,
+                0.49
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 7
+              },
+              "price": [
+                0.56,
+                0.57
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 8
+              },
+              "price": [
+                0.64,
+                0.65
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 9
+              },
+              "price": [
+                0.72,
+                0.73
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 10
+              },
+              "price": [
+                0.8,
+                0.81
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 11
+              },
+              "price": [
+                0.88,
+                0.89
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 12
+              },
+              "price": [
+                0.96,
+                0.97
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 13
+              },
+              "price": [
+                1.04,
+                1.05
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 14
+              },
+              "price": [
+                1.12,
+                1.13
+              ]
+            },
+            {
+              "match": {
+                "resolution": "480p",
+                "duration": 15
+              },
+              "price": [
+                1.2,
+                1.21
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 1
+              },
+              "price": [
+                0.14,
+                0.15
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 2
+              },
+              "price": [
+                0.28,
+                0.29
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 3
+              },
+              "price": [
+                0.42,
+                0.43
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 4
+              },
+              "price": [
+                0.56,
+                0.57
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 5
+              },
+              "price": [
+                0.7,
+                0.71
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 6
+              },
+              "price": [
+                0.84,
+                0.85
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 7
+              },
+              "price": [
+                0.98,
+                0.99
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 8
+              },
+              "price": [
+                1.12,
+                1.13
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 9
+              },
+              "price": [
+                1.26,
+                1.27
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 10
+              },
+              "price": [
+                1.4,
+                1.41
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 11
+              },
+              "price": [
+                1.54,
+                1.55
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 12
+              },
+              "price": [
+                1.68,
+                1.69
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 13
+              },
+              "price": [
+                1.82,
+                1.83
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 14
+              },
+              "price": [
+                1.96,
+                1.97
+              ]
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "duration": 15
+              },
+              "price": [
+                2.1,
+                2.11
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 1
+              },
+              "price": [
+                0.25,
+                0.26
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 2
+              },
+              "price": [
+                0.5,
+                0.51
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 3
+              },
+              "price": [
+                0.75,
+                0.76
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 4
+              },
+              "price": [
+                1.0,
+                1.01
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 5
+              },
+              "price": [
+                1.25,
+                1.26
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 6
+              },
+              "price": [
+                1.5,
+                1.51
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 7
+              },
+              "price": [
+                1.75,
+                1.76
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 8
+              },
+              "price": [
+                2.0,
+                2.01
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 9
+              },
+              "price": [
+                2.25,
+                2.26
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 10
+              },
+              "price": [
+                2.5,
+                2.51
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 11
+              },
+              "price": [
+                2.75,
+                2.76
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 12
+              },
+              "price": [
+                3.0,
+                3.01
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 13
+              },
+              "price": [
+                3.25,
+                3.26
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 14
+              },
+              "price": [
+                3.5,
+                3.51
+              ]
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "duration": 15
+              },
+              "price": [
+                3.75,
+                3.76
+              ]
+            }
+          ],
+          "notes": "xAI list price for grok-imagine-video-1.5 on the person's XAI_API_KEY: per second by resolution, up to that plus $0.01 for a start image. A start video keeps the run on Krea.",
+          "sources": [
+            {
+              "url": "https://docs.x.ai/developers/pricing",
+              "quote": "grok-imagine-video-1.5 | Text, Image, Audio -> Video | $0.01 / img (media input) | 480p $0.08 / sec | 720p $0.14 / sec | 1080p $0.25 / sec"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/video/xai/grok-video-1.5 (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "nano-banana": {

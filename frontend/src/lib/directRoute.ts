@@ -127,6 +127,26 @@ function todayIso(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
+/** A blocker that arrives by wire rather than as a saved param (node_route.WIRED). */
+export const WIRED = '(wired)';
+
+/** `params` plus a marker for each `directRoute.blockedBy` field that arrives
+ * on a wired input port (a Krea copy's style images), so directBlock keeps
+ * that run on the copy just as it would for the saved param
+ * (node_route.with_wired_blockers). `wired` are the ports with an edge in. */
+export function withWiredBlockers(
+  definition: Pick<ModelNodeDefinition, 'directRoute'>,
+  params: Record<string, unknown> | undefined,
+  wired: Iterable<string>,
+): Record<string, unknown> {
+  const values = { ...(params ?? {}) };
+  const ports = new Set(wired);
+  for (const key of definition.directRoute?.blockedBy ?? []) {
+    if (ports.has(key) && !hasValue(values[key])) values[key] = WIRED;
+  }
+  return values;
+}
+
 /** A param's value as a run reads it: the saved value, else the definition default. */
 function effectiveValue(definition: ModelNodeDefinition, params: Record<string, unknown>, key: string): unknown {
   if (hasValue(params[key])) return params[key];
