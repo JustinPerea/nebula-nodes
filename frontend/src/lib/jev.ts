@@ -77,12 +77,11 @@ export interface JevBox {
 export interface JevBoxResult {
   kind: 'box';
   found: JevVerdict;
-  /** null when not found. When found is "unsure" this is the model's guess. */
+  /** Only when found is "true"; null when the target is missing or Jev is unsure. */
   box: JevBox | null;
   /** Only when found is "true". */
   crop: string | null;
   mask: string | null;
-  /** When found is "true" or "unsure". */
   annotated: string | null;
   report: JevReport | null;
 }
@@ -234,14 +233,14 @@ function parseBoxResult(outputs: Record<string, unknown>): JevBoxResult | null {
   if (found === null) return null;
   const box = parseJevBox(portValue(outputs, 'box'));
   if (box === undefined) return null;
-  if (found === 'true' && box === null) return null;
-  if (found === 'false' && box !== null) return null;
+  // A box only comes with a confident "found"; anything else is malformed.
+  if ((found === 'true') !== (box !== null)) return null;
   const confirmed = found === 'true';
   return {
     kind: 'box', found, box,
     crop: confirmed ? text(outputs, 'crop') : null,
     mask: confirmed ? text(outputs, 'mask') : null,
-    annotated: found === 'false' ? null : text(outputs, 'annotated'),
+    annotated: confirmed ? text(outputs, 'annotated') : null,
     report: parseJevReport(portValue(outputs, 'report')),
   };
 }

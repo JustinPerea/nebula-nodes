@@ -1447,6 +1447,32 @@
       ],
       "checked": "2026-10-10"
     },
+    "jev-box": {
+      "currency": "usd",
+      "per": "request",
+      "rows": [
+        {
+          "match": {},
+          "price": [
+            1e-05,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "One request holding the image once and two questions (is it there, and where). TypeSafe bills input tokens only ($0.042 per million; output is free) and images as input tokens, with no published per-image count yet; its own example of one image and a Box question is about 290 tokens. One request can't exceed the 64k-token context limit, so the high end is that limit. Failed requests are assumed not to bill.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
     "jev-decide": {
       "currency": "usd",
       "per": "request",
@@ -1481,6 +1507,32 @@
         {
           "url": "https://docs.typesafe.ai/models",
           "quote": "Long context header: 262k per request and per question, same price per token"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
+    "jev-pick-best": {
+      "currency": "usd",
+      "per": "request",
+      "rows": [
+        {
+          "match": {},
+          "price": [
+            2e-05,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "One Choice request over every candidate. TypeSafe bills input tokens only ($0.042 per million; output is free) and images as input tokens, with no published per-image count yet. One request can't exceed the 64k-token context limit, so the high end is that limit. The low end is two small candidates. Failed requests are assumed not to bill; a request over the limit is sent once more with smaller candidates.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
         },
         {
           "url": "https://docs.typesafe.ai/images",

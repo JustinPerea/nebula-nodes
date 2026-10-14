@@ -9,14 +9,13 @@ import pytest
 
 import main
 
-# query -> the node it must return first. Pick Best and Box land in a later
-# change; their rows start checking as soon as the definitions exist.
+# query -> the node it must return first. Rows for nodes that aren't defined
+# (yet) are skipped.
 SEARCHES = {
     "judge": "jev-decide",
     "judge image": "jev-decide",
     "classify": "jev-decide",
     "yes no": "jev-decide",
-    "typesafe": "jev-decide",
     "pick best": "jev-pick-best",
     "bounding box": "jev-box",
 }
@@ -45,6 +44,14 @@ async def test_find_nodes_returns_the_jev_node_first(no_keys, query, node_id):
 
 
 @pytest.mark.asyncio
+async def test_find_nodes_by_provider_name_lists_every_jev_node_first(no_keys):
+    jev = {"jev-decide", "jev-pick-best", "jev-box"}
+    defined = {node_id for node_id in jev if main.node_registry.get(node_id) is not None}
+    found = await main.agent_find_nodes(query="typesafe", ready_only=False)
+    assert {row["id"] for row in found["nodes"][:len(defined)]} == defined
+
+
+@pytest.mark.asyncio
 async def test_find_and_describe_say_what_decide_needs_and_costs(no_keys):
     row = next(row for row in (await main.agent_find_nodes(query="judge", ready_only=False))["nodes"]
                if row["id"] == "jev-decide")
@@ -62,3 +69,18 @@ async def test_find_and_describe_say_what_decide_needs_and_costs(no_keys):
     assert params["options"]["onlyWhen"] == {"answer_type": ["choice"]}
     assert "TYPESAFE_API_KEY" in described["missing"]
     assert described["price"] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("node_id", "outputs"), [
+    ("jev-pick-best", ["winner", "index", "probabilities", "confidence", "report"]),
+    ("jev-box", ["found", "box", "crop", "mask", "annotated", "report"]),
+])
+async def test_describe_says_what_pick_best_and_box_need_and_cost(no_keys, node_id, outputs):
+    described = await main.agent_describe_node(node_id)
+    assert [port["id"] for port in described["outputs"]] == outputs
+    assert "TYPESAFE_API_KEY" in described["missing"]
+    assert described["price"] is not None
+    row = next(row for row in (await main.agent_find_nodes(query="typesafe", ready_only=False))["nodes"]
+               if row["id"] == node_id)
+    assert row["price"] == {"usd": [0.0, 0.0027]}
