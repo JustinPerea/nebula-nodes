@@ -420,7 +420,7 @@ def test_jev_mode_is_priced_per_request_and_the_other_modes_are_not():
     items = [{"id": mode, "definitionId": "qc-loop-safety", "params": {"mode": mode}}
              for mode in ("jev", "vision-llm", "heuristic")]
     estimate = model_pricing.estimate_run(items, pricing, DEFINITIONS, {})
-    assert estimate["priced"] == {"jev": {"low": 0.00001, "high": 0.0027, "model": "qc-loop-safety"}}
+    assert estimate["priced"] == {"jev": {"low": 0.0000128, "high": 0.0027, "model": "qc-loop-safety"}}
     assert estimate["unpriced"] == ["vision-llm"] and estimate["plus"] == ["input images"]
 
 

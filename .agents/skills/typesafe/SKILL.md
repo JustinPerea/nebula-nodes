@@ -80,7 +80,7 @@ A Box answer always contains a box, even when the target isn't there, so the nod
 ## Keys and cost
 
 - BYOK only: `TYPESAFE_API_KEY` in Settings → TypeSafe. Never suggest a shared or hosted key.
-- Priced per request at the context ceiling: up to $0.0027 (64k tokens) by default, $0.011 with `long_context`. Real runs usually cost far less. Agents under a USD limit can run it without asking.
+- Priced per request, up to the context ceiling: $0.0027 (64k tokens) by default, $0.011 with `long_context`. Measured: a short text question is ~305 tokens ($0.0000128) and each 1024 px image adds ~2,750 ($0.00012). Agents under a USD limit can run it without asking.
 - `long_context` raises the limit to 262k tokens but is slower and less accurate. Turn it on only after a `max_tokens_exceeded` error you can't fix by sending fewer or smaller images.
 
 ## Recipes

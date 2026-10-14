@@ -29,9 +29,9 @@ on and what to re-check. Written in our own words from the vendor docs
 |---|---|
 | Endpoint | `POST https://api.typesafe.ai/v1/systemone` |
 | Auth | `Authorization: Bearer ${TYPESAFE_API_KEY}` |
-| Key check | none documented; Settings health is `configured_unverified` |
-| Models | `jev-1.14.0`, `jev-1.13.0` pinned; `jev-latest`, `jev-preview` aliases |
-| Price | input tokens only, $0.042 / Mtok; images billed as input tokens |
+| Key check | `GET https://api.typesafe.ai/v1/models` with the Bearer key: 401 for a bad key, 200 for a good one (live probe 2026-10-14); not billed |
+| Models | `jev-1.14.0`, `jev-1.13.0` pinned; `jev-latest`, `jev-preview` aliases. `/v1/models` lists only the aliases, but `jev-1.14.0` requests are answered as `jev-1.14.0` |
+| Price | input tokens only, $0.042 / Mtok; images billed as input tokens. Measured: ~305 tokens for a short text question, ~2,750 more per 1024 x 1024 image |
 | Context | 64k per request / 32k per question; 262k with the long-context header |
 | Headers | `TypeSafe-Danger-Zone-Images: true` with images or Box; `TypeSafe-Danger-Zone-Long-Context: true` for long context |
 | Retries | 408, 429, 5xx (529 included), max 2, Retry-After honoured |
@@ -49,8 +49,10 @@ on and what to re-check. Written in our own words from the vendor docs
 ## Known gaps and re-checks
 
 - Score's request field is `criteria` (API reference and SDK types agree). The Score docs page shows `levels` only in its interactive demo data, not in a request.
-- The error body shape isn't documented; `typesafe_client._error_detail` reads `message`, `detail` (string or `loc`/`msg` list), `code` and `field`-like keys defensively.
-- Image token counts aren't published; pricing uses the context ceiling until they are. Pick Best caps candidates at 10 and retries once at 768 px on `max_tokens_exceeded`; raise or drop the cap once a probe measures image tokens.
+- Error bodies seen live are `{"detail": {"error_type": ..., "message": ...}}` (400 `api_usage_error` when the images header is missing, 401 `authentication_error`). `typesafe_client._error_detail` reads that shape, and still reads `message`, string `detail`, `loc`/`msg` lists, `code` and `field`-like keys in case other errors differ.
+- Image tokens measured only at 1024 px (about 2,750 each). Pick Best's cap of 10 fits at that size (~28k of 32k per question); bigger candidates can still go over, and the one retry at 768 px covers that. Re-measure smaller sizes before relying on them.
 - Images and Box are marked not production-ready by the vendor; re-check the images page when Jev 1.15 ships.
-- When Box confidence comes back `null` isn't documented. Nebula keeps it `null`; it doesn't gate on box confidence.
+- When Box confidence comes back `null` isn't documented. In the live probe it was always a number (0.92 present, 0.04 absent, the absent case with a near-full-frame box). Nebula keeps `null` handling and doesn't gate on box confidence.
+- Score: sending `criteria` works live; answers carry `legend` (index → level text) and `probabilities` keyed by index strings. Choice answers come back on the neutral keys `a`/`b`/`c`.
+- Whether failed requests (such as the probe's 400) are billed is still unchecked; compare the console usage with the summed input tokens.
 - Deprecation: the vendor has said 1.13 gets 60 days' notice and 1.14 30 days; no policy page yet.

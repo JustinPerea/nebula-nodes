@@ -51,10 +51,13 @@ from services.typesafe_client import (
 JEV_MODE = "jev"
 MAX_FRAMES = 8
 FRAME_LONG_SIDE = 768
-# TypeSafe hasn't published how many tokens an image costs. Budget as if each
-# 16x16 pixel patch were one token (probably high), and keep every image the
-# request carries under 24k of the 32k per question, leaving room for text.
-# Eight 768 px frames plus a reference come to at most ~21k on that estimate.
+# Budget as if each 16x16 pixel patch were one token, and keep every image
+# the request carries under 24k of the 32k per question, leaving room for
+# text. Eight 768 px frames plus a reference come to at most ~21k on that
+# estimate. A live probe (2026-10-14) measured about 2,750 tokens for one
+# 1024 x 1024 image, where the patch estimate says 4,096, so the estimate
+# runs high at that size. Frames of 768 px or less weren't measured; even if
+# each cost as much as a 1024 px image, nine come to about 25k.
 TOKEN_PATCH = 16
 FRAME_TOKEN_BUDGET = 24_000
 DEFAULT_MIN_CONFIDENCE = 0.5

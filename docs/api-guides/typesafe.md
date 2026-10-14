@@ -28,7 +28,7 @@ All three are `analyzer` nodes, `sync` (one request), and need `TYPESAFE_API_KEY
 ## Setup
 
 1. Create a key in the TypeSafe console (`console.typesafe.ai/keys`).
-2. In Nebula, open **Settings** → **Providers**, add it on the **TypeSafe** row (`TYPESAFE_API_KEY`) and save. TypeSafe has no free key-check call, so health shows the key as *configured, unverified* until a node runs.
+2. In Nebula, open **Settings** → **Providers**, add it on the **TypeSafe** row (`TYPESAFE_API_KEY`) and save. Health checks the key with `GET https://api.typesafe.ai/v1/models` (Bearer), a model listing that isn't billed: a wrong key gets 401 and shows as invalid. No System One request is sent to check a key.
 3. Your own key only. Nebula has no hosted or shared Jev key, and always calls `https://api.typesafe.ai/v1/systemone` directly, never through an aggregator.
 
 Whether TypeSafe may analyze your requests to improve its models is an organization setting in your TypeSafe console. Nebula can't see or change it.
@@ -57,7 +57,7 @@ Params:
 
 | Param | Default | Meaning |
 |---|---|---|
-| `model` | `jev-1.14.0` | Pinned ids `jev-1.14.0`, `jev-1.13.0`; aliases `jev-latest`, `jev-preview` move to new versions, so thresholds tuned on one may shift |
+| `model` | `jev-1.14.0` | Pinned ids `jev-1.14.0`, `jev-1.13.0`; aliases `jev-latest`, `jev-preview` move to new versions, so thresholds tuned on one may shift. `GET /v1/models` lists only the two aliases, but a request for `jev-1.14.0` is answered as `jev-1.14.0` (live probe, 2026-10-14) |
 | `answer_type` | `yes_no` | `yes_no`, `choice` or `score` |
 | `question` | required | One atomic question |
 | `yes_means`, `no_means` | empty | Optional definitions of yes and no (yes/no only) |
@@ -70,6 +70,8 @@ Params:
 | `long_context` | false | Raises the context limit; slower and less accurate |
 
 Choice options go to Jev under neutral keys (`a`, `b`, `c`, ...) with your wording as their description, and come back as your wording. A loaded option name can steer the answer; a neutral key can't.
+
+A Score is sent as a `criteria` array of your levels. Jev's answer carries a `legend` (level index → your level text) and `probabilities` keyed by the index as a string (`"0"`, `"1"`, ...); Nebula maps them back to your wording. Both shapes were confirmed on a live call (2026-10-14).
 
 Outputs (Text, plus the two gate ports):
 
@@ -131,7 +133,7 @@ Outputs:
 
 Limits:
 
-- At most 10 candidates, until TypeSafe publishes how many tokens an image costs. For more, split them across two nodes and pick again between the winners.
+- At most 10 candidates. Each 1024 px candidate costs about 2,780 input tokens (measured, see [Cost](#cost)), so ten come to about 28k, under the 32k per-question limit. Bigger candidates cost more and may not fit. For more than 10, split them across two nodes and pick again between the winners.
 - If TypeSafe answers `max_tokens_exceeded`, Nebula sends the candidates once more at 768 px on the long side and notes it in the report. If that is still too long, the node fails and says to split the set.
 
 ## Jev Box (experimental)
@@ -168,7 +170,7 @@ Every request pairs the Box question with a yes/no "is it there?" question, beca
 
 - Edges are fractions (0..1, from the top-left) of the **original** image: decoded, first frame, EXIF rotation applied (what a browser shows). Any resizing or padding Nebula did before sending is undone.
 - `px` is the integer pixel rectangle in that image; `image` is its size.
-- `confidence` is `null` (never 0) when TypeSafe doesn't report one.
+- `confidence` is `null` (never 0) when TypeSafe doesn't report one. In the live probe it was always a number: 0.92 with the target there, and 0.04 when it wasn't (with a box covering nearly the whole image, which is why the presence question decides `found`).
 - When `found` is `false` or `unsure` there is no box, crop, mask or annotated image, so nothing downstream acts on a box that may point at nothing. `crop`, `mask` and `annotated` are gate ports, withheld in that case, so a node wired to them (an inpaint fed the mask) is skipped rather than run without its input ([gate](#gate-branching-a-graph)). The report still shows the presence probability.
 
 ## Number and report formats (all nodes)
@@ -195,13 +197,14 @@ After a run, a Jev node shows its result on the card instead of the plain Text/I
 
 ## Errors
 
-Every message names the fix and never contains the key. TypeSafe's request id is appended when it sends one.
+Every message names the fix and never contains the key. TypeSafe's request id is appended when it sends one. TypeSafe's error bodies hold an `error_type` and a `message` inside `detail`; Nebula shows the message (cut at 300 characters) and keeps the `error_type` as the error's code.
 
 | Status | What you see |
 |---|---|
 | no key | `TYPESAFE_API_KEY is required` (before any request) |
 | 400 `max_tokens_exceeded` | Too long for the context: send fewer or smaller images, shorten the context, or turn on Long context |
 | 400 image or asset | An image was rejected: re-export it as PNG or JPEG |
+| 400 images header | TypeSafe's message, plus a note that Nebula sends the images header, so TypeSafe may have renamed it |
 | 400 other | TypeSafe's own message |
 | 401 / 403 | The key was rejected: check it in Settings → TypeSafe |
 | 413 | Request too large (32 MiB per request, 16 MiB per image) |
@@ -220,12 +223,23 @@ Nebula prepares every image before sending, because TypeSafe rejects images outs
 
 ## Cost
 
-TypeSafe charges per input token ($0.042 per million) and nothing for output; images count as input tokens, and the per-image count isn't published yet. A request can't be longer than the context limit, so Nebula prices each run at that ceiling: up to **$0.0027** (64k tokens) by default and up to **$0.011** (262k) with Long context. Most questions cost a small fraction of that. Pick Best and Box are priced the same way at the default ceiling; Pick Best's retry after `max_tokens_exceeded` is a second request, and Nebula assumes the rejected first one isn't billed (TypeSafe doesn't say). Re-running an unchanged node replays from Nebula's cache for free.
+TypeSafe charges per input token ($0.042 per million) and nothing for output; images count as input tokens. Measured on live calls (2026-10-14, `jev-1.14.0`):
+
+| Request | Input tokens | Cost |
+|---|---|---|
+| Decide yes/no, text only | 305 | $0.0000128 |
+| Decide yes/no, one 1024 x 1024 PNG | 3,055 | $0.00013 |
+| Box with its presence question, one 1024 x 1024 PNG | 3,068 | $0.00013 |
+| Pick Best, four 1024 x 1024 PNGs | 11,427 | $0.00048 |
+| Choice and Score in one text-only request | 380 | $0.000016 |
+
+So one 1024 px image adds about 2,750 tokens. Only 1024 px images were measured, so the figure for other sizes is unknown. These set the low end of each node's price range (text only for Decide and the QC nodes, one 1024 px image for Box, two for Pick Best). A request can't be longer than the context limit, so the high end is that ceiling: up to **$0.0027** (64k tokens) by default and up to **$0.011** (262k) with Long context. Pick Best and Box only have the default ceiling. Pick Best's retry after `max_tokens_exceeded` is a second request, and Nebula assumes the rejected first one isn't billed (TypeSafe doesn't say). Re-running an unchanged node replays from Nebula's cache for free.
 
 ## Limits
 
 - One question per Decide node. Keep it atomic; ask several narrow questions rather than one compound one.
-- Pick Best takes 2 to 10 candidates. Box finds one target per node and needs Jev 1.14 (`jev-1.14.0` or `jev-preview`).
+- The context is 64k tokens per request and 32k per question. At about 2,750 tokens per 1024 px image, one question can look at roughly eleven 1024 px images.
+- Pick Best takes 2 to 10 candidates (about 28k tokens at 1024 px). Box finds one target per node and needs Jev 1.14 (`jev-1.14.0` or `jev-preview`).
 - Pick Best and Box have no Long context switch.
 - Rate limits are set per organization in the TypeSafe console.
 
@@ -233,7 +247,7 @@ TypeSafe charges per input token ($0.042 per million) and nothing for output; im
 
 `qc-loop-safety`, `qc-frame-review`, `qc-composited-look` and `qc-camera-geometry` have `mode: jev`. Each check the node makes becomes one atomic question (yes/no, Choice or Score) over the sampled frames, all in one request, priced per request like Decide. The node keeps its ports and report keys, adds a `jev` object with every check's probabilities, confidence and verdict, and passes only when every must-pass check passes (the minimum, not an average). An unsure check is never reported as a pass. `model` and `min_confidence` appear only in Jev mode.
 
-Frames: at most 8, 768 px on the long side, each sent once in the state and named in the questions, so they fit the 32k-token per-question limit. The full check list, and which measurements stay local, is in [`docs/video-qc-validation-contract.md`](../video-qc-validation-contract.md#jev-mode).
+Frames: at most 8, 768 px on the long side, each sent once in the state and named in the questions, so they fit the 32k-token per-question limit. Nebula budgets frames at one token per 16 x 16 pixel patch (24k for all images). At 1024 px that estimate is 4,096 tokens against about 2,750 measured, so it runs high; 768 px frames weren't measured, but even at the 1024 px figure nine images come to about 25k. The full check list, and which measurements stay local, is in [`docs/video-qc-validation-contract.md`](../video-qc-validation-contract.md#jev-mode).
 
 ## For developers
 

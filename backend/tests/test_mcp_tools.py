@@ -117,7 +117,7 @@ def test_local_nodes_that_call_a_provider_say_what_they_need(nebula, monkeypatch
     assert qc["runsWith"] == "free" and qc["price"] == "free" and "no list price" in qc["priceNote"]
     assert qc["runsWithOptions"]["options"] == {"heuristic": "free", "vision-llm": None, "opencv": "free",
                                                 "jev": None}
-    assert qc["pricedWhen"]["rows"] == [{"mode": "jev", "usd": [0.00001, 0.0027]}]
+    assert qc["pricedWhen"]["rows"] == [{"mode": "jev", "usd": [0.0000128, 0.0027]}]
 
     keys.update({"GOOGLE_API_KEY": "g"})
     cinema = mcp_server.describe_node("cinema-scene")

@@ -5,10 +5,12 @@ option's description is just that image's placeholder, under a neutral key
 (a, b, c ...), so nothing in an option name can steer the pick. Each image is
 referenced exactly once, so it is sent and billed once.
 
-TypeSafe hasn't published how many tokens an image costs, so the node takes
-at most MAX_CANDIDATES until a live probe measures it. When a request is
-still over the context limit, the node sends the candidates once more at a
-smaller size and says so in the report.
+The node takes at most MAX_CANDIDATES. A live probe (2026-10-14) measured
+about 2,780 input tokens per 1024 px candidate (11,427 for four), so ten
+1024 px candidates come to about 28k, under the 32k per-question limit.
+Larger candidates cost more. When a request is over the context limit, the
+node sends the candidates once more at a smaller size and says so in the
+report.
 
 The ``winner`` output is the winning candidate's original value, never the
 resized copy that was sent. Output formats are the shared Jev contract in
@@ -34,6 +36,7 @@ from services.typesafe_client import (
 
 QUESTION_ID = "pick"
 DEFAULT_QUESTION = "Which image best matches the brief?"
+# Ten 1024 px candidates measured at about 28k tokens of the 32k per question.
 MAX_CANDIDATES = 10
 # Long side for the one retry after max_tokens_exceeded.
 RETRY_SIDE = 768
@@ -101,8 +104,8 @@ async def handle_jev_pick_best(
         raise ValueError(f"Jev Pick Best needs at least two candidate images, got {len(values)}")
     if len(values) > MAX_CANDIDATES:
         raise ValueError(
-            f"Jev Pick Best takes at most {MAX_CANDIDATES} candidates, got {len(values)}. TypeSafe hasn't "
-            "published how many tokens an image costs, so larger sets may not fit one request. Split them "
+            f"Jev Pick Best takes at most {MAX_CANDIDATES} candidates, got {len(values)}. Each 1024 px "
+            "candidate is about 2,800 tokens, so larger sets may not fit one request. Split them "
             "across two Pick Best nodes and pick again between the winners.")
     brief = _brief_text(inputs)
     state = brief or NO_BRIEF

@@ -72,15 +72,16 @@ async def test_find_and_describe_say_what_decide_needs_and_costs(no_keys):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("node_id", "outputs"), [
-    ("jev-pick-best", ["winner", "index", "probabilities", "confidence", "report"]),
-    ("jev-box", ["found", "box", "crop", "mask", "annotated", "report"]),
+@pytest.mark.parametrize(("node_id", "outputs", "low"), [
+    # Low ends from the live probe's 1024 px images, rounded to 4 places.
+    ("jev-pick-best", ["winner", "index", "probabilities", "confidence", "report"], 0.0003),
+    ("jev-box", ["found", "box", "crop", "mask", "annotated", "report"], 0.0001),
 ])
-async def test_describe_says_what_pick_best_and_box_need_and_cost(no_keys, node_id, outputs):
+async def test_describe_says_what_pick_best_and_box_need_and_cost(no_keys, node_id, outputs, low):
     described = await main.agent_describe_node(node_id)
     assert [port["id"] for port in described["outputs"]] == outputs
     assert "TYPESAFE_API_KEY" in described["missing"]
     assert described["price"] is not None
     row = next(row for row in (await main.agent_find_nodes(query="typesafe", ready_only=False))["nodes"]
                if row["id"] == node_id)
-    assert row["price"] == {"usd": [0.0, 0.0027]}
+    assert row["price"] == {"usd": [low, 0.0027]}

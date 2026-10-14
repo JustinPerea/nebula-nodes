@@ -3201,7 +3201,7 @@ Tradeoffs and surprises:
 Shared base for the TypeSafe Jev nodes: client, Decide node, BYOK provider, output contract, pricing, docs. Pick Best, Box, graph branching, the canvas result UI and the QC Jev mode build on it in their own changes.
 
 - **Raw httpx, no SDK.** `typesafe-sdk` needs pydantic>=2.12 and the backend pins 2.11.3, so `backend/services/typesafe_client.py` calls `https://api.typesafe.ai/v1/systemone` directly. Source-direct, BYOK only (`TYPESAFE_API_KEY`); there is no hosted or shared key path.
-- **Key check is configured_unverified.** TypeSafe has no documented free key-check call (`GET /v1/models` is unconfirmed), so `PROVIDER_CHECKS["TypeSafe"]` has an empty url and health reports the key as configured, unverified.
+- **Key check (superseded 2026-10-14 by the live probe).** At first `PROVIDER_CHECKS["TypeSafe"]` had an empty url and health reported configured, unverified. The probe showed `GET /v1/models` returns 401 for a bad key and 200 for a real one, so it is now the key check; see "live probe and demo fixes" below.
 - **One handler file per node.** `backend/handlers/jev_decide.py` holds only Decide. Pick Best and Box should go in `jev_pick_best.py` / `jev_box.py` so the lanes don't edit the same file; shared formats live in `backend/services/jev_outputs.py`.
 - **Separate `levels` param.** Score levels have their own textarea rather than sharing `options` with Choice, so switching `answer_type` never reinterprets what the user typed. `pass_when` is a textarea too (one option per line).
 - **Choice with no `pass_when`.** `pass` then only says whether the answer is confident enough to use: `true` or `unsure`, never `false`. There is nothing to fail against.
@@ -3324,3 +3324,16 @@ Completeness pass against the plan, a read of the request building against TypeS
 - **README** gained a short "Jev decision nodes" entry under Recently added, linking the guide.
 - **Terms.** One comment in `typesafe_client.py` was close to a sentence on TypeSafe's images page; reworded. An n-gram check of the whole diff against the downloaded docs now matches only ids, header names, URLs and numbers.
 - **Build without touching the main checkout.** `npm run build` runs `tsc -b`, which writes tsbuildinfo into `node_modules/.tmp`, and `node_modules` here is a symlink into the main checkout. Ran the same steps by hand instead: `tsc -p tsconfig.app.json` and `tsconfig.node.json` with `--noEmit --tsBuildInfoFile` in the scratchpad, `vite build`, then `check-build-budget.mjs`.
+
+## Jev nodes (2026-10-14): live probe and demo fixes
+
+Part 1, from the first nine live TypeSafe calls (raw results stayed in the session scratchpad, key redacted):
+
+- **Key check on.** `PROVIDER_CHECKS["TypeSafe"]` now probes `GET https://api.typesafe.ai/v1/models` with the Bearer key: 401 for a made-up key, 200 for the real one, and the listing isn't a System One call, so it isn't billed. TypeSafe left the no-probe group in `test_provider_key_validation.py`.
+- **Error bodies.** TypeSafe sends `{"detail": {"error_type", "message"}}`. `_error_detail` used to read nothing from a dict `detail`, so the probe's 400 showed only "rejected the request (400 bad request)" with no code. It now reads the inner message (still capped at 300 characters and key-redacted) and uses `error_type` as `code`. `max_tokens_exceeded` in the text now wins over a broad `error_type`, because Pick Best's downscale retry keys on it.
+- **Images-header hint.** The real wording is "Images are experimental. Send the header TypeSafe-Danger-Zone-Images: true ...", not "not turned on". The hint branch now matches the header name, "images are experimental", or the old wording. Tests use the exact live bodies.
+- **Full stops.** A TypeSafe message ends in a full stop and our sentence adds another, so `_error_for` drops the detail's trailing full stops (not a trailing ellipsis from the cap).
+- **Token numbers.** 305 text-only, 3,055 with one 1024 px PNG, 3,068 for Box + presence, 11,427 for Pick Best over four: about 2,750 to 2,780 per 1024 px image. `MAX_CANDIDATES` 10 stays (about 28k of 32k at 1024 px). QC's patch estimate gives 4,096 for a 1024 px image, above the measured 2,750, so `FRAME_TOKEN_BUDGET` stays; 768 px frames weren't measured, and I wrote that down instead of scaling the 1024 figure by pixel count.
+- **Price low ends.** Decide and the QC Jev rows: $0.0000128 (text-only floor; QC frames weren't measured, so the floor is all that's known). Box: $0.00013 (one 1024 px image). Pick Best: $0.00025 (two 1024 px candidates, ~5,900 tokens). Agent search rounds to four places, so it shows 0.0003 and 0.0001; its test now says so.
+- **Not changed.** Score `criteria`, `legend` and index-keyed `probabilities` matched the code. Box `confidence` came back as a number every time; `null` handling stays. `/v1/models` lists only `jev-latest` and `jev-preview`, but `jev-1.14.0` requests are answered as `jev-1.14.0`, so the pinned default stays.
+- **Still open.** Whether the probe's 400 was billed needs the TypeSafe console usage.
