@@ -51,7 +51,10 @@ Some nodes stay but lose a model option (``RETIRED_PARAMS``):
   gemini-3.1-flash-tts-preview". Voices are the same 30.
 
 A migration for a shutdown that is still ahead is date-gated (``_today``):
-until the shutdown the saved value keeps working and stays as it is.
+until the shutdown the saved value keeps working and stays as it is. The
+``RETIRED_PARAMS`` fixes also run on every run request and in the engine,
+on node create/update, and in price estimates (``migrate_params``), so a
+canvas opened before a shutdown and run after it sends the replacement.
 """
 from __future__ import annotations
 
@@ -201,6 +204,38 @@ RETIRED_PARAMS: dict[str, Any] = {
 }
 
 
+def migrate_params(definition_id: str, params: dict[str, Any] | None) -> dict[str, Any]:
+    """``params`` with any retired option values replaced (``RETIRED_PARAMS``).
+
+    Staging runs this through ``migrate_node``; run requests, node creation and
+    param updates, and price estimates run it too, so a canvas opened before a
+    shutdown date and run after it sends the replacement, not the dead value."""
+    fix = RETIRED_PARAMS.get(definition_id)
+    return fix(dict(params or {})) if fix else dict(params or {})
+
+
+def migrate_param_update(
+    definition_id: str, before: dict[str, Any] | None, update: dict[str, Any],
+) -> dict[str, Any]:
+    """A partial param update with retired values replaced.
+
+    Migrates the merged params, so a fix that depends on other params (Meshy
+    lowpoly clamps the polycount) sees the stored ones, and returns the
+    updated keys plus any stored key the fix changed."""
+    before = dict(before or {})
+    merged = migrate_params(definition_id, {**before, **update})
+    return {k: v for k, v in merged.items() if k in update or before.get(k, _MISSING) != v}
+
+
+_MISSING = object()
+
+
+def default_until(shutdown: date, old: str, new: str) -> str:
+    """A handler's fallback model for a node with no stored ``model``: the old
+    default until ``shutdown``, so the default doesn't change before the date."""
+    return old if _today() < shutdown else new
+
+
 def migrate_node(
     definition_id: str, params: dict[str, Any] | None, label: str | None = None,
 ) -> tuple[str, dict[str, Any], str | None]:
@@ -210,8 +245,7 @@ def migrate_node(
     retirement title, so the canvas says what changed."""
     retired = RETIRED.get(definition_id)
     if retired is None:
-        fix = RETIRED_PARAMS.get(definition_id)
-        return definition_id, fix(dict(params or {})) if fix else dict(params or {}), label
+        return definition_id, migrate_params(definition_id, params), label
     custom = label if isinstance(label, str) and label.strip() and label.strip() != retired["displayName"] else None
     return retired["replacement"], retired["params"](dict(params or {})), custom or retired["label"]
 

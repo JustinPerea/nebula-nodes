@@ -44,6 +44,7 @@ from services.port_contracts import (
 )
 from services.provider_capabilities import gemini_omni_capability_error
 from services.provider_operation_policy import bypasses_output_cache, operation_policy
+from services.retired_nodes import migrate_params
 from services.worldlabs_capabilities import worldlabs_capability_gate
 from execution.error_classifier import classify_error
 from models.events import (
@@ -844,6 +845,11 @@ NodeHandler = Callable[
 ]
 
 
+def _with_current_params(node: GraphNode) -> GraphNode:
+    params = migrate_params(node.definition_id, node.params)
+    return node if params == node.params else node.model_copy(update={"params": params})
+
+
 async def execute_graph(
     nodes: list[GraphNode],
     edges: list[GraphEdge],
@@ -861,6 +867,9 @@ async def execute_graph(
     event serialized from this async task, including child node tasks.
     """
 
+    # Every caller's nodes run with retired option values replaced, so a value
+    # saved before a shutdown date never reaches the provider after it.
+    nodes = [_with_current_params(node) for node in nodes]
     iterator_errors = _iterator_validation_errors(nodes, edges)
     if iterator_errors:
         raise ValueError(iterator_errors[0].message)
