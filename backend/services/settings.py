@@ -298,11 +298,12 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
         "",
         lambda key: {"Authorization": f"Key {key}"},
     ),
-    # TypeSafe documents no key-check endpoint, and every System One call is
-    # billed, so health reports the key as configured but unverified.
+    # The model list is free and checks the key: a live probe (2026-10-14)
+    # got 401 for a made-up key and 200 for a real one. System One calls are
+    # billed, so health never sends one.
     "TypeSafe": ProviderCheck(
         ("TYPESAFE_API_KEY",),
-        "",
+        "https://api.typesafe.ai/v1/models",
         lambda key: {"Authorization": f"Bearer {key}"},
     ),
     # Authenticated, non-billable balance lookup. A successful response is a

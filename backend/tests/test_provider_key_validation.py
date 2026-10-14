@@ -59,7 +59,7 @@ PROVIDER_KEYS = {
 
 ALL_PROVIDERS = list(PROVIDER_KEYS) + ["Nous"]
 # Providers health never probes over HTTP (presence-only or offline-validated).
-NO_HTTP_PROBE = {"Higgsfield", "TypeSafe", "Google Vertex"}
+NO_HTTP_PROBE = {"Higgsfield", "Google Vertex"}
 
 ALLOWED_STATUSES = {
     "not_configured",
@@ -520,6 +520,9 @@ async def test_each_provider_uses_its_own_endpoint_and_auth(monkeypatch):
 
     krea = by_url["https://api.krea.ai/styles"]
     assert krea["Authorization"] == "Bearer key-for-KREA_API_TOKEN"
+
+    typesafe = by_url["https://api.typesafe.ai/v1/models"]
+    assert typesafe == {"Authorization": "Bearer key-for-TYPESAFE_API_KEY"}
 
     world_labs = by_url["https://api.worldlabs.ai/marble/v1/credits"]
     assert world_labs["WLT-Api-Key"] == "key-for-WORLDLABS_API_KEY"
