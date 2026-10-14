@@ -293,9 +293,12 @@ async def test_gen4_5_runs_on_runway_with_whole_seconds():
 
 
 @pytest.mark.asyncio
+@respx.mock(assert_all_called=False)
 async def test_gen4_5_refuses_shapes_runway_lacks_before_submitting():
-    submit = AsyncMock()
-    with patch("execution.async_poll_runner.async_poll_execute", submit):
+    # handle_runway_video binds async_poll_execute at import, so the submit is
+    # patched where it is called; respx refuses any request that slips past.
+    submit = AsyncMock(side_effect=AssertionError("submitted to Runway"))
+    with patch("handlers.runway.async_poll_execute", submit):
         portrait = GraphNode(id="n", definitionId="krea-video-runway-gen-4-5",
                              params={"prompt": "p", "aspect_ratio": "672:1584"})
         with pytest.raises(ValueError, match="672:1584"):
