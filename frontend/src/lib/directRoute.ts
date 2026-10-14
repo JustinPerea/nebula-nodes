@@ -34,17 +34,31 @@ export const DIRECT_REQUIRES: Readonly<Record<string, string>> = { 'ideogram-ref
  * "March 15, 2027" in Google's deprecations table (checked 2026-10-14). */
 interface DirectRetirement { on: string; param?: string; values?: readonly string[] }
 const GEMINI_25_FLASH_IMAGE_SHUTDOWN = '2027-03-15';
+/** gpt-image-1.5: "Dec 1, 2026" in OpenAI's deprecations table (checked 2026-10-14). */
+const GPT_IMAGE_15_SHUTDOWN = '2026-12-01';
 export const DIRECT_RETIRES: Readonly<Record<string, DirectRetirement>> = {
   'nano-banana-fal': { on: GEMINI_25_FLASH_IMAGE_SHUTDOWN, param: 'model', values: ['nano-banana', 'gemini-25-flash-image'] },
   'nano-banana-fal-edit': { on: GEMINI_25_FLASH_IMAGE_SHUTDOWN, param: 'model', values: ['nano-banana', 'gemini-25-flash-image'] },
   'krea-image-google-nano-banana': { on: GEMINI_25_FLASH_IMAGE_SHUTDOWN },
+  'gpt-image-1-5': { on: GPT_IMAGE_15_SHUTDOWN },
+  'gpt-image-1-5-edit': { on: GPT_IMAGE_15_SHUTDOWN },
+};
+
+/** Values of a param both routes read that the maker can't render as set
+ * (node_route.DIRECT_BLOCKED_VALUES): the run stays on the fal or Krea copy.
+ * gpt-image-2's fal presets below OpenAI's 655,360-pixel minimum. */
+const GPT_IMAGE_2_FAL_UNSIZED = ['square', 'portrait_16_9', 'landscape_16_9'];
+export const DIRECT_BLOCKED_VALUES: Readonly<Record<string, Readonly<Record<string, readonly unknown[]>>>> = {
+  'gpt-image-2-fal-generate': { image_size: GPT_IMAGE_2_FAL_UNSIZED },
+  'gpt-image-2-fal-edit': { image_size: GPT_IMAGE_2_FAL_UNSIZED },
 };
 
 /** Why the direct route can't take a run (node_route.direct_block):
  * `requires` a direct param that isn't set (DIRECT_REQUIRES), `blocked` by a
  * copy-only param that is set (directRoute.blockedBy: a Krea copy's explicit
- * width/height), `unsupported` by a shared param's value the maker can't
- * render (directRoute.blockedWhen: Veo 3.1 Fast at 4K on Vertex), or
+ * width/height) or a value the maker can't render (DIRECT_BLOCKED_VALUES),
+ * `unsupported` by a shared param's value the maker can't render
+ * (directRoute.blockedWhen: Veo 3.1 Fast at 4K on Vertex), or
  * `retired` by the maker on `on` (DIRECT_RETIRES). */
 export interface DirectBlock {
   reason: 'requires' | 'blocked' | 'unsupported' | 'retired';
@@ -134,6 +148,10 @@ export function directBlock(definition: ModelNodeDefinition, params: Record<stri
     if (unsupported.includes(effectiveValue(definition, params, key) as string | number | boolean)) {
       return { reason: 'unsupported', param: key, on: null };
     }
+  }
+  const blockedValues = Object.hasOwn(DIRECT_BLOCKED_VALUES, definition.id) ? DIRECT_BLOCKED_VALUES[definition.id] : {};
+  for (const [key, unsupported] of Object.entries(blockedValues)) {
+    if (unsupported.includes(effectiveValue(definition, params, key))) return { reason: 'blocked', param: key, on: null };
   }
   const retires = Object.hasOwn(DIRECT_RETIRES, definition.id) ? DIRECT_RETIRES[definition.id] : undefined;
   if (retires && todayIso() >= retires.on) {

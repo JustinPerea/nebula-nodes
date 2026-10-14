@@ -90,10 +90,10 @@ async def test_handle_generate_org_verification_error_returns_friendly_message()
 
 
 @pytest.mark.asyncio
-async def test_edit_rejects_more_than_10_images(tmp_path: Path) -> None:
-    # 11 image values
+async def test_edit_rejects_more_than_16_images(tmp_path: Path) -> None:
+    # 17 image values ("For GPT image models, you can provide up to 16 images.")
     img_paths = []
-    for i in range(11):
+    for i in range(17):
         p = tmp_path / f"in{i}.png"
         p.write_bytes(b"x")
         img_paths.append(str(p))
@@ -102,7 +102,7 @@ async def test_edit_rejects_more_than_10_images(tmp_path: Path) -> None:
         "images": PortValueDict(type="Image", value=img_paths),
         "prompt": PortValueDict(type="Text", value="edit please"),
     }
-    with pytest.raises(ValueError, match="up to 10"):
+    with pytest.raises(ValueError, match="up to 16"):
         await handle_gpt_image_2_edit(
             node, inputs=inputs, api_keys={"OPENAI_API_KEY": "k"},
             emit=None, run_dir=tmp_path,

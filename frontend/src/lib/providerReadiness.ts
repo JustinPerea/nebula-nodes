@@ -1,7 +1,7 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../types';
 import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
-import { directBlock, directKeyNames, fallbackKeyNames, KEY_PROVIDERS, selectRoute, type DirectBlock, type NodeRoute } from './directRoute';
+import { DIRECT_BLOCKED_VALUES, directBlock, directKeyNames, fallbackKeyNames, KEY_PROVIDERS, selectRoute, type DirectBlock, type NodeRoute } from './directRoute';
 import { modelChoice, paramCallsProvider } from './nodeKeys';
 
 export type ProviderSetupTarget =
@@ -157,6 +157,9 @@ function directBlockNote(def: ModelNodeDefinition, block: DirectBlock, params: R
   const directName = direct ? keyProviderName(direct) : 'the maker';
   const fallbackName = fallback ? (fallback === 'FAL_KEY' ? 'FAL' : keyProviderName(fallback)) : 'the copy';
   if (block.reason === 'requires') return `This saved recipe has no direct ${block.param}, so it uses ${fallbackName}.`;
+  if (block.reason === 'blocked' && block.param && Object.hasOwn(DIRECT_BLOCKED_VALUES[def.id] ?? {}, block.param)) {
+    return `This recipe's ${block.param} has no ${directName} equivalent, so it runs on ${fallbackName}. Pick another ${block.param} to run on ${directName}.`;
+  }
   if (block.reason === 'blocked') {
     return `This recipe sets ${block.param}, which only ${fallbackName} takes, so it runs on ${fallbackName}. Clear it to run on ${directName}.`;
   }

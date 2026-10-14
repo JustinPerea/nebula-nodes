@@ -32,7 +32,8 @@ function entry(status: ProviderHealthEntry['status'], checkedAt = NOW): Provider
   return { configured: status !== 'not_configured', status, last_checked: new Date(checkedAt).toISOString() };
 }
 
-const kreaImage = NODE_DEFINITIONS['krea-image-openai-gpt-image-2'];
+// A Krea copy with no maker route (GPT Image 2 now also runs on OpenAI's API).
+const kreaImage = NODE_DEFINITIONS['krea-image-openai-gpt-image'];
 const kreaVideo = NODE_DEFINITIONS['krea-video-kling-kling-3-0'];
 const dualRoute = NODE_DEFINITIONS['veo-3'];
 
@@ -176,6 +177,37 @@ describe('provider readiness without generation', () => {
     const hd = modelReadiness(definition, freeze({ _kreaAuth: 'api-token', resolution: '1080p' }), credentials({ apiKeys: keys }), health());
     expect(hd).toMatchObject({ setupTarget: { kind: 'api-key', key: 'GOOGLE_VERTEX_CREDENTIALS' } });
     expect(hd.detail).toContain("Runs on Google Vertex's own API");
+  });
+
+  it('keeps a GPT Image 2 fal size OpenAI can\'t render on fal and says why', () => {
+    const definition = NODE_DEFINITIONS['gpt-image-2-fal-generate'];
+    const cache = credentials({ apiKeys: { OPENAI_API_KEY: TOKEN, FAL_KEY: TOKEN } });
+    const direct = modelReadiness(definition, freeze({ image_size: 'landscape_4_3' }), cache, health());
+    expect(direct.connectionLabel).toBe('OpenAI API');
+    expect(direct.detail).toContain("Runs on OpenAI's own API with your OpenAI key");
+    const ready = modelReadiness(definition, freeze({ image_size: 'square' }), cache, health());
+    expect(ready).toMatchObject({ connectionLabel: 'fal.ai API', setupTarget: { kind: 'api-key', key: 'FAL_KEY' } });
+    expect(ready.detail).toContain("This recipe's image_size has no OpenAI equivalent, so it runs on FAL. Pick another image_size to run on OpenAI.");
+  });
+
+  it('points a Krea GPT Image 2 recipe with no keys at the OpenAI key, and keeps a sized one on Krea', () => {
+    const definition = NODE_DEFINITIONS['krea-image-openai-gpt-image-2'];
+    expect(modelReadiness(definition, freeze({}), credentials(), health()))
+      .toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'OPENAI_API_KEY' } });
+    const sized = modelReadiness(definition, freeze({ width: 1920 }), credentials({ apiKeys: { OPENAI_API_KEY: TOKEN } }), health());
+    expect(sized).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+    expect(sized.detail).toContain('This recipe sets width, which only Krea takes, so it runs on Krea.');
+  });
+
+  it('moves GPT Image 1.5 to fal from OpenAI\'s shutdown date', () => {
+    const definition = NODE_DEFINITIONS['gpt-image-1-5'];
+    const cache = credentials({ apiKeys: { OPENAI_API_KEY: TOKEN, FAL_KEY: TOKEN } });
+    vi.setSystemTime(Date.parse('2026-11-30T12:00:00'));
+    expect(modelReadiness(definition, freeze({}), cache, health()).connectionLabel).toBe('OpenAI API');
+    vi.setSystemTime(Date.parse('2026-12-01T12:00:00'));
+    const ready = modelReadiness(definition, freeze({}), cache, health());
+    expect(ready.connectionLabel).toBe('fal.ai API');
+    expect(ready.detail).toContain('OpenAI retires this model on its own API from 2026-12-01, so it runs on FAL.');
   });
 
   it('moves Nano Banana (2.5) to fal from Google\'s shutdown date and says so', () => {

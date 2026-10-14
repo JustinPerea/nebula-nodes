@@ -1539,8 +1539,16 @@ def get_handler_registry(
         registry["seedance-2-fast-i2v"] = _seedance2_fast_i2v_handler
         registry["flux-kontext"] = _flux_kontext_handler
         registry["flux-2-pro"] = _flux2_pro_handler
-        registry["gpt-image-1-5"] = _gpt_image_15_handler
-        registry["gpt-image-1-5-edit"] = _gpt_image_15_edit_handler
+        # GPT Image's fal copies run on OpenAI's Images API when OPENAI_API_KEY
+        # is set (execution/maker_routes_openai.py), else on fal.
+        from execution import maker_routes_openai
+        _openai_direct = maker_routes_openai.fal_direct(emit=emit)
+        registry["gpt-image-1-5"] = maker_routes.dual_route(
+            direct=_openai_direct, fallback=_gpt_image_15_handler,
+            translate=maker_routes_openai.fal_gpt_image_to_openai(maker_routes_openai.GPT_IMAGE_15))
+        registry["gpt-image-1-5-edit"] = maker_routes.dual_route(
+            direct=_openai_direct, fallback=_gpt_image_15_edit_handler,
+            translate=maker_routes_openai.fal_gpt_image_to_openai(maker_routes_openai.GPT_IMAGE_15))
         async def _gpt_image_2_fal_generate_handler(node, inputs, api_keys):
             node.params.setdefault("endpoint_id", "openai/gpt-image-2")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
@@ -1553,8 +1561,12 @@ def get_handler_registry(
         registry["gpt-image-2-edit"] = _openai_image_2_edit_handler
         registry["gpt-image-2-5-generate"] = _openai_image_25_generate_handler
         registry["gpt-image-2-5-edit"] = _openai_image_25_edit_handler
-        registry["gpt-image-2-fal-generate"] = _gpt_image_2_fal_generate_handler
-        registry["gpt-image-2-fal-edit"] = _gpt_image_2_fal_edit_handler
+        registry["gpt-image-2-fal-generate"] = maker_routes.dual_route(
+            direct=_openai_direct, fallback=_gpt_image_2_fal_generate_handler,
+            translate=maker_routes_openai.fal_gpt_image_to_openai(maker_routes_openai.GPT_IMAGE_2))
+        registry["gpt-image-2-fal-edit"] = maker_routes.dual_route(
+            direct=_openai_direct, fallback=_gpt_image_2_fal_edit_handler,
+            translate=maker_routes_openai.fal_gpt_image_to_openai(maker_routes_openai.GPT_IMAGE_2))
         registry["seedvr2-upscale"] = _seedvr2_upscale_handler
         registry["clarity-upscaler"] = _clarity_upscaler_handler
         registry["seedvr-video-upscale"] = _seedvr_video_upscale_handler

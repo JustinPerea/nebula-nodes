@@ -139,6 +139,15 @@ APPROVED_DUAL_ROUTE_SPLITS["identity-edit"] = {
 APPROVED_PARAM_GROUP_MOVES = {
     "meshy-image-to-3d": {"texture_prompt": ("sharedParams", "falParams", 0)},
 }
+# Direct maker routes, OpenAI lane (2026-10-14): the fal copies of GPT Image
+# 1.5 and 2 also run on OpenAI's Images API with the person's OPENAI_API_KEY
+# (execution/maker_routes_openai.py). Every param reaches both routes, so
+# nothing splits: only OPENAI_API_KEY joins envKeyName and becomes
+# directKeyName. `params` is still hashed as it was.
+APPROVED_DIRECT_KEY_ADDITIONS = {
+    node_id: {"envKeyName": ("FAL_KEY", ["OPENAI_API_KEY", "FAL_KEY"]), "directKeyName": "OPENAI_API_KEY"}
+    for node_id in ("gpt-image-1-5", "gpt-image-1-5-edit", "gpt-image-2-fal-generate", "gpt-image-2-fal-edit")
+}
 APPROVED_LEADING_PARAM_ADDITIONS = {
     "krea-2-generate": _KREA_AUTH_PARAM,
     "krea-style-search": _KREA_AUTH_PARAM,
@@ -239,6 +248,12 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
         assert len(moved) == 1, f"unapproved param move: {node_id}.{key}"
         normalized[now_in] = [param for param in normalized[now_in] if param.get("key") != key]
         normalized.setdefault(baseline_in, []).insert(index, moved[0])
+    keys_added = APPROVED_DIRECT_KEY_ADDITIONS.get(node_id)
+    if keys_added is not None:
+        baseline_env, current_env = keys_added["envKeyName"]
+        assert normalized.get("envKeyName") == current_env, f"unapproved envKeyName: {node_id}"
+        normalized["envKeyName"] = baseline_env
+        _remove_approved_fields(normalized, {"directKeyName": keys_added["directKeyName"]})
     split = APPROVED_DUAL_ROUTE_SPLITS.get(node_id)
     if split is not None:
         baseline_env, current_env = split["envKeyName"]

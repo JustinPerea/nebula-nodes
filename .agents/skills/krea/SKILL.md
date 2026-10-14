@@ -71,6 +71,18 @@ Google lane (2026-10-14, `backend/execution/maker_routes_google.py`):
 - No maker route: Veo 2 / 3 / 3 Fast (retired 2026-06-30) and Gemini Omni
   Flash 1.0 (preview ends 2026-10-22).
 
+Since 2026-10-14 the OpenAI copies do the same with `OPENAI_API_KEY`
+(`execution/maker_routes_openai.py`, translation `krea-openai-image`):
+`krea-image-openai-gpt-image-2` (`gpt-image-2`; `width`/`height` are
+Krea-only and keep a run on Krea), `-2-5-flare` and `-2-5-sunburst`
+(`gpt-image-2.5-*`; every Krea field reaches OpenAI). `aspect_ratio` x
+`resolution` map to the fixed `KREA_OPENAI_SIZES` table (16:9 at 2K =
+2048x1152, 1:1 at 4K = 2880x2880); only one of the two set means 1:1 or 1K.
+References in `image_urls` send the run to `/v1/images/edits` (public https
+URLs are fetched first). Their OpenAI route is unpriced: OpenAI publishes no
+per-image price for these models' default sizes. `krea-image-openai-gpt-image`
+has no maker route (its OpenAI model isn't confirmed).
+
 ## Gateway Model Nodes
 
 The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108) included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.

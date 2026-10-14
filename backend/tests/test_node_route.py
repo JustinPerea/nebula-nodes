@@ -54,7 +54,7 @@ def test_cache_tag_names_the_route_only_for_multi_route_nodes():
     assert node_route.cache_tag(krea, {"_kreaAuth": "mcp"}, {"GOOGLE_API_KEY": "g"}) == "plan:krea"
     # Single-route nodes keep the cache keys they had.
     assert node_route.cache_tag(DEFINITIONS["nano-banana"], {}, {"GOOGLE_API_KEY": "g"}) is None
-    assert node_route.cache_tag(DEFINITIONS["krea-image-openai-gpt-image-2"], {}, {"KREA_API_TOKEN": "k"}) is None
+    assert node_route.cache_tag(DEFINITIONS["krea-image-openai-gpt-image"], {}, {"KREA_API_TOKEN": "k"}) is None
 
 
 def test_engine_cache_key_changes_when_a_maker_key_is_added():

@@ -3,6 +3,221 @@
   "about": "Hand-curated list prices for paid nodes. Every entry cites the vendor page and the date it was checked. See services/model_pricing.py for the format; never add a price without a canonical source.",
   "currencies": {},
   "nodes": {
+    "gpt-image-1-5": {
+      "routes": {
+        "openai": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "quality",
+            "image_size"
+          ],
+          "rows": [
+            {
+              "match": {
+                "quality": "low",
+                "image_size": "1024x1024"
+              },
+              "price": 0.009
+            },
+            {
+              "match": {
+                "quality": "low",
+                "image_size": "1024x1536"
+              },
+              "price": 0.013
+            },
+            {
+              "match": {
+                "quality": "low",
+                "image_size": "1536x1024"
+              },
+              "price": 0.013
+            },
+            {
+              "match": {
+                "quality": "medium",
+                "image_size": "1024x1024"
+              },
+              "price": 0.034
+            },
+            {
+              "match": {
+                "quality": "medium",
+                "image_size": "1024x1536"
+              },
+              "price": 0.05
+            },
+            {
+              "match": {
+                "quality": "medium",
+                "image_size": "1536x1024"
+              },
+              "price": 0.05
+            },
+            {
+              "match": {
+                "quality": "high",
+                "image_size": "1024x1024"
+              },
+              "price": 0.133
+            },
+            {
+              "match": {
+                "quality": "high",
+                "image_size": "1024x1536"
+              },
+              "price": 0.2
+            },
+            {
+              "match": {
+                "quality": "high",
+                "image_size": "1536x1024"
+              },
+              "price": 0.2
+            }
+          ],
+          "multiplyBy": [
+            "num_images"
+          ],
+          "notes": "OpenAI Images API standard price for runs on the person's OPENAI_API_KEY (model gpt-image-1.5): OpenAI's per-image figures for the output image, times Count (each image is its own call). Prompt text input ($5 per 1M tokens) isn't counted. OpenAI shuts gpt-image-1.5 down on Dec 1, 2026; from that day the run takes the fal copy (services/node_route.py DIRECT_RETIRES).",
+          "sources": [
+            {
+              "url": "https://developers.openai.com/api/docs/models/gpt-image-1.5",
+              "quote": "Quality Low: 1024x1024 $0.009, 1024x1536 $0.013, 1536x1024 $0.013; Medium: $0.034, $0.05, $0.05; High: $0.133, $0.2, $0.2 (per image)"
+            },
+            {
+              "url": "https://developers.openai.com/api/docs/pricing",
+              "quote": "gpt-image-1.5 | Image | $8.00 | $2.00 | $32.00"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
+    "gpt-image-1-5-edit": {
+      "routes": {
+        "openai": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "quality",
+            "image_size"
+          ],
+          "rows": [
+            {
+              "match": {
+                "quality": "low",
+                "image_size": "1024x1024"
+              },
+              "price": 0.009
+            },
+            {
+              "match": {
+                "quality": "low",
+                "image_size": "1024x1536"
+              },
+              "price": 0.013
+            },
+            {
+              "match": {
+                "quality": "low",
+                "image_size": "1536x1024"
+              },
+              "price": 0.013
+            },
+            {
+              "match": {
+                "quality": "low",
+                "image_size": "auto"
+              },
+              "price": [
+                0.009,
+                0.013
+              ]
+            },
+            {
+              "match": {
+                "quality": "medium",
+                "image_size": "1024x1024"
+              },
+              "price": 0.034
+            },
+            {
+              "match": {
+                "quality": "medium",
+                "image_size": "1024x1536"
+              },
+              "price": 0.05
+            },
+            {
+              "match": {
+                "quality": "medium",
+                "image_size": "1536x1024"
+              },
+              "price": 0.05
+            },
+            {
+              "match": {
+                "quality": "medium",
+                "image_size": "auto"
+              },
+              "price": [
+                0.034,
+                0.05
+              ]
+            },
+            {
+              "match": {
+                "quality": "high",
+                "image_size": "1024x1024"
+              },
+              "price": 0.133
+            },
+            {
+              "match": {
+                "quality": "high",
+                "image_size": "1024x1536"
+              },
+              "price": 0.2
+            },
+            {
+              "match": {
+                "quality": "high",
+                "image_size": "1536x1024"
+              },
+              "price": 0.2
+            },
+            {
+              "match": {
+                "quality": "high",
+                "image_size": "auto"
+              },
+              "price": [
+                0.133,
+                0.2
+              ]
+            }
+          ],
+          "multiplyBy": [
+            "num_images"
+          ],
+          "plus": "input images",
+          "notes": "OpenAI Images API standard price for runs on the person's OPENAI_API_KEY (model gpt-image-1.5): OpenAI's per-image figures for the output image, times Count (each image is its own call). Prompt text input ($5 per 1M tokens) isn't counted. OpenAI shuts gpt-image-1.5 down on Dec 1, 2026; from that day the run takes the fal copy (services/node_route.py DIRECT_RETIRES). 'auto' size is the range across OpenAI's three sizes. Edits also bill each reference image as image input tokens ($8 per 1M); OpenAI publishes no per-image figure for them, so that part isn't estimated.",
+          "sources": [
+            {
+              "url": "https://developers.openai.com/api/docs/models/gpt-image-1.5",
+              "quote": "Quality Low: 1024x1024 $0.009, 1024x1536 $0.013, 1536x1024 $0.013; Medium: $0.034, $0.05, $0.05; High: $0.133, $0.2, $0.2 (per image)"
+            },
+            {
+              "url": "https://developers.openai.com/api/docs/pricing",
+              "quote": "gpt-image-1.5 | Image | $8.00 | $2.00 | $32.00"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
     "gpt-image-2-5-edit": {
       "currency": "usd",
       "per": "image",

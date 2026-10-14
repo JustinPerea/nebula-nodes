@@ -171,10 +171,14 @@ def test_direct_route_models_price_both_routes():
         if direct is None:
             assert entry is None or "routes" not in entry
             continue
+        if direct["pricing"] is None:
+            # A maker route OpenAI publishes no default price for (GPT Image 2 / 2.5) stays unpriced.
+            assert entry is None or "routes" not in entry, node_id
+            continue
         # Krea's own route is priced unless Krea publishes no price for it
         # (Gemini Omni Flash 1.1 has no x-krea-pricing block).
         krea_priced = bool(model.get("pricing")) and node_id not in skipped
-        assert set(entry["routes"]) == ({"krea"} if krea_priced else set()) | {direct["pricing"]["provider"]}
+        assert set(entry["routes"]) == ({"krea"} if krea_priced else set()) | {direct["pricing"]["provider"]}, node_id
         if krea_priced:
             assert entry["routes"]["krea"].get("provider", "krea") == "krea"
         google = entry["routes"]["google"]

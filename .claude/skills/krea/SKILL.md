@@ -135,6 +135,22 @@ The submit body is `{model, type, name, urls}` plus optional `trigger_word`, `ma
   - **Internal resource shapes** the handler recognizes on input ports (not user-facing nodes, but useful to know when an agent emits them): `krea_image_style_reference` (`{kind, image, strength}`) on `image_style_references`; `krea_style` (`{kind, id, strength}`) on `styles`; `nebula_moodboard` on `moodboard`. A `nebula_moodboard` is treated specially — its representative images become style references (default strength 0.7, filling only remaining slots) and its `styleBrief` is appended to the prompt — whereas a raw `moodboard_id` string/object goes into the `moodboards` body field for Krea-side lookup.
 - **How outputs render:** the `image` port is a downloaded local file served via `/api/outputs/…`; the canvas image preview renders it. The `job` port carries the raw Krea job JSON (seeds, all result URLs, status) for debugging or fan-out.
 
+
+**GPT Image on your OpenAI key.**
+
+Also since 2026-10-14, `krea-image-openai-gpt-image-2` (`gpt-image-2`),
+`krea-image-openai-gpt-image-2-5-flare` (`gpt-image-2.5-flare`) and
+`krea-image-openai-gpt-image-2-5-sunburst` (`gpt-image-2.5-sunburst`) run on
+OpenAI's Images API with the person's `OPENAI_API_KEY` (same precedence).
+`aspect_ratio` x `resolution` become a fixed OpenAI size (16:9 at 2K =
+2048x1152, 1:1 at 4K = 2880x2880; table `KREA_OPENAI_SIZES` in
+`backend/execution/maker_routes_openai.py`), and only one of the two set means
+1:1 or 1K. GPT Image 2's explicit `width`/`height` keep the run on Krea.
+Reference images go to `/v1/images/edits` (public https URLs are fetched
+first). The OpenAI route is unpriced: OpenAI publishes no per-image price for
+these models' default sizes. `krea-image-openai-gpt-image` (ChatGPT Image)
+stays Krea-only, since its upstream OpenAI model isn't confirmed.
+
 ### Capability boundaries — what Krea's API can do that Nebula does NOT expose
 
 Nebula deliberately scopes this provider to **Krea's own Krea 2 model + the style system**. Do not promise the following through a Krea node; route the user to the appropriate other Nebula provider (or tell them it's out of scope here):

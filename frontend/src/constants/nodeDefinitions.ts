@@ -7288,7 +7288,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/gpt-image-1.5',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['OPENAI_API_KEY', 'FAL_KEY'],
+    directKeyName: 'OPENAI_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -7363,7 +7364,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/gpt-image-1.5/edit',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['OPENAI_API_KEY', 'FAL_KEY'],
+    directKeyName: 'OPENAI_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -7858,7 +7860,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'openai/gpt-image-2',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['OPENAI_API_KEY', 'FAL_KEY'],
+    directKeyName: 'OPENAI_API_KEY',
     executionPattern: 'stream',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -7934,7 +7937,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'openai/gpt-image-2/edit',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['OPENAI_API_KEY', 'FAL_KEY'],
+    directKeyName: 'OPENAI_API_KEY',
     executionPattern: 'stream',
     inputPorts: [
       { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true },
@@ -16388,7 +16392,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/openai/gpt-image-2",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "OPENAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -16567,7 +16574,154 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ]
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "OPENAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          },
+          {
+            "label": "auto",
+            "value": "auto"
+          }
+        ],
+        "default": "high"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "2:1",
+            "value": "2:1"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "1:2",
+            "value": "1:2"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          },
+          {
+            "label": "4K",
+            "value": "4K"
+          }
+        ]
+      }
+    ],
+    "falParams": [
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-openai-image",
+      "model": "gpt-image-2",
+      "blockedBy": [
+        "width",
+        "height"
+      ]
+    }
   },
   'krea-image-openai-gpt-image-2-5-flare': {
     "id": "krea-image-openai-gpt-image-2-5-flare",
@@ -16575,7 +16729,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/openai/gpt-image-2.5-flare",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "OPENAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -16764,7 +16921,159 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ]
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "OPENAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          },
+          {
+            "label": "xhigh",
+            "value": "xhigh"
+          },
+          {
+            "label": "max",
+            "value": "max"
+          }
+        ],
+        "default": "high"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "2:1",
+            "value": "2:1"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "1:2",
+            "value": "1:2"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          },
+          {
+            "label": "4K",
+            "value": "4K"
+          }
+        ]
+      },
+      {
+        "key": "background",
+        "label": "Background",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "transparent",
+            "value": "transparent"
+          },
+          {
+            "label": "opaque",
+            "value": "opaque"
+          },
+          {
+            "label": "auto",
+            "value": "auto"
+          }
+        ]
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-openai-image",
+      "model": "gpt-image-2.5-flare"
+    }
   },
   'krea-image-openai-gpt-image-2-5-sunburst': {
     "id": "krea-image-openai-gpt-image-2-5-sunburst",
@@ -16772,7 +17081,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/openai/gpt-image-2.5-sunburst",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "OPENAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -16941,7 +17253,139 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ]
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "OPENAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          },
+          {
+            "label": "xhigh",
+            "value": "xhigh"
+          },
+          {
+            "label": "max",
+            "value": "max"
+          }
+        ],
+        "default": "high"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "2:1",
+            "value": "2:1"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "1:2",
+            "value": "1:2"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          },
+          {
+            "label": "4K",
+            "value": "4K"
+          }
+        ]
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-openai-image",
+      "model": "gpt-image-2.5-sunburst"
+    }
   },
   'krea-image-xai-grok-imagine-2': {
     "id": "krea-image-xai-grok-imagine-2",
