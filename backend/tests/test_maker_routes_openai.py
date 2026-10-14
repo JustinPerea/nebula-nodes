@@ -301,3 +301,34 @@ def test_describe_node_names_the_openai_route_and_its_price(monkeypatch, keys, r
     assert body["price"]["billedBy"] == billed
     assert set(body["price"]["routes"]) == {"openai"}
     assert body["price"].get("atDefaultsUsd") == at_defaults
+
+
+# -- review fixes ------------------------------------------------------------------
+
+_ONE_PIXEL_PNG = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=")
+
+
+def _final_only_sse(payload: bytes) -> Response:
+    import base64
+
+    b64 = base64.b64encode(payload).decode()
+    body = f'event: image_generation.completed\ndata: {{"b64_json": "{b64}"}}\n\ndata: [DONE]\n\n'
+    return Response(200, content=body.encode(), headers={"content-type": "text/event-stream"})
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_count_keeps_every_paid_image_and_shows_the_first():
+    """Each of Count's calls is billed by OpenAI; the handlers name the final
+    file after the node id, so without a per-call name the second image
+    overwrote the first and `image` showed the last one."""
+    import base64
+
+    first = base64.b64decode(_ONE_PIXEL_PNG) + b"first"
+    second = base64.b64decode(_ONE_PIXEL_PNG) + b"second"
+    respx.post(GENERATIONS).mock(side_effect=[_final_only_sse(first), _final_only_sse(second)])
+    node = GraphNode(id="n", definitionId="gpt-image-1-5", params={"model": "gpt-image-1.5", "num_images": 2})
+    result = await openai_routes.openai_image_direct()(node, PROMPT, OPENAI)
+    assert len(result["paths"]) == 2 and len(set(result["paths"])) == 2
+    assert [Path(path).read_bytes() for path in result["paths"]] == [first, second]
+    assert result["image"]["value"] == result["paths"][0]

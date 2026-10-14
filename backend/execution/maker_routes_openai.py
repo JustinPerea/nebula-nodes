@@ -292,12 +292,19 @@ def openai_image_direct(*, emit: Emit = None) -> Callable[[GraphNode, dict[str, 
         if values:
             routed["images"] = PortValueDict(type="Image", value=await local_images(values, run_dir))
         paths: list[str] = []
-        for _ in range(count):
+        for index in range(count):
             if values:
                 result = await handle_gpt_image_2_edit(call, routed, api_keys, emit, run_dir, build_body=build_body)
             else:
                 result = await handle_gpt_image_2_generate(call, routed, api_keys, emit, run_dir, build_body=build_body)
-            paths.append(str(result["image"]["value"]))
+            path = Path(str(result["image"]["value"]))
+            if count > 1:
+                # The handlers save every call as "<node id>_final"; give each
+                # paid image its own file so the next call doesn't overwrite it.
+                kept = path.with_name(f"{path.stem}_{index + 1}{path.suffix}")
+                path.replace(kept)
+                path = kept
+            paths.append(str(path))
         return {"image": {"type": "Image", "value": paths[0]}, "paths": paths}
 
     return run
