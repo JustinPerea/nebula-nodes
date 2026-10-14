@@ -1008,21 +1008,28 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-google-nano-banana` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/google/nano-banana` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
-| Width | float | — | — |
-| Height | float | — | — |
 | Image URLs (JSON) | textarea | — | — |
 | Aspect ratio | enum | — | 21:9, 1:1, 4:3, 3:2, 2:3, 5:4, 4:5, 3:4, … |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Width | float | — | — |
+| Height | float | — | — |
 
 ---
 
@@ -1032,22 +1039,29 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-google-nano-banana-2` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/google/nano-banana-2` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | 2026-10-09 |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
-| Width | float | — | — |
-| Height | float | — | — |
 | Image URLs (JSON) | textarea | — | — |
 | Aspect ratio | enum | — | 4:1, 21:9, 1:1, 4:3, 3:2, 2:3, 5:4, 4:5, … |
 | Resolution | enum | 1K | 1K, 2K, 4K |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Width | float | — | — |
+| Height | float | — | — |
 
 ---
 
@@ -1083,21 +1097,28 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-google-nano-banana-flash-lite` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/google/nano-banana-flash-lite` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
-| Width | float | — | — |
-| Height | float | — | — |
 | Image URLs (JSON) | textarea | — | — |
 | Aspect ratio | enum | — | 21:9, 1:1, 4:3, 3:2, 2:3, 5:4, 4:5, 3:4, … |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Width | float | — | — |
+| Height | float | — | — |
 
 ---
 
@@ -1107,22 +1128,29 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-google-nano-banana-pro` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/google/nano-banana-pro` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
-| Width | float | — | — |
-| Height | float | — | — |
 | Image URLs (JSON) | textarea | — | — |
 | Aspect ratio | enum | — | 21:9, 1:1, 4:3, 3:2, 2:3, 5:4, 4:5, 3:4, … |
 | Resolution | enum | 1K | 1K, 2K, 4K |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Width | float | — | — |
+| Height | float | — | — |
 
 ---
 
@@ -1716,12 +1744,14 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `nano-banana-fal` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | GOOGLE_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/nano-banana-2` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-10-10 |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1729,9 +1759,14 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Aspect Ratio | enum | 1:1 | Auto, 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, … |
 | Resolution | enum | 1K | 0.5K, 1K, 2K, 4K |
 | Count | int | 1 | 1–4 |
-| Format | enum | png | PNG, JPEG, WebP |
 | Thinking Level | enum | — | Off, Minimal, High |
 | Web Search | bool | false | — |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Format | enum | png | PNG, JPEG, WebP |
 | Seed | int | — | — |
 
 ---
@@ -1742,12 +1777,14 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `nano-banana-fal-edit` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | GOOGLE_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/nano-banana-2/edit` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Reference Images (Image ×n)* |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-10-10 |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1755,9 +1792,14 @@ Nodes: 302 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Aspect Ratio | enum | auto | Auto, 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, … |
 | Resolution | enum | 1K | 0.5K, 1K, 2K, 4K |
 | Count | int | 1 | 1–4 |
-| Format | enum | png | PNG, JPEG, WebP |
 | Thinking Level | enum | — | Off, Minimal, High |
 | Web Search | bool | false | — |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Format | enum | png | PNG, JPEG, WebP |
 | Seed | int | — | — |
 
 ---

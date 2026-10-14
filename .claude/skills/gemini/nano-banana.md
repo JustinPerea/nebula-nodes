@@ -18,6 +18,23 @@ Nano Banana 2.1 runs on the Gemini Interactions API (`POST /v1beta/interactions`
 
 Image size strings are uppercase `K`: `"1K"`, `"2K"`, `"4K"`. The 512-pixel option has no K suffix.
 
+## fal and Krea copies on this handler
+
+`nano-banana-fal`, `nano-banana-fal-edit` and four Krea copies
+(`krea-image-google-nano-banana-2`, `-pro`, `-flash-lite`,
+`krea-image-google-nano-banana`) run on `handle_nano_banana` when
+`GOOGLE_API_KEY` is set (`backend/execution/maker_routes.py`; a Krea copy set
+to the Krea plan stays on Krea). The translation from fal's params: model ->
+the Google id; `aspect_ratio: auto` omitted; `resolution` -> `imageSize`
+(Nano Banana 2 and Pro); `thinking_level` minimal/high ->
+`generationConfig.thinkingConfig.thinkingLevel` (Nano Banana 2 only);
+`enable_web_search` -> `tools: [{"googleSearch": {}}]` (Nano Banana 2 and
+Pro); `num_images` -> that many calls (the node shows the first, as on fal);
+`seed` and `output_format` are fal-only. Web search and high thinking have no
+list price on the Google route (grounding bills per search query), so those
+runs are unpriced. Wired image URLs go to Google as `fileData.fileUri`, so they
+must be public HTTPS (15 MB per file; ai.google.dev/gemini-api/docs/file-input-methods).
+
 ## Core prompting principle
 
 > **Describe the scene in a narrative paragraph. Don't list keywords.**

@@ -63,8 +63,8 @@ Notes for the curious:
 
 | Capability / Endpoint | In the API | In Nebula | Notes |
 |---|---|---|---|
-| Text-to-3D (`/v2/text-to-3d`) | yes | none | Nebula's `meshy-text-to-3d` node is **FAL-backed** (uses `FAL_KEY`, not the direct Meshy API), so the native endpoint isn't called by any of these 8 nodes. |
-| Image-to-3D (`/v1/image-to-3d`) | yes | none | Same — Nebula's `meshy-image-to-3d` is FAL-backed, outside this provider. |
+| Text-to-3D (`/v2/text-to-3d`) | yes | dual-route | `meshy-text-to-3d` calls this endpoint when `MESHY_API_KEY` is set and falls back to fal's `fal-ai/meshy/v6/text-to-3d` with `FAL_KEY`. Each route gets only its own params (the Meshy-only `ai_model`, `hd_texture`, `remove_lighting` and `target_formats` never reach fal). |
+| Image-to-3D (`/v1/image-to-3d`) | yes | dual-route | Same for `meshy-image-to-3d`: direct with `MESHY_API_KEY`, else fal's `fal-ai/meshy/v6/image-to-3d`. |
 | Multi-Image-to-3D (`/v1/multi-image-to-3d`) | yes | full | `meshy-multi-image-to-3d`. Core params exposed (model, remesh, topology, polycount, texture, PBR, pose, HD texture, enhancement, remove-lighting). |
 | Remesh (`/v1/remesh`) | yes | full | `meshy-remesh`. Topology, polycount, formats, resize-height, convert-only all exposed. |
 | Convert (`/v1/convert`) | yes | partial | Standalone format-conversion endpoint (May 2026). Not wired as its own node; Remesh's `convert_format_only` + `target_formats` covers the common case, but the dedicated endpoint's `input_task_id` chaining is unused. |

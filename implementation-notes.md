@@ -3195,3 +3195,67 @@ Tradeoffs and surprises:
   the sidecar test that sets all four from a shell (fails with the old list).
 - **Left for later:** the `nebula` CLI's own commands still read only `NEBULA_APP_TOKEN`, not the file. Connect
   only sets up the MCP server, so nothing needs it yet.
+
+## 2026-10-14 — Direct maker routes (Nano Banana on your Google key)
+
+fal and Krea copies of a model now run on the maker's own API when the person's maker key is set. Pilot: Nano
+Banana (`nano-banana-fal`, `nano-banana-fal-edit`, and the Krea copies `krea-image-google-nano-banana-2`, `-pro`,
+`-flash-lite`, `krea-image-google-nano-banana`) on `handle_nano_banana` with `GOOGLE_API_KEY`.
+
+- **One rule, one module.** `backend/services/node_route.py` `select_route` (stdlib only) decides the route for the
+  router, pricing and the spend gate (`model_pricing.route_provider`), `krea_account.uses_account`, describe_node
+  and the engine cache key. `frontend/src/lib/directRoute.ts` `selectRoute` is the same rule; both run the shared
+  `backend/tests/fixtures/route_cases.json` against the real catalog. Precedence: `_kreaAuth == "mcp"` (or an
+  account-only Krea node) -> Krea plan; else a trimmed, non-empty direct key -> maker; else the first fallback key;
+  else `unset` (named after the node's apiProvider). Ideogram Reframe still needs `resolution` for its direct
+  route (`DIRECT_REQUIRES`).
+- **Behavior change to know:** a saved Krea Nano Banana node on `api-token` now runs on Google (billed by Google)
+  once a Google key is saved. That's the requested precedence; the readiness line says so, and the Krea plan
+  choice still wins. The Krea skill documents how to keep Krea (remove the key or pick the plan).
+- **Krea definitions (approach A).** The generator (`scripts/sync-krea-catalog.py` `DIRECT_ROUTES`) keeps the full
+  Krea list in `params` (every older reader keeps working) and adds `sharedParams` (all but Krea-only fields, incl.
+  `_kreaAuth`), `falParams` (Krea-only `width`/`height`), `directParams: []`, `directKeyName`, `envKeyName:
+  [GOOGLE_API_KEY, KREA_API_TOKEN]` and `directRoute {translation, model}` (new TS field). `falParams` means "the
+  fallback route's own params" — Krea's here; the model reference labels it "Krea Parameters".
+- **fal definitions.** `params: []` + `sharedParams` (model, aspect_ratio, resolution, num_images, thinking_level,
+  enable_web_search) + `falParams` (output_format, seed) + `directParams: []`. No param changed, order and
+  defaults kept. `test_reference_roles.py` gets an approved dual-route split normalization
+  (`APPROVED_DUAL_ROUTE_SPLITS`) that rebuilds the baseline `params` in the original order and asserts the exact
+  new key fields, rather than a rehash, so a real param change still fails the fingerprint.
+- **Router.** `backend/execution/maker_routes.py` `dual_route` works on `model_copy` with each route's allowlist
+  (`node_route.route_param_keys`: sharedParams + that route's group), translates on the direct route, never
+  mutates the node, and with no key raises `MissingCredentialError` naming every key. Meshy text/image-to-3D moved
+  onto it: fal no longer receives Meshy-only `ai_model`, `hd_texture`, `remove_lighting`, `target_formats` (it used
+  to, and fal forwards every param). Ideogram keeps its own router (it already filtered); Veo keeps its own.
+- **Translation fal -> Gemini** mirrors the fal wrapper per model value: 'auto' aspect omitted (Google: matches the
+  input or 1:1); extreme ratios only on Nano Banana 2 (omitted on Pro, 1:1 on the others); resolution -> imageSize
+  on NB2/Pro (0.5K -> 512; the handler renders Pro's 512 at 1K like fal); thinking minimal/high on NB2 only ->
+  `thinkingConfig.thinkingLevel`; web search on NB2/Pro -> `tools: [{"googleSearch": {}}]`; `num_images` -> N
+  sequential calls, first image shown (fal also makes and bills N and shows the first). Dropped: seed,
+  output_format (the Gemini API documents no image seed). Krea -> Gemini: prompt/image_urls from port or param,
+  aspect_ratio, resolution -> imageSize on NB2/Pro only (Flash-Lite is 1K only).
+- **Pricing.** New per-route entry shape `{"routes": {provider: entry}}` (validate/estimate in model_pricing.py
+  and pricing.ts, shared cases added). Google prices from ai.google.dev/gemini-api/docs/pricing, checked
+  2026-10-14: 3.1 Flash Image $0.045/0.5K, $0.067/1K, $0.101/2K, $0.151/4K; 3 Pro Image $0.134 1K/2K, $0.24 4K;
+  3.1 Flash-Lite $0.0336; 2.5 Flash Image $0.039. Web search (grounding: 5,000 free/month then $14 per 1,000
+  search queries, each query billed) and high thinking (extra thinking tokens) are left **unpriced** on the Google
+  route rather than guessed: rows require `enable_web_search: false` and thinking ''/minimal.
+- **gemini-2.5-flash-image date conflict.** The deprecations table lists shutdown March 15, 2027 (release October
+  2, 2025); the pricing page banner says "will be shut down on October 2, 2026". Kept the route (the deprecations
+  table is the schedule, and the models page still lists it), but a 404 on that model appends Google's named
+  replacement (`gemini-3.1-flash-lite-image`). Live status not confirmed (no real calls).
+- **Reference images** go to Google as `fileData.fileUri` (existing handler behavior). Google documents public
+  HTTPS URLs up to 15 MB (file-input-methods page, fetched 2026-10-14); Krea refs that aren't public would fail.
+- **Cache key.** Multi-route nodes add `_route: "kind:provider"` (`node_route.cache_tag`; a cinema scene tags its
+  base model). Single-route keys are unchanged. Existing cached results for veo-3, ideogram, meshy and the new
+  nodes miss once after upgrade.
+- **Readiness.** Route-aware detail ("Runs on Google's own API with your Google key", "Runs on fal.ai with your FAL
+  key. Add a Google key to run on Google directly."). With nothing set, setup still points at the maker key (the
+  rule Veo and Meshy already used); the Cinema test row for `nano-banana-fal-edit` changed accordingly.
+- **describe_node.** Route-neutral: `paramsFal` renamed `paramsFallback`, plus `fallback` ("fal"/"krea") and
+  `routeProvider`; `route` is "direct", the fallback provider, or None. Price adds `billedBy` and per-route `routes`.
+  With no keys the price shown is the node's own copy (fal for the fal nodes). No test referenced `paramsFal`.
+- **Not done (scoped out):** `identity-edit` (fal-only wrapper with character bundles), `krea-image-google-nano-
+  banana-2-1` (Interactions API; would need thinking passthrough, and Krea's $0.03 vs Google's $0.0336 needs a
+  call), Krea's Veo/Omni copies, Krea direct-only extras (thinking/web search) — `directParams` is supported but
+  empty, and moving Ideogram onto `dual_route`.

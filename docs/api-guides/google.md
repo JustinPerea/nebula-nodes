@@ -29,6 +29,8 @@ All seven nodes authenticate with the same `GOOGLE_API_KEY` and call Google's `g
 
 **Imagen 4 is retired.** Google shut Imagen 4 down on 2026-08-17 and names Nano Banana 2.1 as the replacement, so the `imagen-4-generate` node is gone. Saved graphs open with a `nano-banana` node set to Nano Banana 2.1 (aspect ratio and 1K/2K size carried over), titled "Nano Banana (was Imagen 4)" unless you renamed it.
 
+**Your Google key also runs the fal and Krea copies of Nano Banana** (since 2026-10-14): `nano-banana-fal`, `nano-banana-fal-edit` and the four `krea-image-google-nano-banana*` nodes call the Gemini API with `GOOGLE_API_KEY` when it is saved, billed by Google at the [Gemini API image prices](https://ai.google.dev/gemini-api/docs/pricing). A Krea node set to the Krea plan stays on Krea. Without a Google key they run on fal or Krea as before. fal's `seed` and `output_format` don't apply on Google; web search and high thinking work but have no list price there (Google bills grounding per search query), so the run estimate shows them unpriced.
+
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
 | Gemini | `gemini-chat` | text-gen | `messages` (text), `images` | `model` (Gemini 3.5 Flash default / 3.1 Pro / 3 Flash / 3.1 Flash Lite / 2.5 Pro / 2.5 Flash / 2.5 Flash Lite), `max_tokens`, `temperature`, `system`, `thinkingLevel`, `thinkingBudget`, `top_p`, `top_k`, `stop_sequences`, `response_format` (text / JSON) | Chat, reasoning, summarization, JSON extraction, describing/analyzing images |
