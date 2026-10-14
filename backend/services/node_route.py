@@ -36,6 +36,8 @@ KEY_PROVIDERS: dict[str, str] = {
     "QUIVER_API_KEY": "quiver", "KREA_API_TOKEN": "krea", "IDEOGRAM_API_KEY": "ideogram",
     "WORLDLABS_API_KEY": "worldlabs",
     "GOOGLE_VERTEX_CREDENTIALS": "google",
+    # BytePlus ModelArk, ByteDance's own international API (Seedream, Seedance).
+    "BYTEPLUS_API_KEY": "bytedance",
 }
 
 # A direct route that also needs a param set, else the run takes the fallback.
@@ -66,6 +68,7 @@ DIRECT_RETIRES: dict[str, dict[str, Any]] = {
 REQUIRES = "requires"  # DIRECT_REQUIRES: the direct route needs a param that isn't set
 BLOCKED = "blocked"    # a copy-only param is set that the maker can't honor (directRoute.blockedBy)
 RETIRED = "retired"    # DIRECT_RETIRES: the maker shut this model down on its API
+SIZE = "size"          # the recipe's size is one the maker can't render exactly (directRoute.size)
 
 LOCAL = "local"        # a utility node: no provider
 PLAN = "plan"          # the signed-in Krea plan
@@ -161,7 +164,12 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
       Krea-only params (explicit width/height) the maker can't honor; a
       recipe that sets one stays on Krea instead of silently changing shape.
     - RETIRED: on and after a DIRECT_RETIRES date the maker no longer serves
-      the model, so the fal or Krea copy runs it."""
+      the model, so the fal or Krea copy runs it.
+    - SIZE: ``directRoute.size`` holds the maker's documented output size
+      limits; a recipe whose size the maker can't render exactly (too few or
+      too many pixels, too extreme a ratio, a fractional size, or a size
+      choice it has no equivalent for) stays on the copy instead of being
+      silently resized (Seedream on BytePlus, maker_routes_byteplus.py)."""
     values = params or {}
     node_id = str(definition.get("id") or "")
     needed = DIRECT_REQUIRES.get(node_id)
@@ -171,11 +179,52 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
     for key in (spec.get("blockedBy") or []) if isinstance(spec, Mapping) else []:
         if _has_value(values.get(key)):
             return DirectBlock(BLOCKED, str(key))
+    size = _size_block(definition, values, spec.get("size") if isinstance(spec, Mapping) else None)
+    if size is not None:
+        return size
     retires = DIRECT_RETIRES.get(node_id)
     if retires and _today() >= retires["on"]:
         param = retires.get("param")
         if not param or _effective(definition, values, param) in retires.get("values", []):
             return DirectBlock(RETIRED, param, retires["on"])
+    return None
+
+
+def size_fits(width: Any, height: Any, limits: Mapping[str, Any]) -> bool:
+    """A whole-pixel width x height inside ``limits`` (minPixels, maxPixels,
+    maxAspect), the way the maker documents its "WxH" size."""
+    for value in (width, height):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return False
+        if not float(value).is_integer() or value <= 0:
+            return False
+    pixels = width * height
+    if pixels < limits.get("minPixels", 0) or pixels > limits.get("maxPixels", float("inf")):
+        return False
+    return max(width / height, height / width) <= limits.get("maxAspect", float("inf"))
+
+
+def _size_block(definition: Mapping[str, Any], params: Mapping[str, Any], limits: Any) -> DirectBlock | None:
+    """SIZE when the recipe's size is outside ``directRoute.size``.
+
+    ``widthParam``/``heightParam`` name an explicit size (a Krea copy's
+    width/height; unset leaves it to the route's own required-field check).
+    ``param`` names a size choice (fal's ``image_size``): a value listed in
+    ``unsupported`` blocks, and a ``{width, height}`` value must fit."""
+    if not isinstance(limits, Mapping):
+        return None
+    width_key, height_key = limits.get("widthParam"), limits.get("heightParam")
+    if width_key and height_key:
+        width, height = params.get(width_key), params.get(height_key)
+        if (_has_value(width) or _has_value(height)) and not size_fits(width, height, limits):
+            return DirectBlock(SIZE, str(width_key))
+    key = limits.get("param")
+    if key:
+        value = _effective(definition, params, str(key))
+        if isinstance(value, str) and value in (limits.get("unsupported") or []):
+            return DirectBlock(SIZE, str(key))
+        if isinstance(value, Mapping) and not size_fits(value.get("width"), value.get("height"), limits):
+            return DirectBlock(SIZE, str(key))
     return None
 
 

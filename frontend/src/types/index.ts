@@ -149,17 +149,39 @@ export interface ModelNodeDefinition {
    *  'MESHY_API_KEY' or 'GOOGLE_API_KEY'. A list means any of them, tried in
    *  order (Veo: Vertex, then Gemini API). */
   directKeyName?: string | string[];
-  /** A generated Krea node's maker route (scripts/sync-krea-catalog.py
-   *  DIRECT_ROUTES): the backend translation and the maker's model id.
-   *  `blockedBy` lists Krea-only params that keep a run on Krea when set
-   *  (the maker can't honor them; lib/directRoute.ts directBlock). */
-  directRoute?: { translation: string; model: string; blockedBy?: string[] };
+  /** A dual-route node's maker-route rules. A generated Krea node
+   *  (scripts/sync-krea-catalog.py DIRECT_ROUTES) names the backend
+   *  translation and the maker's model id; a fal node may carry only the
+   *  rules. `blockedBy` lists copy-only params that keep a run on the copy
+   *  when set (the maker can't honor them), and `size` the maker's documented
+   *  output size limits (lib/directRoute.ts directBlock). `setup: 'fallback'`
+   *  points setup at the copy's key when no key is set (BytePlus, which
+   *  doesn't serve the United States and needs each model activated, is not
+   *  the key to suggest first; lib/providerReadiness.ts). */
+  directRoute?: {
+    translation?: string; model?: string; blockedBy?: string[]; size?: DirectSizeLimits; setup?: 'fallback';
+  };
   docUrl?: string;
   /** A local (utility) node that still calls a provider. `utility` only means
    *  "no top-level key"; this says what the node really needs. Readiness, the
    *  missing-key badge, the run estimate and the agent surfaces all read it
    *  (lib/nodeKeys.ts, backend services/node_readiness.py). */
   providerVia?: ProviderVia;
+}
+
+/** A maker's documented output size rules for its direct route
+ *  (backend services/node_route.py _size_block). `widthParam`/`heightParam`
+ *  name an explicit size (a Krea copy's width/height); `param` names a size
+ *  choice whose `unsupported` values, or a `{width, height}` outside the
+ *  limits, keep the run on the copy. */
+export interface DirectSizeLimits {
+  minPixels?: number;
+  maxPixels?: number;
+  maxAspect?: number;
+  widthParam?: string;
+  heightParam?: string;
+  param?: string;
+  unsupported?: string[];
 }
 
 /** How a utility node reaches a provider.

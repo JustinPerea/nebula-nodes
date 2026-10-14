@@ -1,4 +1,4 @@
-import type { APIProvider, ModelNodeDefinition, ParamDefinition } from '../types';
+import type { APIProvider, DirectSizeLimits, ModelNodeDefinition, ParamDefinition } from '../types';
 import { usesKreaAccount } from './kreaConnection';
 
 /**
@@ -22,6 +22,8 @@ export const KEY_PROVIDERS: Readonly<Record<string, APIProvider>> = {
   MINIMAX_API_KEY: 'minimax', XAI_API_KEY: 'xai', HIGGSFIELD_API_KEY: 'higgsfield',
   QUIVER_API_KEY: 'quiver', KREA_API_TOKEN: 'krea', IDEOGRAM_API_KEY: 'ideogram',
   WORLDLABS_API_KEY: 'worldlabs',
+  // BytePlus ModelArk, ByteDance's own international API (Seedream, Seedance).
+  BYTEPLUS_API_KEY: 'bytedance',
 };
 
 /** A direct route that also needs a param set, else the run takes the fallback
@@ -43,9 +45,10 @@ export const DIRECT_RETIRES: Readonly<Record<string, DirectRetirement>> = {
 /** Why the direct route can't take a run (node_route.direct_block):
  * `requires` a direct param that isn't set (DIRECT_REQUIRES), `blocked` by a
  * copy-only param that is set (directRoute.blockedBy: a Krea copy's explicit
- * width/height), or `retired` by the maker on `on` (DIRECT_RETIRES). */
+ * width/height), `retired` by the maker on `on` (DIRECT_RETIRES), or `size`:
+ * the recipe's size is one the maker can't render exactly (directRoute.size). */
 export interface DirectBlock {
-  reason: 'requires' | 'blocked' | 'retired';
+  reason: 'requires' | 'blocked' | 'retired' | 'size';
   param: string | null;
   on: string | null;
 }
@@ -121,6 +124,40 @@ function effectiveValue(definition: ModelNodeDefinition, params: Record<string, 
   return undefined;
 }
 
+/** A whole-pixel width x height inside the maker's documented limits
+ * (node_route.size_fits). */
+export function sizeFits(width: unknown, height: unknown, limits: DirectSizeLimits): boolean {
+  if (typeof width !== 'number' || typeof height !== 'number') return false;
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) return false;
+  const pixels = width * height;
+  if (pixels < (limits.minPixels ?? 0) || pixels > (limits.maxPixels ?? Infinity)) return false;
+  return Math.max(width / height, height / width) <= (limits.maxAspect ?? Infinity);
+}
+
+/** `size` when the recipe's size is outside directRoute.size (node_route._size_block). */
+function sizeBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
+  const limits = definition.directRoute?.size;
+  if (!limits) return null;
+  if (limits.widthParam && limits.heightParam) {
+    const width = params[limits.widthParam];
+    const height = params[limits.heightParam];
+    if ((hasValue(width) || hasValue(height)) && !sizeFits(width, height, limits)) {
+      return { reason: 'size', param: limits.widthParam, on: null };
+    }
+  }
+  if (limits.param) {
+    const value = effectiveValue(definition, params, limits.param);
+    if (typeof value === 'string' && (limits.unsupported ?? []).includes(value)) {
+      return { reason: 'size', param: limits.param, on: null };
+    }
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const size = value as Record<string, unknown>;
+      if (!sizeFits(size.width, size.height, limits)) return { reason: 'size', param: limits.param, on: null };
+    }
+  }
+  return null;
+}
+
 /** Why the direct route can't take a run with these params, or null when it can. */
 export function directBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
   const needed = Object.hasOwn(DIRECT_REQUIRES, definition.id) ? DIRECT_REQUIRES[definition.id] : undefined;
@@ -128,6 +165,8 @@ export function directBlock(definition: ModelNodeDefinition, params: Record<stri
   for (const key of definition.directRoute?.blockedBy ?? []) {
     if (hasValue(params[key])) return { reason: 'blocked', param: key, on: null };
   }
+  const size = sizeBlock(definition, params);
+  if (size) return size;
   const retires = Object.hasOwn(DIRECT_RETIRES, definition.id) ? DIRECT_RETIRES[definition.id] : undefined;
   if (retires && todayIso() >= retires.on) {
     const value = retires.param ? effectiveValue(definition, params, retires.param) : undefined;
