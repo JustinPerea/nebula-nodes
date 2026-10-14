@@ -1447,6 +1447,60 @@
       ],
       "checked": "2026-10-10"
     },
+    "identity-edit": {
+      "routes": {
+        "google": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "resolution",
+            "thinking_level"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "1024",
+                "thinking_level": "low"
+              },
+              "price": [
+                0.067,
+                0.07484
+              ]
+            },
+            {
+              "match": {
+                "resolution": "2048",
+                "thinking_level": "low"
+              },
+              "price": [
+                0.101,
+                0.10884
+              ]
+            }
+          ],
+          "notes": "Gemini API standard (paid tier) price for runs on the person's GOOGLE_API_KEY (execution/maker_routes_google.py: gemini-3.1-flash-image, the model fal's nano-banana-2/edit runs). resolution 1024/2048 renders 1K/2K. The low end is the output image; the high end adds up to 14 input images (the base image plus Character references; Google's limit) at 1,120 tokens each at $0.50 per 1M. Unpriced on this route: thinking medium or high (sent as high, billed as output tokens with no per-image figure). Prompt text input isn't counted. The fal route has no curated price yet. Ignores Batch/Flex/Priority rates.",
+          "sources": [
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "$60.00 (images) Equivalent to $0.045 per 0.5K image* $0.067 per 1K image*, $0.101 per 2K image*, and $0.151 per 4K image*."
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "Input price | Not available | $0.50 (text/image)"
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/media-resolution",
+              "quote": "`unspecified` (Default) | 1120 | ... (Gemini 3 models, Image)"
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/image-generation",
+              "quote": "Up to 14 reference images: Mix up to 14 reference images to produce the final image."
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
+    },
     "kling-v3": {
       "currency": "usd",
       "per": "second",
@@ -1960,43 +2014,108 @@
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-google-nano-banana-2-1": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1K"
-          },
-          "price": 0.03
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1K"
+              },
+              "price": 0.03
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "2K"
+              },
+              "price": 0.0505
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K"
+              },
+              "price": 0.0755
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/image/google/nano-banana-2.1 (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "2K"
-          },
-          "price": 0.0505
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K"
-          },
-          "price": 0.0755
+        "google": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "1K"
+              },
+              "price": [
+                0.0336,
+                0.05712
+              ]
+            },
+            {
+              "match": {
+                "resolution": "2K"
+              },
+              "price": [
+                0.0504,
+                0.07392
+              ]
+            },
+            {
+              "match": {
+                "resolution": "4K"
+              },
+              "price": [
+                0.113,
+                0.13652
+              ]
+            }
+          ],
+          "plus": "thinking tokens",
+          "sources": [
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "$30.00 (images) Equivalent to $0.0336 per 1K image*, $0.0504 per 2K image*, and $0.113 per 4K image*."
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "Input price | Not available | $1.50 (text/image/video)"
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "Output price | Not available | $7.50 (text and thinking)"
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/media-resolution",
+              "quote": "`unspecified` (Default) | 1120 | ... (Gemini 3 models, Image)"
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/image-generation",
+              "quote": "Up to 14 reference images: Mix up to 14 reference images to produce the final image."
+            }
+          ],
+          "notes": "Gemini API standard (paid tier) price, for runs on the person's GOOGLE_API_KEY (model gemini-nano-banana-2.1). The low end is the output image; the high end adds up to 14 reference images (Google's limit) at 1,120 tokens per reference image at $1.50 per 1M. Prompt text input isn't counted (well under $0.01 for a normal prompt). Ignores Batch/Flex/Priority rates. Thinking tokens bill extra at $7.50 per 1M (Google: \"thinking tokens are billed by default for thinking models\"; 2.1 defaults to medium) and can't be counted ahead, so the estimate is open-ended.",
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/image/google/nano-banana-2.1 (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-google-nano-banana-flash-lite": {
@@ -3204,6 +3323,42 @@
       "checked": "2026-10-10",
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
+    "krea-video-google-gemini-omni-flash-1-1": {
+      "routes": {
+        "google": {
+          "currency": "usd",
+          "per": "second",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": 0.10136
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "plus": "input media and thinking tokens",
+          "notes": "Gemini API standard (paid tier) price for runs on the person's GOOGLE_API_KEY (model gemini-omni-1.1-flash): 5,792 output tokens per second of 720p video (the resolution the run uses) at $17.50 per 1M, times the node's duration. Input media (start image, reference images and videos) at $1.50 per 1M and thinking tokens at $9.00 per 1M bill extra; Google doesn't publish their token counts for Omni, so they aren't counted.",
+          "sources": [
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "Output price (including thinking tokens) | Not available | $9.00 (text) $17.50 (video)*"
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "Billing is based on total output token consumption, calculated at a rate of 5,792 tokens per second of 720p video."
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "Input price | Not available | $1.50 (text / image / video / audio)"
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
     "krea-video-google-veo-2": {
       "currency": "usd",
       "per": "request",
@@ -3304,437 +3459,613 @@
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-google-veo-3-1": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "duration",
-        "generate_audio",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "generate_audio": false,
-            "duration": 4
-          },
-          "price": 0.8
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "duration",
+            "generate_audio",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "generate_audio": false,
+                "duration": 4
+              },
+              "price": 0.8
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "generate_audio": false,
+                "duration": 4
+              },
+              "price": 0.8
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "generate_audio": false,
+                "duration": 6
+              },
+              "price": 1.2
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "generate_audio": false,
+                "duration": 6
+              },
+              "price": 1.2
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "generate_audio": false,
+                "duration": 8
+              },
+              "price": 1.6
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "generate_audio": true,
+                "duration": 4
+              },
+              "price": 1.6
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K",
+                "generate_audio": false,
+                "duration": 4
+              },
+              "price": 1.6
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "generate_audio": false,
+                "duration": 8
+              },
+              "price": 1.6
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "generate_audio": true,
+                "duration": 4
+              },
+              "price": 1.6
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "generate_audio": true,
+                "duration": 6
+              },
+              "price": 2.4
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K",
+                "generate_audio": false,
+                "duration": 6
+              },
+              "price": 2.4
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K",
+                "generate_audio": true,
+                "duration": 4
+              },
+              "price": 2.4
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "generate_audio": true,
+                "duration": 6
+              },
+              "price": 2.4
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "generate_audio": true,
+                "duration": 8
+              },
+              "price": 3.2
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K",
+                "generate_audio": false,
+                "duration": 8
+              },
+              "price": 3.2
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "generate_audio": true,
+                "duration": 8
+              },
+              "price": 3.2
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K",
+                "generate_audio": true,
+                "duration": 6
+              },
+              "price": 3.6
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K",
+                "generate_audio": true,
+                "duration": 8
+              },
+              "price": 4.8
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/video/google/veo-3.1 (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "generate_audio": false,
-            "duration": 4
-          },
-          "price": 0.8
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "generate_audio": false,
-            "duration": 6
-          },
-          "price": 1.2
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "generate_audio": false,
-            "duration": 6
-          },
-          "price": 1.2
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "generate_audio": false,
-            "duration": 8
-          },
-          "price": 1.6
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "generate_audio": true,
-            "duration": 4
-          },
-          "price": 1.6
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K",
-            "generate_audio": false,
-            "duration": 4
-          },
-          "price": 1.6
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "generate_audio": false,
-            "duration": 8
-          },
-          "price": 1.6
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "generate_audio": true,
-            "duration": 4
-          },
-          "price": 1.6
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "generate_audio": true,
-            "duration": 6
-          },
-          "price": 2.4
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K",
-            "generate_audio": false,
-            "duration": 6
-          },
-          "price": 2.4
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K",
-            "generate_audio": true,
-            "duration": 4
-          },
-          "price": 2.4
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "generate_audio": true,
-            "duration": 6
-          },
-          "price": 2.4
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "generate_audio": true,
-            "duration": 8
-          },
-          "price": 3.2
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K",
-            "generate_audio": false,
-            "duration": 8
-          },
-          "price": 3.2
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "generate_audio": true,
-            "duration": 8
-          },
-          "price": 3.2
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K",
-            "generate_audio": true,
-            "duration": 6
-          },
-          "price": 3.6
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K",
-            "generate_audio": true,
-            "duration": 8
-          },
-          "price": 4.8
+        "google": {
+          "currency": "usd",
+          "per": "second",
+          "priceParams": [
+            "resolution",
+            "generate_audio"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "720p",
+                "generate_audio": true
+              },
+              "price": 0.4
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "generate_audio": true
+              },
+              "price": 0.4
+            },
+            {
+              "match": {
+                "resolution": "4K",
+                "generate_audio": true
+              },
+              "price": 0.6
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "generate_audio": false
+              },
+              "price": 0.2
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "generate_audio": false
+              },
+              "price": 0.2
+            },
+            {
+              "match": {
+                "resolution": "4K",
+                "generate_audio": false
+              },
+              "price": 0.4
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "Vertex AI (Gemini Enterprise Agent Platform) list price for runs on the person's GOOGLE_VERTEX_CREDENTIALS (model veo-3.1-generate-001), per second of the node's duration. Vertex lists Veo per \"count\" without saying what a count is; it is read as per second, the higher reading and the Gemini API's unit for the same amounts. generate_audio picks the Video + Audio or Video row.",
+          "sources": [
+            {
+              "url": "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing",
+              "quote": "Veo 3.1 Video + Audio generation ... 720p, 1080p $0.40 / 1 count 4k $0.60 / 1 count"
+            },
+            {
+              "url": "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing",
+              "quote": "Video generation ... Video 720p, 1080p $0.20 / 1 count 4k $0.40 / 1 count"
+            },
+            {
+              "url": "https://ai.google.dev/gemini-api/docs/pricing",
+              "quote": "Veo 3.1 Standard video with audio price (default) | Not available | $0.40 (720p and 1080p) $0.60 (4k)"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/video/google/veo-3.1 (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-google-veo-3-1-fast": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "duration",
-        "generate_audio",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "generate_audio": false,
-            "duration": 4
-          },
-          "price": 0.32
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "duration",
+            "generate_audio",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "generate_audio": false,
+                "duration": 4
+              },
+              "price": 0.32
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "generate_audio": false,
+                "duration": 4
+              },
+              "price": 0.4
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "generate_audio": true,
+                "duration": 4
+              },
+              "price": 0.4
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "generate_audio": true,
+                "duration": 4
+              },
+              "price": 0.48
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "generate_audio": false,
+                "duration": 6
+              },
+              "price": 0.48
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "generate_audio": false,
+                "duration": 6
+              },
+              "price": 0.6
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "generate_audio": true,
+                "duration": 6
+              },
+              "price": 0.6
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "generate_audio": false,
+                "duration": 8
+              },
+              "price": 0.64
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "generate_audio": true,
+                "duration": 6
+              },
+              "price": 0.72
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "generate_audio": false,
+                "duration": 8
+              },
+              "price": 0.8
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "generate_audio": true,
+                "duration": 8
+              },
+              "price": 0.8
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "generate_audio": true,
+                "duration": 8
+              },
+              "price": 0.96
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K",
+                "generate_audio": false,
+                "duration": 4
+              },
+              "price": 1
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K",
+                "generate_audio": true,
+                "duration": 4
+              },
+              "price": 1.2
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K",
+                "generate_audio": false,
+                "duration": 6
+              },
+              "price": 1.5
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K",
+                "generate_audio": true,
+                "duration": 6
+              },
+              "price": 1.8
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K",
+                "generate_audio": false,
+                "duration": 8
+              },
+              "price": 2
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "4K",
+                "generate_audio": true,
+                "duration": 8
+              },
+              "price": 2.4
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/video/google/veo-3.1-fast (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "generate_audio": false,
-            "duration": 4
-          },
-          "price": 0.4
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "generate_audio": true,
-            "duration": 4
-          },
-          "price": 0.4
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "generate_audio": true,
-            "duration": 4
-          },
-          "price": 0.48
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "generate_audio": false,
-            "duration": 6
-          },
-          "price": 0.48
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "generate_audio": false,
-            "duration": 6
-          },
-          "price": 0.6
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "generate_audio": true,
-            "duration": 6
-          },
-          "price": 0.6
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "generate_audio": false,
-            "duration": 8
-          },
-          "price": 0.64
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "generate_audio": true,
-            "duration": 6
-          },
-          "price": 0.72
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "generate_audio": false,
-            "duration": 8
-          },
-          "price": 0.8
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "generate_audio": true,
-            "duration": 8
-          },
-          "price": 0.8
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "generate_audio": true,
-            "duration": 8
-          },
-          "price": 0.96
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K",
-            "generate_audio": false,
-            "duration": 4
-          },
-          "price": 1
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K",
-            "generate_audio": true,
-            "duration": 4
-          },
-          "price": 1.2
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K",
-            "generate_audio": false,
-            "duration": 6
-          },
-          "price": 1.5
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K",
-            "generate_audio": true,
-            "duration": 6
-          },
-          "price": 1.8
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K",
-            "generate_audio": false,
-            "duration": 8
-          },
-          "price": 2
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "4K",
-            "generate_audio": true,
-            "duration": 8
-          },
-          "price": 2.4
+        "google": {
+          "currency": "usd",
+          "per": "second",
+          "priceParams": [
+            "resolution",
+            "generate_audio"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "720p",
+                "generate_audio": true
+              },
+              "price": 0.1
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "generate_audio": true
+              },
+              "price": 0.12
+            },
+            {
+              "match": {
+                "resolution": "720p",
+                "generate_audio": false
+              },
+              "price": 0.08
+            },
+            {
+              "match": {
+                "resolution": "1080p",
+                "generate_audio": false
+              },
+              "price": 0.1
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "Vertex AI (Gemini Enterprise Agent Platform) list price for runs on the person's GOOGLE_VERTEX_CREDENTIALS (model veo-3.1-fast-generate-001), per second of the node's duration. Vertex lists Veo per \"count\" without saying what a count is; it is read as per second, the higher reading and the Gemini API's unit for the same amounts. generate_audio picks the Video + Audio or Video row. 4K runs stay on Krea.",
+          "sources": [
+            {
+              "url": "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing",
+              "quote": "Veo 3.1 Fast Video + Audio generation ... 720p $0.10 / 1 count 1080p $0.12 / 1 count 4k $0.30 / 1 count"
+            },
+            {
+              "url": "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing",
+              "quote": "Video generation ... Video 720p $0.08 / 1 count 1080p $0.10 / 1 count 4k $0.25 / 1 count"
+            },
+            {
+              "url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/veo/3-1-generate",
+              "quote": "veo-3.1-fast-generate-001 ... Supported output resolutions: 720p, 1080p"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/video/google/veo-3.1-fast (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-google-veo-3-1-lite": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth",
-        "duration",
-        "resolution"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 4
-          },
-          "price": 0.12
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth",
+            "duration",
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 4
+              },
+              "price": 0.12
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 6
+              },
+              "price": 0.18
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 4
+              },
+              "price": 0.2
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "720p",
+                "duration": 8
+              },
+              "price": 0.24
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 6
+              },
+              "price": 0.3
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1080p",
+                "duration": 8
+              },
+              "price": 0.4
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/video/google/veo-3.1-lite (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
         },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 6
-          },
-          "price": 0.18
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 4
-          },
-          "price": 0.2
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "720p",
-            "duration": 8
-          },
-          "price": 0.24
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 6
-          },
-          "price": 0.3
-        },
-        {
-          "match": {
-            "_kreaAuth": "api-token",
-            "resolution": "1080p",
-            "duration": 8
-          },
-          "price": 0.4
+        "google": {
+          "currency": "usd",
+          "per": "second",
+          "priceParams": [
+            "resolution"
+          ],
+          "rows": [
+            {
+              "match": {
+                "resolution": "720p"
+              },
+              "price": 0.03
+            },
+            {
+              "match": {
+                "resolution": "1080p"
+              },
+              "price": 0.05
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "Vertex AI (Gemini Enterprise Agent Platform) list price for runs on the person's GOOGLE_VERTEX_CREDENTIALS (model veo-3.1-lite-generate-001), per second of the node's duration. Vertex lists Veo per \"count\" without saying what a count is; it is read as per second, the higher reading and the Gemini API's unit for the same amounts. Sent with generateAudio false (the node has no audio choice), so the Video row.",
+          "sources": [
+            {
+              "url": "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing",
+              "quote": "Veo 3.1 Lite ... Video generation ... Video 720p $0.03 / 1 count 1080p $0.05 / 1 count"
+            },
+            {
+              "url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/veo/3-1-generate",
+              "quote": "veo-3.1-lite-generate-001 - Launch stage: Preview"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/video/google/veo-3.1-lite (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-video-google-veo-3-fast": {

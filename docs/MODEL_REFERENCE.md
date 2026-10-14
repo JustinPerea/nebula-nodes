@@ -455,7 +455,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `identity-edit` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | GOOGLE_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/nano-banana-2/edit` |
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)*, Prompt (Text)*, Character (Character), Mask (unavailable) (Mask) |
@@ -1071,23 +1071,30 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-google-nano-banana-2-1` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/google/nano-banana-2.1` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
-| Width | float | — | — |
-| Height | float | — | — |
 | Image URLs (JSON) | textarea | — | — |
 | Aspect ratio | enum | — | 4:1, 21:9, 1:1, 4:3, 3:2, 2:3, 5:4, 4:5, … |
 | Resolution | enum | 1K | 1K, 2K, 4K |
 | Thinking level | enum | medium | minimal, medium, high |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Width | float | — | — |
+| Height | float | — | — |
 
 ---
 
@@ -2542,7 +2549,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-google-gemini-omni-flash-1-1` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/google/gemini-omni-flash-1.1` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), Reference images (Image ×n), Reference videos (Video ×n) |
@@ -2616,7 +2623,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-google-veo-3-1` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_VERTEX_CREDENTIALS, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/google/veo-3.1` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image), Reference images (Image ×n) |
@@ -2643,7 +2650,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-google-veo-3-1-fast` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_VERTEX_CREDENTIALS, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/google/veo-3.1-fast` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image), Reference images (Image ×n) |
@@ -2670,7 +2677,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-google-veo-3-1-lite` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_VERTEX_CREDENTIALS, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/google/veo-3.1-lite` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image) |

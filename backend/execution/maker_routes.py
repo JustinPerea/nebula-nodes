@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import copy
 import json
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Any, Awaitable, Callable, Mapping
 
 from execution.missing_credential import MissingCredentialError
@@ -253,9 +253,13 @@ KREA_TRANSLATIONS: dict[str, tuple[Handler, Callable[[str], Translate]]] = {
 }
 
 
-def krea_router(definition_id: str, fallback: Handler) -> Handler | None:
+def krea_router(definition_id: str, fallback: Handler, emit: Any = None) -> Handler | None:
     """The dual-route handler for a generated Krea node with a maker route, or
-    None when it has none (it stays on the Krea gateway alone)."""
+    None when it has none (it stays on the Krea gateway alone). A direct
+    handler marked ``takes_emit`` (a long video job) gets the run's progress
+    ``emit``."""
+    from execution import maker_routes_google  # noqa: F401  (adds its translations)
+
     definition = _definitions().get(definition_id) or {}
     spec = definition.get("directRoute")
     if not isinstance(spec, Mapping) or not node_route.direct_keys(definition):
@@ -264,4 +268,6 @@ def krea_router(definition_id: str, fallback: Handler) -> Handler | None:
     if translation is None:
         raise ValueError(f"{definition_id}: unknown direct translation {spec.get('translation')!r}")
     direct, make_translate = translation
+    if emit is not None and getattr(direct, "takes_emit", False):
+        direct = partial(direct, emit=emit)
     return dual_route(direct=direct, fallback=fallback, translate=make_translate(str(spec.get("model"))))

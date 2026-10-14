@@ -446,6 +446,147 @@
         "provider": "google",
         "key": "GOOGLE_API_KEY"
       }
+    },
+    {
+      "name": "Veo 3.1 Fast's Krea copy runs on Vertex at 1080p",
+      "nodeId": "krea-video-google-veo-3-1-fast",
+      "params": {
+        "_kreaAuth": "api-token",
+        "resolution": "1080p"
+      },
+      "apiKeys": {
+        "GOOGLE_VERTEX_CREDENTIALS": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_VERTEX_CREDENTIALS"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "duration",
+        "end_image",
+        "generate_audio",
+        "prompt",
+        "reference_images",
+        "resolution",
+        "start_image"
+      ]
+    },
+    {
+      "name": "Veo 3.1 Fast at 4K stays on Krea (Vertex renders Fast at 720p and 1080p)",
+      "nodeId": "krea-video-google-veo-3-1-fast",
+      "params": {
+        "_kreaAuth": "api-token",
+        "resolution": "4K"
+      },
+      "apiKeys": {
+        "GOOGLE_VERTEX_CREDENTIALS": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "Veo 3.1 at 4K runs on Vertex (Standard renders 4K)",
+      "nodeId": "krea-video-google-veo-3-1",
+      "params": {
+        "resolution": "4K"
+      },
+      "apiKeys": {
+        "GOOGLE_VERTEX_CREDENTIALS": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_VERTEX_CREDENTIALS"
+      }
+    },
+    {
+      "name": "a Gemini API key alone doesn't move Krea's Veo off Krea",
+      "nodeId": "krea-video-google-veo-3-1-lite",
+      "params": {},
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "Gemini Omni Flash 1.1's Krea copy runs on the Gemini API",
+      "nodeId": "krea-video-google-gemini-omni-flash-1-1",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_API_KEY"
+      }
+    },
+    {
+      "name": "the Krea plan keeps Nano Banana 2.1 on Krea",
+      "nodeId": "krea-image-google-nano-banana-2-1",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Identity Edit runs on Google with a Google key",
+      "nodeId": "identity-edit",
+      "params": {
+        "resolution": "1024"
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_API_KEY"
+      },
+      "paramKeys": [
+        "identity_strength",
+        "resolution",
+        "thinking_level"
+      ]
+    },
+    {
+      "name": "Identity Edit stays on fal without a Google key",
+      "nodeId": "identity-edit",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
     }
   ]
 }

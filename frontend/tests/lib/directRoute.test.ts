@@ -119,6 +119,10 @@ describe('when the direct route can\'t take a run', () => {
     expect(directBlock(reframe, {})).toEqual({ reason: 'requires', param: 'resolution', on: null });
     const kreaPro = NODE_DEFINITIONS['krea-image-google-nano-banana-pro'];
     expect(directBlock(kreaPro, { width: 1024 })).toEqual({ reason: 'blocked', param: 'width', on: null });
+    const veoFast = NODE_DEFINITIONS['krea-video-google-veo-3-1-fast'];
+    expect(directBlock(veoFast, { resolution: '4K' })).toEqual({ reason: 'unsupported', param: 'resolution', on: null });
+    expect(directBlock(veoFast, {})).toBeNull();
+    expect(directBlock(NODE_DEFINITIONS['krea-video-google-veo-3-1'], { resolution: '4K' })).toBeNull();
     const nano = NODE_DEFINITIONS['nano-banana-fal'];
     expect(directBlock(nano, { model: 'nano-banana' })).toBeNull();
     vi.setSystemTime(new Date('2027-03-15T00:30:00'));
