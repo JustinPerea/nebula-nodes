@@ -216,7 +216,8 @@ def test_devserver_drops_shell_credentials_before_any_worker_starts(monkeypatch,
     import devserver
     from services.credential_catalog import CREDENTIAL_PROVIDERS
 
-    assert devserver.INHERITED_CREDENTIAL_ENV_KEYS == CREDENTIAL_PROVIDERS | {"NEBULA_APP_TOKEN", "NEBULA_AGENT_TOKEN"}
+    assert devserver.INHERITED_CREDENTIAL_ENV_KEYS == CREDENTIAL_PROVIDERS | {
+        "NEBULA_APP_TOKEN", "NEBULA_APP_TOKEN_FILE", "NEBULA_AGENT_TOKEN", "NEBULA_AGENT_TOKEN_FILE"}
     for name in devserver.INHERITED_CREDENTIAL_ENV_KEYS:  # restored after the test
         monkeypatch.setenv(name, f"shell-fixture-{name}")
     monkeypatch.setenv("ANTHROPIC_DEFAULT_SONNET_MODEL", "kept-fixture")

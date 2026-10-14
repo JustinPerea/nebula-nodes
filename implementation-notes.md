@@ -3132,6 +3132,19 @@ Tradeoffs and surprises:
     agents get their token through env, not a file. ACP personal agents read their file through their own MCP
     server, which isn't under these rules. Test: `test_token_file_folders_are_protected` (direct path and a
     symlink alias). Mutation-checked by removing the two entries.
-  - *Not fixed, noted:* after a failed load, a later `create()` or limit change still saves the empty list plus the
-    change over `app-tokens.json`, which drops the other apps. That predates this branch and is a separate fix
-    (refuse writes while the load has failed).
+  - *A new app could write over an unreadable store (fixed after review).* After a failed load, `create()` saved
+    the one new app over `app-tokens.json`, dropping every other app, and the next startup then swept their token
+    files. It predates this branch, but token files made it worse, so it's fixed here. `create()` now refuses
+    ("won't write over it") while the load has failed. Limit, color and revoke already couldn't save: they find no
+    app in the empty list. A failed load is also retried on the next call, so a store that's put right works
+    without a restart. Test: `test_a_new_app_never_writes_over_a_store_that_cant_be_read` (all three damage
+    kinds). Mutation-checked by removing the refusal and the retry (each fails all three).
+- **The backend's own environment drops the token-file variables too.** devserver.py and the desktop sidecar
+  already dropped an inherited `NEBULA_APP_TOKEN` / `NEBULA_AGENT_TOKEN` ("the backend must not run as either"),
+  but not `NEBULA_APP_TOKEN_FILE` or #43's `NEBULA_AGENT_TOKEN_FILE`. Both now drop all four
+  (`devserver.SPENDING_TOKEN_ENV_KEYS`, sidecar `INHERITED_CREDENTIAL_ENV_KEYS`). `child_env` keeps stripping
+  `NEBULA_APP_TOKEN_FILE` from every child; it leaves `NEBULA_AGENT_TOKEN(_FILE)` alone because the in-app chats
+  and ACP sessions set those for their own MCP servers on purpose. Tests: `test_person_session` (the set) and
+  the sidecar test that sets all four from a shell (fails with the old list).
+- **Left for later:** the `nebula` CLI's own commands still read only `NEBULA_APP_TOKEN`, not the file. Connect
+  only sets up the MCP server, so nothing needs it yet.

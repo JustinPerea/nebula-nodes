@@ -98,8 +98,11 @@ class AppTokens:
         self._load_failed = False
 
     def _load(self) -> list[dict[str, Any]]:
-        if self._apps is None:
+        # A store that failed to load is read again on the next call, so a
+        # file put right takes effect without a restart.
+        if self._apps is None or self._load_failed:
             self._apps = []
+            self._load_failed = False
             if self._path is not None and self._path.exists():
                 try:
                     data = json.loads(self._path.read_text(encoding="utf-8"))
@@ -146,6 +149,10 @@ class AppTokens:
         token = TOKEN_PREFIX + secrets.token_urlsafe(32)
         with self._lock:
             apps = self._load()
+            if self._load_failed:
+                # Saving now would write this one app over every other.
+                raise AppTokenError("Nebula couldn't read its list of connected apps (app-tokens.json in its "
+                                    "state folder), so it won't write over it. Fix or move that file, then try again.")
             if len(apps) >= MAX_APPS:
                 raise AppTokenError(f"at most {MAX_APPS} connected apps; revoke one first")
             app = {"id": secrets.token_hex(6), "name": name, "hash": _hash(token), "dailyUsd": limit,

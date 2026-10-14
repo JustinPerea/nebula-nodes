@@ -271,6 +271,39 @@ def test_startup_keeps_every_file_when_the_store_cant_be_read(tmp_path, damage):
     assert app_token_file.read(readable.token_file(first["id"])) == token
 
 
+@pytest.mark.parametrize("damage", ["unreadable", "corrupt", "wrong shape"])
+def test_a_new_app_never_writes_over_a_store_that_cant_be_read(tmp_path, damage):
+    # The empty list a failed load leaves is "unknown", not "no apps": saving
+    # one new app over it would drop every other, and the next startup would
+    # then sweep their token files.
+    store_path = tmp_path / "app-tokens.json"
+    first, token = app_tokens.AppTokens(store_path, token_dir=tmp_path).create("First")
+    original = store_path.read_text()
+    base = app_token_file.root(tmp_path)
+    before = sorted(p.name for p in base.iterdir())
+    if damage == "unreadable":
+        store_path.chmod(0)
+    elif damage == "corrupt":
+        store_path.write_text("{not json")
+    else:
+        store_path.write_text('{"apps": {"x": 1}}')
+    damaged = store_path.read_bytes() if damage != "unreadable" else None
+    store = app_tokens.AppTokens(store_path, token_dir=tmp_path)
+    try:
+        with pytest.raises(app_tokens.AppTokenError, match="won't write over it"):
+            store.create("Second")
+    finally:
+        store_path.chmod(0o600)
+    if damaged is not None:
+        assert store_path.read_bytes() == damaged
+    assert sorted(p.name for p in base.iterdir()) == before
+    # Put right, the same store reads it again: no restart needed.
+    store_path.write_text(original)
+    assert store.lookup(token)["id"] == first["id"]
+    second, _ = store.create("Second")
+    assert [app["id"] for app in store.list()] == [first["id"], second["id"]]
+
+
 def test_the_startup_sweep_never_follows_a_symlinked_folder(tmp_path):
     victim = tmp_path / "victim"
     victim.mkdir()
