@@ -631,6 +631,97 @@
         "quality",
         "resolution"
       ]
+    },
+    {
+      "name": "GPT Image 2's fal Portrait 16:9 preset stays on fal",
+      "nodeId": "gpt-image-2-fal-generate",
+      "params": {
+        "image_size": "portrait_16_9"
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "GPT Image 2's fal Square preset stays on fal",
+      "nodeId": "gpt-image-2-fal-edit",
+      "params": {
+        "image_size": "square"
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "GPT Image 2's fal Square HD preset runs on OpenAI",
+      "nodeId": "gpt-image-2-fal-edit",
+      "params": {
+        "image_size": "square_hd"
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "openai",
+        "key": "OPENAI_API_KEY"
+      }
+    },
+    {
+      "name": "GPT Image 1.5 stays on fal without the OpenAI key",
+      "nodeId": "gpt-image-1-5-edit",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "Krea's GPT Image 2 stays on the Krea token without the OpenAI key",
+      "nodeId": "krea-image-openai-gpt-image-2",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "the Krea plan wins over the OpenAI key on GPT Image 2",
+      "nodeId": "krea-image-openai-gpt-image-2",
+      "params": {
+        "_kreaAuth": "mcp",
+        "aspect_ratio": "16:9"
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
     }
   ]
 }
