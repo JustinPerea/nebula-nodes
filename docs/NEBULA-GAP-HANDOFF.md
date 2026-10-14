@@ -49,5 +49,5 @@ Start by proposing a short implementation plan for #1 and #2, then implement.
 
 - Flora catalog size at audit: ~369 models
 - Nebula nodes: 142 in `node_definitions.json`
-- Caveats already documented: `nano-banana` enum covers Pro; `runway-video` covers Seedance 2.0 / Happy Horse / Gen-4.5; MiniMax covers Hailuo 2.3; `veo-3` is Veo 3.1
+- Caveats already documented: `nano-banana` enum covers Pro; `runway-video` covers Seedance 2.0 (+ Fast, Mini) / Seedance 2.5 / Happy Horse / Gen-4.5 / Veo 3.1; `runway-image` covers Seedream 5.0 Pro / Lite (Runway reseller route); MiniMax covers Hailuo 2.3; `veo-3` is Veo 3.1
 - Nari work is actively using Flora multi-ref (is2i) + will use Enhancor + lipsync later — those gaps are real product pressure, not theoretical

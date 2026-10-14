@@ -197,7 +197,6 @@ EXPECTED_ROLES: dict[str, dict[str, str]] = {
     "minimax-i2v": {"first_frame_image": "subject"},
     "seedance-v1-5": {"image": "subject"},
     "seedance-2-i2v": {"image": "subject"},
-    "sora-2-i2v": {"image": "subject"},
 }
 
 # Mask ports (and any other non-reference ports) must never receive a role.

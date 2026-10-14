@@ -49,7 +49,6 @@ The source of truth for this routing is `backend/execution/sync_runner.py`. Each
 | `kling-v2-1` | `fal-ai/kling-video/v2.1/pro/image-to-video` | Image-to-Video | [`skills/fal-ai__kling-video__v2.1__master__text-to-video.md`](skills/fal-ai__kling-video__v2.1__master__text-to-video.md) |
 | `kling-v3` | `fal-ai/kling-video/v3/standard/text-to-video` | Text-to-Video | [`skills/fal-ai__kling-video__v3__standard__text-to-video.md`](skills/fal-ai__kling-video__v3__standard__text-to-video.md) |
 | `kling-o3` | `fal-ai/kling-video/o3/standard/image-to-video` | Image-to-Video | [`skills/fal-ai__kling-video__o3__pro__image-to-video.md`](skills/fal-ai__kling-video__o3__pro__image-to-video.md) |
-| `sora-2` | `fal-ai/sora-2/text-to-video` (standard) or `.../pro` (when `model=pro`) | Text-to-Video | [`skills/fal-ai__sora-2__text-to-video.md`](skills/fal-ai__sora-2__text-to-video.md), [`skills/fal-ai__sora-2__text-to-video__pro.md`](skills/fal-ai__sora-2__text-to-video__pro.md) |
 | `veo-3` | `fal-ai/veo3` | Text-to-Video | [`skills/fal-ai__veo3.md`](skills/fal-ai__veo3.md) |
 | `wan-2-6-t2v` | `wan/v2.6/text-to-video` | Text-to-Video | [`skills/wan__v2.6__text-to-video.md`](skills/wan__v2.6__text-to-video.md) |
 | `wan-2-6-i2v` | `wan/v2.6/image-to-video` | Image-to-Video | [`skills/wan__v2.6__image-to-video.md`](skills/wan__v2.6__image-to-video.md) |
@@ -115,7 +114,7 @@ FAL doesn't publish public rate-limit numbers. Empirically:
 The bundle's skill files each have a "Prompting best practices" section. High-leverage universal patterns across FAL models:
 
 1. **Narrative > keyword soup** — full prose descriptions beat comma-separated tags on every FAL image model (Flux, Nano Banana, Imagen, Recraft, Seedream, Ideogram).
-2. **Quote dialogue in video prompts** — Veo, Sora 2, Kling all parse quoted strings as speech. SFX as plain text.
+2. **Quote dialogue in video prompts** — Veo and Kling parse quoted strings as speech. SFX as plain text.
 3. **Specify camera terms explicitly** — "dolly," "pan," "POV," "tracking shot," "extreme close-up" work across Veo 3.1, Kling v3, Seedance 2.
 4. **Put reference images first** in multi-image prompts — most models prioritize the first reference.
 5. **Seeds are reproducibility, not style-transfer** — fixing a seed preserves a generation, not a style. For style transfer use model-specific `image_prompt` or `reference_image_urls` params.

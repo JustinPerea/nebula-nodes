@@ -7,10 +7,17 @@ import httpx
 
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
-from services.output import get_run_dir, save_base64_image
+from services.output import get_run_dir, portable_output_ref, save_base64_image
 from execution.missing_credential import MissingCredentialError
+from services.retired_nodes import GPT_IMAGE_1_SHUTDOWN, default_until
+from handlers.openai_image import check_background
 
 OPENAI_IMAGE_EDIT_URL = "https://api.openai.com/v1/images/edits"
+# gpt-image-1 shuts down 2026-10-23; OpenAI names gpt-image-2.5-sunburst or
+# -flare as the replacement and recommends Sunburst "for workflows where editing
+# precision matters most" (https://developers.openai.com/api/docs/deprecations,
+# .../guides/image-generation, checked 2026-10-14).
+DEFAULT_MODEL = "gpt-image-2.5-sunburst"
 
 
 def _resolve_image_bytes(value: Any) -> bytes:
@@ -39,6 +46,8 @@ async def handle_openai_image_edit(
     if not api_key:
         raise MissingCredentialError("OPENAI_API_KEY is required")
 
+    check_background(node.params)
+
     # --- resolve image bytes ---
     image_bytes = _resolve_image_bytes(image_input.value)
 
@@ -50,7 +59,8 @@ async def handle_openai_image_edit(
 
     # --- build multipart form data ---
     prompt_text = str(prompt_input.value)
-    model = node.params.get("model", "gpt-image-1")
+    # A node with no stored model keeps gpt-image-1 until it shuts down.
+    model = node.params.get("model") or default_until(GPT_IMAGE_1_SHUTDOWN, "gpt-image-1", DEFAULT_MODEL)
 
     files: list[tuple[str, Any]] = [
         ("image", ("image.png", image_bytes, "image/png")),
@@ -94,7 +104,9 @@ async def handle_openai_image_edit(
         response.raise_for_status()
 
     data = response.json()
-    b64_data = data["data"][0]["b64_json"]
+    images = [item["b64_json"] for item in data.get("data") or [] if isinstance(item, dict) and item.get("b64_json")]
+    if not images:
+        raise RuntimeError(f"OpenAI returned no image: {str(data)[:300]}")
 
     # Match the saved file extension to the format the API returns.
     # output_format controls the actual bytes returned, so jpeg/webp requests
@@ -102,11 +114,16 @@ async def handle_openai_image_edit(
     extension = output_format if output_format in ("png", "jpeg", "webp") else "png"
 
     run_dir = get_run_dir()
-    file_path = save_base64_image(b64_data, run_dir, extension=extension)
+    # Count (n) asks for several edits; every one is kept, the first on "image".
+    paths = [str(save_base64_image(b64, run_dir, extension=extension)) for b64 in images]
 
     return {
         "image": {
             "type": "Image",
-            "value": str(file_path),
-        }
+            "value": paths[0],
+        },
+        "images": {
+            "type": "Array",
+            "value": [portable_output_ref(path, require_file=True) for path in paths],
+        },
     }

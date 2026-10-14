@@ -1,6 +1,8 @@
 # FAL (fal.ai) in Nebula Nodes
 
-> FAL is Nebula's all-purpose generation gateway: one API key unlocks dozens of top image, video, and 3D models — FLUX, Sora 2, Kling, Seedance, Luma, Wan, Recraft, Ideogram, Hunyuan3D, Meshy, GPT Image, and more — that you wire together on the canvas.
+> FAL is Nebula's all-purpose generation gateway: one API key unlocks dozens of top image, video, and 3D models — FLUX, Kling, Seedance, Luma, Wan, Recraft, Ideogram, Hunyuan3D, Meshy, GPT Image, and more — that you wire together on the canvas.
+
+> **Sora 2:** Retired 2026-10-14: OpenAI shut down the Sora 2 API on 2026-09-24 (no one-to-one replacement), and fal's endpoints ran on it. Saved `sora-2` / `sora-2-i2v` nodes load as `veo-3` on Veo 3.1 Fast (Sora 2 Pro → Veo 3.1), titled "Veo 3.1 Fast (was Sora 2)"; `grok-imagine-video` and `runway-video` are the other choices.
 
 ## What you can make
 
@@ -10,7 +12,7 @@ FAL is a *universal gateway* — a single provider that proxies many different d
 - **Vector art (SVG):** true scalable vector graphics from a text prompt with Recraft V4 SVG — logos, icons, flat illustrations.
 - **Image editing / reference images:** edit or remix existing images with FLUX Kontext, GPT Image 1.5 Edit, and GPT Image 2 Edit (feed one or more reference images + an instruction).
 - **Image editing — inpaint / outpaint (mask-based):** edit only the masked region of an image with FLUX Fill (Inpaint) — feed an image, a mask (white = the region to edit), and a prompt; inpaint to replace objects in a frame or outpaint to extend its borders, while unmasked regions stay untouched.
-- **Video — from text:** Sora 2 (sunsets 2026-09-24 — see the node table), Kling V3, Wan 2.6 T2V, Luma Ray 2, PixVerse V4.5, Seedance 2.0 (+ Fast).
+- **Video — from text:** Kling V3, Wan 2.6 T2V, Luma Ray 2, PixVerse V4.5, Seedance 2.0 (+ Fast).
 - **Video — from a still image:** animate a photo with Kling v2.1, Kling Omni 3, Luma Ray 2 I2V, Wan 2.6 I2V, LTX Video 2, LTX 2.3, Seedance V1.5 Pro, Seedance 2.0 I2V (+ Fast). Many support a start frame *and* an end frame.
 - **Video — from reference clips/images:** drive a new video off reference footage with Wan 2.6 R2V (up to 3 reference videos) and Seedance 2.0 R2V (reference image set).
 - **Video — modify existing video:** restyle/edit a clip you already have with Luma Ray 2 Flash Modify.
@@ -31,7 +33,6 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 | FLUX 1.1 Ultra | `flux-1-1-ultra` | image-gen | prompt, image | *(defaults only)* | High-end photoreal stills |
 | FAL | `fal-universal` | universal | prompt, image | `endpoint_id` | Power-user escape hatch: paste any `fal-ai/...` slug to reach a model Nebula has no dedicated node for |
 | Kling v2.1 | `kling-v2-1` | video-gen | image, prompt, tail_image | `duration`, `negative_prompt`, `cfg_scale` | Animate a photo (with optional end frame) |
-| Sora 2 (sunsets Sep '26) | `sora-2` | video-gen | prompt | `resolution`, `aspect_ratio`, `duration` | Text-to-video, OpenAI Sora 2. **Sunset warning:** OpenAI announced (2026-03-24) the Videos API + sora-2/sora-2-pro shut down 2026-09-24; the FAL endpoints proxy OpenAI, so this node dies then too |
 | FLUX Schnell | `flux-schnell` | image-gen | prompt | `image_size`, `num_inference_steps`, `guidance_scale`, `num_images`, `output_format`, `acceleration`, `enable_safety_checker`, `seed` | Fast, cheap image drafts |
 | Fast SDXL | `fast-sdxl` | image-gen | prompt | `image_size`, `num_images`, `num_inference_steps`, `guidance_scale`, `negative_prompt`, `expand_prompt`, `loras`, `embeddings`, `format`, `enable_safety_checker`, `safety_checker_version`, `seed` | SDXL with LoRA/embedding support |
 | Wan 2.6 T2V | `wan-2-6-t2v` | video-gen | prompt | `duration`, `resolution`, `aspect_ratio`, `negative_prompt`, `seed`, `generate_audio`, `enable_prompt_expansion`, `multi_shots`, `enable_safety_checker` | Text-to-video with optional audio |
@@ -83,7 +84,7 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 
 ## How to use it in Nebula
 
-**Where the nodes appear.** Open the node palette on the canvas and browse by category. FAL nodes are spread across **Image**, **Video**, **3D**, and **Transform** groups — they look like any other model node (e.g. "Sora 2", "FLUX 1.1 Ultra", "Remove Background"). There is no separate "FAL" section; the gateway is invisible unless you reach for the catch-all **FAL** node (`fal-universal`), which lives under the **Universal** group and lets you type a raw `fal-ai/...` endpoint slug.
+**Where the nodes appear.** Open the node palette on the canvas and browse by category. FAL nodes are spread across **Image**, **Video**, **3D**, and **Transform** groups — they look like any other model node (e.g. "Kling V3", "FLUX 1.1 Ultra", "Remove Background"). There is no separate "FAL" section; the gateway is invisible unless you reach for the catch-all **FAL** node (`fal-universal`), which lives under the **Universal** group and lets you type a raw `fal-ai/...` endpoint slug.
 
 **API-key setup (one time).** All FAL nodes authenticate with a single key:
 
@@ -132,7 +133,7 @@ FAL is a gateway, so "the API surface" here means *capabilities* — auth, the c
 | **Image — background removal** | Yes | **full** | `remove-background` (`imageutils/rembg`). |
 | **Image — upscaling** | Yes | **partial** | Two image upscalers exposed: `seedvr2-upscale` (faithful) and `clarity-upscaler` (creative/added detail); FAL has more (ESRGAN, etc.). |
 | **Video — upscaling / restoration** | Yes | **partial** | `seedvr-video-upscale` (`fal-ai/seedvr/upscale/video`, ByteDance SeedVR2 — one-step, temporally-consistent upscale to up to 4K); FAL hosts other video upscalers/restorers that remain unwired. |
-| **Video — text-to-video** | Yes | **full** | Sora 2 (until its 2026-09-24 sunset), Kling V3, Wan 2.6, Luma Ray 2, PixVerse, Seedance 2.0 (+ Fast). |
+| **Video — text-to-video** | Yes | **full** | Kling V3, Wan 2.6, Luma Ray 2, PixVerse, Seedance 2.0 (+ Fast). |
 | **Video — image-to-video** | Yes | **full** | Kling v2.1/Omni 3, Luma Ray 2 I2V, Wan 2.6 I2V, LTX 2 / 2.3, Seedance V1.5 / 2.0. |
 | **Video — reference-to-video** | Yes | **full** | Wan 2.6 R2V, Seedance 2.0 R2V. |
 | **Video — video-to-video / modify** | Yes | **partial** | Only Luma Ray 2 Flash Modify; FAL has many v2v / video-edit models. |

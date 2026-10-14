@@ -14,8 +14,8 @@ Two-stage workflow: **preview** creates a base mesh without texture, then **refi
 |---|---|---|---|---|
 | `mode` | string | ✅ | — | Must be `"preview"` |
 | `prompt` | string | ✅ | — | Max **600 characters**. Noun-phrase style works best ("a monster mask", "a futuristic robot warrior") |
-| `ai_model` | string | | `"latest"` | `"meshy-5"`, `"meshy-6"`, or `"latest"` (= Meshy 6). Meshy 6 is the default and best quality |
-| `model_type` | string | | `"standard"` | `"standard"` (high detail) or `"lowpoly"` (optimized polygons). **Lowpoly ignores `ai_model`, `topology`, `target_polycount`, `should_remesh`** |
+| `ai_model` | string | | `"latest"` | `"latest"` (= `meshy-7.1`), `"meshy-7.1"`, `"meshy-7"` (deprecated, superseded by 7.1), `"meshy-6"` (previous generation), `"meshy-6-lite"` (cheapest, 5 credits), `"meshy-t2"` (only with `model_type: "smart-topology"`). 7/7.1/T2 need account entitlement. `meshy-5` is no longer accepted (openapi.yaml, checked 2026-10-14) |
+| `model_type` | string | | `"standard"` | `"standard"` (high detail), `"smart-topology"` (Meshy T2: clean triangles at a face count you choose, 100–15,000, no quad) or `"lowpoly"`. **`lowpoly` is deprecated and retires 2026-10-30; after that it returns an error.** Use `smart-topology` + `meshy-t2` instead |
 | `should_remesh` | boolean | | `false` on meshy-6; `true` on others | When `false`, returns the highest-precision triangular mesh. Turn on for quad topology or polycount control |
 | `topology` | string | | `"triangle"` | `"quad"` or `"triangle"`. Only applied when `should_remesh=true` |
 | `target_polycount` | integer | | `30000` | Range **100–300,000**. Actual count may deviate based on geometry |
@@ -85,8 +85,8 @@ One-stage workflow. Single reference image → textured 3D model.
 | Param | Type | Required | Default | Notes |
 |---|---|---|---|---|
 | `image_url` | string | ✅ | — | Public URL OR base64 data URI. Formats: `.jpg`, `.jpeg`, `.png`. Example: `data:image/jpeg;base64,<data>` |
-| `ai_model` | string | | `"latest"` | `"meshy-5"`, `"meshy-6"`, `"latest"` |
-| `model_type` | string | | `"standard"` | `"standard"` or `"lowpoly"` |
+| `ai_model` | string | | `"latest"` | Same values as text-to-3d: `latest` (= `meshy-7.1`), `meshy-7.1`, `meshy-7`, `meshy-6`, `meshy-6-lite`, `meshy-t2` |
+| `model_type` | string | | `"standard"` | `"standard"`, `"smart-topology"` (Meshy T2) or `"lowpoly"` (retires 2026-10-30) |
 | `should_texture` | boolean | | `true` | Skip texture phase with `false` — returns mesh only |
 | `enable_pbr` | boolean | | `false` | Metallic + roughness + normal maps |
 | `texture_prompt` | string | | — | Max 800 chars (docs.meshy.ai, checked 2026-10-14; fal's copy caps it at 600). Guide texture with text. Costs 10 additional credits. In Nebula `meshy-image-to-3d` sends it on both routes |
@@ -98,8 +98,8 @@ One-stage workflow. Single reference image → textured 3D model.
 | `save_pre_remeshed_model` | boolean | | `false` | Also return the GLB before remeshing (useful for comparison) |
 | `symmetry_mode` | string | | `"auto"` | `"off"`, `"auto"`, `"on"` |
 | `pose_mode` | string | | `""` | `"a-pose"` or `"t-pose"` |
-| `image_enhancement` | boolean | | `true` | Optimizes input image. Set `false` to preserve exact input appearance. **`meshy-6`/`latest` only** |
-| `remove_lighting` | boolean | | `true` | **`meshy-6`/`latest` only** |
+| `image_enhancement` | boolean | | `true` | Optimizes input image. Set `false` to preserve exact input appearance. **Not supported under `smart-topology`** |
+| `remove_lighting` | boolean | | `true` | **Not supported under `smart-topology`** |
 | `moderation` | boolean | | `false` | Screens `image_url`, `texture_image_url`, `texture_prompt` |
 | `target_formats` | string[] | | all except `3mf` | Limit to what you need |
 | `auto_size` | boolean | | `false` | |
@@ -107,7 +107,11 @@ One-stage workflow. Single reference image → textured 3D model.
 
 **Deprecated**: `is_a_t_pose` (use `pose_mode`).
 
-**Lowpoly caveat:** when `model_type="lowpoly"`, these are IGNORED: `ai_model`, `topology`, `target_polycount`, `should_remesh`, `save_pre_remeshed_model`.
+**Lowpoly caveat:** `model_type="lowpoly"` retires 2026-10-30. Until then it ignores `ai_model`, `topology`, `target_polycount`, `should_remesh`, `save_pre_remeshed_model`. Nebula moves saved lowpoly nodes to `smart-topology` from that date (`backend/services/retired_nodes.py`).
+
+**Smart topology:** the direct handler sends `ai_model: "meshy-t2"` and drops `image_enhancement`/`remove_lighting`; it refuses `topology: "quad"` and `target_polycount` above 15,000 before calling Meshy. The fal fallback (`fal-ai/meshy/v6/text-to-3d`, same limits) is checked the same way before it bills.
+
+**Seed:** `meshy-text-to-3d` sends `seed` on the preview request on both routes (Meshy's TextTo3DRequest has it; image-to-3d and multi-image-to-3d don't, so there it stays fal-only). **Meshy 6 Lite** makes 2K textures only, so the handlers refuse it with `hd_texture: true`.
 
 **PBR dependency:** `enable_pbr=true` requires `should_texture=true`. The API returns 400 otherwise.
 
@@ -146,18 +150,18 @@ Meshy's official prompting advice is sparse. What's confirmed:
 2. **Noun-phrase descriptions** work well — `"a monster mask"`, `"a futuristic robot warrior"`.
 3. **Describe materials separately in `texture_prompt`** when you want precise surface detail. E.g. preview prompt: `"a medieval shield"`. Texture prompt: `"weathered iron rim, dark cracked leather center, tarnished bronze boss"`.
 4. **For character rigging later**, use `pose_mode: "a-pose"` or `"t-pose"` — cleaner topology around limbs = better rig.
-5. **`ai_model: meshy-6`** produces the best quality. Use `meshy-5` only if you specifically want the older aesthetic or you're cost-sensitive.
+5. **`ai_model: latest`** (Meshy 7.1) is the newest. Use `meshy-6` for the previous generation and `meshy-6-lite` for the cheapest mesh (5 credits, 2k textures only).
 6. **Don't ask for text in the mesh.** Meshy doesn't render legible glyphs on 3D surfaces — use retexture with a `texture_image_url` that already has the text baked in.
 7. **Use `should_texture: false` for quick iterations** on silhouette/form. Once the geometry is right, run a retexture pass.
-8. **For 3D printing**, prefer `model_type: "lowpoly"` or set `target_polycount` near your slicer's comfort zone (often ~50k).
+8. **For 3D printing**, set `target_polycount` near your slicer's comfort zone (often ~50k). For a clean low-poly mesh use `model_type: "smart-topology"` (up to 15,000 triangles).
 
 ## Common failure modes
 
-- **`400 — insufficient credits`:** check balance; Meshy 6 is ~4× more expensive than Meshy 5
+- **`400 — insufficient credits`:** check balance (`GET /openapi/v1/balance`)
 - **`400 — invalid image format`:** only `.jpg`/`.jpeg`/`.png` accepted for image inputs
 - **`400 — unreachable URL`:** public URLs must be reachable without auth (no signed URLs, no localhost). Use data URIs instead
 - **Geometry mismatch when using `texture_image_url`:** docs warn this happens when geometry and reference image don't align. Regenerate geometry or fall back to `texture_prompt`
-- **Lowpoly with `ai_model` set:** silently ignored — lowpoly doesn't use the AI model selection
+- **`lowpoly` after 2026-10-30:** returns an error. Use `smart-topology`
 
 ## Example calls
 

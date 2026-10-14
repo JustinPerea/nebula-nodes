@@ -85,7 +85,7 @@ from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, model_pricing, node_readiness, node_route, output_preview
 from services.cli_graph import CLIGraph
-from services.retired_nodes import migrate_node, retired_message
+from services.retired_nodes import migrate_node, migrate_param_update, migrate_params, retired_message
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, now as project_now,
@@ -1667,12 +1667,12 @@ def _normalize_execute_nodes(nodes: list[GraphNode]) -> list[GraphNode]:
     """Normalize request-scoped nodes before validation/execution."""
     normalized: list[GraphNode] = []
     for node in nodes:
+        # A canvas opened before a shutdown date and run after it still holds
+        # the retired value; send the replacement (services/retired_nodes.py).
+        params = migrate_params(node.definition_id, node.params)
         if node.definition_id == "image-input":
-            normalized.append(
-                node.model_copy(update={"params": _normalize_image_input_params(node.params)})
-            )
-        else:
-            normalized.append(node)
+            params = _normalize_image_input_params(params)
+        normalized.append(node if params == node.params else node.model_copy(update={"params": params}))
     return normalized
 
 
@@ -3999,7 +3999,8 @@ def _stage_proposal(
         if uses_durable_recovery(definition_id, provider="worldlabs"):
             raise HTTPException(status_code=400, detail=f"World Labs nodes can't be changed by {what}; add a new node instead")
         _validate_params(definition_id, change.params)
-        candidate.update_params(change.node_id, _coerce_params(definition_id, change.params))
+        candidate.update_params(change.node_id, migrate_param_update(
+            definition_id, node.get("params"), _coerce_params(definition_id, change.params)))
     raw_nodes = [
         {
             "tempId": node.ref,
@@ -6577,7 +6578,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=400, detail="params must be an object")
     position = body.get("position")
     _validate_params(definition_id, params)
-    params = _coerce_params(definition_id, params)
+    params = migrate_params(definition_id, _coerce_params(definition_id, params))
     _refuse_agent_krea_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
         _graph_worldlabs_recovery_checkpoints(
@@ -6674,7 +6675,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
             if not isinstance(connect_spec.get(key), str) or not connect_spec[key]:
                 raise HTTPException(status_code=400, detail=f"connect.{key} must be a non-empty string")
     _validate_params(definition_id, params)
-    params = _coerce_params(definition_id, params)
+    params = migrate_params(definition_id, _coerce_params(definition_id, params))
     _refuse_agent_krea_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
         _graph_worldlabs_recovery_checkpoints(
@@ -6925,7 +6926,8 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         if not isinstance(params, dict):
             raise HTTPException(status_code=400, detail="params must be an object")
         _validate_params(node.get("definitionId", ""), params)
-        params = _coerce_params(node.get("definitionId", ""), params)
+        params = migrate_param_update(node.get("definitionId", ""), params_before,
+                                      _coerce_params(node.get("definitionId", ""), params))
         _refuse_agent_krea_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
         _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))

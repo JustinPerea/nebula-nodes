@@ -30,7 +30,7 @@ Sourced from https://ai.google.dev/gemini-api/docs/models (fetched 2026-04-16; i
 | `veo-3.1-fast-generate-preview` | ✅ | | up to 3 | ✅ | ✅ |
 | `veo-3.1-lite-generate-preview` | ✅ | | | | ✅ |
 
-The Gemini API preview ids above retire on 2026-10-22. On **Vertex AI** the GA ids are `veo-3.1-generate-001` and `veo-3.1-fast-generate-001` (retire "Nov 17 2026 or later"); `veo-3.1-lite-generate-001` is a preview there.
+The Gemini API preview ids above shut down on 2026-10-22, and Nebula's `veo-3` node now stores the Vertex ids below (saved preview ids migrate). On **Vertex AI** the GA ids are `veo-3.1-generate-001` and `veo-3.1-fast-generate-001` (retire "Nov 17 2026 or later"); `veo-3.1-lite-generate-001` is a preview there.
 
 | ID | Family | Role |
 |---|---|---|
@@ -47,9 +47,11 @@ The Gemini API preview ids above retire on 2026-10-22. On **Vertex AI** the GA i
 
 | ID | Role |
 |---|---|
-| `gemini-3.1-flash-tts-preview` | Low-latency TTS with expressive tags |
-| `gemini-2.5-flash-preview-tts` | Fast controllable TTS |
-| `gemini-2.5-pro-preview-tts` | High-fidelity for podcast/audiobook |
+| `gemini-3.8-flash-tts` | Flagship-fidelity TTS (Nebula default). Text is a verbatim transcript; put delivery in `speech_metadata.style`. Unary output is WAV |
+| `gemini-3.8-flash-lite-tts` | Cheaper, lower-latency 3.8 TTS; Google's recommended replacement for 3.1 Flash TTS |
+| `gemini-3.1-flash-tts-preview` | Shuts down 2026-11-17 (replacement: 3.8 Flash-Lite TTS) |
+| `gemini-2.5-flash-preview-tts` | Shuts down 2026-11-17 (replacement: 3.8 Flash TTS) |
+| `gemini-2.5-pro-preview-tts` | Shuts down 2026-11-17 (replacement: 3.8 Flash TTS) |
 
 ## Embeddings
 

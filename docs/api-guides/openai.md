@@ -15,10 +15,10 @@
 
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
-| GPT Image 1 | `gpt-image-1-generate` | image-gen | `prompt` (Text) | `model` (gpt-image-1 / gpt-image-1.5 / gpt-image-1-mini), `size`, `quality`, `output_format`, `background` | Text→image with transparent-background support |
+| GPT Image 1 | `gpt-image-1-generate` | image-gen | `prompt` (Text) | `model` (GPT Image 2.5 Flare default / 2.5 Sunburst / gpt-image-1, shutting down 2026-10-23 / gpt-image-1.5 / gpt-image-1-mini), `size`, `quality`, `output_format`, `background` | Text→image with transparent-background support |
 | GPT Image 2 | `gpt-image-2-generate` | image-gen | `prompt` (Text) | `size` (up to `3840x2160` 4K), `quality`, `output_format`, `output_compression`, `moderation` | Highest-detail text→image with streaming previews |
 | GPT Image 2.5 | `gpt-image-2-5-generate` | image-gen | `prompt` (Text) | `model` (Flare / Sunburst), `size` (to 4K, >2560x1440 experimental), `quality` (adds xhigh / max), `background` (transparent needs png/webp), `output_format`, `output_compression`, `moderation` | Newest OpenAI image model, with transparent backgrounds |
-| GPT Image 1 Edit | `gpt-image-1-edit` | image-gen | `image` (Image), `prompt` (Text), `mask` (Mask) | `model`, `n` (1–10), `size`, `quality`, `output_format`, `background` | Edit / inpaint a single image, optional mask |
+| GPT Image 1 Edit | `gpt-image-1-edit` | image-gen | `image` (Image), `prompt` (Text), `mask` (Mask) | `model` (2.5 Sunburst default), `n` (1–10, every image kept on `images`), `size`, `quality`, `output_format`, `background` | Edit / inpaint a single image, optional mask |
 | GPT Image 2 Edit | `gpt-image-2-edit` | image-gen | `images` (Image, multiple ≤10), `prompt` (Text), `mask` (Mask) | `size`, `quality`, `output_format`, `output_compression`, `moderation` | Edit / compose from up to 10 reference images |
 | GPT Image 2.5 Edit | `gpt-image-2-5-edit` | image-gen | `images` (Image, multiple ≤10), `prompt` (Text), `mask` (Mask) | same as GPT Image 2.5 | Edit / compose with GPT Image 2.5 |
 | OpenAI TTS | `openai-tts` | audio-gen | `text` (Text) | `model` (tts-1 / tts-1-hd / gpt-4o-mini-tts), `voice` (13), `speed`, `response_format`, `instructions` | Read text aloud in a chosen voice |

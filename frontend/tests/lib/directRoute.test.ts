@@ -87,10 +87,11 @@ describe('direct routes with more than one key', () => {
     expect(runRouteProvider(veo, { FAL_KEY: 'k' })).toBe('fal');
   });
 
-  it('offers only Veo 3.1 models', () => {
+  it('offers only Veo 3.1 models, by their Vertex IDs', () => {
+    // The Gemini API previews end 2026-10-22; Vertex serves the -001 models.
     const model = veo.directParams?.find((param) => param.key === 'model');
     expect(model?.options?.map((option) => option.value)).toEqual([
-      'veo-3.1-generate-preview', 'veo-3.1-fast-generate-preview', 'veo-3.1-lite-generate-preview',
+      'veo-3.1-generate-001', 'veo-3.1-fast-generate-001', 'veo-3.1-lite-generate-001',
     ]);
   });
 });

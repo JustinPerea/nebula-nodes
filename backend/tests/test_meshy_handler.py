@@ -428,3 +428,178 @@ async def test_poll_meshy_task_treats_canceled_as_terminal_failure() -> None:
             )
 
     mock_client.get.assert_awaited_once()
+
+
+# ---------- smart topology (Meshy T2), the replacement for lowpoly ----------
+
+
+def _mesh_patches(tmp_path):
+    return (
+        patch("services.output.get_run_dir", return_value=tmp_path),
+        patch("services.output.save_mesh_from_url", new_callable=AsyncMock, return_value=tmp_path / "r.glb"),
+        patch("handlers.meshy.asyncio.sleep", new_callable=AsyncMock),
+    )
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_text_to_3d_smart_topology_sends_meshy_t2_and_refine_inherits_it(tmp_path):
+    bodies: list[dict[str, Any]] = []
+
+    def _submit(request, *args, **kwargs):
+        bodies.append(json.loads(request.content))
+        return Response(202, json={"result": f"task-{len(bodies)}"})
+
+    respx.post("https://api.meshy.ai/openapi/v2/text-to-3d").mock(side_effect=_submit)
+    respx.get(url__regex=r"https://api.meshy.ai/openapi/v2/text-to-3d/task-\d").mock(
+        return_value=Response(200, json=_POLL_SUCCEEDED_MESH)
+    )
+    run_dir, save, sleep = _mesh_patches(tmp_path)
+    with run_dir, save, sleep:
+        await handle_meshy_text_to_3d(
+            node=_node("meshy-text-to-3d", {
+                "mode": "full", "model_type": "smart-topology", "ai_model": "latest",
+                "topology": "triangle", "target_polycount": 8000,
+            }),
+            inputs={"prompt": _port("a crate")},
+            api_keys=FAKE_API_KEY,
+        )
+
+    preview, refine = bodies
+    assert preview["model_type"] == "smart-topology"
+    assert preview["ai_model"] == "meshy-t2"
+    assert preview["target_polycount"] == 8000
+    assert refine["mode"] == "refine"
+    assert "ai_model" not in refine
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_image_to_3d_smart_topology_drops_unsupported_image_flags(tmp_path):
+    captured: dict[str, Any] = {}
+
+    def _submit(request, *args, **kwargs):
+        captured.update(json.loads(request.content))
+        return Response(202, json=_SUBMIT_RESP)
+
+    respx.post("https://api.meshy.ai/openapi/v1/image-to-3d").mock(side_effect=_submit)
+    respx.get("https://api.meshy.ai/openapi/v1/image-to-3d/task-abc-123").mock(
+        return_value=Response(200, json=_POLL_SUCCEEDED_MESH)
+    )
+    run_dir, save, sleep = _mesh_patches(tmp_path)
+    with run_dir, save, sleep:
+        await handle_meshy_image_to_3d(
+            node=_node("meshy-image-to-3d", {
+                "model_type": "smart-topology", "ai_model": "meshy-6",
+                "image_enhancement": True, "remove_lighting": True, "target_polycount": 15000,
+            }),
+            inputs={"image": PortValueDict(type="Image", value=_TINY_PNG_DATA_URI)},
+            api_keys=FAKE_API_KEY,
+        )
+
+    assert captured["ai_model"] == "meshy-t2"
+    assert "image_enhancement" not in captured
+    assert "remove_lighting" not in captured
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("params, message", [
+    ({"topology": "quad"}, "triangles only"),
+    ({"target_polycount": 30000}, "at most 15,000"),
+])
+@respx.mock
+async def test_smart_topology_rejects_what_meshy_t2_cannot_make(params, message):
+    route = respx.post("https://api.meshy.ai/openapi/v1/image-to-3d")
+    with pytest.raises(ValueError, match=message):
+        await handle_meshy_image_to_3d(
+            node=_node("meshy-image-to-3d", {"model_type": "smart-topology", **params}),
+            inputs={"image": PortValueDict(type="Image", value=_TINY_PNG_DATA_URI)},
+            api_keys=FAKE_API_KEY,
+        )
+    assert not route.called
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_text_to_3d_forwards_seed_on_the_preview(tmp_path):
+    """Meshy's TextTo3DRequest takes ``seed`` (https://docs.meshy.ai/openapi.yaml); refine doesn't."""
+    bodies: list[dict[str, Any]] = []
+
+    def _submit(request, *args, **kwargs):
+        bodies.append(json.loads(request.content))
+        return Response(202, json={"result": f"task-{len(bodies)}"})
+
+    respx.post("https://api.meshy.ai/openapi/v2/text-to-3d").mock(side_effect=_submit)
+    respx.get(url__regex=r"https://api.meshy.ai/openapi/v2/text-to-3d/task-\d").mock(
+        return_value=Response(200, json=_POLL_SUCCEEDED_MESH)
+    )
+    run_dir, save, sleep = _mesh_patches(tmp_path)
+    with run_dir, save, sleep:
+        await handle_meshy_text_to_3d(
+            node=_node("meshy-text-to-3d", {"mode": "full", "seed": 42}),
+            inputs={"prompt": _port("a crate")},
+            api_keys=FAKE_API_KEY,
+        )
+    preview, refine = bodies
+    assert preview["seed"] == 42
+    assert "seed" not in refine
+
+
+def test_seed_is_offered_on_both_text_to_3d_routes():
+    from services.node_registry import NodeRegistry
+
+    definition = NodeRegistry().get_all()["meshy-text-to-3d"]
+    assert "seed" in {p["key"] for p in definition["sharedParams"]}
+    assert "seed" not in {p["key"] for p in definition.get("falParams") or []}
+
+
+@pytest.mark.parametrize("definition_id, expected", [
+    ("meshy-text-to-3d", ["latest", "meshy-6", "meshy-6-lite", "meshy-7.1"]),
+    ("meshy-image-to-3d", ["latest", "meshy-6", "meshy-6-lite", "meshy-7.1"]),
+    ("meshy-multi-image-to-3d", ["latest", "meshy-6", "meshy-6-lite", "meshy-7.1"]),
+    # Retexture's newest is meshy-7 and it rejects meshy-7.1 (https://docs.meshy.ai/llms.txt).
+    ("meshy-retexture", ["latest", "meshy-6", "meshy-6-lite", "meshy-7"]),
+])
+def test_ai_model_options_follow_meshys_enum_per_endpoint(definition_id, expected):
+    from services.node_registry import NodeRegistry
+
+    definition = NodeRegistry().get_all()[definition_id]
+    params = [p for group in ("params", "directParams") for p in definition.get(group) or []]
+    ai_model = next(p for p in params if p["key"] == "ai_model")
+    assert [o["value"] for o in ai_model["options"]] == expected
+    assert ai_model["default"] == "latest"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_meshy_6_lite_refuses_4k_textures():
+    route = respx.post("https://api.meshy.ai/openapi/v1/image-to-3d")
+    with pytest.raises(ValueError, match="2K textures only"):
+        await handle_meshy_image_to_3d(
+            node=_node("meshy-image-to-3d", {"ai_model": "meshy-6-lite", "hd_texture": True}),
+            inputs={"image": PortValueDict(type="Image", value=_TINY_PNG_DATA_URI)},
+            api_keys=FAKE_API_KEY,
+        )
+    assert not route.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("params, message", [
+    ({"topology": "quad"}, "triangles only"),
+    ({"target_polycount": 30000}, "at most 15,000"),
+])
+async def test_smart_topology_on_the_fal_route_is_checked_before_it_bills(params, message):
+    from execution.sync_runner import get_handler_registry
+
+    async def emit(_event) -> None:
+        pass
+
+    with patch("handlers.fal_universal.handle_fal_universal", new_callable=AsyncMock) as fal, \
+            pytest.raises(ValueError, match=message):
+        handler = get_handler_registry(emit=emit)["meshy-text-to-3d"]
+        await handler(
+            _node("meshy-text-to-3d", {"model_type": "smart-topology", **params}),
+            {"prompt": _port("a crate")},
+            {"FAL_KEY": "fal-test"},
+        )
+    fal.assert_not_called()
