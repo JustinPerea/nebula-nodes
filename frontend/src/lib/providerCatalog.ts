@@ -16,6 +16,9 @@ export interface ProviderKeySpec {
   highlights?: string[];
   /** Said instead of node names when the node list doesn't explain the key. */
   note?: string;
+  /** What to know before getting this key (where it's sold, setup it needs).
+   *  Shown under the key field and in the saved row. */
+  caveat?: string;
 }
 
 export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
@@ -49,6 +52,15 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
     note: 'Workspace spend reporting (enterprise)' },
   { key: 'IDEOGRAM_API_KEY', label: 'Ideogram', placeholder: 'ideogram_...', url: 'https://developer.ideogram.ai', brand: ['Ideogram'] },
   { key: 'WORLDLABS_API_KEY', label: 'World Labs', placeholder: 'wlt_...', url: 'https://platform.worldlabs.ai', brand: ['World Labs'] },
+  // BytePlus Service Specific Terms (Model Services): "The BytePlus Model
+  // Services are not available in the United States." Models need activating
+  // first (404 ModelNotOpen otherwise). docs/api-guides/byteplus.md.
+  { key: 'BYTEPLUS_API_KEY', label: 'BytePlus · ModelArk', placeholder: 'ModelArk API key',
+    url: 'https://ai.byteplus.com/ark/region:ap-southeast-1/apiKey', brand: ['Seedream'],
+    note: 'Seedream on ByteDance\'s own API',
+    caveat: 'BytePlus doesn\'t offer its model services in the United States (BytePlus Service Specific Terms). '
+      + 'Use an Asia Pacific (ap-southeast-1) ModelArk key, and activate each model on the ModelArk console\'s '
+      + 'Model activation page first; Seedance 2.x also needs USD 30 of BytePlus credits before activation.' },
 ];
 
 export const PROVIDER_KEY_SPECS: Readonly<Record<string, ProviderKeySpec>> = Object.fromEntries(

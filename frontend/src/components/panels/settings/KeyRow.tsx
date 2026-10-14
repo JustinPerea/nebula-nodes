@@ -138,6 +138,7 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
               {/* "Saved" needs no more words; a check result explains itself. */}
               {state.status !== 'Saved' && <> {readiness.detail}</>}
             </p>
+            {spec.caveat && <p className="settings-hint">{spec.caveat}</p>}
             {error && <p className="settings-row__error" role="alert">{error}</p>}
           </div>
         )}
@@ -164,6 +165,7 @@ export function KeyRow({ spec, configured }: { spec: ProviderKeySpec; configured
                   aria-label={`${revealed ? 'Hide' : 'Show'} ${spec.label} API key`}>{revealed ? 'Hide' : 'Show'}</button>
               </div>
             )}
+            {spec.caveat && <p className="settings-hint">{spec.caveat}</p>}
             {error && <p className="settings-row__error" role="alert">{error}</p>}
             <div className="settings-row__foot">
               <span className="settings-hint">

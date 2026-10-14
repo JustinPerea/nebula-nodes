@@ -52,13 +52,14 @@ PROVIDER_KEYS = {
     "Google Vertex": "GOOGLE_VERTEX_CREDENTIALS",
     "Higgsfield": "HIGGSFIELD_API_KEY",
     "World Labs": "WORLDLABS_API_KEY",
+    "BytePlus": "BYTEPLUS_API_KEY",
     # Nous has no settings.json key — it resolves an OAuth credential from
     # Hermes auth files via services.nous_auth.load_nous_credential().
 }
 
 ALL_PROVIDERS = list(PROVIDER_KEYS) + ["Nous"]
 # Providers health never probes over HTTP (presence-only or offline-validated).
-NO_HTTP_PROBE = {"Higgsfield", "Google Vertex"}
+NO_HTTP_PROBE = {"Higgsfield", "Google Vertex", "BytePlus"}
 
 ALLOWED_STATUSES = {
     "not_configured",
@@ -211,6 +212,20 @@ async def test_configured_provider_without_safe_probe_is_truthfully_unverified(
     assert result["Higgsfield"]["configured"] is True
     assert result["Higgsfield"]["status"] == "configured_unverified"
     assert "no safe validation probe" in result["Higgsfield"]["detail"]
+    assert log == []
+
+
+@pytest.mark.asyncio
+async def test_byteplus_key_is_never_probed(monkeypatch):
+    # BytePlus documents no free read-only call for a ModelArk API key; any
+    # data-plane call is a generation, so the key stays unverified.
+    _set_keys(monkeypatch, {"BYTEPLUS_API_KEY": "test-key"})
+    log = _install_client(monkeypatch, lambda url, headers: _FakeResponse(200))
+
+    result = await settings_service.validate_provider_keys()
+
+    assert result["BytePlus"]["configured"] is True
+    assert result["BytePlus"]["status"] == "configured_unverified"
     assert log == []
 
 
