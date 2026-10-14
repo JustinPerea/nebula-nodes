@@ -1,26 +1,16 @@
 import type { ModelNodeDefinition, ParamDefinition, ParamOption } from '../types';
-import { configuredDirectKey } from './directRoute';
+import { routeParamDefinitions, selectRoute } from './directRoute';
 import { withNewKreaMode, type KreaConnectionMode } from './kreaConnection';
 
+/** The params Create shows for the route this run would take (lib/directRoute.ts):
+ * the maker's own on a maker key, the fal or Krea copy's otherwise, and Krea's
+ * when the recipe bills the Krea plan. */
 export function resolveCreateParamDefinitions(
   def: ModelNodeDefinition,
   apiKeys: Record<string, string> = {},
+  params: Record<string, unknown> = {},
 ): ParamDefinition[] {
-  if (!def.sharedParams) return def.params;
-
-  const useDirectRoute = Boolean(configuredDirectKey(def, apiKeys));
-  const routeParams = useDirectRoute
-    ? (def.directParams ?? [])
-    : (def.falParams ?? []);
-
-  // Route selection should already make keys unique. Keep this defensive
-  // boundary so malformed catalog data can never create duplicate React
-  // controls or ambiguous request values in Create.
-  const byKey = new Map<string, ParamDefinition>();
-  for (const param of [...def.sharedParams, ...routeParams]) {
-    byKey.set(param.key, param);
-  }
-  return [...byKey.values()];
+  return routeParamDefinitions(def, selectRoute(def, params, apiKeys).kind);
 }
 
 export function matchesVisibleWhen(
@@ -39,7 +29,7 @@ export function deriveVisibleParams(
   params: Record<string, unknown>,
   apiKeys: Record<string, string> = {},
 ): ParamDefinition[] {
-  const sources = resolveCreateParamDefinitions(def, apiKeys);
+  const sources = resolveCreateParamDefinitions(def, apiKeys, params);
   const effectiveValues = Object.fromEntries(sources.map((p) => [p.key, params[p.key] ?? p.default]));
   return sources
     .filter((p) => !p.hidden)
@@ -56,7 +46,7 @@ export function buildDefaultParamsForUi(
   kreaConnectionMode: KreaConnectionMode = 'api-token',
 ): Record<string, unknown> {
   const defaults: Record<string, unknown> = {};
-  const sources = resolveCreateParamDefinitions(def, apiKeys);
+  const sources = resolveCreateParamDefinitions(def, apiKeys, withNewKreaMode(def, {}, kreaConnectionMode));
   for (const p of sources) {
     if (p.default !== undefined) defaults[p.key] = p.default;
   }

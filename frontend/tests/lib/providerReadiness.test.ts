@@ -140,6 +140,29 @@ describe('provider readiness without generation', () => {
     });
   });
 
+  it.each([
+    ['nano-banana-fal', 'fal.ai', 'FAL key', 'FAL_KEY'],
+    ['krea-image-google-nano-banana-2', 'Krea', 'Krea API token', 'KREA_API_TOKEN'],
+  ])('says which route %s takes: your Google key, else its fal or Krea copy', (id, copy, copyKey, fallbackKey) => {
+    const definition = NODE_DEFINITIONS[id];
+    const direct = modelReadiness(definition, {}, credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN, [fallbackKey]: TOKEN } }), health());
+    expect(direct).toMatchObject({ connectionLabel: 'Google API', setupTarget: { kind: 'api-key', key: 'GOOGLE_API_KEY' } });
+    expect(direct.detail).toContain("Runs on Google's own API with your Google key");
+    const fallback = modelReadiness(definition, {}, credentials({ apiKeys: { [fallbackKey]: TOKEN } }), health());
+    expect(fallback).toMatchObject({ setupTarget: { kind: 'api-key', key: fallbackKey } });
+    expect(fallback.detail).toContain(`Runs on ${copy} with your ${copyKey}`);
+    expect(fallback.detail).toContain('Add a Google key to run on Google directly');
+    const none = modelReadiness(definition, {}, credentials(), health());
+    expect(none).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'GOOGLE_API_KEY' } });
+    expect(none.detail).toContain(`or on ${copy} with a ${copyKey}`);
+  });
+
+  it('keeps a Krea copy on the signed-in plan even with a Google key', () => {
+    const ready = modelReadiness(NODE_DEFINITIONS['krea-image-google-nano-banana-pro'], freeze({ _kreaAuth: 'mcp' }),
+      credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN }, kreaConnection: { status: 'connected' } }), health());
+    expect(ready).toMatchObject({ label: 'Krea signed in', setupTarget: { kind: 'krea-mcp' } });
+  });
+
   it('prefers Vertex over the Gemini API key when both direct credentials are set', () => {
     const ready = modelReadiness(dualRoute, {}, credentials({ apiKeys: {
       GOOGLE_VERTEX_CREDENTIALS: TOKEN, GOOGLE_API_KEY: TOKEN, FAL_KEY: TOKEN,
@@ -251,7 +274,9 @@ describe('provider readiness without generation', () => {
     ['flux-1-dev', 'FAL_KEY', 'Seedream 4.5'],
     ['seedream-4-5', 'FAL_KEY', 'Seedream 4.5'],
     ['nano-banana', 'GOOGLE_API_KEY', 'Nano Banana'],
-    ['nano-banana-fal-edit', 'FAL_KEY', 'Nano Banana Edit (FAL)'],
+    // Nano Banana's fal copy also runs on the Gemini API (2026-10-14); with
+    // no key set, setup points at the maker's key, as for Veo and Meshy.
+    ['nano-banana-fal-edit', 'GOOGLE_API_KEY', 'Nano Banana Edit (FAL)'],
     ['flux-kontext', 'FAL_KEY', 'FLUX Kontext'],
   ])('derives Cinema %s readiness from the actual scene base model', (model, key, name) => {
     const params = freeze({ scene: { base: { model }, shots: [{ id: 'retained-shot', prompt: 'fixture' }] } });

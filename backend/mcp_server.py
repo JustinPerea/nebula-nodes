@@ -350,8 +350,10 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     """One node type in detail: input and output ports (ids to wire), params
     (type, default, options, ranges, `onlyWhen` another param has a value),
     whether it runs here, and list prices by the params that set them.
-    Dual-route nodes also list `paramsDirect` / `paramsFal`; `route` says
-    which one this machine uses. A local node that calls a provider (Cinema
+    Dual-route nodes (a fal or Krea copy that also runs on the model maker's
+    API with your key) also list `paramsDirect` / `paramsFallback`; `route`
+    says which one this machine uses ("direct", or the `fallback` provider,
+    "fal" or "krea"), and `price.routes` prices each. A local node that calls a provider (Cinema
     Scene's base model, a Video QC node's vision-llm mode) has
     `runsWithOptions`: readiness per value of the param that picks it, and a
     note when a different value would run with the keys set here."""

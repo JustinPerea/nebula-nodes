@@ -1,8 +1,60 @@
 import { describe, expect, it } from 'vitest';
+import shared from '../../../backend/tests/fixtures/route_cases.json';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
-import { resolveCreateParamDefinitions } from '../../src/lib/createParams';
-import { configuredDirectKey, directKeyNames } from '../../src/lib/directRoute';
+import { buildDefaultParamsForUi, resolveCreateParamDefinitions } from '../../src/lib/createParams';
+import {
+  configuredDirectKey, directKeyNames, fallbackProvider, routeParamDefinitions, selectRoute,
+} from '../../src/lib/directRoute';
 import { runRouteProvider } from '../../src/lib/modelDiscovery';
+
+type RouteCase = {
+  name: string;
+  nodeId: string;
+  params: Record<string, unknown>;
+  apiKeys: Record<string, string>;
+  expected: { kind: string; provider: string | null; key: string | null };
+  paramKeys?: string[];
+};
+
+describe('selectRoute (cases shared with backend services/node_route.py)', () => {
+  for (const testCase of (shared as { cases: RouteCase[] }).cases) {
+    it(testCase.name, () => {
+      const definition = NODE_DEFINITIONS[testCase.nodeId];
+      const route = selectRoute(definition, testCase.params, testCase.apiKeys);
+      expect(route).toEqual(testCase.expected);
+      expect(runRouteProvider(definition, testCase.apiKeys, testCase.params)).toBe(testCase.expected.provider);
+      if (testCase.paramKeys) {
+        expect(routeParamDefinitions(definition, route.kind).map((param) => param.key).sort()).toEqual(testCase.paramKeys);
+      }
+    });
+  }
+});
+
+describe('maker routes for fal and Krea copies', () => {
+  const nanoFal = NODE_DEFINITIONS['nano-banana-fal'];
+  const kreaPro = NODE_DEFINITIONS['krea-image-google-nano-banana-pro'];
+
+  it('names the fallback provider', () => {
+    expect(fallbackProvider(nanoFal)).toBe('fal');
+    expect(fallbackProvider(kreaPro)).toBe('krea');
+    expect(fallbackProvider(NODE_DEFINITIONS['nano-banana'])).toBeUndefined();
+  });
+
+  it('shows only the route\'s params in Create, with the Krea plan winning over a Google key', () => {
+    const keys = { GOOGLE_API_KEY: 'k', KREA_API_TOKEN: 'k' };
+    const keysFor = (params: Record<string, unknown>) =>
+      resolveCreateParamDefinitions(kreaPro, keys, params).map((param) => param.key);
+    expect(keysFor({ _kreaAuth: 'api-token' })).not.toContain('width');
+    expect(keysFor({ _kreaAuth: 'mcp' })).toEqual(expect.arrayContaining(['width', 'height', 'resolution']));
+    expect(resolveCreateParamDefinitions(nanoFal, { GOOGLE_API_KEY: 'k' }).map((param) => param.key)).not.toContain('seed');
+    expect(resolveCreateParamDefinitions(nanoFal, { FAL_KEY: 'k' }).map((param) => param.key)).toContain('seed');
+  });
+
+  it('seeds new Create drafts with the chosen Krea connection', () => {
+    expect(buildDefaultParamsForUi(kreaPro, { GOOGLE_API_KEY: 'k' }, 'mcp')).toMatchObject({ _kreaAuth: 'mcp', resolution: '1K' });
+    expect(buildDefaultParamsForUi(kreaPro, { GOOGLE_API_KEY: 'k' }, 'api-token')).toMatchObject({ _kreaAuth: 'api-token' });
+  });
+});
 
 const veo = NODE_DEFINITIONS['veo-3'];
 

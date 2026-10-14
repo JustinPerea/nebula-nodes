@@ -29,7 +29,7 @@ export function NodeRunStatus({ data, definition }: NodeRunStatusProps) {
   }, [executing]);
 
   if (data.state !== 'queued' && !executing) return null;
-  const provider = definition ? runRouteProvider(definition, apiKeys) : null;
+  const provider = definition ? runRouteProvider(definition, apiKeys, data.params) : null;
   const percent = executing && data.progress !== undefined && data.progress > 0
     ? Math.round(data.progress * 100) : null;
   const parts = data.state === 'queued'

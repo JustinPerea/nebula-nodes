@@ -1,0 +1,282 @@
+{
+  "about": "Route selection cases shared by backend/services/node_route.py select_route and frontend/src/lib/directRoute.ts selectRoute, against the real node catalog. paramKeys (when given) are the params that route shows and sends, sorted.",
+  "cases": [
+    {
+      "name": "maker key wins over the fal key",
+      "nodeId": "nano-banana-fal",
+      "params": {},
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_API_KEY"
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "enable_web_search",
+        "model",
+        "num_images",
+        "resolution",
+        "thinking_level"
+      ]
+    },
+    {
+      "name": "fal runs it without a maker key",
+      "nodeId": "nano-banana-fal-edit",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "enable_web_search",
+        "model",
+        "num_images",
+        "output_format",
+        "resolution",
+        "seed",
+        "thinking_level"
+      ]
+    },
+    {
+      "name": "a blank maker key doesn't count",
+      "nodeId": "nano-banana-fal",
+      "params": {},
+      "apiKeys": {
+        "GOOGLE_API_KEY": "  ",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "nothing set names the node's provider",
+      "nodeId": "nano-banana-fal",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null
+      }
+    },
+    {
+      "name": "the Krea plan wins over a maker key",
+      "nodeId": "krea-image-google-nano-banana-2",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "height",
+        "image_urls",
+        "prompt",
+        "resolution",
+        "width"
+      ]
+    },
+    {
+      "name": "a Krea node on the API token takes the maker key",
+      "nodeId": "krea-image-google-nano-banana-pro",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "image_urls",
+        "prompt",
+        "resolution"
+      ]
+    },
+    {
+      "name": "a Krea node saved before the choice takes the maker key",
+      "nodeId": "krea-image-google-nano-banana",
+      "params": {},
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "image_urls",
+        "prompt"
+      ]
+    },
+    {
+      "name": "Krea runs it without a maker key",
+      "nodeId": "krea-image-google-nano-banana-flash-lite",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "height",
+        "image_urls",
+        "prompt",
+        "width"
+      ]
+    },
+    {
+      "name": "a Krea node without a maker route stays on Krea",
+      "nodeId": "krea-image-openai-gpt-image-2",
+      "params": {},
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "only",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "an account-only Krea node bills the plan",
+      "nodeId": "krea-moodboard-search",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Vertex before the Gemini API key",
+      "nodeId": "veo-3",
+      "params": {},
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "GOOGLE_VERTEX_CREDENTIALS": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_VERTEX_CREDENTIALS"
+      }
+    },
+    {
+      "name": "a saved reframe without a direct resolution stays on fal",
+      "nodeId": "ideogram-reframe",
+      "params": {
+        "image_size": "square_hd"
+      },
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "a reframe with a direct resolution goes direct",
+      "nodeId": "ideogram-reframe",
+      "params": {
+        "resolution": "1024x1024"
+      },
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "ideogram",
+        "key": "IDEOGRAM_API_KEY"
+      },
+      "paramKeys": [
+        "num_images",
+        "rendering_speed",
+        "resolution",
+        "seed"
+      ]
+    },
+    {
+      "name": "Meshy on its own key",
+      "nodeId": "meshy-text-to-3d",
+      "params": {},
+      "apiKeys": {
+        "MESHY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "meshy",
+        "key": "MESHY_API_KEY"
+      }
+    },
+    {
+      "name": "a single-route node",
+      "nodeId": "nano-banana",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "only",
+        "provider": "google",
+        "key": "GOOGLE_API_KEY"
+      }
+    },
+    {
+      "name": "a local node has no provider",
+      "nodeId": "text-input",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "local",
+        "provider": null,
+        "key": null
+      }
+    }
+  ]
+}

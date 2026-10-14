@@ -69,6 +69,18 @@ describe('Canvas inspector enum controls', () => {
     expect(currentParams()).toEqual({ [key]: 0.37 });
   });
 
+  it.each([
+    [{ _kreaAuth: 'api-token' }, { GOOGLE_API_KEY: 'fixture-only', KREA_API_TOKEN: 'fixture-only' }, false],
+    [{ _kreaAuth: 'api-token' }, { KREA_API_TOKEN: 'fixture-only' }, true],
+    // The Krea plan is the person's choice: a Google key never takes it over.
+    [{ _kreaAuth: 'mcp' }, { GOOGLE_API_KEY: 'fixture-only' }, true],
+  ])('shows Krea-only sizing on a Krea copy only when Krea runs it (%o, %o)', (params, apiKeys, kreaFields) => {
+    useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true, apiKeys } });
+    renderModel('krea-image-google-nano-banana-pro', params);
+    expect(screen.queryByLabelText('Width') !== null).toBe(kreaFields);
+    expect(screen.getByRole('combobox', { name: 'Resolution' })).toBeVisible();
+  });
+
   it('writes original numeric Krea duration choices and preserves the default', () => {
     renderModel('krea-video-kling-kling-2-5', { prompt: 'Orbit the logo' });
     const duration = screen.getByRole('combobox', { name: 'Duration' });

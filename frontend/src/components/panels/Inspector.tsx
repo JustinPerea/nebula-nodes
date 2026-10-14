@@ -12,7 +12,7 @@ import { fetchOpenRouterModels, fetchNousModels, fetchQuiverModels, getSettings,
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from './MaskPainterModal';
-import { configuredDirectKey } from '../../lib/directRoute';
+import { routeParamDefinitions, selectRoute } from '../../lib/directRoute';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
 
@@ -218,20 +218,17 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const nodeData = selectedNodeData ?? (exiting ? lastSelectionRef.current?.data : undefined);
   const definition = nodeData ? NODE_DEFINITIONS[nodeData.definitionId] : undefined;
 
-  // Resolve params: dual-param nodes use sharedParams + (falParams or directParams)
+  // Resolve params: dual-route nodes show sharedParams plus the params of the
+  // route this run takes (lib/directRoute.ts selectRoute, the backend's rule):
+  // directParams on the maker's key, falParams on the fal or Krea copy and on
+  // the Krea plan. Until settings load, no key counts as set.
   const settingsCache = useUIStore((s) => s.settingsCache);
+  const nodeParams = nodeData?.params;
   const resolvedParams: ParamDefinition[] = useMemo(() => {
     if (!definition) return [];
-    if (definition.sharedParams) {
-      const useDirectRoute = settingsCache.loaded
-        && Boolean(configuredDirectKey(definition, settingsCache.apiKeys));
-      const routeParams = useDirectRoute
-        ? (definition.directParams ?? [])
-        : (definition.falParams ?? []);
-      return [...definition.sharedParams, ...routeParams];
-    }
-    return definition.params;
-  }, [definition, settingsCache.loaded, settingsCache.apiKeys]);
+    const route = selectRoute(definition, nodeParams, settingsCache.loaded ? settingsCache.apiKeys : {});
+    return routeParamDefinitions(definition, route.kind);
+  }, [definition, nodeParams, settingsCache.loaded, settingsCache.apiKeys]);
 
   // Filter params by visibleWhen conditions
   const visibleParams = useMemo(() => {
