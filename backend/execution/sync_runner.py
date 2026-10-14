@@ -1605,7 +1605,13 @@ def get_handler_registry(
         registry["seedvr2-upscale"] = _seedvr2_upscale_handler
         registry["clarity-upscaler"] = _clarity_upscaler_handler
         registry["seedvr-video-upscale"] = _seedvr_video_upscale_handler
-        registry["seedream-4-5"] = _seedream45_handler
+        # Seedream 4.5 / 5.0 Lite on BytePlus ModelArk with BYTEPLUS_API_KEY,
+        # else on fal (execution/maker_routes_byteplus.py).
+        from execution import maker_routes_byteplus
+        registry["seedream-4-5"] = maker_routes.dual_route(
+            direct=maker_routes_byteplus.byteplus_seedream, fallback=_seedream45_handler,
+            translate=maker_routes_byteplus.seedream_fal_to_byteplus,
+        )
         registry["esrgan-upscale"] = _esrgan_upscale_handler
         registry["recraft-crisp-upscale"] = _recraft_crisp_upscale_handler
         registry["pika-i2v"] = _pika_i2v_handler

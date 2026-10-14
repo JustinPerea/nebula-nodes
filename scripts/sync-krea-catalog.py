@@ -172,6 +172,55 @@ DIRECT_ROUTES = {
                                 {"url": GOOGLE_PRICING_URL, "quote": "Input price | Not available | $0.30 (text / image)"}]},
     },
 }
+# Seedream's Krea copies on BytePlus ModelArk, ByteDance's own international
+# API, with the person's BYTEPLUS_API_KEY (backend handlers/byteplus.py,
+# execution/maker_routes_byteplus.py). Read from BytePlus's docs 2026-10-14:
+# - Model ids and size rules: docs.byteplus.com/en/docs/ModelArk/image-generation-api
+#   ("Seedream 4.0 ... Total pixels range: [1280x720=921,600, 4096x4096=16,777,216]";
+#   5.0 lite "[2560x1440(3,686,400), 4096x4096(16,777,216)]"; 5.0 pro / flash
+#   "[1280x720(921,600), 2048x2048x1.1025(4,624,220)]"; "Aspect ratio range:
+#   [1/16, 16]" for all). A Krea width/height outside them stays on Krea
+#   (directSize -> directRoute.size; never resized).
+# - Seedream 5.0 lite: the model list names "seedream-5-0-260128 (also
+#   supports: seedream-5-0-lite-260128)"; the pricing page prices
+#   seedream-5-0-lite-260128, so that id is the one called.
+# - seed (default 1337) has no ModelArk equivalent: Krea-only, dropped on the
+#   maker route. style_images carry a Krea `strength` (-2..2) ModelArk can't
+#   take, so they're Krea-only and keep a run on Krea when set.
+_BYTEPLUS_PRICING_URL = "https://docs.byteplus.com/en/docs/ModelArk/model-pricing"
+_BYTEPLUS_NOTE = ("BytePlus ModelArk pay-as-you-go output price for runs on the person's BYTEPLUS_API_KEY (model "
+                  "{model}). Images that fail (content moderation) aren't billed.")
+
+
+def _byteplus_route(model, minimum, maximum, price, quote, note=""):
+    return {
+        "directKeyName": "BYTEPLUS_API_KEY", "translation": "krea-seedream", "model": model,
+        "kreaOnly": ["seed", "style_images"], "directBlockedBy": ["style_images"], "directParams": [],
+        # With no key set, setup suggests the Krea token: BytePlus doesn't
+        # serve the United States and each model needs activating first.
+        "directSetup": "fallback",
+        "directSize": {"widthParam": "width", "heightParam": "height", "minPixels": minimum,
+                       "maxPixels": maximum, "maxAspect": 16},
+        "pricing": {"provider": "bytedance", "per": "image", "priceParams": [],
+                    "rows": [{"match": {}, "price": price}],
+                    "notes": _BYTEPLUS_NOTE.format(model=model) + note,
+                    "sources": [{"url": _BYTEPLUS_PRICING_URL, "quote": quote}], "checked": "2026-10-14"},
+    }
+
+
+DIRECT_ROUTES.update({
+    "/generate/image/bytedance/seedream-4": _byteplus_route(
+        "seedream-4-0-250828", 921_600, 16_777_216, 0.03, "seedream-4-0-250828 | Free | 0.03"),
+    "/generate/image/bytedance/seedream-5-lite": _byteplus_route(
+        "seedream-5-0-lite-260128", 3_686_400, 16_777_216, 0.035, "seedream-5-0-lite-260128 | Free | 0.035"),
+    "/generate/image/bytedance/seedream-5-pro": _byteplus_route(
+        "dola-seedream-5-0-pro-260628", 921_600, 4_624_220, [0.045, 0.09],
+        "Single image generation: ≤ 2.61 million pixels (1.5K or lower): 0.045; > 2.61 million pixels "
+        "(higher than 1.5K): 0.09",
+        " The price is per output pixel tier: 0.045 USD up to 2.61 million pixels, 0.09 USD above, so a run "
+        "is quoted as that range (the price rows can't read width x height). The maker route sends no input "
+        "images (style images keep a run on Krea), so the 0.003 USD per extra input image doesn't apply."),
+})
 
 
 def direct_route_definition(endpoint, params):
@@ -190,6 +239,10 @@ def direct_route_definition(endpoint, params):
     if defaulted:
         # A default would block the maker route for every new node.
         raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedBy fields have defaults: {defaulted}")
+    size = route.get("directSize")
+    size_keys = {size[k] for k in ("widthParam", "heightParam", "param") if size and size.get(k)}
+    if size_keys & set(route["kreaOnly"]) or size_keys - keys:
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: directSize must name shared Krea fields")
     clash = sorted(keys & {param["key"] for param in route["directParams"]})
     if clash:
         raise ValueError(f"DIRECT_ROUTES {endpoint}: directParams repeat Krea fields: {clash}")
@@ -200,7 +253,9 @@ def direct_route_definition(endpoint, params):
         "falParams": [param for param in params if param["key"] in route["kreaOnly"]],
         "directParams": list(route["directParams"]),
         "directRoute": {"translation": route["translation"], "model": route["model"],
-                        **({"blockedBy": list(blocked)} if blocked else {})},
+                        **({"blockedBy": list(blocked)} if blocked else {}),
+                        **({"size": dict(size)} if size else {}),
+                        **({"setup": route["directSetup"]} if route.get("directSetup") else {})},
     }
 
 
@@ -210,6 +265,11 @@ def direct_route_pricing(endpoint):
         return None
     pricing = dict(route["pricing"])
     provider = pricing.pop("provider")
+    if provider != "google":
+        # A maker whose overlay entry is the whole price (sources, notes and
+        # checked date included); the Google reference-image range below is
+        # Gemini-specific.
+        return provider, {"currency": "usd", **pricing}
     model = route["model"]
     pricing["rows"] = [{**row, "price": with_references(row["price"], model)} for row in pricing["rows"]]
     pricing["sources"] = [*pricing["sources"], _GOOGLE_INPUT_SOURCES[model], _REFERENCE_LIMIT_SOURCE]

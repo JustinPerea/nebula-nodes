@@ -446,6 +446,218 @@
         "provider": "google",
         "key": "GOOGLE_API_KEY"
       }
+    },
+    {
+      "name": "Seedream runs on BytePlus with the BytePlus key",
+      "nodeId": "seedream-4-5",
+      "params": {},
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      },
+      "paramKeys": [
+        "image_size",
+        "max_images",
+        "model",
+        "num_images"
+      ]
+    },
+    {
+      "name": "Seedream stays on fal without the BytePlus key",
+      "nodeId": "seedream-4-5",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "paramKeys": [
+        "enable_safety_checker",
+        "image_size",
+        "max_images",
+        "model",
+        "num_images",
+        "seed"
+      ]
+    },
+    {
+      "name": "a saved Seedream seed keeps the run on fal",
+      "nodeId": "seedream-4-5",
+      "params": {
+        "seed": 7
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "fal's 512px Square has no BytePlus size",
+      "nodeId": "seedream-4-5",
+      "params": {
+        "image_size": "square"
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "a Seedream size under BytePlus's pixel minimum stays on fal",
+      "nodeId": "seedream-4-5",
+      "params": {
+        "image_size": {
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "a Seedream size BytePlus takes goes direct",
+      "nodeId": "seedream-4-5",
+      "params": {
+        "image_size": {
+          "width": 4096,
+          "height": 1714
+        }
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      }
+    },
+    {
+      "name": "a Krea Seedream size inside the model's window goes to BytePlus",
+      "nodeId": "krea-image-bytedance-seedream-4",
+      "params": {
+        "_kreaAuth": "api-token",
+        "width": 2048,
+        "height": 2048
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "height",
+        "prompt",
+        "width"
+      ]
+    },
+    {
+      "name": "a Krea Seedream 5 Lite size under 3.69 MP stays on Krea",
+      "nodeId": "krea-image-bytedance-seedream-5-lite",
+      "params": {
+        "width": 1024,
+        "height": 1024
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "height",
+        "prompt",
+        "seed",
+        "style_images",
+        "width"
+      ]
+    },
+    {
+      "name": "a fractional Krea size stays on Krea",
+      "nodeId": "krea-image-bytedance-seedream-4",
+      "params": {
+        "width": 1024.5,
+        "height": 1024
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "Krea style images keep Seedream on Krea",
+      "nodeId": "krea-image-bytedance-seedream-5-pro",
+      "params": {
+        "width": 2048,
+        "height": 2048,
+        "style_images": "[{\"strength\": 1}]"
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "the Krea plan wins over the BytePlus key",
+      "nodeId": "krea-image-bytedance-seedream-5-pro",
+      "params": {
+        "_kreaAuth": "mcp",
+        "width": 2048,
+        "height": 2048
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
     }
   ]
 }

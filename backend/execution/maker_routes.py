@@ -252,6 +252,11 @@ KREA_TRANSLATIONS: dict[str, tuple[Handler, Callable[[str], Translate]]] = {
     "krea-nano-banana": (krea_google_nano_banana, krea_nano_banana_to_google),
 }
 
+# Seedream on BytePlus ModelArk (execution/maker_routes_byteplus.py).
+from execution import maker_routes_byteplus as _byteplus  # noqa: E402
+
+KREA_TRANSLATIONS["krea-seedream"] = (_byteplus.krea_byteplus_seedream, _byteplus.krea_seedream_to_byteplus)
+
 
 def krea_router(definition_id: str, fallback: Handler) -> Handler | None:
     """The dual-route handler for a generated Krea node with a maker route, or

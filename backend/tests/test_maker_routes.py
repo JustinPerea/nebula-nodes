@@ -32,6 +32,8 @@ MAKER_ROUTED = {
     "nano-banana-fal", "nano-banana-fal-edit", "meshy-text-to-3d", "meshy-image-to-3d",
     "krea-image-google-nano-banana-2", "krea-image-google-nano-banana-pro",
     "krea-image-google-nano-banana-flash-lite", "krea-image-google-nano-banana",
+    "seedream-4-5", "krea-image-bytedance-seedream-4", "krea-image-bytedance-seedream-5-lite",
+    "krea-image-bytedance-seedream-5-pro",
 }
 
 

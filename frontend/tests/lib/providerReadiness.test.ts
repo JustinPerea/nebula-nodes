@@ -167,6 +167,26 @@ describe('provider readiness without generation', () => {
     expect(googleOnly).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
   });
 
+  it.each([
+    ['seedream-4-5', 'fal.ai', 'FAL_KEY', freeze({ image_size: 'square' }), 'image_size'],
+    ['krea-image-bytedance-seedream-5-lite', 'Krea', 'KREA_API_TOKEN', freeze({ width: 1024, height: 1024 }), 'width'],
+  ])('runs %s on BytePlus, keeps a size BytePlus can\'t render on its copy, and suggests the copy\'s key first',
+    (id, copy, fallbackKey, unsized, param) => {
+      const definition = NODE_DEFINITIONS[id];
+      const keys = credentials({ apiKeys: { BYTEPLUS_API_KEY: TOKEN, [fallbackKey]: TOKEN } });
+      const sized = id === 'seedream-4-5' ? freeze({}) : freeze({ width: 2048, height: 2048 });
+      const direct = modelReadiness(definition, sized, keys, health());
+      expect(direct).toMatchObject({ connectionLabel: 'BytePlus API', setupTarget: { kind: 'api-key', key: 'BYTEPLUS_API_KEY' } });
+      expect(direct.detail).toContain("Runs on BytePlus's own API with your BytePlus key, billed by BytePlus.");
+      const blocked = modelReadiness(definition, unsized, keys, health());
+      expect(blocked.setupTarget).toEqual({ kind: 'api-key', key: fallbackKey });
+      expect(blocked.detail).toContain(`BytePlus can't render this recipe's ${param} exactly, so it runs on ${copy === 'fal.ai' ? 'FAL' : copy}.`);
+      // Nothing set: BytePlus isn't sold in the United States, so setup points at the copy.
+      const none = modelReadiness(definition, sized, credentials(), health());
+      expect(none).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: fallbackKey } });
+      expect(none.detail).toContain('Runs on BytePlus with your BytePlus key, or on');
+    });
+
   it('moves Nano Banana (2.5) to fal from Google\'s shutdown date and says so', () => {
     const definition = NODE_DEFINITIONS['nano-banana-fal'];
     const cache = credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN, FAL_KEY: TOKEN } });

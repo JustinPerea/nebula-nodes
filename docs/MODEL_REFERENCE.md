@@ -936,12 +936,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-bytedance-seedream-4` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | BYTEPLUS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/bytedance/seedream-4` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Style images (Any ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -949,6 +951,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Prompt | textarea | — | — |
 | Width | float | — | …–4096 |
 | Height | float | — | …–4096 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Seed | float | 1337 | — |
 | Style images (JSON) | textarea | — | — |
 
@@ -960,12 +967,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-bytedance-seedream-5-lite` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | BYTEPLUS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/bytedance/seedream-5-lite` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Style images (Any ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -973,6 +982,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Prompt | textarea | — | — |
 | Width | float | — | …–4096 |
 | Height | float | — | …–4096 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Seed | float | 1337 | — |
 | Style images (JSON) | textarea | — | — |
 
@@ -984,12 +998,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-bytedance-seedream-5-pro` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | BYTEPLUS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/bytedance/seedream-5-pro` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Style images (Any ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -997,6 +1013,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Prompt | textarea | — | — |
 | Width | float | — | …–4096 |
 | Height | float | — | …–4096 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Seed | float | 1337 | — |
 | Style images (JSON) | textarea | — | — |
 
@@ -1928,12 +1949,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `seedream-4-5` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/bytedance/seedream/v4.5/text-to-image` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, References (Image ×n) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1941,6 +1964,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Size | enum | square_hd | Square HD (2048x2048), Square (512x512), Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9, Auto 2K, Auto 4K, … |
 | Generations | int | 1 | 1–6 |
 | Images per Generation | int | 1 | 1–6 |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Safety Checker | bool | true | — |
 | Seed | int | — | — |
 

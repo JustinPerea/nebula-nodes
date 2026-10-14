@@ -1750,51 +1750,124 @@
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-bytedance-seedream-4": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token"
-          },
-          "price": 0.03
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token"
+              },
+              "price": 0.03
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/image/bytedance/seedream-4 (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
+        },
+        "bytedance": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": 0.03
+            }
+          ],
+          "notes": "BytePlus ModelArk pay-as-you-go output price for runs on the person's BYTEPLUS_API_KEY (model seedream-4-0-250828). Images that fail (content moderation) aren't billed.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedream-4-0-250828 | Free | 0.03"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/image/bytedance/seedream-4 (spec sha256 9d5dd91a9e81)"
-        }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-bytedance-seedream-5-lite": {
-      "currency": "usd",
-      "per": "request",
-      "priceParams": [
-        "_kreaAuth"
-      ],
-      "rows": [
-        {
-          "match": {
-            "_kreaAuth": "api-token"
-          },
-          "price": 0.035
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "request",
+          "priceParams": [
+            "_kreaAuth"
+          ],
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token"
+              },
+              "price": 0.035
+            }
+          ],
+          "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "x-krea-pricing on POST /generate/image/bytedance/seedream-5-lite (spec sha256 9d5dd91a9e81)"
+            }
+          ],
+          "checked": "2026-10-10"
+        },
+        "bytedance": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": 0.035
+            }
+          ],
+          "notes": "BytePlus ModelArk pay-as-you-go output price for runs on the person's BYTEPLUS_API_KEY (model seedream-5-0-lite-260128). Images that fail (content moderation) aren't billed.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedream-5-0-lite-260128 | Free | 0.035"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced.",
-      "sources": [
-        {
-          "url": "https://api.krea.ai/openapi.json",
-          "quote": "x-krea-pricing on POST /generate/image/bytedance/seedream-5-lite (spec sha256 9d5dd91a9e81)"
+      },
+      "generatedBy": "scripts/sync-krea-catalog.py"
+    },
+    "krea-image-bytedance-seedream-5-pro": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [],
+          "rows": [
+            {
+              "match": {},
+              "price": [
+                0.045,
+                0.09
+              ]
+            }
+          ],
+          "notes": "BytePlus ModelArk pay-as-you-go output price for runs on the person's BYTEPLUS_API_KEY (model dola-seedream-5-0-pro-260628). Images that fail (content moderation) aren't billed. The price is per output pixel tier: 0.045 USD up to 2.61 million pixels, 0.09 USD above, so a run is quoted as that range (the price rows can't read width x height). The maker route sends no input images (style images keep a run on Krea), so the 0.003 USD per extra input image doesn't apply.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "Single image generation: ≤ 2.61 million pixels (1.5K or lower): 0.045; > 2.61 million pixels (higher than 1.5K): 0.09"
+            }
+          ],
+          "checked": "2026-10-14"
         }
-      ],
-      "checked": "2026-10-10",
+      },
       "generatedBy": "scripts/sync-krea-catalog.py"
     },
     "krea-image-google-nano-banana": {
@@ -8391,6 +8464,153 @@
         }
       ],
       "checked": "2026-10-14"
+    },
+    "seedream-4-5": {
+      "routes": {
+        "bytedance": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "model",
+            "max_images"
+          ],
+          "rows": [
+            {
+              "match": {
+                "model": "4.5",
+                "max_images": 1
+              },
+              "price": 0.04
+            },
+            {
+              "match": {
+                "model": "4.5",
+                "max_images": 2
+              },
+              "price": [
+                0.04,
+                0.08
+              ]
+            },
+            {
+              "match": {
+                "model": "4.5",
+                "max_images": 3
+              },
+              "price": [
+                0.04,
+                0.12
+              ]
+            },
+            {
+              "match": {
+                "model": "4.5",
+                "max_images": 4
+              },
+              "price": [
+                0.04,
+                0.16
+              ]
+            },
+            {
+              "match": {
+                "model": "4.5",
+                "max_images": 5
+              },
+              "price": [
+                0.04,
+                0.2
+              ]
+            },
+            {
+              "match": {
+                "model": "4.5",
+                "max_images": 6
+              },
+              "price": [
+                0.04,
+                0.24
+              ]
+            },
+            {
+              "match": {
+                "model": "5.0-lite",
+                "max_images": 1
+              },
+              "price": 0.035
+            },
+            {
+              "match": {
+                "model": "5.0-lite",
+                "max_images": 2
+              },
+              "price": [
+                0.035,
+                0.07
+              ]
+            },
+            {
+              "match": {
+                "model": "5.0-lite",
+                "max_images": 3
+              },
+              "price": [
+                0.035,
+                0.105
+              ]
+            },
+            {
+              "match": {
+                "model": "5.0-lite",
+                "max_images": 4
+              },
+              "price": [
+                0.035,
+                0.14
+              ]
+            },
+            {
+              "match": {
+                "model": "5.0-lite",
+                "max_images": 5
+              },
+              "price": [
+                0.035,
+                0.175
+              ]
+            },
+            {
+              "match": {
+                "model": "5.0-lite",
+                "max_images": 6
+              },
+              "price": [
+                0.035,
+                0.21
+              ]
+            }
+          ],
+          "multiplyBy": [
+            "num_images"
+          ],
+          "notes": "BytePlus ModelArk pay-as-you-go price per output image, for runs on the person's BYTEPLUS_API_KEY (4.5: seedream-4-5-251128, 5.0 Lite: seedream-5-0-lite-260128). Input (reference) images are free. Each of num_images is its own request; max_images above 1 asks for a sequential batch of up to that many, and BytePlus bills \"the actual number of generated images\", so it's a range from one image to max_images. Failed images (content moderation) aren't billed. The fal route has no list price here.",
+          "sources": [
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedream-4-5-251128 | Free | 0.04"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "seedream-5-0-lite-260128 | Free | 0.035"
+            },
+            {
+              "url": "https://docs.byteplus.com/en/docs/ModelArk/model-pricing",
+              "quote": "For Seedream 5.0 lite, Seedream 4.5, and Seedream 4.0, sequential image generation is billed based on the actual number of generated images."
+            }
+          ],
+          "checked": "2026-10-14"
+        }
+      }
     },
     "veo-3": {
       "currency": "usd",

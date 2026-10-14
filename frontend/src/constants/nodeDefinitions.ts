@@ -10076,7 +10076,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/bytedance/seedream/v4.5/text-to-image',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -10085,7 +10086,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'model',
         label: 'Model',
@@ -10133,6 +10135,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 1,
         max: 6,
       },
+    ],
+    falParams: [
       {
         key: 'enable_safety_checker',
         label: 'Safety Checker',
@@ -10149,6 +10153,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus.py): a saved seed
+    // keeps the run on fal (ModelArk has no seed), and so does a size
+    // ModelArk can't render exactly: 4.5 and 5.0 lite take "WxH" with
+    // 3,686,400 to 16,777,216 pixels and a 1/16 to 16 ratio. With no key
+    // set, setup suggests the fal key (BytePlus doesn't serve the US).
+    directRoute: {
+      setup: 'fallback',
+      blockedBy: ['seed'],
+      size: { param: 'image_size', minPixels: 3686400, maxPixels: 16777216, maxAspect: 16, unsupported: ['square'] },
+    },
   },
 
   'ideogram-v4': {
@@ -17725,7 +17740,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/bytedance/seedream-4",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -17824,7 +17842,82 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "max": 4096,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "max": 4096,
+        "step": 0.01
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "style_images",
+        "label": "Style images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedream",
+      "model": "seedream-4-0-250828",
+      "blockedBy": [
+        "style_images"
+      ],
+      "size": {
+        "widthParam": "width",
+        "heightParam": "height",
+        "minPixels": 921600,
+        "maxPixels": 16777216,
+        "maxAspect": 16
+      },
+      "setup": "fallback"
+    }
   },
   'krea-image-bytedance-seedream-5-lite': {
     "id": "krea-image-bytedance-seedream-5-lite",
@@ -17832,7 +17925,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/bytedance/seedream-5-lite",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -17932,7 +18028,82 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "max": 4096,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "max": 4096,
+        "step": 0.01
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "style_images",
+        "label": "Style images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedream",
+      "model": "seedream-5-0-lite-260128",
+      "blockedBy": [
+        "style_images"
+      ],
+      "size": {
+        "widthParam": "width",
+        "heightParam": "height",
+        "minPixels": 3686400,
+        "maxPixels": 16777216,
+        "maxAspect": 16
+      },
+      "setup": "fallback"
+    }
   },
   'krea-image-bytedance-seedream-5-pro': {
     "id": "krea-image-bytedance-seedream-5-pro",
@@ -17940,7 +18111,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/bytedance/seedream-5-pro",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -18040,7 +18214,82 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "max": 4096,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "max": 4096,
+        "step": 0.01
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "style_images",
+        "label": "Style images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedream",
+      "model": "dola-seedream-5-0-pro-260628",
+      "blockedBy": [
+        "style_images"
+      ],
+      "size": {
+        "widthParam": "width",
+        "heightParam": "height",
+        "minPixels": 921600,
+        "maxPixels": 4624220,
+        "maxAspect": 16
+      },
+      "setup": "fallback"
+    }
   },
   'krea-image-qwen-2512': {
     "id": "krea-image-qwen-2512",
