@@ -1033,7 +1033,7 @@ function assertValidNebulaEnvelope(parsed: unknown): asserts parsed is NebulaFil
     }
     if (
       node.data.state != null
-      && !['idle', 'queued', 'executing', 'complete', 'error'].includes(String(node.data.state))
+      && !['idle', 'queued', 'executing', 'complete', 'error', 'skipped'].includes(String(node.data.state))
     ) {
       throw new Error(`Invalid .nebula file: nodes[${index}].data.state is invalid`);
     }

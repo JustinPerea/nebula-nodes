@@ -195,6 +195,8 @@ export function notifyJobComplete(opts: {
   ok: boolean;
   durationSec: number;
   nodesExecuted: number;
+  /** Nodes a gate skipped (they never ran). */
+  nodesSkipped?: number;
   message?: string;
 }): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -227,7 +229,9 @@ export function notifyJobComplete(opts: {
     try {
       const body =
         opts.message ??
-        `${opts.nodesExecuted} ${opts.nodesExecuted === 1 ? 'node' : 'nodes'} · ${opts.durationSec.toFixed(1)}s`;
+        `${opts.nodesExecuted} ${opts.nodesExecuted === 1 ? 'node' : 'nodes'}`
+        + (opts.nodesSkipped ? ` · ${opts.nodesSkipped} skipped` : '')
+        + ` · ${opts.durationSec.toFixed(1)}s`;
       const n = new Notification(opts.ok ? 'Pipeline complete' : 'Pipeline failed', {
         body,
         icon: '/favicon.svg',

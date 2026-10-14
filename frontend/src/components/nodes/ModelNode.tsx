@@ -21,6 +21,7 @@ import { BatchCarousel } from './BatchCarousel';
 import { MeshPreview } from './MeshPreview';
 import { RepresentationViewer } from './RepresentationViewer';
 import { NodeError } from './NodeError';
+import { SkippedBadge } from './SkippedBadge';
 import { VideoEditAction } from './VideoEditAction';
 import { NodeTypeIcon } from './NodeTypeIcon';
 import { useSelectionActionSlot } from '../../lib/selectionActionSlot';
@@ -749,6 +750,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           raw={nodeData.error}
         />
       )}
+
+      {nodeData.state === 'skipped' && <SkippedBadge reason={nodeData.skipReason} />}
 
       <BatchCarousel preview={batchPreview} />
 

@@ -76,6 +76,9 @@ export interface RunRecord {
   batchOutputs?: Record<string, Array<Record<string, PortValue>>>;
   /** Optional item attribution parallel to each node's immutable batch results. */
   batchVariants?: Record<string, VariantScope[]>;
+  /** Nodes a gate upstream skipped this run (node id -> reason). They never
+   *  ran and cost nothing. */
+  skippedNodes?: Record<string, string>;
   outOfDateReasons?: string[];
   /** Immutable admission fact. Unlike snapshot params, this stays true after
    * a recovery event patches the accepted operation ID into the snapshot. */
@@ -271,6 +274,18 @@ export function recordRunOutput(
 
 /** Compatibility for callers predating ordinary result provenance. */
 export const recordPaperRunOutput = recordRunOutput;
+
+/** Note a node a gate skipped (backend execution/gating.py) on its running record. */
+export function recordRunSkip(
+  history: RunRecord[], runId: string, nodeId: string, reason: string,
+): RunRecord[] {
+  const index = history.findIndex((record) => record.id === runId && record.status === 'running'
+    && record.snapshot.nodes.some((node) => node.id === nodeId));
+  if (index < 0) return history;
+  return history.map((record, recordIndex) => recordIndex === index
+    ? { ...record, skippedNodes: deepFreeze({ ...record.skippedNodes, [nodeId]: reason.slice(0, 300) }) }
+    : record);
+}
 
 /** Keep every repeated result immutable, including successful items in a run
  * that is later cancelled or fails. Batch events replace only their node's
@@ -776,7 +791,9 @@ function isRunRecord(value: unknown): value is RunRecord {
           && Object.values(outputs).every((output) => isObject(output)
             && typeof output.type === 'string' && 'value' in output)))))
     && (value.outOfDateReasons === undefined || (Array.isArray(value.outOfDateReasons)
-      && value.outOfDateReasons.every((reason) => typeof reason === 'string')));
+      && value.outOfDateReasons.every((reason) => typeof reason === 'string')))
+    && (value.skippedNodes === undefined || (isObject(value.skippedNodes)
+      && Object.values(value.skippedNodes).every((reason) => typeof reason === 'string')));
 }
 
 function isCreateRunOrigin(value: unknown): value is CreateRunOrigin {

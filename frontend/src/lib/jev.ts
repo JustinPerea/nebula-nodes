@@ -43,6 +43,10 @@ export interface JevDecideResult {
   /** Label -> probability. */
   probabilities: Record<string, number>;
   report: JevReport | null;
+  /** Which gate output carried the Through value: 'pass' (On Pass), 'fail'
+   *  (On Fail), or null when neither did (unsure with "Take neither branch",
+   *  or outputs saved before Decide was a gate). */
+  branch: 'pass' | 'fail' | null;
 }
 
 export interface JevPickBestResult {
@@ -187,6 +191,15 @@ export function parseJevReport(value: unknown): JevReport | null {
   return { title, fields, notes, model, inputTokens: tokens };
 }
 
+/** A gate port carried a value: present and not withheld (backend
+ * execution/gating.py). The canvas never sees withheld entries, since the
+ * engine drops them, so there a withheld port is simply absent. */
+function carried(outputs: Record<string, unknown>, port: string): boolean {
+  const entry = outputs[port];
+  if (entry && typeof entry === 'object' && 'withheld' in entry) return false;
+  return portValue(outputs, port) != null;
+}
+
 function parseDecide(outputs: Record<string, unknown>): JevDecideResult | null {
   const answer = text(outputs, 'answer');
   const pass = parseVerdict(portValue(outputs, 'pass'));
@@ -197,6 +210,7 @@ function parseDecide(outputs: Record<string, unknown>): JevDecideResult | null {
   return {
     kind: 'decide', answer, pass, probability, confidence, probabilities,
     report: parseJevReport(portValue(outputs, 'report')),
+    branch: carried(outputs, 'on_pass') ? 'pass' : carried(outputs, 'on_fail') ? 'fail' : null,
   };
 }
 
