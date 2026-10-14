@@ -6,7 +6,8 @@ import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { getCreateModels } from '../../src/lib/createModels';
 import { CATEGORY_LABELS, providerLabel } from '../../src/lib/modelDiscovery';
 
-const KREA_IMAGE = 'krea-image-openai-gpt-image-2';
+// A Krea-only copy: GPT Image 2 (Krea) also runs on OpenAI with an OpenAI key.
+const KREA_IMAGE = 'krea-image-openai-gpt-image';
 const KREA_VIDEO = 'krea-video-kling-kling-3-0';
 
 function modelName(id: string) {

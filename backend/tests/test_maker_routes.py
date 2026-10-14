@@ -32,6 +32,9 @@ MAKER_ROUTED = {
     "nano-banana-fal", "nano-banana-fal-edit", "meshy-text-to-3d", "meshy-image-to-3d",
     "krea-image-google-nano-banana-2", "krea-image-google-nano-banana-pro",
     "krea-image-google-nano-banana-flash-lite", "krea-image-google-nano-banana",
+    "gpt-image-1-5", "gpt-image-1-5-edit", "gpt-image-2-fal-generate", "gpt-image-2-fal-edit",
+    "krea-image-openai-gpt-image-2", "krea-image-openai-gpt-image-2-5-flare",
+    "krea-image-openai-gpt-image-2-5-sunburst",
 }
 
 
@@ -276,7 +279,8 @@ def test_retired_direct_routes_cover_every_route_to_the_retiring_model():
     krea = {node_id for node_id, definition in DEFINITIONS.items()
             if (definition.get("directRoute") or {}).get("model") == maker_routes.GEMINI_25_FLASH_IMAGE}
     assert krea and krea <= set(node_route.DIRECT_RETIRES)
-    assert {entry["on"] for entry in node_route.DIRECT_RETIRES.values()} == {"2027-03-15"}
+    assert {node_route.DIRECT_RETIRES[node_id]["on"] for node_id in ("nano-banana-fal", "nano-banana-fal-edit", *krea)} == {
+        "2027-03-15"}
 
 
 @pytest.mark.asyncio

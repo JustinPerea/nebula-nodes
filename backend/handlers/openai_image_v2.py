@@ -139,7 +139,9 @@ async def handle_gpt_image_2_generate(
     return {"image": {"type": "Image", "value": final_path}}
 
 
-MAX_EDIT_IMAGES = 10
+# "For GPT image models, you can provide up to 16 images."
+# (https://developers.openai.com/api/reference/resources/images, checked 2026-10-14)
+MAX_EDIT_IMAGES = 16
 
 
 def _normalize_image_input(value: Any) -> list[str]:
@@ -192,7 +194,8 @@ async def handle_gpt_image_2_edit(
         files.append(("mask", (mp.name, require_allowed_path(mp).read_bytes(), "image/png")))
 
     form: dict[str, str] = {}
-    for key in ("model", "prompt", "size", "quality", "moderation", "output_format", "background"):
+    # input_fidelity only reaches here for gpt-image-1.5 (execution/maker_routes_openai.py build_body).
+    for key in ("model", "prompt", "size", "quality", "moderation", "output_format", "background", "input_fidelity"):
         if key in body:
             form[key] = str(body[key])
     if "output_compression" in body:

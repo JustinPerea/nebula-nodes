@@ -252,6 +252,12 @@ KREA_TRANSLATIONS: dict[str, tuple[Handler, Callable[[str], Translate]]] = {
     "krea-nano-banana": (krea_google_nano_banana, krea_nano_banana_to_google),
 }
 
+from execution import maker_routes_openai  # noqa: E402  (stdlib + models only; no cycle)
+
+KREA_TRANSLATIONS["krea-openai-image"] = (
+    maker_routes_openai.krea_openai_image, maker_routes_openai.krea_openai_image_to_openai,
+)
+
 
 def krea_router(definition_id: str, fallback: Handler) -> Handler | None:
     """The dual-route handler for a generated Krea node with a maker route, or

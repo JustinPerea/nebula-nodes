@@ -126,5 +126,11 @@ describe('when the direct route can\'t take a run', () => {
     expect(directBlock(nano, {})).toBeNull();
     expect(directBlock(NODE_DEFINITIONS['krea-image-google-nano-banana'], {}))
       .toEqual({ reason: 'retired', param: null, on: '2027-03-15' });
+    // A shared param's value the maker can't render keeps the run on the copy;
+    // the default is never one of them.
+    const gpt2 = NODE_DEFINITIONS['gpt-image-2-fal-generate'];
+    expect(directBlock(gpt2, {})).toBeNull();
+    expect(directBlock(gpt2, { image_size: 'square_hd' })).toBeNull();
+    expect(directBlock(gpt2, { image_size: 'landscape_16_9' })).toEqual({ reason: 'blocked', param: 'image_size', on: null });
   });
 });

@@ -176,7 +176,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `gpt-image-1-5` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/gpt-image-1.5` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
@@ -199,7 +199,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `gpt-image-1-5-edit` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/gpt-image-1.5/edit` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Reference Images (Image ×n)* |
@@ -343,7 +343,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `gpt-image-2-fal-edit` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `openai/gpt-image-2/edit` |
 | **Execution** | stream |
 | **Inputs** | Reference Images (Image ×n)*, Prompt (Text)* |
@@ -366,7 +366,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `gpt-image-2-fal-generate` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `openai/gpt-image-2` |
 | **Execution** | stream |
 | **Inputs** | Prompt (Text)* |
@@ -1430,12 +1430,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-openai-gpt-image-2` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | OPENAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/openai/gpt-image-2` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | 2026-10-09 |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1443,10 +1445,15 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Prompt | textarea | — | — |
 | Quality | enum | high | low, medium, high, auto |
 | Image URLs (JSON) | textarea | — | — |
-| Width | float | — | — |
-| Height | float | — | — |
 | Aspect ratio | enum | — | 16:9, 2:1, 3:2, 4:3, 1:1, 3:4, 2:3, 1:2, … |
 | Resolution | enum | — | 1K, 2K, 4K |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Width | float | — | — |
+| Height | float | — | — |
 
 ---
 
@@ -1456,7 +1463,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-openai-gpt-image-2-5-flare` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | OPENAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/openai/gpt-image-2.5-flare` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
@@ -1481,7 +1488,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-openai-gpt-image-2-5-sunburst` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | OPENAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/openai/gpt-image-2.5-sunburst` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |

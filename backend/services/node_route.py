@@ -54,17 +54,37 @@ DIRECT_REQUIRES: dict[str, str] = {"ideogram-reframe": "resolution"}
 # changelog and the model still listed as stable, so the table's date is the
 # one gated; a 404 before then names the replacement (maker_routes.py).
 _GEMINI_25_FLASH_IMAGE_SHUTDOWN = "2027-03-15"
+_GPT_IMAGE_15_SHUTDOWN = "2026-12-01"
 DIRECT_RETIRES: dict[str, dict[str, Any]] = {
     "nano-banana-fal": {"on": _GEMINI_25_FLASH_IMAGE_SHUTDOWN, "param": "model",
                         "values": ["nano-banana", "gemini-25-flash-image"]},
     "nano-banana-fal-edit": {"on": _GEMINI_25_FLASH_IMAGE_SHUTDOWN, "param": "model",
                              "values": ["nano-banana", "gemini-25-flash-image"]},
     "krea-image-google-nano-banana": {"on": _GEMINI_25_FLASH_IMAGE_SHUTDOWN},
+    # gpt-image-1.5: "Dec 1, 2026 | `gpt-image-1.5` | `gpt-image-2.5-sunburst` or
+    # `gpt-image-2.5-flare`" (https://developers.openai.com/api/docs/deprecations,
+    # checked 2026-10-14). From that day the fal copies run it.
+    "gpt-image-1-5": {"on": _GPT_IMAGE_15_SHUTDOWN},
+    "gpt-image-1-5-edit": {"on": _GPT_IMAGE_15_SHUTDOWN},
+}
+
+# Values of a param both routes read that the maker can't render as set: a run
+# saved with one stays on the fal or Krea copy (reason BLOCKED) instead of
+# silently changing shape. The defaults are never listed (they'd send every new
+# node to the copy). gpt-image-2's fal presets: OpenAI needs "total pixels
+# between 655,360 and 8,294,400", so Square (512x512) and the 16:9 presets
+# (576x1024, 1024x576) have no OpenAI size
+# (https://developers.openai.com/api/docs/guides/image-generation, checked
+# 2026-10-14; execution/maker_routes_openai.py maps the rest exactly).
+_GPT_IMAGE_2_FAL_UNSIZED = ["square", "portrait_16_9", "landscape_16_9"]
+DIRECT_BLOCKED_VALUES: dict[str, dict[str, list[Any]]] = {
+    "gpt-image-2-fal-generate": {"image_size": _GPT_IMAGE_2_FAL_UNSIZED},
+    "gpt-image-2-fal-edit": {"image_size": _GPT_IMAGE_2_FAL_UNSIZED},
 }
 
 # Why a direct route can't take a run (direct_block).
 REQUIRES = "requires"  # DIRECT_REQUIRES: the direct route needs a param that isn't set
-BLOCKED = "blocked"    # a copy-only param is set that the maker can't honor (directRoute.blockedBy)
+BLOCKED = "blocked"    # a copy-only param is set (directRoute.blockedBy), or a value the maker can't render (DIRECT_BLOCKED_VALUES)
 RETIRED = "retired"    # DIRECT_RETIRES: the maker shut this model down on its API
 
 LOCAL = "local"        # a utility node: no provider
@@ -160,6 +180,8 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
     - BLOCKED: a generated Krea copy names, in ``directRoute.blockedBy``, the
       Krea-only params (explicit width/height) the maker can't honor; a
       recipe that sets one stays on Krea instead of silently changing shape.
+      DIRECT_BLOCKED_VALUES does the same for a shared param's values the
+      maker can't render (gpt-image-2's small fal size presets).
     - RETIRED: on and after a DIRECT_RETIRES date the maker no longer serves
       the model, so the fal or Krea copy runs it."""
     values = params or {}
@@ -171,6 +193,9 @@ def direct_block(definition: Mapping[str, Any], params: Mapping[str, Any] | None
     for key in (spec.get("blockedBy") or []) if isinstance(spec, Mapping) else []:
         if _has_value(values.get(key)):
             return DirectBlock(BLOCKED, str(key))
+    for key, unsupported in DIRECT_BLOCKED_VALUES.get(node_id, {}).items():
+        if _effective(definition, values, key) in unsupported:
+            return DirectBlock(BLOCKED, key)
     retires = DIRECT_RETIRES.get(node_id)
     if retires and _today() >= retires["on"]:
         param = retires.get("param")

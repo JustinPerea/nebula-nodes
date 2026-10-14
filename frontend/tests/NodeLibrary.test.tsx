@@ -142,7 +142,9 @@ describe('NodeLibrary accessible authoring', () => {
     fireEvent.change(provider, { target: { value: 'openai' } });
     expect(search).toHaveValue('GPT Image');
     expect(screen.getByRole('button', { name: 'GPT Image 1' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'GPT Image 2 (Krea)' })).not.toBeInTheDocument();
+    // GPT Image 2 (Krea) also runs on OpenAI's own API; the Krea-only copy doesn't.
+    expect(screen.getByRole('button', { name: 'GPT Image 2 (Krea)' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'ChatGPT Image (Krea)' })).not.toBeInTheDocument();
   });
 
   it('explains empty searches and offers working task recovery and filter reset', () => {

@@ -171,7 +171,33 @@ DIRECT_ROUTES = {
                                           "to $0.039 per image."},
                                 {"url": GOOGLE_PRICING_URL, "quote": "Input price | Not available | $0.30 (text / image)"}]},
     },
+    "/generate/image/openai/gpt-image-2": {
+        # Krea's width/height are free numbers; OpenAI takes WIDTHxHEIGHT only
+        # within its size rules, so a recipe that sets either stays on Krea.
+        # aspect_ratio + resolution map to an exact OpenAI size (backend
+        # execution/maker_routes_openai.py KREA_OPENAI_SIZES). Unpriced (see below).
+        "directKeyName": "OPENAI_API_KEY", "translation": "krea-openai-image", "model": "gpt-image-2",
+        "kreaOnly": ["width", "height"], "directBlockedBy": ["width", "height"], "directParams": [],
+        "pricing": None,
+    },
+    "/generate/image/openai/gpt-image-2.5-flare": {
+        "directKeyName": "OPENAI_API_KEY", "translation": "krea-openai-image", "model": "gpt-image-2.5-flare",
+        "kreaOnly": [], "directParams": [], "pricing": None,
+    },
+    "/generate/image/openai/gpt-image-2.5-sunburst": {
+        "directKeyName": "OPENAI_API_KEY", "translation": "krea-openai-image", "model": "gpt-image-2.5-sunburst",
+        "kreaOnly": [], "directParams": [], "pricing": None,
+    },
 }
+
+# The Krea OpenAI copies' OpenAI route is unpriced. OpenAI tabulates GPT
+# Image 2 per image only at 1024x1024, 1024x1536 and 1536x1024 (image
+# generation guide, "Calculating costs", checked 2026-10-14), and a new Krea
+# GPT Image 2 node sets no aspect_ratio or resolution, so OpenAI picks the
+# size ('auto') and the default can't be priced; every other size is only in
+# OpenAI's calculator. GPT Image 2.5 has no per-image figure at all ("The GPT
+# Image 2 calculator does not estimate GPT Image 2.5 token consumption", model
+# pages).
 
 
 def direct_route_definition(endpoint, params):
@@ -206,7 +232,7 @@ def direct_route_definition(endpoint, params):
 
 def direct_route_pricing(endpoint):
     route = DIRECT_ROUTES.get(endpoint)
-    if not route:
+    if not route or not route.get("pricing"):
         return None
     pricing = dict(route["pricing"])
     provider = pricing.pop("provider")
