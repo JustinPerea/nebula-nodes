@@ -340,7 +340,7 @@ def get_handler_registry(
         # DIRECT_ROUTES) run on the maker's API when its key is set, unless
         # the node bills the Krea plan; otherwise the Krea gateway.
         gateway = partial(handle_krea_gateway, emit=emit)
-        registry[definition_id] = maker_routes.krea_router(definition_id, gateway) or gateway
+        registry[definition_id] = maker_routes.krea_router(definition_id, gateway, emit) or gateway
     from handlers.krea import (
         handle_krea_library_manage, handle_krea_moodboard_create, handle_krea_moodboard_search,
     )
