@@ -44,8 +44,11 @@ flowchart LR
 1. Put a strong key in `~/.hermes/.env`: `API_SERVER_KEY=` followed by the output of
    `openssl rand -hex 32`. The startup guard refuses a missing key, a placeholder, or one under 16
    characters, even on loopback [S2 `_api_key_passes_startup_guard`].
-2. Bring the adapter back: `/platform resume api_server` from Telegram, as the guard's own error says
-   [S2, S11]. If it stays fatal, restart the gateway. Then
+2. Restart the gateway: `hermes gateway restart` (it drains running turns first, then starts fresh)
+   [S15]. Don't use `/platform resume api_server`, even though the guard's error suggests it. A key
+   failure is marked non-retryable, so the adapter never enters the retry queue and resume answers
+   "api_server is not in the retry queue — nothing to resume." The key is also read only when the
+   adapter is built [S2 l.1196, l.4462-4478; S16]. Then
    `curl -s http://127.0.0.1:8642/health` should print `{"status": "ok"}` [S1 "GET /health"].
 3. Settings > Connect your agent > Hermes: name it (say "Hermes"), pick a color and a daily limit,
    Connect. Paste the printed `mcp_servers.nebula` entry into `~/.hermes/config.yaml`. It sets
@@ -61,12 +64,23 @@ flowchart LR
   - Desktop app: in the encrypted credential store Electron already has (`desktop/credentials.mjs`,
     `safeStorage`, macOS Keychain-backed), under a new name `HERMES_API_SERVER_KEY`, handed to the
     sidecar on the launch-secrets stdin line (`services/launch_secrets.py`), held in memory only.
-  - Browser dev: `settings.json` `apiKeys.HERMES_API_SERVER_KEY`, like every provider key in dev.
-  - Add the name to `services/credential_catalog.py` `CREDENTIAL_PROVIDERS` (and the desktop allowlist
-    that mirrors it). That puts it in every child-environment scrub for free, including
-    `acp_session._AGENT_ENV_DROP`. Mark it as not a model provider so no node routes to it.
-  - `GET /api/settings` and the personal-agents routes return only `keySet: true|false` for it, never
-    the masked `***abcd` tail other keys get.
+  - Browser dev: `settings.json` `apiKeys.HERMES_API_SERVER_KEY`, beside the provider keys.
+  - **Not** in `CREDENTIAL_PROVIDERS`. That set must equal the frontend `providerCatalog.ts` keys and
+    `settings.example.json` `apiKeys` (`test_settings_api.py`), so adding it there would make Settings
+    show Hermes as a model-provider key row. And it has no field to mark a key "not a provider".
+  - Instead, `services/credential_catalog.py` gets a second set, `NON_PROVIDER_CREDENTIALS =
+    {"HERMES_API_SERVER_KEY"}`, and `ALL_CREDENTIALS = CREDENTIAL_PROVIDERS | NON_PROVIDER_CREDENTIALS`.
+    - Scrubs switch to `ALL_CREDENTIALS`: `acp_session._AGENT_ENV_DROP`, `devserver.py`
+      `INHERITED_CREDENTIAL_ENV_KEYS`, and the desktop sidecar env strip.
+    - The desktop credential allowlist (`desktop/credentials.mjs`) gets a matching
+      `NON_PROVIDER_CREDENTIALS` export; its mirror test checks both sets.
+    - `_CREDENTIAL_PROVIDER_ALLOWLIST`, `providerCatalog.ts` and `settings.example.json` stay
+      providers only, so the generic `/api/settings/api-keys/{provider}` routes refuse the Hermes name.
+      It is written and deleted only through the personal-agents route, behind `require_person`.
+  - `GET /api/settings` has no person check (agents read it) and masks every `apiKeys` entry as
+    `***` plus the last 4. It must drop every `NON_PROVIDER_CREDENTIALS` name from `apiKeys` before
+    masking. The personal-agents routes return only `keySet: true|false`. Test: the key's tail never
+    appears in either response.
 - **Keeps the address**, not secret, in `personal-agents.json` on the agent row: `url` (default
   `http://127.0.0.1:8642`) and `appId` (the Connect app it uses).
   - v1 accepts only `http` on `127.0.0.1`, `localhost` or `::1`, the same rule
@@ -139,12 +153,17 @@ Frames are `id: <seq>` plus `data: <json>`; the event name is the JSON `event` f
 | `approval.request` | `request_id`, `command`, `description`, `choices`... | `permission_request` (below) |
 | `approval.responded` | `choice`, `request_id` | `permission_resolved` |
 | `run.completed` | `output`, `usage`, `runtime` | `output` as `text` only if nothing streamed, then `result` `end_turn` |
-| `run.failed` | `error`, `turn_exit_reason`, `partial` | `error`, then `result` `error`; `max_iterations_reached(...)` becomes "Hermes hit its turn limit." |
+| `run.failed` | `completed: false`, `partial`, and either `error` (provider or agent failure) or `output` plus `turn_exit_reason` (turn limit, partial reply) | `output` as `text` if present and not streamed; then `error` with Hermes' `error` if present, else "Hermes hit its turn limit." for `max_iterations_reached(...)`, else "Hermes stopped before finishing."; then `result` `error` |
 | `run.cancelled` | `interrupted: true` | `result` `cancelled` |
 | `run.interrupted` | `error` | `error` "Hermes' gateway stopped during this turn." |
 | `replay.truncated` | `oldest_retained_seq` | `system` "Some of Hermes' progress was lost while reconnecting." |
 | `run.steered` | | ignored in v1 |
 
+- `run.failed` has two shapes [S3 `_execute_run` l.972-986, S13 terminal status table]. A
+  provider failure (`failed=True`) carries `error` and no `output`. A turn that ended without
+  finishing (`completed=False` or `partial`, such as the iteration budget) carries `output` with
+  Hermes' fallback text and no `error`. Nebula must not assume `error` is there, and must show the
+  partial answer before the closing line.
 - Run events carry no tool-call id. Nebula pairs `tool.completed` with the oldest open `tool.started`
   of the same `tool` name (FIFO). Parallel calls of one tool can pair in the wrong order; the chat only
   shows previews, so that is acceptable [S3 `_FIXED_EVENT_FIELDS`].
@@ -174,12 +193,44 @@ Frames are `id: <seq>` plus `data: <json>`; the event name is the JSON `event` f
 
 - One chat = one Hermes session id, `nebula-<32 hex>`, minted by Nebula when the chat starts. It is the
   `sessionId` the chat panel already keeps and sends back.
-- Nebula records the ids it minted (`gateway-sessions.json` in the state dir, newest 200) and only ever
-  sends those. A send can't steer Nebula into his Telegram session by passing its id.
-- Because Hermes holds the history, a Nebula backend restart doesn't lose the conversation: the next
-  send with the same `sessionId` carries on. (ACP chats can't; their process dies with the backend.)
-- `/clear` and switching agent: stop any active run, forget the id, mint a new one next send. The old
-  session stays in his Hermes history (source `api_server`), like a `/new` in Telegram.
+- Nebula records the ids it minted (`gateway-sessions.json` in the state dir, newest 200), each with
+  the `agentId` and Hermes `url` it was minted for, and only ever sends those. A send can't steer
+  Nebula into his Telegram session by passing its id.
+- Hermes holds the history, so the conversation can outlive the socket, the backend and the app. That
+  doesn't happen by itself. Today's code ends it in three places, and each needs a change:
+  - **Socket ownership.** `/ws/chat` gives each socket a fresh `connection_id` (`main.py`), and
+    `acp_sessions.get(session_id, owner)` only returns a session whose owner matches. A reconnected
+    socket, or a restarted backend, gets `None`, `personal_turn` sends `personal_session_ended`, and
+    ChatPanel clears its `sessionId`.
+  - **Socket drop.** `close_owned(connection_id, "disconnected")` closes every session the socket
+    owned and forgets it.
+  - **App relaunch.** ChatPanel keeps `sessionId` in plain `useState`. Only the agent selection is in
+    `localStorage`, so a reopened panel sends no `sessionId` and a new Hermes session starts.
+- **Revival, backend.** `personal_turn` gets one new branch, for the gateway kind only. When
+  `acp_sessions.get` returns `None` and the agent is a gateway agent, it calls
+  `acp_sessions.revive_gateway(session_id, agent_id, connection_id)` instead of answering
+  `personal_session_ended`. Revival succeeds when:
+  - the id is in `gateway-sessions.json` with the same `agentId`, and the agent's current `url` matches
+    the recorded one (a different Hermes wouldn't have the history);
+  - the agent is on and `ready`;
+  - no live session in this backend already holds that id under another socket. If one does, the send
+    gets an `error` with a new code, `personal_session_busy`: "This conversation is open in another
+    Nebula window." Nothing is stolen, and the panel keeps its id (only `personal_session_ended`
+    clears it).
+  - The revived session's owner becomes the sending socket's `connection_id`. Ownership is per socket,
+    so it can't carry over; the minted-ids list is the guard instead. Any socket that may send to a
+    personal agent at all (person token, not Commons) may revive, the same rule as starting a chat.
+  - Anything else gets `personal_session_ended` as today. ACP sessions keep today's behaviour: their
+    process is gone, so there is nothing to revive.
+- **Revival, frontend.** For gateway agents, ChatPanel stores the chat's `sessionId` in `localStorage`
+  per agent (`nebula.chat.gatewaySession.<agentId>`, wrapped in try/catch like the selection key). On
+  open with a gateway agent selected, or on switching back to one, it restores that id and shows a `system` line: "Continuing your
+  earlier Hermes conversation. /clear starts fresh." The panel doesn't refetch the old messages in v1;
+  Hermes has them. `personal_session_ended` clears the stored id as well as the state.
+- `/clear` stops any active run, forgets the id (state and `localStorage`), and mints a new one next
+  send. Switching to another agent stops the active run but keeps the stored id, so coming back to
+  Hermes continues the conversation. The old session stays in his Hermes history (source
+  `api_server`), like a `/new` in Telegram.
 - The Nebula conversation is visible from his dashboard and `GET /api/sessions` as its own session.
   It does not appear inside his Telegram thread. What crosses over is memory (MEMORY.md, USER.md,
   skills), which is the point.
@@ -210,8 +261,15 @@ Frames are `id: <seq>` plus `data: <json>`; the event name is the JSON `event` f
 - No overall turn limit, as for ACP. Hermes has its own watchdogs, which end the run as `cancelled`
   with a `turn_exit_reason` [S13].
 - Stream drops while the run is live: reconnect with `Last-Event-ID: <last seq>`, up to 3 tries with
-  1, 2, 4 s backoff. Hermes keeps the last 1,000 events per run and the buffer for 5 minutes without a
-  subscriber [S3 `_RunStream`, S2 `_RUN_STREAM_TTL`].
+  1, 2, 4 s backoff. Hermes keeps the last 1,000 events per run [S3 `_RunStream`].
+- The buffer's 5 minutes count from when the run's stream was created, not from when the last
+  subscriber left. A sweep every 60 s drops the transport of any run older than 5 minutes that has no
+  subscriber at that moment, and later events are no longer buffered [S2 `_RUN_STREAM_TTL` l.4358,
+  S3 `_sweep_orphaned_runs_once` l.1284-1295]. So a drop during a run longer than 5 minutes can lose
+  the stream for good.
+- A 404 `run_not_found` from `/events` during a reconnect means "transport expired", not "no such
+  run" (`_handle_run_events` waits 1 s for the stream, then returns 404 [S3 l.1077-1082]). Nebula
+  stops retrying and goes straight to the poll below. It never shows "run not found".
 - Still nothing: `GET /v1/runs/{id}` once. Terminal: emit `output` and finish. Running: `system`
   "Lost touch with Hermes. It may still be working; its answer will be in this conversation's next
   turn." Terminal statuses stay pollable for an hour [S2 `_RUN_STATUS_TTL`].
@@ -236,8 +294,9 @@ Frames are `id: <seq>` plus `data: <json>`; the event name is the JSON `event` f
   uses on `AcpHostSession`: `id`, `agent_id`, `owner`, `display_name`, `color`, `closed`,
   `prompt()`, `resolve_permission()`, `cancel_turn()`, `close()`, `ended_message()`, `launch_key`.
 - `AcpSessionManager` becomes a manager of both kinds (rename to `PersonalSessionManager` later, not in
-  the first PR). `open()` picks the class from the agent's kind. `personal_turn` in `main.py` doesn't
-  change shape.
+  the first PR). `open()` picks the class from the agent's kind. `personal_turn` in `main.py` keeps
+  its shape apart from the gateway-only revival branch (see Conversation continuity), which calls a
+  new `revive_gateway()` on the manager.
 
 ### Shared
 
@@ -261,10 +320,11 @@ Frames are `id: <seq>` plus `data: <json>`; the event name is the JSON `event` f
   app token. So no `agent-tokens/` file, no `NEBULA_AGENT_TOKEN_FILE`, no per-chat revoke.
 - **No Nebula workspace** and no `workspace_scope`. Hermes' tools run where Hermes runs.
 - **Idle reaper.** Nothing is held open between turns, so idle costs nothing. The reaper only drops the
-  in-memory record after 30 minutes; the next send with the same `sessionId` revives it from
-  `gateway-sessions.json` without a new health check.
-- **Disconnect.** ACP kills the agent with the socket. Here a socket drop stops the active run (so
-  nothing works unwatched on Nebula's behalf) but keeps the conversation.
+  in-memory record after 30 minutes; the next send with the same `sessionId` goes through
+  `revive_gateway()` without a new health check.
+- **Disconnect.** ACP kills the agent with the socket. Here `close_owned` on a socket drop stops the
+  active run (so nothing works unwatched on Nebula's behalf) and drops the in-memory record, but leaves
+  the id in `gateway-sessions.json`. The next send from any socket revives it.
 
 ## Budget and identity
 
@@ -294,7 +354,7 @@ Frames are `id: <seq>` plus `data: <json>`; the event name is the JSON `event` f
 - **Nebula must never:**
   - log the key, put it in an error message, a chat event, a crash report or diagnostics;
   - send it to the renderer, even masked;
-  - put it in a child process environment (the `CREDENTIAL_PROVIDERS` scrub covers this) or argv;
+  - put it in a child process environment (the `ALL_CREDENTIALS` scrub covers this) or argv;
   - send it anywhere but the stored loopback address (no proxies, no redirects);
   - choose `session` or `always` on an approval;
   - forward a client-supplied Hermes session id it didn't mint.
@@ -317,7 +377,9 @@ Frames are `id: <seq>` plus `data: <json>`; the event name is the JSON `event` f
 | 429 cap | "Hermes is busy; try again in a moment." |
 | 503 draining | "Hermes is restarting. Try again in a few seconds." |
 | Provider failure (`run.failed`) | Hermes' redacted error, then the turn ends |
-| Turn limit | "Hermes hit its turn limit." |
+| Turn limit or unfinished turn | Any partial answer Hermes sent, then "Hermes hit its turn limit." (or "Hermes stopped before finishing.") |
+| Stream lost past Hermes' 5-minute buffer (404 on reconnect) | Poll result, or "Lost touch with Hermes..." |
+| Conversation open in another Nebula window | "This conversation is open in another Nebula window." |
 | Stream lost, run still going | "Lost touch with Hermes. It may still be working..." |
 | Gateway restarted mid-turn | "Hermes' gateway stopped during this turn." |
 | Approval timed out in Hermes | Card turns "timed out"; Hermes reports the command blocked |
@@ -336,14 +398,25 @@ Frames are `id: <seq>` plus `data: <json>`; the event name is the JSON `event` f
   validation, approval choice mapping (never `session` or `always`).
 - **Session** (`tests/test_gateway_session.py`): approval round trip with `request_id`; Hermes-side
   timeout flips the card; stop with and without a terminal event; reconnect with `Last-Event-ID`;
-  poll fallback; `close_stale` on key or address change; `/clear` mints a new id; only minted ids are
-  accepted; backend-restart continuity from `gateway-sessions.json`.
+  poll fallback, including a 404 from `/events` after the transport expired (goes to the poll, never
+  says "run not found"); `run.failed` with `output` and no `error` (partial text shown, then the
+  turn-limit line) and with `error` and no `output`; `close_stale` on key or address change; `/clear`
+  mints a new id; only minted ids are accepted; `revive_gateway()` from a new `connection_id` after a
+  socket drop and after a backend restart (fresh manager, same `gateway-sessions.json`), refused for an
+  unminted id, another agent's id, a changed `url`, or an id live under another socket.
 - **Secrets** (`tests/test_gateway_secrets.py`): the key never appears in logs (caplog), chat events,
-  errors, settings responses or a child environment; no proxy or redirect is followed.
+  errors, settings responses or a child environment; no proxy or redirect is followed. `GET
+  /api/settings` has no `HERMES_API_SERVER_KEY` entry (not even `***` plus 4); the generic api-keys
+  routes refuse the name; `_AGENT_ENV_DROP` and the devserver scrub include it;
+  `test_settings_api`'s provider-catalog check still passes without a frontend change.
 - **WebSocket** (`tests/test_chat_personal_ws.py` additions): a `personal:hermes` send streams through
-  the fake server; permission answers need the person token and the owning socket.
+  the fake server; permission answers need the person token and the owning socket; close the socket,
+  open a new one, send with the old `sessionId`: the fake server sees the same Hermes `session_id`
+  and no `personal_session_ended` is sent.
 - **Frontend**: Settings row (key field write-only, Check button states, app picker); `vitest` for the
-  picker status; no ChatPanel change expected.
+  picker status; ChatPanel stores the gateway `sessionId` per agent, restores it on mount with the
+  "Continuing" line, and clears it on `/clear` and `personal_session_ended`, not on agent switch.
+  `localStorage` throwing doesn't break the panel.
 - Run the full backend suite, `npx vitest run`, `tsc`, `npm run lint`, and the contracts check.
 
 ### Live verification (Justin)
@@ -359,16 +432,19 @@ Frames are `id: <seq>` plus `data: <json>`; the event name is the JSON `event` f
 7. Message Hermes on Telegram during a Nebula turn. Both answer.
 8. "Remember that my favourite color is teal" in Nebula, then ask in Telegram.
 9. `/clear`, send again: a fresh conversation, the old one still in his Hermes dashboard's session list.
-10. Quit and reopen Nebula mid-conversation, send again: the conversation continues.
+10. Quit and reopen Nebula mid-conversation. The panel says it is continuing; ask "what did I just
+    ask you?" and Hermes answers from the earlier turns.
+11. Restart only the backend (dev) with the panel open, send again: same conversation, no "agent has
+    stopped" error.
 
 ## Delivery
 
 | PR | What | Rough size |
 |---|---|---|
-| 0 | Justin's setup (key, resume adapter, Connect, paste MCP entry). No code. | 15 min |
-| 1 | Backend: `hermes_gateway.py`, `gateway_session.py`, gateway kind in `personal_agents.py`, key storage (dev settings, credential catalog, desktop allowlist, launch secrets), manager branching, fake server and tests | ~900 lines incl. tests |
+| 0 | Justin's setup (key, gateway restart, Connect, paste MCP entry). No code. | 15 min |
+| 1 | Backend: `hermes_gateway.py`, `gateway_session.py`, gateway kind in `personal_agents.py`, key storage (dev settings, `NON_PROVIDER_CREDENTIALS` in `credential_catalog.py` and its desktop mirror in `credentials.mjs`, scrubs switched to `ALL_CREDENTIALS`, `GET /api/settings` dropping the name, launch secrets), manager branching, fake server and tests. `providerCatalog.ts` and `settings.example.json` don't change. | ~950 lines incl. tests |
 | 2 | Settings UI: key field, address, app link, Check; picker status; `PERSONAL-AGENTS.md` and `MCP-SETUP.md` updates | ~400 lines |
-| 3 | Resilience: `Last-Event-ID` reconnect, poll fallback, restart continuity, Hermes-side approval timeout handling | ~300 lines |
+| 3 | Resilience: `Last-Event-ID` reconnect, 404-means-expired and poll fallback, `revive_gateway()` and its `personal_turn` branch, ChatPanel `sessionId` persistence per gateway agent, Hermes-side approval timeout handling | ~450 lines |
 | later | Steer, images, remote Hermes over https, other API-server agents | |
 
 PR 1 depends on the token-file branch only for the docs snippet; the code doesn't.
@@ -412,6 +488,12 @@ the files below match it except for type annotations. Base URL:
 - [S12] `tools/approval_context.py` l.256 (`approvals.timeout`, default 300).
 - [S13] `website/docs/developer-guide/programmatic-integration.md` l.181-215 (steer, terminal statuses).
 - [S14] `website/docs/user-guide/security.md` l.259 and l.273 ("always" saves to the permanent allowlist in `config.yaml`).
+- [S15] `website/docs/user-guide/windows-native.md` l.236 (`hermes gateway restart`: drain-first stop,
+  then a fresh start).
+- [S16] `gateway/run_startup.py` l.1331-1338 (a fatal adapter goes to the retry queue only when
+  `fatal_error_retryable`).
+- [S17] `gateway/slash_commands.py` l.521-526 (`/platform resume` on an unqueued platform returns
+  `not_queued_resume`), `locales/en.yaml` l.900 (its text).
 
 ### Where docs and code disagree or say less
 
@@ -426,5 +508,8 @@ the files below match it except for type annotations. Base URL:
   [S13], and code limits it to `running` runs.
 - Docs' config example puts settings under `gateway.api_server`; Justin's config uses
   `platforms.api_server.extra`. Docs say both are accepted [S1 l.742].
-- `/platform resume api_server` re-reading a new key comes from the guard's error text [S2]; not
-  verified by running it.
+- Contradicted by code: the key guard's error text says to set the key and run `/platform resume
+  api_server` [S2 l.4462-4478]. But it sets the fatal error with `retryable=False`, startup queues a
+  failed adapter for retry only when it is retryable [S16], and resume refuses a platform that isn't
+  queued ("not in the retry queue — nothing to resume") [S17]. The key is read once when the
+  adapter is built [S2 l.1196]. Only a gateway restart brings it back.
