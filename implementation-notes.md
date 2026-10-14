@@ -3528,3 +3528,85 @@ Banana (`nano-banana-fal`, `nano-banana-fal-edit`, and the Krea copies `krea-ima
 - **Engine cache test.** `test_node_route.py` now runs `execute_graph` end to end: fal run, same keys hit the
   cache, adding GOOGLE_API_KEY misses and calls the direct handler. Verified it fails with the `_route` tag
   disabled.
+
+## 2026-10-14 — Direct maker routes, Google lane (identity-edit, Krea NB 2.1 / Veo 3.1 / Omni 1.1)
+
+Branch `direct-google`, on top of the Nano Banana pilot. New code lives in
+`backend/execution/maker_routes_google.py`; shared files got small additive
+hooks only.
+
+- **Routes built.** `identity-edit` -> `gemini-3.1-flash-image` (`GOOGLE_API_KEY`);
+  `krea-image-google-nano-banana-2-1` -> `gemini-nano-banana-2.1` (`GOOGLE_API_KEY`, Interactions API);
+  `krea-video-google-veo-3-1` / `-fast` / `-lite` -> `veo-3.1-generate-001` / `-fast-generate-001` /
+  `-lite-generate-001` on Vertex (`GOOGLE_VERTEX_CREDENTIALS` only);
+  `krea-video-google-gemini-omni-flash-1-1` -> `gemini-omni-1.1-flash` (`GOOGLE_API_KEY`).
+  Skipped as briefed: Krea Veo 2 / 3 / 3 Fast (retired 2026-06-30) and Omni Flash 1.0 (preview ends 2026-10-22).
+- **Veo copies are Vertex-only.** The Gemini API previews shut down 2026-10-22 (deprecations table), eight
+  days from now, and `handle_veo` already refuses key-only runs after that. Adding `GOOGLE_API_KEY` as a
+  second direct key would have needed a `DIRECT_RETIRES` entry that flips a week later, so I didn't add it.
+  A Gemini API key alone leaves these nodes on Krea.
+- **New route rule: `directRoute.blockedWhen`** (`node_route.UNSUPPORTED`, mirrored in `directRoute.ts`,
+  worded in readiness). It keeps a run on the copy when a *shared* param has a value the maker can't render.
+  First use: Veo 3.1 Fast at 4K. Vertex's model card says Fast outputs "720p, 1080p", but the Vertex pricing
+  page lists a Fast 4k price. That conflict is why the run stays on Krea instead of guessing. The generator
+  refuses a `directBlockedWhen` that would block the param's default.
+- **Port-dependent limits can't be route rules** (`select_route` sees params, not wires), so they are refused
+  in the direct handler before any request. Veo references need duration 8 ("reference image to video only
+  supports 8 seconds"). Veo references at 4K are refused because the references page and the API reference
+  say "4k (Veo 3.1 Preview models only)". Veo references with start/end frames are refused because no page
+  documents that combination. An end frame without a start frame is refused (Gemini API: lastFrame "Must be
+  used in combination with the image parameter"). For Omni, a start image plus references is refused, since
+  Google separates them only by `[# Sources ...]` tags in the prompt. **Tradeoff:** with a Vertex/Google key
+  saved, these combos fail instead of running on Krea. The person can pick the Krea plan or remove the key.
+- **Doc conflicts I followed the newer page on.** (1) referenceImages on GA ids: the older vertex-ai API
+  reference lists previews only; the Agent Platform model card and references page list
+  `veo-3.1-generate-001` and `-fast-generate-001`. (2) Lite frames: the model card says "Image Not supported"
+  and also "first and last frame Supported". `veo-3` already sends frames and lets Vertex decide, and the Krea
+  Lite route does the same. Neither one has been live-verified.
+- **generateAudio.** Vertex: "Required for Veo 3 models". Krea's Standard/Fast `generate_audio` (default false)
+  maps to it. Krea's Lite has no such field, and its price equals Google's *video-only* Lite rate ($0.03/s at
+  720p), so Lite sends `false`. Whether Krea's Lite output actually has sound is NOT CONFIRMED.
+- **Omni duration format.** The Gemini API's Interactions reference lists `response_format.duration` as an
+  optional string with no format. Vertex's page for the same Interactions API says "integers between 3 and 10,
+  followed by 's'", so the handler sends "8s". It's only sent when the node has a duration (the
+  `gemini-omni-flash` node has none, so it is unchanged). Also, `handle_gemini_omni` now accepts a list on
+  `video` (up to 3 reference clips); a single string still behaves as before.
+- **Nano Banana 2.1 thinking.** `_nano_banana_interaction` now sends `generation_config.thinking_level` when
+  `thinkingLevel` is minimal/medium/high (the image-generation page's REST example). Only the Krea copy sets it;
+  the `nano-banana` node has no thinking param yet (follow-up if wanted).
+- **identity-edit.** The bundle expansion and mask refusal moved from `sync_runner._identity_edit_handler`
+  into `maker_routes_google.identity_edit_request`, used by both routes. The definition was split with no
+  param changes (`params: []` + `sharedParams` [resolution, thinking_level, identity_strength]). The
+  fingerprint test approves it via `APPROVED_DUAL_ROUTE_SPLITS["identity-edit"]` (mutation-checked: changing
+  identity_strength's default still fails). **Surprise:** route filtering would drop a saved node `seed` (not a
+  declared param), which `test_bundle_seed_applied_when_node_seed_unset` relies on. The handler carries it to
+  the fal route only. Google has no image seed, so the bundle seed doesn't apply there.
+- **Progress for long direct jobs.** `krea_router(..., emit=)` now partials `emit` into a direct handler marked
+  `takes_emit` (Veo, Omni), so the Vertex poll reports progress. The one-line change in `sync_runner` passes
+  `emit=emit`. Other lanes editing that same line will conflict trivially.
+- **Pricing (all checked 2026-10-14 on Google's pages).**
+  - Veo: Vertex "per count" is read as per second (same reading as `veo-3`). Standard $0.40/$0.60 4k with
+    audio, $0.20/$0.40 video only; Fast $0.10/$0.12 with audio, $0.08/$0.10 video only; Lite $0.03/$0.05
+    video only. These equal Krea's own prices.
+  - Omni: $0.10136/s (5,792 tokens/s at 720p x $17.50/1M) x duration, with an open `plus` for input media and
+    thinking tokens. Google publishes no token counts for those.
+  - NB 2.1: $0.0336/$0.0504/$0.113 per 1K/2K/4K, plus up to 14 refs at 1,120 tokens x $1.50/1M. The 1,120 is
+    my reading: NB 2.1 is "an update to Nano Banana 2 (Gemini 3.1 Flash Image)", and the media-resolution page
+    gives 1,120 for Gemini 3 image inputs. The route also carries `plus: "thinking tokens"`, because 2.1
+    defaults to medium thinking and Google says thinking tokens are always billed.
+  - **Decision for Justin:** Google's NB 2.1 list price is *higher* than Krea's ($0.0336 vs $0.03 at 1K;
+    Krea's 2K is $0.0505, 4K $0.0755 vs Google's $0.113). The maker-key-wins precedence still sends the run to
+    Google. If you'd rather Krea win when it's cheaper, that's a precedence change, not a lane change.
+  - identity-edit's Google route: $0.067/$0.101 (1024/2048) + 14 input images at 1,120 x $0.50/1M. Thinking
+    medium/high is unpriced, the same rule as the pilot's Nano Banana 2. The fal route still has no curated
+    price (it had none before).
+  - The sync script's `direct_route_pricing` now skips the image reference math for models not in
+    `REFERENCE_IMAGE_COST`, so video routes use their own notes. `noteExtra` appends to the image note.
+- **Tests.** New `backend/tests/test_maker_routes_google.py` (transport mocked; 29 tests incl. real-catalog
+  prices), shared route cases (+8), TS directBlock/readiness cases. `test_krea_catalog` now allows a direct
+  route without a Krea price (Omni 1.1 has no `x-krea-pricing`) and Vertex source URLs. Mutation-checked:
+  the blockedWhen check (py and TS), the thinking passthrough, Omni duration, generateAudio mapping, the emit
+  partial, the 8-second refusal, the fal seed carry, and identity-edit's imageSize.
+- **NOT CONFIRMED (no live calls):** Lite frames on Vertex; GA referenceImages acceptance; the "8s" Omni
+  duration string on the Gemini API; whether Omni honors several video parts as references (Google also says
+  "Referencing or reasoning across multiple videos is not supported").
