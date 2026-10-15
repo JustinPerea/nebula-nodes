@@ -43,7 +43,9 @@ Written in our own words from BFL's OpenAPI and docs (fetched 2026-10-15).
 
 | Node | Handler | Status |
 |---|---|---|
-| none yet | `backend/handlers/bfl.py` (`run_task`) | client shipped 2026-10-15; FLUX 3 nodes wire it in a later PR of the routing series |
+| `flux-3-image`, `flux-3-image-klein`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale` (BFL is the maker route, first in Auto order) | `route_clients.run_bfl` → `backend/handlers/bfl.py` (`run_task`) | route-table nodes, 2026-10-15; per-host detail in `flux-3.md` |
+| `flux-3-image-klein-base` | fal only | BFL's API doesn't serve Klein Base |
+| flux-2-pro (FLUX.2) | fal (`sync_runner.py`) | its BFL route is the next PR of the routing series |
 
 ## Known gaps and re-checks
 
@@ -52,4 +54,4 @@ Written in our own words from BFL's OpenAPI and docs (fetched 2026-10-15).
 - `safety_tolerance`: 0-4 for FLUX 3 on the errors page, 0-7 org-gated in the OpenAPI. Re-check before exposing more than 0-4.
 - Result-link lifetimes differ between pages; the client downloads at once, so only a very slow download could hit them.
 - The delivery host is not restricted (BFL says region hostnames change); the key is never sent to it.
-- No paid call has been made against BFL. The first FLUX 3 node PR should run one live image (cheapest: Klein at 768sq, $0.008) with Justin's go-ahead.
+- No paid call has been made against BFL. The first live check should be one Klein image at 768sq ($0.008), with Justin's go-ahead.

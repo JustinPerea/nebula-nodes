@@ -18,7 +18,23 @@ sequenceDiagram
   D-->>N: image or video bytes, saved to the run folder at once
 ```
 
-**Status (2026-10-15, routing series PR 3):** BFL is the maker route of FLUX 3 Image, FLUX 3 Image Klein, FLUX 3 Video, FLUX Video Edit and FLUX Video Upscale (`flux-3-image`, `flux-3-image-klein`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale`). Under Auto a run goes to BFL whenever `BFL_API_KEY` is set (and stops, offering the routes that can, when BFL can't take the settings); the provider switcher picks another route. `draft_enhance` isn't offered yet. See `docs/PROVIDER-ROUTES.md`.
+**Status (2026-10-15, routing series PR 3):** BFL is the maker route of FLUX 3 Image, FLUX 3 Image Klein, FLUX 3 Video, FLUX Video Edit and FLUX Video Upscale. Each is one node with a provider switcher on the card; BFL is the first route, so with `BFL_API_KEY` saved, Auto runs on BFL (and stops, offering the routes that can, when BFL can't take the settings). `draft_enhance` isn't offered yet. FLUX.2 (`flux-2-pro`) still runs on fal; its BFL route is the next PR. See `docs/PROVIDER-ROUTES.md`.
+
+## Nodes
+
+| Node | Providers you can pick (Auto order) |
+|---|---|
+| FLUX 3 Image (`flux-3-image`) | Black Forest Labs, fal, Replicate, OpenRouter |
+| FLUX 3 Image Klein (`flux-3-image-klein`) | Black Forest Labs, OpenRouter |
+| FLUX 3 Image Klein Base (`flux-3-image-klein-base`) | fal only (BFL's API doesn't serve it) |
+| FLUX 3 Video (`flux-3-video`) | Black Forest Labs, fal, Replicate, OpenRouter, Krea |
+| FLUX Video Edit (`flux-video-edit`) | Black Forest Labs, fal, Krea |
+| FLUX Video Upscale (`flux-video-upscale`) | Black Forest Labs, fal, Replicate, Krea |
+
+- **Auto** runs on the first provider in that order whose key you've saved. If a setting doesn't fit that provider (1.5k on fal, 4K video on Replicate), the run stops before anything is billed and the switcher offers the providers that take it. Auto never moves you to another provider by itself.
+- **Each provider shows its own options.** Pick a provider and the Inspector lists only the values it takes; a value it doesn't take is moved to the closest one, with a note on the card.
+- **Krea's old FLUX nodes** (Flux 3 Video, Flux Video Edit, Flux Video Upscale) open as these nodes set to Krea, with the same Krea billing choice.
+- What each provider takes, per node, with sources: `docs/model-providers/bfl/flux-3.md`. How routes work: [provider routes](../PROVIDER-ROUTES.md).
 
 ## Setup
 
@@ -111,7 +127,7 @@ Drafts (hd only) cost $0.06 per second. The September 10 release note listed old
 
 **FLUX.2, per megapixel** (first output MP, then each additional output MP and each input MP): [pro] $0.03 then $0.015; [max] $0.07 then $0.03; [flex] $0.05 then $0.05; [klein] 9B $0.015 then $0.002; [klein] 4B $0.014 then $0.001.
 
-These prices aren't in `backend/data/model_pricing.json` yet; they go in with the nodes that use them.
+The FLUX 3 prices are in `backend/data/model_pricing.json`, per route (other providers' prices: `docs/model-providers/bfl/flux-3.md`). The FLUX.2 prices go in with its BFL route.
 
 ## Not confirmed yet
 
@@ -119,7 +135,7 @@ These prices aren't in `backend/data/model_pricing.json` yet; they go in with th
 - What `No Card Generated` means beyond "never becomes Ready"; BFL lists it as a final status without a description.
 - `safety_tolerance` limits: BFL's errors page says 0-4 for FLUX 3, the OpenAPI says 0-7 with the approved maximum set per organization.
 - Whether FLUX 3 Video takes a webhook: the cookbook shows `webhook_url`, the OpenAPI body doesn't. Nebula polls either way.
-- Nothing here was tried against a paid endpoint: no generations were run while building it.
+- Nothing here was tried against a paid endpoint: no generations were run while building it. The first live check should be one Klein image at 768sq ($0.008).
 
 ## Code
 

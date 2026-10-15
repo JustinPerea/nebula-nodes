@@ -23,15 +23,22 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 | [QuiverAI (Arrow)](./quiver.md) | 2 | ~85% | complete | No user-facing model browser (GET /v1/models data only fills the dropdown) |
 | [World Labs (Marble)](./worldlabs.md) | 2 | ~42% | complete | World/media lifecycle, listing, sharing, and depth-panorama conversion are not exposed as nodes |
 | [xAI (Grok Imagine)](./xai.md) | 1 (+6 direct routes) | ~20% | complete | `grok-imagine-image-quality` and video extensions; Grok Imagine images run on the xAI key since 2026-10-14 (fal and Krea copies) |
-| [Replicate](./replicate.md) | 1 | ~20% | complete | Real-time streaming of model output (SSE via urls.stream) — the big one for chat/LLM models |
-| [OpenRouter](./openrouter.md) | 1 | ~30% | complete | Tool / function calling (tools, tool_choice) |
+| [Replicate](./replicate.md) | 1 (+3 FLUX 3 routes) | ~20% | complete | Real-time streaming of model output (SSE via urls.stream) — the big one for chat/LLM models |
+| [OpenRouter](./openrouter.md) | 1 (+3 FLUX 3 routes) | ~30% | complete | Tool / function calling (tools, tool_choice) |
 | [Nous Portal (Hermes)](./nous.md) | 1 | ~70% | complete | Legacy POST /completions endpoint (and `<think>` prefill via it) not exposed |
 | [Higgsfield](./higgsfield.md) | 1 | ~25% | complete | DoP motion/camera presets (getMotions()) — Higgsfield's headline feature — not surfaced |
 | [Anthropic (Claude)](./anthropic.md) | 1 | ~20% | complete | Tool use / function calling — both custom client tools and Anthropic server tools entirely unexposed |
 | [TypeSafe (Jev)](./typesafe.md) | 3 | ~75% | complete | Several questions in one Decide request; Box edge-check questions and several targets per image |
-| [Black Forest Labs (FLUX)](./bfl.md) | 0 (client and key only, 2026-10-15) | Submit, poll and download for every FLUX endpoint; key check | none yet (comes with the nodes) | The FLUX 3 nodes themselves (next PRs of the routing series) |
+| [Black Forest Labs (FLUX)](./bfl.md) | 6 FLUX 3 route-table nodes (BFL route on 5), 2026-10-15 | FLUX 3 Image, Klein, Video, Video Edit, Video Upscale; key check | complete | FLUX.2 on BFL (next PR); FLUX 3 Video `draft_enhance` |
 
 ## Agent skill gaps
+
+**2026-10-15 update:** Black Forest Labs has a complete skill at
+`.agents/skills/bfl/SKILL.md` (mirrored in `.claude/skills/bfl/`): the six
+FLUX 3 route-table nodes, what each provider route takes, Auto and the
+switcher, prices, BFL's prompting rules (no negative prompts, bounding boxes in
+the prompt) and errors. The `krea`, `fal`, `replicate` and `openrouter` skills
+now describe their routes on the FLUX 3 and Krea 3 nodes.
 
 **2026-09-03 update:** World Labs joined the catalog with a complete repo-local
 skill at `.agents/skills/worldlabs/SKILL.md`. It covers the two public-Marble

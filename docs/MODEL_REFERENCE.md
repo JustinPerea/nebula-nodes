@@ -107,7 +107,7 @@ Nodes: 307 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Images (Image ×n) |
 | **Outputs** | Image (Image) |
-| **Audited** | — |
+| **Audited** | 2026-10-15 |
 
 **Routes** (Auto tries them in this order; `_provider` picks one)
 
@@ -157,7 +157,7 @@ Nodes: 307 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Images (Image ×n) |
 | **Outputs** | Image (Image) |
-| **Audited** | — |
+| **Audited** | 2026-10-15 |
 
 **Routes** (Auto tries them in this order; `_provider` picks one)
 
@@ -195,7 +195,7 @@ Nodes: 307 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Images (Image ×n) |
 | **Outputs** | Image (Image) |
-| **Audited** | — |
+| **Audited** | 2026-10-15 |
 
 **Routes** (Auto tries them in this order; `_provider` picks one)
 
@@ -898,7 +898,7 @@ Nodes: 307 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Images (Image ×n) |
 | **Outputs** | Image (Image) |
-| **Audited** | — |
+| **Audited** | 2026-10-15 |
 
 **Routes** (Auto tries them in this order; `_provider` picks one)
 
@@ -2195,7 +2195,7 @@ Nodes: 307 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Start image (Image), End image (Image), Start video (Video), Keyframes (Image ×n) |
 | **Outputs** | Video (Video)* |
-| **Audited** | — |
+| **Audited** | 2026-10-15 |
 
 **Routes** (Auto tries them in this order; `_provider` picks one)
 
@@ -2247,7 +2247,7 @@ Nodes: 307 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Video (Video)* |
 | **Outputs** | Video (Video)* |
-| **Audited** | — |
+| **Audited** | 2026-10-15 |
 
 **Routes** (Auto tries them in this order; `_provider` picks one)
 
@@ -5639,7 +5639,7 @@ Nodes: 307 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Video (Video)*, Prompt (Text) |
 | **Outputs** | Video (Video)* |
-| **Audited** | — |
+| **Audited** | 2026-10-15 |
 
 **Routes** (Auto tries them in this order; `_provider` picks one)
 
