@@ -12,6 +12,8 @@ from typing import Any
 
 import httpx
 
+from services.http_errors import HTTP_ERRORS
+
 SYSTEM_PROMPT = (
     "You are a prompt enhancer for an AI image and video generation studio. "
     "Rewrite the user's prompt to be more vivid, specific, and visually descriptive "
@@ -124,7 +126,7 @@ async def _call_provider(
     url, headers, body = build_enhance_request(provider, key, model, prompt)
     try:
         resp = await client.post(url, headers=headers, json=body)
-    except httpx.HTTPError as exc:
+    except HTTP_ERRORS as exc:
         raise EnhanceProviderError(f"Could not reach {provider}") from exc
     if resp.status_code >= 400:
         raise EnhanceProviderError(f"{provider} call failed ({resp.status_code})")

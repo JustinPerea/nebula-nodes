@@ -122,7 +122,7 @@ Start/end frames and references can't be combined: BytePlus calls them "mutually
 
 **Cancelling.** Stopping a run sends `DELETE /contents/generations/tasks/{id}`. BytePlus cancels a task that is still queued; "a running task can't be cancelled", so it finishes and, if it succeeds, BytePlus bills it. Nebula stops waiting after about 65 minutes and sends the same DELETE.
 
-**Poll errors.** A poll that gets a 5xx or loses the connection is retried after 2, 4, 8 and 16 seconds (about 30 seconds in all; `backend/execution/poll_retry.py`, shared by every async video poller). A 4xx isn't retried. If the poll still fails, the run fails and Nebula sends the DELETE, so a task that is still queued doesn't start.
+**Poll errors.** A poll that gets a 5xx or loses the connection (a TLS error mid-response included) is retried after 2, 4, 8 and 16 seconds (about 30 seconds in all; `backend/execution/poll_retry.py`, shared by every async video poller). A 4xx isn't retried. If the poll still fails, the run fails and Nebula sends the DELETE, so a task that is still queued doesn't start.
 
 ### Seedance pricing (model-pricing, read 2026-10-14)
 

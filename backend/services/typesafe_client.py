@@ -39,6 +39,8 @@ from typing import Any, Iterable, Mapping, Sequence
 import httpx
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+from services.http_errors import TRANSPORT_ERRORS
+
 API_URL = "https://api.typesafe.ai/v1/systemone"
 CREDENTIAL = "TYPESAFE_API_KEY"
 IMAGES_HEADER = "TypeSafe-Danger-Zone-Images"
@@ -908,7 +910,7 @@ async def system_one(api_key: str, *, model: str, state: Any, questions: Mapping
             response: httpx.Response | None = None
             try:
                 response = await client.post(API_URL, headers=headers, **kwargs)
-            except (httpx.TimeoutException, httpx.TransportError) as exc:
+            except TRANSPORT_ERRORS as exc:  # ssl.SSLError too: see services/http_errors.py
                 if attempt > MAX_RETRIES:
                     kind = "timed out" if isinstance(exc, httpx.TimeoutException) else "connection failed"
                     raise TypeSafeError(f"Couldn't reach TypeSafe ({kind}) after {attempt} tries. "
