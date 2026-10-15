@@ -793,6 +793,9 @@ def _error_detail(response: httpx.Response, api_key: str) -> tuple[str, str | No
     text = _redact(" ".join(text.split()), api_key)
     if "max_tokens_exceeded" in text:
         code = "max_tokens_exceeded"  # more useful than a broad error_type
+    elif code:
+        # The code reaches the node error too; it gets the same key scrub and a cap.
+        code = _redact(code, api_key)[:80]
     return (text[:300] + "…" if len(text) > 300 else text), code
 
 

@@ -27,6 +27,7 @@ from execution.sync_runner import get_handler_registry
 from models.graph import GraphEdge, GraphNode, PortValueDict
 from services import typesafe_client as ts
 from services.edit_masks import fit_mask, has_transparency, openai_edit_mask
+from services.file_access import ProtectedPathError
 from services.output import OUTPUT_ROOT, local_media_ref
 
 OPENAI_SSE = (Path(__file__).resolve().parents[2] / "contracts" / "fixtures" / "handlers" / "openai"
@@ -118,7 +119,8 @@ def test_a_mask_that_already_has_transparency_is_left_alone():
     mask.paste((0, 0, 0, 0), (0, 0, 16, 16))
     data = _png(mask)
     assert has_transparency(mask)
-    assert openai_edit_mask(data, (128, 128)) == data
+    # Already a PNG with alpha at the image's size: sent byte for byte.
+    assert openai_edit_mask(data, (64, 64)) == data
 
 
 def test_fit_mask_keeps_polarity_and_skips_a_mask_that_fits():
@@ -255,3 +257,183 @@ async def test_box_mask_drives_gpt_image_25_edit_with_a_transparent_mask(monkeyp
     expected = [0 if level >= 128 else 255 for level in box_mask.convert("L").getdata()]
     assert list(sent.getchannel("A").getdata()) == expected
     assert sent.getchannel("A").getpixel((380, 190)) == 0 and sent.getchannel("A").getpixel((20, 20)) == 255
+
+
+# -- review: resolver edge cases ---------------------------------------------------
+
+
+@pytest.mark.parametrize("host", [
+    "0.0.0.0:8000", "127.0.0.2:8000", "LOCALHOST:5173", "localhost.:8000", "app.localhost:8000",
+    "[::ffff:127.0.0.1]:8000", "[::]:8000", "127.1:8000", "2130706433:8000", "user@127.0.0.1:8000",
+])
+def test_every_loopback_spelling_maps_to_the_file(host):
+    path, ref = _output_file("spelling.png", Image.new("RGB", (8, 8)))
+    assert local_media_ref(f"http://{host}{ref}") == str(path.resolve())
+
+
+@pytest.mark.parametrize("host", [
+    "10.0.0.5:8000", "192.168.1.2", "example.com", "127.0.0.1.example.com", "localhost.example.com",
+    "[2001:db8::1]",
+])
+def test_other_hosts_are_left_as_urls(host):
+    url = f"http://{host}/api/outputs/media-refs/spelling.png"
+    assert local_media_ref(url) == url
+
+
+@pytest.mark.parametrize("ref", [
+    "/api/outputs/%2e%2e/%2e%2e/etc/passwd",
+    "/api/outputs/media-refs/%2E%2E/%2E%2E/%2E%2E/etc/passwd",
+    "/api/outputs/a%2F..%2F..%2Fetc%2Fpasswd",
+    "/api/outputs//etc/passwd",
+    "/api/outputs/media-refs/./ref.png",
+    "/api/outputs/media-refs\\..\\..\\x.png",
+    "/api/outputs/media-refs/%00.png",
+    "http://127.0.0.1:8000/api/outputs/../../etc/passwd",
+    "http://0.0.0.0:8000/api/outputs/%2e%2e/%2e%2e/etc/passwd",
+])
+def test_encoded_and_url_traversal_is_refused(ref):
+    with pytest.raises(ValueError):
+        local_media_ref(ref)
+
+
+def test_double_encoding_names_a_file_inside_the_output_folder():
+    # %252e%252e decodes once to the literal name "%2e%2e", never to "..".
+    resolved = Path(local_media_ref("/api/outputs/media-refs/%252e%252e/x.png"))
+    assert resolved.is_relative_to(OUTPUT_ROOT.resolve())
+    assert resolved.parent.name == "%2e%2e"
+
+
+def test_a_symlink_out_of_the_output_folder_is_refused(tmp_path):
+    outside = tmp_path / "secret.png"
+    Image.new("RGB", (4, 4)).save(outside)
+    link = OUTPUT_ROOT / "media-refs" / "escape.png"
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.unlink(missing_ok=True)
+    link.symlink_to(outside)
+    with pytest.raises(ValueError):
+        local_media_ref("/api/outputs/media-refs/escape.png")
+
+
+def test_a_symlink_inside_the_output_folder_resolves_to_its_target():
+    target, _ = _output_file("target.png", Image.new("RGB", (4, 4)))
+    link = OUTPUT_ROOT / "media-refs" / "inside-link.png"
+    link.unlink(missing_ok=True)
+    link.symlink_to(target)
+    assert local_media_ref("/api/outputs/media-refs/inside-link.png") == str(target.resolve())
+
+
+def test_the_allowed_path_policy_still_runs():
+    # A file with a second hard link can't be proven outside protected stores.
+    target, ref = _output_file("linked.png", Image.new("RGB", (4, 4)))
+    twin = target.with_name("linked-twin.png")
+    twin.unlink(missing_ok=True)
+    twin.hardlink_to(target)
+    try:
+        with pytest.raises(ProtectedPathError):
+            local_media_ref(ref)
+    finally:
+        twin.unlink()
+
+
+def test_spatial_values_keep_their_refs():
+    _, ref = _output_file("depth.png", Image.new("L", (4, 4)))
+    mapped = _local_media_inputs({"depth": PortValueDict(type="DepthMap", value=ref),
+                                  "frames": PortValueDict(type="DepthSequence", value=[ref])})
+    assert mapped["depth"].value == ref and mapped["frames"].value == [ref]
+
+
+# -- review: OpenAI masks that already have alpha, and soft edges ---------------------
+
+
+def _alpha_hole(size: tuple[int, int], hole: tuple[int, int, int, int]) -> Image.Image:
+    mask = Image.new("RGBA", size, (20, 40, 60, 255))
+    mask.paste((0, 0, 0, 0), hole)
+    return mask
+
+
+def test_a_transparent_mask_at_another_size_is_resized_keeping_its_alpha():
+    out = Image.open(io.BytesIO(openai_edit_mask(_png(_alpha_hole((64, 32), (0, 0, 32, 32))), (256, 128))))
+    assert out.format == "PNG" and out.mode == "RGBA" and out.size == (256, 128)
+    alpha = out.getchannel("A")
+    assert alpha.getpixel((60, 60)) == 0 and alpha.getpixel((200, 60)) == 255
+    assert set(alpha.getdata()) == {0, 255}
+
+
+def test_a_transparent_webp_mask_goes_out_as_png():
+    buffer = io.BytesIO()
+    _alpha_hole((64, 64), (0, 0, 32, 64)).save(buffer, format="WEBP", lossless=True)
+    out = Image.open(io.BytesIO(openai_edit_mask(buffer.getvalue(), (64, 64))))
+    assert out.format == "PNG" and out.mode == "RGBA"
+    assert out.getchannel("A").getpixel((10, 10)) == 0 and out.getchannel("A").getpixel((50, 10)) == 255
+
+
+def test_a_trns_mask_counts_as_transparent_and_gets_a_real_alpha_channel():
+    mask = Image.new("L", (32, 32), 200)
+    mask.paste(0, (0, 0, 16, 32))
+    buffer = io.BytesIO()
+    mask.save(buffer, format="PNG", transparency=0)  # black marked see-through via tRNS
+    reopened = Image.open(io.BytesIO(buffer.getvalue()))
+    assert has_transparency(reopened)
+    out = Image.open(io.BytesIO(openai_edit_mask(buffer.getvalue(), (32, 32))))
+    assert out.mode == "RGBA"
+    # The person's transparent half stays the edit area; it isn't inverted.
+    assert out.getchannel("A").getpixel((4, 4)) == 0 and out.getchannel("A").getpixel((28, 4)) == 255
+
+
+def test_antialiased_grey_edges_split_at_mid_grey():
+    ramp = Image.new("L", (256, 1))
+    ramp.putdata(list(range(256)))
+    alpha = Image.open(io.BytesIO(openai_edit_mask(_png(ramp), (256, 1)))).getchannel("A")
+    assert [alpha.getpixel((x, 0)) for x in (0, 127, 128, 255)] == [255, 255, 0, 0]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_gpt_image_1_edit_sends_the_converted_mask():
+    image, _ = _output_file("v1-image.png", Image.new("RGB", (200, 100)))
+    mask, _ = _output_file("v1-mask.png", _white_on_black((100, 50), (0, 0, 50, 50)))
+    payload = base64.b64encode(_png(Image.new("RGB", (4, 4)))).decode()
+    route = respx.post("https://api.openai.com/v1/images/edits").mock(
+        return_value=httpx.Response(200, json={"data": [{"b64_json": payload}]}))
+    node = GraphNode(id="e1", definitionId="gpt-image-1-edit", params={})
+
+    async def emit(event):
+        return None
+
+    await get_handler_registry(emit=emit)["gpt-image-1-edit"](node, {
+        "image": PortValueDict(type="Image", value=str(image)),
+        "mask": PortValueDict(type="Image", value=str(mask)),
+        "prompt": PortValueDict(type="Text", value="paint it blue"),
+    }, KEYS)
+    sent = Image.open(io.BytesIO(_multipart(route.calls.last.request)["mask"][0]))
+    assert sent.format == "PNG" and sent.mode == "RGBA" and sent.size == (200, 100)
+    assert sent.getchannel("A").getpixel((50, 50)) == 0 and sent.getchannel("A").getpixel((150, 50)) == 255
+
+
+@pytest.mark.asyncio
+async def test_mask_painter_never_fetches_a_private_source_url(monkeypatch):
+    monkeypatch.setattr(engine, "_materialize_media_outputs", _keep)
+    router = respx.mock(assert_all_called=False)
+    private = router.get("http://10.0.0.5/scene.png").mock(
+        return_value=httpx.Response(200, content=_png(Image.new("RGB", (8, 8)))))
+    painted = "data:image/png;base64," + base64.b64encode(_png(Image.new("L", (8, 8), 255))).decode()
+
+    async def remote_image(node, inputs, api_keys):
+        return {"image": {"type": "Image", "value": "http://10.0.0.5/scene.png"}}
+
+    events: list = []
+
+    async def emit(event):
+        events.append(event)
+
+    registry = get_handler_registry(emit=emit)
+    registry["nano-banana"] = remote_image
+    nodes = [GraphNode(id="src", definitionId="nano-banana", params={}),
+             GraphNode(id="mp", definitionId="mask-painter", params={"_maskData": painted})]
+    edges = [GraphEdge(id="e", source="src", sourceHandle="image", target="mp", targetHandle="image")]
+    with router:
+        await execute_graph(nodes, edges, KEYS, registry, emit, run_id="mask-painter-private")
+
+    assert not private.called
+    errors = [event for event in events if event.type == "error" and event.node_id == "mp"]
+    assert errors, events

@@ -628,3 +628,9 @@ async def test_surrounding_whitespace_on_a_key_is_trimmed(monkeypatch):
     await ts.system_one(f"  {KEY}\n", model="jev-1.14.0", state="x",
                         questions={"q": {"type": "noul", "instructions": "y?"}})
     assert calls[0].headers["authorization"] == f"Bearer {KEY}"
+
+
+def test_an_error_code_is_key_free_and_capped():
+    body = {"detail": {"error_type": f"bad_{KEY}_" + "y" * 200, "message": "nope"}}
+    _text, code = ts._error_detail(httpx.Response(400, json=body), KEY)
+    assert KEY not in code and code.startswith("bad_***_") and len(code) == 80

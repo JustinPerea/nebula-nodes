@@ -1375,17 +1375,19 @@ async def _execute_graph(
                     mask_img = _PILImage.open(_io.BytesIO(mask_bytes)).convert("L")
 
                     # Match the source image dimensions exactly. The source may be a
-                    # local path or a data URI; remote URLs are downloaded.
+                    # local path or a data URI; remote URLs are downloaded, but only
+                    # from public https hosts (no fetches into this machine or a
+                    # private network) and capped in size. Nebula's own
+                    # /api/outputs URLs were already mapped to paths above.
                     src_value = str(image_input.value)
                     if src_value.startswith("data:image"):
                         src_bytes = _b64.b64decode(src_value.partition(",")[2])
                         src_img = _PILImage.open(_io.BytesIO(src_bytes))
                     elif src_value.startswith(("http://", "https://")):
-                        import httpx as _httpx
-                        async with _httpx.AsyncClient(timeout=60.0) as _client:
-                            _resp = await _client.get(src_value, follow_redirects=True)
-                            _resp.raise_for_status()
-                        src_img = _PILImage.open(_io.BytesIO(_resp.content))
+                        from services.public_url import fetch_public_media
+                        src_bytes, _type = await fetch_public_media(
+                            src_value, label="Mask Painter image", max_bytes=50_000_000, timeout=60.0)
+                        src_img = _PILImage.open(_io.BytesIO(src_bytes))
                     else:
                         src_img = _PILImage.open(require_allowed_path(src_value))
 

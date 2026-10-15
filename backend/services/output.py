@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import logging
 import mimetypes
 import os
 import re
+import socket
 import threading
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -395,16 +397,40 @@ def resolve_output_ref(value: str) -> str:
     return str(candidate)
 
 
-_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+def _is_this_machine(host: str) -> bool:
+    """A URL host that only ever means this machine.
+
+    Covers every spelling a browser or the desktop shell may hand over:
+    localhost (with a trailing dot or as a *.localhost name), the whole
+    127.0.0.0/8 range, ::1, an IPv4-mapped loopback (::ffff:127.0.0.1) and
+    the unspecified 0.0.0.0 / :: that browsers send to this machine. Short
+    and numeric IPv4 forms (127.1, 2130706433) are read the way browsers do.
+    """
+    host = host.lower().rstrip(".")
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        if not host or not re.fullmatch(r"[0-9a-fx.]+", host):
+            return False
+        try:
+            address = ipaddress.IPv4Address(socket.inet_aton(host))
+        except OSError:
+            return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped
+    return address.is_loopback or address.is_unspecified
 
 
 def is_local_output_url(value: str) -> bool:
     """An http(s) URL to this machine's own /api/outputs route."""
     try:
         parts = urlsplit(value)
+        host = parts.hostname or ""
     except ValueError:
         return False
-    return (parts.scheme in {"http", "https"} and (parts.hostname or "").lower() in _LOOPBACK_HOSTS
+    return (parts.scheme in {"http", "https"} and _is_this_machine(host)
             and parts.path.startswith("/api/outputs/"))
 
 

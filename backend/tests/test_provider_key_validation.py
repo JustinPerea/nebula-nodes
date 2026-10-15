@@ -16,6 +16,7 @@ All HTTP is mocked — no live API calls.
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -457,6 +458,26 @@ async def test_network_failure_reports_error(monkeypatch, exc):
     assert result["OpenAI"]["configured"] is True
     assert result["OpenAI"]["status"] == "error"
     assert result["OpenAI"]["detail"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("respond, expected", [
+    (lambda url, headers: _FakeResponse(401), "invalid"),  # the live probe's made-up-key reply
+    (lambda url, headers: _FakeResponse(200), "valid"),
+    (lambda url, headers: (_ for _ in ()).throw(httpx.ConnectError("api.typesafe.ai unreachable")), "error"),
+    (lambda url, headers: (_ for _ in ()).throw(httpx.TimeoutException("slow")), "error"),
+])
+async def test_typesafe_key_check_tells_a_bad_key_from_a_network_failure(monkeypatch, respond, expected):
+    key = "ts-live-secret-123"
+    _set_keys(monkeypatch, {"TYPESAFE_API_KEY": key})
+    log = _install_client(monkeypatch, respond)
+
+    result = await settings_service.validate_provider_keys()
+
+    assert result["TypeSafe"]["configured"] is True
+    assert result["TypeSafe"]["status"] == expected
+    assert key not in json.dumps(result)
+    assert [entry["url"] for entry in log if "typesafe" in entry["url"]] == ["https://api.typesafe.ai/v1/models"]
 
 
 # ---------------------------------------------------------------------------
