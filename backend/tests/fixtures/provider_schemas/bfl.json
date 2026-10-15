@@ -1,0 +1,849 @@
+{
+ "_read": "2026-10-15",
+ "_source": "https://api.bfl.ai/openapi.json",
+ "schemas": {
+  "flux-3-image": {
+   "additionalProperties": false,
+   "properties": {
+    "aspect_ratio": {
+     "anyOf": [
+      {
+       "enum": [
+        "21:9",
+        "2:1",
+        "16:9",
+        "3:2",
+        "7:5",
+        "4:3",
+        "5:4",
+        "1:1",
+        "4:5",
+        "3:4",
+        "5:7",
+        "2:3",
+        "9:16",
+        "1:2",
+        "9:21"
+       ],
+       "type": "string"
+      },
+      {
+       "const": "auto",
+       "type": "string"
+      }
+     ],
+     "default": "auto",
+     "description": "Output aspect ratio. Under `auto` a ratio the prompt asks for wins, otherwise the output keeps the first reference image's framing; without references the prompt decides, else 1:1.",
+     "title": "Aspect Ratio"
+    },
+    "grounding": {
+     "default": true,
+     "description": "When true (default) the prompt may be grounded in external research: web search and image search. When false, both are off.",
+     "title": "Grounding",
+     "type": "boolean"
+    },
+    "images": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional reference image(s) the prompt edits or draws from; each is an http(s) URL or base64, one to 10 total.",
+     "title": "Images"
+    },
+    "prompt": {
+     "description": "Free-form prompt describing the image.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "resolution": {
+     "default": "1k",
+     "description": "Image resolution class, an equal-pixel-area tier: `768sq`, `1k`, `1.5k`, `2k`, or `4k`. Exact dimensions vary with the aspect ratio.",
+     "enum": [
+      "768sq",
+      "1k",
+      "1.5k",
+      "2k",
+      "4k"
+     ],
+     "title": "Resolution",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+     "maximum": 7.0,
+     "minimum": 0.0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "version": {
+     "const": "latest",
+     "default": "latest",
+     "description": "Endpoint version. `latest` (default) serves the current release; dated pinnable release tags are added here as they are published.",
+     "title": "Version",
+     "type": "string"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux3ImageInputs",
+   "type": "object"
+  },
+  "flux-3-image-klein": {
+   "additionalProperties": false,
+   "description": "FLUX 3 Image Klein: text-to-image, or editing with up to 10 reference images.",
+   "properties": {
+    "aspect_ratio": {
+     "anyOf": [
+      {
+       "enum": [
+        "21:9",
+        "2:1",
+        "16:9",
+        "3:2",
+        "7:5",
+        "4:3",
+        "5:4",
+        "1:1",
+        "4:5",
+        "3:4",
+        "5:7",
+        "2:3",
+        "9:16",
+        "1:2",
+        "9:21"
+       ],
+       "type": "string"
+      },
+      {
+       "const": "auto",
+       "type": "string"
+      }
+     ],
+     "default": "auto",
+     "description": "Output aspect ratio, as in flux-3-image. `auto` (default): for edits, the first reference's exact aspect; for text-to-image, a ratio picked from the prompt (prompt rewrite, else ratio keywords, else 16:9) at the requested tier. Ignored when width and height are set.",
+     "title": "Aspect Ratio"
+    },
+    "height": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Exact output height in pixels, [64, 6256]; width x height at most 16822272 pixels (16.8 MP, the largest 4k bin).",
+     "title": "Height"
+    },
+    "images": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional reference image(s), each an http(s) URL or base64, one to 10 total. The first is the image being edited and sets the default output size.",
+     "title": "Images"
+    },
+    "output_format": {
+     "default": "jpeg",
+     "description": "Output image format: `jpeg` (default) or `png`.",
+     "enum": [
+      "jpeg",
+      "png"
+     ],
+     "title": "Output Format",
+     "type": "string"
+    },
+    "prompt": {
+     "description": "Free-form prompt describing the image.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "resolution": {
+     "anyOf": [
+      {
+       "enum": [
+        "768sq",
+        "1k",
+        "1.5k",
+        "2k",
+        "4k"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Equal-area size tier, as in flux-3-image: `768sq`, `1k`, `1.5k`, `2k` or `4k`. Omitted: `1k` for text-to-image; for edits the first reference's own size, or its nearest tier when aspect_ratio is set. Ignored when width and height are set.",
+     "title": "Resolution"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+     "maximum": 7.0,
+     "minimum": 0.0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "maximum": 4294967295.0,
+       "minimum": 0.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Seed for reproducibility; random when omitted.",
+     "title": "Seed"
+    },
+    "steps": {
+     "anyOf": [
+      {
+       "maximum": 16.0,
+       "minimum": 1.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Denoising steps (default 16).",
+     "title": "Steps"
+    },
+    "width": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Exact output width in pixels, [64, 6256]; set together with height. Overrides resolution and aspect_ratio.",
+     "title": "Width"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux3ImageKleinInputs",
+   "type": "object"
+  },
+  "flux-3-video": {
+   "oneOf": [
+    {
+     "additionalProperties": false,
+     "properties": {
+      "aspect_ratio": {
+       "anyOf": [
+        {
+         "enum": [
+          "21:9",
+          "2:1",
+          "16:9",
+          "4:3",
+          "1:1",
+          "3:4",
+          "9:16",
+          "9:21"
+         ],
+         "type": "string"
+        },
+        {
+         "const": "auto",
+         "type": "string"
+        }
+       ],
+       "default": "auto",
+       "description": "Output aspect ratio. `auto` lets the harness choose from the prompt and any references.",
+       "title": "Aspect Ratio"
+      },
+      "draft": {
+       "default": false,
+       "description": "Draft mode: generate a fast preview and return a `draft_cache` download URL in the result. Download that bundle and pass it back later to render the full-quality version of the same generation.",
+       "title": "Draft",
+       "type": "boolean"
+      },
+      "duration": {
+       "anyOf": [
+        {
+         "maximum": 20.0,
+         "minimum": 5.0,
+         "type": "integer"
+        },
+        {
+         "const": "auto",
+         "type": "string"
+        }
+       ],
+       "default": "auto",
+       "description": "Video duration in seconds (any whole second from 5 to 20), or `auto` to fit the content.",
+       "title": "Duration"
+      },
+      "generate_audio": {
+       "default": true,
+       "description": "Generate synchronized audio alongside the video.",
+       "title": "Generate Audio",
+       "type": "boolean"
+      },
+      "mode": {
+       "const": "t2v",
+       "title": "Mode",
+       "type": "string"
+      },
+      "prompt": {
+       "description": "Free-form prompt describing the video.",
+       "title": "Prompt",
+       "type": "string"
+      },
+      "resolution": {
+       "default": "hd",
+       "description": "Video resolution class: `hd`, or `fhd`/`qhd`/`uhd` for a higher-resolution result finished by the video upsampler. Exact dimensions vary with the aspect ratio.",
+       "enum": [
+        "hd",
+        "fhd",
+        "qhd",
+        "uhd"
+       ],
+       "title": "Resolution",
+       "type": "string"
+      },
+      "safety_tolerance": {
+       "default": 2,
+       "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+       "maximum": 7.0,
+       "minimum": 0.0,
+       "title": "Safety Tolerance",
+       "type": "integer"
+      },
+      "user": {
+       "anyOf": [
+        {
+         "maxLength": 256,
+         "minLength": 1,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Opaque identifier for the end user supplied by the calling platform.",
+       "title": "User"
+      },
+      "version": {
+       "const": "latest",
+       "default": "latest",
+       "description": "Endpoint version. `latest` (default) serves the current release; dated pinnable release tags are added here as they are published.",
+       "title": "Version",
+       "type": "string"
+      }
+     },
+     "required": [
+      "prompt",
+      "mode"
+     ],
+     "title": "Text to Video",
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "description": "Image continuation: your images become frames of the video. One image\nstarts the video; two start and end it; with more, the first starts it,\nthe last ends it, and the rest fall evenly in between. To control the\ntiming yourself, send `[seconds, image]` pairs: each image becomes the\nframe at that second.",
+     "properties": {
+      "aspect_ratio": {
+       "anyOf": [
+        {
+         "enum": [
+          "21:9",
+          "2:1",
+          "16:9",
+          "4:3",
+          "1:1",
+          "3:4",
+          "9:16",
+          "9:21"
+         ],
+         "type": "string"
+        },
+        {
+         "const": "auto",
+         "type": "string"
+        }
+       ],
+       "default": "auto",
+       "description": "Output aspect ratio. `auto` lets the harness choose from the prompt and any references.",
+       "title": "Aspect Ratio"
+      },
+      "draft": {
+       "default": false,
+       "description": "Draft mode: generate a fast preview and return a `draft_cache` download URL in the result. Download that bundle and pass it back later to render the full-quality version of the same generation.",
+       "title": "Draft",
+       "type": "boolean"
+      },
+      "duration": {
+       "anyOf": [
+        {
+         "maximum": 20.0,
+         "minimum": 5.0,
+         "type": "integer"
+        },
+        {
+         "const": "auto",
+         "type": "string"
+        }
+       ],
+       "default": "auto",
+       "description": "Video duration in seconds (any whole second from 5 to 20), or `auto` to fit the content.",
+       "title": "Duration"
+      },
+      "generate_audio": {
+       "default": true,
+       "description": "Generate synchronized audio alongside the video.",
+       "title": "Generate Audio",
+       "type": "boolean"
+      },
+      "keyframes": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "maxItems": 2,
+         "minItems": 2,
+         "prefixItems": [
+          {
+           "type": "number"
+          },
+          {
+           "type": "string"
+          }
+         ],
+         "type": "array"
+        },
+        {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        {
+         "items": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "string"
+           }
+          ],
+          "type": "array"
+         },
+         "type": "array"
+        }
+       ],
+       "description": "Your images become frames of the video; each is an http(s) URL or base64, one to ten total. Plain images: one starts the video, two start and end it, with more the first starts it, the last ends it, and the rest fall evenly in between (3 or more need a set `duration`). To control the timing yourself, send `[seconds, image]` pairs in time order, e.g. `[[0, \"...\"], [3.5, \"...\"]]`: each image becomes the frame at that second, and with `duration: \"auto\"` the video runs to the last pair's second, rounded up (20s max).",
+       "title": "Keyframes"
+      },
+      "mode": {
+       "const": "i2v",
+       "title": "Mode",
+       "type": "string"
+      },
+      "prompt": {
+       "description": "Free-form prompt describing the video.",
+       "title": "Prompt",
+       "type": "string"
+      },
+      "resolution": {
+       "default": "hd",
+       "description": "Video resolution class: `hd`, or `fhd`/`qhd`/`uhd` for a higher-resolution result finished by the video upsampler. Exact dimensions vary with the aspect ratio.",
+       "enum": [
+        "hd",
+        "fhd",
+        "qhd",
+        "uhd"
+       ],
+       "title": "Resolution",
+       "type": "string"
+      },
+      "safety_tolerance": {
+       "default": 2,
+       "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+       "maximum": 7.0,
+       "minimum": 0.0,
+       "title": "Safety Tolerance",
+       "type": "integer"
+      },
+      "user": {
+       "anyOf": [
+        {
+         "maxLength": 256,
+         "minLength": 1,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Opaque identifier for the end user supplied by the calling platform.",
+       "title": "User"
+      },
+      "version": {
+       "const": "latest",
+       "default": "latest",
+       "description": "Endpoint version. `latest` (default) serves the current release; dated pinnable release tags are added here as they are published.",
+       "title": "Version",
+       "type": "string"
+      }
+     },
+     "required": [
+      "prompt",
+      "mode",
+      "keyframes"
+     ],
+     "title": "Image to Video",
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "description": "Video continuation: the generated clip carries on from your video's\nfinal frames.",
+     "properties": {
+      "aspect_ratio": {
+       "anyOf": [
+        {
+         "enum": [
+          "21:9",
+          "2:1",
+          "16:9",
+          "4:3",
+          "1:1",
+          "3:4",
+          "9:16",
+          "9:21"
+         ],
+         "type": "string"
+        },
+        {
+         "const": "auto",
+         "type": "string"
+        }
+       ],
+       "default": "auto",
+       "description": "Output aspect ratio. `auto` lets the harness choose from the prompt and any references.",
+       "title": "Aspect Ratio"
+      },
+      "draft": {
+       "default": false,
+       "description": "Draft mode: generate a fast preview and return a `draft_cache` download URL in the result. Download that bundle and pass it back later to render the full-quality version of the same generation.",
+       "title": "Draft",
+       "type": "boolean"
+      },
+      "duration": {
+       "anyOf": [
+        {
+         "maximum": 15.0,
+         "minimum": 5.0,
+         "type": "integer"
+        },
+        {
+         "const": "auto",
+         "type": "string"
+        }
+       ],
+       "default": "auto",
+       "description": "Video duration in seconds (any whole second from 5 to 15), or `auto` to fit the content.",
+       "title": "Duration"
+      },
+      "generate_audio": {
+       "default": true,
+       "description": "Generate synchronized audio alongside the video.",
+       "title": "Generate Audio",
+       "type": "boolean"
+      },
+      "mode": {
+       "const": "v2v",
+       "title": "Mode",
+       "type": "string"
+      },
+      "prompt": {
+       "description": "Free-form prompt describing the video.",
+       "title": "Prompt",
+       "type": "string"
+      },
+      "resolution": {
+       "default": "hd",
+       "description": "Video resolution class: `hd`, or `fhd`/`qhd`/`uhd` for a higher-resolution result finished by the video upsampler. Exact dimensions vary with the aspect ratio.",
+       "enum": [
+        "hd",
+        "fhd",
+        "qhd",
+        "uhd"
+       ],
+       "title": "Resolution",
+       "type": "string"
+      },
+      "safety_tolerance": {
+       "default": 2,
+       "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+       "maximum": 7.0,
+       "minimum": 0.0,
+       "title": "Safety Tolerance",
+       "type": "integer"
+      },
+      "start_video": {
+       "description": "The video to continue, an http(s) URL or base64 mp4; the generated clip carries on from its final frames.",
+       "title": "Start Video",
+       "type": "string"
+      },
+      "user": {
+       "anyOf": [
+        {
+         "maxLength": 256,
+         "minLength": 1,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Opaque identifier for the end user supplied by the calling platform.",
+       "title": "User"
+      },
+      "version": {
+       "const": "latest",
+       "default": "latest",
+       "description": "Endpoint version. `latest` (default) serves the current release; dated pinnable release tags are added here as they are published.",
+       "title": "Version",
+       "type": "string"
+      }
+     },
+     "required": [
+      "prompt",
+      "mode",
+      "start_video"
+     ],
+     "title": "Video Continuation",
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "description": "Full-quality render of a prior `draft` generation. The bundle pins the\ngeneration itself -- the original mode, prompt, seed, and conditioning\nmedia -- so `resolution` is the only output choice left to the caller.",
+     "properties": {
+      "draft_cache": {
+       "description": "Encrypted draft-cache bundle from a prior `draft` generation. Primary form: the base64-encoded `.bin` file downloaded from the prior result's `draft_cache` URL. An http(s) URL is also accepted for replays within the download URL's expiry window. The harness is skipped and the original FLUX call is reproduced at full quality; the original inputs are embedded in the bundle.",
+       "title": "Draft Cache",
+       "type": "string"
+      },
+      "mode": {
+       "const": "draft_enhance",
+       "title": "Mode",
+       "type": "string"
+      },
+      "resolution": {
+       "default": "fhd",
+       "description": "Video resolution class of the enhanced result: `fhd` (default), `qhd`, and `uhd` finish the reproduced generation with the video upsampler at that canvas, `hd` returns it without that pass. The reproduced generation is identical whichever is chosen; only the finishing pass differs.",
+       "enum": [
+        "hd",
+        "fhd",
+        "qhd",
+        "uhd"
+       ],
+       "title": "Resolution",
+       "type": "string"
+      },
+      "safety_tolerance": {
+       "default": 2,
+       "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+       "maximum": 7.0,
+       "minimum": 0.0,
+       "title": "Safety Tolerance",
+       "type": "integer"
+      },
+      "user": {
+       "anyOf": [
+        {
+         "maxLength": 256,
+         "minLength": 1,
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Opaque identifier for the end user supplied by the calling platform.",
+       "title": "User"
+      }
+     },
+     "required": [
+      "mode",
+      "draft_cache"
+     ],
+     "title": "Draft Enhance",
+     "type": "object"
+    }
+   ]
+  },
+  "flux-tools/video-edit-v1": {
+   "additionalProperties": false,
+   "description": "Video edit on a dedicated route: the clip and the instruction.\n\nThe public `/flux-tools/video-edit-v1` body. The route pins the recipe, so\nthe body has no `mode` and no `version` to pick, and every serving control\n-- duration, resolution, aspect ratio, audio, steps, guidance, seed --\nstays server-pinned.",
+   "properties": {
+    "prompt": {
+     "description": "Edit instruction, stripped of surrounding whitespace.",
+     "maxLength": 4096,
+     "minLength": 1,
+     "title": "Prompt",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+     "maximum": 7.0,
+     "minimum": 0.0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "user": {
+     "anyOf": [
+      {
+       "maxLength": 256,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Opaque identifier for the end user supplied by the calling platform.",
+     "title": "User"
+    },
+    "video": {
+     "description": "The video to edit, an http(s) URL or base64-encoded mp4.",
+     "title": "Video",
+     "type": "string"
+    }
+   },
+   "required": [
+    "video",
+    "prompt"
+   ],
+   "title": "Video Edit",
+   "type": "object"
+  },
+  "flux-tools/video-upscale-v1": {
+   "additionalProperties": false,
+   "properties": {
+    "creativity": {
+     "default": 1,
+     "description": "Upscale behavior: 0 preserves the source precisely; 1 allows creative detail enhancement.",
+     "enum": [
+      0,
+      1
+     ],
+     "title": "Creativity",
+     "type": "integer"
+    },
+    "input_video": {
+     "description": "The clip to upscale: base64-encoded mp4 (max 50MB) or an http(s) URL. The upscale covers the first 20 seconds; a clip slightly over that is upscaled up to the 20 second mark, and one well over is rejected. At most 2560x1440 (3.7 megapixels) per frame: this endpoint upscales toward 4K, so downscale a larger source before submitting it.",
+     "title": "Input Video",
+     "type": "string"
+    },
+    "prompt": {
+     "default": "",
+     "description": "Optional description of the clip's content, steering the enhanced detail. Leave empty for a neutral upscale.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+     "maximum": 7.0,
+     "minimum": 0.0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "upscale_factor": {
+     "default": 2.0,
+     "description": "Output scaling relative to the source resolution, between 1.5 and 3. The output preserves the source aspect ratio and is capped at a 13.75 MP frame: very large sources are upscaled by less than the requested factor.",
+     "maximum": 3.0,
+     "minimum": 1.5,
+     "title": "Upscale Factor",
+     "type": "number"
+    },
+    "user": {
+     "anyOf": [
+      {
+       "maxLength": 256,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Opaque identifier for the end user supplied by the calling platform.",
+     "title": "User"
+    },
+    "webhook_secret": {
+     "anyOf": [
+      {
+       "format": "password",
+       "type": "string",
+       "writeOnly": true
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Secret echoed in the webhook signature header.",
+     "title": "Webhook Secret"
+    },
+    "webhook_url": {
+     "anyOf": [
+      {
+       "format": "uri",
+       "maxLength": 2083,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "URL to receive the result callback.",
+     "title": "Webhook Url"
+    }
+   },
+   "required": [
+    "input_video"
+   ],
+   "title": "Flux3VideoUpscaleInputs",
+   "type": "object"
+  }
+ }
+}
