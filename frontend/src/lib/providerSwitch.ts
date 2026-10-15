@@ -59,8 +59,10 @@ export interface SwitchState {
   blocked: boolean;
   /** Why, in the router's words (routeUnavailable), or the Krea sign-in. */
   message: string | null;
-  /** The routes with a key that take the recipe as it is: one click each. */
-  alternatives: { routeId: string; label: string }[];
+  /** The routes with a key that take the recipe as it is: one click each,
+   * writing what that route's API-balance row writes (the offer is made on
+   * its key, so never the Krea plan). */
+  alternatives: { routeId: string; label: string; writes: Params }[];
 }
 
 /** Short names for the 10px card chip; anything else uses its full label. */
@@ -77,6 +79,19 @@ function isSet(apiKeys: SwitchContext['apiKeys'], key: string): boolean {
 
 function kreaPlanPicked(params: Params): boolean {
   return params._kreaAuth === 'mcp';
+}
+
+/** What a pick writes besides `_provider`: on a node with a Krea route that
+ * can bill the plan, every pick sets the Krea billing mode too, so a plan
+ * picked earlier never stays behind for a later pick (a route row, or a
+ * one-click switch offered on an API key) to bill. `plan` is the plan row;
+ * `auto` the Auto row, which keeps the saved mode only where Krea is the
+ * maker, the one place Auto bills the plan (selectRoute rule 1). */
+function billingWrites(definition: ModelNodeDefinition, routeId: string, plan: boolean): Params {
+  const routes = routesOf(definition);
+  if (!routes.some((spec) => spec.plan)) return { [PROVIDER_PARAM]: routeId };
+  if (routeId === AUTO && routes[0]?.maker && routes[0].plan) return { [PROVIDER_PARAM]: AUTO };
+  return { [PROVIDER_PARAM]: routeId, _kreaAuth: plan ? 'mcp' : 'api-token' };
 }
 
 /** A block's value without its param name: "resolution 1.5k" -> "1.5k". */
@@ -144,7 +159,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
     label: autoUnavailable ? `Auto · can't run: ${autoReason(definition, autoUnavailable)}` : `Auto · runs on ${autoName}`,
     keyState: null, price: autoUnavailable || !autoSpec ? '-'
       : price(definition, autoSpec, estimates, context.pricing, autoRoute.kind === 'plan').price,
-    block: null, selected: choice === AUTO, writes: { [PROVIDER_PARAM]: AUTO },
+    block: null, selected: choice === AUTO, writes: billingWrites(definition, AUTO, false),
   }];
   for (const spec of routesOf(definition)) {
     const block = routeBlock(definition, spec, routed);
@@ -161,7 +176,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
         ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, false)),
         block: note,
         selected: choice === spec.id && !(both && kreaPlanPicked(saved)),
-        writes: { [PROVIDER_PARAM]: spec.id, ...(both ? { _kreaAuth: 'api-token' } : {}) },
+        writes: billingWrites(definition, spec.id, false),
       });
     }
     if (spec.plan) {
@@ -173,7 +188,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
         ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, true)),
         block: note,
         selected: choice === spec.id && (spec.plan === 'only' || kreaPlanPicked(saved)),
-        writes: { [PROVIDER_PARAM]: spec.id, _kreaAuth: 'mcp' },
+        writes: billingWrites(definition, spec.id, true),
       });
     }
   }
@@ -192,6 +207,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
       ?? (signInNeeded ? `${definition.displayName} bills your Krea plan. Sign in to Krea in Settings, or choose another provider.` : null),
     alternatives: (unavailable?.alternatives ?? []).map((routeId) => ({
       routeId, label: providerLabel(routeById(definition, routeId)?.provider),
+      writes: billingWrites(definition, routeId, false),
     })),
   };
 }

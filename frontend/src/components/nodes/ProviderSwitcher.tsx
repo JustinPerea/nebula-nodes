@@ -21,8 +21,8 @@ import '../../styles/provider-switcher.css';
  * - `pill`: Create Studio's pill.
  *
  * A pick is a person's switch: it writes `_provider` (and `_kreaAuth` on a
- * Krea row) and moves any saved value the new route doesn't take to its
- * closest one there, returning one note per change for the card. Nothing
+ * node with a Krea plan route: lib/providerSwitch.ts billingWrites) and
+ * moves any saved value the new route doesn't take to its closest one there, returning one note per change for the card. Nothing
  * else here writes params: keys changing, a shared graph or an import keep
  * every value, and the menu shows the stop with one-click switches instead.
  */
@@ -166,7 +166,7 @@ export function ProviderMenu({ state, onPick, inline = false, labelledBy, label,
             <button key={alternative.routeId} type="button" role="menuitem" tabIndex={-1}
               className="provider-switcher__alternative"
               onClick={() => {
-                onPick({ writes: { _provider: alternative.routeId }, routeId: alternative.routeId });
+                onPick({ writes: alternative.writes, routeId: alternative.routeId });
                 onClose?.(true);
               }}>
               Switch to {alternative.label}

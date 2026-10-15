@@ -122,7 +122,7 @@ describe('ProviderSwitcher picks', () => {
     const onPick = vi.fn();
     render(<Controlled initial={{ resolution: '1.5k', grounding: true }} onPick={onPick} />);
     fireEvent.click(row(/^fal\.ai/));
-    expect(onPick).toHaveBeenCalledWith({ resolution: '2k', grounding: true, _provider: 'fal' },
+    expect(onPick).toHaveBeenCalledWith({ resolution: '2k', grounding: true, _provider: 'fal', _kreaAuth: 'api-token' },
       ["1.5k isn't on fal.ai: set to 2k"]);
     expect(row(/^fal\.ai/)).toHaveAttribute('aria-checked', 'true');
   });
@@ -146,7 +146,17 @@ describe('ProviderSwitcher picks', () => {
     expect(row(/^Auto/)).toHaveTextContent("Auto · can't run: 1.5k isn't on fal.ai");
     expect(screen.getByRole('status')).toHaveTextContent("Fixture Route Table can't run on fal.ai");
     fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to Replicate' }));
-    expect(onPick).toHaveBeenCalledWith({ resolution: '1.5k', _provider: 'replicate' }, []);
+    expect(onPick).toHaveBeenCalledWith({ resolution: '1.5k', _provider: 'replicate', _kreaAuth: 'api-token' }, []);
+  });
+
+  it('a one-click switch to Krea bills the API balance it was offered on, even after the plan row', () => {
+    // Krea · plan, then fal, then fal's key removed: Krea is offered on its API token.
+    withKeys({ KREA_API_TOKEN: KEY }, true);
+    const onPick = vi.fn();
+    render(<Controlled initial={{ _provider: 'fal', _kreaAuth: 'mcp' }} onPick={onPick} />);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to Krea' }));
+    expect(onPick).toHaveBeenLastCalledWith(expect.objectContaining({ _provider: 'krea', _kreaAuth: 'api-token' }), []);
+    expect(row(/^Krea · API balance/)).toHaveAttribute('aria-checked', 'true');
   });
 
   it('keeps every value when the route changes without a click (keys removed), and flags the stop', () => {

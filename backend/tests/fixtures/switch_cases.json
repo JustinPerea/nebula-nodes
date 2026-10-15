@@ -184,6 +184,49 @@
                     "keyframes": [{ "frame_index": 0, "image_url": "https://e.com/k.png" }] }
         }
       }
+    },
+    {
+      "name": "the one-click switch to Krea bills the API balance it was offered on, not a plan picked earlier",
+      "definition": "clients-video",
+      "saved": { "_provider": "fal", "_kreaAuth": "mcp" },
+      "keys": ["KREA_API_TOKEN"],
+      "kreaSignedIn": true,
+      "wired": {},
+      "click": "alternative:krea",
+      "switcher": {
+        "before": { "chip": "fal", "blocked": true, "alternatives": ["krea"] },
+        "chip": "Krea", "blocked": false, "alternatives": [], "notes": []
+      },
+      "writes": { "_provider": "krea", "_kreaAuth": "api-token" },
+      "run": {
+        "route": "krea",
+        "request": {
+          "method": "POST", "url": "https://api.krea.ai/generate/video/black-forest-labs/flux-3-video",
+          "body": { "prompt": "p", "duration": 5, "resolution": "720p", "aspect_ratio": "16:9", "generate_audio": true }
+        }
+      }
+    },
+    {
+      "name": "a click on fal after Krea's plan row clears the plan, so no later pick bills it unasked",
+      "definition": "clients-video",
+      "saved": { "_provider": "krea", "_kreaAuth": "mcp" },
+      "keys": ["FAL_KEY"],
+      "kreaSignedIn": true,
+      "wired": {},
+      "click": "fal",
+      "switcher": {
+        "before": { "chip": "Krea plan", "blocked": false, "alternatives": [] },
+        "chip": "fal", "blocked": false, "alternatives": [], "notes": []
+      },
+      "writes": { "_provider": "fal", "_kreaAuth": "api-token" },
+      "run": {
+        "route": "fal",
+        "request": {
+          "method": "POST", "url": "https://queue.fal.run/blackforestlabs/flux-3/text-to-video",
+          "schema": ["fal", "blackforestlabs/flux-3/text-to-video"],
+          "body": { "prompt": "p", "duration": 5, "resolution": "720p", "aspect_ratio": "16:9", "generate_audio": true }
+        }
+      }
     }
   ]
 }

@@ -48,7 +48,7 @@ describe('providerSwitchState', () => {
     expect(state.rows[0].label).toBe("Auto · can't run: 1.5k isn't on fal.ai");
     expect(state.blocked).toBe(true);
     expect(state.chip).toBe('Auto · fal');
-    expect(state.alternatives).toEqual([{ routeId: 'replicate', label: 'Replicate' }]);
+    expect(state.alternatives).toEqual([{ routeId: 'replicate', label: 'Replicate', writes: { _provider: 'replicate', _kreaAuth: 'api-token' } }]);
     expect(state.message).toContain("can't run on fal.ai");
   });
 
@@ -58,7 +58,7 @@ describe('providerSwitchState', () => {
     expect(chosen.chip).toBe('Rep');
     expect(chosen.blocked).toBe(true);
     expect(chosen.rows.find((row) => row.id === 'replicate')?.selected).toBe(true);
-    expect(chosen.alternatives).toEqual([{ routeId: 'bfl', label: 'Black Forest Labs' }]);
+    expect(chosen.alternatives).toEqual([{ routeId: 'bfl', label: 'Black Forest Labs', writes: { _provider: 'bfl', _kreaAuth: 'api-token' } }]);
   });
 
   it('keeps the Krea API row and plan row apart, and each pick writes both billing params', () => {
@@ -72,6 +72,12 @@ describe('providerSwitchState', () => {
     expect(plan.rows.find((row) => row.id === 'krea:plan')?.keyState).toBe('signed-in');
     expect(api.rows.find((row) => row.id === 'krea')?.writes).toEqual({ _provider: 'krea', _kreaAuth: 'api-token' });
     expect(api.rows.find((row) => row.id === 'krea:plan')?.writes).toEqual({ _provider: 'krea', _kreaAuth: 'mcp' });
+    // Every other pick writes the billing mode too, so an earlier plan pick
+    // never stays saved for a later Krea pick to bill.
+    expect(plan.rows.find((row) => row.id === 'fal')?.writes).toEqual({ _provider: 'fal', _kreaAuth: 'api-token' });
+    expect(plan.rows[0].writes).toEqual({ _provider: 'auto', _kreaAuth: 'api-token' });
+    const offered = providerSwitchState(TABLE, { _provider: 'fal', _kreaAuth: 'mcp' }, context({ KREA_API_TOKEN: KEY }, { kreaSignedIn: true }));
+    expect(offered.alternatives).toEqual([{ routeId: 'krea', label: 'Krea', writes: { _provider: 'krea', _kreaAuth: 'api-token' } }]);
     // Signed out, the plan run can't start: the chip warns.
     expect(providerSwitchState(TABLE, { _provider: 'krea', _kreaAuth: 'mcp' }, context({})).blocked).toBe(true);
   });
@@ -82,6 +88,11 @@ describe('providerSwitchState', () => {
     const krea = providerSwitchState(routed['routes-krea'], { _kreaAuth: 'mcp' }, context({}, { kreaSignedIn: true }));
     expect(krea.rows[0].label).toBe('Auto · runs on Krea plan');
     expect(krea.chip).toBe('Auto · Krea plan');
+    // Where Krea is the maker, Auto bills the saved mode: the Auto row keeps it.
+    expect(krea.rows[0].writes).toEqual({ _provider: 'auto' });
+    // A plan-only route's row bills the plan; every other row the API.
+    expect(video.rows.find((row) => row.id === 'krea-plan:plan')?.writes).toEqual({ _provider: 'krea-plan', _kreaAuth: 'mcp' });
+    expect(video.rows.find((row) => row.id === 'bfl')?.writes).toEqual({ _provider: 'bfl', _kreaAuth: 'api-token' });
   });
 
   it('counts wired inputs against a route port limit', () => {
