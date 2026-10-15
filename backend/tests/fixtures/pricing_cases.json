@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed).",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run.",
   "definitions": {
     "img": {
       "id": "img",
@@ -574,6 +574,50 @@
           }
         }
       ]
+    },
+    "moded": {
+      "id": "moded",
+      "apiProvider": "bfl",
+      "params": [
+        {
+          "key": "resolution",
+          "default": "hd",
+          "options": [
+            {
+              "value": "hd"
+            },
+            {
+              "value": "fhd"
+            }
+          ]
+        },
+        {
+          "key": "draft",
+          "default": false
+        },
+        {
+          "key": "duration",
+          "default": 5
+        }
+      ]
+    },
+    "tooled": {
+      "id": "tooled",
+      "apiProvider": "bfl",
+      "params": [
+        {
+          "key": "creativity",
+          "default": 1,
+          "options": [
+            {
+              "value": 0
+            },
+            {
+              "value": 1
+            }
+          ]
+        }
+      ]
     }
   },
   "pricing": {
@@ -1024,6 +1068,85 @@
             "checked": "2026-10-15"
           }
         }
+      },
+      "moded": {
+        "currency": "usd",
+        "per": "second",
+        "multiplyBy": [
+          "duration"
+        ],
+        "rows": [
+          {
+            "match": {
+              "draft": true,
+              "(mode)": "v2v"
+            },
+            "price": 0.12
+          },
+          {
+            "match": {
+              "draft": true
+            },
+            "price": 0.06
+          },
+          {
+            "match": {
+              "(mode)": "v2v",
+              "resolution": "hd"
+            },
+            "price": 0.21
+          },
+          {
+            "match": {
+              "(mode)": "i2v",
+              "resolution": "hd"
+            },
+            "price": 0.16
+          },
+          {
+            "match": {
+              "(mode)": "t2v",
+              "resolution": "hd"
+            },
+            "price": 0.15
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-15"
+      },
+      "tooled": {
+        "currency": "usd",
+        "per": "megapixel-second",
+        "multiplyBy": [
+          "(output megapixels)",
+          "(source seconds)"
+        ],
+        "rows": [
+          {
+            "match": {
+              "creativity": 0
+            },
+            "price": 0.07
+          },
+          {
+            "match": {
+              "creativity": 1
+            },
+            "price": 0.1
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-15"
       }
     }
   },
@@ -1511,6 +1634,108 @@
       "nodeId": "table",
       "params": {},
       "routeProvider": "openrouter",
+      "expected": null
+    },
+    {
+      "name": "(mode): nothing wired is text to video",
+      "nodeId": "moded",
+      "params": {},
+      "expected": {
+        "currency": "usd",
+        "low": 0.75,
+        "high": 0.75
+      }
+    },
+    {
+      "name": "(mode): a wired start image is image to video",
+      "nodeId": "moded",
+      "params": {
+        "duration": 6
+      },
+      "wired": [
+        "start_image"
+      ],
+      "expected": {
+        "currency": "usd",
+        "low": 0.96,
+        "high": 0.96
+      }
+    },
+    {
+      "name": "(mode): wired keyframes or an end image are image to video too",
+      "nodeId": "moded",
+      "params": {},
+      "wired": [
+        "keyframes",
+        "prompt"
+      ],
+      "expected": {
+        "currency": "usd",
+        "low": 0.8,
+        "high": 0.8
+      }
+    },
+    {
+      "name": "(mode): a wired start video is video to video, and wins over images",
+      "nodeId": "moded",
+      "params": {},
+      "wired": [
+        "start_video",
+        "start_image"
+      ],
+      "expected": {
+        "currency": "usd",
+        "low": 1.05,
+        "high": 1.05
+      }
+    },
+    {
+      "name": "(mode): rows that don't name the mode still match it",
+      "nodeId": "moded",
+      "params": {
+        "draft": true
+      },
+      "wired": [
+        "start_image"
+      ],
+      "expected": {
+        "currency": "usd",
+        "low": 0.3,
+        "high": 0.3
+      }
+    },
+    {
+      "name": "(mode): a draft video to video run takes its own row",
+      "nodeId": "moded",
+      "params": {
+        "draft": true
+      },
+      "wired": [
+        "start_video"
+      ],
+      "expected": {
+        "currency": "usd",
+        "low": 0.6,
+        "high": 0.6
+      }
+    },
+    {
+      "name": "(mode): a mode with no row is unpriced, never another mode's price",
+      "nodeId": "moded",
+      "params": {
+        "resolution": "fhd"
+      },
+      "expected": null
+    },
+    {
+      "name": "run-time quantities: a price on the source clip is unpriced before the run",
+      "nodeId": "tooled",
+      "params": {
+        "creativity": 0
+      },
+      "wired": [
+        "video"
+      ],
       "expected": null
     }
   ],
