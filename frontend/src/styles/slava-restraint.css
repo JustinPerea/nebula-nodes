@@ -3524,6 +3524,12 @@ body.app-slava-restraint .model-node__preview-placeholder {
   position: relative;
   z-index: var(--sr-layer-node-preview);
 }
+/* Below a column of input ports the header isn't over the preview, and the
+ * pull-up would cover the last port (FLUX 3 Video's "Keyframes +"). */
+body.app-slava-restraint .model-node__ports--input + .model-node__preview,
+body.app-slava-restraint .model-node__ports--input + .model-node__preview-placeholder {
+  margin-top: 0;
+}
 /* Image / video preview fills the area completely. */
 body.app-slava-restraint .model-node__preview img,
 body.app-slava-restraint .model-node__preview video {
