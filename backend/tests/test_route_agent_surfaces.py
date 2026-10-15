@@ -91,3 +91,12 @@ def test_nebula_info_prints_one_line_per_route():
     # Under each route, what it takes that the PARAMS list doesn't say.
     assert "takes aspect_ratio auto|1:1|16:9; resolution 768sq|1k|2k|4k" in text
     assert "takes safety_tolerance 0-4; grounding" in text
+
+
+def test_saving_accepts_every_route_s_params(surfaces):
+    """Values stay flat in node.params, so a save takes any route's params,
+    even ones the shown route doesn't offer (route_block decides at run time)."""
+    surfaces({})
+    valid = main._valid_param_keys(TABLE["id"])
+    assert {"aspect_ratio", "resolution", "safety_tolerance", "grounding", "_provider", "_kreaAuth"} <= valid
+    main._validate_params(TABLE["id"], {"_provider": "fal", "resolution": "1.5k", "grounding": True})
