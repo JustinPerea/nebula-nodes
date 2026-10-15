@@ -4,7 +4,7 @@ import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { buildDefaultParamsForUi, resolveCreateParamDefinitions } from '../../src/lib/createParams';
 import {
   blockFields, configuredDirectKey, directBlock, directKeyNames, fallbackProvider, hasRoutes, paramDefinitionsForRun,
-  routeParamDefinitions, routeUnavailable, selectRoute, usesRoutePlan, WIRED, withWiredBlockers,
+  routeParamDefinitions, routeUnavailable, selectRoute, shownRouteId, usesRoutePlan, WIRED, withWiredBlockers,
 } from '../../src/lib/directRoute';
 import { runRouteProvider } from '../../src/lib/modelDiscovery';
 import type { ModelNodeDefinition } from '../../src/types';
@@ -21,6 +21,8 @@ type RouteCase = {
   };
   unavailable?: Record<string, unknown> | null;
   paramKeys?: string[];
+  shownRoute?: string | null;
+  routeParams?: Record<string, unknown>[];
   wired?: string[];
   wiredCounts?: Record<string, number>;
   block?: { reason: string; param: string | null; detail?: string; on?: string } | null;
@@ -29,6 +31,15 @@ type RouteCase = {
 const fixture = shared as unknown as {
   defaultToday: string; cases: RouteCase[]; definitions: Record<string, ModelNodeDefinition>;
 };
+/** A param as route_cases.json `routeParams` spells it: key, option values, range. */
+function offered(param: { key: string; options?: { value: unknown }[]; min?: number; max?: number }): Record<string, unknown> {
+  const shown: Record<string, unknown> = { key: param.key };
+  if (Array.isArray(param.options)) shown.options = param.options.map((option) => option.value);
+  if (param.min !== undefined) shown.min = param.min;
+  if (param.max !== undefined) shown.max = param.max;
+  return shown;
+}
+
 /** The case's node: an inline route-table node, or one from the catalog. */
 const definitionFor = (nodeId: string) => fixture.definitions[nodeId] ?? NODE_DEFINITIONS[nodeId];
 
@@ -60,6 +71,12 @@ describe('selectRoute (cases shared with backend services/node_route.py)', () =>
       if (testCase.paramKeys) {
         expect(routeParamDefinitions(definition, route.routeId ?? route.kind).map((param) => param.key).sort())
           .toEqual(testCase.paramKeys);
+      }
+      if (testCase.shownRoute !== undefined) {
+        const shown = shownRouteId(definition, params, testCase.apiKeys);
+        expect(shown ?? null).toBe(testCase.shownRoute);
+        // The options the node offers on that route (enums cut, ranges narrowed).
+        expect(routeParamDefinitions(definition, shown).map(offered)).toEqual(testCase.routeParams);
       }
     });
   }
