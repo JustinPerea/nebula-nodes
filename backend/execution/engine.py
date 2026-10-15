@@ -570,7 +570,8 @@ def _cache_route_tag(
         definition, params = base, nested[1]
         tag = node_route.cache_tag(definition, params, api_keys)
         return f"{nested[0]}={tag}" if tag else None
-    params = node_route.with_wired_blockers(definition, params, node_route.filled_ports(inputs))
+    # Item counts, as maker_routes.multi_route reads a ``ports`` rule.
+    params = node_route.with_wired_blockers(definition, params, node_route.filled_counts(inputs))
     return node_route.cache_tag(definition, params, api_keys)
 
 
@@ -853,7 +854,10 @@ def validate_graph(
             key_names = []
 
         # Edges into each port, which a route's ``ports`` rule and a wired
-        # rule param read (node_route.with_wired_blockers).
+        # rule param read (node_route.with_wired_blockers). Before the run
+        # an edge counts one input; the router counts the items each port
+        # carries (filled_counts), so one edge bringing a list of images can
+        # still stop there, before that provider is called.
         wired: dict[str, int] = {}
         for edge in incoming_edges.get(node.id, []):
             wired[edge.target_handle] = wired.get(edge.target_handle, 0) + 1

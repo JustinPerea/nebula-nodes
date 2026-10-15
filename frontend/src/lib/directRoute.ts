@@ -291,7 +291,9 @@ function countedPorts(definition: Pick<ModelNodeDefinition, 'directRoute' | 'rou
  * it as the saved param (node_route.with_wired_blockers). `wired` are the
  * ports with an edge in, or a map of each port to how many inputs it carries;
  * a route-table node with a `ports` rule then gets those counts under
- * PORT_COUNTS. */
+ * PORT_COUNTS. The frontend counts edges, all it knows before the run; the
+ * backend router counts the items each port carries, so one edge bringing a
+ * list can still stop the run there. */
 export function withWiredBlockers(
   definition: Pick<ModelNodeDefinition, 'directRoute' | 'routes'>,
   params: Record<string, unknown> | undefined,

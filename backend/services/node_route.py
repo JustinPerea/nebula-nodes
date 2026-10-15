@@ -626,7 +626,11 @@ def with_wired_blockers(
 
     ``wired`` may also map each port to how many inputs it carries
     (filled_counts); a route-table node with a ``ports`` rule then gets those
-    counts under PORT_COUNTS. A plain set counts one per port."""
+    counts under PORT_COUNTS. A plain set counts one per port. The router
+    and the cache key count items (a list counts its length), which is what
+    the provider receives; the preflight, the estimate and the switcher
+    count edges, all that is known before upstream nodes run, so they can
+    only under-count."""
     values = dict(params or {})
     counts = ({str(port): int(count) for port, count in wired.items()} if isinstance(wired, Mapping)
               else {str(port): 1 for port in (wired or ())})

@@ -62,7 +62,8 @@ A route-table node keeps its usual fields (`apiProvider` is the maker, `envKeyNa
 
 - `select_route` returns a `Route`: `kind` (`plan`, `direct` for the maker, `fallback` for any other route, `unset` when it can't run), `provider`, `key`, plus `routeId`, `block` and `missing` on route-table nodes.
 - `route_unavailable` explains an `unset` run: `{routeId, missing, block, alternatives, message}`. The same `message` shows on the node, in the run error, in the preflight and in the run estimate.
-- Wired inputs count. A port rule reads how many inputs arrive (`filled_counts` at run time, edges in the preflight and the estimate), under the reserved `"(wired ports)"` key that `with_wired_blockers` adds.
+- Wired inputs count. A port rule reads how many inputs arrive, under the reserved `"(wired ports)"` key that `with_wired_blockers` adds. The router and the cache key count items (`filled_counts`: a list counts its length, which is what the provider gets). The preflight, the estimate and the switcher count edges, all that is known before upstream nodes run. So one edge bringing a list of six images to a route that takes four passes the preflight and stops in the router, before that provider is called.
+- The Krea plan is decided from the same routed values (`with_wired_blockers`), so a wired input that blocks or unblocks the plan route changes the preflight's sign-in check, the estimate's plan runs and the spend gate the same way it changes the router.
 - The cache key names the route that ran: `direct:bfl`, `fallback:replicate`, `plan:krea`, so a result from one provider never replays as another's.
 - The handler gets only the route's own settings, renamed and value-mapped (`translate_params`). A Krea route also gets `_kreaAuth` for how this run bills.
 

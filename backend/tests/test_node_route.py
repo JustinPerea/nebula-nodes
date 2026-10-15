@@ -283,6 +283,10 @@ def test_cache_tag_names_the_route_id_on_a_route_table_node():
     wired = {"keyframes": PortValueDict(type="Image", value=["a.png", "b.png"])}
     assert _cache_route_tag(node, video, {"OPENROUTER_API_KEY": "o"}) == "fallback:openrouter"
     assert _cache_route_tag(node, video, {"OPENROUTER_API_KEY": "o"}, wired) == "unset:openrouter"
+    # One input carrying a list counts its items, as the router counts them.
+    five = {"images": PortValueDict(type="Image", value=[f"{i}.png" for i in range(5)])}
+    on_openrouter = GraphNode(id="n", definitionId="routes-image", params={"_provider": "openrouter"})
+    assert _cache_route_tag(on_openrouter, image, {"OPENROUTER_API_KEY": "o"}, five) == "unset:openrouter"
 
 
 def test_filled_counts_counts_list_items():
