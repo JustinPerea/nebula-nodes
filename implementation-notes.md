@@ -1,5 +1,29 @@
 # Implementation Notes
 
+## 2026-10-15 — PR 3 integration: nodes, merge and docs lanes on flux-3-nodes
+
+Branch `flux-3-nodes` (from `provider-switcher`): `flux3-lane-merge` (which holds `flux3-lane-nodes`) and `flux3-lane-docs` merged with merge commits.
+
+Merge decisions:
+
+- **Two conflicts, both kept.** `docs/api-guides/bfl.md`: the docs lane's nodes table and Auto notes, with the nodes lane's status details (`BFL_API_KEY`, the stop-and-offer, `draft_enhance` not offered). `implementation-notes.md`: the three PR 3 sections side by side.
+- **Generated files regenerated, not merged:** `MODEL_REFERENCE.md`, `route_tables.json` (unchanged), `provider_knowledge_manifest.json` (unchanged, 290 paths). `node_definitions.json` was left as the nodes lane wrote it: `scripts/export-node-defs.ts` reproduces the seven new nodes exactly, but would also undo the JSON-only fixes on `gemini-tts`, `veo-3`, `gemini-omni-flash` and `quiver-arrow-generate`, so its output was checked and discarded. AGENTS.md now says so.
+- **Krea 3's audit date.** The regenerated reference gave `krea-3` "Audited 2026-10-09", taken from `krea-2.md`, which mentions `krea-3` in backticks (the same trap the docs lane hit for `flux-2-pro`). `krea-2.md` now names it without backticks; the date comes from `krea-3.md` (2026-10-15).
+- **AGENTS.md** gives the counted 307 (`node_definitions.json` and `NODE_DEFINITIONS` agree), and its Flora line lists all three folded Krea FLUX nodes.
+
+Fixed after the live check (isolated backend :8144 and Vite :5264, placeholder keys only, no run started; screenshots in the session scratchpad `flux3/pr3-shots/`):
+
+- **Krea 3's "Early access" note showed nowhere.** `RouteSpec.note` was declared ("readiness copy") but nothing rendered it. `providerSwitchState` now gives the route's API row an `info` line, shown under the name and price in the card menu and the Inspector; a "Doesn't take ..." block replaces it. It goes on the API row only: the note is about Krea's API, and whether the plan reaches Krea 3 isn't documented.
+- **Klein Base's name was cut** to "FLUX 3 Image..." by the chip at the 240 px card limit. Cards with a provider chip (`model-node--switchable`) may grow to 300 px.
+- **FLUX 3 Video's last port was hidden.** The preview's -32 px pull-up (meant for a header floating over the preview) covered "Keyframes +" once the node had an output. Below input ports the preview no longer pulls up. This touches every default-skin model node with inputs and a preview: they get 32 px taller, and their last input row shows.
+- **Migrated input nodes landed on other nodes.** `migrate_graph` put them 360 px left of the folded node, which is on top of the previous node in a graph laid out 400 px apart (the fixture's own layout). `_free_spot` now moves an added node down past any positioned node within 320 x 400 px. Tradeoff: node sizes aren't saved in the graph, so the clearance is a fixed box sized for a five-port video card with a preview.
+- **Library rows:** a long readiness line wrapped the Settings button to the left edge; it stays right now.
+
+Seen and left alone:
+
+- The import alert names a folded node by its saved label, so an unrenamed one reads "Flux Video Upscale (Krea)" while the canvas shows "FLUX Video Upscale". That's the merge lane's choice (the name the person knows from the file).
+- No `FORjustin.md` exists in this repo to update.
+
 ## 2026-10-15 — Provider routes, PR 3: the FLUX 3 and Krea 3 nodes
 
 Branch `flux3-lane-nodes` (from `provider-switcher`). Seven route-table nodes ship: `flux-3-image`, `flux-3-image-klein`, `flux-3-image-klein-base`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale`, `krea-3`. The three generated Krea FLUX nodes fold into them. Guide: `docs/PROVIDER-ROUTES.md`, "The nodes". No paid call was made: every request is checked against a mocked transport and the providers' schemas.
