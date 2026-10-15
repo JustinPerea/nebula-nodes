@@ -1,5 +1,6 @@
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import type { ResultContext } from '../../lib/resultContext';
+import { BILLING_PARAM_LABELS } from '../../lib/billingParams';
 
 export function ResultMetadata({ context }: { context: ResultContext }) {
   const date = context.timestamp !== undefined ? new Date(context.timestamp) : null;
@@ -36,7 +37,7 @@ export function ResultDetails({ context }: { context: ResultContext }) {
         <dl>
           {Object.entries(context.params).map(([key, value]) => (
             <div key={key}>
-              <dt>{key === '_kreaAuth' ? 'Krea access' : parameterDefinitions.find((param) => param.key === key)?.label ?? key}</dt>
+              <dt>{BILLING_PARAM_LABELS[key] ?? parameterDefinitions.find((param) => param.key === key)?.label ?? key}</dt>
               <dd>{settingValue(value)}</dd>
             </div>
           ))}

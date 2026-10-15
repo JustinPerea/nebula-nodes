@@ -70,11 +70,12 @@ Runs billed to a signed-in Krea plan (``plan``) have no per-call USD price:
 Krea charges compute units it doesn't publish per model. They are counted as
 runs instead (times a node's batch runs, shots and passes) against
 ``kreaPlanRuns``, and always counted even with no limit set. Agents can't move
-a node onto the plan themselves: changing ``_kreaAuth`` takes a proposal
-(``main._refuse_agent_krea_billing_change``). That holds on every way in: the
+a node onto the plan themselves, or onto another provider: changing
+``_kreaAuth`` or a route-table node's ``_provider`` takes a proposal
+(``main._refuse_agent_billing_change``). That holds on every way in: the
 edit routes, project snapshots, and the run routes, which take params in the
 request (a run may only bill a node the way its canvas node does, and a node
-that exists only for the run starts on the API token).
+that exists only for the run starts on Auto and the API token).
 
 A cinema scene is a local node that calls its base image model once per
 shot, so it is priced, limited and counted as that model, times its shots

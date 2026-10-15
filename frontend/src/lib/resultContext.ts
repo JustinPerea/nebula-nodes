@@ -4,6 +4,7 @@ import type { ModelNodeDefinition, NodeData, PortValue } from '../types';
 import type { CreateDraftSeed } from '../store/createDraftStore';
 import { backendAssetUrlSync } from './backend';
 import { isCreateModel } from './createModels';
+import { isRecipeParam } from './billingParams';
 import { kreaModeFor, supportsKreaAccount } from './kreaConnection';
 import type { RunRecord, RunSnapshotNode } from './runHistory';
 
@@ -54,7 +55,7 @@ function outputIdentity(outputs: Record<string, PortValue>): string {
 
 function authorParams(params: Record<string, unknown>, definition?: ModelNodeDefinition): Record<string, unknown> {
   const authored = structuredClone(Object.fromEntries(Object.entries(params)
-    .filter(([key]) => !key.startsWith('_') || key === '_kreaAuth')));
+    .filter(([key]) => isRecipeParam(key))));
   // Old gateway recipes used API billing even when their mode was not written.
   if (supportsKreaAccount(definition)) authored._kreaAuth = kreaModeFor(definition, params);
   return authored;
