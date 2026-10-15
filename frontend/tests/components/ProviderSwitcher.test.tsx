@@ -202,6 +202,19 @@ describe('ProviderSwitcher keyboard', () => {
     expect(document.activeElement).toBe(chip);
   });
 
+  it('closes on Tab and Shift+Tab with focus back on the chip, not past the portalled menu', () => {
+    withKeys({ BFL_API_KEY: KEY });
+    render(<Controlled variant="chip" />);
+    const chip = screen.getByRole('button', { name: /^Provider for Fixture Route Table/ });
+    for (const shiftKey of [false, true]) {
+      fireEvent.click(chip);
+      const menu = screen.getByRole('menu', { name: 'Provider for Fixture Route Table' });
+      expect(fireEvent.keyDown(menu, { key: 'Tab', shiftKey })).toBe(false); // default prevented
+      expect(screen.queryByRole('menu')).toBeNull();
+      expect(document.activeElement).toBe(chip);
+    }
+  });
+
   it('opens on ArrowDown and closes after a pick, returning focus', () => {
     withKeys({ BFL_API_KEY: KEY });
     render(<Controlled variant="pill" />);

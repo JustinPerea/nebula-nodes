@@ -90,8 +90,8 @@ interface ProviderMenuProps {
   onClose?: (returnFocus: boolean) => void;
 }
 
-/** The menu: role=menu with menuitemradio rows, arrow keys, Home/End and
- * Escape. In a popover the checked row takes focus when it opens; in place,
+/** The menu: role=menu with menuitemradio rows, arrow keys, Home/End,
+ * Escape and Tab (both close a popover, focus back on its trigger). In a popover the checked row takes focus when it opens; in place,
  * one row is in the tab order (roving tabindex). */
 export function ProviderMenu({ state, onPick, inline = false, labelledBy, label, onClose }: ProviderMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -124,7 +124,9 @@ export function ProviderMenu({ state, onPick, inline = false, labelledBy, label,
     else if (event.key === 'Home') move(0);
     else if (event.key === 'End') move(list.length - 1);
     else if (event.key === 'Escape' && onClose) onClose(true);
-    else if (event.key === 'Tab' && onClose) { onClose(false); return; }
+    // The popover is portalled to the end of the body, so the browser's own
+    // Tab would leave the canvas: close and put focus back on the trigger.
+    else if (event.key === 'Tab' && onClose) onClose(true);
     else return;
     event.preventDefault();
     event.stopPropagation();
