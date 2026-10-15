@@ -209,7 +209,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
   const categoryColor = CATEGORY_COLORS[definition.category] ?? '#424242';
   const stateClass = `model-node--${nodeData.state}`;
-  const imageOutput = Object.values(previewOutputs).find((o) => o.type === 'Image' && o.value);
+  // A mask is drawn like an image when there's no regular image, so a Preview
+  // wired to Jev Box's mask shows it instead of an empty card.
+  const imageOutput = Object.values(previewOutputs).find((o) => o.type === 'Image' && o.value)
+    ?? Object.values(previewOutputs).find((o) => o.type === 'Mask' && o.value);
   const textOutput = Object.values(previewOutputs).find((o) => o.type === 'Text' && o.value);
   const videoOutput = Object.values(previewOutputs).find((o) => o.type === 'Video' && o.value);
   const meshOutput = Object.values(previewOutputs).find((o) => o.type === 'Mesh' && o.value);
