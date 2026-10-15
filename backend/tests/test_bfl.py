@@ -148,6 +148,16 @@ async def test_get_result_refuses_an_off_host_url_without_a_request(monkeypatch)
     assert fake.requests == []
 
 
+@pytest.mark.asyncio
+async def test_a_poll_redirect_is_not_followed_with_the_key(monkeypatch):
+    fake = FakeBFL(monkeypatch, polls=[httpx.Response(302, headers={"location": "https://evil.com/steal"})])
+
+    with pytest.raises(bfl.BFLError, match="error 302"):
+        await _run()
+
+    assert "https://evil.com/steal" not in fake.urls()
+
+
 # -- the happy path -----------------------------------------------------------
 
 @pytest.mark.asyncio
