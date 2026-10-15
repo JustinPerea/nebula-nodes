@@ -14,7 +14,7 @@ from mcp.server.fastmcp import Image
 from PIL import Image as PILImage
 
 import mcp_server
-from models.events import ExecutedEvent
+from models.events import ExecutedEvent, SkippedEvent
 from nebula_api import NebulaAPI, NebulaAPIError
 from services import agent_spend, node_readiness, output_preview
 
@@ -112,9 +112,12 @@ def test_local_nodes_that_call_a_provider_say_what_they_need(nebula, monkeypatch
     qc_row = next(row for row in mcp_server.find_nodes(query="qc frame")["nodes"] if row["id"] == "qc-frame-review")
     assert qc_row["runsWith"] == "free" and qc_row["price"] == "free"
     assert "mode=vision-llm" in qc_row["needsKeyFor"] and "no list price" in qc_row["needsKeyFor"]
+    assert "mode=jev needs TYPESAFE_API_KEY and is priced per run" in qc_row["needsKeyFor"]
     qc = mcp_server.describe_node("qc-frame-review")
     assert qc["runsWith"] == "free" and qc["price"] == "free" and "no list price" in qc["priceNote"]
-    assert qc["runsWithOptions"]["options"] == {"heuristic": "free", "vision-llm": None, "opencv": "free"}
+    assert qc["runsWithOptions"]["options"] == {"heuristic": "free", "vision-llm": None, "opencv": "free",
+                                                "jev": None}
+    assert qc["pricedWhen"]["rows"] == [{"mode": "jev", "usd": [0.0000128, 0.0027]}]
 
     keys.update({"GOOGLE_API_KEY": "g"})
     cinema = mcp_server.describe_node("cinema-scene")
@@ -154,6 +157,32 @@ def test_run_previews_images_and_reports_text(nebula):
     assert len(images) == 1
     assert len(images[0].data) <= output_preview.MAX_BYTES
     assert max(PILImage.open(io.BytesIO(images[0].data)).size) <= output_preview.SIZES["small"]
+
+
+def test_run_reports_skipped_nodes_and_describe_marks_gate_ports(nebula, monkeypatch):
+    import main
+
+    async def gated_execute_graph(*, nodes, emit, run_id, **kwargs):
+        for node in nodes:
+            if node.definition_id == "text-input":
+                await emit(ExecutedEvent(node_id=node.id, run_id=run_id,
+                                         outputs={"text": {"type": "Text", "value": "x"}}))
+            else:
+                await emit(SkippedEvent(node_id=node.id, run_id=run_id, gate_node_id="g",
+                                        reason="Jev Decide failed (answered no, 0.12)"))
+
+    monkeypatch.setattr(main, "execute_graph", gated_execute_graph)
+    built = _build()
+    image = built["idMap"]["+img"]
+    parts = asyncio.run(mcp_server.run_nodes(image, wait_seconds=10))
+    result = _text(parts)
+    assert result["skipped"] == {image: "Jev Decide failed (answered no, 0.12)"}
+    assert image not in result["outputs"] and len(parts) == 1  # nothing to preview
+
+    described = mcp_server.describe_node("jev-decide")
+    gates = [port for port in described["outputs"] if port.get("gate")]
+    assert gates == [{"id": "on_pass", "type": "Any", "gate": True}, {"id": "on_fail", "type": "Any", "gate": True}]
+    assert {"id": "through", "type": "Any"} in described["inputs"]
 
 
 def test_a_long_run_comes_back_running_then_get_run_collects_it(nebula):

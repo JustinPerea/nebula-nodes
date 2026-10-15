@@ -8,7 +8,7 @@ from typing import Any
 from models.graph import GraphNode, PortValueDict
 from services.qc_common import create_annotated_frame, format_report, resolve_local_media, save_annotated_output
 
-VALID_QC_MODES = {"heuristic", "vision-llm", "opencv"}
+VALID_QC_MODES = {"heuristic", "vision-llm", "opencv", "jev"}
 
 
 def qc_mode(node: GraphNode) -> str:

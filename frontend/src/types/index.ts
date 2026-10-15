@@ -44,7 +44,9 @@ export type NodeCategory =
   | 'character'
   | 'moodboard';
 
-export type NodeState = 'idle' | 'queued' | 'executing' | 'complete' | 'error';
+/** `skipped`: the run reached this node, but a gate upstream withheld its
+ *  input, so it never started and cost nothing. */
+export type NodeState = 'idle' | 'queued' | 'executing' | 'complete' | 'error' | 'skipped';
 
 export type ExecutionPattern = 'sync' | 'async-poll' | 'stream';
 
@@ -71,6 +73,7 @@ export type APIProvider =
   | 'krea'
   | 'worldlabs'
   | 'nous'
+  | 'typesafe'
   | 'utility';
 
 export interface PortDefinition {
@@ -88,6 +91,10 @@ export interface PortDefinition {
   /** Advisory reference weight, 0.0-1.0. Absent behaves as 1.0. Displayed as a
    *  filled bar indicator; consumed by reference-bundle packing. */
   weight?: number;
+  /** Output ports only: a gate port that carries a value on some runs and is
+   *  withheld on others. Nodes wired to a withheld port are skipped
+   *  (backend/execution/gating.py). */
+  conditional?: boolean;
 }
 
 export interface ParamOption {
@@ -125,6 +132,9 @@ export interface ParamDefinition {
 export interface ModelNodeDefinition {
   id: string;
   displayName: string;
+  /** What the node does, in words people and agents search for. The agent
+   *  find_nodes tool matches against it (backend/main.py agent_find_nodes). */
+  description?: string;
   category: NodeCategory;
   apiProvider: APIProvider;
   apiEndpoint: string;
@@ -254,10 +264,13 @@ export interface DirectSizeLimits {
  *    this list to them.
  *  - `param`: one param picks local or provider work. Only the values in
  *    `freeWhen` run locally; any other value (including an empty or unknown
- *    one) needs one of `anyKey` and has no list price. */
+ *    one) needs one of `anyKey`. `byValue` gives a value its own keys and
+ *    provider (QC Jev mode: TYPESAFE_API_KEY). A paid value has a list price
+ *    only when the node's price entry has a row for it (lib/pricing.ts). */
 export type ProviderVia =
   | { kind: 'model'; path: string[]; models: string[]; default: string; fallbackFor: string[] }
-  | { kind: 'param'; param: string; freeWhen: string[]; anyKey: string[]; provider: string };
+  | { kind: 'param'; param: string; freeWhen: string[]; anyKey: string[]; provider: string;
+      byValue?: Record<string, { anyKey: string[]; provider: string }> };
 
 /** A single shot within a cinema-scene storyboard. Each shot carries its own
  *  prompt and (optionally) overrides the shared palette/look, and produces one
@@ -513,6 +526,13 @@ export interface NodeData {
    *  still holds the raw provider string for the expandable debug details. */
   errorCategory?: string;
   errorFriendly?: string;
+  /** UI-only: why the latest run skipped this node, e.g. "Jev Decide failed
+   *  (answered no, 0.12)", and the gate node that caused it. */
+  skipReason?: string;
+  skipGateNodeId?: string;
+  /** UI-only: output ports the latest run withheld (port -> reason). Wires
+   *  from them draw as inactive. */
+  withheldPorts?: Record<string, string>;
   keyStatus?: 'ok' | 'missing';
   streamingText?: string;
   streamingPartials?: { index: number; src: string }[];

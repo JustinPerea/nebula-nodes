@@ -167,6 +167,68 @@
         }
       ]
     },
+    "judge": {
+      "id": "judge",
+      "apiProvider": "typesafe",
+      "params": [
+        {
+          "key": "model",
+          "default": "jev-1.14.0",
+          "options": [
+            {
+              "value": "jev-1.14.0"
+            },
+            {
+              "value": "jev-1.13.0"
+            }
+          ]
+        },
+        {
+          "key": "long_context",
+          "default": false
+        }
+      ]
+    },
+    "qc-judge": {
+      "id": "qc-judge",
+      "apiProvider": "utility",
+      "params": [
+        {
+          "key": "mode",
+          "default": "heuristic",
+          "options": [
+            {
+              "value": "heuristic"
+            },
+            {
+              "value": "vision-llm"
+            },
+            {
+              "value": "jev"
+            }
+          ]
+        }
+      ],
+      "providerVia": {
+        "kind": "param",
+        "param": "mode",
+        "freeWhen": [
+          "heuristic"
+        ],
+        "anyKey": [
+          "OPENAI_API_KEY"
+        ],
+        "provider": "vision",
+        "byValue": {
+          "jev": {
+            "anyKey": [
+              "TYPESAFE_API_KEY"
+            ],
+            "provider": "typesafe"
+          }
+        }
+      }
+    },
     "routed": {
       "id": "routed",
       "apiProvider": "fal",
@@ -427,6 +489,59 @@
           }
         ],
         "checked": "2026-10-12"
+      },
+      "judge": {
+        "currency": "usd",
+        "per": "request",
+        "rows": [
+          {
+            "match": {
+              "long_context": true
+            },
+            "price": [
+              1e-05,
+              0.011
+            ]
+          },
+          {
+            "match": {},
+            "price": [
+              1e-05,
+              0.0027
+            ]
+          }
+        ],
+        "plus": "input images",
+        "sources": [
+          {
+            "url": "https://example.com/judge",
+            "quote": "$0.042 per Mtok input"
+          }
+        ],
+        "checked": "2026-10-14"
+      },
+      "qc-judge": {
+        "currency": "usd",
+        "per": "request",
+        "rows": [
+          {
+            "match": {
+              "mode": "jev"
+            },
+            "price": [
+              1e-05,
+              0.0027
+            ]
+          }
+        ],
+        "plus": "input images",
+        "sources": [
+          {
+            "url": "https://example.com/judge",
+            "quote": "$0.042 per Mtok input"
+          }
+        ],
+        "checked": "2026-10-14"
       },
       "routed": {
         "routes": {
@@ -826,6 +941,71 @@
         "low": 1.0,
         "high": 1.0
       }
+    },
+    {
+      "name": "a per-request ceiling at the default context",
+      "nodeId": "judge",
+      "params": {},
+      "expected": {
+        "currency": "usd",
+        "low": 1e-05,
+        "high": 0.0027,
+        "plus": "input images"
+      }
+    },
+    {
+      "name": "a boolean setting picks the long-context ceiling",
+      "nodeId": "judge",
+      "params": {
+        "long_context": true
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 1e-05,
+        "high": 0.011,
+        "plus": "input images"
+      }
+    },
+    {
+      "name": "a boolean setting left off keeps the default ceiling",
+      "nodeId": "judge",
+      "params": {
+        "long_context": false,
+        "model": "jev-1.13.0"
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 1e-05,
+        "high": 0.0027,
+        "plus": "input images"
+      }
+    },
+    {
+      "name": "a local node's paid mode with its own row is priced",
+      "nodeId": "qc-judge",
+      "params": {
+        "mode": "jev"
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 1e-05,
+        "high": 0.0027,
+        "plus": "input images"
+      }
+    },
+    {
+      "name": "a local node's paid mode without a row is unpriced",
+      "nodeId": "qc-judge",
+      "params": {
+        "mode": "vision-llm"
+      },
+      "expected": null
+    },
+    {
+      "name": "a local node at its free default matches no row",
+      "nodeId": "qc-judge",
+      "params": {},
+      "expected": null
     },
     {
       "name": "a routed entry prices the maker route",

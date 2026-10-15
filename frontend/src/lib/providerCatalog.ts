@@ -51,6 +51,8 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   { key: 'KREA_USAGE_KEY', label: 'Krea · usage key', placeholder: 'Service key', url: 'https://www.krea.ai/api-keys',
     note: 'Workspace spend reporting (enterprise)' },
   { key: 'IDEOGRAM_API_KEY', label: 'Ideogram', placeholder: 'ideogram_...', url: 'https://developer.ideogram.ai', brand: ['Ideogram'] },
+  { key: 'TYPESAFE_API_KEY', label: 'TypeSafe', placeholder: 'Your TypeSafe key', url: 'https://console.typesafe.ai/keys',
+    brand: ['Jev'], note: 'Typed judge, classify and pick-best decisions (Jev)' },
   { key: 'WORLDLABS_API_KEY', label: 'World Labs', placeholder: 'wlt_...', url: 'https://platform.worldlabs.ai', brand: ['World Labs'] },
   // BytePlus Service Specific Terms (Model Services): "The BytePlus Model
   // Services are not available in the United States." Models need activating

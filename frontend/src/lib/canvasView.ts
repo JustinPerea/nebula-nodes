@@ -8,7 +8,7 @@ export interface CanvasViewReport {
   nodes: Array<{ id: string; x: number; y: number; width?: number; height?: number; state?: NodeState }>;
 }
 
-const NODE_STATES: ReadonlySet<string> = new Set(['idle', 'queued', 'executing', 'complete', 'error']);
+const NODE_STATES: ReadonlySet<string> = new Set(['idle', 'queued', 'executing', 'complete', 'error', 'skipped']);
 /** Matches the backend's cap; the rest of a huge canvas is still in the graph. */
 const MAX_REPORTED_NODES = 2000;
 

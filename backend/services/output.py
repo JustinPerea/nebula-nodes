@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import logging
 import mimetypes
 import os
 import re
+import socket
 import threading
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -404,6 +406,69 @@ def resolve_output_ref(value: str) -> str:
     except (ValueError, OSError, RuntimeError):
         return value  # malformed or escaping reference — refuse
     return str(candidate)
+
+
+def _is_this_machine(host: str) -> bool:
+    """A URL host that only ever means this machine.
+
+    Covers every spelling a browser or the desktop shell may hand over:
+    localhost (with a trailing dot or as a *.localhost name), the whole
+    127.0.0.0/8 range, ::1, an IPv4-mapped loopback (::ffff:127.0.0.1) and
+    the unspecified 0.0.0.0 / :: that browsers send to this machine. Short
+    and numeric IPv4 forms (127.1, 2130706433) are read the way browsers do.
+    """
+    host = host.lower().rstrip(".")
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        if not host or not re.fullmatch(r"[0-9a-fx.]+", host):
+            return False
+        try:
+            address = ipaddress.IPv4Address(socket.inet_aton(host))
+        except OSError:
+            return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped
+    return address.is_loopback or address.is_unspecified
+
+
+def is_local_output_url(value: str) -> bool:
+    """An http(s) URL to this machine's own /api/outputs route."""
+    try:
+        parts = urlsplit(value)
+        host = parts.hostname or ""
+    except ValueError:
+        return False
+    return (parts.scheme in {"http", "https"} and _is_this_machine(host)
+            and parts.path.startswith("/api/outputs/"))
+
+
+def local_media_ref(value: str) -> str:
+    """Turn a reference to one of Nebula's own outputs into its file path.
+
+    Node outputs reach the next node in two spellings: an absolute path
+    (most handlers) or a served ``/api/outputs/<rel>`` reference (Jev Box,
+    the QC nodes, chat uploads, saved projects). A loopback URL to that
+    route (``http://127.0.0.1:8000/api/outputs/...``) is the same file.
+    Handlers that open their input as a file only understand the first, so
+    this maps the other two to it. Its query and fragment are ignored: they
+    don't change which file is served.
+
+    Raises ValueError for a reference that escapes OUTPUT_ROOT, and runs the
+    result through the allowed-path policy. Anything else (absolute paths,
+    other URLs, data: URIs, text) comes back unchanged.
+    """
+    if not isinstance(value, str):
+        return value
+    ref = urlsplit(value).path if is_local_output_url(value) else value
+    if not ref.startswith("/api/outputs/"):
+        return value
+    resolved = resolve_output_ref(ref)
+    if resolved == ref:
+        raise ValueError("A media reference escapes Nebula's output directory, so it wasn't read")
+    return str(require_allowed_path(resolved))
 
 
 def portable_output_ref(value: str, *, require_file: bool = False) -> str:

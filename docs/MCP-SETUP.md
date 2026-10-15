@@ -33,7 +33,8 @@ The server exposes these tools for building and running (see
   and list prices by the params that set them. A local node that still calls
   a provider also has `runsWithOptions`: readiness per value of the param that
   picks the provider (Cinema Scene's `scene.base.model`, a QC node's `mode`),
-  and a note when another value would run with the keys set here.
+  and a note when another value would run with the keys set here. A QC
+  node's `pricedWhen` lists the price rows of its paid modes (Jev).
 - `edit_canvas`: adds nodes, wires, param changes, renames and moves in one
   call, all or nothing. Same shape as `propose_change`.
 - `remove_from_canvas`: deletes nodes or single wires, all or nothing.
@@ -152,6 +153,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `edge.added` / `edge.removed` | wired / unwired | source, target and handles |
 | `selection.changed` | the selected set changed | `nodeIds`, `count` |
 | `run.started` / `run.finished` / `run.failed` / `run.cancelled` | per node, attributed to whoever started the run | `runId`, `error` |
+| `run.skipped` | a gate upstream (Jev Decide's On Pass / On Fail) withheld the node's input, so it never ran | `runId`, `reason`, `gateNodeId` |
 | `canvas.replaced` | import, project opened or created; node ids restart | `reason` |
 | `canvas.cleared` | Clear canvas | |
 | `pin.added` / `pin.removed` | the person left or deleted a note | `pinId`, `text`, `anchor` |
@@ -445,9 +447,8 @@ The person decides what agents may spend, in **Settings > Preferences**:
   daily limit (see "Connect your agent" below).
 
 Any limit also makes an agent ask before running a node with no list price,
-since Nebula can't check it. That includes a Video QC node in any mode but
-`heuristic` or `opencv` (vision-llm calls a vision model, which has no list
-price) and a node whose priced setting arrives by wire (Krea Kling 3.0's
+since Nebula can't check it. That includes a Video QC node in vision-llm mode (it calls a vision model,
+which has no list price; Jev mode is priced per request) and a node whose priced setting arrives by wire (Krea Kling 3.0's
 `multi_prompt` port), or is set to something the price list doesn't cover
 (multi-shot Kling). Free nodes always pass. The person's own runs from the
 canvas are never limited.
@@ -834,8 +835,9 @@ result at 25,000 tokens.
 `nebula context` uses, so the CLI and the MCP server agree on what can run.
 `apiProvider: utility` only means "no top-level key". A local node that still
 calls a provider says how in its definition's `providerVia` (`kind: model`
-for Cinema Scene's base model, `kind: param` for the QC nodes' mode), and
-readiness, the canvas badge, the run estimate and proposals all read it.
+for Cinema Scene's base model, `kind: param` for the QC nodes' mode, with
+`byValue` for a mode that needs its own key, like QC `jev` and
+`TYPESAFE_API_KEY`), and readiness, the canvas badge, the run estimate and proposals all read it.
 `backend/tests/test_node_readiness.py` fails when a utility handler that can
 reach the network isn't declared, and pins `providerVia` to the handler
 constants it describes. Its import walk fails closed: relative imports are

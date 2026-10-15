@@ -216,7 +216,7 @@ def test_definitions_and_frontend_mirror_match_contract() -> None:
     repo = Path(__file__).resolve().parents[2]
     definitions = json.loads((repo / "backend/data/node_definitions.json").read_text())
     # The local Batch source extends the current 288-node catalog (Krea gateway now covers every generation route).
-    assert len(definitions) == 300  # Sora 2 and Sora 2 I2V retired 2026-10-14
+    assert len(definitions) == 303  # +3 Jev nodes; Sora 2 and Sora 2 I2V retired 2026-10-14
     frontend = (repo / "frontend/src/constants/nodeDefinitions.ts").read_text()
     for definition_id in QC_IDS:
         definition = definitions[definition_id]
@@ -227,7 +227,7 @@ def test_definitions_and_frontend_mirror_match_contract() -> None:
         assert definition["inputPorts"][0]["dataType"] == "Video"
         assert {port["dataType"] for port in definition["outputPorts"]} == {"Image", "Text"}
         mode = next(param for param in definition["params"] if param["key"] == "mode")
-        assert {option["value"] for option in mode["options"]} == {"heuristic", "vision-llm", "opencv"}
+        assert {option["value"] for option in mode["options"]} == {"heuristic", "vision-llm", "opencv", "jev"}
         assert f"'{definition_id}':" in frontend
 
 

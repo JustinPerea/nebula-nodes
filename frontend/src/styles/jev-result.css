@@ -1,0 +1,724 @@
+/*
+ * Jev results on the canvas (JevResult.tsx): Decide, Pick Best and Box.
+ *
+ * Quiet by default, like every Slava card: monochrome type, one tone per
+ * result (pass green, fail orange, unsure yellow), figures in mono. Motion is
+ * a single reveal when a result arrives: bars and meters grow from the left
+ * and the Box outline draws itself, on the same sampled spring the workspace
+ * dock uses (~2% overshoot). Reduced motion shows the final state at once.
+ */
+body.app-slava-restraint {
+  --jev-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
+  --jev-reveal: 420ms;
+  --jev-draw: 560ms;
+  --jev-width: 300px;
+  --jev-track: rgba(255, 255, 255, 0.07);
+  --jev-rest: rgba(255, 255, 255, 0.24);
+  --jev-pass: var(--sr-success);
+  --jev-pass-soft: var(--sr-success-soft);
+  --jev-fail: var(--sr-accent);
+  --jev-fail-soft: var(--sr-accent-soft);
+  --jev-unsure: var(--sr-warning);
+  --jev-unsure-soft: var(--sr-warning-soft);
+}
+
+/* The card: a fixed width so numbers and bars line up across Jev nodes. */
+body.app-slava-restraint .model-node--jev-surface {
+  width: var(--jev-width);
+  min-width: var(--jev-width);
+  max-width: var(--jev-width);
+}
+
+body.app-slava-restraint .model-node--jev-surface .model-node__header {
+  min-height: var(--sr-node-text-header-min-height);
+  padding: var(--sr-node-text-header-padding);
+}
+
+body.app-slava-restraint .jev-result {
+  display: grid;
+  gap: 10px;
+  padding: 2px 14px 14px;
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+  line-height: var(--sr-line-body);
+  --jev-tone: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .jev-result--pass { --jev-tone: var(--jev-pass); }
+body.app-slava-restraint .jev-result--fail { --jev-tone: var(--jev-fail); }
+body.app-slava-restraint .jev-result--unsure,
+body.app-slava-restraint .jev-result--close { --jev-tone: var(--jev-unsure); }
+
+body.app-slava-restraint .jev-result__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sr-space-2);
+  min-height: 22px;
+}
+
+/* Verdict chip */
+body.app-slava-restraint .jev-result__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px 0 8px;
+  border: 1px solid color-mix(in srgb, var(--jev-chip) 30%, transparent);
+  border-radius: var(--sr-radius-pill);
+  background: color-mix(in srgb, var(--jev-chip) 11%, transparent);
+  color: var(--jev-chip);
+  font-size: var(--sr-type-label);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  --jev-chip: var(--sr-ink-light);
+}
+body.app-slava-restraint .jev-result__chip--pass { --jev-chip: var(--jev-pass); }
+body.app-slava-restraint .jev-result__chip--fail { --jev-chip: var(--jev-fail); }
+body.app-slava-restraint .jev-result__chip--unsure { --jev-chip: var(--jev-unsure); }
+body.app-slava-restraint .jev-result__chip--none { --jev-chip: var(--sr-ink-light); }
+
+body.app-slava-restraint .jev-result__chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px color-mix(in srgb, currentColor 55%, transparent);
+}
+
+body.app-slava-restraint .jev-result__badge {
+  padding: 2px 7px;
+  border: 1px dashed var(--sr-edge-strong);
+  border-radius: var(--sr-radius-pill);
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .jev-result__question {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-body);
+  line-height: var(--sr-line-body);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .jev-result__muted { color: var(--sr-ink-meta); }
+
+body.app-slava-restraint .jev-result__headline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sr-space-3);
+  margin-top: -2px;
+}
+
+body.app-slava-restraint .jev-result__answer {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sr-ink-bold);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .jev-result__headline-figure {
+  flex: 0 0 auto;
+  color: var(--jev-tone);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-title);
+  font-variant-numeric: tabular-nums;
+}
+
+body.app-slava-restraint .jev-result__figure {
+  color: var(--sr-ink);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Fills: the width is the value; the reveal scales up from the left edge. */
+body.app-slava-restraint .jev-result__fill--pass { --jev-fill: var(--jev-pass); }
+body.app-slava-restraint .jev-result__fill--fail { --jev-fill: var(--jev-fail); }
+body.app-slava-restraint .jev-result__fill--unsure { --jev-fill: var(--jev-unsure); }
+body.app-slava-restraint .jev-result__fill--rest { --jev-fill: var(--jev-rest); }
+
+@keyframes jev-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+body.app-slava-restraint :is(.jev-result__meter-fill, .jev-result__bar-fill) {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--jev-value, 0) * 100%);
+  border-radius: inherit;
+  background: var(--jev-fill, var(--jev-rest));
+  transform-origin: left center;
+  animation: jev-grow var(--jev-reveal) var(--jev-spring) var(--jev-delay, 0ms) both;
+}
+
+/* Yes/no meter */
+body.app-slava-restraint .jev-result__meter-block { display: grid; gap: 6px; }
+
+body.app-slava-restraint .jev-result__meter {
+  position: relative;
+  height: 6px;
+  border-radius: var(--sr-radius-pill);
+  background: var(--jev-track);
+}
+
+body.app-slava-restraint .jev-result__meter-fill {
+  box-shadow: 0 0 12px color-mix(in srgb, var(--jev-fill) 35%, transparent);
+}
+
+body.app-slava-restraint .jev-result__threshold {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 1px;
+  margin-left: -0.5px;
+  background: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .jev-result__scale {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sr-space-3);
+  color: var(--sr-ink-meta);
+  font-size: var(--sr-type-meta);
+}
+body.app-slava-restraint .jev-result__scale > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Choice bars */
+body.app-slava-restraint .jev-result__bars { display: grid; gap: 7px; }
+
+body.app-slava-restraint .jev-result__bar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 92px) 1fr 34px;
+  align-items: center;
+  gap: var(--sr-space-2);
+  color: var(--sr-ink-meta);
+  font-size: var(--sr-type-label);
+}
+body.app-slava-restraint .jev-result__bar-row .jev-result__figure { text-align: right; color: var(--sr-ink-meta); }
+body.app-slava-restraint .jev-result__bar-row--winner { color: var(--sr-ink-bold); }
+body.app-slava-restraint .jev-result__bar-row--winner .jev-result__figure { color: var(--sr-ink-bold); }
+
+body.app-slava-restraint .jev-result__bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .jev-result__bar-track {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--sr-radius-pill);
+  background: var(--jev-track);
+}
+
+body.app-slava-restraint .jev-result__more {
+  color: var(--sr-ink-faint);
+  font-size: var(--sr-type-meta);
+}
+
+/* Score levels: one segment per level, brighter where the model leans, and
+ * a notch at the expected score. */
+body.app-slava-restraint .jev-result__levels {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--jev-level-count, 3), 1fr);
+  gap: 3px;
+  height: 6px;
+}
+
+@keyframes jev-level-in {
+  from { transform: scaleY(0.2); opacity: 0; }
+  to { transform: scaleY(1); }
+}
+
+body.app-slava-restraint .jev-result__level {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--sr-ink-bold) calc(10% + var(--jev-weight, 0) * 45%), transparent);
+  animation: jev-level-in var(--jev-reveal) var(--jev-spring) var(--jev-delay, 0ms) both;
+}
+body.app-slava-restraint .jev-result__level--answer {
+  background: var(--jev-fill);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--jev-fill) 35%, transparent);
+}
+
+body.app-slava-restraint .jev-result__notch {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--sr-ink-bold);
+  box-shadow: 0 0 0 2px var(--sr-glass-strong);
+}
+
+/* Pick Best: the winner, then every candidate with its share. */
+body.app-slava-restraint .jev-result__hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--sr-node-preview-bg);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--jev-tone) 55%, transparent);
+}
+body.app-slava-restraint .jev-result--pick-best { --jev-tone: var(--jev-pass); }
+body.app-slava-restraint .jev-result--pick-best.jev-result--close { --jev-tone: var(--jev-unsure); }
+
+body.app-slava-restraint .jev-result__hero img {
+  display: block;
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+}
+
+body.app-slava-restraint .jev-result__hero-label {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: var(--sr-radius-pill);
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: var(--sr-blur-pill);
+  -webkit-backdrop-filter: var(--sr-blur-pill);
+  color: var(--sr-ink-bold);
+  font-size: var(--sr-type-label);
+  font-weight: 600;
+}
+
+body.app-slava-restraint .jev-result__candidates {
+  display: grid;
+  grid-template-columns: repeat(var(--jev-columns, 3), minmax(0, 1fr));
+  gap: 8px;
+}
+
+body.app-slava-restraint .jev-result__candidate {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 5px 6px;
+  color: var(--sr-ink-meta);
+}
+body.app-slava-restraint .jev-result__candidate .jev-result__thumb { grid-column: 1 / -1; }
+body.app-slava-restraint .jev-result__candidate .jev-result__figure { color: var(--sr-ink-meta); }
+body.app-slava-restraint .jev-result__candidate--winner .jev-result__figure { color: var(--sr-ink-bold); }
+
+body.app-slava-restraint .jev-result__thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: var(--sr-node-media-bg);
+  object-fit: cover;
+  opacity: 0.5;
+  filter: saturate(0.6);
+  transition: opacity var(--sr-motion-ui), filter var(--sr-motion-ui);
+}
+body.app-slava-restraint .jev-result__candidate--winner .jev-result__thumb {
+  opacity: 1;
+  filter: none;
+  box-shadow: 0 0 0 1.5px var(--jev-tone);
+}
+body.app-slava-restraint .jev-result__candidate:hover .jev-result__thumb {
+  opacity: 0.9;
+  filter: none;
+}
+
+body.app-slava-restraint .jev-result__thumb--empty {
+  display: grid;
+  place-items: center;
+  aspect-ratio: auto;
+  height: 22px;
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  opacity: 1;
+}
+
+/* Which gate port the verdict went out on, when the gate is wired. */
+body.app-slava-restraint .jev-result__branch {
+  margin: 0;
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-label);
+  line-height: var(--sr-line-meta);
+}
+body.app-slava-restraint .jev-result__branch span {
+  color: var(--jev-tone);
+  font-family: var(--sr-mono);
+}
+
+body.app-slava-restraint .jev-result__hint {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 2px solid color-mix(in srgb, var(--jev-unsure) 60%, transparent);
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-label);
+  line-height: var(--sr-line-meta);
+}
+
+/* Box: the searched image, the area outside the box dimmed, the outline
+ * drawn in, and its confidence pinned to the corner. */
+body.app-slava-restraint .jev-result__stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--sr-node-preview-bg);
+}
+
+body.app-slava-restraint .jev-result__stage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+body.app-slava-restraint .jev-result__overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+@keyframes jev-fade-in {
+  from { opacity: 0; }
+}
+
+body.app-slava-restraint .jev-result__frame {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+
+body.app-slava-restraint .jev-result__scrim {
+  fill: rgba(0, 0, 0, 0.56);
+  animation: jev-fade-in 240ms var(--jev-spring) 120ms both;
+}
+
+@keyframes jev-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+body.app-slava-restraint .jev-result__box {
+  fill: none;
+  stroke: var(--jev-tone);
+  stroke-width: 1.5px;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: jev-draw var(--jev-draw) var(--jev-spring) both;
+}
+/* A wide faint copy under the outline as its glow. */
+body.app-slava-restraint .jev-result__box--glow {
+  stroke-width: 6px;
+  stroke-opacity: 0.22;
+}
+
+@keyframes jev-label-in {
+  from { opacity: 0; transform: translateY(calc(-100% + 4px)); }
+  to { opacity: 1; transform: translateY(-100%); }
+}
+@keyframes jev-label-in-inside {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+body.app-slava-restraint .jev-result__box-label {
+  position: absolute;
+  margin-top: -4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--jev-tone);
+  color: var(--sr-on-accent);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  transform: translateY(-100%);
+  animation: jev-label-in var(--jev-reveal) var(--jev-spring) 260ms both;
+}
+body.app-slava-restraint .jev-result__box-label--inside {
+  margin: 4px 0 0 4px;
+  transform: none;
+  animation-name: jev-label-in-inside;
+}
+
+body.app-slava-restraint .jev-result--missing .jev-result__stage img {
+  opacity: 0.32;
+  filter: grayscale(1);
+}
+/* Unsure keeps the image's colour but dims it under the status. */
+body.app-slava-restraint .jev-result--box.jev-result--unsure .jev-result__stage img {
+  opacity: 0.5;
+}
+body.app-slava-restraint .jev-result--unsure .jev-result__missing-title {
+  color: var(--jev-unsure);
+}
+
+body.app-slava-restraint .jev-result__missing {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 4px;
+  padding: var(--sr-space-4);
+  text-align: center;
+  animation: jev-fade-in 240ms var(--jev-spring) both;
+}
+body.app-slava-restraint .jev-result__missing--plain {
+  position: static;
+  min-height: 120px;
+  border: 1px dashed var(--sr-edge-strong);
+  border-radius: 10px;
+}
+
+body.app-slava-restraint .jev-result__missing-title {
+  color: var(--sr-ink-bold);
+  font-size: var(--sr-type-title);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+body.app-slava-restraint .jev-result__missing-target {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Footer: confidence and the model that answered, kept quiet. */
+body.app-slava-restraint .jev-result__footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sr-space-3);
+  padding-top: 8px;
+  border-top: 1px solid var(--sr-edge);
+  color: var(--sr-ink-meta);
+  font-size: var(--sr-type-meta);
+}
+body.app-slava-restraint .jev-result__footer .jev-result__figure { color: var(--sr-ink-light); }
+
+body.app-slava-restraint .jev-result__model {
+  color: var(--sr-ink-faint);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  white-space: nowrap;
+}
+
+/* Inspector: the full result (JevResultDetails.tsx). */
+body.app-slava-restraint .jev-details {
+  display: grid;
+  gap: 10px;
+}
+
+body.app-slava-restraint .jev-details__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sr-space-2);
+  min-width: 0;
+  color: var(--sr-ink-bold);
+  font-size: var(--sr-type-control);
+  font-weight: 600;
+}
+body.app-slava-restraint .jev-details__summary > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .jev-details__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--sr-type-label);
+}
+body.app-slava-restraint .jev-details__table th {
+  padding: 0 0 4px;
+  color: var(--sr-ink-meta);
+  font-size: var(--sr-type-meta);
+  font-weight: 500;
+  text-align: left;
+}
+body.app-slava-restraint .jev-details__table th:last-child,
+body.app-slava-restraint .jev-details__table td:last-child { text-align: right; }
+body.app-slava-restraint .jev-details__table td {
+  padding: 5px 0;
+  border-top: 1px solid var(--sr-edge);
+  color: var(--sr-ink-light);
+  vertical-align: middle;
+}
+body.app-slava-restraint .jev-details__table td:first-child {
+  max-width: 120px;
+  padding-right: var(--sr-space-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.app-slava-restraint .jev-details__table td:nth-child(2) { width: 40%; padding-right: var(--sr-space-3); }
+body.app-slava-restraint .jev-details__table .jev-result__bar-track { display: block; }
+body.app-slava-restraint .jev-details__table tr.jev-details__row--top td { color: var(--sr-ink-bold); }
+body.app-slava-restraint .jev-details__table td:last-child {
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+body.app-slava-restraint .jev-details__facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px 12px;
+  margin: 0;
+  font-size: var(--sr-type-label);
+}
+body.app-slava-restraint .jev-details__fact { display: contents; }
+body.app-slava-restraint .jev-details__facts dt { color: var(--sr-ink-meta); }
+body.app-slava-restraint .jev-details__facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--sr-ink);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  text-align: right;
+}
+
+body.app-slava-restraint .jev-details__notes {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-label);
+  line-height: var(--sr-line-meta);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint :is(
+    .jev-result__meter-fill, .jev-result__bar-fill, .jev-result__level, .jev-result__scrim,
+    .jev-result__box, .jev-result__box-label, .jev-result__missing
+  ) {
+    animation: none;
+  }
+  body.app-slava-restraint .jev-result__thumb { transition: none; }
+}
+
+/*
+ * The setting you type on a Jev card (JevCardField.tsx): Decide and Pick
+ * Best's question, Box's target. A labelled field in the card's own type, so
+ * it reads as part of the card rather than a form dropped onto it.
+ */
+.model-node__jev-field {
+  display: grid;
+  gap: 4px;
+}
+
+.model-node__jev-field-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #777;
+}
+
+.model-node__jev-field-note {
+  font-size: 10px;
+  color: #777;
+}
+
+body:not(.app-slava-restraint) .model-node__jev-field .model-node__jev-input {
+  min-height: 0;
+  resize: none;
+}
+
+body.app-slava-restraint .model-node__jev-field {
+  padding: 4px 14px 10px;
+}
+
+body.app-slava-restraint .model-node__jev-field-label {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-micro);
+}
+
+body.app-slava-restraint .model-node__jev-field-note {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-meta);
+  line-height: var(--sr-line-meta);
+}
+
+body.app-slava-restraint .model-node__jev-field .model-node__jev-input {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  max-height: 120px;
+  padding: 7px 9px;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-surface-control);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-control);
+  line-height: var(--sr-line-compact);
+  resize: none;
+  outline: none;
+  transition: border-color var(--sr-motion-fast), background-color var(--sr-motion-fast);
+  scrollbar-color: var(--sr-node-scrollbar-color) transparent;
+}
+
+body.app-slava-restraint .model-node__jev-field .model-node__jev-input:hover {
+  background: var(--sr-surface-control-hover);
+}
+
+body.app-slava-restraint .model-node__jev-field .model-node__jev-input:focus {
+  border-color: var(--sr-edge-strong);
+  caret-color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .model-node__jev-field .model-node__jev-input:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: 0;
+}
+
+body.app-slava-restraint .model-node__jev-field .model-node__jev-input::placeholder {
+  color: var(--sr-ink-faint);
+}
+
+/* With the field above it, the result opens closer to the card's top. */
+body.app-slava-restraint .model-node__jev-field ~ .jev-result {
+  padding-top: 0;
+}

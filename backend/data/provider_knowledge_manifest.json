@@ -227,6 +227,7 @@
     ".agents/skills/runway/character-performance.md",
     ".agents/skills/runway/image.md",
     ".agents/skills/runway/video.md",
+    ".agents/skills/typesafe/SKILL.md",
     ".agents/skills/worldlabs/SKILL.md",
     ".agents/skills/xai/SKILL.md",
     "docs/KREA-MCP.md",
@@ -248,6 +249,7 @@
     "docs/api-guides/quiver.md",
     "docs/api-guides/replicate.md",
     "docs/api-guides/runway.md",
+    "docs/api-guides/typesafe.md",
     "docs/api-guides/worldlabs.md",
     "docs/api-guides/xai.md",
     "docs/fal-model-schemas.md",
@@ -281,6 +283,7 @@
     "docs/model-providers/quiver/arrow-vectorize.md",
     "docs/model-providers/replicate-openrouter-nous/universal.md",
     "docs/model-providers/runway/runway.md",
+    "docs/model-providers/typesafe/_provider.md",
     "docs/model-providers/worldlabs/marble.md",
     "docs/model-providers/xai/grok-imagine-video.md"
   ]

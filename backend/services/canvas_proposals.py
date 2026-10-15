@@ -296,8 +296,9 @@ def cost_for(
 
     A cinema scene is a utility node that calls its base image model once per
     shot, so it is paid, by that model's provider. A utility node whose
-    ``providerVia`` param picks provider work (a QC node in vision-llm mode)
-    is paid too, by whichever vision model has a key set."""
+    ``providerVia`` param picks provider work (a QC node in vision-llm or jev
+    mode) is paid too, by the provider that value calls (``byValue``), and
+    priced only when its own entry has a row for that value (jev)."""
     from services import model_pricing, node_readiness
 
     if (definition or {}).get("id") == model_pricing.CINEMA_SCENE:
@@ -308,8 +309,14 @@ def cost_for(
     provider = str((definition or {}).get("apiProvider") or "") or None
     if provider == "utility" and not model_pricing.is_local(definition or {}, params or {}):
         via = node_readiness.provider_via(definition or {}) or {}
-        what = str(via.get("provider") or "provider")
-        return {"kind": "paid", "provider": what, "label": f"paid · {what} model, no list price"}
+        _keys, what = node_readiness.param_route(via, node_readiness.param_value(definition or {}, params or {}))
+        try:
+            entry = (model_pricing.load_pricing().get("nodes") or {}).get(str((definition or {}).get("id") or ""))
+        except (OSError, ValueError):
+            entry = None
+        priced = model_pricing.estimate_node(entry, definition or {}, params or {}) is not None
+        return {"kind": "paid", "provider": what,
+                "label": f"paid · {what} model{'' if priced else ', no list price'}"}
     if provider == "utility":
         return {"kind": "free", "provider": None, "label": "free · runs locally"}
     return {"kind": "paid", "provider": provider, "label": f"paid · {provider or 'provider'}"}

@@ -50,11 +50,17 @@ describe('the shipped price table', () => {
     // Every curated or generated entry must resolve at the node's defaults,
     // or the chip would read "unpriced" for a fresh node.
     // A dual-route node prices each route on its own: check every route.
+    // A local node priced only in a paid mode (QC Jev) is free at its
+    // defaults, so it must resolve in that mode instead.
     const missing = Object.entries(nodes)
       .flatMap(([id, entry]) => (entry.routes
         ? Object.keys(entry.routes).map((provider) => [id, entry, provider, `${id} (${provider})`] as const)
         : [[id, entry, entry.provider, id] as const]))
-      .filter(([id, entry, provider]) => estimateNode(entry, catalog[id] ?? {}, {}, provider) === null)
+      .filter(([id, entry, provider]) => {
+        const local = catalog[id]?.apiProvider === 'utility';
+        const params = local ? { ...(entry.rows?.[0]?.match ?? {}) } : {};
+        return estimateNode(entry, catalog[id] ?? {}, params, provider) === null;
+      })
       .map(([, , , label]) => label);
     expect(missing).toEqual([]);
   });

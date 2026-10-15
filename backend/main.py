@@ -63,6 +63,7 @@ from models.events import (
     ExecutedEvent,
     ExecutingEvent,
     ErrorEvent,
+    SkippedEvent,
     GraphCancelledEvent,
     GraphCompleteEvent,
     ProviderRecoveryEvent,
@@ -981,7 +982,7 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
                     detail=f"nodes[{index}].data.outputs.{port_id} must be a typed port object",
                 )
         state = data.get("state")
-        if state is not None and state not in {"idle", "queued", "executing", "complete", "error"}:
+        if state is not None and state not in {"idle", "queued", "executing", "complete", "error", "skipped"}:
             raise HTTPException(status_code=400, detail=f"nodes[{index}].data.state is invalid")
 
         ingress_nodes.append(
@@ -3316,15 +3317,26 @@ def _cinema_price_note() -> str:
 
 
 def _keyed_mode_hint(definition: Mapping[str, Any]) -> str | None:
-    """find_nodes' short form of a param-picked provider call (vision-llm QC)."""
+    """find_nodes' short form of a param-picked provider call (vision-llm or
+    Jev QC): which keys each paid value needs, and whether it has a list price."""
     via = node_readiness.provider_via(definition)
     if not via or via.get("kind") != "param":
         return None
     free = set(via.get("freeWhen") or [])
     paid = [option.get("value") for param in definition.get("params") or [] if param.get("key") == via.get("param")
             for option in param.get("options") or [] if isinstance(option, dict) and option.get("value") not in free]
-    return (f"{via.get('param')}={'/'.join(str(v) for v in paid)} needs {' or '.join(via.get('anyKey') or [])} "
-            "and has no list price")
+    try:
+        entry = (model_pricing.load_pricing().get("nodes") or {}).get(definition.get("id"))
+    except (OSError, ValueError):
+        entry = None
+    groups: dict[tuple[str, bool], list[str]] = {}
+    for value in paid:
+        keys, _ = node_readiness.param_route(via, value)
+        priced = model_pricing.estimate_node(entry, definition, {via.get("param"): value}) is not None
+        groups.setdefault((" or ".join(keys), priced), []).append(str(value))
+    return "; ".join(f"{via.get('param')}={'/'.join(values)} needs {keys} and "
+                     f"{'is priced per run (describe_node)' if priced else 'has no list price'}"
+                     for (keys, priced), values in groups.items())
 
 
 @app.get("/api/agent/nodes")
@@ -3422,7 +3434,9 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     access = node_readiness.node_access(definition, keys, krea_signed_in, definitions)
     ports = lambda key: [  # noqa: E731
         {"id": port["id"], "type": port.get("dataType"), **({"required": True} if port.get("required") else {}),
-         **({"multiple": True} if port.get("multiple") else {})}
+         **({"multiple": True} if port.get("multiple") else {}),
+         # A gate output: on some runs it's withheld, and nodes wired to it are skipped.
+         **({"gate": True} if port.get("conditional") else {})}
         for port in definition.get(key) or []
     ]
     result: dict[str, Any] = {
@@ -3480,6 +3494,16 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         if options and options.get("note"):
             # Free at its defaults; the other values of that param are not.
             result["priceNote"] = f"Free at its defaults. {options['note']}"
+        try:
+            entry = (model_pricing.load_pricing().get("nodes") or {}).get(definition["id"])
+        except (OSError, ValueError):
+            entry = None
+        if entry:
+            # A paid value with its own rows (QC mode jev): what a run in it costs.
+            result["pricedWhen"] = {
+                "per": entry.get("per"), "dependsOn": entry.get("priceParams") or [],
+                "rows": [{**row.get("match", {}), "usd": row.get("price")} for row in entry.get("rows") or []][:40],
+            }
     elif definition.get("apiProvider") == "utility":
         result["price"] = None
         result["priceNote"] = (options or {}).get("note") or (
@@ -3627,8 +3651,10 @@ _RUN_EVENT_KINDS: dict[type, str] = {
     ExecutingEvent: "run.started",
     ExecutedEvent: "run.finished",
     ErrorEvent: "run.failed",
+    SkippedEvent: "run.skipped",
 }
-_RUN_EVENT_VERBS = {"run.started": "started", "run.finished": "finished", "run.failed": "failed"}
+_RUN_EVENT_VERBS = {"run.started": "started", "run.finished": "finished", "run.failed": "failed",
+                    "run.skipped": "skipped"}
 
 
 def _journal_execution_event(event: Any, run_id: str | None) -> None:
@@ -3647,6 +3673,10 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
         if isinstance(event, ErrorEvent):
             error = event.friendly or event.error or ""
             data["error"] = str(_journal_safe_value(error, key="error"))[:200]
+        if isinstance(event, SkippedEvent):
+            data["reason"] = str(_journal_safe_value(event.reason, key="reason"))[:200]
+            if event.gate_node_id:
+                data["gateNodeId"] = event.gate_node_id
         _journal(
             kind,
             node_id=node_id,
@@ -8793,7 +8823,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     if target:
         await _show_agent({"nodeId": target}, say=f"Running {_node_label(target)}")
 
-    outcome: dict[str, Any] = {"results": {}, "errors": {}}
+    outcome: dict[str, Any] = {"results": {}, "errors": {}, "skipped": {}}
     task = asyncio.create_task(_execute_cli_run(run_id, sub_nodes, sub_edges, api_keys, outcome))
     # Registered like canvas runs: it fences project switching until it ends,
     # and DELETE /api/executions/{runId} (`nebula cancel`) stops it.
@@ -8816,6 +8846,8 @@ async def _execute_cli_run(
 ) -> dict[str, Any]:
     results: dict[str, Any] = outcome["results"]
     errors: dict[str, str] = outcome["errors"]
+    # Nodes a gate upstream skipped: node id -> reason. They never ran.
+    skipped: dict[str, str] = outcome.setdefault("skipped", {})
 
     async def collect_events(event: ExecutionEvent) -> None:
         # This path keeps per-node events to itself (it returns results in
@@ -8833,6 +8865,8 @@ async def _execute_cli_run(
                 _sync_outputs_to_cli_graph(event.node_id, event.outputs)
         elif isinstance(event, ErrorEvent):
             errors[event.node_id] = event.error
+        elif isinstance(event, SkippedEvent):
+            skipped[event.node_id] = event.reason
 
     handler_registry = get_handler_registry(emit=collect_events)
     start = _time_module.time()
@@ -8873,19 +8907,21 @@ async def _execute_cli_run(
     # Sync outputs to frontend canvas
     await _broadcast_graph_sync()
 
+    skipped_note = f", {len(skipped)} skipped by a gate" if skipped else ""
     if errors:
         publish_action(
             f"Ran {len(results) + len(errors)} node(s) in {duration:.1f}s — "
-            f"{len(errors)} errored: {', '.join(errors.keys())}"
+            f"{len(errors)} errored: {', '.join(errors.keys())}{skipped_note}"
         )
     else:
         publish_action(
-            f"Ran {len(results)} node(s) cleanly in {duration:.1f}s"
+            f"Ran {len(results)} node(s) cleanly in {duration:.1f}s{skipped_note}"
         )
 
     return {
         "results": results,
         "errors": errors,
+        "skipped": skipped,
         # Per node, what each run said beside its outputs (the size a maker made).
         **({"notes": outcome["notes"]} if outcome.get("notes") else {}),
         "duration": round(duration, 2),
@@ -8927,6 +8963,7 @@ async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: 
     if task.cancelled():
         made = entry["outcome"]
         return {**head, "status": "cancelled", "results": made["results"], "errors": made["errors"],
+                "skipped": made.get("skipped", {}),
                 **({"notes": made["notes"]} if made.get("notes") else {}),
                 "nodesExecuted": len(made["results"]) + len(made["errors"])}
     if report_failure and task.exception() is not None:

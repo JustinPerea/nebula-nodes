@@ -145,6 +145,12 @@ def test_view_reports_are_validated():
             presence.report_view(bad)
 
 
+def test_a_node_a_gate_skipped_reports_its_state():
+    presence = AgentPresence(clock=Clock())
+    report = {"viewport": {"x": 0, "y": 0, "zoom": 1}, "nodes": [{"id": "n1", "x": 0, "y": 0, "state": "skipped"}]}
+    assert presence.report_view(report) == {"ok": True, "nodes": 1}
+
+
 def test_snapshot_merges_the_browser_view_with_the_graph_and_redacts():
     clock = Clock()
     presence = AgentPresence(clock=clock)

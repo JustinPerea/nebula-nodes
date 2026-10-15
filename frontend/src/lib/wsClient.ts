@@ -166,10 +166,14 @@ export type ExecutionEvent = (
   | { type: 'queued'; nodeId: string }
   | { type: 'executing'; nodeId: string; variant?: VariantScope | null }
   | { type: 'progress'; nodeId: string; value: number; variant?: VariantScope | null }
-  | { type: 'executed'; nodeId: string; outputs: Record<string, PortValue>; batchOutputs?: Array<Record<string, PortValue>> | null; variant?: VariantScope | null; batchVariants?: VariantScope[] | null; notes?: string[] | null }
+  | { type: 'executed'; nodeId: string; outputs: Record<string, PortValue>; batchOutputs?: Array<Record<string, PortValue>> | null; variant?: VariantScope | null; batchVariants?: VariantScope[] | null; notes?: string[] | null;
+      /** Output ports the node left empty on purpose (port -> reason); wires from them are inactive. */
+      withheld?: Record<string, string> | null }
+  /** A gate upstream withheld this node's input, so it never ran (backend execution/gating.py). */
+  | { type: 'skipped'; nodeId: string; reason: string; gateNodeId?: string | null }
   | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string; variant?: VariantScope | null }
   | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string }> }
-  | { type: 'graphComplete'; duration: number; nodesExecuted: number }
+  | { type: 'graphComplete'; duration: number; nodesExecuted: number; nodesSkipped?: number }
   | { type: 'graphCancelled' }
   | {
       type: 'executionStatus';

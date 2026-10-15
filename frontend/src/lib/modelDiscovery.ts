@@ -22,7 +22,7 @@ const PROVIDER_LABELS: Record<APIProvider, string> = {
   bytedance: 'ByteDance', minimax: 'MiniMax', luma: 'Luma', xai: 'xAI',
   recraft: 'Recraft', ideogram: 'Ideogram', openrouter: 'OpenRouter', bfl: 'Black Forest Labs',
   higgsfield: 'Higgsfield', meshy: 'Meshy', quiver: 'QuiverAI', krea: 'Krea',
-  worldlabs: 'World Labs', nous: 'Nous', utility: 'Local tools',
+  worldlabs: 'World Labs', nous: 'Nous', typesafe: 'TypeSafe', utility: 'Local tools',
 };
 
 export function providerLabel(provider: string): string {

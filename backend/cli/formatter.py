@@ -67,7 +67,9 @@ def format_node_detail(node: dict[str, Any]) -> str:
     if outputs:
         lines.append("OUTPUTS:")
         for p in outputs:
-            lines.append(f"  {p['id']:<16}{p['dataType']}")
+            # A gate output is withheld on some runs; nodes wired to it are then skipped.
+            gate = "gate" if p.get("conditional") else ""
+            lines.append(f"  {p['id']:<16}{p['dataType']:<10}{gate}".rstrip())
         lines.append("")
 
     params = node.get("params", [])
@@ -296,10 +298,18 @@ def format_context(
     for node_id in keyed_modes:
         via = provider_via(definitions[node_id]) or {}
         keys = [str(key) for key in via.get("anyKey") or []]
-        legend = (f"+ free at its defaults; {via.get('param')} other than {'/'.join(via.get('freeWhen') or [])} calls a "
+        own = via.get("byValue") if isinstance(via.get("byValue"), dict) else {}
+        skip = list(via.get("freeWhen") or []) + list(own)
+        legend = (f"+ free at its defaults; {via.get('param')} other than {'/'.join(skip)} calls a "
                   f"{via.get('provider')} model with {' or '.join(keys)}"
                   f"{' (set here)' if any(key in configured_keys for key in keys) else ''}. No list price, "
                   "so under a spending limit that takes a proposal.")
+        for value, route in own.items():
+            route_keys = [str(key) for key in (route or {}).get("anyKey") or []]
+            legend += (f" {via.get('param')} {value} calls {(route or {}).get('provider')} with "
+                       f"{' or '.join(route_keys)}"
+                       f"{' (set here)' if any(key in configured_keys for key in route_keys) else ''}, "
+                       "priced per run.")
         if legend not in legends:
             legends.append(legend)
     lines.extend(legends)
@@ -334,6 +344,10 @@ def format_run_results(results: dict[str, Any], node_defs: dict[str, dict[str, A
 
     for nid, err in errors.items():
         lines.append(f"{nid}: ERROR — {err}")
+
+    # A gate upstream withheld these nodes' input, so they never ran (and cost nothing).
+    for nid, reason in (results.get("skipped") or {}).items():
+        lines.append(f"{nid}: skipped — {reason}")
 
     if duration is not None:
         lines.append(f"\nCompleted in {duration}s")
@@ -516,6 +530,8 @@ def format_event(event: dict[str, Any]) -> str:
         summary = f"{summary}: {shown}"
     elif kind == "run.failed" and data.get("error"):
         summary = f"{summary}: {_brief(data['error'], 100)}"
+    elif kind == "run.skipped" and data.get("reason"):
+        summary = f"{summary}: {_brief(data['reason'], 100)}"
     elif kind == "pin.added" and data.get("pinId"):
         summary = f"{summary} — nebula pin resolve {data['pinId']} --say \"...\" when done"
     elif kind == "pin.resolved" and data.get("pinId"):

@@ -89,11 +89,13 @@ def test_qc_is_free_at_its_defaults_and_says_what_vision_llm_needs(definition_id
     definition = DEFINITIONS[definition_id]
     assert node_readiness.node_access(definition, set(), False, DEFINITIONS) == "free"
     nothing = node_readiness.detail(definition, set(), False, DEFINITIONS)
-    assert nothing["options"] == {"heuristic": "free", "vision-llm": None, "opencv": "free"}
+    assert nothing["options"] == {"heuristic": "free", "vision-llm": None, "opencv": "free", "jev": None}
     assert all(key in nothing["missing"]["vision-llm"] for key in VISION_KEYS)
+    assert nothing["missing"]["jev"] == "needs TYPESAFE_API_KEY in Settings > Providers"
     assert "no list price" in nothing["note"]
     openai = node_readiness.detail(definition, {"OPENAI_API_KEY"}, False, DEFINITIONS)
-    assert openai["options"]["vision-llm"] == "key" and "missing" not in openai
+    # A vision key runs vision-llm; Jev mode still needs TypeSafe's own key.
+    assert openai["options"]["vision-llm"] == "key" and list(openai["missing"]) == ["jev"]
 
 
 @pytest.mark.parametrize(("params", "calls"), [
@@ -130,10 +132,15 @@ def test_qc_provider_via_matches_vision_llm_and_the_handler_modes(definition_id)
     from services.vision_llm import VISION_PROVIDERS
 
     definition = DEFINITIONS[definition_id]
+    from services.qc_jev import JEV_MODE
+    from services.typesafe_client import CREDENTIAL
+
     via = definition["providerVia"]
     assert via["anyKey"] == [provider.key_name for provider in VISION_PROVIDERS]
-    # Every QC handler calls the vision model only for mode == "vision-llm".
-    assert set(via["freeWhen"]) == VALID_QC_MODES - {"vision-llm"}
+    # Every QC handler calls the vision model only for mode == "vision-llm",
+    # and TypeSafe only for mode == "jev".
+    assert set(via["freeWhen"]) == VALID_QC_MODES - {"vision-llm", JEV_MODE}
+    assert via["byValue"] == {JEV_MODE: {"anyKey": [CREDENTIAL], "provider": "typesafe"}}
     default = next(p["default"] for p in definition["params"] if p["key"] == via["param"])
     assert qc_mode(GraphNode(id="n", definitionId=definition_id, params={})) == default
 
