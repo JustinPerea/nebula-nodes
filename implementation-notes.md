@@ -1,5 +1,18 @@
 # Implementation Notes
 
+## 2026-10-15 — PR 1 review fixes
+
+### Review follow-up
+
+Four review findings, each confirmed with a failing test before the fix.
+
+- **Plan billing read raw params (fixed).** On a route-table node `uses_krea_plan` / `usesRoutePlan` ran the plan route's rules on the saved params. The router runs them on `with_wired_blockers` output. A wired input could block the plan route: the preflight then skipped `route_unavailable` and the estimate counted a plan run. Or it could unblock the route: the estimate priced the run in USD and the sign-in check was skipped. The fix is in the callers, not the function. `krea_account.uses_account` takes `wired`, and the engine preflight (edge counts), the cache key's connection revision (`filled_counts`), `estimate_run` and `runScope.summarizeRunScope` now pass routed values. Legacy nodes read only `_kreaAuth`, so for them nothing changes. New shared cases: `route_cases.json` gives `routes-krea` a `style_image` port and a `rejectsWhen` 2K-without-it rule, and `pricing_cases.json` gives the `table` Krea route `ports.images.max 2` plus a 2k-without-images rule. Both route harnesses now assert `uses_krea_plan(routed) == (kind == PLAN)`.
+- **addNode / addNodeAndConnect skipped route defaults (fixed).** Both, plus the cinema motion Veo node and `sampleGraph.defaultsFor`, now go through `buildDefaultParams` (`allParamDefinitions`). `buildDefaultParams` also `structuredClone`s each default now. Before, only add-and-connect and the Veo path did, so addNode shared array or object defaults with the definition. `allParamDefinitions.test.ts` already pins the defaults to be the same for every legacy catalog node.
+- **Two ways of counting wired inputs (partly fixed, rest documented).** There were really three. The cache key used `filled_ports` (one per port), the router used `filled_counts` (items), and the preflight, estimate and switcher used edges. The cache key now uses `filled_counts`. The router keeps counting items, because the items are what the provider receives. Counting edges there would send six images to a route that takes four. The preflight can't count items, since a list's length only exists once upstream nodes run, and no output port declares a list. So one edge carrying a list can pass the preflight and stop in the router. The router still stops it before that provider is called, but upstream nodes have already run. This is written down in `with_wired_blockers`, `withWiredBlockers`, the engine preflight and `docs/PROVIDER-ROUTES.md`. It's latent until PR 2 adds a `ports` rule to a real node.
+- **resultContext.modelName and ResultDetails hand lists (fixed).** Both read `allParamDefinitions`. It is first-wins in the same group order (params, shared, direct, fal), so legacy nodes give the same answers.
+
+Not changed: `nodeKeyStatus`, `modelReadiness` and the Inspector call `usesKreaAccount(def, params)` without wiring. They are per-node badges that don't see the graph's edges, and `routeUnavailable` in the same places doesn't see them either. A badge can be wrong for a plan route that only a wire blocks or unblocks, but the run, estimate and spend gate are now right.
+
 ## 2026-10-15 — PR 1 integration: bfl-provider merged into provider-routes-core
 
 - **Conflicts were both additive.** `implementation-notes.md` keeps both lanes' sections (core first, BFL second). `scripts/check-node-contracts.mjs` keeps both new reads: the core lane's route fixtures / `keyProviders` and the BFL lane's `KEYS_AHEAD_OF_NODES` parse.
