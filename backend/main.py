@@ -3383,6 +3383,9 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
         hint = _keyed_mode_hint(definition)
         if hint:
             row["needsKeyFor"] = hint  # free at its defaults; describe_node has the detail
+        if node_route.has_routes(definition):
+            # Each provider route it can run on, in Auto order (describe_node has each one).
+            row["providers"] = [str(route["id"]) for route in node_route.routes_of(definition)]
         if definition["id"] == model_pricing.CINEMA_SCENE:
             row["price"] = None  # its base model's price, once per shot (describe_node)
         elif model_pricing.is_local(definition):
@@ -3392,7 +3395,10 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
         else:
             estimate = model_pricing.estimate_node(
                 pricing.get(definition["id"]), definition, {},
-                model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
+                model_pricing.route_price_key(
+                    definition, node_route.select_route(definition, {}, settings.get("apiKeys") or {}))
+                if node_route.has_routes(definition)
+                else model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
             row["price"] = ({"usd": [round(estimate["low"], 4), round(estimate["high"], 4)]}
                             if estimate and estimate.get("currency") == "usd" else None)
         # Ready first; then exact id, id prefix, name hits; then by name.
@@ -3403,6 +3409,60 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
     rows.sort(key=lambda pair: pair[0])
     return {"total": len(rows), "nodes": [row for _, row in rows[:limit]],
             "krea": "signed in" if krea_signed_in else "not signed in"}
+
+
+PROVIDER_CHOICE_NOTE = (
+    "Runs on one provider route: _provider names it (a route id), or auto takes the first route "
+    "whose key is set, in this order. A run never moves to another route by itself: when the "
+    "chosen route can't take a setting, or its key isn't set, the run stops and says which "
+    "routes could. Which route runs decides whose key pays, so it's the person's call: propose "
+    "a _provider change with propose_change; direct edits of _provider are refused."
+)
+
+
+def _describe_routes(
+    definition: Mapping[str, Any], api_keys: Mapping[str, Any],
+    shown: Callable[[str], list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """describe_node's fields for a route-table node (services/node_route.py
+    routes): the provider choice at defaults, which route Auto resolves to
+    here, and each route with its keys, own params, any block at the
+    defaults and its list price."""
+    route = node_route.select_route(definition, {}, api_keys)
+    try:
+        pricing = model_pricing.load_pricing()
+    except (OSError, ValueError):
+        pricing = {"nodes": {}}
+    prices = model_pricing.estimate_routes(definition, {}, (), pricing)
+    rows = []
+    for spec in node_route.routes_of(definition):
+        estimate = prices.get(str(spec["id"]))
+        row: dict[str, Any] = {
+            "id": spec["id"], "provider": spec.get("provider"),
+            "name": node_route.provider_label(spec.get("provider")),
+            "keys": list(spec.get("keys") or []),
+            "keySet": any(api_keys.get(key) for key in spec.get("keys") or []),
+            "params": [_brief_param(dict(param)) for param in spec.get("params") or []
+                       if not str(param.get("key", "")).startswith("_") and not param.get("hidden")],
+            "block": node_route.block_dict(node_route.route_block(definition, spec, {})),
+            "price": ({"usd": [round(estimate["low"], 4), round(estimate["high"], 4)]}
+                      if estimate and estimate.get("currency") == "usd" else None),
+        }
+        if spec.get("maker"):
+            row["maker"] = True
+        if spec.get("plan"):
+            row["plan"] = spec["plan"]
+        if spec.get("note"):
+            row["note"] = spec["note"]
+        rows.append(row)
+    return {
+        "providerChoice": {
+            "param": node_route.PROVIDER_PARAM, "value": node_route.AUTO,
+            "resolved": route.route_id if route.kind != node_route.UNSET else None,
+        },
+        "routes": rows,
+        "providerNote": PROVIDER_CHOICE_NOTE,
+    }
 
 
 def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
@@ -3457,7 +3517,9 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     # A dual-route node lists its shared params here and each route's own
     # below (a generated Krea copy keeps its full Krea list in `params` too).
     result["params"] = shown("sharedParams") if "sharedParams" in definition else shown("params")
-    fallback = node_route.fallback_provider(definition)
+    fallback = None if node_route.has_routes(definition) else node_route.fallback_provider(definition)
+    if node_route.has_routes(definition):
+        result.update(_describe_routes(definition, settings.get("apiKeys") or {}, shown))
     if fallback:
         # Which route a run takes here at defaults (services/node_route.py):
         # "direct" (the maker's API with your key), the fallback copy ("fal",
@@ -3528,7 +3590,10 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
             else:
                 result["priceNote"] = "No list price; agent runs of it must be proposed (propose_change)."
         else:
-            provider = model_pricing.route_provider(definition, settings.get("apiKeys") or {})
+            provider = (model_pricing.route_price_key(
+                            definition, node_route.select_route(definition, {}, settings.get("apiKeys") or {}))
+                        if node_route.has_routes(definition)
+                        else model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
             estimate = model_pricing.estimate_node(entry, definition, {}, provider)
 
             def price_table(priced: Mapping[str, Any]) -> dict[str, Any]:

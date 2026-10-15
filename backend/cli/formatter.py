@@ -6,6 +6,7 @@ from typing import Any
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import detail, krea_modes, node_access, provider_via  # noqa: F401 (node_access is re-exported)
 from services.maker_sizes import rule_note
+from services.node_route import all_param_definitions
 
 
 def format_node_table(nodes: list[dict[str, Any]]) -> str:
@@ -53,6 +54,18 @@ def format_node_detail(node: dict[str, Any]) -> str:
         key = " or ".join(key)
     pattern = node.get("executionPattern", "?")
     lines.append(f"Provider: {provider} | Key: {key} | Exec: {pattern}")
+    routes = node.get("routes") if isinstance(node.get("routes"), list) else []
+    if routes:
+        # A route-table node (services/node_route.py): one line per provider
+        # route, in Auto order, and how to pick one.
+        lines.append("ROUTES (_provider; auto takes the first with its key set):")
+        for route in routes:
+            keys = " or ".join(str(k) for k in route.get("keys") or []) or "-"
+            tags = [tag for tag in ("maker" if route.get("maker") else "",
+                                    f"Krea plan {route['plan']}" if route.get("plan") else "") if tag]
+            lines.append(f"  {str(route.get('id')):<16}{str(route.get('provider')):<14}{keys}"
+                         + (f"  ({', '.join(tags)})" if tags else ""))
+        lines.append("  Changing _provider is the person's call: `nebula propose` it; direct edits are refused.")
     lines.append("")
 
     inputs = node.get("inputPorts", [])
@@ -73,6 +86,9 @@ def format_node_detail(node: dict[str, Any]) -> str:
         lines.append("")
 
     params = node.get("params", [])
+    if routes:
+        # Shared params and each route's own (services/node_route.py), once each.
+        params = all_param_definitions(node)
     if params:
         lines.append("PARAMS:")
         for p in params:
@@ -292,6 +308,11 @@ def format_context(
         if krea_both:
             lines.append("  Those that also take a token default to it. Moving one to the Krea plan is the person's")
             lines.append("  call: `nebula propose` the _kreaAuth=mcp change; direct edits of it are refused.")
+    multi = [n["id"] for n in nodes if isinstance(n.get("routes"), list) and n.get("routes")]
+    if multi:
+        lines.append(f"{len(multi)} node(s) run on a provider route you choose (_provider; `nebula info <id>` lists")
+        lines.append("  them). Auto takes the first route with its key set; switching is the person's call:")
+        lines.append("  `nebula propose` it.")
     if access_count.get("nous"):
         lines.append("^ needs a local Nous (Hermes) sign-in; not checked here.")
     legends: list[str] = []
