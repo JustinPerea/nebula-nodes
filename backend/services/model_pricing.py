@@ -418,7 +418,8 @@ def route_provider(
 
 
 def uses_krea_account(definition: Mapping[str, Any], params: Mapping[str, Any]) -> bool:
-    """Krea runs billed to a signed-in account's plan rather than per call."""
+    """Krea runs billed to a signed-in account's plan rather than per call.
+    ``params`` are routed (node_route.with_wired_blockers)."""
     from services import node_route
 
     return node_route.uses_krea_plan(definition, params)
@@ -613,14 +614,15 @@ def estimate_run(
                 continue
         elif not definition or definition.get("apiProvider") == "utility":
             continue
-        if uses_krea_account(definition, params):
+        # A Krea-only setting that arrives by wire keeps the run on Krea
+        # (node_route.with_wired_blockers), as the router does, and a wired
+        # input can block or unblock a route-table node's plan route.
+        routed = node_route.with_wired_blockers(definition, params, ports)
+        if uses_krea_account(definition, routed):
             plan.append(node_id)
             plan_runs[node_id] = {"model": str(definition.get("id") or item.get("definitionId") or ""),
                                   "runs": (multipliers or {}).get(node_id, (1, 1))[1] * calls}
             continue
-        # A Krea-only setting that arrives by wire keeps the run on Krea
-        # (node_route.with_wired_blockers), as the router does.
-        routed = node_route.with_wired_blockers(definition, params, ports)
         if node_route.has_routes(definition):
             missing = node_route.route_unavailable(definition, routed, api_keys)
             if missing is not None:

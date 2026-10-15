@@ -31,12 +31,16 @@ def is_account_only(definition: dict | None) -> bool:
     return bool(param) and [option.get("value") for option in param.get("options", [])] == ["mcp"]
 
 
-def uses_account(node: GraphNode, definition: dict | None) -> bool:
+def uses_account(node: GraphNode, definition: dict | None, wired: Any = ()) -> bool:
     """A saved node uses the Krea account only if it offers that choice and
     chose it; old nodes without the param keep API-token billing. The plan
-    wins over a maker key on a dual-route Krea node (services/node_route.py)."""
-    from services.node_route import uses_krea_plan
-    return bool(definition) and uses_krea_plan(definition, node.params)
+    wins over a maker key on a dual-route Krea node (services/node_route.py).
+
+    ``wired`` are the node's wired input ports (or a port -> count map), as
+    node_route.with_wired_blockers takes them: whether a route-table node's
+    plan route can take the run depends on them, as it does in the router."""
+    from services.node_route import uses_krea_plan, with_wired_blockers
+    return bool(definition) and uses_krea_plan(definition, with_wired_blockers(definition, node.params, wired))
 
 
 class AccountTools:

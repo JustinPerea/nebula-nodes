@@ -328,7 +328,9 @@ def uses_krea_plan(definition: Mapping[str, Any], params: Mapping[str, Any] | No
     one whose saved `_kreaAuth` is "mcp". Nodes saved before the choice
     existed keep API-token billing. On a route-table node, exactly when
     :func:`select_route` returns PLAN (its Krea route, chosen or the maker
-    under Auto, with the plan picked, and able to take the run)."""
+    under Auto, with the plan picked, and able to take the run), so
+    ``params`` are routed (with_wired_blockers) as the router reads them: a
+    wired input can block the plan route or unblock it."""
     if has_routes(definition):
         values = params or {}
         route = _plan_route(definition, values)

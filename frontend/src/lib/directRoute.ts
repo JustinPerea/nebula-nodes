@@ -488,7 +488,9 @@ function planRoute(definition: RoutedDefinition, params: Record<string, unknown>
 }
 
 /** A route-table run billed to the signed-in Krea plan: exactly when
- * selectRoute returns `plan` (node_route.uses_krea_plan). */
+ * selectRoute returns `plan` (node_route.uses_krea_plan), so `params` are
+ * routed (withWiredBlockers): a wired input can block or unblock the plan
+ * route. */
 export function usesRoutePlan(definition: RoutedDefinition, params: Record<string, unknown> | undefined): boolean {
   const values = params ?? {};
   const route = planRoute(definition, values);

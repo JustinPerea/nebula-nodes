@@ -240,13 +240,14 @@ export function summarizeRunScope(
       cost.unpriced.push(name);
       continue;
     }
-    if (usesKreaAccount(definition, params)) {
+    // A Krea-only setting that arrives by wire keeps the run on Krea
+    // (directRoute.withWiredBlockers), as the backend router does, and a
+    // wired input can block or unblock a route-table node's plan route.
+    const routed = withWiredBlockers(definition, params, ports);
+    if (usesKreaAccount(definition, routed)) {
       cost.plan.push(name);
       continue;
     }
-    // A Krea-only setting that arrives by wire keeps the run on Krea
-    // (directRoute.withWiredBlockers), as the backend router does.
-    const routed = withWiredBlockers(definition, params, ports);
     let priceKey: string | null;
     if (hasRoutes(definition)) {
       const missing = routeUnavailable(definition, routed, costContext.apiKeys);

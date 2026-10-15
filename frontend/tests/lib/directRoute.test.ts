@@ -4,7 +4,7 @@ import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { buildDefaultParamsForUi, resolveCreateParamDefinitions } from '../../src/lib/createParams';
 import {
   blockFields, configuredDirectKey, directBlock, directKeyNames, fallbackProvider, hasRoutes, paramDefinitionsForRun,
-  routeParamDefinitions, routeUnavailable, selectRoute, WIRED, withWiredBlockers,
+  routeParamDefinitions, routeUnavailable, selectRoute, usesRoutePlan, WIRED, withWiredBlockers,
 } from '../../src/lib/directRoute';
 import { runRouteProvider } from '../../src/lib/modelDiscovery';
 import type { ModelNodeDefinition } from '../../src/types';
@@ -46,6 +46,8 @@ describe('selectRoute (cases shared with backend services/node_route.py)', () =>
       if (hasRoutes(definition)) {
         expect({ ...route, block: blockFields(route.block) }).toEqual(testCase.expected);
         expect(routeUnavailable(definition, params, testCase.apiKeys)).toEqual(testCase.unavailable);
+        // Plan billing reads the same routed values the router does.
+        expect(usesRoutePlan(definition, params)).toBe(route.kind === 'plan');
       } else {
         expect(route).toEqual(testCase.expected);
       }

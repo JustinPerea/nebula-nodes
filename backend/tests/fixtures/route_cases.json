@@ -301,6 +301,12 @@
           "label": "Prompt",
           "dataType": "Text",
           "required": true
+        },
+        {
+          "id": "style_image",
+          "label": "Style image",
+          "dataType": "Image",
+          "required": false
         }
       ],
       "outputPorts": [
@@ -410,7 +416,16 @@
               "resolution": [
                 "4K"
               ]
-            }
+            },
+            "rejectsWhen": [
+              {
+                "match": {
+                  "resolution": "2K",
+                  "style_image": "(unset)"
+                },
+                "label": "2K without a style image"
+              }
+            ]
           },
           "note": "Early access: Krea 3 beta workspaces only"
         },
@@ -4290,6 +4305,65 @@
         ],
         "message": "Fixture Krea can't run on Krea: it doesn't take resolution 4K. Change that setting, or switch provider. fal.ai can take it."
       }
+    },
+    {
+      "name": "routes: Krea-maker plan its route refuses unless a port is wired is unset",
+      "nodeId": "routes-krea",
+      "params": {
+        "_kreaAuth": "mcp",
+        "resolution": "2K"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "2K without a style image"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "krea",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "2K without a style image"
+        },
+        "alternatives": [
+          "fal"
+        ],
+        "message": "Fixture Krea can't run on Krea: it doesn't take 2K without a style image. Change that setting, or switch provider. fal.ai can take it."
+      }
+    },
+    {
+      "name": "routes: Krea-maker plan unblocked by a wired port bills the plan",
+      "nodeId": "routes-krea",
+      "params": {
+        "_kreaAuth": "mcp",
+        "resolution": "2K"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "wiredCounts": {
+        "style_image": 1
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
     },
     {
       "name": "routes: plan-only routes are skipped under Auto",

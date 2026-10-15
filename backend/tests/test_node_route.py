@@ -40,6 +40,9 @@ def test_route_matches_shared_cases(case, monkeypatch):
     if node_route.has_routes(definition):
         assert _as_case(route) == case["expected"]
         assert node_route.route_unavailable(definition, params, case["apiKeys"]) == case["unavailable"]
+        # Plan billing (the preflight's sign-in check, the estimate's plan
+        # runs) reads the same routed values the router does.
+        assert node_route.uses_krea_plan(definition, params) == (route.kind == node_route.PLAN)
     else:
         assert {k: route._asdict()[k] for k in ("kind", "provider", "key")} == case["expected"]
         # A node without routes never names a route id, so its Route equals

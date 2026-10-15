@@ -556,7 +556,21 @@
               "resolution": [
                 "4k"
               ]
-            }
+            },
+            "ports": {
+              "images": {
+                "max": 2
+              }
+            },
+            "rejectsWhen": [
+              {
+                "match": {
+                  "resolution": "2k",
+                  "images": "(unset)"
+                },
+                "label": "2k without a reference image"
+              }
+            ]
           }
         }
       ]
@@ -1620,6 +1634,47 @@
         "_kreaAuth": "mcp"
       },
       "apiKeys": {},
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": false,
+        "plan": true
+      }
+    },
+    {
+      "name": "the Krea plan with more wired images than its route takes is unavailable, not a plan run",
+      "nodeId": "table",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wiredCounts": {
+        "images": 3
+      },
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": true,
+        "plan": false
+      }
+    },
+    {
+      "name": "the Krea plan a wired image unblocks is a plan run, not priced in USD",
+      "nodeId": "table",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp",
+        "resolution": "2k"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wiredCounts": {
+        "images": 1
+      },
       "expected": {
         "low": null,
         "high": null,

@@ -852,8 +852,13 @@ def validate_graph(
         else:
             key_names = []
 
+        # Edges into each port, which a route's ``ports`` rule and a wired
+        # rule param read (node_route.with_wired_blockers).
+        wired: dict[str, int] = {}
+        for edge in incoming_edges.get(node.id, []):
+            wired[edge.target_handle] = wired.get(edge.target_handle, 0) + 1
         from services.krea_account import uses_account
-        krea_account = uses_account(node, node_def)
+        krea_account = uses_account(node, node_def, wired)
         if krea_account:
             from services.krea_connector import is_krea_connected
             if not is_krea_connected():
@@ -864,9 +869,6 @@ def validate_graph(
             # A route-table node runs on its chosen route (or Auto's), never
             # on whichever key happens to be set: fail here, before any spend,
             # with the router's own words (maker_routes.multi_route).
-            wired: dict[str, int] = {}
-            for edge in incoming_edges.get(node.id, []):
-                wired[edge.target_handle] = wired.get(edge.target_handle, 0) + 1
             routed = node_route.with_wired_blockers(node_def, node.params, wired)
             unavailable = node_route.route_unavailable(node_def, routed, api_keys)
             if unavailable is not None:
@@ -1201,7 +1203,8 @@ async def _execute_graph(
                 }
                 cache_params = dict(node.params)
                 from services.krea_account import uses_account
-                if uses_account(node, definition_metadata):
+                from services.node_route import filled_counts
+                if uses_account(node, definition_metadata, filled_counts(resolved_inputs)):
                     from services.krea_connector import connection_revision
                     cache_params["_kreaConnectionRevision"] = connection_revision()
                 # Which route this run takes (maker key, fal or Krea copy, Krea

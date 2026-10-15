@@ -6505,7 +6505,16 @@
        "resolution": [
         "4K"
        ]
-      }
+      },
+      "rejectsWhen": [
+       {
+        "match": {
+         "resolution": "2K",
+         "style_image": "(unset)"
+        },
+        "label": "2K without a style image"
+       }
+      ]
      }
     },
     {
