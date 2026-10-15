@@ -1,5 +1,11 @@
 # Implementation Notes
 
+## 2026-10-15 — PR 1 integration: bfl-provider merged into provider-routes-core
+
+- **Conflicts were both additive.** `implementation-notes.md` keeps both lanes' sections (core first, BFL second). `scripts/check-node-contracts.mjs` keeps both new reads: the core lane's route fixtures / `keyProviders` and the BFL lane's `KEYS_AHEAD_OF_NODES` parse.
+- **`BFL_API_KEY: bfl` was already in both `KEY_PROVIDERS` tables** (the core lane added it), so no routing edit was needed. What was missing was a check that the two key lists agree: Settings' `credential_catalog.CREDENTIAL_PROVIDERS` and routing's `KEY_PROVIDERS` were never compared. `test_every_billing_key_settings_stores_names_its_provider` (test_node_contracts.py) now requires them equal, minus `KREA_USAGE_KEY` (it only reads Krea usage, nothing bills it), and ties `route_tables.json` to `KEY_PROVIDERS`; `routeTables.test.ts` already ties the TS table to that snapshot.
+- **The bisect gap from the BFL lane remains**: b5d1fb18 alone fails the settings-key contract tests, 7fca2ed0 fixes them. Left unsquashed because the branch history is a merge; squash when the PR is cut if each commit must pass.
+
 ## 2026-10-15 — Provider routes, PR 1 of 4: the routing core and the BFL key
 
 Branch `provider-routes-core`. One node per model, all provider routes in that node, a saved `_provider` choice. No new model nodes and no switcher UI yet (PRs 2-4). Plain-language guide: `docs/PROVIDER-ROUTES.md`.
