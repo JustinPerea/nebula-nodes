@@ -50,6 +50,7 @@ def test_describe_node_lists_each_route(surfaces):
     assert "grounding" not in fal_params
     assert by_id["krea"]["plan"] == "optional"
     assert by_id["bfl"]["price"] == {"usd": [0.03, 0.03]} and by_id["openrouter"]["price"] is None
+    assert by_id["fal"]["priceUnconfirmed"] is True and "priceUnconfirmed" not in by_id["bfl"]
     assert all(route["block"] is None for route in body["routes"])
     assert "_provider" in body["providerNote"] and "propose_change" in body["providerNote"]
     # The legacy dual-route fields stay off a route-table node.

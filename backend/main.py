@@ -3454,6 +3454,9 @@ def _describe_routes(
             "price": ({"usd": [round(estimate["low"], 4), round(estimate["high"], 4)]}
                       if estimate and estimate.get("currency") == "usd" else None),
         }
+        if row["price"] and model_pricing.route_price_unconfirmed(
+                (pricing.get("nodes") or {}).get(str(definition.get("id") or "")), definition, str(spec["id"])):
+            row["priceUnconfirmed"] = True
         if spec.get("maker"):
             row["maker"] = True
         if spec.get("plan"):
