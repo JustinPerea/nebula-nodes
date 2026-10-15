@@ -57,7 +57,7 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   // Black Forest Labs' own API (api.bfl.ai, x-key header). Keys come from
   // dashboard.bfl.ai under API -> Keys, scoped to a project; credits are
   // shared by the organization. docs/api-guides/bfl.md.
-  { key: 'BFL_API_KEY', label: 'Black Forest Labs', placeholder: 'BFL API key', url: 'https://dashboard.bfl.ai',
+  { key: 'BFL_API_KEY', label: 'Black Forest Labs', placeholder: 'bfl_...', url: 'https://dashboard.bfl.ai',
     brand: ['FLUX'], note: 'FLUX on Black Forest Labs\' own API' },
   // BytePlus Service Specific Terms (Model Services): "The BytePlus Model
   // Services are not available in the United States." Models need activating
