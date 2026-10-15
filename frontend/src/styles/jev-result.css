@@ -722,3 +722,190 @@ body.app-slava-restraint .model-node__jev-field .model-node__jev-input::placehol
 body.app-slava-restraint .model-node__jev-field ~ .jev-result {
   padding-top: 0;
 }
+
+/*
+ * TypeSafe pink on Jev nodes (.model-node--jev, set by ModelNode.tsx with or
+ * without a result). The colours live in lib/jev.ts (JEV_BRAND) and arrive
+ * as --jev-brand / --jev-brand-soft on the node; nothing here names a hex.
+ * The same node also gets --node-category-color = --jev-brand, so the card
+ * border, selection ring and entrance glow in slava-restraint.css turn pink
+ * on their own. Fills, borders and dark-on-pink labels use the accent; small
+ * pink text on the dark card uses the soft pink, which keeps WCAG AA.
+ * Decide's pass / fail / unsure colours keep their meaning and stay as they
+ * are. No new motion: the executing ring is static.
+ */
+body.app-slava-restraint .model-node--jev {
+  --sr-node-card-border-mix: 42%;
+  --sr-node-progress-fill: var(--jev-brand);
+}
+
+/* Header: a pink wash from the top edge, over the usual legibility gradient. */
+body.app-slava-restraint .model-node--jev .model-node__header {
+  background-image:
+    linear-gradient(to bottom, color-mix(in srgb, var(--jev-brand) 22%, transparent) 0%, transparent 100%),
+    var(--sr-node-header-gradient);
+  box-shadow: inset 0 1.5px 0 color-mix(in srgb, var(--jev-brand) 85%, transparent);
+}
+
+body.app-slava-restraint .model-node--jev .model-node__type-icon {
+  color: var(--jev-brand-soft);
+}
+
+/* Running: a solid pink ring while Jev answers. */
+body.app-slava-restraint .model-node--jev.model-node--executing .model-node__card {
+  border-color: var(--jev-brand);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--jev-brand) 60%, transparent),
+    0 0 24px color-mix(in srgb, var(--jev-brand) 30%, transparent),
+    var(--sr-shadow-node);
+}
+
+/* The running indicator's dot matrix, in pink. */
+body.app-slava-restraint .model-node--jev .model-node__loading-spinner::before {
+  background-color: var(--jev-brand-soft);
+  box-shadow:
+    5px 0 color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+    10px 0 color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+    15px 0 color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+    0 5px var(--jev-brand-soft),
+    5px 5px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+    10px 5px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+    15px 5px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+    0 10px var(--jev-brand-soft),
+    5px 10px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+    10px 10px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+    15px 10px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+    0 15px var(--jev-brand-soft),
+    5px 15px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+    10px 15px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+    15px 15px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent);
+}
+
+/* The same beam as slava-dot-matrix-beam (slava-restraint.css), in pink. Its
+ * keyframes name white outright, so the Jev copy swaps only the colour. */
+@keyframes jev-dot-matrix-beam {
+  0%, 100% {
+    background-color: color-mix(in srgb, var(--jev-brand-soft) 92%, transparent);
+    box-shadow:
+      5px 0 color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      10px 0 color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      15px 0 color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      0 5px color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      5px 5px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      10px 5px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      15px 5px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      0 10px color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      5px 10px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      10px 10px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      15px 10px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      0 15px color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      5px 15px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      10px 15px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      15px 15px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent);
+  }
+  25% {
+    background-color: color-mix(in srgb, var(--jev-brand-soft) 14%, transparent);
+    box-shadow:
+      5px 0 color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      10px 0 color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      15px 0 color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      0 5px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      5px 5px color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      10px 5px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      15px 5px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      0 10px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      5px 10px color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      10px 10px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      15px 10px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      0 15px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      5px 15px color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      10px 15px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      15px 15px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent);
+  }
+  50% {
+    background-color: color-mix(in srgb, var(--jev-brand-soft) 22%, transparent);
+    box-shadow:
+      5px 0 color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      10px 0 color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      15px 0 color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      0 5px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      5px 5px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      10px 5px color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      15px 5px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      0 10px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      5px 10px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      10px 10px color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      15px 10px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      0 15px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      5px 15px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      10px 15px color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      15px 15px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent);
+  }
+  75% {
+    background-color: color-mix(in srgb, var(--jev-brand-soft) 48%, transparent);
+    box-shadow:
+      5px 0 color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      10px 0 color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      15px 0 color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      0 5px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      5px 5px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      10px 5px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      15px 5px color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      0 10px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      5px 10px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      10px 10px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      15px 10px color-mix(in srgb, var(--jev-brand-soft) 92%, transparent),
+      0 15px color-mix(in srgb, var(--jev-brand-soft) 48%, transparent),
+      5px 15px color-mix(in srgb, var(--jev-brand-soft) 22%, transparent),
+      10px 15px color-mix(in srgb, var(--jev-brand-soft) 14%, transparent),
+      15px 15px color-mix(in srgb, var(--jev-brand-soft) 92%, transparent);
+  }
+}
+
+body.app-slava-restraint .model-node--jev .model-node__loading-spinner::before {
+  animation-name: jev-dot-matrix-beam;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .model-node--jev .model-node__loading-spinner::before {
+    animation: none;
+  }
+}
+
+/* The question / target field: pink focus. */
+body.app-slava-restraint .model-node--jev .model-node__jev-field .model-node__jev-input:focus {
+  border-color: var(--jev-brand);
+  caret-color: var(--jev-brand-soft);
+}
+body.app-slava-restraint .model-node--jev .model-node__jev-field .model-node__jev-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--jev-brand) 55%, transparent);
+}
+
+/* Pick Best: the winner isn't a verdict, so it's pink (a close call stays
+ * yellow). Outside a Jev node the variables are unset and it falls back to
+ * the pass tone. */
+body.app-slava-restraint .jev-result--pick-best:not(.jev-result--close) {
+  --jev-tone: var(--jev-brand, var(--jev-pass));
+}
+body.app-slava-restraint .jev-result__chip--brand { --jev-chip: var(--jev-brand-soft, var(--jev-pass)); }
+body.app-slava-restraint .jev-result__fill--brand { --jev-fill: var(--jev-brand, var(--jev-pass)); }
+
+body.app-slava-restraint .jev-result--pick-best:not(.jev-result--close) .jev-result__candidate--winner .jev-result__figure {
+  color: var(--jev-brand-soft, var(--sr-ink-bold));
+}
+
+/* "#3 74%" on the winner: a solid pink tag with dark type, like Box's. */
+body.app-slava-restraint .model-node--jev .jev-result--pick-best:not(.jev-result--close) .jev-result__hero-label {
+  background: var(--jev-brand);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: var(--sr-on-accent);
+}
+body.app-slava-restraint .model-node--jev .jev-result--pick-best:not(.jev-result--close) .jev-result__hero-label .jev-result__figure {
+  color: inherit;
+}
+
+/* Box: the outline and its percentage tag are pink; the "Found" chip keeps
+ * its verdict colour. */
+body.app-slava-restraint .jev-result--box.jev-result--pass {
+  --jev-tone: var(--jev-brand, var(--jev-pass));
+}
