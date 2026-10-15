@@ -320,6 +320,52 @@
       },
       "writes": {},
       "run": { "route": null, "refused": "can't run on OpenRouter" }
+    },
+    {
+      "name": "FLUX 3 Video: a click on Krea turns off a Draft picked on BFL, which Krea doesn't take or show",
+      "definition": "flux-3-video",
+      "saved": {
+        "_provider": "bfl",
+        "draft": true
+      },
+      "keys": [
+        "BFL_API_KEY",
+        "KREA_API_TOKEN"
+      ],
+      "wired": {},
+      "click": "krea",
+      "switcher": {
+        "before": {
+          "chip": "BFL",
+          "blocked": false,
+          "alternatives": []
+        },
+        "chip": "Krea",
+        "blocked": false,
+        "alternatives": [],
+        "notes": [
+          "Draft (fast preview) isn't on Krea: turned off"
+        ]
+      },
+      "writes": {
+        "_provider": "krea",
+        "_kreaAuth": "api-token",
+        "draft": false
+      },
+      "run": {
+        "route": "krea",
+        "request": {
+          "method": "POST",
+          "url": "https://api.krea.ai/generate/video/black-forest-labs/flux-3-video",
+          "body": {
+            "prompt": "p",
+            "duration": 5,
+            "resolution": "720p",
+            "aspect_ratio": "16:9",
+            "generate_audio": true
+          }
+        }
+      }
     }
   ]
 }

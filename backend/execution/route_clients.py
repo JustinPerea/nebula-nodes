@@ -89,14 +89,27 @@ def refuse_end_alone(inputs: Mapping[str, Any], where: str) -> None:
         raise ValueError(f"{where} needs a start image (or keyframes) to end on an end image")
 
 
+# The most images BFL, fal and Replicate take for one FLUX 3 video, start
+# image, keyframes and end image together: BFL "one to ten total"
+# (api.bfl.ai/openapi.json Flux3VideoI2VInputs.keyframes), fal keyframes
+# maxItems 10, Replicate images "up to 10" (all read 2026-10-15). The route
+# rule (rules.ports "frames") stops it before the run; this keeps a list that
+# arrives on one edge from reaching the provider.
+VIDEO_MAX_FRAMES = 10
+
+
 def video_frames(inputs: Mapping[str, Any], where: str) -> list[Any]:
     """A video node's images in time order: start, keyframes, end
-    (refuse_end_alone)."""
+    (refuse_end_alone), at most VIDEO_MAX_FRAMES of them."""
     refuse_end_alone(inputs, where)
     start = port_values(inputs, "start_image")[:1]
     frames = [*start, *port_values(inputs, "keyframes")]
     end = port_values(inputs, "end_image")[:1]
-    return [*frames, *end]
+    frames = [*frames, *end]
+    if len(frames) > VIDEO_MAX_FRAMES:
+        raise ValueError(f"{where} takes at most {VIDEO_MAX_FRAMES} images in all (start image, keyframes and end "
+                         f"image), but {len(frames)} are wired. Disconnect {len(frames) - VIDEO_MAX_FRAMES}.")
+    return frames
 
 
 def local_media_path(value: Any) -> Path | None:

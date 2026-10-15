@@ -161,7 +161,10 @@ class RouteSpec(TypedDict, total=False):
       provider's; a value it doesn't list is one the route doesn't take.
     - ``rules``: the directRoute rule grammar (blockedBy, accepts, rejects,
       rejectsWhen, size) plus ``ports`` ``{port: {max}}``, the most inputs
-      the route takes on a wired port.
+      the route takes on a wired port. An entry with ``of`` caps several
+      ports together (``{"frames": {"max": 10, "of": ["start_image",
+      "keyframes", "end_image"], "label": "images (...)"}}``): its key names
+      the group, ``label`` is how messages name it (port_limit_count).
     - ``pricing``: its key under model_pricing.json ``routes`` (default id).
     - ``note``: readiness copy for this route.
 
@@ -539,7 +542,7 @@ def _rules_block(definition: Mapping[str, Any], values: Mapping[str, Any],
     ports = rules.get("ports")
     counts = values.get(PORT_COUNTS)
     for port, limit in (ports.items() if isinstance(ports, Mapping) else []):
-        count = counts.get(port, 0) if isinstance(counts, Mapping) else 0
+        count = port_limit_count(port, limit, counts)
         most = limit.get("max") if isinstance(limit, Mapping) else None
         if isinstance(most, int) and count > most:
             return DirectBlock(PORTS, str(port), None, f"{port} {count}")
@@ -602,10 +605,32 @@ def wired_rule_params(definition: Mapping[str, Any]) -> set[str]:
     return named
 
 
+def _limit_ports(port: Any, limit: Any) -> list[str]:
+    """The input ports one ``ports`` entry counts: its ``of`` list for a
+    group, else the port it is keyed by."""
+    group = limit.get("of") if isinstance(limit, Mapping) else None
+    return [str(item) for item in group] if isinstance(group, list) else [str(port)]
+
+
+def port_limit_count(port: Any, limit: Any, counts: Any) -> int:
+    """How many inputs one ``ports`` entry counts: the sum over its ports.
+    FLUX 3 Video's providers take at most ten images in all, start image,
+    keyframes and end image together, so that cap is a group."""
+    if not isinstance(counts, Mapping):
+        return 0
+    return sum(int(counts.get(name, 0) or 0) for name in _limit_ports(port, limit))
+
+
+def port_limit_name(port: Any, limit: Any) -> str:
+    """How a message names one ``ports`` entry: its ``label``, else its key."""
+    label = limit.get("label") if isinstance(limit, Mapping) else None
+    return str(label) if isinstance(label, str) and label else str(port)
+
+
 def counted_ports(definition: Mapping[str, Any]) -> set[str]:
     """The ports a route's ``ports`` rule counts (route-table nodes only)."""
-    return {str(port) for rules in (_rule_sets(definition) if has_routes(definition) else [])
-            for port in (rules.get("ports") or {})}
+    return {name for rules in (_rule_sets(definition) if has_routes(definition) else [])
+            for port, limit in (rules.get("ports") or {}).items() for name in _limit_ports(port, limit)}
 
 
 # Where with_wired_blockers puts the wired-input counts the ``ports`` rule
@@ -966,9 +991,10 @@ def _why(route: Mapping[str, Any], block: DirectBlock) -> str:
         return f"the maker retired this model on {block.on}"
     if block.reason == PORTS:
         limit = ((route.get("rules") or {}).get("ports") or {}).get(block.param) or {}
+        name = port_limit_name(block.param, limit)
         if not limit.get("max"):
-            return f"it doesn't take wired {block.param}"
-        return f"it takes at most {limit.get('max')} wired {block.param}"
+            return f"it doesn't take wired {name}"
+        return f"it takes at most {limit.get('max')} wired {name}"
     return str(block.detail or block.reason)
 
 
@@ -1109,10 +1135,24 @@ def routes_problems(definition: Mapping[str, Any]) -> list[str]:
             unknown = sorted(set(rules) - _ROUTE_RULE_KEYS)
             if unknown:
                 problems.append(f"{where}.rules has unknown rules {unknown}")
+            input_ids = {str(p.get("id")) for p in definition.get("inputPorts") or [] if isinstance(p, Mapping)}
             for port, limit in (rules.get("ports") or {}).items():
                 most = limit.get("max") if isinstance(limit, Mapping) else None
                 if isinstance(most, bool) or not isinstance(most, int) or most < 0:
                     problems.append(f"{where}.rules.ports.{port}.max must be a whole number of inputs")
+                if not isinstance(limit, Mapping):
+                    continue
+                stray_limit = sorted(set(limit) - {"max", "of", "label"})
+                if stray_limit:
+                    problems.append(f"{where}.rules.ports.{port} has unknown fields {stray_limit}")
+                group = limit.get("of")
+                if group is not None and (not isinstance(group, list) or len(group) < 2
+                                          or not all(isinstance(name, str) and name in input_ids for name in group)):
+                    problems.append(f"{where}.rules.ports.{port}.of must list two or more of the node's input ports")
+                if group is not None and port in input_ids:
+                    problems.append(f"{where}.rules.ports.{port} groups ports, so its key must not be an input port")
+                if "label" in limit and (not isinstance(limit["label"], str) or not limit["label"].strip()):
+                    problems.append(f"{where}.rules.ports.{port}.label must be text")
         for param in route.get("params") or []:
             key = str(param.get("key")) if isinstance(param, Mapping) else "?"
             if key in BILLING_PARAMS:

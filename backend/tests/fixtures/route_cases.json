@@ -7365,6 +7365,143 @@
       ]
     },
     {
+      "name": "flux-3-video: BFL takes at most ten images in all, start, keyframes and end together",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "bfl"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only",
+        "REPLICATE_API_TOKEN": "fixture-only"
+      },
+      "wiredCounts": {
+        "start_image": 1,
+        "keyframes": 10,
+        "end_image": 1
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": "bfl",
+        "block": {
+          "reason": "ports",
+          "param": "frames",
+          "detail": "frames 12"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "bfl",
+        "missing": [],
+        "block": {
+          "reason": "ports",
+          "param": "frames",
+          "detail": "frames 12"
+        },
+        "alternatives": [],
+        "message": "FLUX 3 Video can't run on Black Forest Labs: it takes at most 10 wired images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
+      }
+    },
+    {
+      "name": "flux-3-video: a start image, eight keyframes and an end image are ten, which BFL takes",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "bfl"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only"
+      },
+      "wiredCounts": {
+        "start_image": 1,
+        "keyframes": 8,
+        "end_image": 1
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "flux-3-video: under Auto, eleven images in all stop on fal too",
+      "nodeId": "flux-3-video",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "wiredCounts": {
+        "start_image": 1,
+        "keyframes": 9,
+        "end_image": 1
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": "fal",
+        "block": {
+          "reason": "ports",
+          "param": "frames",
+          "detail": "frames 11"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "fal",
+        "missing": [],
+        "block": {
+          "reason": "ports",
+          "param": "frames",
+          "detail": "frames 11"
+        },
+        "alternatives": [],
+        "message": "FLUX 3 Video can't run on fal.ai: it takes at most 10 wired images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
+      }
+    },
+    {
+      "name": "flux-3-video: Replicate takes at most ten images in all",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "replicate"
+      },
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "fixture-only"
+      },
+      "wiredCounts": {
+        "start_image": 1,
+        "keyframes": 10
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "replicate",
+        "key": null,
+        "routeId": "replicate",
+        "block": {
+          "reason": "ports",
+          "param": "frames",
+          "detail": "frames 11"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "replicate",
+        "missing": [],
+        "block": {
+          "reason": "ports",
+          "param": "frames",
+          "detail": "frames 11"
+        },
+        "alternatives": [],
+        "message": "FLUX 3 Video can't run on Replicate: it takes at most 10 wired images (start + keyframes + end). Disconnect the extra inputs, or switch provider."
+      }
+    },
+    {
       "name": "krea-3: Auto with the Krea plan bills the plan",
       "nodeId": "krea-3",
       "params": {

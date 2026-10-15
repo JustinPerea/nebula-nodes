@@ -13828,7 +13828,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
               label: 'an end image without a start image or keyframes',
             },
           ],
-          ports: { keyframes: { max: 10 } },
+          // BFL ("one to ten total", api.bfl.ai/openapi.json Flux3VideoI2VInputs.keyframes), fal
+          // (keyframes-to-video keyframes maxItems 10) and Replicate (images "up to 10") cap the
+          // start image, keyframes and end image together; all read 2026-10-15.
+          ports: {
+            keyframes: { max: 10 },
+            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start + keyframes + end)' },
+          },
         },
       },
       {
@@ -13885,7 +13891,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
               label: 'an end image without a start image or keyframes',
             },
           ],
-          ports: { keyframes: { max: 10 } },
+          ports: {
+            keyframes: { max: 10 },
+            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start + keyframes + end)' },
+          },
         },
       },
       {
@@ -13937,7 +13946,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
               label: 'an end image without a start image or keyframes',
             },
           ],
-          ports: { keyframes: { max: 10 } },
+          ports: {
+            keyframes: { max: 10 },
+            frames: { max: 10, of: ['start_image', 'keyframes', 'end_image'], label: 'images (start + keyframes + end)' },
+          },
         },
       },
       {

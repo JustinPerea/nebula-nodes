@@ -24995,6 +24995,15 @@
           "ports": {
             "keyframes": {
               "max": 10
+            },
+            "frames": {
+              "max": 10,
+              "of": [
+                "start_image",
+                "keyframes",
+                "end_image"
+              ],
+              "label": "images (start + keyframes + end)"
             }
           }
         }
@@ -25154,6 +25163,15 @@
           "ports": {
             "keyframes": {
               "max": 10
+            },
+            "frames": {
+              "max": 10,
+              "of": [
+                "start_image",
+                "keyframes",
+                "end_image"
+              ],
+              "label": "images (start + keyframes + end)"
             }
           }
         }
@@ -25255,6 +25273,15 @@
           "ports": {
             "keyframes": {
               "max": 10
+            },
+            "frames": {
+              "max": 10,
+              "of": [
+                "start_image",
+                "keyframes",
+                "end_image"
+              ],
+              "label": "images (start + keyframes + end)"
             }
           }
         }

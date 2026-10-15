@@ -229,6 +229,34 @@ def test_routes_problems_names_each_broken_rule():
         assert expected in problems, (expected, problems)
 
 
+def test_routes_problems_checks_a_ports_group():
+    """A ``ports`` entry with ``of`` caps several input ports together
+    (FLUX 3 Video's ten images in all); check-node-contracts.mjs is the same."""
+    broken = json.loads(json.dumps(FIXTURE_DEFINITIONS["routes-image"]))
+    rules = broken["routes"][0].setdefault("rules", {})
+    rules["ports"] = {
+        "images": {"max": 4, "of": ["images", "prompt"]},
+        "pair": {"max": 4, "of": ["images", "nope"]},
+        "solo": {"max": 4, "of": ["images"], "label": " "},
+        "odd": {"max": 4, "most": 2},
+    }
+    problems = "\n".join(node_route.routes_problems(broken))
+    for expected in ("ports.images groups ports, so its key must not be an input port",
+                     "ports.pair.of must list two or more of the node's input ports",
+                     "ports.solo.of must list two or more", "ports.solo.label must be text",
+                     "ports.odd has unknown fields ['most']"):
+        assert expected in problems, (expected, problems)
+
+
+def test_a_ports_group_counts_its_ports_together():
+    limit = {"max": 10, "of": ["start_image", "keyframes", "end_image"], "label": "images (start + keyframes + end)"}
+    counts = {"start_image": 1, "keyframes": 10, "end_image": 1, "prompt": 1}
+    assert node_route.port_limit_count("frames", limit, counts) == 12
+    assert node_route.port_limit_count("keyframes", {"max": 10}, counts) == 10
+    assert node_route.port_limit_name("frames", limit) == "images (start + keyframes + end)"
+    assert node_route.port_limit_name("keyframes", {"max": 10}) == "keyframes"
+
+
 @pytest.mark.parametrize("node_id", sorted(FIXTURE_DEFINITIONS))
 def test_every_route_takes_every_default(node_id, monkeypatch):
     """A switch is always one click from runnable: no route's rules refuse

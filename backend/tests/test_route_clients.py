@@ -377,6 +377,22 @@ def test_krea_ports_go_under_a_folded_entrys_port_fields():
     assert route_clients.krea_inputs({}, inputs) == inputs
 
 
+def test_more_than_ten_video_frames_stop_before_any_request():
+    """BFL, fal and Replicate take at most ten images for one FLUX 3 video,
+    start image, keyframes and end image together; a list arriving on one
+    edge (which the preflight counts as one) still stops in the client."""
+    frames = [f"https://e.com/{i}.png" for i in range(10)]
+    inputs = ports(prompt="p", start_image="https://e.com/s.png", keyframes=frames, end_image="https://e.com/e.png")
+    with pytest.raises(ValueError, match="at most 10 images in all .* but 12 are wired. Disconnect 2"):
+        route_clients.bfl_body("flux-3-video", {}, inputs)
+    with pytest.raises(ValueError, match="at most 10 images in all"):
+        route_clients.fal_fields("blackforestlabs/flux-3/keyframes-to-video", {"duration": 5}, inputs)
+    with pytest.raises(ValueError, match="at most 10 images in all"):
+        route_clients.replicate_input({}, inputs, "x", "black-forest-labs/flux-3")
+    ten = ports(prompt="p", start_image="https://e.com/s.png", keyframes=frames[:8], end_image="https://e.com/e.png")
+    assert len(route_clients.video_frames(ten, "x")) == 10
+
+
 def test_keyframes_spread_evenly_over_the_clip():
     assert route_clients.keyframe_indexes(1, 5) == [0]
     assert route_clients.keyframe_indexes(2, 8) == [0, 192]

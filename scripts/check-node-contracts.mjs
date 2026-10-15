@@ -204,8 +204,23 @@ function validateRoutes(nodes, source) {
       } else if (route.rules) {
         const unknown = Object.keys(route.rules).filter((key) => !ROUTE_RULES.has(key));
         if (unknown.length) errors.push(`${at}.rules has unknown rules ${unknown.join(', ')}`);
+        const inputIds = new Set((definition.inputPorts ?? []).map((port) => port?.id));
         for (const [port, limit] of Object.entries(route.rules.ports ?? {})) {
           if (!Number.isInteger(limit?.max) || limit.max < 0) errors.push(`${at}.rules.ports.${port}.max must be a whole number of inputs`);
+          if (!limit || typeof limit !== 'object') continue;
+          const strayLimit = Object.keys(limit).filter((key) => !['max', 'of', 'label'].includes(key));
+          if (strayLimit.length) errors.push(`${at}.rules.ports.${port} has unknown fields ${strayLimit.join(', ')}`);
+          // A group (FLUX 3 Video's ten images in all) caps several ports together.
+          if (limit.of !== undefined && (!Array.isArray(limit.of) || limit.of.length < 2
+            || !limit.of.every((name) => typeof name === 'string' && inputIds.has(name)))) {
+            errors.push(`${at}.rules.ports.${port}.of must list two or more of the node's input ports`);
+          }
+          if (limit.of !== undefined && inputIds.has(port)) {
+            errors.push(`${at}.rules.ports.${port} groups ports, so its key must not be an input port`);
+          }
+          if ('label' in limit && (typeof limit.label !== 'string' || !limit.label.trim())) {
+            errors.push(`${at}.rules.ports.${port}.label must be text`);
+          }
         }
       }
       const routeKeys = new Set((route.params ?? []).map((param) => param?.key));
