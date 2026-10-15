@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null.",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null. `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES).",
   "definitions": {
     "img": {
       "id": "img",
@@ -2027,6 +2027,22 @@
       }
     },
     {
+      "name": "FLUX 3 Video on the Krea plan: the API balance row still shows the API price",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.75,
+        "fal": 0.85,
+        "replicate": 0.85,
+        "openrouter": 0.85,
+        "krea": 0.85
+      }
+    },
+    {
       "name": "FLUX 3 Video: a 10 s continuation is v2v; OpenRouter takes no start video",
       "nodeId": "flux-3-video",
       "params": {
@@ -2120,10 +2136,41 @@
       }
     },
     {
-      "name": "Krea 3: a range over the references each route takes",
+      "name": "Krea 3: a text-only run costs the base price on each route",
       "nodeId": "krea-3",
       "params": {},
       "wired": [],
+      "expected": {
+        "krea": 0.03,
+        "fal": [
+          0.1,
+          0.1006
+        ]
+      }
+    },
+    {
+      "name": "Krea 3: high thinking at 2K on Krea, no references",
+      "nodeId": "krea-3",
+      "params": {
+        "thinking_mode": "high",
+        "resolution": "2K"
+      },
+      "wired": [],
+      "expected": {
+        "krea": 0.08,
+        "fal": [
+          0.1,
+          0.1006
+        ]
+      }
+    },
+    {
+      "name": "Krea 3: a range over the references each route takes, once images are wired",
+      "nodeId": "krea-3",
+      "params": {},
+      "wired": [
+        "images"
+      ],
       "expected": {
         "krea": [
           0.03,
@@ -2136,22 +2183,93 @@
       }
     },
     {
-      "name": "Krea 3: high thinking at 2K on Krea",
+      "name": "Krea 3 on the Krea plan: the API balance row still shows the API price",
       "nodeId": "krea-3",
       "params": {
-        "thinking_mode": "high",
-        "resolution": "2K"
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
       },
       "wired": [],
       "expected": {
-        "krea": [
-          0.08,
-          0.64
-        ],
+        "krea": 0.03,
         "fal": [
           0.1,
-          0.9056
+          0.1006
         ]
+      }
+    }
+  ],
+  "shippedRunCases": [
+    {
+      "name": "FLUX 3 Video on Auto with a Krea plan mode left saved and only a Krea token bills the API token, so it is priced",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "auto",
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.85,
+        "high": 0.85,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "FLUX 3 Video on the Krea plan row is billed to the plan",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {},
+      "wired": [],
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": false,
+        "plan": true
+      }
+    },
+    {
+      "name": "Krea 3 text-only on the Krea API token costs the base price",
+      "nodeId": "krea-3",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.03,
+        "high": 0.03,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 3 with references wired on the Krea API token is a range",
+      "nodeId": "krea-3",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [
+        "images"
+      ],
+      "expected": {
+        "low": 0.03,
+        "high": 0.59,
+        "unavailable": false,
+        "plan": false
       }
     }
   ]

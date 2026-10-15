@@ -343,15 +343,24 @@ def test_price_variables_that_arent_params_are_validated():
     moded = CASES["pricing"]["nodes"]["moded"]
     bad = {"nodes": {
         "moded": {**moded, "rows": [{"match": {"(mode)": "x2v"}, "price": 0.1},
-                                    {"match": {"(frames)": 1}, "price": 0.1}]},
+                                    {"match": {"(frames)": 1}, "price": 0.1},
+                                    {"match": {"(references)": "8"}, "price": 0.1}]},
         "tooled": {**CASES["pricing"]["nodes"]["tooled"], "per": "megapixel"},
     }}
     problems = "\n".join(model_pricing.validate_pricing(bad, definitions))
     assert "(mode) must be one of ('t2v', 'i2v', 'v2v')" in problems
+    assert "(references) must be one of ('none', 'some')" in problems
     assert "matches unknown param '(frames)'" in problems
     assert "per must be one of" in problems
     assert model_pricing.validate_pricing({"nodes": {"moded": moded, "tooled": CASES["pricing"]["nodes"]["tooled"]}},
                                           definitions) == []
+
+
+@pytest.mark.parametrize("wired, refs", [
+    ((), "none"), (("prompt",), "none"), (("images",), "some"), (("images", "prompt"), "some"),
+])
+def test_references_reads_the_reference_image_port(wired, refs):
+    assert model_pricing.references(wired) == refs
 
 
 @pytest.mark.parametrize("wired, mode", [

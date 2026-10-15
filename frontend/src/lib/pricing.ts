@@ -90,6 +90,12 @@ function matches(values: Record<string, unknown>, match: Record<string, unknown>
  * route clients pick BFL's `mode` by). */
 export const VIDEO_MODE = '(mode)';
 const IMAGE_PORTS = ['start_image', 'keyframes', 'end_image'];
+/** Whether a run has reference images wired, a price variable read from the
+ * wired ports: `some` with an edge into `images`, else `none`
+ * (model_pricing.REFERENCES). Krea 3 prices a run without references at the
+ * exact base price. */
+export const REFERENCES = '(references)';
+const REFERENCE_PORTS = ['images'];
 /** Price variables known only once the run's source clip is (its length,
  * its output frame size): an entry that reads one is unpriced before the run
  * (model_pricing.RUN_TIME_VARIABLES). */
@@ -100,6 +106,12 @@ export function videoMode(wired: Iterable<string>): 't2v' | 'i2v' | 'v2v' {
   const ports = new Set(wired);
   if (ports.has('start_video')) return 'v2v';
   return IMAGE_PORTS.some((port) => ports.has(port)) ? 'i2v' : 't2v';
+}
+
+/** Whether a run has reference images wired (REFERENCES). */
+export function references(wired: Iterable<string>): 'none' | 'some' {
+  const ports = new Set(wired);
+  return REFERENCE_PORTS.some((port) => ports.has(port)) ? 'some' : 'none';
 }
 
 /** Every setting an entry's price reads: row and extra matches, multiplyBy. */
@@ -138,7 +150,7 @@ export function entryForRoute(entry: PriceEntry | undefined, provider: string | 
  * row, the run bills a different provider than the entry prices, a setting
  * the price reads arrives by wire, so it's only known at run time, or the
  * price reads a RUN_TIME_VARIABLES quantity). The wired ports also give the
- * VIDEO_MODE a row may match. A `routes` entry prices the route
+ * VIDEO_MODE and REFERENCES a row may match. A `routes` entry prices the route
  * `routeProvider` names. */
 export function estimateNode(
   priceEntry: PriceEntry | undefined,
@@ -157,6 +169,7 @@ export function estimateNode(
   if (ports.some((port) => priced.has(port)) || RUN_TIME_VARIABLES.some((key) => priced.has(key))) return null;
   const values = effectiveParams(entry, definition, params);
   if (priced.has(VIDEO_MODE)) values[VIDEO_MODE] = videoMode(ports);
+  if (priced.has(REFERENCES)) values[REFERENCES] = references(ports);
   const row = (entry.rows ?? []).find((candidate) => matches(values, candidate.match));
   if (!row) return null;
   const base = bounds(row.price);

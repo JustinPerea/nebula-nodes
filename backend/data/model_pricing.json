@@ -687,7 +687,6 @@
           "rows": [
             {
               "match": {
-                "_kreaAuth": "api-token",
                 "(mode)": "v2v",
                 "resolution": "hd"
               },
@@ -695,7 +694,6 @@
             },
             {
               "match": {
-                "_kreaAuth": "api-token",
                 "(mode)": "v2v",
                 "resolution": "fhd"
               },
@@ -703,14 +701,12 @@
             },
             {
               "match": {
-                "_kreaAuth": "api-token",
                 "resolution": "hd"
               },
               "price": 0.17
             },
             {
               "match": {
-                "_kreaAuth": "api-token",
                 "resolution": "fhd"
               },
               "price": 0.29
@@ -719,7 +715,7 @@
           "multiplyBy": [
             "duration"
           ],
-          "notes": "API-token runs only; Krea account (plan) runs bill workspace compute, which Krea doesn't publish. Krea's x-krea-pricing lists a fixed price per request by mode, resolution and duration, and every point is the per-second rate times the duration: t2v and i2v 720p $0.17, 1080p $0.29; v2v 720p $0.41, 1080p $0.53. (mode) is read from the wired ports, not a saved param: v2v with start_video wired, i2v with start_image, keyframes or end_image, else t2v. A combination no row lists is unpriced.",
+          "notes": "The API balance's price. A Krea account (plan) run bills workspace compute, which Krea doesn't publish; the estimate sends plan runs to the plan before any row is read (model_pricing.uses_krea_account), so the rows don't match _kreaAuth and the switcher's API balance row shows this price whatever mode is saved. Krea's x-krea-pricing lists a fixed price per request by mode, resolution and duration, and every point is the per-second rate times the duration: t2v and i2v 720p $0.17, 1080p $0.29; v2v 720p $0.41, 1080p $0.53. (mode) is read from the wired ports, not a saved param: v2v with start_video wired, i2v with start_image, keyframes or end_image, else t2v. A combination no row lists is unpriced.",
           "sources": [
             {
               "url": "https://api.krea.ai/openapi.json",
@@ -2905,7 +2901,20 @@
           "rows": [
             {
               "match": {
-                "_kreaAuth": "api-token",
+                "(references)": "none",
+                "resolution": "1K"
+              },
+              "price": 0.03
+            },
+            {
+              "match": {
+                "(references)": "none",
+                "resolution": "2K"
+              },
+              "price": 0.06
+            },
+            {
+              "match": {
                 "resolution": "1K"
               },
               "price": [
@@ -2915,7 +2924,6 @@
             },
             {
               "match": {
-                "_kreaAuth": "api-token",
                 "resolution": "2K"
               },
               "price": [
@@ -2932,7 +2940,7 @@
               "price": 0.02
             }
           ],
-          "notes": "API-token runs only; Krea account (plan) runs bill workspace compute units, which Krea doesn't publish, so they stay unpriced. The low end is a text-to-image run (base $0.03 at 1K, $0.06 at 2K). Each reference image adds $0.02 (a 1K reference) or $0.07 (a 2K reference), priced by the reference's own size, which isn't known before the run; the high end adds the most references Krea takes (8) at $0.07. thinking_mode high adds $0.02 per generation.",
+          "notes": "The API balance's price. A Krea account (plan) run bills workspace compute units, which Krea doesn't publish; the estimate sends plan runs to the plan before any row is read, so the rows don't match _kreaAuth. (references) is read from the wired ports: with nothing wired to images, a run costs the base price exactly ($0.03 at 1K, $0.06 at 2K). With references wired, each adds $0.02 (a 1K reference) or $0.07 (a 2K reference), priced by the reference's own size, which isn't known before the run; the range runs from the base price to the most references Krea takes (8) at $0.07. thinking_mode high adds $0.02 per generation.",
           "sources": [
             {
               "url": "https://www.krea.ai/docs/developers/krea-3/overview.md#pricing",
@@ -2953,6 +2961,16 @@
           "rows": [
             {
               "match": {
+                "(references)": "none",
+                "image_size": "auto"
+              },
+              "price": [
+                0.1,
+                0.1006
+              ]
+            },
+            {
+              "match": {
                 "image_size": "auto"
               },
               "price": [
@@ -2969,7 +2987,7 @@
               "price": 0.125
             }
           ],
-          "notes": "fal bills $0.025 per megapixel (1 MP = 1024x1024), counting the output plus each reference image at no more than the output's size. auto is 'about 2048x2048' (4 MP, $0.10), so the price isn't exact; the output can't exceed 4,220,160 px ($0.1006). The high end adds 8 references at that cap. reasoning_level high (edit only) bills 5 MP more ($0.125). The preset sizes (square_hd, square, portrait_*, landscape_*) aren't given in pixels for this endpoint (fal presets differ per model), so runs on them are unpriced.",
+          "notes": "fal bills $0.025 per megapixel (1 MP = 1024x1024), counting the output plus each reference image at no more than the output's size. auto is 'about 2048x2048' (4 MP, $0.10), so the price isn't exact; the output can't exceed 4,220,160 px ($0.1006). (references) is read from the wired ports: with nothing wired to images the run bills the output only ($0.10-0.1006); with references wired the high end adds 8 references at that cap. reasoning_level high (edit only) bills 5 MP more ($0.125). The preset sizes (square_hd, square, portrait_*, landscape_*) aren't given in pixels for this endpoint (fal presets differ per model), so runs on them are unpriced.",
           "sources": [
             {
               "url": "https://fal.ai/models/krea/v3/text-to-image/llms.txt",

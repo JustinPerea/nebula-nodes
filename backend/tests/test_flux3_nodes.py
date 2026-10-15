@@ -239,6 +239,26 @@ def test_every_route_is_priced_or_said_to_be_unpriced():
 
 SHIPPED_ROUTE_CASES = json.loads((Path(__file__).parent / "fixtures" / "pricing_cases.json").read_text())[
     "shippedRouteCases"]
+SHIPPED_RUN_CASES = json.loads((Path(__file__).parent / "fixtures" / "pricing_cases.json").read_text())[
+    "shippedRunCases"]
+
+
+@pytest.mark.parametrize("case", SHIPPED_RUN_CASES, ids=[c["name"] for c in SHIPPED_RUN_CASES])
+def test_a_whole_run_is_priced_on_the_route_it_bills(case):
+    """runScope.test.ts runs the same cases (pricing_cases.json shippedRunCases).
+    A Krea route's rows don't read _kreaAuth: a plan run goes to the plan
+    first, so an API-token run is priced whatever mode is left saved."""
+    item = {"id": "n1", "definitionId": case["nodeId"], "params": case["params"], "name": "Node"}
+    wired = {"n1": {port: 1 for port in case["wired"]}} if case["wired"] else None
+    result = model_pricing.estimate_run([item], PRICING, REGISTRY, case["apiKeys"], None, wired)
+    expected = case["expected"]
+    if expected["low"] is None:
+        assert "n1" not in result["priced"]
+    else:
+        assert result["priced"]["n1"]["low"] == pytest.approx(expected["low"])
+        assert result["priced"]["n1"]["high"] == pytest.approx(expected["high"])
+    assert ("n1" in result["unavailable"]) is expected["unavailable"]
+    assert ("n1" in result["plan"]) is expected["plan"]
 
 
 @pytest.mark.parametrize("case", SHIPPED_ROUTE_CASES, ids=[c["name"] for c in SHIPPED_ROUTE_CASES])

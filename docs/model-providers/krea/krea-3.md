@@ -56,8 +56,8 @@ fal's schema changed since the first research dumps: edit gained `reasoning_leve
 
 ## Prices
 
-- **Krea** (docs pricing table; the OpenAPI has no `x-krea-pricing`): base $0.03 at 1K, $0.06 at 2K; +$0.02 for `high` thinking; each reference +$0.02 (1K reference) or +$0.07 (2K reference), by the reference's own size. That size isn't known before the run, so the price is a range, as for Gemini: $0.03 to $0.59 at 1K, $0.06 to $0.62 at 2K. API-token runs only; plan runs are unpriced.
-- **fal** (llms.txt, **unconfirmed**): $0.025 per megapixel, counting the output plus each reference at no more than the output's size. `auto` is about 4 MP (~$0.10), so the range is $0.10 to $0.9056; `high` reasoning adds $0.125. Runs on a preset size are unpriced (krea/v3 gives no pixel sizes for its presets).
+- **Krea** (docs pricing table; the OpenAPI has no `x-krea-pricing`): base $0.03 at 1K, $0.06 at 2K; +$0.02 for `high` thinking; each reference +$0.02 (1K reference) or +$0.07 (2K reference), by the reference's own size. With nothing wired to Images the run costs the base price exactly ($0.03 at 1K, $0.06 at 2K). With references wired, their size isn't known before the run, so the price is a range, as for Gemini: $0.03 to $0.59 at 1K, $0.06 to $0.62 at 2K (the `(references)` price variable, read from the wired ports). This is the API balance's price; plan runs bill workspace compute and are unpriced.
+- **fal** (llms.txt, **unconfirmed**): $0.025 per megapixel, counting the output plus each reference at no more than the output's size. `auto` is about 4 MP (~$0.10): a run with no references is $0.10 to $0.1006, and with references wired the range runs to $0.9056 (8 references); `high` reasoning adds $0.125. Runs on a preset size are unpriced (krea/v3 gives no pixel sizes for its presets).
 
 ## Catalog
 
