@@ -20,9 +20,10 @@ ACCOUNT_ONLY_MESSAGE = "This Krea feature is only available on a connected Krea 
 
 
 def account_param(definition: dict | None) -> dict | None:
-    if not definition or definition.get("apiProvider") != "krea":
-        return None
-    return next((param for param in definition.get("params", []) if param.get("key") == "_kreaAuth"), None)
+    """The node's `_kreaAuth` param: on a Krea node, or on a route-table node
+    with a Krea route that can bill the plan (services/node_route.py)."""
+    from services.node_route import krea_auth_param
+    return krea_auth_param(definition) if definition else None  # type: ignore[return-value]
 
 
 def is_account_only(definition: dict | None) -> bool:

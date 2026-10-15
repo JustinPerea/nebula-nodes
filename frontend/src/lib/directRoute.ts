@@ -1,4 +1,6 @@
-import type { APIProvider, DirectAcceptRule, DirectSizeLimits, ModelNodeDefinition, ParamDefinition } from '../types';
+import type {
+  APIProvider, DirectAcceptRule, DirectSizeLimits, ModelNodeDefinition, ParamDefinition, RouteRules, RouteSpec,
+} from '../types';
 import { usesKreaAccount } from './kreaConnection';
 
 /**
@@ -12,6 +14,10 @@ import { usesKreaAccount } from './kreaConnection';
  *    (directBlock): the maker's API.
  * 3. otherwise the first other key that is set (FAL_KEY, KREA_API_TOKEN, or
  *    RUNWAY_API_KEY for the ElevenLabs models Runway resells).
+ *
+ * A route-table node (`routes`, docs/PROVIDER-ROUTES.md) reads its saved
+ * `_provider` instead, and Auto never moves to another provider because of
+ * a param (selectRoute). Nodes without `routes` keep the rule above.
  */
 
 /** Which provider bills a run that uses this key (node_route.KEY_PROVIDERS). */
@@ -25,7 +31,26 @@ export const KEY_PROVIDERS: Readonly<Record<string, APIProvider>> = {
   WORLDLABS_API_KEY: 'worldlabs', TYPESAFE_API_KEY: 'typesafe',
   // BytePlus ModelArk, ByteDance's own international API (Seedream, Seedance).
   BYTEPLUS_API_KEY: 'bytedance',
+  // Black Forest Labs' own API (api.bfl.ai), the maker of FLUX.
+  BFL_API_KEY: 'bfl',
 };
+
+/** How errors, readiness and the run status name a provider
+ * (node_route.PROVIDER_LABELS; tests/fixtures/route_tables.json pins both). */
+export const PROVIDER_LABELS: Readonly<Record<APIProvider, string>> = {
+  openai: 'OpenAI', anthropic: 'Anthropic', google: 'Google', runway: 'Runway',
+  kling: 'Kling', elevenlabs: 'ElevenLabs', replicate: 'Replicate', fal: 'fal.ai',
+  bytedance: 'ByteDance', minimax: 'MiniMax', luma: 'Luma', xai: 'xAI',
+  recraft: 'Recraft', ideogram: 'Ideogram', openrouter: 'OpenRouter', bfl: 'Black Forest Labs',
+  higgsfield: 'Higgsfield', meshy: 'Meshy', quiver: 'QuiverAI', krea: 'Krea',
+  worldlabs: 'World Labs', nous: 'Nous', typesafe: 'TypeSafe', utility: 'Local tools',
+};
+
+/** The params that decide who bills a run: the provider choice and the Krea
+ * billing mode (node_route.BILLING_PARAMS). Only the person changes them. */
+export const PROVIDER_PARAM = '_provider';
+export const BILLING_PARAMS: readonly string[] = [PROVIDER_PARAM, '_kreaAuth'];
+export const AUTO = 'auto';
 
 /** A direct route that also needs a param set, else the run takes the fallback
  * (node_route.DIRECT_REQUIRES): Ideogram's direct reframe sizes by `resolution`;
@@ -61,7 +86,9 @@ export const DIRECT_RETIRES: Readonly<Record<string, DirectRetirement>> = {
  * exactly (directRoute.size), or `retired` by the maker on `on`
  * (DIRECT_RETIRES). */
 export interface DirectBlock {
-  reason: 'requires' | 'blocked' | 'unsupported' | 'size' | 'retired';
+  /** Route-table nodes add `ports` (more inputs wired than a route takes,
+   * rules.ports) and `unknown-provider` (`_provider` names no route). */
+  reason: 'requires' | 'blocked' | 'unsupported' | 'size' | 'retired' | 'ports' | 'unknown-provider';
   param: string | null;
   on: string | null;
   /** `unsupported`: what the maker doesn't take, the param and its value
@@ -71,10 +98,16 @@ export interface DirectBlock {
 
 export type RouteKind = 'local' | 'plan' | 'only' | 'direct' | 'fallback' | 'unset';
 
+/** Where one run goes. `routeId`, `block` and `missing` are only set on
+ * route-table nodes (node_route.Route): the route chosen or resolved, why it
+ * can't take this run, and the keys it would need. */
 export interface NodeRoute {
   kind: RouteKind;
   provider: string | null;
   key: string | null;
+  routeId?: string | null;
+  block?: DirectBlock | null;
+  missing?: string[];
 }
 
 type ApiKeys = Readonly<Record<string, string | undefined>>;
@@ -142,43 +175,146 @@ export const SET = '(set)';
 export const NOT_SET = '(unset)';
 /** A param that arrives by wire rather than saved (node_route.WIRED). */
 export const WIRED = '(wired)';
+/** Where withWiredBlockers puts the wired-input counts a `ports` rule reads
+ * (node_route.PORT_COUNTS). Never a param name, so it is never sent. */
+export const PORT_COUNTS = '(wired ports)';
+
+type RoutedDefinition = Pick<ModelNodeDefinition, 'id' | 'apiProvider' | 'envKeyName' | 'directKeyName'
+  | 'directRoute' | 'routes' | 'params' | 'sharedParams' | 'directParams' | 'falParams'>;
+
+/** A route-table node: its definition lists `routes` (node_route.has_routes). */
+export function hasRoutes(definition: Pick<ModelNodeDefinition, 'routes'> | undefined): boolean {
+  return Array.isArray(definition?.routes) && definition.routes.length > 0;
+}
+
+const RULE_KEYS = ['blockedBy', 'accepts', 'rejects', 'rejectsWhen', 'size'] as const;
+
+/** A dual-route node's maker rules in RouteSpec `rules` form: directRoute's
+ * rules plus `requires` (DIRECT_REQUIRES) and `retires` (DIRECT_RETIRES)
+ * (node_route._legacy_rules). */
+function legacyRules(definition: RoutedDefinition): RouteRules {
+  const spec = (definition.directRoute ?? {}) as Record<string, unknown>;
+  const rules: Record<string, unknown> = {};
+  for (const key of RULE_KEYS) if (Object.hasOwn(spec, key)) rules[key] = spec[key];
+  if (Object.hasOwn(DIRECT_REQUIRES, definition.id)) rules.requires = DIRECT_REQUIRES[definition.id];
+  if (Object.hasOwn(DIRECT_RETIRES, definition.id)) rules.retires = { ...DIRECT_RETIRES[definition.id] };
+  return rules as RouteRules;
+}
+
+/** Every route a node can run on, in Auto order (node_route.routes_of): a
+ * route-table node's `routes`, else computed specs (a dual-route node's
+ * maker route, then one copy route per other provider in envKeyName order;
+ * a single-route node one route on its apiProvider). selectRoute doesn't use
+ * the computed specs. */
+export function routesOf(definition: RoutedDefinition): RouteSpec[] {
+  if (hasRoutes(definition)) return definition.routes!;
+  const provider = definition.apiProvider;
+  const env = envKeyNames(definition);
+  if (env.length < 2) return [{ id: provider ?? '', provider, keys: env, params: [] } as unknown as RouteSpec];
+  const specs: RouteSpec[] = [];
+  const direct = directKeyNames(definition);
+  const providerFor = (key: string) => (Object.hasOwn(KEY_PROVIDERS, key) ? KEY_PROVIDERS[key] : provider);
+  if (direct.length) {
+    const maker = providerFor(direct[0]);
+    specs.push({ id: maker, provider: maker, maker: true, keys: direct, params: [...(definition.directParams ?? [])],
+      rules: legacyRules(definition) } as unknown as RouteSpec);
+  }
+  const grouped = new Map<string, string[]>();
+  for (const key of fallbackKeyNames(definition)) {
+    const copy = providerFor(key);
+    grouped.set(copy, [...(grouped.get(copy) ?? []), key]);
+  }
+  for (const [copy, keys] of grouped) {
+    specs.push({ id: copy, provider: copy, keys, params: [...(definition.falParams ?? [])] } as unknown as RouteSpec);
+  }
+  return specs;
+}
+
+export function routeById(definition: RoutedDefinition, routeId: unknown): RouteSpec | undefined {
+  return routesOf(definition).find((route) => route.id === routeId);
+}
+
+export function makerRoute(definition: RoutedDefinition): RouteSpec | undefined {
+  return routesOf(definition).find((route) => route.maker);
+}
+
+/** Every param a node declares, once per key: params, sharedParams,
+ * directParams, falParams, then each route's own params; the first
+ * definition of a key wins (node_route.all_param_definitions). */
+export function allParamDefinitions(
+  definition: Pick<ModelNodeDefinition, 'params' | 'sharedParams' | 'directParams' | 'falParams' | 'routes'>,
+): ParamDefinition[] {
+  const seen = new Map<string, ParamDefinition>();
+  const groups = [definition.params, definition.sharedParams, definition.directParams, definition.falParams,
+    ...(hasRoutes(definition) ? definition.routes!.map((route) => route.params) : [])];
+  for (const group of groups) {
+    for (const param of Array.isArray(group) ? group : []) {
+      if (param?.key && !seen.has(param.key)) seen.set(param.key, param);
+    }
+  }
+  return [...seen.values()];
+}
 
 /** The params a rule counts as set when they arrive by wire: `blockedBy` and
  * every rejectsWhen entry matching "(set)" or "(unset)": a wired port isn't
- * unset (node_route.wired_rule_params). */
-export function wiredRuleParams(definition: Pick<ModelNodeDefinition, 'directRoute'>): Set<string> {
-  const named = new Set(definition.directRoute?.blockedBy ?? []);
-  for (const rule of definition.directRoute?.rejectsWhen ?? []) {
-    for (const [key, want] of Object.entries(rule.match)) if (want === SET || want === NOT_SET) named.add(key);
+ * unset (node_route.wired_rule_params). On a route-table node, over every
+ * route and its endpointWhen entries. */
+export function wiredRuleParams(definition: Pick<ModelNodeDefinition, 'directRoute' | 'routes'>): Set<string> {
+  const named = new Set<string>();
+  for (const spec of ruleSets(definition)) {
+    for (const key of spec.blockedBy ?? []) named.add(key);
+    for (const rule of spec.rejectsWhen ?? []) {
+      for (const [key, want] of Object.entries(rule.match)) if (want === SET || want === NOT_SET) named.add(key);
+    }
+  }
+  for (const route of hasRoutes(definition) ? definition.routes! : []) {
+    for (const option of route.endpointWhen ?? []) {
+      for (const [key, want] of Object.entries(option.when ?? {})) if (want === SET || want === NOT_SET) named.add(key);
+    }
   }
   return named;
+}
+
+function ruleSets(definition: Pick<ModelNodeDefinition, 'directRoute' | 'routes'>): RouteRules[] {
+  if (hasRoutes(definition)) return definition.routes!.map(routeRules);
+  return definition.directRoute ? [definition.directRoute] : [];
+}
+
+/** The ports a route's `ports` rule counts (route-table nodes only). */
+function countedPorts(definition: Pick<ModelNodeDefinition, 'directRoute' | 'routes'>): Set<string> {
+  if (!hasRoutes(definition)) return new Set();
+  return new Set(ruleSets(definition).flatMap((rules) => Object.keys(rules.ports ?? {})));
 }
 
 /** `params` plus a WIRED marker for each param a rule reads as set
  * (wiredRuleParams) that arrives on a wired input port, so directBlock treats
  * it as the saved param (node_route.with_wired_blockers). `wired` are the
- * ports with an edge in. */
+ * ports with an edge in, or a map of each port to how many inputs it carries;
+ * a route-table node with a `ports` rule then gets those counts under
+ * PORT_COUNTS. */
 export function withWiredBlockers(
-  definition: Pick<ModelNodeDefinition, 'directRoute'>,
+  definition: Pick<ModelNodeDefinition, 'directRoute' | 'routes'>,
   params: Record<string, unknown> | undefined,
-  wired: Iterable<string>,
+  wired: Iterable<string> | ReadonlyMap<string, number>,
 ): Record<string, unknown> {
   const values = { ...(params ?? {}) };
-  const ports = new Set(wired);
+  const counts = wired instanceof Map
+    ? new Map(wired)
+    : new Map([...(wired as Iterable<string>)].map((port) => [port, 1] as const));
   for (const key of wiredRuleParams(definition)) {
-    if (ports.has(key) && !hasValue(values[key])) values[key] = WIRED;
+    if (counts.has(key) && !hasValue(values[key])) values[key] = WIRED;
+  }
+  const counted = countedPorts(definition);
+  if (counted.size) {
+    values[PORT_COUNTS] = Object.fromEntries([...counts].filter(([port, count]) => counted.has(port) && count > 0));
   }
   return values;
 }
 
 /** A param's value as a run reads it: the saved value, else the definition default. */
-function effectiveValue(definition: ModelNodeDefinition, params: Record<string, unknown>, key: string): unknown {
+function effectiveValue(definition: RoutedDefinition, params: Record<string, unknown>, key: string): unknown {
   if (hasValue(params[key])) return params[key];
-  for (const group of [definition.sharedParams, definition.directParams, definition.falParams, definition.params]) {
-    const param = group?.find((candidate) => candidate.key === key);
-    if (param) return param.default;
-  }
-  return undefined;
+  return allParamDefinitions(definition).find((candidate) => candidate.key === key)?.default;
 }
 
 /** One spelling for a param value, as pricing compares them: 6 == 6.0 and
@@ -198,9 +334,8 @@ export function sizeFits(width: unknown, height: unknown, limits: DirectSizeLimi
   return Math.max(width / height, height / width) <= (limits.maxAspect ?? Infinity);
 }
 
-/** `size` when the recipe's size is outside directRoute.size (node_route._size_block). */
-function sizeBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
-  const limits = definition.directRoute?.size;
+/** `size` when the recipe's size is outside the rules' size (node_route._size_block). */
+function sizeBlock(definition: RoutedDefinition, params: Record<string, unknown>, limits: DirectSizeLimits | undefined): DirectBlock | null {
   if (!limits) return null;
   if (limits.widthParam && limits.heightParam) {
     const width = params[limits.widthParam];
@@ -238,7 +373,7 @@ export function valueAccepted(value: unknown, rule: DirectAcceptRule): boolean {
 /** One entry of a rejectsWhen `match` (node_route._matches): "(set)" means
  * saved non-empty or wired, "(unset)" neither; any other value is compared
  * with the run's value. */
-function matches(definition: ModelNodeDefinition, params: Record<string, unknown>, key: string, want: unknown): boolean {
+function matches(definition: RoutedDefinition, params: Record<string, unknown>, key: string, want: unknown): boolean {
   if (want === SET) return hasValue(params[key]);
   if (want === NOT_SET) return !hasValue(params[key]);
   return matchValue(effectiveValue(definition, params, key)) === matchValue(want);
@@ -248,21 +383,20 @@ function matches(definition: ModelNodeDefinition, params: Record<string, unknown
  * the run's values (saved, else the definition default): `accepts` the values
  * the maker takes, `rejects` values it doesn't, `rejectsWhen` combinations it
  * doesn't (every entry must match). */
-function unsupportedBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
-  const spec = definition.directRoute;
-  for (const [key, rule] of Object.entries(spec?.accepts ?? {})) {
+function unsupportedBlock(definition: RoutedDefinition, params: Record<string, unknown>, spec: RouteRules): DirectBlock | null {
+  for (const [key, rule] of Object.entries(spec.accepts ?? {})) {
     const value = effectiveValue(definition, params, key);
     if (hasValue(value) && !valueAccepted(value, rule)) {
       return { reason: 'unsupported', param: key, on: null, detail: `${key} ${matchValue(value)}` };
     }
   }
-  for (const [key, refused] of Object.entries(spec?.rejects ?? {})) {
+  for (const [key, refused] of Object.entries(spec.rejects ?? {})) {
     const value = effectiveValue(definition, params, key);
     if (hasValue(value) && refused.map(matchValue).includes(matchValue(value))) {
       return { reason: 'unsupported', param: key, on: null, detail: `${key} ${matchValue(value)}` };
     }
   }
-  for (const rule of spec?.rejectsWhen ?? []) {
+  for (const rule of spec.rejectsWhen ?? []) {
     const entries = Object.entries(rule.match);
     if (entries.length && entries.every(([key, want]) => matches(definition, params, key, want))) {
       return { reason: 'unsupported', param: entries[0][0], on: null, detail: rule.label };
@@ -271,32 +405,141 @@ function unsupportedBlock(definition: ModelNodeDefinition, params: Record<string
   return null;
 }
 
-/** Why the direct route can't take a run with these params, or null when it
- * can (node_route.direct_block, same rules in the same order). `params` are
- * the saved params plus the wired ports a rule reads (withWiredBlockers). */
-export function directBlock(definition: ModelNodeDefinition, params: Record<string, unknown>): DirectBlock | null {
-  const needed = Object.hasOwn(DIRECT_REQUIRES, definition.id) ? DIRECT_REQUIRES[definition.id] : undefined;
-  if (needed && !hasValue(params[needed])) return { reason: 'requires', param: needed, on: null };
-  for (const key of definition.directRoute?.blockedBy ?? []) {
+/** directBlock's checks, in its order, over one rule set, then the `ports`
+ * rule (node_route._rules_block). */
+function rulesBlock(definition: RoutedDefinition, params: Record<string, unknown>, rules: RouteRules): DirectBlock | null {
+  if (rules.requires && !hasValue(params[rules.requires])) return { reason: 'requires', param: rules.requires, on: null };
+  for (const key of rules.blockedBy ?? []) {
     if (hasValue(params[key])) return { reason: 'blocked', param: key, on: null };
   }
-  const block = unsupportedBlock(definition, params) ?? sizeBlock(definition, params);
+  const block = unsupportedBlock(definition, params, rules) ?? sizeBlock(definition, params, rules.size);
   if (block) return block;
-  const retires = Object.hasOwn(DIRECT_RETIRES, definition.id) ? DIRECT_RETIRES[definition.id] : undefined;
+  const retires = rules.retires;
   if (retires && todayIso() >= retires.on) {
     const value = retires.param ? effectiveValue(definition, params, retires.param) : undefined;
     if (!retires.param || (retires.values ?? []).includes(value as string)) {
       return { reason: 'retired', param: retires.param ?? null, on: retires.on };
     }
   }
+  const counts = (params[PORT_COUNTS] ?? {}) as Record<string, number>;
+  for (const [port, limit] of Object.entries(rules.ports ?? {})) {
+    const count = typeof counts[port] === 'number' ? counts[port] : 0;
+    if (Number.isInteger(limit?.max) && count > limit.max) {
+      return { reason: 'ports', param: port, on: null, detail: `${port} ${count}` };
+    }
+  }
   return null;
 }
 
-export function directAllowed(definition: ModelNodeDefinition, params: Record<string, unknown>): boolean {
+/** Why the direct route can't take a run with these params, or null when it
+ * can (node_route.direct_block, same rules in the same order). `params` are
+ * the saved params plus the wired ports a rule reads (withWiredBlockers). */
+export function directBlock(definition: RoutedDefinition, params: Record<string, unknown>): DirectBlock | null {
+  return rulesBlock(definition, params, legacyRules(definition));
+}
+
+/** A route's rules plus the `accepts` its `valueMap` implies (node_route._route_rules). */
+function routeRules(route: RouteSpec): RouteRules {
+  const rules: RouteRules = { ...(route.rules ?? {}) };
+  if (route.valueMap && Object.keys(route.valueMap).length) {
+    const accepts = { ...(rules.accepts ?? {}) };
+    for (const [key, mapped] of Object.entries(route.valueMap)) {
+      if (!Object.hasOwn(accepts, key) && mapped && typeof mapped === 'object') {
+        accepts[key] = { values: Object.keys(mapped) };
+      }
+    }
+    rules.accepts = accepts;
+  }
+  return rules;
+}
+
+/** Why `route` can't take a run with these params, or null when it can
+ * (node_route.route_block). */
+export function routeBlock(definition: RoutedDefinition, route: RouteSpec | undefined, params: Record<string, unknown>): DirectBlock | null {
+  if (!route) return null;
+  return rulesBlock(definition, params, routeRules(route));
+}
+
+export function directAllowed(definition: RoutedDefinition, params: Record<string, unknown>): boolean {
   return directBlock(definition, params) === null;
 }
 
-/** The route a run of this node takes with these params and keys. */
+/** The saved `_provider`: a route id, or "auto" when it isn't set. */
+export function providerChoice(params: Record<string, unknown> | undefined): string {
+  const value = params?.[PROVIDER_PARAM];
+  return value === undefined || value === null || value === '' ? AUTO : String(value);
+}
+
+function kreaMode(params: Record<string, unknown>): string {
+  return params._kreaAuth ? String(params._kreaAuth) : 'api-token';
+}
+
+function takesPlan(route: RouteSpec, params: Record<string, unknown>): boolean {
+  return route.plan === 'only' || (route.plan === 'optional' && kreaMode(params) === 'mcp');
+}
+
+/** The Krea route a route-table run bills to the plan, before its rules are
+ * checked (node_route._plan_route): the chosen route, or under Auto the
+ * maker route when it is Krea's. */
+function planRoute(definition: RoutedDefinition, params: Record<string, unknown>): RouteSpec | undefined {
+  const choice = providerChoice(params);
+  const route = choice === AUTO ? makerRoute(definition) : routeById(definition, choice);
+  return route?.plan && takesPlan(route, params) ? route : undefined;
+}
+
+/** A route-table run billed to the signed-in Krea plan: exactly when
+ * selectRoute returns `plan` (node_route.uses_krea_plan). */
+export function usesRoutePlan(definition: RoutedDefinition, params: Record<string, unknown> | undefined): boolean {
+  const values = params ?? {};
+  const route = planRoute(definition, values);
+  return route !== undefined && routeBlock(definition, route, values) === null;
+}
+
+function setKeys(route: RouteSpec, apiKeys: ApiKeys): string[] {
+  return keyList(route.keys).filter((key) => isSet(apiKeys, key));
+}
+
+function unionKeys(definition: RoutedDefinition): string[] {
+  return [...new Set(routesOf(definition).flatMap((route) => keyList(route.keys)))];
+}
+
+function unset(provider: string | null | undefined, routeId: string | null, block: DirectBlock | null, missing: string[] = []): NodeRoute {
+  return { kind: 'unset', provider: provider ?? null, key: null, routeId, block, missing };
+}
+
+/** selectRoute for a route-table node (node_route._select_from_routes). */
+function selectFromRoutes(definition: RoutedDefinition, params: Record<string, unknown>, apiKeys: ApiKeys): NodeRoute {
+  const routes = routesOf(definition);
+  const first = routes[0]?.provider ?? definition.apiProvider;
+  const choice = providerChoice(params);
+  const plan = planRoute(definition, params);
+  if (plan) {
+    const block = routeBlock(definition, plan, params);
+    if (block) return unset(plan.provider, plan.id, block);
+    return { kind: 'plan', provider: 'krea', key: null, routeId: plan.id, block: null, missing: [] };
+  }
+  const keyed = (route: RouteSpec): NodeRoute => ({
+    kind: route.maker ? 'direct' : 'fallback', provider: route.provider, key: setKeys(route, apiKeys)[0],
+    routeId: route.id, block: null, missing: [],
+  });
+  if (choice !== AUTO) {
+    const route = routeById(definition, choice);
+    if (!route) return unset(first, null, { reason: 'unknown-provider', param: PROVIDER_PARAM, on: null, detail: choice });
+    if (!setKeys(route, apiKeys).length) return unset(route.provider, route.id, null, keyList(route.keys));
+    const block = routeBlock(definition, route, params);
+    if (block) return unset(route.provider, route.id, block);
+    return keyed(route);
+  }
+  const route = routes.find((candidate) => candidate.plan !== 'only' && setKeys(candidate, apiKeys).length > 0);
+  if (!route) return unset(first, null, null, unionKeys(definition));
+  // Auto never moves on: who bills depends on the choice and the keys.
+  const block = routeBlock(definition, route, params);
+  if (block) return unset(route.provider, route.id, block);
+  return keyed(route);
+}
+
+/** The route a run of this node takes with these params and keys
+ * (node_route.select_route, the same precedence). */
 export function selectRoute(
   definition: ModelNodeDefinition,
   params: Record<string, unknown> | undefined,
@@ -304,6 +547,7 @@ export function selectRoute(
 ): NodeRoute {
   const values = params ?? {};
   if (definition.apiProvider === 'utility') return { kind: 'local', provider: null, key: null };
+  if (hasRoutes(definition)) return selectFromRoutes(definition, values, apiKeys);
   if (usesKreaAccount(definition, values)) return { kind: 'plan', provider: 'krea', key: null };
   const env = envKeyNames(definition);
   if (env.length < 2) return { kind: 'only', provider: definition.apiProvider, key: env[0] ?? null };
@@ -317,12 +561,139 @@ export function selectRoute(
   return { kind: 'unset', provider: definition.apiProvider, key: null };
 }
 
+/** The key under model_pricing.json `routes` that prices this route
+ * (model_pricing.route_price_key): the route's `pricing` or id on a
+ * route-table node, the provider on every other node. */
+export function routePriceKey(definition: ModelNodeDefinition, route: NodeRoute): string | null {
+  if (!hasRoutes(definition)) return route.provider;
+  const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
+  return spec ? (spec.pricing ?? spec.id) : null;
+}
+
+/** The provider model or path a run on `route` calls: the first
+ * endpointWhen entry whose `when` matches, else `endpoint`
+ * (node_route.route_endpoint). */
+export function routeEndpoint(definition: RoutedDefinition, route: RouteSpec, params: Record<string, unknown> | undefined): string | undefined {
+  const values = params ?? {};
+  for (const option of route.endpointWhen ?? []) {
+    const entries = Object.entries(option.when ?? {});
+    if (entries.length && entries.every(([key, want]) => matches(definition, values, key, want))) return option.endpoint;
+  }
+  return route.endpoint;
+}
+
+export function providerLabel(provider: string | null | undefined): string {
+  return provider && Object.hasOwn(PROVIDER_LABELS, provider) ? PROVIDER_LABELS[provider as APIProvider] : (provider || 'provider');
+}
+
+function orList(items: string[]): string {
+  return items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
+}
+
+function why(route: RouteSpec, block: DirectBlock): string {
+  if (block.reason === 'unsupported') return `it doesn't take ${block.detail}`;
+  if (block.reason === 'blocked') return `it doesn't take ${block.param}`;
+  if (block.reason === 'requires') return `it needs ${block.param} set`;
+  if (block.reason === 'size') return `it can't render that ${block.param} exactly`;
+  if (block.reason === 'retired') return `the maker retired this model on ${block.on}`;
+  if (block.reason === 'ports') {
+    const most = route.rules?.ports?.[block.param ?? '']?.max;
+    return most ? `it takes at most ${most} wired ${block.param}` : `it doesn't take wired ${block.param}`;
+  }
+  return String(block.detail ?? block.reason);
+}
+
+function acceptedValues(route: RouteSpec, block: DirectBlock): string[] {
+  if (block.reason !== 'unsupported' || !block.param) return [];
+  const rule = routeRules(route).accepts?.[block.param];
+  return (rule?.values ?? []).map(matchValue);
+}
+
+/** Why a route-table run can't start, in the words the router, the engine's
+ * preflight and the switcher use (node_route.route_unavailable_message). */
+export function routeUnavailableMessage(definition: ModelNodeDefinition, route: NodeRoute, alternatives: string[] = []): string {
+  const name = definition.displayName || definition.id || 'This node';
+  const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
+  const others = alternatives.map((alt) => providerLabel(routeById(definition, alt)?.provider));
+  const also = others.length ? ` ${orList(others)} can take it.` : '';
+  const block = route.block;
+  if (block?.reason === 'unknown-provider') {
+    const ids = [AUTO, ...routesOf(definition).map((candidate) => candidate.id)];
+    return `${name} is set to provider '${block.detail}', which it doesn't have. Choose ${orList(ids)}.`;
+  }
+  if (block && spec) {
+    const values = acceptedValues(spec, block);
+    const fix = values.length ? `Pick ${orList(values)}, or switch provider.`
+      : block.reason === 'ports' ? 'Disconnect the extra inputs, or switch provider.'
+        : 'Change that setting, or switch provider.';
+    return `${name} can't run on ${providerLabel(spec.provider)}: ${why(spec, block)}. ${fix}${also}`;
+  }
+  const needed = route.missing?.length ? orList(route.missing) : 'a provider key';
+  if (spec) {
+    return `${name} is set to ${providerLabel(spec.provider)}, which needs ${needed}. `
+      + `Add it in Settings > Providers or choose another provider.${also}`;
+  }
+  return `${name} needs ${needed} in Settings > Providers.`;
+}
+
+export interface RouteUnavailable {
+  routeId: string | null;
+  missing: string[];
+  block: Partial<DirectBlock> | null;
+  /** The other routes with a key set that can take the run: the one-click
+   * switches. Auto never takes one by itself. */
+  alternatives: string[];
+  message: string;
+}
+
+/** A block as JSON, its set fields only (node_route.block_dict). */
+export function blockFields(block: DirectBlock | null | undefined): Partial<DirectBlock> | null {
+  if (!block) return null;
+  return Object.fromEntries(Object.entries(block).filter(([, value]) => value !== null && value !== undefined)) as Partial<DirectBlock>;
+}
+
+/** Why a route-table node can't run with these params and keys, or null when
+ * it can and for every node without `routes` (node_route.route_unavailable).
+ * `params` are routed (withWiredBlockers). */
+export function routeUnavailable(
+  definition: ModelNodeDefinition,
+  params: Record<string, unknown> | undefined,
+  apiKeys: ApiKeys,
+): RouteUnavailable | null {
+  if (!hasRoutes(definition)) return null;
+  const values = params ?? {};
+  const route = selectRoute(definition, values, apiKeys);
+  if (route.kind !== 'unset') return null;
+  const alternatives = routesOf(definition)
+    .filter((candidate) => candidate.id !== route.routeId && candidate.plan !== 'only'
+      && setKeys(candidate, apiKeys).length > 0 && routeBlock(definition, candidate, values) === null)
+    .map((candidate) => candidate.id);
+  return {
+    routeId: route.routeId ?? null,
+    missing: route.missing ?? [],
+    block: blockFields(route.block),
+    alternatives,
+    message: routeUnavailableMessage(definition, route, alternatives),
+  };
+}
+
 /** The params a route shows and sends: sharedParams plus that route's own
  * group (directParams on the maker route, falParams on the fal or Krea copy
- * and on the Krea plan). Nodes without a split keep `params`. */
-export function routeParamDefinitions(definition: ModelNodeDefinition, kind: RouteKind): ParamDefinition[] {
+ * and on the Krea plan). Nodes without a split keep `params`. On a
+ * route-table node `route` may be a route id (NodeRoute.routeId): its
+ * sharedParams plus that route's params; `_provider` and `_kreaAuth` are the
+ * switcher's, never in this list (node_route.route_param_keys). */
+export function routeParamDefinitions(definition: ModelNodeDefinition, route: RouteKind | string | null | undefined): ParamDefinition[] {
+  if (hasRoutes(definition)) {
+    const spec = routeById(definition, route);
+    const byKey = new Map<string, ParamDefinition>();
+    for (const param of [...(definition.sharedParams ?? []), ...(spec?.params ?? [])]) byKey.set(param.key, param);
+    return [...byKey.values()];
+  }
   if (!definition.sharedParams) return definition.params;
-  const group = kind === 'direct' ? (definition.directParams ?? []) : (definition.falParams ?? []);
+  const kinds: readonly string[] = ['local', 'plan', 'only', 'direct', 'fallback', 'unset'];
+  const direct = route === 'direct' || (!kinds.includes(String(route)) && makerRoute(definition)?.id === route);
+  const group = direct ? (definition.directParams ?? []) : (definition.falParams ?? []);
   // Route selection should already make keys unique; keep this boundary so
   // malformed catalog data can never create duplicate controls.
   const byKey = new Map<string, ParamDefinition>();
@@ -336,7 +707,9 @@ export function routeParamDefinitions(definition: ModelNodeDefinition, kind: Rou
  * without `resolution` (an agent-made node) would otherwise hide the only
  * control that moves it onto the person's Ideogram key. Create seeds that
  * param's default (as a new node always did); the Inspector passes
- * `seedOptIn: false` so it shows unset ("Choose…") until the person picks. */
+ * `seedOptIn: false` so it shows unset ("Choose…") until the person picks.
+ * A route-table node shows the chosen or resolved route's params, even when
+ * that route can't run yet, so they stay editable. */
 export function paramDefinitionsForRun(
   definition: ModelNodeDefinition,
   params: Record<string, unknown> | undefined,
@@ -345,6 +718,9 @@ export function paramDefinitionsForRun(
 ): ParamDefinition[] {
   const values = params ?? {};
   const route = selectRoute(definition, values, apiKeys);
+  if (hasRoutes(definition)) {
+    return routeParamDefinitions(definition, route.routeId ?? routesOf(definition)[0]?.id);
+  }
   const shown = routeParamDefinitions(definition, route.kind);
   const block = directBlock(definition, values);
   if (route.kind === 'direct' || block?.reason !== 'requires' || !block.param || !configuredDirectKey(definition, apiKeys)) {
