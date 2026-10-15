@@ -33,7 +33,25 @@ Seven route-table nodes ship (PR 3, 2026-10-15). The node library's provider lin
 | `flux-video-upscale` FLUX Video Upscale | `bfl` (maker), `fal`, `replicate`, `krea` (API token or plan) | `creativity` (precise/creative) and `upscale_factor` 1.5-3; optional prompt. Priced by the output's megapixel-seconds or tier, so unpriced until the run. Replaces `krea-enhance-black-forest-labs-flux-video-upscale`. |
 | `krea-3` Krea 3 | `krea` (maker, API token or plan; early access for beta workspaces), `fal` | Up to 8 reference images. Krea's options (`thinking_mode`, `resolution`, `aspect_ratio`, `regional_edit`) and fal's (`model`, `reasoning_level`, `image_size`, ...) are each route's own; only `seed` is shared. |
 
-The three Krea FLUX nodes the catalog generated before are now the `krea` routes of these nodes: `scripts/sync-krea-catalog.py` `FOLDED` (see Adding a route-table node). Saved graphs that still name the old ids are moved by the migration lane.
+The three Krea FLUX nodes the catalog generated before are now the `krea` routes of these nodes: `scripts/sync-krea-catalog.py` `FOLDED` (see Adding a route-table node). Saved graphs that still name the old ids load as the new nodes (below).
+
+### Saved graphs with the old Krea nodes
+
+`services/retired_nodes.py` `MERGED` maps each old id to its new node, and every way a graph comes in (`/api/graph/import`, clusters, proposals, restore bundles, project snapshots, the boot state file) runs `migrate_graph` before staging:
+
+```mermaid
+flowchart LR
+  old["Flux 3 Video (Krea)<br/>prompt typed, 1080p, _kreaAuth: mcp"] -->|migrate_node| new["FLUX 3 Video<br/>_provider: krea, _kreaAuth: mcp, resolution: fhd"]
+  old -->|typed prompt, port unwired| input["Text Input"] -->|prompt| new
+  old -.->|All videos / All artifacts / Job edge| dropped["dropped, with a load warning"]
+```
+
+- The node is set to the Krea route with its `_kreaAuth` kept, so the same account pays the same way. Values the new node spells differently are renamed (`720p`→`hd`, `1080p`→`fhd`, creativity `precise`/`creative`→`0`/`1`); anything else is kept, and the run stops before billing if Krea can't take it.
+- Ports keep their ids except Upscale's `video_url`, now `video`.
+- A prompt or media URL typed on the old node, with nothing wired to that port, moves to a Text, Image or Video Input node wired to it. The new nodes read these only from ports.
+- A renamed node keeps its title. An agent may load one on the API token but not on the plan, the same rule as before.
+- Per-model agent spend limits under an old id apply to the new node; where both are set, the lower holds (`agent_spend._fold_models`).
+- Tests: `test_retired_nodes.py` (the map, each node, `migrate_graph`, and `fixtures/krea_flux_folded.nebula` through import, project open, restore and the state file).
 
 ## The switcher
 

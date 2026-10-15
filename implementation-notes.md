@@ -33,8 +33,34 @@ Tradeoffs and surprises:
 
 - **Route-table routers are only registered with an event sink.** `get_handler_registry()` without `emit` (some tests) has no handler for them; the engine always passes one. Left as PR 2 built it.
 - **Auto with the Krea plan doesn't reach a Krea route that isn't first.** On FLUX 3 Video with `_kreaAuth: mcp` and no keys, Auto stops and names the keys; the person picks the "Krea · plan" row. On Krea 3, Krea is the maker and first, so Auto bills the plan. That is the PR 2 rule ("Auto never moves"); a route case pins each.
-- The old Krea node ids leave the registry in this branch. Saved graphs naming them need the migration lane before this merges.
+- The old Krea node ids leave the registry in this branch. Saved graphs naming them load through the migration below.
 - fal's FLUX 3 prices disagree between its model pages and its pricing API; the higher (page) price is kept, marked `unconfirmed`. Replicate's upscale megapixel size isn't stated (binary or decimal), so that route is `unconfirmed` too.
+
+## 2026-10-15 — Provider routes, PR 3: saved graphs with the folded Krea FLUX nodes
+
+Branch `flux3-lane-merge` (fast-forwarded onto `flux3-lane-nodes`). A saved graph, project, restore bundle or state file that names `krea-video-black-forest-labs-flux-3-video`, `krea-video-black-forest-labs-flux-video-edit` or `krea-enhance-black-forest-labs-flux-video-upscale` loads as `flux-3-video`, `flux-video-edit` or `flux-video-upscale` on the Krea route. `services/retired_nodes.py` `MERGED` holds the map; `migrate_node` and the new `migrate_graph` apply it. Guide: `docs/PROVIDER-ROUTES.md`, "Saved graphs with the old Krea nodes".
+
+Decisions that weren't in the spec:
+
+- **Typed prompt and media move to input nodes.** The old Krea nodes had `prompt` and every media field as both a param and a port (a wired port won, `krea_gateway._request_body`); the new nodes read them only from ports. The prompt textarea was where people typed, so dropping it would lose work, and a hidden fallback param would need route-client changes in every provider. `migrate_graph` puts a typed value with nothing wired into a Text Input (`value`), Image Input or Video Input (`filePath`) node wired to the port, 360 px to the left. Both input nodes pass an https URL through unchanged (`engine._image_input_output`, the video-input branch). A typed value under a wired port was never sent, so it is dropped. A blank one is skipped.
+- **`MERGED` entries have `inputs` and `outputs` maps, not one `ports` map.** Upscale's old input `video_url` becomes `video`, and its output `video` stays `video`; one map keyed by port id couldn't say both. `typed` lists the params that move to input nodes.
+- **Unrenamed nodes take the new node's name** ("FLUX 3 Video"), not a "was ..." title like the retired nodes. It is the same model on the same provider, and the switcher chip shows Krea. A renamed node keeps its title.
+- **`_kreaAuth` is written explicitly** (`api-token` when the old node saved none, which is what the old handler used), so a later change to the new node's default can't move billing.
+- **Dropped connections are warned about.** An edge from All videos, All artifacts or Job is dropped (DESIGN section 6; remapping All videos to the single `video` would hand a list consumer one item). `/api/graph/import` and `/api/projects/{id}/open` return `warnings`, and the canvas shows them in its import/open alert. A boot-time state file only logs them (`[cli_graph]`). Saved outputs keep only the `video` port, since the import validator refuses undeclared output handles.
+- **Agent billing rule unchanged by the fold.** `_refuse_agent_billing_change` would count `_provider: "krea"` on a new node as an agent's provider switch. A folded node is checked against the old node's baseline (Krea route, API-token mode, `_folded_billing_baseline`): an agent may import it on the API token, as before, but not on the plan (`mcp`), as before. `_snapshot_nodes` reads a pre-fold project node as what it loads as, so an autosave of the migrated canvas isn't a billing change.
+- **Spend limits fold at read time, lower wins.** `agent_spend._fold_models` moves an old id's per-model limits to the new id, keeping the lower of each limit where both exist. It runs in `caps_from_settings` and `validate_caps` (which now accepts an old id, so Settings can save back what it read). `GET /api/settings` shows the folded view (`saved_caps_view`), so the Settings list names the new node. Per-model spend recorded under an old id in the ledger counts toward the new id too. settings.json is rewritten only when the person next saves.
+
+Changes outside the spec's list:
+
+- `_stage_project_snapshot` labels a migrated node with the registry's display name when it has no title of its own (before, a migrated node's label could be `None` in the RF snapshot; retired nodes always had one).
+- `GraphFileActions` builds the provider-key warnings from the nodes the backend returned, not the file's, so a folded node set to Krea with no Krea token is named too.
+
+Tradeoffs and surprises:
+
+- Run-history recipes in a project keep the old ids. They are the record of what ran.
+- Proposals and clusters migrate too (they share `_stage_graph_nodes`), so an agent naming an old id gets the new node plus any input node. `/api/graph/node` and `/api/quick` refuse the old id with "is now part of 'flux-3-video' (provider: Krea)".
+- A migrated FLUX 3 Video node with no Krea token stops and names `KREA_API_TOKEN`; it doesn't move to BFL even with a BFL key ("Stop and offer a switch").
+- Favorites and other settings that store node ids weren't touched.
 
 ## 2026-10-15 — PR 2 integration: switcher-clients and switcher-ui merged into provider-switcher
 
