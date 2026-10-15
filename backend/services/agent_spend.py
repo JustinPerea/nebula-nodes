@@ -577,7 +577,7 @@ def decide(
     api_keys = settings.get("apiKeys") or {}
     multipliers = model_pricing.run_multipliers(list(items), [(source, target) for source, target, _ in edges])
     estimate = model_pricing.estimate_run(list(items), pricing, definitions, api_keys, multipliers,
-                                          model_pricing.wired_ports(list(items), edges))
+                                          model_pricing.wired_counts(list(items), edges))
     definition_of = {str(item["id"]): str(item.get("definitionId") or "") for item in items}
     labels = {node_id: str((definitions.get(def_id) or {}).get("displayName") or "") for node_id, def_id in definition_of.items()}
 

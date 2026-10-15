@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 import {
   cinemaSceneBase, describeRunScope, runChipLabel, runCostConfirmMessage, runMultipliers, shouldConfirmRunCost,
@@ -6,7 +6,10 @@ import {
 } from '../../src/lib/runScope';
 import type { PricingTable } from '../../src/lib/pricing';
 import shippedTable from '../../../backend/data/model_pricing.json';
-import type { NodeData } from '../../src/types';
+import type { ModelNodeDefinition, NodeData } from '../../src/types';
+import pricingCases from '../../../backend/tests/fixtures/pricing_cases.json';
+import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
+import { routeUnavailable, withWiredBlockers } from '../../src/lib/directRoute';
 
 const node = (id: string, definitionId: string, label = ''): Node<NodeData> => ({
   id, position: { x: 0, y: 0 }, data: { definitionId, label, params: {} } as unknown as NodeData,
@@ -267,4 +270,50 @@ describe('local nodes that call a provider, and wired price settings', () => {
     const inside = summarizeRunScope([shots, kling], wired, { kind: 'cluster', nodeIds: ['t', 'k'] }, { pricing: table, apiKeys: {} });
     expect(inside.cost?.unpriced).toEqual(['Kling']);
   });
+});
+
+describe('run estimate for a route-table node (cases shared with the backend)', () => {
+  type RunCase = {
+    name: string; nodeId: string; params: Record<string, unknown>; apiKeys: Record<string, string>;
+    wiredCounts?: Record<string, number>;
+    expected: { low: number | null; high: number | null; unavailable: boolean; plan: boolean };
+  };
+  const fixture = pricingCases as unknown as {
+    definitions: Record<string, ModelNodeDefinition>; pricing: PricingTable; runCases: RunCase[];
+  };
+  // summarizeRunScope reads the registry, so the fixture node joins it for these cases.
+  beforeAll(() => { NODE_DEFINITIONS.table = fixture.definitions.table; });
+  afterAll(() => { delete NODE_DEFINITIONS.table; });
+
+  for (const testCase of fixture.runCases) {
+    it(testCase.name, () => {
+      const target: Node<NodeData> = {
+        id: 'n1', position: { x: 0, y: 0 },
+        data: { definitionId: testCase.nodeId, label: 'Node', params: testCase.params } as unknown as NodeData,
+      };
+      const sources: Node<NodeData>[] = [];
+      const wires: Edge[] = [];
+      for (const [port, count] of Object.entries(testCase.wiredCounts ?? {})) {
+        for (let index = 0; index < count; index += 1) {
+          sources.push(node(`${port}-${index}`, 'text-input'));
+          wires.push({ id: `${port}-${index}`, source: `${port}-${index}`, target: 'n1', targetHandle: port });
+        }
+      }
+      const { cost } = summarizeRunScope([...sources, target], wires, { kind: 'graph' },
+        { pricing: fixture.pricing, apiKeys: testCase.apiKeys });
+      const line = cost!.lines.find((candidate) => candidate.name === 'Node');
+      if (testCase.expected.low === null) expect(line).toBeUndefined();
+      else expect([line!.low, line!.high]).toEqual([testCase.expected.low, testCase.expected.high]);
+      expect(Boolean(cost!.unavailable?.Node)).toBe(testCase.expected.unavailable);
+      expect(cost!.plan.includes('Node')).toBe(testCase.expected.plan);
+      if (testCase.expected.unavailable) {
+        const definition = fixture.definitions.table;
+        const routed = withWiredBlockers(definition, testCase.params, new Map(Object.entries(testCase.wiredCounts ?? {})));
+        expect(cost!.unavailable!.Node).toBe(routeUnavailable(definition, routed, testCase.apiKeys)!.message);
+        expect(cost!.unpriced).toContain('Node');
+        expect(describeRunScope({ total: 1, paid: ['Node'], cost })).toContain("Can't run on the chosen provider: Node");
+        expect(describeRunScope({ total: 1, paid: ['Node'], cost })).not.toContain('No list price');
+      }
+    });
+  }
 });

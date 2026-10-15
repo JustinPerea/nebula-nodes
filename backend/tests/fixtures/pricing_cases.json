@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them.",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes).",
   "definitions": {
     "img": {
       "id": "img",
@@ -278,6 +278,286 @@
           "type": "integer",
           "min": 3000,
           "max": 600000
+        }
+      ]
+    },
+    "table": {
+      "id": "table",
+      "displayName": "Fixture Route Table",
+      "category": "image-gen",
+      "apiProvider": "bfl",
+      "apiEndpoint": "/v1/flux-3-image",
+      "executionPattern": "async-poll",
+      "envKeyName": [
+        "BFL_API_KEY",
+        "FAL_KEY",
+        "REPLICATE_API_TOKEN",
+        "OPENROUTER_API_KEY",
+        "KREA_API_TOKEN"
+      ],
+      "directKeyName": [
+        "BFL_API_KEY"
+      ],
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": true
+        },
+        {
+          "id": "images",
+          "label": "Images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "id": "image",
+          "label": "Image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "params": [
+        {
+          "key": "_provider",
+          "label": "Provider",
+          "type": "enum",
+          "required": false,
+          "default": "auto",
+          "options": [
+            {
+              "label": "auto",
+              "value": "auto"
+            },
+            {
+              "label": "bfl",
+              "value": "bfl"
+            },
+            {
+              "label": "fal",
+              "value": "fal"
+            },
+            {
+              "label": "replicate",
+              "value": "replicate"
+            },
+            {
+              "label": "openrouter",
+              "value": "openrouter"
+            },
+            {
+              "label": "krea",
+              "value": "krea"
+            }
+          ],
+          "hidden": true
+        },
+        {
+          "key": "_kreaAuth",
+          "label": "Krea connection",
+          "type": "enum",
+          "required": false,
+          "default": "api-token",
+          "options": [
+            {
+              "label": "api-token",
+              "value": "api-token"
+            },
+            {
+              "label": "mcp",
+              "value": "mcp"
+            }
+          ]
+        }
+      ],
+      "sharedParams": [
+        {
+          "key": "aspect_ratio",
+          "label": "Aspect ratio",
+          "type": "enum",
+          "required": false,
+          "default": "auto",
+          "options": [
+            {
+              "label": "auto",
+              "value": "auto"
+            },
+            {
+              "label": "1:1",
+              "value": "1:1"
+            },
+            {
+              "label": "16:9",
+              "value": "16:9"
+            },
+            {
+              "label": "9:21",
+              "value": "9:21"
+            }
+          ]
+        },
+        {
+          "key": "resolution",
+          "label": "Resolution",
+          "type": "enum",
+          "required": false,
+          "default": "1k",
+          "options": [
+            {
+              "label": "768sq",
+              "value": "768sq"
+            },
+            {
+              "label": "1k",
+              "value": "1k"
+            },
+            {
+              "label": "1.5k",
+              "value": "1.5k"
+            },
+            {
+              "label": "2k",
+              "value": "2k"
+            },
+            {
+              "label": "4k",
+              "value": "4k"
+            }
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "label": "Safety tolerance",
+          "type": "integer",
+          "required": false,
+          "default": 2,
+          "min": 0,
+          "max": 6
+        }
+      ],
+      "routes": [
+        {
+          "id": "bfl",
+          "provider": "bfl",
+          "maker": true,
+          "keys": [
+            "BFL_API_KEY"
+          ],
+          "handler": "bfl",
+          "endpoint": "/v1/flux-3-image",
+          "params": [
+            {
+              "key": "grounding",
+              "label": "Grounding",
+              "type": "boolean",
+              "required": false,
+              "default": false
+            }
+          ],
+          "rules": {
+            "accepts": {
+              "safety_tolerance": {
+                "min": 0,
+                "max": 4,
+                "integer": true
+              }
+            }
+          }
+        },
+        {
+          "id": "fal",
+          "provider": "fal",
+          "keys": [
+            "FAL_KEY"
+          ],
+          "handler": "fal",
+          "endpoint": "blackforestlabs/flux-3/text-to-image",
+          "endpointWhen": [
+            {
+              "when": {
+                "images": "(set)"
+              },
+              "endpoint": "blackforestlabs/flux-3/edit-image"
+            }
+          ],
+          "valueMap": {
+            "resolution": {
+              "768sq": "square",
+              "1k": "1k",
+              "2k": "2k",
+              "4k": "4k"
+            },
+            "aspect_ratio": {
+              "auto": "auto",
+              "1:1": "1:1",
+              "16:9": "16:9"
+            }
+          }
+        },
+        {
+          "id": "replicate",
+          "provider": "replicate",
+          "keys": [
+            "REPLICATE_API_TOKEN"
+          ],
+          "handler": "replicate-model",
+          "endpoint": "black-forest-labs/flux-3-image",
+          "params": [
+            {
+              "key": "grounding",
+              "label": "Grounding",
+              "type": "boolean",
+              "required": false,
+              "default": false
+            }
+          ],
+          "pricing": "replicate-std"
+        },
+        {
+          "id": "openrouter",
+          "provider": "openrouter",
+          "keys": [
+            "OPENROUTER_API_KEY"
+          ],
+          "handler": "openrouter-images",
+          "endpoint": "black-forest-labs/flux-3-image",
+          "valueMap": {
+            "resolution": {
+              "768sq": "768",
+              "1k": "1K",
+              "1.5k": "1.5K",
+              "2k": "2K",
+              "4k": "4K"
+            }
+          },
+          "rules": {
+            "ports": {
+              "images": {
+                "max": 4
+              }
+            }
+          }
+        },
+        {
+          "id": "krea",
+          "provider": "krea",
+          "keys": [
+            "KREA_API_TOKEN"
+          ],
+          "plan": "optional",
+          "handler": "krea",
+          "endpoint": "/generate/image/black-forest-labs/flux-3-image",
+          "rules": {
+            "rejects": {
+              "resolution": [
+                "4k"
+              ]
+            }
+          }
         }
       ]
     }
@@ -640,6 +920,95 @@
           }
         ],
         "checked": "2026-10-14"
+      },
+      "table": {
+        "routes": {
+          "bfl": {
+            "currency": "usd",
+            "per": "image",
+            "rows": [
+              {
+                "match": {
+                  "resolution": "1k"
+                },
+                "price": 0.03
+              },
+              {
+                "match": {
+                  "resolution": "2k"
+                },
+                "price": 0.06
+              },
+              {
+                "match": {
+                  "resolution": "4k"
+                },
+                "price": 0.12
+              }
+            ],
+            "sources": [
+              {
+                "url": "https://example.com/pricing",
+                "quote": "fixture"
+              }
+            ],
+            "checked": "2026-10-15"
+          },
+          "fal": {
+            "currency": "usd",
+            "per": "image",
+            "provider": "fal",
+            "rows": [
+              {
+                "match": {},
+                "price": 0.035
+              }
+            ],
+            "sources": [
+              {
+                "url": "https://example.com/pricing",
+                "quote": "fixture"
+              }
+            ],
+            "checked": "2026-10-15"
+          },
+          "replicate-std": {
+            "currency": "usd",
+            "per": "image",
+            "provider": "replicate",
+            "rows": [
+              {
+                "match": {},
+                "price": 0.04
+              }
+            ],
+            "sources": [
+              {
+                "url": "https://example.com/pricing",
+                "quote": "fixture"
+              }
+            ],
+            "checked": "2026-10-15"
+          },
+          "krea": {
+            "currency": "usd",
+            "per": "image",
+            "provider": "krea",
+            "rows": [
+              {
+                "match": {},
+                "price": 0.05
+              }
+            ],
+            "sources": [
+              {
+                "url": "https://example.com/pricing",
+                "quote": "fixture"
+              }
+            ],
+            "checked": "2026-10-15"
+          }
+        }
       }
     }
   },
@@ -1078,6 +1447,240 @@
         "currency": "usd",
         "low": 0.15,
         "high": 0.15
+      }
+    },
+    {
+      "name": "route table: the maker route prices by resolution",
+      "nodeId": "table",
+      "params": {},
+      "routeProvider": "bfl",
+      "expected": {
+        "currency": "usd",
+        "low": 0.03,
+        "high": 0.03
+      }
+    },
+    {
+      "name": "route table: the maker route at 4k",
+      "nodeId": "table",
+      "params": {
+        "resolution": "4k"
+      },
+      "routeProvider": "bfl",
+      "expected": {
+        "currency": "usd",
+        "low": 0.12,
+        "high": 0.12
+      }
+    },
+    {
+      "name": "route table: a route priced under its pricing key",
+      "nodeId": "table",
+      "params": {},
+      "routeProvider": "replicate-std",
+      "expected": {
+        "currency": "usd",
+        "low": 0.04,
+        "high": 0.04
+      }
+    },
+    {
+      "name": "route table: a route's provider is not its price key",
+      "nodeId": "table",
+      "params": {},
+      "routeProvider": "replicate",
+      "expected": null
+    },
+    {
+      "name": "route table: a route without an entry is unpriced",
+      "nodeId": "table",
+      "params": {},
+      "routeProvider": "openrouter",
+      "expected": null
+    }
+  ],
+  "runCases": [
+    {
+      "name": "Auto with the maker key prices the maker route",
+      "nodeId": "table",
+      "params": {},
+      "apiKeys": {
+        "BFL_API_KEY": "set",
+        "FAL_KEY": "set"
+      },
+      "expected": {
+        "low": 0.03,
+        "high": 0.03,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Auto with only a fal key prices fal",
+      "nodeId": "table",
+      "params": {
+        "resolution": "2k"
+      },
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "expected": {
+        "low": 0.035,
+        "high": 0.035,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "an explicit route prices that route, whatever else is keyed",
+      "nodeId": "table",
+      "params": {
+        "_provider": "replicate"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "set",
+        "REPLICATE_API_TOKEN": "set"
+      },
+      "expected": {
+        "low": 0.04,
+        "high": 0.04,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "an explicit route without its key is unavailable, not priced elsewhere",
+      "nodeId": "table",
+      "params": {
+        "_provider": "replicate"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "set"
+      },
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": true,
+        "plan": false
+      }
+    },
+    {
+      "name": "Auto blocked by a param is unavailable, never moved",
+      "nodeId": "table",
+      "params": {
+        "safety_tolerance": 6
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "set",
+        "FAL_KEY": "set"
+      },
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": true,
+        "plan": false
+      }
+    },
+    {
+      "name": "Auto with no key is unavailable",
+      "nodeId": "table",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": true,
+        "plan": false
+      }
+    },
+    {
+      "name": "too many wired images block the explicit route",
+      "nodeId": "table",
+      "params": {
+        "_provider": "openrouter"
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "set"
+      },
+      "wiredCounts": {
+        "images": 5
+      },
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": true,
+        "plan": false
+      }
+    },
+    {
+      "name": "the Krea route on the plan is billed to the plan",
+      "nodeId": "table",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {},
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": false,
+        "plan": true
+      }
+    }
+  ],
+  "routeEstimateCases": [
+    {
+      "name": "every route at the defaults",
+      "nodeId": "table",
+      "params": {},
+      "expected": {
+        "bfl": 0.03,
+        "fal": 0.035,
+        "replicate": 0.04,
+        "openrouter": null,
+        "krea": 0.05
+      }
+    },
+    {
+      "name": "4k: Krea rejects it, the maker prices it higher",
+      "nodeId": "table",
+      "params": {
+        "resolution": "4k"
+      },
+      "expected": {
+        "bfl": 0.12,
+        "fal": 0.035,
+        "replicate": 0.04,
+        "openrouter": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "1.5k: fal's value map can't take it, the maker has no row",
+      "nodeId": "table",
+      "params": {
+        "resolution": "1.5k"
+      },
+      "expected": {
+        "bfl": null,
+        "fal": null,
+        "replicate": 0.04,
+        "openrouter": null,
+        "krea": 0.05
+      }
+    },
+    {
+      "name": "a safety tolerance above the maker's limit",
+      "nodeId": "table",
+      "params": {
+        "safety_tolerance": 6
+      },
+      "expected": {
+        "bfl": null,
+        "fal": 0.035,
+        "replicate": 0.04,
+        "openrouter": null,
+        "krea": 0.05
       }
     }
   ]

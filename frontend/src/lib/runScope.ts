@@ -2,7 +2,7 @@ import type { Edge, Node } from '@xyflow/react';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
 import { batchSizeCap, parseBatchItems } from './batch';
-import { withWiredBlockers } from './directRoute';
+import { hasRoutes, routePriceKey, routeUnavailable, selectRoute, withWiredBlockers } from './directRoute';
 import { usesKreaAccount } from './kreaConnection';
 import { runRouteProvider } from './modelDiscovery';
 import { cinemaSceneBase, isLocalRun } from './nodeKeys';
@@ -20,6 +20,10 @@ export interface RunCost {
   plan: string[];
   /** Known costs the vendor doesn't publish a fixed price for, e.g. "input images". */
   plus: string[];
+  /** Route-table nodes whose chosen route (or Auto's) can't run, by name,
+   * with the reason (directRoute.routeUnavailable). Also in `unpriced`;
+   * never priced at another route. Present only when there are some. */
+  unavailable?: Record<string, string>;
 }
 
 export interface RunScopeSummary {
@@ -132,12 +136,6 @@ export function runMultipliers(nodes: Node<NodeData>[], edges: Edge[]): Map<stri
 // times its shots. Its allowlist is the definition's providerVia (nodeKeys.ts).
 export { cinemaSceneBase } from './nodeKeys';
 
-/** Each run node's input ports that have an edge into them. A priced setting
- * that arrives by wire is only known at run time (pricing.estimateNode).
- * Mirrors wired_ports in backend services/model_pricing.py over the edges the
- * run sends: only edges whose source also runs, since a cluster run sends just
- * the edges inside it (graphStore runCluster) and a wire from outside never
- * reaches the backend. Graph and node scopes already hold every source. */
 /** The input ports of one canvas node that have an edge into them, as the
  * run estimate reads them (wiredPorts), for the node's own route display
  * (its run status and its Inspector params). */
@@ -147,12 +145,23 @@ export function nodeWiredPorts(nodeId: string, edges: readonly Pick<Edge, 'targe
   return [...ports].sort();
 }
 
-export function wiredPorts(nodes: Node<NodeData>[], edges: Edge[]): Map<string, Set<string>> {
+/** Each run node's input ports that have an edge into them, with how many
+ * edges reach each. A priced setting that arrives by wire is only known at
+ * run time (pricing.estimateNode).
+ * Mirrors wired_counts in backend services/model_pricing.py over the edges the
+ * run sends: only edges whose source also runs, since a cluster run sends just
+ * the edges inside it (graphStore runCluster) and a wire from outside never
+ * reaches the backend. Graph and node scopes already hold every source. */
+export function wiredPorts(nodes: Node<NodeData>[], edges: Edge[]): Map<string, Map<string, number>> {
   const ids = new Set(nodes.map((node) => node.id));
-  const wired = new Map<string, Set<string>>();
+  const wired = new Map<string, Map<string, number>>();
   for (const edge of edges) {
     if (!ids.has(edge.source) || !ids.has(edge.target) || !edge.targetHandle) continue;
-    wired.set(edge.target, new Set([...(wired.get(edge.target) ?? []), edge.targetHandle]));
+    // How many edges reach each port: a route-table node's `ports` rule reads
+    // it (model_pricing.wired_counts).
+    const ports = wired.get(edge.target) ?? new Map<string, number>();
+    ports.set(edge.targetHandle, (ports.get(edge.targetHandle) ?? 0) + 1);
+    wired.set(edge.target, ports);
   }
   return wired;
 }
@@ -205,7 +214,7 @@ export function summarizeRunScope(
     let params = (node.data?.params ?? {}) as Record<string, unknown>;
     let calls = 1;
     let noPrice = false;
-    let ports: Iterable<string> = wired.get(node.id) ?? [];
+    let ports: ReadonlyMap<string, number> = wired.get(node.id) ?? new Map();
     const name = node.data?.label || definition?.displayName || node.id;
     if (!definition || isLocalRun(definition, params)) continue;
     if (definition.providerVia?.kind === 'model') {
@@ -214,7 +223,7 @@ export function summarizeRunScope(
         definition = NODE_DEFINITIONS[nested.model];
         params = nested.params;
         calls = nested.shots;
-        ports = []; // the scene's ports aren't its base model's params
+        ports = new Map(); // the scene's ports aren't its base model's params
       } else {
         noPrice = true;
       }
@@ -237,10 +246,20 @@ export function summarizeRunScope(
     }
     // A Krea-only setting that arrives by wire keeps the run on Krea
     // (directRoute.withWiredBlockers), as the backend router does.
-    const estimate = estimateNode(
-      pricing.nodes[definition.id], definition, params,
-      runRouteProvider(definition, costContext.apiKeys, withWiredBlockers(definition, params, ports)), ports,
-    );
+    const routed = withWiredBlockers(definition, params, ports);
+    let priceKey: string | null;
+    if (hasRoutes(definition)) {
+      const missing = routeUnavailable(definition, routed, costContext.apiKeys);
+      if (missing) {
+        cost.unpriced.push(name);
+        cost.unavailable = { ...cost.unavailable, [name]: missing.message };
+        continue;
+      }
+      priceKey = routePriceKey(definition, selectRoute(definition, routed, costContext.apiKeys));
+    } else {
+      priceKey = runRouteProvider(definition, costContext.apiKeys, routed);
+    }
+    const estimate = estimateNode(pricing.nodes[definition.id], definition, params, priceKey, ports.keys());
     if (!estimate || estimate.currency !== 'usd') {
       cost.unpriced.push(name);
       continue;
@@ -292,7 +311,11 @@ export function describeRunScope({ total, paid, cost, gated }: RunScopeSummary):
     parts.push(`Estimated ${total} at list prices (${detail.join('; ')})`);
   }
   if (cost?.plus.length) parts.push(`Not included: ${cost.plus.join(', ')}`);
-  if (cost?.unpriced.length) parts.push(`No list price for ${nameList(cost.unpriced)}`);
+  const unavailable = Object.keys(cost?.unavailable ?? {});
+  const unpriced = cost?.unpriced.filter((name) => !unavailable.includes(name)) ?? [];
+  if (unpriced.length) parts.push(`No list price for ${nameList(unpriced)}`);
+  // Each of these has its own message on the node and in the run error.
+  if (unavailable.length) parts.push(`Can't run on the chosen provider: ${nameList(unavailable)}`);
   if (cost?.plan.length) parts.push(`Billed to your Krea plan: ${nameList(cost.plan)}`);
   if (gated?.length) parts.push(gatedNote(gated));
   return parts.join('. ');

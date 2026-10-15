@@ -15,6 +15,12 @@ that still calls a provider says how in its definition's ``providerVia``:
   ``keys_needed`` name the keys the other values need. ``byValue`` gives a
   value its own keys and provider (QC ``mode: jev`` needs TYPESAFE_API_KEY,
   the other paid modes a vision key); ``param_route`` reads it.
+
+A route-table node (services/node_route.py ``routes``) is ready, as a
+definition, when any route is (``node_access``). One node on the canvas runs
+on its saved ``_provider`` choice, or Auto's, and nothing else
+(``instance_access``, ``keys_needed``): a key for another route doesn't make
+it ready.
 """
 from __future__ import annotations
 
@@ -117,8 +123,25 @@ def keys_needed(
 ) -> list[Mapping[str, Any]] | None:
     """What one node, with these params, needs to run: a list of definitions
     whose keys it uses (the node itself, or the model a ``kind: model`` node
-    runs, or a stand-in carrying a ``kind: param`` node's keys); [] when it
-    runs locally; None when it can't be read (fail closed)."""
+    runs, or a stand-in carrying a ``kind: param`` node's keys, or the chosen
+    route's keys on a route-table node); [] when it runs locally; None when it
+    can't be read (fail closed)."""
+    from services import node_route
+
+    if node_route.has_routes(definition):
+        choice = node_route.provider_choice(params)
+        if choice == node_route.AUTO:
+            return [definition]
+        route = node_route.route_by_id(definition, choice)
+        if route is None:
+            return None
+        stand_in: dict[str, Any] = {"id": definition.get("id"), "apiProvider": route.get("provider"),
+                                    "envKeyName": list(route.get("keys") or [])}
+        if route.get("plan"):
+            # The route's plan is reached through the node's _kreaAuth (krea_modes).
+            stand_in["params"] = [param for param in definition.get("params") or []
+                                  if isinstance(param, Mapping) and param.get("key") in node_route.BILLING_PARAMS]
+        return [stand_in]
     via = provider_via(definition)
     if via is None:
         local = (definition.get("apiProvider") == "utility" and not krea_modes(definition)
@@ -175,6 +198,28 @@ def node_access(
             if best in options:
                 return best
     return None
+
+
+def instance_access(
+    definition: Mapping[str, Any], params: Mapping[str, Any] | None, configured_keys: Iterable[str],
+    krea_signed_in: bool = False, definitions: Mapping[str, Mapping[str, Any]] | None = None,
+) -> str | None:
+    """How this node, with these params, can run here (KEY, KREA, ...), or None.
+
+    A route-table node answers for the route it would take: its explicit
+    ``_provider`` route, or Auto's (node_route.select_route), so a key for
+    another route doesn't count, and a setting that route can't take makes
+    it None (node_route.route_unavailable says why). The Krea route on the
+    plan needs the sign-in. Every other node answers as ``node_access``."""
+    from services import node_route
+
+    if not node_route.has_routes(definition):
+        return node_access(definition, configured_keys, krea_signed_in, definitions)
+    if node_route.uses_krea_plan(definition, params):
+        return KREA if krea_signed_in else None
+    keys = {key: "set" for key in configured_keys}
+    route = node_route.select_route(definition, params, keys)
+    return None if route.kind == node_route.UNSET else KEY
 
 
 def missing(

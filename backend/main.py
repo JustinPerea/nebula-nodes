@@ -4146,7 +4146,7 @@ def _estimate_proposal_run(
          for n in graph_nodes],
         [(str(e.get("source")), str(e.get("target"))) for e in graph_edges],
     )
-    wired = model_pricing.wired_ports(
+    wired = model_pricing.wired_counts(
         items, [(str(e.get("source")), str(e.get("target")), e.get("targetHandle")) for e in graph_edges])
     return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired)
 
