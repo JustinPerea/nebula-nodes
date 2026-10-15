@@ -26,6 +26,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import services.settings as settings_service  # noqa: E402
+from services.credential_catalog import KEYS_AHEAD_OF_NODES  # noqa: E402
 from services.nous_auth import (  # noqa: E402
     NousCredential,
     NousCredentialExpiredError,
@@ -55,6 +56,7 @@ PROVIDER_KEYS = {
     "TypeSafe": "TYPESAFE_API_KEY",
     "World Labs": "WORLDLABS_API_KEY",
     "BytePlus": "BYTEPLUS_API_KEY",
+    "Black Forest Labs": "BFL_API_KEY",
     # Nous has no settings.json key — it resolves an OAuth credential from
     # Hermes auth files via services.nous_auth.load_nous_credential().
 }
@@ -264,6 +266,41 @@ async def test_world_labs_credits_probe_classifies_credentials_and_availability(
             "headers": {"WLT-Api-Key": "world-labs-test-key"},
         }
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status_code", "expected_status", "detail_fragment"),
+    [
+        (200, "valid", None),
+        # Live probes, 2026-10-15: a missing or made-up key gets 403 {"detail":
+        # "Not authenticated"}, a malformed one 422 {"detail": "Invalid API
+        # key format"}. Both are a wrong key, not a missing permission.
+        (403, "invalid", "HTTP 403"),
+        (422, "invalid", "HTTP 422"),
+        (402, "insufficient_credits", "HTTP 402"),
+        (429, "rate_limited", "HTTP 429"),
+        (503, "error", "HTTP 503"),
+    ],
+)
+async def test_bfl_credits_probe_reads_a_bad_key_as_invalid(
+    monkeypatch, status_code, expected_status, detail_fragment
+):
+    _set_keys(monkeypatch, {"BFL_API_KEY": "bfl-test-key"})
+    log = _install_client(monkeypatch, lambda url, headers: _FakeResponse(status_code))
+
+    result = await settings_service.validate_provider_keys()
+
+    bfl = result["Black Forest Labs"]
+    assert bfl["configured"] is True
+    assert bfl["status"] == expected_status
+    if detail_fragment is None:
+        assert "detail" not in bfl
+    else:
+        assert detail_fragment in bfl["detail"]
+    assert "bfl-test-key" not in json.dumps(result)
+    # The free credit-balance read, never a generation.
+    assert log == [{"url": "https://api.bfl.ai/v1/credits", "headers": {"x-key": "bfl-test-key"}}]
 
 
 _VALID_SERVICE_ACCOUNT = (
@@ -560,6 +597,9 @@ async def test_each_provider_uses_its_own_endpoint_and_auth(monkeypatch):
     typesafe = by_url["https://api.typesafe.ai/v1/models"]
     assert typesafe == {"Authorization": "Bearer key-for-TYPESAFE_API_KEY"}
 
+    bfl = by_url["https://api.bfl.ai/v1/credits"]
+    assert bfl == {"x-key": "key-for-BFL_API_KEY"}
+
     world_labs = by_url["https://api.worldlabs.ai/marble/v1/credits"]
     assert world_labs["WLT-Api-Key"] == "key-for-WORLDLABS_API_KEY"
 
@@ -588,7 +628,27 @@ def test_provider_checks_cover_every_catalog_credential():
     # GOOGLE_VERTEX_CREDENTIALS is a Settings credential that may be read by
     # a handler as an alternate route without being a node's envKeyName.
     optional = {"GOOGLE_VERTEX_CREDENTIALS"}
-    assert health_keys - optional == catalog_keys - optional
+    assert health_keys - optional == (catalog_keys | KEYS_AHEAD_OF_NODES) - optional
+    # A key ahead of its nodes is still checked by health once it is saved.
+    assert KEYS_AHEAD_OF_NODES <= health_keys
+
+
+def test_settings_health_rows_find_their_check_by_name():
+    # Settings looks up a key's health entry by PROVIDER_KEY_LABELS[key]
+    # (frontend/src/components/panels/settings/rowHelpers.ts), so each label
+    # must be the PROVIDER_CHECKS name that probes that key.
+    import re
+
+    source = (Path(__file__).resolve().parents[2] / "frontend/src/lib/providerReadiness.ts").read_text()
+    block = re.search(r"PROVIDER_KEY_LABELS[^=]*= \{([\s\S]*?)\};", source)
+    assert block, "PROVIDER_KEY_LABELS literal not found"
+    labels = dict(re.findall(r"([A-Z0-9_]+): '([^']+)'", block.group(1)))
+    names_by_key = {
+        key: name for name, check in settings_service.PROVIDER_CHECKS.items() for key in check.key_names
+    }
+    assert labels, "no labels parsed"
+    for key, label in labels.items():
+        assert names_by_key.get(key) == label, key
 
 
 # ---------------------------------------------------------------------------

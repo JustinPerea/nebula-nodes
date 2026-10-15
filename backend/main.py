@@ -148,7 +148,7 @@ from services.person_gate import (
     person_gate_error,
     require_person,
 )
-from services.canvas_edits import INTERNAL_OK as KREA_BILLING_PARAMS, EditSpec, parse_edit
+from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
 from services.canvas_proposals import (
     MAX_REASON,
     Proposal,
@@ -1922,7 +1922,7 @@ def _require_spend_approval(
     headers = current_request_headers()
     if _is_person_request():
         return
-    _refuse_agent_krea_billing_in_run(nodes, on_canvas=on_canvas)
+    _refuse_agent_billing_in_run(nodes, on_canvas=on_canvas)
     ask = how_to_ask or agent_spend.propose_hint(run_ids or [])
     try:
         pricing = model_pricing.load_pricing()
@@ -1944,17 +1944,18 @@ def _require_spend_approval(
         _place_hold(run_id, key, dict(decision.per_node), dict(decision.plan_per_node), at=at)
 
 
-def _refuse_agent_krea_billing_in_run(nodes: list[GraphNode], *, on_canvas: bool = True) -> None:
-    """403 when a run that isn't the person's bills a dual-mode Krea node
-    other than the way the canvas node it names does. A node that isn't on
-    the canvas, or is there as another definition, starts on the default
-    (the API token)."""
+def _refuse_agent_billing_in_run(nodes: list[GraphNode], *, on_canvas: bool = True) -> None:
+    """403 when a run that isn't the person's bills a node other than the
+    way the canvas node it names does (_billing_choice: a route-table node's
+    provider, a dual-mode Krea node's billing mode). A node that isn't on the
+    canvas, or is there as another definition, starts on the defaults (Auto,
+    the API token)."""
     changes = []
     for node in nodes:
         live = cli_graph.nodes.get(node.id) if on_canvas else None
         before = live.get("params") or {} if live and live.get("definitionId") == node.definition_id else None
         changes.append((node.id if on_canvas else node.definition_id, node.definition_id, before, node.params))
-    _refuse_agent_krea_billing_change(changes)
+    _refuse_agent_billing_change(changes)
 
 
 def _place_hold(run_id: str, key: str, per_node: dict[str, tuple[str, float]],
@@ -3382,6 +3383,9 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
         hint = _keyed_mode_hint(definition)
         if hint:
             row["needsKeyFor"] = hint  # free at its defaults; describe_node has the detail
+        if node_route.has_routes(definition):
+            # Each provider route it can run on, in Auto order (describe_node has each one).
+            row["providers"] = [str(route["id"]) for route in node_route.routes_of(definition)]
         if definition["id"] == model_pricing.CINEMA_SCENE:
             row["price"] = None  # its base model's price, once per shot (describe_node)
         elif model_pricing.is_local(definition):
@@ -3391,7 +3395,10 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
         else:
             estimate = model_pricing.estimate_node(
                 pricing.get(definition["id"]), definition, {},
-                model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
+                model_pricing.route_price_key(
+                    definition, node_route.select_route(definition, {}, settings.get("apiKeys") or {}))
+                if node_route.has_routes(definition)
+                else model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
             row["price"] = ({"usd": [round(estimate["low"], 4), round(estimate["high"], 4)]}
                             if estimate and estimate.get("currency") == "usd" else None)
         # Ready first; then exact id, id prefix, name hits; then by name.
@@ -3402,6 +3409,60 @@ async def agent_find_nodes(query: str = "", category: str = "", ready_only: bool
     rows.sort(key=lambda pair: pair[0])
     return {"total": len(rows), "nodes": [row for _, row in rows[:limit]],
             "krea": "signed in" if krea_signed_in else "not signed in"}
+
+
+PROVIDER_CHOICE_NOTE = (
+    "Runs on one provider route: _provider names it (a route id), or auto takes the first route "
+    "whose key is set, in this order. A run never moves to another route by itself: when the "
+    "chosen route can't take a setting, or its key isn't set, the run stops and says which "
+    "routes could. Which route runs decides whose key pays, so it's the person's call: propose "
+    "a _provider change with propose_change; direct edits of _provider are refused."
+)
+
+
+def _describe_routes(
+    definition: Mapping[str, Any], api_keys: Mapping[str, Any],
+    shown: Callable[[str], list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """describe_node's fields for a route-table node (services/node_route.py
+    routes): the provider choice at defaults, which route Auto resolves to
+    here, and each route with its keys, own params, any block at the
+    defaults and its list price."""
+    route = node_route.select_route(definition, {}, api_keys)
+    try:
+        pricing = model_pricing.load_pricing()
+    except (OSError, ValueError):
+        pricing = {"nodes": {}}
+    prices = model_pricing.estimate_routes(definition, {}, (), pricing)
+    rows = []
+    for spec in node_route.routes_of(definition):
+        estimate = prices.get(str(spec["id"]))
+        row: dict[str, Any] = {
+            "id": spec["id"], "provider": spec.get("provider"),
+            "name": node_route.provider_label(spec.get("provider")),
+            "keys": list(spec.get("keys") or []),
+            "keySet": any(api_keys.get(key) for key in spec.get("keys") or []),
+            "params": [_brief_param(dict(param)) for param in spec.get("params") or []
+                       if not str(param.get("key", "")).startswith("_") and not param.get("hidden")],
+            "block": node_route.block_dict(node_route.route_block(definition, spec, {})),
+            "price": ({"usd": [round(estimate["low"], 4), round(estimate["high"], 4)]}
+                      if estimate and estimate.get("currency") == "usd" else None),
+        }
+        if spec.get("maker"):
+            row["maker"] = True
+        if spec.get("plan"):
+            row["plan"] = spec["plan"]
+        if spec.get("note"):
+            row["note"] = spec["note"]
+        rows.append(row)
+    return {
+        "providerChoice": {
+            "param": node_route.PROVIDER_PARAM, "value": node_route.AUTO,
+            "resolved": route.route_id if route.kind != node_route.UNSET else None,
+        },
+        "routes": rows,
+        "providerNote": PROVIDER_CHOICE_NOTE,
+    }
 
 
 def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
@@ -3456,7 +3517,9 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
     # A dual-route node lists its shared params here and each route's own
     # below (a generated Krea copy keeps its full Krea list in `params` too).
     result["params"] = shown("sharedParams") if "sharedParams" in definition else shown("params")
-    fallback = node_route.fallback_provider(definition)
+    fallback = None if node_route.has_routes(definition) else node_route.fallback_provider(definition)
+    if node_route.has_routes(definition):
+        result.update(_describe_routes(definition, settings.get("apiKeys") or {}, shown))
     if fallback:
         # Which route a run takes here at defaults (services/node_route.py):
         # "direct" (the maker's API with your key), the fallback copy ("fal",
@@ -3527,7 +3590,10 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
             else:
                 result["priceNote"] = "No list price; agent runs of it must be proposed (propose_change)."
         else:
-            provider = model_pricing.route_provider(definition, settings.get("apiKeys") or {})
+            provider = (model_pricing.route_price_key(
+                            definition, node_route.select_route(definition, {}, settings.get("apiKeys") or {}))
+                        if node_route.has_routes(definition)
+                        else model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
             estimate = model_pricing.estimate_node(entry, definition, {}, provider)
 
             def price_table(priced: Mapping[str, Any]) -> dict[str, Any]:
@@ -4084,6 +4150,8 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
     """
     ref_for = {new_id: ref for ref, new_id in id_map.items()}
     definitions = node_registry.get_all()
+    # Who would bill a route-table node depends on the keys set (cost_for).
+    api_keys = load_settings().get("apiKeys", {}) or {}
     entries: list[dict[str, Any]] = []
     up_to = False
     if run_ids:
@@ -4116,7 +4184,7 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
             entries.append({
                 "ref": ref_for.get(node_id, node_id),
                 "nodeId": None if node_id in ref_for else node_id,
-                **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions),
+                **cost_for(definition, candidate.nodes[node_id].get("params") or {}, definitions, api_keys),
                 "price": {"low": line["low"], "high": line["high"]} if line else None,
             })
         if estimate:
@@ -4124,6 +4192,7 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
                 **estimate,
                 "unpriced": [ref_for.get(i, i) for i in estimate["unpriced"]],
                 "plan": [ref_for.get(i, i) for i in estimate["plan"]],
+                "unavailable": {ref_for.get(i, i): why for i, why in (estimate.get("unavailable") or {}).items()},
             }
         return summarize_cost(entries, up_to=up_to, estimate=estimate)
     return summarize_cost(entries, up_to=up_to)
@@ -4146,7 +4215,7 @@ def _estimate_proposal_run(
          for n in graph_nodes],
         [(str(e.get("source")), str(e.get("target"))) for e in graph_edges],
     )
-    wired = model_pricing.wired_ports(
+    wired = model_pricing.wired_counts(
         items, [(str(e.get("source")), str(e.get("target")), e.get("targetHandle")) for e in graph_edges])
     return model_pricing.estimate_run(items, pricing, definitions, api_keys, multipliers, wired)
 
@@ -4193,16 +4262,18 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     await _sweep_proposals()
     _validate_graph_ingress_complexity(body)
     try:
-        # A proposal is where an agent asks to change a Krea node's billing
-        # (_kreaAuth): direct edits refuse that (_refuse_agent_krea_billing_change).
-        spec = parse_spec(body, internal_ok=KREA_BILLING_PARAMS)
+        # A proposal is where an agent asks to change who bills a node
+        # (_provider, _kreaAuth): direct edits refuse that (_refuse_agent_billing_change).
+        spec = parse_spec(body, internal_ok=BILLING_PARAMS)
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
     for node in spec.nodes:
         _check_krea_auth(node.definition_id, node.params, node.ref)
+        _check_provider(node.definition_id, node.params, node.ref)
     for change in spec.params:
         current = cli_graph.nodes.get(change.node_id) or {}
         _check_krea_auth(str(current.get("definitionId") or ""), change.params, change.node_id)
+        _check_provider(str(current.get("definitionId") or ""), change.params, change.node_id)
     try:
         candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec)
     except HTTPException as exc:
@@ -6260,9 +6331,10 @@ def _sync_params_to_cli_graph(
     Only a canvas node of the same definition is written. ``submitted`` is
     for a run whose params came from a request that isn't the person's
     (``_submitted_params``): the params as that request sent them. Then
-    only what the run itself changed is copied, never ``_kreaAuth``, so a
-    request can't edit the canvas by running a node with the canvas node's
-    id; edits go through the edit routes and their checks."""
+    only what the run itself changed is copied, never who bills it
+    (``_provider``, ``_kreaAuth``: BILLING_PARAMS), so a request can't edit
+    the canvas by running a node with the canvas node's id; edits go through
+    the edit routes and their checks."""
     persisted = False
     for node in nodes:
         current = cli_graph.nodes.get(node.id, {})
@@ -6320,10 +6392,10 @@ def _sync_params_to_cli_graph(
             sent = submitted.get(node.id) or {}
             params = {
                 key: value for key, value in (cli_graph.nodes[node.id].get("params") or {}).items()
-                if key == "_kreaAuth" or key not in sent or key in node.params
+                if key in BILLING_PARAMS or key not in sent or key in node.params
             }
             params.update({key: value for key, value in node.params.items()
-                           if key != "_kreaAuth" and (key not in sent or sent[key] != value)})
+                           if key not in BILLING_PARAMS and (key not in sent or sent[key] != value)})
         params = _declared_run_params(node.definition_id, params)
         if cli_graph.nodes[node.id].get("params") != params:
             cli_graph.nodes[node.id]["params"] = copy.deepcopy(params)
@@ -6436,12 +6508,7 @@ def _valid_param_keys(definition_id: str) -> set[str] | None:
         "nous-portal-universal",
     }:
         return None
-    keys: set[str] = set()
-    for source_key in ("params", "sharedParams", "falParams", "directParams"):
-        for p in defn.get(source_key, []) or []:
-            if isinstance(p, dict) and p.get("key"):
-                keys.add(p["key"])
-    return keys
+    return {str(p["key"]) for p in node_route.all_param_definitions(defn)}
 
 
 def _to_bool(v: Any) -> bool:
@@ -6491,11 +6558,10 @@ def _coerce_params(definition_id: str, params: dict[str, Any]) -> dict[str, Any]
     defn = node_registry.get(definition_id)
     if not defn:
         return dict(params)
-    param_specs: dict[str, tuple[str, bool]] = {}
-    for source_key in ("params", "sharedParams", "falParams", "directParams"):
-        for p in defn.get(source_key, []) or []:
-            if isinstance(p, dict) and p.get("key") and p.get("type"):
-                param_specs[p["key"]] = (p["type"], bool(p.get("required")))
+    param_specs: dict[str, tuple[str, bool]] = {
+        str(p["key"]): (p["type"], bool(p.get("required")))
+        for p in node_route.all_param_definitions(defn) if p.get("type")
+    }
     result: dict[str, Any] = {}
     for k, v in params.items():
         if k.startswith("_") or v is None:
@@ -6637,8 +6703,9 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=400, detail="params must be an object")
     position = body.get("position")
     _validate_params(definition_id, params)
+    _check_provider(str(definition_id), params, str(definition_id))
     params = migrate_params(definition_id, _coerce_params(definition_id, params))
-    _refuse_agent_krea_billing_change([(str(definition_id), str(definition_id), None, params)])
+    _refuse_agent_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
         _graph_worldlabs_recovery_checkpoints(
             [{"id": "new-node", "definitionId": definition_id, "params": params}]
@@ -6734,8 +6801,9 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
             if not isinstance(connect_spec.get(key), str) or not connect_spec[key]:
                 raise HTTPException(status_code=400, detail=f"connect.{key} must be a non-empty string")
     _validate_params(definition_id, params)
+    _check_provider(str(definition_id), params, str(definition_id))
     params = migrate_params(definition_id, _coerce_params(definition_id, params))
-    _refuse_agent_krea_billing_change([(str(definition_id), str(definition_id), None, params)])
+    _refuse_agent_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
         _graph_worldlabs_recovery_checkpoints(
             [{"id": "new-node", "definitionId": definition_id, "params": params}]
@@ -6930,9 +6998,8 @@ async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
         definition = node_registry.get("veo-3")
         if not definition:
             raise HTTPException(status_code=400, detail="The Veo motion node is unavailable")
-        param_sources = ([*definition["sharedParams"], *definition.get("falParams", []), *definition.get("directParams", [])]
-                         if "sharedParams" in definition else definition.get("params", []))
-        defaults = {param["key"]: copy.deepcopy(param["default"]) for param in param_sources if "default" in param}
+        defaults = {param["key"]: copy.deepcopy(param["default"])
+                    for param in node_route.all_param_definitions(definition) if "default" in param}
         _validate_params("veo-3", defaults)
         defaults = _coerce_params("veo-3", defaults)
         try:
@@ -6985,9 +7052,10 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         if not isinstance(params, dict):
             raise HTTPException(status_code=400, detail="params must be an object")
         _validate_params(node.get("definitionId", ""), params)
+        _check_provider(str(node.get("definitionId") or ""), params, node_id)
         params = migrate_param_update(node.get("definitionId", ""), params_before,
                                       _coerce_params(node.get("definitionId", ""), params))
-        _refuse_agent_krea_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
+        _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
         _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
         if node.get("definitionId") == "cinema-scene" and "scene" in params:
@@ -7369,16 +7437,21 @@ async def delete_graph_node(node_id: str) -> dict:
     return {"status": "deleted", "id": node_id}
 
 
-def _krea_billing(definition_id: str, params: Mapping[str, Any]) -> str | None:
-    """How a Krea node that offers both API-token and plan billing bills with
-    these params; None for every other node (account-only nodes have no
-    choice to change)."""
+def _billing_choice(definition_id: str, params: Mapping[str, Any]) -> tuple[str, str] | None:
+    """Who bills a node's run with these params, as far as the person
+    chooses it: (provider choice, Krea mode). The provider choice is a
+    route-table node's ``_provider`` (a route id, or "auto"; '' on every
+    other node); the Krea mode is ``_kreaAuth`` on a node that offers both
+    API-token and plan billing ('' when it doesn't). None when the node has
+    neither choice (account-only Krea nodes have no choice to change)."""
     definition = node_registry.get(definition_id) or {}
+    provider = node_route.provider_choice(params) if node_route.has_routes(definition) else ""
     modes = node_readiness.krea_modes(definition)
-    if len(modes) < 2:
-        return None
-    param = next((p for p in definition.get("params") or [] if p.get("key") == "_kreaAuth"), {})
-    return str(params.get("_kreaAuth") or param.get("default") or "api-token")
+    mode = ""
+    if len(modes) >= 2:
+        param = next((p for p in definition.get("params") or [] if p.get("key") == "_kreaAuth"), {})
+        mode = str(params.get("_kreaAuth") or param.get("default") or "api-token")
+    return (provider, mode) if provider or mode else None
 
 
 KREA_BILLING_REFUSAL = (
@@ -7386,23 +7459,38 @@ KREA_BILLING_REFUSAL = (
     "plan) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the "
     "change instead with propose_change (`nebula propose`); the person accepts it on the canvas."
 )
+PROVIDER_CHOICE_REFUSAL = (
+    "Changing which provider a node runs on (_provider: a route id, or auto) decides whose key "
+    "pays for it, so it's the person's call and needs their OK. Leave _provider as it is, and "
+    "propose the change instead with propose_change (`nebula propose`); the person accepts it "
+    "on the canvas."
+)
 
 
-def _refuse_agent_krea_billing_change(changes: Iterable[tuple[str, str, Mapping[str, Any] | None, Mapping[str, Any]]]) -> None:
-    """403 when an edit that isn't the person's would change a Krea node's
-    billing mode. ``changes`` are (label, definitionId, params before or None
-    for a new node, params after). A new node counts as changed when it
-    starts on a mode other than the node's default (the API token). The
-    person's own edits and accepted proposals always pass."""
+def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, Any] | None, Mapping[str, Any]]]) -> None:
+    """403 when an edit that isn't the person's would change who bills a
+    node's run: a route-table node's ``_provider``, or a Krea node's billing
+    mode (_billing_choice). ``changes`` are (label, definitionId, params
+    before or None for a new node, params after). A new node counts as
+    changed unless it starts on Auto and the default mode (the API token).
+    The person's own edits and accepted proposals always pass."""
     if _is_person_request():
         return
-    switched = []
+    provider_switched: list[str] = []
+    mode_switched: list[str] = []
     for label, definition_id, before, after in changes:
-        mode = _krea_billing(definition_id, after)
-        if mode is not None and mode != _krea_billing(definition_id, before or {}):
-            switched.append(label)
-    if switched:
-        raise HTTPException(status_code=403, detail=f"{_listed(switched, 4)}: {KREA_BILLING_REFUSAL}")
+        choice = _billing_choice(definition_id, after)
+        if choice is None:
+            continue
+        was = _billing_choice(definition_id, before or {}) or ("", "")
+        if choice[0] != was[0]:
+            provider_switched.append(label)
+        elif choice[1] != was[1]:
+            mode_switched.append(label)
+    if provider_switched:
+        raise HTTPException(status_code=403, detail=f"{_listed(provider_switched, 4)}: {PROVIDER_CHOICE_REFUSAL}")
+    if mode_switched:
+        raise HTTPException(status_code=403, detail=f"{_listed(mode_switched, 4)}: {KREA_BILLING_REFUSAL}")
 
 
 def _check_krea_auth(definition_id: str, params: dict[str, Any], label: str) -> None:
@@ -7413,6 +7501,20 @@ def _check_krea_auth(definition_id: str, params: dict[str, Any], label: str) -> 
     if params["_kreaAuth"] not in modes:
         offered = f"one of {', '.join(modes)}" if modes else "left out (it isn't a Krea node)"
         raise HTTPException(status_code=400, detail=f"_kreaAuth on {label} must be {offered}")
+
+
+def _check_provider(definition_id: str, params: dict[str, Any], label: str) -> None:
+    """Direct edits may set `_provider`; only to "auto" or one of the node's
+    route ids, and only on a route-table node (services/node_route.py)."""
+    if node_route.PROVIDER_PARAM not in params:
+        return
+    definition = node_registry.get(definition_id) or {}
+    if not node_route.has_routes(definition):
+        raise HTTPException(status_code=400,
+                            detail=f"_provider on {label} must be left out (it has one provider route)")
+    allowed = [node_route.AUTO, *(str(route["id"]) for route in node_route.routes_of(definition))]
+    if params[node_route.PROVIDER_PARAM] not in allowed:
+        raise HTTPException(status_code=400, detail=f"_provider on {label} must be one of {', '.join(allowed)}")
 
 
 @app.post("/api/graph/apply")
@@ -7440,10 +7542,12 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     additions = spec.additions
     for node in additions.nodes:
         _check_krea_auth(node.definition_id, node.params, node.ref)
+        _check_provider(node.definition_id, node.params, node.ref)
     for change in additions.params:
         current = cli_graph.nodes.get(change.node_id) or {}
         _check_krea_auth(str(current.get("definitionId") or ""), change.params, change.node_id)
-    _refuse_agent_krea_billing_change(
+        _check_provider(str(current.get("definitionId") or ""), change.params, change.node_id)
+    _refuse_agent_billing_change(
         [(node.ref, node.definition_id, None, node.params) for node in additions.nodes]
         + [(change.node_id, str((cli_graph.nodes.get(change.node_id) or {}).get("definitionId") or ""),
             (cli_graph.nodes.get(change.node_id) or {}).get("params") or {},
@@ -7977,7 +8081,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
         reference_key="id",
         include_outputs=True,
     )
-    _refuse_agent_krea_billing_change(
+    _refuse_agent_billing_change(
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), None,
          candidate.nodes[node_id].get("params") or {}) for node_id in id_map.values())
     _stage_graph_edges(candidate, raw_edges, id_map)
@@ -8080,7 +8184,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
             reference_key="tempId",
             include_outputs=False,
         )
-        _refuse_agent_krea_billing_change(
+        _refuse_agent_billing_change(
             (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), None,
              candidate.nodes[node_id].get("params") or {}) for node_id in id_map.values())
         created_edge_ids = _stage_graph_edges(candidate, raw_edges, id_map)
@@ -8365,19 +8469,20 @@ def _snapshot_nodes(snapshot: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     return nodes
 
 
-def _refuse_agent_krea_billing_in_project(candidate: CLIGraph, *before: Mapping[str, Mapping[str, Any]]) -> None:
+def _refuse_agent_billing_in_project(candidate: CLIGraph, *before: Mapping[str, Mapping[str, Any]]) -> None:
     """A project snapshot from a request that isn't the person's can't change
-    how a Krea node bills: opening the project later loads it onto the canvas.
-    ``before`` holds what each node was, by id, most current first (the live
-    canvas, then the project as saved); a node in none of them, or there as
-    another definition, starts on the default (the API token)."""
+    who bills a node (_billing_choice): opening the project later loads it
+    onto the canvas. ``before`` holds what each node was, by id, most current
+    first (the live canvas, then the project as saved); a node in none of
+    them, or there as another definition, starts on the defaults (Auto, the
+    API token)."""
     changes = []
     for node_id, node in candidate.nodes.items():
         definition_id = str(node.get("definitionId") or "")
         prior = next((known.get("params") or {} for graph in before
                       if (known := graph.get(node_id)) and known.get("definitionId") == definition_id), None)
         changes.append((node_id, definition_id, prior, node.get("params") or {}))
-    _refuse_agent_krea_billing_change(changes)
+    _refuse_agent_billing_change(changes)
 
 
 def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> bool:
@@ -8517,7 +8622,7 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
             return {"project": public_project(existing), "workspaceRevision": catalog["workspaceRevision"]}
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in source["snapshot"]["nodes"]}
         snapshot, candidate = _stage_project_snapshot(body.get("snapshot"), historical=historical)
-        _refuse_agent_krea_billing_in_project(
+        _refuse_agent_billing_in_project(
             candidate, *([cli_graph.nodes] if catalog["activeProjectId"] == source["id"] else []),
             _snapshot_nodes(source["snapshot"]))
         try:
@@ -8596,7 +8701,7 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
             historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
             historical.update({node_id: node["definitionId"] for node_id, node in cli_graph.nodes.items()})
             staged, candidate = _stage_project_snapshot(body["snapshot"], historical=historical)
-            _refuse_agent_krea_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
+            _refuse_agent_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
             project["snapshot"] = staged
             project["_backendNodeIds"] = sorted(set(cli_graph.nodes) & {node["id"] for node in project["snapshot"]["nodes"]})
             project["_backendEdgeIds"] = sorted({edge["id"] for edge in cli_graph.edges} & {edge["id"] for edge in project["snapshot"]["edges"]})

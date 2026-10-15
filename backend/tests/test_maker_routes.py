@@ -352,3 +352,144 @@ def test_route_node_copies_and_never_shares_values():
     routed = maker_routes.route_node(node, {"a"})
     routed.params["a"].append(9)
     assert node.params == {"a": [1], "b": 2} and routed.params == {"a": [1, 9]}
+
+
+# -- route-table nodes (definition `routes`, maker_routes.multi_route) ----------
+
+import json  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+ROUTE_FIXTURES = json.loads((Path(__file__).parent / "fixtures" / "route_cases.json").read_text())["definitions"]
+# Route-table nodes in the registry; none ship before the first FLUX 3 nodes.
+MULTI_ROUTED: set[str] = set()
+
+
+def test_every_route_table_node_has_a_multi_router():
+    registry = get_handler_registry(emit=AsyncMock())
+    multi = {node_id for node_id, handler in registry.items() if getattr(handler, "multi_route", False)}
+    assert multi == MULTI_ROUTED == {node_id for node_id, d in DEFINITIONS.items() if node_route.has_routes(d)}
+
+
+def _clients(*route_ids):
+    """A stub client per route id: records the node it got, returns an image."""
+    return {route_id: AsyncMock(return_value={"image": {"type": "Image", "value": f"{route_id}.png"}})
+            for route_id in route_ids}
+
+
+@pytest.fixture
+def route_fixtures(monkeypatch):
+    monkeypatch.setattr(maker_routes, "definition_for", lambda definition_id: ROUTE_FIXTURES[definition_id])
+    return ROUTE_FIXTURES
+
+
+IMAGE_ROUTES = ("bfl", "fal", "replicate", "openrouter", "krea")
+IMAGE_DEFAULTS = {"_provider": "auto", "_kreaAuth": "api-token", "aspect_ratio": "auto", "resolution": "1k",
+                  "safety_tolerance": 2, "grounding": False}
+
+
+@pytest.mark.asyncio
+async def test_multi_route_runs_auto_on_the_maker_with_only_its_params(route_fixtures):
+    clients = _clients(*IMAGE_ROUTES)
+    node = GraphNode(id="n", definitionId="routes-image", params=dict(IMAGE_DEFAULTS))
+    before = copy.deepcopy(node.params)
+    result = await maker_routes.multi_route(clients)(node, PROMPT, {"BFL_API_KEY": "b", "FAL_KEY": "f"})
+    assert result["image"]["value"] == "bfl.png"
+    sent = clients["bfl"].await_args.args[0]
+    # The billing params never reach a provider; another route's never either.
+    assert sent.params == {"aspect_ratio": "auto", "resolution": "1k", "safety_tolerance": 2, "grounding": False}
+    assert all(not clients[other].await_count for other in IMAGE_ROUTES if other != "bfl")
+    assert node.params == before
+
+
+@pytest.mark.asyncio
+async def test_multi_route_honors_an_explicit_choice_and_translates_values(route_fixtures):
+    clients = _clients(*IMAGE_ROUTES)
+    node = GraphNode(id="n", definitionId="routes-image",
+                     params={**IMAGE_DEFAULTS, "_provider": "fal", "resolution": "768sq"})
+    await maker_routes.multi_route(clients)(node, PROMPT, {"BFL_API_KEY": "b", "FAL_KEY": "f"})
+    assert not clients["bfl"].await_count
+    sent = clients["fal"].await_args.args[0]
+    # fal's own value for 768sq (its valueMap); BFL-and-Replicate-only grounding dropped.
+    assert sent.params == {"aspect_ratio": "auto", "resolution": "square", "safety_tolerance": 2}
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_choice_with_a_missing_key_names_only_that_key(route_fixtures):
+    clients = _clients(*IMAGE_ROUTES)
+    node = GraphNode(id="n", definitionId="routes-image", params={**IMAGE_DEFAULTS, "_provider": "replicate"})
+    with pytest.raises(MissingCredentialError) as raised:
+        await maker_routes.multi_route(clients)(node, PROMPT, {"BFL_API_KEY": "b", "FAL_KEY": "f"})
+    message = str(raised.value)
+    assert "set to Replicate, which needs REPLICATE_API_TOKEN" in message
+    assert "BFL_API_KEY" not in message and "FAL_KEY" not in message
+    assert not any(client.await_count for client in clients.values())
+
+
+@pytest.mark.asyncio
+async def test_auto_stops_on_a_block_instead_of_billing_another_provider(route_fixtures):
+    clients = _clients(*IMAGE_ROUTES)
+    node = GraphNode(id="n", definitionId="routes-image", params={**IMAGE_DEFAULTS, "resolution": "1.5k"})
+    with pytest.raises(MissingCredentialError, match="can't run on fal.ai: it doesn't take resolution 1.5k"):
+        await maker_routes.multi_route(clients)(node, PROMPT, {"FAL_KEY": "f", "REPLICATE_API_TOKEN": "r"})
+    assert not any(client.await_count for client in clients.values())
+
+
+@pytest.mark.asyncio
+async def test_wired_inputs_count_against_a_routes_port_limit(route_fixtures):
+    clients = _clients(*IMAGE_ROUTES)
+    node = GraphNode(id="n", definitionId="routes-image", params={**IMAGE_DEFAULTS, "_provider": "openrouter"})
+    five = {**PROMPT, "images": PortValueDict(type="Image", value=[f"{i}.png" for i in range(5)])}
+    with pytest.raises(MissingCredentialError, match="at most 4 wired images"):
+        await maker_routes.multi_route(clients)(node, five, {"OPENROUTER_API_KEY": "o"})
+    four = {**PROMPT, "images": PortValueDict(type="Image", value=[f"{i}.png" for i in range(4)])}
+    await maker_routes.multi_route(clients)(node, four, {"OPENROUTER_API_KEY": "o"})
+    assert clients["openrouter"].await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_krea_route_gets_the_billing_mode_explicitly(route_fixtures):
+    clients = _clients(*IMAGE_ROUTES)
+    router = maker_routes.multi_route(clients)
+    plan = GraphNode(id="n", definitionId="routes-image", params={**IMAGE_DEFAULTS, "_provider": "krea", "_kreaAuth": "mcp"})
+    await router(plan, PROMPT, {})
+    assert clients["krea"].await_args.args[0].params["_kreaAuth"] == "mcp"
+    token = GraphNode(id="n", definitionId="routes-image", params={**IMAGE_DEFAULTS, "_provider": "krea"})
+    await router(token, PROMPT, {"KREA_API_TOKEN": "k"})
+    assert clients["krea"].await_args.args[0].params["_kreaAuth"] == "api-token"
+    assert "_provider" not in clients["krea"].await_args.args[0].params
+
+
+@pytest.mark.asyncio
+async def test_rename_sends_a_route_prefixed_param_under_the_providers_name(route_fixtures):
+    clients = _clients("krea", "fal")
+    node = GraphNode(id="n", definitionId="routes-krea",
+                     params={"_provider": "fal", "resolution": "2K", "fal_seed": 7, "thinking_mode": "high"})
+    await maker_routes.multi_route(clients)(node, PROMPT, {"FAL_KEY": "f"})
+    assert clients["fal"].await_args.args[0].params == {"resolution": "2K", "seed": 7}
+
+
+@pytest.mark.asyncio
+async def test_register_route_nodes_builds_a_router_from_the_route_clients(route_fixtures, monkeypatch):
+    from execution import route_clients
+
+    run = AsyncMock(return_value={"image": {"type": "Image", "value": "x.png"}})
+    monkeypatch.setattr(route_clients, "ROUTE_CLIENTS", {"fal": route_clients.RouteClient(run)})
+    registry: dict = {"routes-image": object()}
+    route_clients.register_route_nodes(registry, {**DEFINITIONS, **ROUTE_FIXTURES}, emit="emit")
+    handler = registry["routes-image"]
+    assert handler.multi_route and handler.dual_route
+    assert {node_id for node_id, h in registry.items() if getattr(h, "multi_route", False)} == set(ROUTE_FIXTURES)
+    node = GraphNode(id="n", definitionId="routes-image", params={**IMAGE_DEFAULTS, "_provider": "fal"})
+    await handler(node, PROMPT, {"FAL_KEY": "f"})
+    assert run.await_args.kwargs["route"]["id"] == "fal" and run.await_args.kwargs["emit"] == "emit"
+    # A route whose client hasn't landed fails before any provider request.
+    with pytest.raises(MissingCredentialError, match="can't run on Black Forest Labs in this version"):
+        await handler(node.model_copy(update={"params": {**IMAGE_DEFAULTS, "_provider": "bfl"}}),
+                      PROMPT, {"BFL_API_KEY": "b"})
+
+
+def test_translate_params_renames_then_maps_values():
+    route = {"rename": {"resolution": "image_size", "fal_seed": "seed"},
+             "valueMap": {"resolution": {"1k": "square_hd"}, "draft": {"true": "on"}}}
+    assert maker_routes.translate_params(route, {"resolution": "1k", "fal_seed": 3, "draft": True, "x": 1}) == {
+        "image_size": "square_hd", "seed": 3, "draft": "on", "x": 1}

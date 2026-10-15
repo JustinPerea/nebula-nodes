@@ -190,12 +190,71 @@ export interface ModelNodeDefinition {
     snap?: DirectSizeSnap;
     startShape?: DirectStartShape;
   };
+  /** A route-table node: one node per model whose routes run on the
+   *  maker's API and on each aggregator, in Auto order (RouteSpec,
+   *  docs/PROVIDER-ROUTES.md). Its saved `_provider` picks one, or "auto"
+   *  (lib/directRoute.ts selectRoute, backend services/node_route.py).
+   *  `directParams`, `falParams` and `directRoute` never sit next to it, and
+   *  `envKeyName` is the ordered union of its routes' keys. */
+  routes?: RouteSpec[];
   docUrl?: string;
   /** A local (utility) node that still calls a provider. `utility` only means
    *  "no top-level key"; this says what the node really needs. Readiness, the
    *  missing-key badge, the run estimate and the agent surfaces all read it
    *  (lib/nodeKeys.ts, backend services/node_readiness.py). */
   providerVia?: ProviderVia;
+}
+
+/** Which client runs a route (backend execution/route_clients.py). */
+export type RouteHandler = 'bfl' | 'fal' | 'replicate-model' | 'openrouter-images' | 'openrouter-videos' | 'krea';
+
+/** One provider route of a route-table node (ModelNodeDefinition.routes;
+ *  backend services/node_route.py RouteSpec has the field notes). */
+export interface RouteSpec {
+  /** Unique in the node; the saved `_provider` names it. Equals `provider`
+   *  unless a node has two routes on one provider. */
+  id: string;
+  /** Who bills a run on this route. */
+  provider: APIProvider;
+  /** The model maker's own API: at most one route, and it is routes[0]. */
+  maker?: true;
+  /** Any of these keys runs it, tried in order. */
+  keys: string[];
+  /** A Krea route that can bill the signed-in plan: 'optional' when
+   *  `_kreaAuth` is 'mcp', 'only' always. */
+  plan?: 'optional' | 'only';
+  handler: RouteHandler;
+  endpoint?: string;
+  /** First match wins; `when` uses the rejectsWhen grammar ("(set)" and
+   *  "(unset)" count wired ports). */
+  endpointWhen?: { when: Record<string, string | number | boolean>; endpoint: string }[];
+  /** Params only this route takes. */
+  params?: ParamDefinition[];
+  /** A param key -> the provider's field name. */
+  rename?: Record<string, string>;
+  /** A param key -> {our value: the provider's value}. A value it doesn't
+   *  list is one this route doesn't take. */
+  valueMap?: Record<string, Record<string, unknown>>;
+  rules?: RouteRules;
+  /** Its key under model_pricing.json `routes` (default: id). */
+  pricing?: string;
+  /** Readiness copy for this route. */
+  note?: string;
+}
+
+/** A route's rules: the directRoute grammar, plus `ports`, the most inputs
+ *  the route takes on a wired port (`max: 0` refuses any). Computed specs of
+ *  older dual-route nodes (lib/directRoute.ts routesOf) also carry
+ *  `requires` and `retires`. */
+export interface RouteRules {
+  blockedBy?: string[];
+  accepts?: Record<string, DirectAcceptRule>;
+  rejects?: Record<string, ReadonlyArray<string | number | boolean>>;
+  rejectsWhen?: DirectRejectsWhenRule[];
+  size?: DirectSizeLimits;
+  ports?: Record<string, { max: number }>;
+  requires?: string;
+  retires?: { on: string; param?: string; values?: readonly string[] };
 }
 
 /** The values a maker takes for one param (directRoute.accepts); any other

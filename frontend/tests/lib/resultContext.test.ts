@@ -115,6 +115,13 @@ describe('resultContextForNode', () => {
     }
   });
 
+  it('keeps the saved provider choice as recipe data', () => {
+    const saved = run({ snapshot: { nodes: [snapshotNode('model', 'nano-banana',
+      { prompt: 'Param-only prompt', _provider: 'fal', _jobId: 'runtime' })], edges: [] } });
+    expect(resultContextForNode(node(), [saved]).reusableDraft?.params).toMatchObject({ _provider: 'fal' });
+    expect(resultContextForNode(node(), [saved]).reusableDraft?.params).not.toHaveProperty('_jobId');
+  });
+
   it('does not share nested params, source refs or draft objects with saved history', () => {
     const original = run();
     original.snapshot.nodes[1].params.custom = { palette: ['red', 'blue'] };

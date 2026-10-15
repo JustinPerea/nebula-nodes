@@ -181,11 +181,9 @@ def _effective(definition: Mapping[str, Any], params: Mapping[str, Any], key: st
     value = params.get(key)
     if value is not None and value != "":
         return value
-    for group in ("sharedParams", "directParams", "falParams", "params"):
-        for param in definition.get(group) or []:
-            if isinstance(param, Mapping) and param.get("key") == key:
-                return param.get("default")
-    return None
+    from services.node_route import param_definition
+    param = param_definition(definition, key)
+    return param.get("default") if param is not None else None
 
 
 def definition_snap(definition: Mapping[str, Any], params: Mapping[str, Any] | None) -> SizeSnap | None:

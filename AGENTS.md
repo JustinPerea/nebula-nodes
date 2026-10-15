@@ -1,6 +1,6 @@
 # Nebula Nodes — Agent Instructions
 
-AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph. 303 nodes defined in `backend/data/node_definitions.json` (source of truth). `docs/MODEL_REFERENCE.md` is generated from it via `node scripts/generate-model-reference.mjs` — never edit it by hand.
+AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph. 303 nodes, written in `frontend/src/constants/nodeDefinitions.ts` and exported to `backend/data/node_definitions.json` (`scripts/export-node-defs.ts`), which the backend and every script read. `docs/MODEL_REFERENCE.md` is generated from it via `node scripts/generate-model-reference.mjs` — never edit it by hand.
 
 ## Standing task: Flora gap audit
 
@@ -23,4 +23,5 @@ Implementation work to add missing nodes should run in a **dedicated Cursor chat
 
 - Repo-backed agent skills live in `.agents/skills/` (indexed by the backend Codex runner). Keep them free of secrets and user outputs.
 - Dual-route nodes (a fal or Krea copy that also runs on the maker's API with the person's key) pick their route through `backend/services/node_route.py` (mirrored by `frontend/src/lib/directRoute.ts`): Krea plan, else maker key, else the fal/Krea key. Krea maker routes are declared in `scripts/sync-krea-catalog.py` `DIRECT_ROUTES`; never hand-edit generated Krea nodes.
+- One node per model. A model several providers sell is one node with a `routes` table and a hidden `_provider` param (a route id, or `auto`: the first route whose key is set). Auto never switches provider because of a setting; the run stops and names the routes that could run it. Changing `_provider`, like `_kreaAuth`, is the person's call: agents propose it. Only new nodes use `routes`; the dual-route nodes above stay as they are. See `docs/PROVIDER-ROUTES.md`, and after changing a node's routes or params run `backend/.venv/bin/python scripts/generate-route-tables.py`.
 - When adding a node, regenerate `docs/MODEL_REFERENCE.md` and check the corresponding entry off in `docs/flora-gap-audit.md` if it closes a logged gap.

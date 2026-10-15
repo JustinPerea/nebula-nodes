@@ -4,6 +4,8 @@ import type { ModelNodeDefinition, NodeData, PortValue } from '../types';
 import type { CreateDraftSeed } from '../store/createDraftStore';
 import { backendAssetUrlSync } from './backend';
 import { isCreateModel } from './createModels';
+import { isRecipeParam } from './billingParams';
+import { allParamDefinitions } from './directRoute';
 import { kreaModeFor, supportsKreaAccount } from './kreaConnection';
 import type { RunRecord, RunSnapshotNode } from './runHistory';
 
@@ -54,7 +56,7 @@ function outputIdentity(outputs: Record<string, PortValue>): string {
 
 function authorParams(params: Record<string, unknown>, definition?: ModelNodeDefinition): Record<string, unknown> {
   const authored = structuredClone(Object.fromEntries(Object.entries(params)
-    .filter(([key]) => !key.startsWith('_') || key === '_kreaAuth')));
+    .filter(([key]) => isRecipeParam(key))));
   // Old gateway recipes used API billing even when their mode was not written.
   if (supportsKreaAccount(definition)) authored._kreaAuth = kreaModeFor(definition, params);
   return authored;
@@ -63,8 +65,7 @@ function authorParams(params: Record<string, unknown>, definition?: ModelNodeDef
 function modelName(definitionId: string, params: Record<string, unknown>): string {
   const definition = NODE_DEFINITIONS[definitionId];
   if (!definition) return definitionId;
-  const selected = [...definition.params, ...(definition.sharedParams ?? []),
-    ...(definition.directParams ?? []), ...(definition.falParams ?? [])]
+  const selected = allParamDefinitions(definition)
     .find((param) => param.key === 'model')?.options?.find((option) => option.value === params.model)?.label;
   return selected && selected !== definition.displayName
     ? `${definition.displayName} · ${selected}` : definition.displayName;

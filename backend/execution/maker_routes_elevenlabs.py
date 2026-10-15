@@ -32,6 +32,7 @@ from functools import partial
 from typing import Any, Awaitable, Callable, Mapping
 
 from models.graph import GraphNode, PortValueDict
+from services import node_route
 
 Handler = Callable[[GraphNode, dict[str, PortValueDict], dict[str, str]], Awaitable[dict[str, Any]]]
 Translate = Callable[
@@ -50,12 +51,8 @@ ELEVENLABS_VOICE_PARAM = "voice_id"
 def _default(definition_id: str, key: str) -> Any:
     from execution.maker_routes import definition_for
 
-    definition = definition_for(definition_id)
-    for group in ("sharedParams", "directParams", "falParams", "params"):
-        for param in definition.get(group) or []:
-            if isinstance(param, Mapping) and param.get("key") == key:
-                return param.get("default")
-    return None
+    param = node_route.param_definition(definition_for(definition_id), key)
+    return param.get("default") if param is not None else None
 
 
 def _value(node: GraphNode, key: str) -> Any:
