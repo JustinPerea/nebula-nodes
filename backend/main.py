@@ -3415,8 +3415,9 @@ PROVIDER_CHOICE_NOTE = (
     "Runs on one provider route: _provider names it (a route id), or auto takes the first route "
     "whose key is set, in this order. A run never moves to another route by itself: when the "
     "chosen route can't take a setting, or its key isn't set, the run stops and says which "
-    "routes could. Which route runs decides whose key pays, so it's the person's call: propose "
-    "a _provider change with propose_change; direct edits of _provider are refused."
+    "routes could. Each route's params list the values that provider takes; set values the "
+    "route you run on takes. Which route runs decides whose key pays, so it's the person's "
+    "call: propose a _provider change with propose_change; direct edits of _provider are refused."
 )
 
 
@@ -3426,8 +3427,9 @@ def _describe_routes(
 ) -> dict[str, Any]:
     """describe_node's fields for a route-table node (services/node_route.py
     routes): the provider choice at defaults, which route Auto resolves to
-    here, and each route with its keys, own params, any block at the
-    defaults and its list price."""
+    here, and each route with its keys, the params it takes as it offers
+    them (node_route.route_param_definitions), any block at the defaults and
+    its list price."""
     route = node_route.select_route(definition, {}, api_keys)
     try:
         pricing = model_pricing.load_pricing()
@@ -3442,12 +3444,19 @@ def _describe_routes(
             "name": node_route.provider_label(spec.get("provider")),
             "keys": list(spec.get("keys") or []),
             "keySet": any(api_keys.get(key) for key in spec.get("keys") or []),
-            "params": [_brief_param(dict(param)) for param in spec.get("params") or []
+            # What this route takes: the shared params and its own, each as
+            # it offers them (enums cut, ranges narrowed), the list the
+            # Inspector shows on this provider.
+            "params": [_brief_param(dict(param))
+                       for param in node_route.route_param_definitions(definition, str(spec["id"]))
                        if not str(param.get("key", "")).startswith("_") and not param.get("hidden")],
             "block": node_route.block_dict(node_route.route_block(definition, spec, {})),
             "price": ({"usd": [round(estimate["low"], 4), round(estimate["high"], 4)]}
                       if estimate and estimate.get("currency") == "usd" else None),
         }
+        if row["price"] and model_pricing.route_price_unconfirmed(
+                (pricing.get("nodes") or {}).get(str(definition.get("id") or "")), definition, str(spec["id"])):
+            row["priceUnconfirmed"] = True
         if spec.get("maker"):
             row["maker"] = True
         if spec.get("plan"):

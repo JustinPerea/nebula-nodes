@@ -1,0 +1,232 @@
+{
+  "_note": "PR 2's two halves joined: a person's pick in the provider switcher (frontend lib/providerSwitch.ts) to the route client that runs it (backend execution/route_clients.py). Each case runs on a fixture node in route_client_definitions.json. `saved` is what the node holds before the click, on top of every param's default; `keys` the key names set (values are fixtures); `wired` the input ports and what each carries (one edge each). `click` is a menu row id ('auto', a route id, '<route id>:plan'), 'alternative:<route id>' for the one-click switch under a stopped run, or null for no click. `switcher` is what the switcher shows before (`before`) and after the click, and `writes` the params the click changes on the saved node (snapped values included). Python (test_route_clients.py) saves `saved` + `writes` on the node and runs it through multi_route: `run.route` is the route the router picks, and `run.request` the one provider request it makes (`body` exactly, checked against `schema`), or `run.refused` the message it stops with before any request. TS (frontend/tests/components/switchToClient.test.tsx) seeds the node in the graph store, clicks the row in the Inspector's switcher and checks the store holds `saved` + `writes`, the card note is `notes`, and the switcher shows `switcher`.",
+  "cases": [
+    {
+      "name": "a click on fal snaps 1.5k to 2k and sends the wired image to fal's edit endpoint",
+      "definition": "clients-image",
+      "saved": { "resolution": "1.5k" },
+      "keys": ["BFL_API_KEY", "FAL_KEY"],
+      "wired": { "images": ["https://e.com/a.png"] },
+      "click": "fal",
+      "switcher": {
+        "before": { "chip": "Auto · BFL", "blocked": false, "alternatives": [] },
+        "chip": "fal", "blocked": false, "alternatives": [],
+        "notes": ["1.5k isn't on fal.ai: set to 2k"]
+      },
+      "writes": { "_provider": "fal", "resolution": "2k" },
+      "run": {
+        "route": "fal",
+        "request": {
+          "method": "POST", "url": "https://queue.fal.run/blackforestlabs/flux-3/edit-image",
+          "schema": ["fal", "blackforestlabs/flux-3/edit-image"],
+          "body": { "prompt": "p", "aspect_ratio": "auto", "resolution": "2k", "safety_tolerance": 2,
+                    "image_urls": ["https://e.com/a.png"] }
+        }
+      }
+    },
+    {
+      "name": "no click: Auto lands on fal, which can't take 1.5k, so the run stops before any request",
+      "definition": "clients-image",
+      "saved": { "resolution": "1.5k" },
+      "keys": ["FAL_KEY", "OPENROUTER_API_KEY"],
+      "wired": {},
+      "click": null,
+      "switcher": {
+        "before": { "chip": "Auto · fal", "blocked": true, "alternatives": ["openrouter"] },
+        "chip": "Auto · fal", "blocked": true, "alternatives": ["openrouter"], "notes": []
+      },
+      "writes": {},
+      "run": { "route": null, "refused": "can't run on fal.ai" }
+    },
+    {
+      "name": "the one-click switch under the stop moves to OpenRouter and keeps 1.5k",
+      "definition": "clients-image",
+      "saved": { "resolution": "1.5k" },
+      "keys": ["FAL_KEY", "OPENROUTER_API_KEY"],
+      "wired": {},
+      "click": "alternative:openrouter",
+      "switcher": {
+        "before": { "chip": "Auto · fal", "blocked": true, "alternatives": ["openrouter"] },
+        "chip": "OR", "blocked": false, "alternatives": [], "notes": []
+      },
+      "writes": { "_provider": "openrouter" },
+      "run": {
+        "route": "openrouter",
+        "request": {
+          "method": "POST", "url": "https://openrouter.ai/api/v1/images",
+          "schema": ["openrouter", "images/black-forest-labs/flux-3-image"],
+          "body": { "model": "black-forest-labs/flux-3-image", "prompt": "p", "resolution": "1.5K",
+                    "aspect_ratio": "auto",
+                    "provider": { "options": { "black-forest-labs": { "safety_tolerance": 2 } } } }
+        }
+      }
+    },
+    {
+      "name": "a click on Auto from an explicit Replicate route runs on the maker",
+      "definition": "clients-image",
+      "saved": { "_provider": "replicate", "aspect_ratio": "9:21" },
+      "keys": ["BFL_API_KEY", "REPLICATE_API_TOKEN"],
+      "wired": {},
+      "click": "auto",
+      "switcher": {
+        "before": { "chip": "Rep", "blocked": false, "alternatives": [] },
+        "chip": "Auto · BFL", "blocked": false, "alternatives": [], "notes": []
+      },
+      "writes": { "_provider": "auto" },
+      "run": {
+        "route": "bfl",
+        "request": {
+          "method": "POST", "url": "https://api.bfl.ai/v1/flux-3-image",
+          "schema": ["bfl", "flux-3-image"],
+          "body": { "prompt": "p", "aspect_ratio": "9:21", "resolution": "1k", "safety_tolerance": 2,
+                    "grounding": false }
+        }
+      }
+    },
+    {
+      "name": "a click on Replicate sends the video recipe to its official model",
+      "definition": "clients-video",
+      "saved": { "duration": 7, "resolution": "fhd" },
+      "keys": ["BFL_API_KEY", "REPLICATE_API_TOKEN"],
+      "wired": {},
+      "click": "replicate",
+      "switcher": {
+        "before": { "chip": "Auto · BFL", "blocked": false, "alternatives": [] },
+        "chip": "Rep", "blocked": false, "alternatives": [], "notes": []
+      },
+      "writes": { "_provider": "replicate" },
+      "run": {
+        "route": "replicate",
+        "request": {
+          "method": "POST", "url": "https://api.replicate.com/v1/models/black-forest-labs/flux-3/predictions",
+          "schema": ["replicate", "black-forest-labs/flux-3"],
+          "body": { "input": { "prompt": "p", "duration": "7", "resolution": "1080p", "aspect_ratio": "16:9",
+                               "generate_audio": true } }
+        }
+      }
+    },
+    {
+      "name": "a click on Krea's API balance row runs the catalog model on the API token",
+      "definition": "clients-video",
+      "saved": { "resolution": "fhd" },
+      "keys": ["BFL_API_KEY", "KREA_API_TOKEN"],
+      "wired": {},
+      "click": "krea",
+      "switcher": {
+        "before": { "chip": "Auto · BFL", "blocked": false, "alternatives": [] },
+        "chip": "Krea", "blocked": false, "alternatives": [], "notes": []
+      },
+      "writes": { "_provider": "krea", "_kreaAuth": "api-token" },
+      "run": {
+        "route": "krea",
+        "request": {
+          "method": "POST", "url": "https://api.krea.ai/generate/video/black-forest-labs/flux-3-video",
+          "body": { "prompt": "p", "duration": 5, "resolution": "1080p", "aspect_ratio": "16:9",
+                    "generate_audio": true }
+        }
+      }
+    },
+    {
+      "name": "a click on Krea's plan row bills the plan through the account path, with no API request",
+      "definition": "clients-video",
+      "saved": { "resolution": "fhd" },
+      "keys": ["BFL_API_KEY"],
+      "kreaSignedIn": true,
+      "wired": {},
+      "click": "krea:plan",
+      "switcher": {
+        "before": { "chip": "Auto · BFL", "blocked": false, "alternatives": [] },
+        "chip": "Krea plan", "blocked": false, "alternatives": [], "notes": []
+      },
+      "writes": { "_provider": "krea", "_kreaAuth": "mcp" },
+      "run": {
+        "route": "krea",
+        "plan": {
+          "endpoint": "/generate/video/black-forest-labs/flux-3-video",
+          "body": { "prompt": "p", "duration": 5, "resolution": "1080p", "aspect_ratio": "16:9",
+                    "generate_audio": true }
+        }
+      }
+    },
+    {
+      "name": "no click: a wired keyframe on the saved OpenRouter route stops the run and offers fal",
+      "definition": "clients-video",
+      "saved": { "_provider": "openrouter" },
+      "keys": ["FAL_KEY", "OPENROUTER_API_KEY"],
+      "wired": { "keyframes": ["https://e.com/k.png"] },
+      "click": null,
+      "switcher": {
+        "before": { "chip": "OR", "blocked": true, "alternatives": ["fal"] },
+        "chip": "OR", "blocked": true, "alternatives": ["fal"], "notes": []
+      },
+      "writes": {},
+      "run": { "route": null, "refused": "can't run on OpenRouter" }
+    },
+    {
+      "name": "the one-click switch to fal sends the keyframe to fal's keyframes endpoint",
+      "definition": "clients-video",
+      "saved": { "_provider": "openrouter" },
+      "keys": ["FAL_KEY", "OPENROUTER_API_KEY"],
+      "wired": { "keyframes": ["https://e.com/k.png"] },
+      "click": "alternative:fal",
+      "switcher": {
+        "before": { "chip": "OR", "blocked": true, "alternatives": ["fal"] },
+        "chip": "fal", "blocked": false, "alternatives": [], "notes": []
+      },
+      "writes": { "_provider": "fal" },
+      "run": {
+        "route": "fal",
+        "request": {
+          "method": "POST", "url": "https://queue.fal.run/blackforestlabs/flux-3/keyframes-to-video",
+          "schema": ["fal", "blackforestlabs/flux-3/keyframes-to-video"],
+          "body": { "prompt": "p", "duration": 5, "resolution": "720p", "aspect_ratio": "16:9",
+                    "generate_audio": true,
+                    "keyframes": [{ "frame_index": 0, "image_url": "https://e.com/k.png" }] }
+        }
+      }
+    },
+    {
+      "name": "the one-click switch to Krea bills the API balance it was offered on, not a plan picked earlier",
+      "definition": "clients-video",
+      "saved": { "_provider": "fal", "_kreaAuth": "mcp" },
+      "keys": ["KREA_API_TOKEN"],
+      "kreaSignedIn": true,
+      "wired": {},
+      "click": "alternative:krea",
+      "switcher": {
+        "before": { "chip": "fal", "blocked": true, "alternatives": ["krea"] },
+        "chip": "Krea", "blocked": false, "alternatives": [], "notes": []
+      },
+      "writes": { "_provider": "krea", "_kreaAuth": "api-token" },
+      "run": {
+        "route": "krea",
+        "request": {
+          "method": "POST", "url": "https://api.krea.ai/generate/video/black-forest-labs/flux-3-video",
+          "body": { "prompt": "p", "duration": 5, "resolution": "720p", "aspect_ratio": "16:9", "generate_audio": true }
+        }
+      }
+    },
+    {
+      "name": "a click on fal after Krea's plan row clears the plan, so no later pick bills it unasked",
+      "definition": "clients-video",
+      "saved": { "_provider": "krea", "_kreaAuth": "mcp" },
+      "keys": ["FAL_KEY"],
+      "kreaSignedIn": true,
+      "wired": {},
+      "click": "fal",
+      "switcher": {
+        "before": { "chip": "Krea plan", "blocked": false, "alternatives": [] },
+        "chip": "fal", "blocked": false, "alternatives": [], "notes": []
+      },
+      "writes": { "_provider": "fal", "_kreaAuth": "api-token" },
+      "run": {
+        "route": "fal",
+        "request": {
+          "method": "POST", "url": "https://queue.fal.run/blackforestlabs/flux-3/text-to-video",
+          "schema": ["fal", "blackforestlabs/flux-3/text-to-video"],
+          "body": { "prompt": "p", "duration": 5, "resolution": "720p", "aspect_ratio": "16:9", "generate_audio": true }
+        }
+      }
+    }
+  ]
+}

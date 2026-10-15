@@ -13,6 +13,10 @@ import { getReferenceRole } from '../../lib/referenceRoles';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { useUIStore } from '../../store/uiStore';
 import { usesKreaAccount } from '../../lib/kreaConnection';
+import { routeSwitch } from '../../lib/directRoute';
+import { nodeWiredCounts } from '../../lib/runScope';
+import { useProviderNoteStore } from '../../store/providerNoteStore';
+import { ProviderSwitcher } from './ProviderSwitcher';
 import { missingKeyTitle } from '../../lib/nodeKeys';
 import { useGraphStore } from '../../store/graphStore';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
@@ -75,6 +79,21 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const entranceClass = useSlavaNodeEntranceClass();
+  // A route-table node's provider chip (ProviderSwitcher): it counts the
+  // edges into each port, as the preflight does. The selector returns a
+  // string so other nodes' edges don't re-render this card.
+  const switchable = routeSwitch(definition);
+  const wiredKey = useGraphStore((s) => (switchable
+    ? [...nodeWiredCounts(id, s.edges)].map(([port, count]) => `${port}=${count}`).join('&') : ''));
+  const wiredCounts = useMemo(() => new Map(wiredKey ? wiredKey.split('&').map((part) => {
+    const [port, count] = part.split('=');
+    return [port, Number(count)] as const;
+  }) : []), [wiredKey]);
+  const providerNote = useProviderNoteStore((s) => s.notes[id]);
+  const onProviderPick = useCallback((next: Record<string, unknown>, notes: string[]) => {
+    updateNodeData(id, { params: next });
+    useProviderNoteStore.getState().show(id, notes);
+  }, [id, updateNodeData]);
   const [videoLoop, setVideoLoop] = useState<boolean>(true);
   const isTextInput = nodeData.definitionId === 'text-input';
   const isStickyNote = nodeData.definitionId === 'sticky-note';
@@ -386,7 +405,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           : <span className="model-node__category-dot" style={{ backgroundColor: categoryColor }} />}
         <NodeLabel nodeId={id} label={nodeData.label} displayName={definition.displayName} />
         {batchPreview.label && <span className="batch-carousel__active-label" title={batchPreview.lineage}>[{batchPreview.label}]</span>}
-        {nodeData.keyStatus === 'missing' && <span className="model-node__badge model-node__badge--warning"
+        {nodeData.keyStatus === 'missing' && !switchable && <span className="model-node__badge model-node__badge--warning"
           title={usesKreaAccount(definition, nodeData.params) ? 'Krea sign-in required' : missingKeyTitle(definition, nodeData.params)}>&#x26A0;</span>}
         <span
           className="model-node__id-chip nodrag"
@@ -403,6 +422,11 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         >
           {/^n\d+$/.test(id) ? id : id.slice(0, 4)}
         </span>
+        {/* One indicator on these nodes: the chip replaces the missing-key badge. */}
+        {switchable && (
+          <ProviderSwitcher definition={definition} params={nodeData.params} variant="chip"
+            wired={wiredCounts} onPick={onProviderPick} />
+        )}
         {isSlavaSkin && downloadableOutput && (
           <button
             type="button"
@@ -449,6 +473,17 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           </button>
         )}
       </div>
+
+      {switchable && providerNote && (
+        <div className="model-node__provider-note nodrag nopan" role="status">
+          <span className="model-node__provider-note-text">{providerNote}</span>
+          <button type="button" className="model-node__provider-note-dismiss" aria-label="Dismiss provider note"
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => { event.stopPropagation(); useProviderNoteStore.getState().dismiss(id); }}>
+            &times;
+          </button>
+        </div>
+      )}
 
       {nodeData.outputFreshness && nodeData.outputFreshness.outOfDateReasons.length > 0 && (
         <div className="model-node__source-stale nodrag nopan" role="status">

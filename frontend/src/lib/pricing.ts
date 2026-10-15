@@ -1,5 +1,5 @@
 import type { ModelNodeDefinition } from '../types';
-import { allParamDefinitions, hasRoutes, routeBlock, routesOf, withWiredBlockers } from './directRoute';
+import { allParamDefinitions, hasRoutes, routeBlock, routeById, routesOf, withWiredBlockers } from './directRoute';
 
 /** One curated price entry from backend/data/model_pricing.json. The format
  * and its rules live in backend/services/model_pricing.py; this file mirrors
@@ -22,6 +22,9 @@ export interface PriceEntry {
   defaults?: Record<string, unknown>;
   provider?: string;
   plus?: string;
+  /** The provider's page doesn't state this price exactly (a higher page
+   * price kept until the exact one is published); the switcher marks it "*". */
+  unconfirmed?: boolean;
   notes?: string;
   sources?: Array<{ url: string; quote: string }>;
   checked?: string;
@@ -195,4 +198,12 @@ export function estimateRoutes(
       : estimateNode(entry, definition, params, route.pricing ?? route.id, ports);
   }
   return estimates;
+}
+
+/** A route's price that its provider's page doesn't state exactly (its
+ * entry's `unconfirmed`; model_pricing.route_price_unconfirmed). */
+export function routePriceUnconfirmed(definition: ModelNodeDefinition, routeId: string, pricing?: PricingTable | null): boolean {
+  const spec = routeById(definition, routeId);
+  if (!spec) return false;
+  return entryForRoute(pricing?.nodes[definition.id], spec.pricing ?? spec.id)?.unconfirmed === true;
 }

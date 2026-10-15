@@ -1,0 +1,355 @@
+/* The provider switcher of a route-table node (components/nodes/ProviderSwitcher.tsx):
+ * the card chip, the Create pill, the menu (in the Inspector, or a popover over
+ * the canvas) and the one-line switch note on the card. Visual rules sit under
+ * body.app-slava-restraint, with a plain fallback for the other skins; layout
+ * rules are shared.
+ *
+ * The popover opens on a spring sampled as a linear() easing (k 500, c 36:
+ * about 1% overshoot over 320ms, as workspace-rail.css), scale 0.98 -> 1 from
+ * its trigger's corner, with a short opacity fade alongside. */
+
+.provider-switcher__popover {
+  --provider-switcher-spring: linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 60;
+  width: 304px;
+  max-width: calc(100vw - 16px);
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: top left;
+}
+
+.provider-switcher__popover--above { transform-origin: bottom left; }
+
+.provider-switcher__popover--open {
+  opacity: 1;
+  pointer-events: auto;
+  animation:
+    provider-switcher-spring 320ms var(--provider-switcher-spring) both,
+    provider-switcher-fade 120ms ease-out both;
+}
+
+@keyframes provider-switcher-spring {
+  from { transform: scale(0.98); }
+  to { transform: scale(1); }
+}
+
+@keyframes provider-switcher-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .provider-switcher__popover--open { animation: none; }
+}
+
+.provider-switcher__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px;
+}
+
+.provider-switcher__menu--inline { padding: 0; }
+
+.provider-switcher__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 68px;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.provider-switcher__row--auto { grid-template-columns: minmax(0, 1fr); }
+
+/* Auto has no key cell: its label takes that room, and its price sits at the
+ * right edge with the key column. */
+.provider-switcher__row--auto .provider-switcher__item { align-items: start; }
+
+/* Auto's "can't run: <reason>" is the stop reason: it wraps, never cut. */
+.provider-switcher__row--auto .provider-switcher__label { white-space: normal; }
+
+.provider-switcher__item {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 6px;
+  min-height: 28px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.provider-switcher__check { display: inline-flex; align-items: center; justify-content: center; }
+
+.provider-switcher__name { display: flex; flex-direction: column; min-width: 0; }
+
+.provider-switcher__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.provider-switcher__block { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The Inspector column is narrow (about 234px): names wrap there instead of
+ * cutting "Black Forest Labs" to "Black Forest La...". */
+.provider-switcher--inspector .provider-switcher__label,
+.provider-switcher--inspector .provider-switcher__block { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+
+.provider-switcher--inspector .provider-switcher__row,
+.provider-switcher--inspector .provider-switcher__item { align-items: start; }
+
+.provider-switcher--inspector .provider-switcher__key,
+.provider-switcher--inspector .provider-switcher__setup { margin-top: 4px; }
+
+.provider-switcher--inspector .provider-switcher__check,
+.provider-switcher--inspector .provider-switcher__price { padding-top: 1px; }
+
+.provider-switcher__price { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.provider-switcher__key,
+.provider-switcher__setup {
+  justify-self: end;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.provider-switcher__setup {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.provider-switcher__alternatives {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 6px 2px;
+}
+
+.provider-switcher__alternative {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.provider-switcher__stop { padding: 6px 10px 8px; line-height: 1.4; }
+
+.provider-switcher--inspector .provider-switcher__stop { padding: 6px 0 0; }
+
+.model-node__provider-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 3px;
+  max-width: 96px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.provider-switcher__chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.provider-switcher__pill { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+.model-node__provider-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 10px;
+  line-height: 1.35;
+}
+
+.model-node__provider-note-text { flex: 1; min-width: 0; }
+
+.model-node__provider-note-dismiss {
+  flex-shrink: 0;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* -- Slava Restraint ------------------------------------------------------- */
+
+body.app-slava-restraint .provider-switcher__popover {
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control-lg);
+  background: var(--sr-glass-raised);
+  color: var(--sr-ink);
+  box-shadow: var(--sr-shadow-popover);
+  backdrop-filter: var(--sr-blur-panel);
+  -webkit-backdrop-filter: var(--sr-blur-panel);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+}
+
+body.app-slava-restraint .provider-switcher--inspector { font-size: var(--sr-type-body); }
+
+body.app-slava-restraint .provider-switcher__item {
+  color: var(--sr-ink-light);
+  transition: background-color var(--sr-motion-fast), color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .provider-switcher__item:hover,
+body.app-slava-restraint .provider-switcher__item:focus-visible {
+  background: var(--sr-surface-control-hover);
+  color: var(--sr-ink-bold);
+  outline: none;
+}
+
+body.app-slava-restraint .provider-switcher__row--selected .provider-switcher__item { color: var(--sr-ink-bold); }
+
+body.app-slava-restraint .provider-switcher__check { color: var(--sr-accent); }
+
+body.app-slava-restraint .provider-switcher__row--auto .provider-switcher__label { color: inherit; }
+
+body.app-slava-restraint .provider-switcher__block {
+  color: var(--sr-warning);
+  font-size: var(--sr-type-meta);
+}
+
+body.app-slava-restraint .provider-switcher__price,
+body.app-slava-restraint .provider-switcher__key {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+}
+
+body.app-slava-restraint .provider-switcher__setup {
+  color: var(--sr-accent);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  transition: background-color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .provider-switcher__setup:hover,
+body.app-slava-restraint .provider-switcher__setup:focus-visible {
+  background: var(--sr-accent-soft);
+  outline: none;
+}
+
+body.app-slava-restraint .provider-switcher__alternative {
+  border: 1px solid var(--sr-accent-border);
+  background: var(--sr-accent-soft);
+  color: var(--sr-ink-bold);
+  font-size: var(--sr-type-label);
+  transition: background-color var(--sr-motion-fast), border-color var(--sr-motion-fast);
+}
+
+body.app-slava-restraint .provider-switcher__alternative:hover,
+body.app-slava-restraint .provider-switcher__alternative:focus-visible {
+  border-color: var(--sr-accent-border-strong);
+  background: var(--sr-accent-hover-soft);
+  outline: none;
+}
+
+body.app-slava-restraint .provider-switcher__stop {
+  border-top: 1px solid var(--sr-edge);
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-label);
+}
+
+body.app-slava-restraint .provider-switcher--inspector .provider-switcher__stop { border-top: 0; }
+
+body.app-slava-restraint .model-node__provider-chip {
+  border: 1px solid var(--sr-edge);
+  background: transparent;
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  transition: color var(--sr-motion-ui), border-color var(--sr-motion-ui);
+}
+
+body.app-slava-restraint .model-node__provider-chip:hover,
+body.app-slava-restraint .model-node__provider-chip:focus-visible,
+body.app-slava-restraint .model-node__provider-chip[aria-expanded="true"] {
+  border-color: var(--sr-edge-strong);
+  color: var(--sr-ink);
+  outline: none;
+}
+
+body.app-slava-restraint .model-node__provider-chip--blocked,
+body.app-slava-restraint .model-node__provider-chip--blocked:hover {
+  border-color: var(--sr-accent-border-strong);
+  background: var(--sr-accent-soft);
+  color: var(--sr-accent);
+}
+
+body.app-slava-restraint .provider-switcher__pill--blocked { border-color: var(--sr-accent-border-strong); }
+
+body.app-slava-restraint .provider-switcher__pill--blocked .provider-switcher__chip-text,
+body.app-slava-restraint .provider-switcher__pill--blocked .provider-switcher__warning { color: var(--sr-accent); }
+
+body.app-slava-restraint .model-node__provider-note {
+  border-top: 1px solid var(--sr-edge);
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-label);
+}
+
+body.app-slava-restraint .model-node__provider-note-dismiss { color: var(--sr-ink-meta); }
+
+body.app-slava-restraint .model-node__provider-note-dismiss:hover,
+body.app-slava-restraint .model-node__provider-note-dismiss:focus-visible { color: var(--sr-ink-bold); outline: none; }
+
+/* -- Other skins: a plain dark fallback ------------------------------------ */
+
+body:not(.app-slava-restraint) .provider-switcher__popover {
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #1c1c1e;
+  color: #e6e6e6;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+  font-size: 12px;
+}
+
+body:not(.app-slava-restraint) .provider-switcher__item:hover,
+body:not(.app-slava-restraint) .provider-switcher__item:focus-visible { background: #2a2a2d; outline: none; }
+
+body:not(.app-slava-restraint) .provider-switcher__block { color: #f5c518; font-size: 10px; }
+
+body:not(.app-slava-restraint) .provider-switcher__price,
+body:not(.app-slava-restraint) .provider-switcher__key { color: #888; font-size: 10px; }
+
+body:not(.app-slava-restraint) .provider-switcher__setup { color: #ff5a1f; font-size: 10px; }
+
+body:not(.app-slava-restraint) .provider-switcher__alternative { border: 1px solid #ff5a1f; background: transparent; color: #e6e6e6; }
+
+body:not(.app-slava-restraint) .model-node__provider-chip {
+  border: 1px solid #333;
+  background: #252525;
+  color: #999;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+
+body:not(.app-slava-restraint) .model-node__provider-chip--blocked { border-color: #ff5a1f; color: #ff5a1f; }
+
+body:not(.app-slava-restraint) .model-node__provider-note { color: #aaa; font-size: 11px; }
+
+/* -- Create Studio pill ----------------------------------------------------- */
+
+body.app-slava-restraint .provider-switcher__pill { font-family: var(--sr-ui); }
+
+body.app-slava-restraint .provider-switcher__pill .provider-switcher__chip-text { color: var(--sr-ink); }
+
+body.app-slava-restraint .provider-switcher__pill:hover,
+body.app-slava-restraint .provider-switcher__pill:focus-visible,
+body.app-slava-restraint .provider-switcher__pill[aria-expanded="true"] { border-color: var(--sr-edge-strong); outline: none; }
+
+.param-pills__note { display: inline-flex; align-items: center; gap: 6px; }
+
+.param-pills__note-dismiss { padding: 0 2px; border: 0; background: transparent; font: inherit; cursor: pointer; }
+
+body.app-slava-restraint .param-pills__note { color: var(--sr-ink-light); font-size: var(--sr-type-label); }
+
+body.app-slava-restraint .param-pills__note-dismiss { color: var(--sr-ink-meta); }

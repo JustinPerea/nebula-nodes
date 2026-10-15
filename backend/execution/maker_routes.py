@@ -139,7 +139,9 @@ def multi_route(clients: Mapping[str, Handler]) -> Handler:
     other client runs. Otherwise the client gets a copy of the node with only
     that route's params (route_node), translated into the provider's names
     (translate_params); a Krea route's copy carries ``_kreaAuth`` set to how
-    the run bills."""
+    the run bills. The client is also told the route's ``endpoint``,
+    resolved here from ``endpointWhen`` on the routed values (our names, the
+    wired ports marked), since its copy only has the provider's names."""
 
     async def _route(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str]) -> dict[str, Any]:
         definition = definition_for(node.definition_id)
@@ -159,7 +161,8 @@ def multi_route(clients: Mapping[str, Handler]) -> Handler:
                  if spec.get("provider") == "krea" else None)
         routed = route_node(node, node_route.route_param_keys(definition, route.route_id))
         routed = routed.model_copy(update={"params": {**translate_params(spec, routed.params), **(extra or {})}})
-        return await client(routed, dict(inputs), api_keys)
+        endpoint = node_route.route_endpoint(definition, spec, routed_params)
+        return await client(routed, dict(inputs), api_keys, endpoint=endpoint)
 
     _route.multi_route = True  # type: ignore[attr-defined]  # a route-table node's router
     _route.dual_route = True  # type: ignore[attr-defined]  # so the router walks in tests find it too

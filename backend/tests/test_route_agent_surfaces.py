@@ -39,9 +39,18 @@ def test_describe_node_lists_each_route(surfaces):
     by_id = {route["id"]: route for route in body["routes"]}
     assert by_id["bfl"]["maker"] is True and by_id["bfl"]["keySet"] is False
     assert by_id["fal"]["keySet"] is True and by_id["fal"]["name"] == "fal.ai"
-    assert [param["key"] for param in by_id["bfl"]["params"]] == ["grounding"]
+    # Each route lists what it takes: the shared params and its own, as it
+    # offers them (node_route.route_param_definitions).
+    assert [param["key"] for param in by_id["bfl"]["params"]] == [
+        "aspect_ratio", "resolution", "safety_tolerance", "grounding"]
+    bfl_params = {param["key"]: param for param in by_id["bfl"]["params"]}
+    fal_params = {param["key"]: param for param in by_id["fal"]["params"]}
+    assert bfl_params["safety_tolerance"]["max"] == 4 and fal_params["safety_tolerance"]["max"] == 6
+    assert "1.5k" in bfl_params["resolution"]["options"] and "1.5k" not in fal_params["resolution"]["options"]
+    assert "grounding" not in fal_params
     assert by_id["krea"]["plan"] == "optional"
     assert by_id["bfl"]["price"] == {"usd": [0.03, 0.03]} and by_id["openrouter"]["price"] is None
+    assert by_id["fal"]["priceUnconfirmed"] is True and "priceUnconfirmed" not in by_id["bfl"]
     assert all(route["block"] is None for route in body["routes"])
     assert "_provider" in body["providerNote"] and "propose_change" in body["providerNote"]
     # The legacy dual-route fields stay off a route-table node.
@@ -79,3 +88,15 @@ def test_nebula_info_prints_one_line_per_route():
     # Shared params and each route's own are all listed.
     for key in ("aspect_ratio", "resolution", "safety_tolerance", "grounding"):
         assert f"  {key}" in text, key
+    # Under each route, what it takes that the PARAMS list doesn't say.
+    assert "takes aspect_ratio auto|1:1|16:9; resolution 768sq|1k|2k|4k" in text
+    assert "takes safety_tolerance 0-4; grounding" in text
+
+
+def test_saving_accepts_every_route_s_params(surfaces):
+    """Values stay flat in node.params, so a save takes any route's params,
+    even ones the shown route doesn't offer (route_block decides at run time)."""
+    surfaces({})
+    valid = main._valid_param_keys(TABLE["id"])
+    assert {"aspect_ratio", "resolution", "safety_tolerance", "grounding", "_provider", "_kreaAuth"} <= valid
+    main._validate_params(TABLE["id"], {"_provider": "fal", "resolution": "1.5k", "grounding": True})
