@@ -349,6 +349,31 @@ async def test_fal_failure_raises_and_cancel_stops_the_request_upstream(monkeypa
     assert hosts.sent("PUT", r".*/r1/cancel")
 
 
+@pytest.mark.asyncio
+async def test_fal_video_gets_a_longer_poll_budget_and_running_out_cancels_upstream(monkeypatch):
+    from handlers import fal_universal
+
+    budgets: list[dict[str, Any]] = []
+    real = fal_universal.handle_fal_universal
+
+    async def spy(*args, **kwargs):
+        budgets.append({k: kwargs[k] for k in ("max_polls", "poll_interval") if k in kwargs})
+        return await real(*args, **{**kwargs, "max_polls": 2, "poll_interval": 0.0})
+
+    monkeypatch.setattr(fal_universal, "handle_fal_universal", spy)
+    hosts = fal_hosts(monkeypatch, {}, statuses=["IN_QUEUE", "IN_PROGRESS"])
+    with pytest.raises(RuntimeError, match="timed out after 2 polls"):
+        await run("fal", "clients-video", "fal", {"duration": 5}, ports(prompt="p"))
+    from services import cancellation
+
+    await asyncio.gather(*list(cancellation._pending_cancel_tasks))
+    assert hosts.sent("PUT", r".*/r1/cancel")
+    fal_hosts(monkeypatch, {"images": [{"url": "https://fal.media/x.png"}]})
+    await run("fal", "clients-image", "fal", {}, ports(prompt="p"))
+    # 30 minutes for a video; an image keeps fal's default 10.
+    assert budgets == [{"max_polls": 600, "poll_interval": 3.0}, {}]
+
+
 # -- Replicate --------------------------------------------------------------------
 
 REP = r"https://api\.replicate\.com/v1/"

@@ -319,6 +319,13 @@ def fal_fields(endpoint: str, params: Mapping[str, Any], inputs: Mapping[str, An
     return fields
 
 
+# fal's default budget (handle_fal_universal) is 300 polls x 2 s, 10 minutes.
+# A FLUX 3 video takes "several minutes per generation" (BFL) and may wait in
+# fal's queue first, so a video job gets 600 polls x 3 s, 30 minutes, between
+# Replicate's 15 and BFL's 60. When it runs out, the job is cancelled upstream.
+FAL_VIDEO_POLLS: tuple[int, float] = (600, 3.0)
+
+
 async def run_fal(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str], *,
                   route: Mapping[str, Any], emit: Any = None, endpoint: Any = None) -> dict[str, Any]:
     """fal forwards every param it is given (handle_fal_universal), so the
@@ -333,7 +340,10 @@ async def run_fal(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: d
     fal_node = _fal_wrapper_node(node.model_copy(update={"params": params}), endpoint_id)
     prompt = prompt_of(inputs)
     fal_inputs = {"prompt": PortValueDict(type="Text", value=prompt)} if prompt is not None else {}
-    result = await handle_fal_universal(fal_node, fal_inputs, api_keys, emit=emit)
+    budget = {}
+    if output_port(definition)[1] == "Video":
+        budget = dict(zip(("max_polls", "poll_interval"), FAL_VIDEO_POLLS))
+    result = await handle_fal_universal(fal_node, fal_inputs, api_keys, emit=emit, **budget)
     return rekey(definition, result, "fal.ai")
 
 
