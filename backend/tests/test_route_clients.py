@@ -621,3 +621,93 @@ async def test_each_client_runs_end_to_end_through_multi_route(monkeypatch, defi
     hosts_seen = {httpx.URL(str(r.url)).host for r in hosts.requests}
     assert not hosts_seen & ({"api.bfl.ai", "queue.fal.run", "api.replicate.com", "openrouter.ai", "api.krea.ai"}
                              - {httpx.URL(request_pattern.replace("\\", "")).host})
+
+
+# -- From the switcher's click to the client (fixtures/switch_cases.json) --------
+# The frontend half (frontend/tests/lib/switchToClient.test.ts) checks that
+# each case's click writes `writes`; this half saves those values and checks
+# the router sends them to the right client, endpoint and body.
+
+SWITCH_CASES = json.loads((FIXTURES / "switch_cases.json").read_text())["cases"]
+SWITCH_HOSTS: dict[str, Callable[[pytest.MonkeyPatch, bool], FakeHosts]] = {
+    "bfl": lambda mp, video: bfl_hosts(mp, MP4 if video else PNG),
+    "fal": lambda mp, video: fal_hosts(mp, {"video": {"url": "https://fal.media/x.mp4"}} if video
+                                       else {"images": [{"url": "https://fal.media/x.png"}]}),
+    "replicate": lambda mp, video: replicate_hosts(mp, [{"id": "p1", "status": "succeeded",
+                                                  "output": "https://replicate.delivery/x/out.mp4"}],
+                                            "https://replicate.delivery/x/out.mp4", MP4),
+    "openrouter": lambda mp, video: FakeHosts(mp, [("POST", OR + "images", httpx.Response(200, json={
+        "data": [{"b64_json": base64.b64encode(PNG).decode()}]}))]),
+    "krea": lambda mp, video: krea_hosts(mp),
+}
+
+
+def switch_node(case: dict[str, Any]) -> GraphNode:
+    """The node as the switcher leaves it: defaults, the saved values, then what the click wrote."""
+    definition = DEFINITIONS[case["definition"]]
+    defaults = {p["key"]: p["default"] for group in ("params", "sharedParams") for p in definition[group]}
+    defaults.update({p["key"]: p["default"] for r in definition["routes"] for p in r.get("params") or []})
+    return node(case["definition"], **{**defaults, **case["saved"], **case["writes"]})
+
+
+@pytest.mark.parametrize("case", SWITCH_CASES, ids=[c["name"] for c in SWITCH_CASES])
+def test_switch_cases_pick_the_route_the_switcher_shows(case):
+    from services import node_route
+
+    definition = DEFINITIONS[case["definition"]]
+    graph_node = switch_node(case)
+    keys = {key: KEYS[key] for key in case["keys"]}
+    routed = node_route.with_wired_blockers(definition, graph_node.params,
+                                            {port: 1 for port in case["wired"]})
+    picked = node_route.select_route(definition, routed, keys)
+    if case["run"]["route"] is None:
+        assert picked.kind == node_route.UNSET
+        unavailable = node_route.route_unavailable(definition, routed, keys) or {}
+        assert list(unavailable.get("alternatives") or []) == case["switcher"]["alternatives"]
+        return
+    assert picked.route_id == case["run"]["route"]
+    # What the click saved, the route takes: no stop after a person's pick.
+    assert node_route.route_block(definition, node_route.route_by_id(definition, picked.route_id), routed) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", SWITCH_CASES, ids=[c["name"] for c in SWITCH_CASES])
+async def test_switch_cases_reach_the_right_client(monkeypatch, case):
+    from services import krea_mcp_generation
+
+    run_ = case["run"]
+    seen: dict[str, Any] = {}
+
+    async def plan_generate(node, body, model, assets, map_body, validate_, emit, **kwargs):
+        seen.update(body=body, endpoint=model["endpoint"])
+        return {"status": "completed", "result": {"urls": [KREA_RESULT]}}
+
+    monkeypatch.setattr(krea_mcp_generation, "generate", plan_generate)
+    video = route_clients.output_port(DEFINITIONS[case["definition"]])[1] == "Video"
+    hosts = (FakeHosts(monkeypatch, []) if run_["route"] is None
+             else SWITCH_HOSTS[run_["route"]](monkeypatch, video))
+    keys = {key: KEYS[key] for key in case["keys"]}
+    handler = registry_handler(case["definition"])
+    inputs = ports(prompt="p", **case["wired"])
+    if "refused" in run_:
+        with pytest.raises(MissingCredentialError, match=re.escape(run_["refused"])):
+            await handler(switch_node(case), inputs, keys)
+        assert not hosts.requests and not seen
+        return
+    out = await handler(switch_node(case), inputs, keys)
+    port, data_type = route_clients.output_port(DEFINITIONS[case["definition"]])
+    assert out[port]["type"] == data_type
+    if "plan" in run_:
+        assert seen == run_["plan"]
+        assert not [r for r in hosts.requests if r.method == "POST"]  # only the result's download
+        return
+    request = run_["request"]
+    body = hosts.json(request["method"], re.escape(request["url"]))
+    assert body == request["body"]
+    if "schema" in request:
+        provider, key = request["schema"]
+        validate(SCHEMAS[provider][key], body["input"] if provider == "replicate" else body)
+    # One provider per run: every request went to the picked provider's hosts.
+    first = httpx.URL(request["url"]).host
+    assert {httpx.URL(str(r.url)).host for r in hosts.requests} <= {first, "api.us1.bfl.ai", "delivery-us1.bfl.ai",
+                                                                     "replicate.delivery", "gen.krea.ai"}
