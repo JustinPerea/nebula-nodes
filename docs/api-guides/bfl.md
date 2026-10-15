@@ -18,7 +18,7 @@ sequenceDiagram
   D-->>N: image or video bytes, saved to the run folder at once
 ```
 
-**Status (2026-10-15, routing series PR 3):** BFL is the maker route of FLUX 3 Image, FLUX 3 Image Klein, FLUX 3 Video, FLUX Video Edit and FLUX Video Upscale. Each is one node with a provider switcher on the card; BFL is the first route, so with `BFL_API_KEY` saved, Auto runs on BFL (and stops, offering the routes that can, when BFL can't take the settings). `draft_enhance` isn't offered yet. FLUX.2 (`flux-2-pro`) still runs on fal; its BFL route is the next PR. See `docs/PROVIDER-ROUTES.md`.
+**Status (2026-10-15, routing series PR 4):** BFL is the maker route of FLUX 3 Image, FLUX 3 Image Klein, FLUX 3 Video, FLUX Video Edit, FLUX Video Upscale and FLUX.2. Each is one node with a provider switcher on the card; BFL is the first route, so with `BFL_API_KEY` saved, Auto runs on BFL (and stops, offering the routes that can, when BFL can't take the settings). `draft_enhance` isn't offered yet. See `docs/PROVIDER-ROUTES.md`.
 
 ## Nodes
 
@@ -30,11 +30,13 @@ sequenceDiagram
 | FLUX 3 Video (`flux-3-video`) | Black Forest Labs, fal, Replicate, OpenRouter, Krea |
 | FLUX Video Edit (`flux-video-edit`) | Black Forest Labs, fal, Krea |
 | FLUX Video Upscale (`flux-video-upscale`) | Black Forest Labs, fal, Replicate, Krea |
+| FLUX.2 (`flux-2-pro`): Pro, Max, Flex, Klein 9B, Klein 4B, and fal's Flash | Black Forest Labs (no Flash), fal |
 
 - **Auto** runs on the first provider in that order whose key you've saved. If a setting doesn't fit that provider (1.5k on fal, 4K video on Replicate), the run stops before anything is billed and the switcher offers the providers that take it. Auto never moves you to another provider by itself.
 - **Each provider shows its own options.** Pick a provider and the Inspector lists only the values it takes; a value it doesn't take is moved to the closest one, with a note on the card.
 - **Krea's old FLUX nodes** (Flux 3 Video, Flux Video Edit, Flux Video Upscale) open as these nodes set to Krea, with the same Krea billing choice.
-- What each provider takes, per node, with sources: `docs/model-providers/bfl/flux-3.md`. How routes work: [provider routes](../PROVIDER-ROUTES.md).
+- **FLUX.2 picks its model in the node** (`model`: Pro by default). Flash is fal's own model, so FLUX.2 Flash runs only on fal; picking Black Forest Labs on a Flash node moves it to Flex, with a note. Steps and guidance are Flex settings.
+- What each provider takes, per node, with sources: `docs/model-providers/bfl/flux-3.md` and `flux-2.md`. How routes work: [provider routes](../PROVIDER-ROUTES.md).
 
 ## Setup
 
@@ -127,7 +129,7 @@ Drafts (hd only) cost $0.06 per second. The September 10 release note listed old
 
 **FLUX.2, per megapixel** (first output MP, then each additional output MP and each input MP): [pro] $0.03 then $0.015; [max] $0.07 then $0.03; [flex] $0.05 then $0.05; [klein] 9B $0.015 then $0.002; [klein] 4B $0.014 then $0.001.
 
-The FLUX 3 prices are in `backend/data/model_pricing.json`, per route (other providers' prices: `docs/model-providers/bfl/flux-3.md`). The FLUX.2 prices go in with its BFL route.
+The FLUX 3 and FLUX.2 prices are in `backend/data/model_pricing.json`, per route (other providers' prices: `docs/model-providers/bfl/flux-3.md` and `flux-2.md`). Every FLUX.2 size the node offers is at most 1 MP and it takes no input image, so a FLUX.2 run on BFL costs the first-megapixel price.
 
 ## Not confirmed yet
 

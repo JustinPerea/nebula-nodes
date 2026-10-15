@@ -140,6 +140,8 @@ values `1`–`6`. The registry correctly includes all 6 values.
 
 ### flux-2-pro (`fal-ai/flux-2-pro`)
 
+> **Superseded 2026-10-15 (provider routes, PR 4):** `flux-2-pro` is now the FLUX.2 route-table node (BFL first, then fal, six models). Current detail: `docs/model-providers/bfl/flux-2.md`. The notes below describe the old fal-only handler.
+
 | Parameter | Type | Default | Accepted values | Status |
 |-----------|------|---------|-----------------|--------|
 | `prompt` | string | required | — | via `prompt` port |

@@ -72,27 +72,43 @@ Nodes: 307 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 ---
 
-### FLUX 2 Pro
+### FLUX.2
 
 | | |
 |---|---|
 | **ID** | `flux-2-pro` |
-| **Provider** | FAL |
-| **API Key** | FAL_KEY |
-| **Endpoint** | `fal-ai/flux-2-pro` |
+| **Provider** | BFL |
+| **API Key** | BFL_API_KEY, FAL_KEY |
+| **Endpoint** | `/v1/flux-2-pro` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-15 |
+
+**Routes** (Auto tries them in this order; `_provider` picks one)
+
+| Route | Provider | Keys | Endpoint | Notes |
+|---|---|---|---|---|
+| `bfl` | BFL | BFL_API_KEY | `/v1/flux-2-pro` | maker; BFL has no Flash and no safety-checker switch. |
+| `fal` | FAL | FAL_KEY | `fal-ai/flux-2-pro` | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | pro | FLUX 2 Pro, FLUX 2 Max, FLUX 2 Flash |
+| Model | enum | pro | FLUX 2 Pro, FLUX 2 Max, FLUX 2 Flash, FLUX 2 Flex, FLUX 2 Klein 9B, FLUX 2 Klein 4B |
 | Size | enum | landscape_4_3 | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
 | Format | enum | jpeg | JPEG, PNG |
 | Safety | enum | 2 | 1 (Strict), 2, 3, 4, 5 (Permissive) |
-| Safety Checker | bool | true | — |
 | Seed | int | — | — |
+| Steps (Flex) | int | — | 1–50 |
+| Guidance (Flex) | float | — | 1.5–10 |
+
+**FAL (`fal`) Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Safety Checker | bool | true | — |
 
 ---
 

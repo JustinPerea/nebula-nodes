@@ -1,5 +1,34 @@
 # Implementation Notes
 
+## 2026-10-15 — Provider routes, PR 4: FLUX.2 on BFL
+
+Branch `flux-2-bfl` (from `flux-3-nodes`). `flux-2-pro` ("FLUX.2") was a fal-only handler in `sync_runner.py`; it is now a route-table node, BFL (maker) first, then fal. Spec: session scratchpad `flux3/pr4-spec/flux-2-pro.json`. No paid calls; every provider fact is from the provider's own schema, docs or pricing page, fetched 2026-10-15 (`docs/model-providers/bfl/flux-2.md`).
+
+Decisions not in the spec:
+
+- **`model` is a shared select of six** (`pro`, `max`, `flash`, `flex`, `klein-9b`, `klein-4b`); `endpointWhen` picks the path on each route and `model` is never sent (`BFL_FLUX2_SWITCHES`, `FAL_ENDPOINT_DROPS`). BFL rejects `flash` (it has none) and the switcher snaps Flash to Flex on a BFL click, the list-order tie, which is the pricier neighbour.
+- **Names stay fal's.** Saved graphs carry `image_size`, `num_inference_steps`, `guidance_scale` and string `safety_tolerance`; BFL's route renames and value-maps them (preset → `{width, height}` spread into the body, `"2"` → 2).
+- **BFL default size filled in.** BFL documents FLUX.2 `width`/`height` "default 0" (no default), so `run_bfl` fills the node's default preset (`landscape_4_3`, 1024×768) when none is saved (`flux2_default_size`).
+- **Steps and guidance are Flex-only** on both routes (`rejectsWhen` on the other models), typed `int` and `float` (the contract check rejects `number`). BFL takes steps 1-50, fal 2-50 (`accepts` on fal).
+- **Row-level `unconfirmed` prices** (new, Python and TS): fal's Pro/Max/Flex prices are exact, Flash and Klein aren't (no rounding stated below 1 MP; Klein's `endpointBilling` $0.006/$0.005 vs the page's $0.011/$0.009). The higher figure is kept per row. `route_price_unconfirmed` / `routePriceUnconfirmed` now take the saved params and wired ports. The Python validator checks the row flag is a bool; TS has no validator.
+- **The spec's fal price quotes were misattributed**; the sources in `model_pricing.json` quote what each page actually says.
+
+Deviations from the spec (Justin to confirm):
+
+- **fal Flash still gets `safety_tolerance`.** `Flux2FlashInput` has no such field, but the old handler sent it on every Flash run. To keep saved graphs' requests byte-for-byte, the fal route sends it too and there is no Flash safety stop. `tests/fixtures/flux2_legacy_fal_requests.json` pins the old handler's requests for all 6,048 saved combinations (captured from e43c63e6 with `git archive`) and `test_flux2_nodes.py` replays them through the new fal route.
+- **Klein on fal** drops the default `safety_tolerance` and stops a non-default one (Klein's schema has no such field).
+
+Behaviour changes on saved graphs (all from the old handler being loose):
+
+- `model` was matched case-insensitively (`"MAX"` ran Max); now only the lowercase enum values match.
+- Extra saved params were forwarded to fal; the route sends only declared params.
+
+Tradeoffs and surprises:
+
+- `test_reference_roles.py` needed an exact `APPROVED_ROUTE_TABLE_CONVERSIONS["flux-2-pro"]` entry and `APPROVED_APPENDED_OPTIONS["flux-2-pro"]` (Flex, Klein 9B, Klein 4B), plus a drift test that the conversion still fingerprints every param. Approval needed.
+- `fal.json` and `bfl.json` provider schemas gained the FLUX.2 inputs, `$ref`s inlined, from each provider's OpenAPI.
+- Left out: image inputs/editing, preview endpoints, prompt upsampling, `safety_tolerance` 0, exact sizes, Flash/Klein steps on fal, finetunes, FLUX.2 [dev] and Klein Base, other providers.
+
 ## 2026-10-15 — PR 3 integration: nodes, merge and docs lanes on flux-3-nodes
 
 Branch `flux-3-nodes` (from `provider-switcher`): `flux3-lane-merge` (which holds `flux3-lane-nodes`) and `flux3-lane-docs` merged with merge commits.
