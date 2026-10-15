@@ -286,6 +286,21 @@ def test_migrate_graph_remaps_ports_moves_typed_values_and_warns_on_dropped_outp
         "'Flux 3 Video (Krea)' no longer has its Krea 'All artifacts' output, so its connection to 'Look' was removed."]
 
 
+def test_migrate_graph_places_added_input_nodes_clear_of_saved_nodes():
+    # Saved nodes 400 px apart (the fixture's layout): 360 px to the left of
+    # the folded node is on top of its neighbour, so the input node moves down
+    # past it, and a second one moves past the first.
+    nodes = [
+        {"id": "t", "definitionId": "text-input", "params": {"value": "comet"}, "position": {"x": 0, "y": 0}},
+        {"id": "v", "definitionId": FLUX_VIDEO, "position": {"x": 400, "y": 0},
+         "params": {"prompt": "a comet", "start_image": "https://x/a.png"}},
+    ]
+    out_nodes, _, _ = retired_nodes.migrate_graph(nodes, [])
+    by_id = {node["id"]: node for node in out_nodes}
+    assert by_id["v-prompt"]["position"] == {"x": 40.0, "y": 400.0}
+    assert by_id["v-start_image"]["position"] == {"x": 40.0, "y": 800.0}
+
+
 def test_migrate_graph_leaves_a_graph_without_folded_nodes_alone():
     nodes = [{"id": "a", "definitionId": "text-input", "params": {}}]
     assert retired_nodes.migrate_graph(nodes, [], key="id") == (nodes, [], [])

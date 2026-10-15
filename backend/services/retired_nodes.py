@@ -428,7 +428,8 @@ def migrate_graph(
     - a prompt or media value typed on it, with nothing wired to that port,
       becomes a Text, Image or Video Input node wired to it (the new nodes
       read these only from ports). ``new_id(hint)`` names the added node;
-      by default ``<ref>-<port>``.
+      by default ``<ref>-<port>``. It goes 360 px to the left of the node,
+      moved down past any positioned node it would cover (``_free_spot``).
 
     Added nodes have no ``label``; added edges have no ``id``."""
     if not any(node.get("definitionId") in MERGED for node in nodes):
@@ -475,6 +476,7 @@ def migrate_graph(
             wired.add((target, str(edge.get("targetHandle"))))
         out_edges.append(edge)
 
+    occupied = [spot for spot in (_spot(node) for node in nodes) if spot is not None]
     out_nodes: list[dict[str, Any]] = []
     for node in nodes:
         ref = str(node.get(key))
@@ -495,8 +497,7 @@ def migrate_graph(
                 if merged["outputs"].get(handle)
             }
         out_nodes.append(migrated)
-        position = node.get("position") if isinstance(node.get("position"), dict) else None
-        placed = 0
+        position = _spot(node)
         for param, (input_id, value_key, output_port) in merged["typed"].items():
             value = params.get(param)
             port = merged["inputs"][param]
@@ -504,15 +505,39 @@ def migrate_graph(
                 continue
             added: dict[str, Any] = {key: fresh(f"{ref}-{port}"), "definitionId": input_id, "params": {value_key: value}}
             if position is not None:
-                try:
-                    added["position"] = {"x": float(position["x"]) - 360.0, "y": float(position["y"]) + 160.0 * placed}
-                except (KeyError, TypeError, ValueError):
-                    pass
-            placed += 1
+                spot = _free_spot(position[0] - 360.0, position[1], occupied)
+                occupied.append(spot)
+                added["position"] = {"x": spot[0], "y": spot[1]}
             out_nodes.append(added)
             out_edges.append({"source": added[key], "sourceHandle": output_port, "target": ref, "targetHandle": port})
             wired.add((ref, port))
     return out_nodes, out_edges, warnings
+
+
+# The room an added input node keeps clear around a saved node: wider than a
+# card (route-table cards reach 300 px) and taller than a video card with its
+# preview (about 380 px with five ports) or a text input (about 240 px).
+_NODE_W, _NODE_H, _STEP = 320.0, 400.0, 40.0
+
+
+def _spot(node: dict[str, Any]) -> tuple[float, float] | None:
+    position = node.get("position")
+    if not isinstance(position, dict):
+        return None
+    try:
+        return float(position["x"]), float(position["y"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _free_spot(x: float, y: float, occupied: list[tuple[float, float]]) -> tuple[float, float]:
+    """(x, y), or the first spot below it that covers no positioned node."""
+    def covers(top: float) -> bool:
+        return any(abs(x - ox) < _NODE_W and abs(top - oy) < _NODE_H for ox, oy in occupied)
+
+    while covers(y):
+        y += _STEP
+    return x, y
 
 
 def retired_message(definition_id: str) -> str | None:
