@@ -32,6 +32,12 @@ Each key in `node_definitions.json` is a **definition id** (stable API name). Gr
 | `inputPorts` | Port[] | May be `[]` for source-only nodes |
 | `outputPorts` | Port[] | May be `[]` for sink-only nodes |
 
+### Display-only outputs (`displayOutputs`)
+
+Optional Port[]. Values a node keeps in its `outputs` only to show them on its card, with no handle to wire from. Image Compare keeps `imageA`/`imageB` here to draw its before/after slider, and Preview keeps `input`.
+
+Every key a run writes into a node's `outputs` must be declared in `outputPorts` or `displayOutputs`. Saving a project, importing a graph and restoring a backup all reject any other handle, so a handler that adds an undeclared key breaks autosave for that canvas. Edges can only start from `outputPorts`. `backend/tests/test_output_handle_contract.py` checks the engine and handlers against the registry, and the check script rejects a `displayOutputs` id that repeats an `outputPorts` id.
+
 ### Optional param groups
 
 | Group | When used |

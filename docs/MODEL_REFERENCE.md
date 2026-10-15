@@ -5183,7 +5183,7 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Endpoint** | `fal-ai/meshy/v6/image-to-3d` |
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)* |
-| **Outputs** | Mesh (Mesh) |
+| **Outputs** | Mesh (Mesh), Model URL (Text) |
 | **Audited** | 2026-06-03 |
 
 **Shared Parameters**
@@ -5322,7 +5322,7 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Endpoint** | `fal-ai/meshy/v6/text-to-3d` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
-| **Outputs** | Mesh (Mesh) |
+| **Outputs** | Mesh (Mesh), Model URL (Text) |
 | **Audited** | 2026-06-03 |
 
 **Shared Parameters**

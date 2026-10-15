@@ -144,6 +144,10 @@ export interface ModelNodeDefinition {
   capabilityNote?: string;
   inputPorts: PortDefinition[];
   outputPorts: PortDefinition[];
+  /** Values a node keeps in its outputs only to show them on the card, with no
+   *  handle to wire from. Image Compare keeps its two inputs here to draw the
+   *  before/after slider. Saving accepts these handles; edges never do. */
+  displayOutputs?: PortDefinition[];
   params: ParamDefinition[];
   /** Dual-route nodes: a fal or Krea copy that also runs on its maker's API
    *  with the person's key. Inspector and Create render sharedParams plus the

@@ -22,7 +22,8 @@ from tests.conftest import PERSON
 @pytest.fixture
 def replay_runtime(monkeypatch, tmp_path):
     graph = CLIGraph()
-    graph.add_node("text-input", {"value": "edited canvas prompt", "seed": 99})
+    # Two params the definition declares: a run syncs only declared ones (main._declared_run_params).
+    graph.add_node("sticky-note", {"content": "edited canvas prompt", "color": 99})
     registry = ExecutionRunRegistry()
     broadcast = AsyncMock()
     monkeypatch.setattr(main_module, "cli_graph", graph)
@@ -92,7 +93,7 @@ async def test_replay_preserves_live_params_and_ordinary_runs_still_sync_metadat
             raise
 
     monkeypatch.setattr(main_module, "execute_graph", fake_execute_graph)
-    node = GraphNode(id="n1", definitionId="text-input", params={"value": "saved prompt", "seed": 7})
+    node = GraphNode(id="n1", definitionId="sticky-note", params={"content": "saved prompt", "color": 7})
     with request_headers_scope(PERSON if who == "person" else {"X-Nebula-Agent": "Codex"}):
         response = await start_request(single_node, "replay-param-contract", preserve, node)
     record = registry.get(response["runId"])
@@ -105,11 +106,11 @@ async def test_replay_preserves_live_params_and_ordinary_runs_still_sync_metadat
         assert sum(isinstance(call.args[0], GraphCancelledEvent) for call in broadcast.await_args_list) == 1
     else:
         await record.task
-    assert accepted == [{"value": "saved prompt", "seed": 7}]
+    assert accepted == [{"content": "saved prompt", "color": 7}]
     # The person's run mirrors its params onto the canvas. A run that isn't
     # the person's writes back only what the run itself added: its request
     # can't edit the canvas (that goes through the edit routes and their checks).
-    synced = ({"value": "saved prompt", "seed": 7, "_sourceDuration": 1.2} if who == "person"
+    synced = ({"content": "saved prompt", "color": 7, "_sourceDuration": 1.2} if who == "person"
               else {**before, "_sourceDuration": 1.2})
     assert graph.nodes["n1"]["params"] == (before if preserve else synced)
     assert graph.nodes["n1"]["outputs"] == {"text": {"type": "Text", "value": "saved recipe result"}}
@@ -135,7 +136,7 @@ async def test_preserved_replay_still_records_late_provider_recovery_after_stop(
             raise
 
     monkeypatch.setattr(main_module, "execute_graph", fake_execute_graph)
-    node = GraphNode(id="n1", definitionId="text-input", params={"value": "old recipe", "seed": 7})
+    node = GraphNode(id="n1", definitionId="sticky-note", params={"content": "old recipe", "color": 7})
     response = await start_request(single_node, "replay-recovery-contract", True, node)
     record = registry.get(response["runId"])
     assert record is not None

@@ -205,7 +205,8 @@ describe('WorldEnvironmentViewer', () => {
     await waitFor(() => expect(onStatusChange).toHaveBeenCalledWith('ready'));
     const application = screen.getByRole('application');
     const camera = viewerHarness.threeState?.camera as PerspectiveCamera;
-    expect(camera.position.toArray()).toEqual([0, 2.75, 0]);
+    // 'ready' is reported before the render whose effect places the camera.
+    await waitFor(() => expect(camera.position.toArray()).toEqual([0, 2.75, 0]));
 
     camera.position.set(9, 8, 7);
     camera.quaternion.setFromAxisAngle(new Vector3(0, 1, 0), 0.7);

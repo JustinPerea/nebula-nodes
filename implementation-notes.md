@@ -4824,3 +4824,60 @@ Justin asked whether the Jev nodes could take their question straight on the car
 - **No repeated text, and the answered question stays.** The result's question line comes from the report's `Question:`/`Target:` field (what was actually sent). `JevResultView` takes `fieldText` (the field's value, or the param default when blank, so Pick Best's default question counts) and hides the line when the two match after collapsing whitespace (the handlers collapse it too). When they differ it shows the answered text prefixed "Asked" (Box: "Searched for"). The app has no params-changed stale flag (`outputFreshness` is only for Paper sources), so this prefix is the only marker; I didn't add a stale state. Box's "Not found" overlay follows the same rule for its target line.
 - **Canvas keys.** React Flow already skips its delete key inside form fields; the app's own `document`/`window` keydown listeners don't, so the field stops propagation as the text-input node does. Checked live in a Playwright harness (isolated Vite on 5191, API proxied to a dead port): with the node selected, Backspace/Delete edited the text and left the node; drag inside the field selected text without moving the node; the wheel over the field didn't zoom (wheel on the empty canvas did).
 - **Mishap.** The first harness launch used Vite's default cache dir, which in this worktree is the main checkout's symlinked `frontend/node_modules/.vite`, so it re-optimized that dependency cache (06:58). It is a regenerable cache; the dev server on 5173 may re-optimize on its next load. Relaunched with `cacheDir` in the scratchpad.
+
+## Image Compare autosave fix (2026-10-14)
+
+- **Root cause:** the engine writes every result into the node's `outputs`, the frontend saves those outputs with
+  the project, and saving (also graph import and backup restore) rejects any output handle the definition doesn't
+  declare (`_validate_imported_outputs`, added 2026-09-11). Image Compare passes its two inputs through as
+  `imageA`/`imageB` so the card can draw the before/after slider, but its definition had `outputPorts: []`. The
+  first autosave after a run got a 400 and the top bar stuck on "Save failed · Retry". Validation was right; the
+  definitions were incomplete.
+- **Same bug, other nodes:** Preview (echoes `input`), Meshy Text-to-3D and Image-to-3D on the direct Meshy route
+  (`model_url`, added in April without a port) and the Remotion node (echoed its `manifest` param as an output).
+  Any of them broke autosave the same way.
+- **Decision: new optional `displayOutputs` field instead of more output ports.** Image Compare and Preview are
+  sinks. Declaring their echoes as `outputPorts` would add wire handles to both cards, and Preview would get an
+  output named `input`. `displayOutputs` says "saved with the node, never wired". Save accepts these handles;
+  edge validation still uses `outputPorts` only, so an edge from `imageA` is still a 400 (tested). The frontend's
+  "Add next step" already reads only `outputPorts`.
+- **Meshy `model_url` became a real output port** (Text, optional). Retexture, Auto-Rig and Remesh take a
+  `model_url` Text input, so this is the wire that was missing. Only the direct route fills it; the FAL fallback
+  leaves it empty. Meshy's hosted URLs are signed and expire, so a saved graph's value can go stale.
+- **Remotion: dropped the `manifest` echo** rather than declaring it. It's already in params and nothing read the
+  output. Handler tests now check what was passed to the renderer instead.
+- **Tests that guard the whole class:** `backend/tests/test_output_handle_contract.py` runs Image Compare and
+  Preview through the engine and autosaves the result (the original failure, reproduced first). It also scans
+  `engine.py` branch by branch, checks every `SYNC_HANDLERS` function against its own definition, and checks that
+  every literal output key in `handlers/` and `execution/` is declared by some definition. The last one is a
+  broad net: it can't map helpers outside `SYNC_HANDLERS` to their exact node. `frontend/tests/nodeDefinitionHandles.test.ts`
+  checks that the frontend and backend definitions list the same port ids and types, so the canvas can't draw a
+  handle the backend rejects.
+- **Reference-roles fingerprint test:** recorded the four definition changes as exact approved additions
+  (`APPROVED_OUTPUT_PORT_ADDITIONS` plus `displayOutputs` entries in `APPROVED_TOP_LEVEL_FIELD_ADDITIONS`) rather
+  than rewriting the baseline hashes.
+- **Not fixed, worth knowing:**
+  - `fal_universal._parse_fal_output` picks the output key from the response shape. A fixed FAL-backed node
+    whose response falls through to the JSON dump writes `text`, which most image/video nodes don't declare. Saving
+    would then fail the same way. That depends on what the provider returns, so the static test can't see it.
+  - The JSON registry and `nodeDefinitions.ts` already differ in a few labels and `_note` fields (gemini-tts,
+    gemini-omni-flash, veo-3, quiver-arrow-generate), so `scripts/export-node-defs.ts` would undo them. Port ids
+    and types match; the new parity test checks only those.
+- **Browser check:** isolated backend on 8131 and Vite on 5231 (temp settings/state/output; the proxy was
+  repointed by a temp Vite config because `vite.config.ts` hardcodes 8000). Two Image Inputs into Image Compare,
+  run, autosave. Before the fix: PUT 400 with the `imageA` message and "Save failed · Retry". After: PUT 200, "Saved",
+  and the saved snapshot keeps `imageA`/`imageB`.
+
+## Jev tournament demo (2026-10-14)
+
+- **Branch.** `jev-tournament-demo` in the demo worktree, off `jev-nodes` at `03db7088`. It carries a cherry-pick of `63e2071d` from `fix-image-compare-autosave` (Preview now declares its `input` display output) and one new fix below. The demo graph has a Preview node (Box's crop), so without `63e2071d` the first autosave after a run fails with "output handle 'input' is not declared by definition 'preview'".
+- **Run params leaked onto the canvas and broke autosave.** About 50 fal handlers in `execution/sync_runner.py` route by `node.params.setdefault("endpoint_id", ...)`. A person's run mirrors `node.params` back to the canvas (`_sync_params_to_cli_graph`), and saving a project then rejects the undeclared key: "Unknown param(s) for flux-fill-inpaint: ['endpoint_id']" and the top bar stuck on "Save failed · Retry". This predates the Jev work (the same sync and save check are on main).
+  - Fixed at the sync, not in each handler: `_declared_run_params` keeps only keys the definition declares and `_`-prefixed canvas state, using the same `_valid_param_keys` as the save check, so no handler (today's fifty or a future one) can write a key the save will refuse. Universal nodes still sync every key.
+  - A key that already leaked is dropped by the node's next run, because the canvas sends it back with the run.
+  - Checked the handlers that legitimately write params back (Video Edit clips and source info, Recraft colours, Ideogram seed, World Labs resume ids on `worldlabs-environment`): all declared, so they still sync.
+  - Not changed: the handlers still mutate `node.params` (the manifest and agents' `/api/graph/export` of the run's own nodes don't see it now). Switching them to `_fal_wrapper_node` is a cleaner follow-up.
+  - Test: `backend/tests/test_run_param_sync.py`, including the real FLUX Fill handler (fal mocked) followed by a project save. Three of its four tests fail without the fix.
+- **Box -> FLUX Fill without shims.** The demo's mock backend dropped `--shim-mask`. A mocked run sent FLUX Fill the winner as a data URI and Box's mask at the image's size (1024 x 1024), white box = Box's crop rectangle, and the mock painted the swap into exactly that area. Nothing failed.
+- **Two older tests relied on the leak.** `test_paper_replay.py` and `test_execution_cancellation.py::test_canvas_stop_syncs_recovery_params_before_cancelled_event` synced made-up param keys back to the canvas, which the stricter sync now drops.
+  - Paper replay now uses a sticky note's declared `content` and `color` instead of keys a text input doesn't declare.
+  - The cancellation test now uses `worldlabs-environment` with its declared `display_name`, the node whose resume ids are the real reason that sync runs on stop. It runs as a person and skips graph validation; the comments say why.

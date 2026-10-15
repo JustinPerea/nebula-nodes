@@ -1441,9 +1441,11 @@ def _validate_imported_outputs(
     definition = node_registry.get(definition_id) or {}
     output_ports = (cinema_output_ports(params) if definition_id == "cinema-scene"
                     else definition.get("outputPorts", []) or [])
+    # displayOutputs are values a node keeps only to show on its card (Image
+    # Compare's two inputs). They are saved with the node but never wired.
     declared_ports = {
         str(port["id"]): str(port.get("dataType") or "Any")
-        for port in output_ports
+        for port in [*output_ports, *(definition.get("displayOutputs", []) or [])]
         if isinstance(port, dict) and isinstance(port.get("id"), str)
     }
     handles_are_dynamic = (
@@ -6322,12 +6324,32 @@ def _sync_params_to_cli_graph(
             }
             params.update({key: value for key, value in node.params.items()
                            if key != "_kreaAuth" and (key not in sent or sent[key] != value)})
+        params = _declared_run_params(node.definition_id, params)
         if cli_graph.nodes[node.id].get("params") != params:
             cli_graph.nodes[node.id]["params"] = copy.deepcopy(params)
             persisted = True
     if persisted:
         cli_graph._maybe_persist()
     return persisted
+
+
+def _declared_run_params(definition_id: str, params: Mapping[str, Any]) -> dict[str, Any]:
+    """The run's params minus keys a handler added that the definition doesn't declare.
+
+    Many fal handlers route by writing ``endpoint_id`` into ``node.params``
+    (``params.setdefault("endpoint_id", ...)`` in execution/sync_runner.py).
+    Mirrored onto the canvas, that key then failed every project autosave
+    ("Unknown param(s) for flux-fill-inpaint: ['endpoint_id']", the same check
+    as ``_validate_params``), so the top bar stuck on "Save failed". Declared
+    keys and ``_``-prefixed canvas state still sync; universal nodes (no fixed
+    key list) sync everything, as before. A key that already leaked onto a
+    canvas node is dropped by its next run, since the run sends the canvas
+    params back.
+    """
+    valid = _valid_param_keys(definition_id)
+    if valid is None:
+        return dict(params)
+    return {key: value for key, value in params.items() if key.startswith("_") or key in valid}
 
 
 def _submitted_params(nodes: list[GraphNode]) -> dict[str, dict[str, Any]] | None:
