@@ -1,0 +1,99 @@
+/* Gates (backend/execution/gating.py): a node a gate skipped, and wires
+ * from a withheld port. The skipped card settles to a quiet, desaturated
+ * state on a decelerating curve (the skin's handle curve, no ease-in-out),
+ * and only its "Skipped" chip keeps full strength. Reduced motion: instant. */
+
+.node-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin: 6px 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  cursor: help;
+  user-select: none;
+}
+
+.node-skip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+body.app-slava-restraint .node-skip {
+  color: var(--sr-ink-meta, #a0a0a0);
+  background: color-mix(in srgb, var(--sr-ink-meta, #a0a0a0) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sr-ink-meta, #a0a0a0) 28%, transparent);
+  font-family: var(--sr-mono, ui-monospace, monospace);
+  animation: node-skip-in 220ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+body.app-slava-restraint .node-skip__dot {
+  border: 1px solid currentColor;
+  background: transparent;
+}
+
+body:not(.app-slava-restraint) .node-skip {
+  color: #9a9a9a;
+  background: #262626;
+  border: 1px solid #3a3a3a;
+}
+
+body:not(.app-slava-restraint) .node-skip__dot {
+  border: 1px solid currentColor;
+}
+
+/* Everything on the card except the chip recedes. */
+.model-node--skipped .model-node__card > :not(.node-skip) {
+  opacity: 0.42;
+  filter: saturate(0.25);
+  transition:
+    opacity 260ms cubic-bezier(0.32, 0.72, 0, 1),
+    filter 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+body.app-slava-restraint .model-node--skipped .model-node__card {
+  border-style: dashed;
+}
+
+/* The inspector's State row: why the node was skipped. */
+.inspector__state-reason {
+  margin-top: 4px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@keyframes node-skip-in {
+  from { opacity: 0; transform: translateY(-2px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+/* A wire from a withheld port (or a skipped node): thin, dotted and faint.
+ * animation: none also stops the draw-in, whose forwards fill would
+ * otherwise keep stroke-dasharray at none. */
+body.app-slava-restraint .react-flow__edge .react-flow__edge-path.typed-edge.typed-edge--inactive,
+body:not(.app-slava-restraint) .react-flow__edge .react-flow__edge-path.typed-edge.typed-edge--inactive {
+  opacity: 0.28;
+  stroke-dasharray: 2 6;
+  stroke-linecap: round;
+  filter: none;
+  animation: none;
+  transition: opacity 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .node-skip {
+    animation: none;
+  }
+
+  .model-node--skipped .model-node__card > :not(.node-skip),
+  body.app-slava-restraint .react-flow__edge .react-flow__edge-path.typed-edge.typed-edge--inactive,
+  body:not(.app-slava-restraint) .react-flow__edge .react-flow__edge-path.typed-edge.typed-edge--inactive {
+    transition: none;
+  }
+}

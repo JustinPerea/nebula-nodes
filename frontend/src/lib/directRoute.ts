@@ -22,7 +22,7 @@ export const KEY_PROVIDERS: Readonly<Record<string, APIProvider>> = {
   MESHY_API_KEY: 'meshy', RUNWAY_API_KEY: 'runway', ELEVENLABS_API_KEY: 'elevenlabs',
   MINIMAX_API_KEY: 'minimax', XAI_API_KEY: 'xai', HIGGSFIELD_API_KEY: 'higgsfield',
   QUIVER_API_KEY: 'quiver', KREA_API_TOKEN: 'krea', IDEOGRAM_API_KEY: 'ideogram',
-  WORLDLABS_API_KEY: 'worldlabs',
+  WORLDLABS_API_KEY: 'worldlabs', TYPESAFE_API_KEY: 'typesafe',
   // BytePlus ModelArk, ByteDance's own international API (Seedream, Seedance).
   BYTEPLUS_API_KEY: 'bytedance',
 };

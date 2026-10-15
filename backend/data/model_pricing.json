@@ -1859,6 +1859,100 @@
         }
       }
     },
+    "jev-box": {
+      "currency": "usd",
+      "per": "request",
+      "rows": [
+        {
+          "match": {},
+          "price": [
+            0.00013,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "One request holding the image once and two questions (is it there, and where). TypeSafe bills input tokens only ($0.042 per million; output is free) and images as input tokens. A live probe (2026-10-14) measured about 305 input tokens for a short text-only question and about 2,750 more for each 1024 x 1024 image (3,055 for a yes/no with one image, 11,427 for Pick Best over four). The low end is one 1024 px image with both questions (3,068 tokens measured); a smaller image may cost less. One request can't exceed the 64k-token context limit, so the high end is that limit. Failed requests are assumed not to bill.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
+    "jev-decide": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "long_context"
+      ],
+      "rows": [
+        {
+          "match": {
+            "long_context": true
+          },
+          "price": [
+            1.28e-05,
+            0.011
+          ]
+        },
+        {
+          "match": {},
+          "price": [
+            1.28e-05,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "TypeSafe bills input tokens only ($0.042 per million; output is free) and images as input tokens. A live probe (2026-10-14) measured about 305 input tokens for a short text-only question and about 2,750 more for each 1024 x 1024 image (3,055 for a yes/no with one image, 11,427 for Pick Best over four). The low end is that text-only question (~305 tokens). One request can't exceed the context limit, so the high end is that limit: 64k tokens by default, 262k with Long context. Failed requests are assumed not to bill.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Long context header: 262k per request and per question, same price per token"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
+    "jev-pick-best": {
+      "currency": "usd",
+      "per": "request",
+      "rows": [
+        {
+          "match": {},
+          "price": [
+            0.00025,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "One Choice request over every candidate. TypeSafe bills input tokens only ($0.042 per million; output is free) and images as input tokens. A live probe (2026-10-14) measured about 305 input tokens for a short text-only question and about 2,750 more for each 1024 x 1024 image (3,055 for a yes/no with one image, 11,427 for Pick Best over four). The low end is two 1024 px candidates (~5,900 tokens); smaller candidates may cost less. One request can't exceed the 64k-token context limit, so the high end is that limit. Failed requests are assumed not to bill; a request over the limit is sent once more with smaller candidates.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
     "kling-v3": {
       "currency": "usd",
       "per": "second",
@@ -10907,6 +11001,130 @@
           "checked": "2026-10-14"
         }
       }
+    },
+    "qc-camera-geometry": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "mode"
+      ],
+      "rows": [
+        {
+          "match": {
+            "mode": "jev"
+          },
+          "price": [
+            1.28e-05,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "Jev mode only: every check goes in one TypeSafe request, so a run is one request. TypeSafe bills input tokens only ($0.042 per million) and images as input tokens. A live probe (2026-10-14) measured about 305 input tokens for a short text-only question and about 2,750 more for each 1024 x 1024 image (3,055 for a yes/no with one image, 11,427 for Pick Best over four). Jev mode sends frames at 768 px or less, which weren't measured, so the low end is only the text-only floor (~305 tokens); the high end is the 64k-token request limit (Jev mode doesn't offer Long context). Heuristic and opencv modes are free; vision-llm mode has no list price. Failed requests are assumed not to bill.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
+    "qc-composited-look": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "mode"
+      ],
+      "rows": [
+        {
+          "match": {
+            "mode": "jev"
+          },
+          "price": [
+            1.28e-05,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "Jev mode only: every check goes in one TypeSafe request, so a run is one request. TypeSafe bills input tokens only ($0.042 per million) and images as input tokens. A live probe (2026-10-14) measured about 305 input tokens for a short text-only question and about 2,750 more for each 1024 x 1024 image (3,055 for a yes/no with one image, 11,427 for Pick Best over four). Jev mode sends frames at 768 px or less, which weren't measured, so the low end is only the text-only floor (~305 tokens); the high end is the 64k-token request limit (Jev mode doesn't offer Long context). Heuristic and opencv modes are free; vision-llm mode has no list price. Failed requests are assumed not to bill.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
+    "qc-frame-review": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "mode"
+      ],
+      "rows": [
+        {
+          "match": {
+            "mode": "jev"
+          },
+          "price": [
+            1.28e-05,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "Jev mode only: every check goes in one TypeSafe request, so a run is one request. TypeSafe bills input tokens only ($0.042 per million) and images as input tokens. A live probe (2026-10-14) measured about 305 input tokens for a short text-only question and about 2,750 more for each 1024 x 1024 image (3,055 for a yes/no with one image, 11,427 for Pick Best over four). Jev mode sends frames at 768 px or less, which weren't measured, so the low end is only the text-only floor (~305 tokens); the high end is the 64k-token request limit (Jev mode doesn't offer Long context). Heuristic and opencv modes are free; vision-llm mode has no list price. Failed requests are assumed not to bill.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
+    },
+    "qc-loop-safety": {
+      "currency": "usd",
+      "per": "request",
+      "priceParams": [
+        "mode"
+      ],
+      "rows": [
+        {
+          "match": {
+            "mode": "jev"
+          },
+          "price": [
+            1.28e-05,
+            0.0027
+          ]
+        }
+      ],
+      "plus": "input images",
+      "notes": "Jev mode only: every check goes in one TypeSafe request, so a run is one request. TypeSafe bills input tokens only ($0.042 per million) and images as input tokens. A live probe (2026-10-14) measured about 305 input tokens for a short text-only question and about 2,750 more for each 1024 x 1024 image (3,055 for a yes/no with one image, 11,427 for Pick Best over four). Jev mode sends frames at 768 px or less, which weren't measured, so the low end is only the text-only floor (~305 tokens); the high end is the 64k-token request limit (Jev mode doesn't offer Long context). Heuristic and opencv modes are free; vision-llm mode has no list price. Failed requests are assumed not to bill.",
+      "sources": [
+        {
+          "url": "https://docs.typesafe.ai/models",
+          "quote": "Jev 1.14 and 1.13: $0.042 per Mtok of input; output tokens free; context 64k per request / 32k per question"
+        },
+        {
+          "url": "https://docs.typesafe.ai/images",
+          "quote": "Image tokens are billed at the input token price; no separate image charge"
+        }
+      ],
+      "checked": "2026-10-14"
     },
     "runway-image": {
       "currency": "usd",

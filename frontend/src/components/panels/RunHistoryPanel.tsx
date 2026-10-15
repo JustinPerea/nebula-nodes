@@ -201,6 +201,14 @@ export function RunHistoryPanel() {
                     {r.nodesExecuted != null && (
                       <> · {r.nodesExecuted} {executedUnit}{r.nodesExecuted === 1 ? '' : 's'}</>
                     )}
+                    {r.skippedNodes && Object.keys(r.skippedNodes).length > 0 && (
+                      <span
+                        className="run-history__skipped"
+                        title={Object.entries(r.skippedNodes).map(([id, reason]) => `${id} skipped: ${reason}`).join('\n')}
+                      >
+                        {' '}· {Object.keys(r.skippedNodes).length} skipped
+                      </span>
+                    )}
                     {r.targetNodeId && (
                       <span className="run-history__target" title={r.targetNodeId}>
                         {' '}· target {r.targetNodeId}

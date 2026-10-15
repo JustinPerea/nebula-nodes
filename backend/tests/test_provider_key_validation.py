@@ -16,6 +16,7 @@ All HTTP is mocked — no live API calls.
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -51,6 +52,7 @@ PROVIDER_KEYS = {
     "Krea usage": "KREA_USAGE_KEY",
     "Google Vertex": "GOOGLE_VERTEX_CREDENTIALS",
     "Higgsfield": "HIGGSFIELD_API_KEY",
+    "TypeSafe": "TYPESAFE_API_KEY",
     "World Labs": "WORLDLABS_API_KEY",
     "BytePlus": "BYTEPLUS_API_KEY",
     # Nous has no settings.json key — it resolves an OAuth credential from
@@ -473,6 +475,26 @@ async def test_network_failure_reports_error(monkeypatch, exc):
     assert result["OpenAI"]["detail"]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("respond, expected", [
+    (lambda url, headers: _FakeResponse(401), "invalid"),  # the live probe's made-up-key reply
+    (lambda url, headers: _FakeResponse(200), "valid"),
+    (lambda url, headers: (_ for _ in ()).throw(httpx.ConnectError("api.typesafe.ai unreachable")), "error"),
+    (lambda url, headers: (_ for _ in ()).throw(httpx.TimeoutException("slow")), "error"),
+])
+async def test_typesafe_key_check_tells_a_bad_key_from_a_network_failure(monkeypatch, respond, expected):
+    key = "ts-live-secret-123"
+    _set_keys(monkeypatch, {"TYPESAFE_API_KEY": key})
+    log = _install_client(monkeypatch, respond)
+
+    result = await settings_service.validate_provider_keys()
+
+    assert result["TypeSafe"]["configured"] is True
+    assert result["TypeSafe"]["status"] == expected
+    assert key not in json.dumps(result)
+    assert [entry["url"] for entry in log if "typesafe" in entry["url"]] == ["https://api.typesafe.ai/v1/models"]
+
+
 # ---------------------------------------------------------------------------
 # Per-provider request shape (URL + auth header)
 # ---------------------------------------------------------------------------
@@ -534,6 +556,9 @@ async def test_each_provider_uses_its_own_endpoint_and_auth(monkeypatch):
 
     krea = by_url["https://api.krea.ai/styles"]
     assert krea["Authorization"] == "Bearer key-for-KREA_API_TOKEN"
+
+    typesafe = by_url["https://api.typesafe.ai/v1/models"]
+    assert typesafe == {"Authorization": "Bearer key-for-TYPESAFE_API_KEY"}
 
     world_labs = by_url["https://api.worldlabs.ai/marble/v1/credits"]
     assert world_labs["WLT-Api-Key"] == "key-for-WORLDLABS_API_KEY"

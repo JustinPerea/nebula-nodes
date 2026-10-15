@@ -10,8 +10,9 @@ under Factory mission `a06170a9-b974-43ea-9dc3-82b2bd937afd`.
   `qc-loop-safety`, `qc-frame-review`, `qc-composited-look`, and
   `qc-camera-geometry`. The total registry count is 172.
 - Every node is a synchronous `utility` analyzer with a required Video input,
-  `mode` enum (`heuristic`, `vision-llm`, `opencv`, default `heuristic`), an
-  annotated Image output named `frame`, and a JSON Text output named `text`.
+  `mode` enum (`heuristic`, `vision-llm`, `opencv`, `jev`, default
+  `heuristic`), an annotated Image output named `frame`, and a JSON Text
+  output named `text`. `jev` was added on 2026-10-14 (see "Jev mode" below).
 - Heuristic and OpenCV modes execute without provider keys. Vision-LLM mode
   fails clearly when none of `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or
   `GOOGLE_API_KEY` is configured, as a missing credential
@@ -34,6 +35,56 @@ under Factory mission `a06170a9-b974-43ea-9dc3-82b2bd937afd`.
   request limits.
   Provider output is parsed as JSON when possible and schema-coerced by the
   handler; tests make no live or paid calls.
+
+## Jev mode
+
+`mode: jev` asks TypeSafe Jev one typed question per check (yes/no, pick one,
+or a score) instead of asking a vision LLM for JSON. Code:
+`backend/services/qc_jev.py` plus a `_jev_checks` list in each handler.
+
+- Needs `TYPESAFE_API_KEY` (BYOK). With no key the node raises a missing
+  credential before any frame is cut. `providerVia.byValue.jev` says so, so
+  readiness, the canvas badge and agents ask for that key, not a vision key.
+- Params shown only in Jev mode: `model` (pinned `jev-1.14.0` by default)
+  and `min_confidence` (0.5).
+- The local heuristic metrics run first, as in vision-llm mode, and Jev's
+  answers overwrite the fields its checks cover. Same ports and report keys;
+  the report adds `jev` with each check's question, answer, probabilities,
+  confidence and verdict, the overall verdict, the lowest pass probability,
+  the model that answered, input tokens, request id and which samples went.
+- Each frame is in the request state once (`frame_3`, `first_frame`,
+  `reference`); questions refer to it by name. At most 8 frames, downscaled
+  to 768 px on the long side, so the images stay under 24k of the 32k-token
+  per-question limit on a deliberately high estimate (TypeSafe hasn't
+  published image token counts). The report says when frames were left out.
+- All checks go in one request, priced per request (up to $0.0027, the 64k
+  context ceiling). Long context isn't offered.
+- Verdicts: a check is `true`, `false`, `unsure` (confidence below
+  `min_confidence`) or `n/a`. The overall `jev.verdict` is `false` if any
+  must-pass check fails, else `unsure` if any is unsure, else `true`; `null`
+  when no must-pass check applied. Legacy boolean fields fail closed: an
+  unsure check is never `true` there (`loop_safe` is `false`,
+  `pass_fail_summary` entries and `chroma_key_detected` are `null`).
+- Image input is experimental at TypeSafe; `jev.images` says so.
+
+| Node | Check | Question type | Gates | Report fields it sets |
+|---|---|---|---|---|
+| qc-loop-safety | lighting, content, camera (first vs last frame) | 3 yes/no | all | `loop_safe`, `seam_score` (lowest pass probability), `discontinuity_type` (worst failure, or `unsure`) |
+| qc-frame-review | identity | Choice: same / different / no face | yes (`n/a` with no face) | `identity_drift_score` |
+| | expression | Score, 4 levels of unexplained change | pass at <= 0.45 | `expression_drift_score` |
+| | background | yes/no | yes | `background_stability_score` |
+| | face per sent frame (when `track_faces`) | yes/no | no | `face_detected_per_frame` |
+| qc-composited-look | edge spill, light match, depth, cutout, chroma key | 5 yes/no | all | the matching scores, `compositing_artifacts` (the artifact type of each failed check), `chroma_key_detected`; `overall_integration_score` is the lowest pass probability |
+| qc-camera-geometry | angle | Choice: low / eye-level / high | no | `detected_camera_angle`, `geometry_confidence` |
+| | pan, tilt, zoom | 3 Choices | no | `motion_direction` |
+| | expected angle (when set) | yes/no | yes | `expected_angle_match` |
+| | reference match (when wired) | Score, 4 levels | pass at >= 0.5 | `reference_match_score` |
+
+Kept on the local metrics in Jev mode because they are measurements, not
+typed answers: loop `frame_analysis`, frame-review `color_drift_score` and the
+OpenCV face proxies, composited `background_consistency_score`, and camera
+`motion_estimate` magnitudes, horizon, vanishing points, distortion and
+homographies.
 
 ## Node behavior
 

@@ -31,6 +31,7 @@ import {
   paperRunOutOfDateReasons,
   recordRunOutput,
   recordRunBatchOutputs,
+  recordRunSkip,
   sanitizeVariantScopes,
   snapshotWithLatestPaperSources,
   providerRecoveryWarningText,
@@ -141,6 +142,17 @@ function captureRunSnapshot(nodes: Node<NodeData>[], edges: Edge[]): RunGraphSna
       targetHandle: edge.targetHandle,
     })),
   });
+}
+
+/** Gate state from the previous run, cleared when a node is queued or starts again. */
+const CLEAR_GATE_STATE = { skipReason: undefined, skipGateNodeId: undefined, withheldPorts: undefined } as const;
+
+/** The executed event's withheld ports, kept only when it is a port -> reason map. */
+function withheldPorts(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string');
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 function persistedRunHistory(history: RunRecord[]): RunRecord[] {
@@ -5199,13 +5211,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           ...clearBatchPreview(event.runId ?? currentRunId ?? undefined),
           streamingText: undefined,
           streamingPartials: undefined,
+          ...CLEAR_GATE_STATE,
         });
         break;
       case 'executing': {
         const runId = event.runId ?? currentRunId ?? undefined;
         const live = get().nodes.find((node) => node.id === event.nodeId);
         get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, runStartedAt: Date.now(), streamingText: undefined,
-          streamingPartials: undefined, streamingSvg: undefined, runNotes: undefined,
+          streamingPartials: undefined, streamingSvg: undefined, runNotes: undefined, ...CLEAR_GATE_STATE,
           ...(live?.data.batchRunId !== runId ? clearBatchPreview(runId) : {}),
         });
         break;
@@ -5257,7 +5270,32 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           ? event.notes.filter((note): note is string => typeof note === 'string' && note !== '') : [];
         get().updateNodeData(event.nodeId, { state: 'complete', outputs: liveOutputs as NodeData['outputs'],
           batchOutputs, batchVariants, batchRunId: runId ?? undefined, runNotes: runNotes.length ? runNotes : undefined,
-          outputFreshness, progress: undefined, streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined });
+          outputFreshness, progress: undefined, streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined,
+          skipReason: undefined, skipGateNodeId: undefined, withheldPorts: withheldPorts(event.withheld) });
+        break;
+      }
+      case 'skipped': {
+        // A gate upstream withheld this node's input: it never started and
+        // cost nothing. Its previous outputs stay but aren't shown as current.
+        const runId = event.runId ?? currentRunId;
+        if (runId && ownsRun(runId)) {
+          set((state) => {
+            const runHistory = recordRunSkip(state.runHistory, runId, event.nodeId, String(event.reason ?? ''));
+            return runHistory === state.runHistory ? {} : { runHistory: persistedRunHistory(runHistory) };
+          });
+        }
+        get().updateNodeData(event.nodeId, {
+          state: 'skipped',
+          skipReason: typeof event.reason === 'string' && event.reason ? event.reason : 'A gate upstream withheld its input',
+          skipGateNodeId: typeof event.gateNodeId === 'string' ? event.gateNodeId : undefined,
+          withheldPorts: undefined,
+          // Notes describe a run; a skipped node didn't run this time.
+          runNotes: undefined,
+          progress: undefined,
+          streamingText: undefined,
+          streamingPartials: undefined,
+          streamingSvg: undefined,
+        });
         break;
       }
       case 'streamDelta':
@@ -5320,7 +5358,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         // complete; DELETE/status reconciliation decides actual cancellation.
         settleTrackedExecutionStatus('completed', runId, set, get, {
           durationSec: event.duration, nodesExecuted: event.nodesExecuted });
-        notifyJobComplete({ ok: !runFailed, durationSec: event.duration, nodesExecuted: event.nodesExecuted });
+        notifyJobComplete({ ok: !runFailed, durationSec: event.duration, nodesExecuted: event.nodesExecuted,
+          nodesSkipped: event.nodesSkipped });
         break;
       }
       case 'graphCancelled': {

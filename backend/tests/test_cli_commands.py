@@ -145,8 +145,9 @@ def test_context_says_what_local_provider_nodes_need():
     listed = " ".join(line for line in nothing.splitlines() if line.startswith(("Cinema:", "Analyzer:")))
     assert "cinema-scene" not in listed  # its base models all need a key
     assert "qc-frame-review+" in listed
-    assert "+ free at its defaults; mode other than heuristic/opencv calls a vision model with " \
+    assert "+ free at its defaults; mode other than heuristic/opencv/jev calls a vision model with " \
            "ANTHROPIC_API_KEY or OPENAI_API_KEY or GOOGLE_API_KEY. No list price" in nothing
+    assert "mode jev calls typesafe with TYPESAFE_API_KEY, priced per run." in nothing
     assert "Utility (free)" not in nothing
 
     google = format_context({"apiKeys": {"GOOGLE_API_KEY": "g"}}, nodes)

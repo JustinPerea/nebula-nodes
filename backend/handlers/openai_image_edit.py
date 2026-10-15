@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from models.graph import GraphNode, PortValueDict
+from services.edit_masks import image_size, openai_edit_mask
 from services.media_input import read_local_media
 from services.output import get_run_dir, portable_output_ref, save_base64_image
 from execution.missing_credential import MissingCredentialError
@@ -59,7 +60,9 @@ async def handle_openai_image_edit(
     mask_input = inputs.get("mask")
     mask_bytes: bytes | None = None
     if mask_input and mask_input.value:
-        mask_bytes = _resolve_image_bytes(mask_input.value)
+        # OpenAI edits only where the mask is transparent; Nebula's masks are
+        # white-on-black. openai_edit_mask converts (services/edit_masks.py).
+        mask_bytes = openai_edit_mask(_resolve_image_bytes(mask_input.value), image_size(str(image_input.value)))
 
     # --- build multipart form data ---
     prompt_text = str(prompt_input.value)

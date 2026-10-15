@@ -34,6 +34,10 @@ Drop nodes, connect their inputs and outputs, and run a creative pipeline using 
 
 ## Recently added
 
+### Jev decision nodes (TypeSafe)
+
+Put a judge between your generators. **Jev Decide** asks one typed question about text or images (yes/no, pick one option, or a score) and returns the answer with its probability and confidence, or *unsure* when Jev isn't confident enough. It is also a gate: wire anything into **Through** and it comes out of **On Pass** or **On Fail**, and the nodes on the branch it didn't take are skipped and cost nothing. **Jev Pick Best** picks the best of up to 10 candidate images. **Jev Box** (experimental) finds one thing in an image and returns its box, a crop and an inpainting mask. The Video QC nodes have a Jev mode too. Bring your own TypeSafe key (`TYPESAFE_API_KEY`); a request costs at most $0.0027 ($0.011 with Long context). TypeSafe marks image input as experimental. [Jev guide](docs/api-guides/typesafe.md).
+
 ### Projects home
 
 Start at **Projects** to create a blank canvas or reopen recent work. Projects autosave their canvas, outputs, run history and Creator Studio draft locally. Use the home button in any workspace to return to the project list. Rename or delete a project from its card. Deleted projects go to **Recently deleted** for 30 days, where you can restore them (or use Undo right away); generated files always stay in your outputs folder. Existing canvases are preserved as **Recovered canvas**.

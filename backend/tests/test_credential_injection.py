@@ -27,7 +27,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# The credential allowlist (18 keys; mirrors backend/main.py).
+# The credential allowlist (19 keys; mirrors backend/main.py).
 ALLOWED_PROVIDERS = {
     "ANTHROPIC_API_KEY",
     "ELEVENLABS_API_KEY",
@@ -43,6 +43,7 @@ ALLOWED_PROVIDERS = {
     "QUIVER_API_KEY",
     "REPLICATE_API_TOKEN",
     "RUNWAY_API_KEY",
+    "TYPESAFE_API_KEY",
     "XAI_API_KEY",
     "WORLDLABS_API_KEY",
     "KREA_USAGE_KEY",

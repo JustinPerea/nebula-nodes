@@ -1,4 +1,23 @@
-import type { ModelNodeDefinition } from '../types';
+import type { ModelNodeDefinition, ParamDefinition, ProviderVia } from '../types';
+
+// The Video QC nodes run locally in heuristic and opencv mode. Vision LLM mode
+// calls the first vision model with a key set (backend services/vision_llm.py
+// VISION_PROVIDERS) and has no list price; Jev mode asks TypeSafe Jev one typed
+// question per check (backend services/qc_jev.py), priced per request.
+const QC_PROVIDER_VIA: ProviderVia = {
+  kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'],
+  anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision',
+  byValue: { jev: { anyKey: ['TYPESAFE_API_KEY'], provider: 'typesafe' } },
+};
+const QC_JEV_PARAMS: ParamDefinition[] = [
+  { key: 'model', label: 'Jev Model', type: 'enum', required: false, default: 'jev-1.14.0', options: [
+    { label: 'Jev 1.14.0 (pinned)', value: 'jev-1.14.0' },
+    { label: 'Jev 1.13.0 (pinned)', value: 'jev-1.13.0' },
+    { label: 'jev-latest (moves; re-check thresholds)', value: 'jev-latest' },
+    { label: 'jev-preview (moves)', value: 'jev-preview' },
+  ], visibleWhen: { mode: ['jev'] } },
+  { key: 'min_confidence', label: 'Jev Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05, visibleWhen: { mode: ['jev'] } },
+];
 
 export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'paper-source': {
@@ -12976,12 +12995,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       { key: 'mode', label: 'Analysis Mode', type: 'enum', required: false, default: 'heuristic', options: [
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
+        { label: 'Jev (TypeSafe, experimental)', value: 'jev' },
       ] },
       { key: 'sample_density', label: 'Sample Density', type: 'integer', required: false, default: 5, min: 2, max: 12, step: 1 },
+      ...QC_JEV_PARAMS,
     ],
-    // Vision LLM mode calls the first vision model with a key set
-    // (backend services/vision_llm.py VISION_PROVIDERS); it has no list price.
-    providerVia: { kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'], anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision' },
+    providerVia: QC_PROVIDER_VIA,
   },
   'qc-frame-review': {
     id: 'qc-frame-review', displayName: 'QC Frame Review', category: 'analyzer',
@@ -12994,13 +13013,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       { key: 'mode', label: 'Analysis Mode', type: 'enum', required: false, default: 'heuristic', options: [
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
+        { label: 'Jev (TypeSafe, experimental)', value: 'jev' },
       ] },
       { key: 'sample_rate', label: 'Samples Per Second', type: 'float', required: false, default: 1, min: 0.1, max: 4, step: 0.1 },
       { key: 'track_faces', label: 'Track Faces', type: 'boolean', required: false, default: true },
+      ...QC_JEV_PARAMS,
     ],
-    // Vision LLM mode calls the first vision model with a key set
-    // (backend services/vision_llm.py VISION_PROVIDERS); it has no list price.
-    providerVia: { kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'], anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision' },
+    providerVia: QC_PROVIDER_VIA,
   },
   'qc-composited-look': {
     id: 'qc-composited-look', displayName: 'QC Composited Look', category: 'analyzer',
@@ -13013,12 +13032,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       { key: 'mode', label: 'Analysis Mode', type: 'enum', required: false, default: 'heuristic', options: [
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
+        { label: 'Jev (TypeSafe, experimental)', value: 'jev' },
       ] },
       { key: 'sample_density', label: 'Sample Density', type: 'integer', required: false, default: 5, min: 2, max: 12, step: 1 },
+      ...QC_JEV_PARAMS,
     ],
-    // Vision LLM mode calls the first vision model with a key set
-    // (backend services/vision_llm.py VISION_PROVIDERS); it has no list price.
-    providerVia: { kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'], anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision' },
+    providerVia: QC_PROVIDER_VIA,
   },
   'qc-camera-geometry': {
     id: 'qc-camera-geometry', displayName: 'QC Camera Geometry', category: 'analyzer',
@@ -13034,12 +13053,178 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     params: [
       { key: 'mode', label: 'Analysis Mode', type: 'enum', required: false, default: 'heuristic', options: [
         { label: 'Heuristic', value: 'heuristic' }, { label: 'Vision LLM', value: 'vision-llm' }, { label: 'OpenCV', value: 'opencv' },
+        { label: 'Jev (TypeSafe, experimental)', value: 'jev' },
       ] },
       { key: 'expected_angle', label: 'Expected Angle', type: 'string', required: false, default: '', placeholder: 'e.g. low-angle push-in' },
+      ...QC_JEV_PARAMS,
     ],
-    // Vision LLM mode calls the first vision model with a key set
-    // (backend services/vision_llm.py VISION_PROVIDERS); it has no list price.
-    providerVia: { kind: 'param', param: 'mode', freeWhen: ['heuristic', 'opencv'], anyKey: ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'], provider: 'vision' },
+    providerVia: QC_PROVIDER_VIA,
+  },
+
+  // TypeSafe Jev answers typed questions with probabilities and writes no text.
+  // Output formats: docs/api-guides/typesafe.md (lib/jev.ts parses them).
+  'jev-decide': {
+    id: 'jev-decide',
+    displayName: 'Jev Decide (judge / classify / yes-no)',
+    description: 'Judge, classify or score text and images with one typed question: yes/no, pick one option, or rate on a scale. Returns the answer, its probability, confidence and a pass / fail / unsure verdict. Also a gate: whatever is wired into Through comes out of On Pass or On Fail, and the nodes on the other branch are skipped. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.',
+    category: 'analyzer',
+    apiProvider: 'typesafe',
+    apiEndpoint: '/v1/systemone',
+    envKeyName: 'TYPESAFE_API_KEY',
+    executionPattern: 'sync',
+    capabilityNote: 'Image input is experimental at TypeSafe: the request format and accuracy can change between releases.',
+    docUrl: 'docs/api-guides/typesafe.md',
+    inputPorts: [
+      { id: 'state', label: 'Context', dataType: 'Text', required: false },
+      { id: 'images', label: 'Images', dataType: 'Image', required: false, multiple: true, maxConnections: 16 },
+      // The gate's passenger: comes out of On Pass or On Fail unchanged.
+      { id: 'through', label: 'Through', dataType: 'Any', required: false },
+    ],
+    outputPorts: [
+      { id: 'answer', label: 'Answer', dataType: 'Text', required: false },
+      { id: 'pass', label: 'Pass', dataType: 'Text', required: false },
+      { id: 'probability', label: 'Probability', dataType: 'Text', required: false },
+      { id: 'confidence', label: 'Confidence', dataType: 'Text', required: false },
+      { id: 'probabilities', label: 'Probabilities (JSON)', dataType: 'Text', required: false },
+      { id: 'report', label: 'Report', dataType: 'Text', required: false },
+      // Exactly one carries a value; nodes wired to the other are skipped
+      // (backend/execution/gating.py).
+      { id: 'on_pass', label: 'On Pass', dataType: 'Any', required: false, conditional: true },
+      { id: 'on_fail', label: 'On Fail', dataType: 'Any', required: false, conditional: true },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'jev-1.14.0',
+        options: [
+          { label: 'Jev 1.14.0 (pinned)', value: 'jev-1.14.0' },
+          { label: 'Jev 1.13.0 (pinned)', value: 'jev-1.13.0' },
+          { label: 'jev-latest (moves; re-check thresholds)', value: 'jev-latest' },
+          { label: 'jev-preview (moves)', value: 'jev-preview' },
+        ],
+      },
+      {
+        key: 'answer_type',
+        label: 'Answer Type',
+        type: 'enum',
+        required: false,
+        default: 'yes_no',
+        options: [
+          { label: 'Yes / No', value: 'yes_no' },
+          { label: 'Pick one option', value: 'choice' },
+          { label: 'Score on a scale', value: 'score' },
+        ],
+      },
+      { key: 'question', label: 'Question', type: 'textarea', required: true, placeholder: 'Is the product on a plain white background?' },
+      { key: 'yes_means', label: 'Yes Means (optional)', type: 'string', required: false, default: '', visibleWhen: { answer_type: ['yes_no'] } },
+      { key: 'no_means', label: 'No Means (optional)', type: 'string', required: false, default: '', visibleWhen: { answer_type: ['yes_no'] } },
+      { key: 'options', label: 'Options (one per line)', type: 'textarea', required: false, default: '', placeholder: 'Product photo\nLifestyle shot\nIllustration', visibleWhen: { answer_type: ['choice'] } },
+      { key: 'pass_when', label: 'Passing Options (one per line)', type: 'textarea', required: false, default: '', visibleWhen: { answer_type: ['choice'] } },
+      { key: 'levels', label: 'Levels, Low to High (one per line)', type: 'textarea', required: false, default: '', placeholder: 'Off brief\nPartly on brief\nOn brief', visibleWhen: { answer_type: ['score'] } },
+      { key: 'threshold', label: 'Pass Threshold', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05, visibleWhen: { answer_type: ['yes_no', 'score'] } },
+      { key: 'min_confidence', label: 'Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
+      {
+        key: 'when_unsure',
+        label: 'When Unsure',
+        type: 'enum',
+        required: false,
+        default: 'fail',
+        options: [
+          { label: 'Take the fail branch', value: 'fail' },
+          { label: 'Take the pass branch', value: 'pass' },
+          { label: 'Take neither branch', value: 'neither' },
+        ],
+      },
+      { key: 'long_context', label: 'Long Context (slower, less accurate)', type: 'boolean', required: false, default: false },
+    ],
+  },
+
+  // Picks the best of several candidate images; `winner` is the original value.
+  'jev-pick-best': {
+    id: 'jev-pick-best',
+    displayName: 'Jev Pick Best (rank / choose best image)',
+    description: 'Pick the best of several candidate images against a brief, in one typed Choice. Returns the winning image itself, its index, every candidate\'s probability and how confident the pick is; low confidence means the candidates are close. TypeSafe Jev makes decisions only, no text generation. Image input is experimental.',
+    category: 'analyzer',
+    apiProvider: 'typesafe',
+    apiEndpoint: '/v1/systemone',
+    envKeyName: 'TYPESAFE_API_KEY',
+    executionPattern: 'sync',
+    capabilityNote: 'Image input is experimental at TypeSafe: the request format and accuracy can change between releases. Up to 10 candidates per node.',
+    docUrl: 'docs/api-guides/typesafe.md',
+    inputPorts: [
+      { id: 'candidates', label: 'Candidates', dataType: 'Image', required: true, multiple: true, maxConnections: 10 },
+      { id: 'brief', label: 'Brief', dataType: 'Text', required: false },
+    ],
+    outputPorts: [
+      { id: 'winner', label: 'Winner', dataType: 'Image', required: false },
+      { id: 'index', label: 'Index', dataType: 'Text', required: false },
+      { id: 'probabilities', label: 'Probabilities (JSON)', dataType: 'Text', required: false },
+      { id: 'confidence', label: 'Confidence', dataType: 'Text', required: false },
+      { id: 'report', label: 'Report', dataType: 'Text', required: false },
+    ],
+    params: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'jev-1.14.0',
+        options: [
+          { label: 'Jev 1.14.0 (pinned)', value: 'jev-1.14.0' },
+          { label: 'Jev 1.13.0 (pinned)', value: 'jev-1.13.0' },
+          { label: 'jev-latest (moves; re-check thresholds)', value: 'jev-latest' },
+          { label: 'jev-preview (moves)', value: 'jev-preview' },
+        ],
+      },
+      { key: 'question', label: 'Question', type: 'textarea', required: false, default: 'Which image best matches the brief?', placeholder: 'Which image best matches the brief?' },
+      { key: 'min_confidence', label: 'Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
+    ],
+  },
+
+  // Finds one thing in an image. Only a confident 'found' produces crop / mask / annotated.
+  'jev-box': {
+    id: 'jev-box',
+    displayName: 'Jev Box (experimental)',
+    description: 'Find one thing in an image and get its bounding box, a crop and a rectangle mask for inpainting. A presence check runs in the same request, so a missing target gives found false, no crop, and the nodes wired to Crop, Mask or Annotated are skipped. TypeSafe Jev makes decisions only, no text generation. Experimental at TypeSafe.',
+    category: 'analyzer',
+    apiProvider: 'typesafe',
+    apiEndpoint: '/v1/systemone',
+    envKeyName: 'TYPESAFE_API_KEY',
+    executionPattern: 'sync',
+    capabilityNote: 'Box questions and image input are experimental at TypeSafe: the format, limits and accuracy can change between releases. Needs Jev 1.14.',
+    docUrl: 'docs/api-guides/typesafe.md',
+    inputPorts: [
+      { id: 'image', label: 'Image', dataType: 'Image', required: true },
+      { id: 'target', label: 'Target', dataType: 'Text', required: false },
+    ],
+    outputPorts: [
+      { id: 'found', label: 'Found', dataType: 'Text', required: false },
+      { id: 'box', label: 'Box (JSON)', dataType: 'Text', required: false },
+      { id: 'crop', label: 'Crop', dataType: 'Image', required: false, conditional: true },
+      { id: 'mask', label: 'Mask', dataType: 'Mask', required: false, conditional: true },
+      { id: 'annotated', label: 'Annotated', dataType: 'Image', required: false, conditional: true },
+      { id: 'report', label: 'Report', dataType: 'Text', required: false },
+    ],
+    params: [
+      { key: 'target', label: 'Target', type: 'string', required: false, default: '', placeholder: 'the red car' },
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'jev-1.14.0',
+        options: [
+          { label: 'Jev 1.14.0 (pinned)', value: 'jev-1.14.0' },
+          { label: 'jev-preview (moves)', value: 'jev-preview' },
+        ],
+      },
+      { key: 'presence_threshold', label: 'Presence Threshold', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
+      { key: 'min_confidence', label: 'Minimum Confidence', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
+      { key: 'pad', label: 'Crop Padding (fraction of image)', type: 'float', required: false, default: 0.05, min: 0, max: 0.5, step: 0.01 },
+    ],
   },
 
   'identity-edit': {

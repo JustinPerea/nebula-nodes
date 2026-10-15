@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable
 from execution.stream_runner import StreamConfig, stream_execute_image
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
+from services.edit_masks import image_size, openai_edit_mask
 from services.media_input import read_local_media
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
@@ -194,9 +195,12 @@ async def handle_gpt_image_2_edit(
         files.append(("image[]", (p.name, data, _guess_mime(p))))
     mask_input = inputs.get("mask")
     if mask_input and mask_input.value:
+        # OpenAI edits only where the mask is transparent; Nebula's masks are
+        # white-on-black. openai_edit_mask converts (services/edit_masks.py).
         mp = Path(str(mask_input.value))
         _checked, data = read_local_media(mp, label="Mask", max_bytes=MAX_EDIT_IMAGE_BYTES)
-        files.append(("mask", (mp.name, data, "image/png")))
+        mask_bytes = openai_edit_mask(data, image_size(image_paths[0]))
+        files.append(("mask", ("mask.png", mask_bytes, "image/png")))
 
     form: dict[str, str] = {}
     # input_fidelity only reaches here for gpt-image-1.5 (execution/maker_routes_openai.py build_body).

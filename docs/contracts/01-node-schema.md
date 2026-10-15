@@ -114,6 +114,7 @@ interface Port {
   required: boolean;
   multiple?: boolean;      // input: accept many connections → list value
   maxConnections?: number; // optional cap
+  conditional?: true;      // output only: a gate port, see "Gate ports" below
 }
 ```
 
@@ -133,6 +134,8 @@ Resolved inputs map port id → `PortValueDict`:
 
 Multi ports (`multiple: true`) resolve to `value` as a **list** when multiple edges connect.
 
+Nebula's own files reach a handler as absolute paths. Upstream nodes may emit them as `/api/outputs/<rel>` refs (Jev Box, the QC nodes, chat uploads, saved projects), and a browser may hand over a loopback URL to that route (`localhost`, any `127.x` address, `::1`, `0.0.0.0` and their other spellings); the engine maps both to the file's path before the handler runs (`execution/engine.py` `_local_media_inputs`, using `services/output.py` `local_media_ref`), keeping the containment and allowed-path checks. `Text` and spatial values are passed exactly as they arrive, and so is everything going into the built-in pass-through nodes (reroute, router, preview, array builder and selector, image compare, combine text), so they hand a ref on as a ref. Other URLs and data URIs are unchanged.
+
 ### Handler output shape
 
 Return map port id → `PortValueDict`:
@@ -142,6 +145,19 @@ Return map port id → `PortValueDict`:
   "image": { "type": "Image", "value": "/absolute/path.png" }
 }
 ```
+
+A port the handler leaves out is just missing downstream: the next node still runs, without that input.
+
+### Gate ports (`conditional: true`)
+
+A gate node lets a graph branch. Its conditional output ports carry a value on some runs and are *withheld* on others. Today the gates are `jev-decide` (`on_pass` / `on_fail`) and `jev-box` (`crop` / `mask` / `annotated`, withheld unless the target was found).
+
+- **Withholding.** The handler returns `execution.gating.withheld(reason)` for the port: `{"type": "Any", "value": null, "withheld": "Jev Decide failed (answered no, 0.12)"}`. Only conditional ports can be withheld; withholding any other port fails the node. A conditional port the handler leaves out counts as withheld, so a buggy gate fails closed.
+- **The rule.** A node runs only if none of its inbound edges comes from a withheld port or a skipped node. Otherwise it is **skipped**: no `executing` event, no provider call, no cache entry, no charge. It gets a `skipped` event with the gate's reason, and its descendants follow the same rule.
+- **Both branches into one node.** A node wired to both `on_pass` and `on_fail` of the same gate is always skipped, since one of them is always withheld. A "first available" merge node is a possible follow-up.
+- **Iterators.** The rule applies per item. Below an iterator, a node runs for the items whose gate passed and is skipped for the rest; it is marked skipped only when every item was.
+- **Cache.** The withheld entries stay in the cached outputs, so a cache hit skips the same nodes. They never reach port values, events, manifests or the canvas: the engine strips them (`gating.split_outputs`).
+- **Events.** `executed` carries `withheld` (port → reason) so the canvas can draw those wires as inactive; `skipped` carries `reason` and `gate_node_id`.
 
 ---
 
@@ -222,3 +238,5 @@ Full vertical slices (registry + handler + events):
 | Date | Change |
 |------|--------|
 | 2026-07-01 | Initial node schema |
+| 2026-10-14 | Gate ports (`conditional: true`) and the skip rule |
+| 2026-10-14 | `/api/outputs` refs and loopback URLs reach handlers as file paths |

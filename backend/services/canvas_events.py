@@ -61,6 +61,7 @@ EVENT_KINDS = frozenset({
     "run.started",
     "run.finished",
     "run.failed",
+    "run.skipped",
     "run.cancelled",
     "canvas.replaced",
     "canvas.cleared",
