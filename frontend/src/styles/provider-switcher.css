@@ -63,6 +63,13 @@
 
 .provider-switcher__row--auto { grid-template-columns: minmax(0, 1fr); }
 
+/* Auto has no key cell: its label takes that room, and its price sits at the
+ * right edge with the key column. */
+.provider-switcher__row--auto .provider-switcher__item { align-items: start; }
+
+/* Auto's "can't run: <reason>" is the stop reason: it wraps, never cut. */
+.provider-switcher__row--auto .provider-switcher__label { white-space: normal; }
+
 .provider-switcher__item {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr) auto;
@@ -86,6 +93,20 @@
 .provider-switcher__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .provider-switcher__block { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The Inspector column is narrow (about 234px): names wrap there instead of
+ * cutting "Black Forest Labs" to "Black Forest La...". */
+.provider-switcher--inspector .provider-switcher__label,
+.provider-switcher--inspector .provider-switcher__block { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+
+.provider-switcher--inspector .provider-switcher__row,
+.provider-switcher--inspector .provider-switcher__item { align-items: start; }
+
+.provider-switcher--inspector .provider-switcher__key,
+.provider-switcher--inspector .provider-switcher__setup { margin-top: 4px; }
+
+.provider-switcher--inspector .provider-switcher__check,
+.provider-switcher--inspector .provider-switcher__price { padding-top: 1px; }
 
 .provider-switcher__price { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
