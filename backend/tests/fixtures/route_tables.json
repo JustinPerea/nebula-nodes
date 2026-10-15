@@ -622,6 +622,996 @@
     "seed"
    ]
   },
+  "flux-3-image": {
+   "routes": [
+    {
+     "id": "bfl",
+     "provider": "bfl",
+     "maker": true,
+     "keys": [
+      "BFL_API_KEY"
+     ],
+     "handler": "bfl",
+     "paramKeys": [
+      "grounding"
+     ],
+     "rules": {
+      "ports": {
+       "images": {
+        "max": 10
+       }
+      }
+     }
+    },
+    {
+     "id": "fal",
+     "provider": "fal",
+     "keys": [
+      "FAL_KEY"
+     ],
+     "handler": "fal",
+     "paramKeys": [
+      "enable_prompt_expansion"
+     ],
+     "rules": {
+      "ports": {
+       "images": {
+        "max": 10
+       }
+      }
+     }
+    },
+    {
+     "id": "replicate",
+     "provider": "replicate",
+     "keys": [
+      "REPLICATE_API_TOKEN"
+     ],
+     "handler": "replicate-model",
+     "paramKeys": [
+      "grounding"
+     ],
+     "rules": {
+      "ports": {
+       "images": {
+        "max": 10
+       }
+      }
+     }
+    },
+    {
+     "id": "openrouter",
+     "provider": "openrouter",
+     "keys": [
+      "OPENROUTER_API_KEY"
+     ],
+     "handler": "openrouter-images",
+     "paramKeys": [],
+     "rules": {
+      "ports": {
+       "images": {
+        "max": 10
+       }
+      }
+     }
+    }
+   ],
+   "allParamKeys": [
+    "_provider",
+    "aspect_ratio",
+    "resolution",
+    "safety_tolerance",
+    "grounding",
+    "enable_prompt_expansion"
+   ],
+   "routeParams": {
+    "bfl": [
+     {
+      "key": "aspect_ratio",
+      "options": [
+       "auto",
+       "21:9",
+       "2:1",
+       "16:9",
+       "3:2",
+       "7:5",
+       "4:3",
+       "5:4",
+       "1:1",
+       "4:5",
+       "3:4",
+       "5:7",
+       "2:3",
+       "9:16",
+       "1:2",
+       "9:21"
+      ]
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "768sq",
+       "1k",
+       "1.5k",
+       "2k",
+       "4k"
+      ]
+     },
+     {
+      "key": "safety_tolerance",
+      "min": 0,
+      "max": 4
+     },
+     {
+      "key": "grounding"
+     }
+    ],
+    "fal": [
+     {
+      "key": "aspect_ratio",
+      "options": [
+       "auto",
+       "21:9",
+       "2:1",
+       "16:9",
+       "3:2",
+       "7:5",
+       "4:3",
+       "5:4",
+       "1:1",
+       "4:5",
+       "3:4",
+       "5:7",
+       "2:3",
+       "9:16",
+       "1:2"
+      ]
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "768sq",
+       "1k",
+       "2k",
+       "4k"
+      ]
+     },
+     {
+      "key": "safety_tolerance",
+      "min": 0,
+      "max": 4
+     },
+     {
+      "key": "enable_prompt_expansion"
+     }
+    ],
+    "replicate": [
+     {
+      "key": "aspect_ratio",
+      "options": [
+       "auto",
+       "21:9",
+       "2:1",
+       "16:9",
+       "3:2",
+       "7:5",
+       "4:3",
+       "5:4",
+       "1:1",
+       "4:5",
+       "3:4",
+       "5:7",
+       "2:3",
+       "9:16",
+       "1:2",
+       "9:21"
+      ]
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "768sq",
+       "1k",
+       "1.5k",
+       "2k",
+       "4k"
+      ]
+     },
+     {
+      "key": "safety_tolerance",
+      "min": 0,
+      "max": 4
+     },
+     {
+      "key": "grounding"
+     }
+    ],
+    "openrouter": [
+     {
+      "key": "aspect_ratio",
+      "options": [
+       "auto",
+       "21:9",
+       "2:1",
+       "16:9",
+       "3:2",
+       "7:5",
+       "4:3",
+       "5:4",
+       "1:1",
+       "4:5",
+       "3:4",
+       "5:7",
+       "2:3",
+       "9:16",
+       "1:2",
+       "9:21"
+      ]
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "768sq",
+       "1k",
+       "1.5k",
+       "2k",
+       "4k"
+      ]
+     },
+     {
+      "key": "safety_tolerance",
+      "min": 0,
+      "max": 4
+     }
+    ]
+   }
+  },
+  "flux-3-image-klein": {
+   "routes": [
+    {
+     "id": "bfl",
+     "provider": "bfl",
+     "maker": true,
+     "keys": [
+      "BFL_API_KEY"
+     ],
+     "handler": "bfl",
+     "paramKeys": [
+      "steps",
+      "output_format"
+     ],
+     "rules": {
+      "ports": {
+       "images": {
+        "max": 10
+       }
+      }
+     }
+    },
+    {
+     "id": "openrouter",
+     "provider": "openrouter",
+     "keys": [
+      "OPENROUTER_API_KEY"
+     ],
+     "handler": "openrouter-images",
+     "paramKeys": [],
+     "rules": {
+      "ports": {
+       "images": {
+        "max": 10
+       }
+      },
+      "rejectsWhen": [
+       {
+        "match": {
+         "seed": "(set)"
+        },
+        "label": "a seed"
+       }
+      ]
+     }
+    }
+   ],
+   "allParamKeys": [
+    "_provider",
+    "aspect_ratio",
+    "resolution",
+    "safety_tolerance",
+    "seed",
+    "steps",
+    "output_format"
+   ],
+   "routeParams": {
+    "bfl": [
+     {
+      "key": "aspect_ratio",
+      "options": [
+       "auto",
+       "21:9",
+       "2:1",
+       "16:9",
+       "3:2",
+       "7:5",
+       "4:3",
+       "5:4",
+       "1:1",
+       "4:5",
+       "3:4",
+       "5:7",
+       "2:3",
+       "9:16",
+       "1:2",
+       "9:21"
+      ]
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "768sq",
+       "1k",
+       "1.5k",
+       "2k",
+       "4k"
+      ]
+     },
+     {
+      "key": "safety_tolerance",
+      "min": 0,
+      "max": 4
+     },
+     {
+      "key": "seed",
+      "min": 0,
+      "max": 4294967295
+     },
+     {
+      "key": "steps",
+      "min": 1,
+      "max": 16
+     },
+     {
+      "key": "output_format",
+      "options": [
+       "jpeg",
+       "png"
+      ]
+     }
+    ],
+    "openrouter": [
+     {
+      "key": "aspect_ratio",
+      "options": [
+       "auto",
+       "21:9",
+       "2:1",
+       "16:9",
+       "3:2",
+       "7:5",
+       "4:3",
+       "5:4",
+       "1:1",
+       "4:5",
+       "3:4",
+       "5:7",
+       "2:3",
+       "9:16",
+       "1:2",
+       "9:21"
+      ]
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "768sq",
+       "1k",
+       "1.5k",
+       "2k",
+       "4k"
+      ]
+     },
+     {
+      "key": "safety_tolerance",
+      "min": 0,
+      "max": 4
+     },
+     {
+      "key": "seed",
+      "min": 0,
+      "max": 4294967295
+     }
+    ]
+   }
+  },
+  "flux-3-image-klein-base": {
+   "routes": [
+    {
+     "id": "fal",
+     "provider": "fal",
+     "keys": [
+      "FAL_KEY"
+     ],
+     "handler": "fal",
+     "paramKeys": [],
+     "rules": {
+      "ports": {
+       "images": {
+        "max": 10
+       }
+      }
+     }
+    }
+   ],
+   "allParamKeys": [
+    "_provider",
+    "image_size",
+    "seed",
+    "output_format",
+    "enable_prompt_expansion",
+    "enable_safety_checker"
+   ],
+   "routeParams": {
+    "fal": [
+     {
+      "key": "image_size",
+      "options": [
+       "square_hd",
+       "square",
+       "portrait_4_3",
+       "portrait_16_9",
+       "landscape_4_3",
+       "landscape_16_9"
+      ]
+     },
+     {
+      "key": "seed"
+     },
+     {
+      "key": "output_format",
+      "options": [
+       "png",
+       "jpeg",
+       "webp"
+      ]
+     },
+     {
+      "key": "enable_prompt_expansion"
+     },
+     {
+      "key": "enable_safety_checker"
+     }
+    ]
+   }
+  },
+  "flux-3-video": {
+   "routes": [
+    {
+     "id": "bfl",
+     "provider": "bfl",
+     "maker": true,
+     "keys": [
+      "BFL_API_KEY"
+     ],
+     "handler": "bfl",
+     "paramKeys": [
+      "draft"
+     ],
+     "rules": {
+      "rejectsWhen": [
+       {
+        "match": {
+         "draft": true,
+         "resolution": "fhd"
+        },
+        "label": "Drafts render at hd only"
+       },
+       {
+        "match": {
+         "draft": true,
+         "resolution": "qhd"
+        },
+        "label": "Drafts render at hd only"
+       },
+       {
+        "match": {
+         "draft": true,
+         "resolution": "uhd"
+        },
+        "label": "Drafts render at hd only"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "duration": 16
+        },
+        "label": "Video continuation runs 5-15 s on Black Forest Labs"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "duration": 17
+        },
+        "label": "Video continuation runs 5-15 s on Black Forest Labs"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "duration": 18
+        },
+        "label": "Video continuation runs 5-15 s on Black Forest Labs"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "duration": 19
+        },
+        "label": "Video continuation runs 5-15 s on Black Forest Labs"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "duration": 20
+        },
+        "label": "Video continuation runs 5-15 s on Black Forest Labs"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "start_image": "(set)"
+        },
+        "label": "Continue a video or animate images, not both"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "keyframes": "(set)"
+        },
+        "label": "Continue a video or animate images, not both"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "end_image": "(set)"
+        },
+        "label": "Continue a video or animate images, not both"
+       },
+       {
+        "match": {
+         "end_image": "(set)",
+         "start_image": "(unset)",
+         "keyframes": "(unset)"
+        },
+        "label": "An end image needs a start image or keyframes before it"
+       }
+      ],
+      "ports": {
+       "keyframes": {
+        "max": 10
+       }
+      }
+     }
+    },
+    {
+     "id": "fal",
+     "provider": "fal",
+     "keys": [
+      "FAL_KEY"
+     ],
+     "handler": "fal",
+     "paramKeys": [
+      "draft"
+     ],
+     "rules": {
+      "accepts": {
+       "aspect_ratio": {
+        "values": [
+         "auto",
+         "21:9",
+         "2:1",
+         "16:9",
+         "4:3",
+         "1:1",
+         "3:4",
+         "9:16"
+        ]
+       }
+      },
+      "rejectsWhen": [
+       {
+        "match": {
+         "draft": true,
+         "resolution": "fhd"
+        },
+        "label": "Drafts render at hd only"
+       },
+       {
+        "match": {
+         "draft": true,
+         "resolution": "qhd"
+        },
+        "label": "Drafts render at hd only"
+       },
+       {
+        "match": {
+         "draft": true,
+         "resolution": "uhd"
+        },
+        "label": "Drafts render at hd only"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "start_image": "(set)"
+        },
+        "label": "Continue a video or animate images, not both"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "keyframes": "(set)"
+        },
+        "label": "Continue a video or animate images, not both"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "end_image": "(set)"
+        },
+        "label": "Continue a video or animate images, not both"
+       },
+       {
+        "match": {
+         "end_image": "(set)",
+         "start_image": "(unset)",
+         "keyframes": "(unset)"
+        },
+        "label": "An end image needs a start image or keyframes before it"
+       }
+      ],
+      "ports": {
+       "keyframes": {
+        "max": 10
+       }
+      }
+     }
+    },
+    {
+     "id": "replicate",
+     "provider": "replicate",
+     "keys": [
+      "REPLICATE_API_TOKEN"
+     ],
+     "handler": "replicate-model",
+     "paramKeys": [
+      "draft"
+     ],
+     "rules": {
+      "accepts": {
+       "aspect_ratio": {
+        "values": [
+         "auto",
+         "21:9",
+         "2:1",
+         "16:9",
+         "4:3",
+         "1:1",
+         "3:4",
+         "9:16"
+        ]
+       }
+      },
+      "rejectsWhen": [
+       {
+        "match": {
+         "draft": true,
+         "resolution": "fhd"
+        },
+        "label": "Drafts are 720p on Replicate"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "start_image": "(set)"
+        },
+        "label": "Continue a video or animate images, not both"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "keyframes": "(set)"
+        },
+        "label": "Continue a video or animate images, not both"
+       },
+       {
+        "match": {
+         "start_video": "(set)",
+         "end_image": "(set)"
+        },
+        "label": "Continue a video or animate images, not both"
+       },
+       {
+        "match": {
+         "end_image": "(set)",
+         "start_image": "(unset)",
+         "keyframes": "(unset)"
+        },
+        "label": "An end image needs a start image or keyframes before it"
+       }
+      ],
+      "ports": {
+       "keyframes": {
+        "max": 10
+       }
+      }
+     }
+    },
+    {
+     "id": "openrouter",
+     "provider": "openrouter",
+     "keys": [
+      "OPENROUTER_API_KEY"
+     ],
+     "handler": "openrouter-videos",
+     "paramKeys": [],
+     "rules": {
+      "accepts": {
+       "aspect_ratio": {
+        "values": [
+         "21:9",
+         "16:9",
+         "4:3",
+         "1:1",
+         "3:4",
+         "9:16"
+        ]
+       }
+      },
+      "rejects": {
+       "draft": [
+        true
+       ]
+      },
+      "rejectsWhen": [
+       {
+        "match": {
+         "end_image": "(set)",
+         "start_image": "(unset)",
+         "keyframes": "(unset)"
+        },
+        "label": "An end image needs a start image or keyframes before it"
+       }
+      ],
+      "ports": {
+       "keyframes": {
+        "max": 0
+       },
+       "start_video": {
+        "max": 0
+       }
+      }
+     }
+    },
+    {
+     "id": "krea",
+     "provider": "krea",
+     "keys": [
+      "KREA_API_TOKEN"
+     ],
+     "plan": "optional",
+     "handler": "krea",
+     "paramKeys": [],
+     "rules": {
+      "accepts": {
+       "aspect_ratio": {
+        "values": [
+         "21:9",
+         "2:1",
+         "16:9",
+         "4:3",
+         "1:1",
+         "3:4",
+         "9:16"
+        ]
+       }
+      },
+      "rejects": {
+       "draft": [
+        true
+       ]
+      },
+      "rejectsWhen": [
+       {
+        "match": {
+         "end_image": "(set)",
+         "start_image": "(unset)",
+         "keyframes": "(unset)"
+        },
+        "label": "An end image needs a start image or keyframes before it"
+       }
+      ],
+      "ports": {
+       "keyframes": {
+        "max": 0
+       }
+      }
+     }
+    }
+   ],
+   "allParamKeys": [
+    "_provider",
+    "_kreaAuth",
+    "duration",
+    "resolution",
+    "aspect_ratio",
+    "generate_audio",
+    "draft"
+   ],
+   "routeParams": {
+    "bfl": [
+     {
+      "key": "duration",
+      "min": 5,
+      "max": 20
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "hd",
+       "fhd",
+       "qhd",
+       "uhd"
+      ]
+     },
+     {
+      "key": "aspect_ratio",
+      "options": [
+       "auto",
+       "21:9",
+       "2:1",
+       "16:9",
+       "4:3",
+       "1:1",
+       "3:4",
+       "9:16",
+       "9:21"
+      ]
+     },
+     {
+      "key": "generate_audio"
+     },
+     {
+      "key": "draft"
+     }
+    ],
+    "fal": [
+     {
+      "key": "duration",
+      "min": 5,
+      "max": 20
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "hd",
+       "fhd",
+       "qhd",
+       "uhd"
+      ]
+     },
+     {
+      "key": "aspect_ratio",
+      "options": [
+       "auto",
+       "21:9",
+       "2:1",
+       "16:9",
+       "4:3",
+       "1:1",
+       "3:4",
+       "9:16"
+      ]
+     },
+     {
+      "key": "generate_audio"
+     },
+     {
+      "key": "draft"
+     }
+    ],
+    "replicate": [
+     {
+      "key": "duration",
+      "min": 5,
+      "max": 20
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "hd",
+       "fhd"
+      ]
+     },
+     {
+      "key": "aspect_ratio",
+      "options": [
+       "auto",
+       "21:9",
+       "2:1",
+       "16:9",
+       "4:3",
+       "1:1",
+       "3:4",
+       "9:16"
+      ]
+     },
+     {
+      "key": "generate_audio"
+     },
+     {
+      "key": "draft"
+     }
+    ],
+    "openrouter": [
+     {
+      "key": "duration",
+      "min": 5,
+      "max": 20
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "hd",
+       "fhd",
+       "qhd",
+       "uhd"
+      ]
+     },
+     {
+      "key": "aspect_ratio",
+      "options": [
+       "21:9",
+       "16:9",
+       "4:3",
+       "1:1",
+       "3:4",
+       "9:16"
+      ]
+     },
+     {
+      "key": "generate_audio"
+     }
+    ],
+    "krea": [
+     {
+      "key": "duration",
+      "min": 5,
+      "max": 20
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "hd",
+       "fhd"
+      ]
+     },
+     {
+      "key": "aspect_ratio",
+      "options": [
+       "21:9",
+       "2:1",
+       "16:9",
+       "4:3",
+       "1:1",
+       "3:4",
+       "9:16"
+      ]
+     },
+     {
+      "key": "generate_audio"
+     }
+    ]
+   }
+  },
   "flux-fill-inpaint": {
    "routes": [
     {
@@ -683,6 +1673,154 @@
     "enable_safety_checker",
     "seed"
    ]
+  },
+  "flux-video-edit": {
+   "routes": [
+    {
+     "id": "bfl",
+     "provider": "bfl",
+     "maker": true,
+     "keys": [
+      "BFL_API_KEY"
+     ],
+     "handler": "bfl",
+     "paramKeys": []
+    },
+    {
+     "id": "fal",
+     "provider": "fal",
+     "keys": [
+      "FAL_KEY"
+     ],
+     "handler": "fal",
+     "paramKeys": []
+    },
+    {
+     "id": "krea",
+     "provider": "krea",
+     "keys": [
+      "KREA_API_TOKEN"
+     ],
+     "plan": "optional",
+     "handler": "krea",
+     "paramKeys": []
+    }
+   ],
+   "allParamKeys": [
+    "_provider",
+    "_kreaAuth"
+   ],
+   "routeParams": {
+    "bfl": [],
+    "fal": [],
+    "krea": []
+   }
+  },
+  "flux-video-upscale": {
+   "routes": [
+    {
+     "id": "bfl",
+     "provider": "bfl",
+     "maker": true,
+     "keys": [
+      "BFL_API_KEY"
+     ],
+     "handler": "bfl",
+     "paramKeys": []
+    },
+    {
+     "id": "fal",
+     "provider": "fal",
+     "keys": [
+      "FAL_KEY"
+     ],
+     "handler": "fal",
+     "paramKeys": []
+    },
+    {
+     "id": "replicate",
+     "provider": "replicate",
+     "keys": [
+      "REPLICATE_API_TOKEN"
+     ],
+     "handler": "replicate-model",
+     "paramKeys": []
+    },
+    {
+     "id": "krea",
+     "provider": "krea",
+     "keys": [
+      "KREA_API_TOKEN"
+     ],
+     "plan": "optional",
+     "handler": "krea",
+     "paramKeys": []
+    }
+   ],
+   "allParamKeys": [
+    "_provider",
+    "_kreaAuth",
+    "creativity",
+    "upscale_factor"
+   ],
+   "routeParams": {
+    "bfl": [
+     {
+      "key": "creativity",
+      "options": [
+       0,
+       1
+      ]
+     },
+     {
+      "key": "upscale_factor",
+      "min": 1.5,
+      "max": 3
+     }
+    ],
+    "fal": [
+     {
+      "key": "creativity",
+      "options": [
+       0,
+       1
+      ]
+     },
+     {
+      "key": "upscale_factor",
+      "min": 1.5,
+      "max": 3
+     }
+    ],
+    "replicate": [
+     {
+      "key": "creativity",
+      "options": [
+       0,
+       1
+      ]
+     },
+     {
+      "key": "upscale_factor",
+      "min": 1.5,
+      "max": 3
+     }
+    ],
+    "krea": [
+     {
+      "key": "creativity",
+      "options": [
+       0,
+       1
+      ]
+     },
+     {
+      "key": "upscale_factor",
+      "min": 1.5,
+      "max": 3
+     }
+    ]
+   }
   },
   "frame-extractor": {
    "routes": [
@@ -2923,6 +4061,168 @@
     "moodboard_strength"
    ]
   },
+  "krea-3": {
+   "routes": [
+    {
+     "id": "krea",
+     "provider": "krea",
+     "maker": true,
+     "keys": [
+      "KREA_API_TOKEN"
+     ],
+     "plan": "optional",
+     "handler": "krea",
+     "paramKeys": [
+      "thinking_mode",
+      "resolution",
+      "aspect_ratio",
+      "regional_edit"
+     ],
+     "rules": {
+      "ports": {
+       "images": {
+        "max": 8
+       }
+      },
+      "rejectsWhen": [
+       {
+        "match": {
+         "regional_edit": true,
+         "images": "(unset)"
+        },
+        "label": "a regional edit without a reference image"
+       }
+      ]
+     }
+    },
+    {
+     "id": "fal",
+     "provider": "fal",
+     "keys": [
+      "FAL_KEY"
+     ],
+     "handler": "fal",
+     "paramKeys": [
+      "model",
+      "reasoning_level",
+      "image_size",
+      "negative_prompt",
+      "output_format"
+     ],
+     "rules": {
+      "ports": {
+       "images": {
+        "max": 8
+       }
+      },
+      "rejectsWhen": [
+       {
+        "match": {
+         "reasoning_level": "high",
+         "images": "(unset)"
+        },
+        "label": "high reasoning without a reference image (fal.ai takes it on krea/v3/edit only)"
+       }
+      ]
+     }
+    }
+   ],
+   "allParamKeys": [
+    "_provider",
+    "_kreaAuth",
+    "seed",
+    "thinking_mode",
+    "resolution",
+    "aspect_ratio",
+    "regional_edit",
+    "model",
+    "reasoning_level",
+    "image_size",
+    "negative_prompt",
+    "output_format"
+   ],
+   "routeParams": {
+    "krea": [
+     {
+      "key": "seed"
+     },
+     {
+      "key": "thinking_mode",
+      "options": [
+       "fast",
+       "high"
+      ]
+     },
+     {
+      "key": "resolution",
+      "options": [
+       "1K",
+       "2K"
+      ]
+     },
+     {
+      "key": "aspect_ratio",
+      "options": [
+       "1:1",
+       "4:5",
+       "3:4",
+       "2:3",
+       "9:16",
+       "5:4",
+       "4:3",
+       "3:2",
+       "16:9",
+       "21:9"
+      ]
+     },
+     {
+      "key": "regional_edit"
+     }
+    ],
+    "fal": [
+     {
+      "key": "seed"
+     },
+     {
+      "key": "model",
+      "options": [
+       "berry",
+       "jam"
+      ]
+     },
+     {
+      "key": "reasoning_level",
+      "options": [
+       "low",
+       "medium",
+       "high"
+      ]
+     },
+     {
+      "key": "image_size",
+      "options": [
+       "auto",
+       "square_hd",
+       "square",
+       "portrait_4_3",
+       "portrait_16_9",
+       "landscape_4_3",
+       "landscape_16_9"
+      ]
+     },
+     {
+      "key": "negative_prompt"
+     },
+     {
+      "key": "output_format",
+      "options": [
+       "png",
+       "jpeg"
+      ]
+     }
+    ]
+   }
+  },
   "krea-3d-export": {
    "routes": [
     {
@@ -3561,25 +4861,6 @@
     "tool",
     "input",
     "output_index"
-   ]
-  },
-  "krea-enhance-black-forest-labs-flux-video-upscale": {
-   "routes": [
-    {
-     "id": "krea",
-     "provider": "krea",
-     "keys": [
-      "KREA_API_TOKEN"
-     ],
-     "paramKeys": []
-    }
-   ],
-   "allParamKeys": [
-    "_kreaAuth",
-    "creativity",
-    "upscale_factor",
-    "prompt",
-    "video_url"
    ]
   },
   "krea-enhance-bytedance-seedvr-2": {
@@ -6746,46 +8027,6 @@
     "reference_images",
     "reference_videos",
     "reference_audios"
-   ]
-  },
-  "krea-video-black-forest-labs-flux-3-video": {
-   "routes": [
-    {
-     "id": "krea",
-     "provider": "krea",
-     "keys": [
-      "KREA_API_TOKEN"
-     ],
-     "paramKeys": []
-    }
-   ],
-   "allParamKeys": [
-    "_kreaAuth",
-    "prompt",
-    "start_image",
-    "start_video",
-    "end_image",
-    "duration",
-    "resolution",
-    "aspect_ratio",
-    "generate_audio"
-   ]
-  },
-  "krea-video-black-forest-labs-flux-video-edit": {
-   "routes": [
-    {
-     "id": "krea",
-     "provider": "krea",
-     "keys": [
-      "KREA_API_TOKEN"
-     ],
-     "paramKeys": []
-    }
-   ],
-   "allParamKeys": [
-    "_kreaAuth",
-    "prompt",
-    "start_video"
    ]
   },
   "krea-video-bytedance-seedance-1-0-pro": {

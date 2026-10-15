@@ -78,7 +78,7 @@ def _offered(param):
 def test_every_dual_route_node_lists_its_maker_key_first_and_splits_params_cleanly():
     for node_id, definition in DEFINITIONS.items():
         direct = node_route.direct_keys(definition)
-        if not direct:
+        if not direct or node_route.has_routes(definition):
             continue
         env = node_route.env_keys(definition)
         assert env[: len(direct)] == direct, node_id
@@ -275,6 +275,8 @@ def test_cache_tags_of_every_node_without_routes_keep_their_old_spelling():
     key_sets = [{}, {"FAL_KEY": "k"}, {"KREA_API_TOKEN": "k"},
                 {key: "k" for key in node_route.KEY_PROVIDERS}]
     for node_id, definition in DEFINITIONS.items():
+        if node_route.has_routes(definition):
+            continue
         for keys in key_sets:
             for params in ({}, {"_kreaAuth": "mcp"}, {"_provider": "fal"}):
                 route = node_route.select_route(definition, params, keys)
@@ -387,7 +389,8 @@ def test_all_param_definitions_matches_every_list_it_replaced(site):
     order, maker_key = _LEGACY_ORDERS[site]
     checked = 0
     for node_id, definition in DEFINITIONS.items():
-        if maker_key and maker_key not in node_route.direct_keys(definition):
+        # A route-table node had no hand-written list to replace.
+        if node_route.has_routes(definition) or (maker_key and maker_key not in node_route.direct_keys(definition)):
             continue
         new = {p["key"]: p for p in node_route.all_param_definitions(definition)}
         old = _legacy_lookup(definition, order, last_wins="last one wins" in site)
@@ -407,6 +410,8 @@ def test_all_param_definitions_keeps_the_graph_defaults_and_create_lists():
     read sharedParams + falParams + directParams when there are shared
     params (else `params`), the last one winning: the same keys and defaults."""
     for node_id, definition in DEFINITIONS.items():
+        if node_route.has_routes(definition):
+            continue
         sources = ([*definition["sharedParams"], *(definition.get("falParams") or []),
                     *(definition.get("directParams") or [])] if "sharedParams" in definition
                    else definition.get("params") or [])

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import shared from '../../../backend/tests/fixtures/pricing_cases.json';
 import shippedTable from '../../../backend/data/model_pricing.json';
 import backendCatalog from '../../../backend/data/node_definitions.json';
-import { estimateNode, estimateRoutes, formatUsd, formatUsdRange, routePriceUnconfirmed, type PriceEntry, type PricingTable } from '../../src/lib/pricing';
+import { estimateNode, estimateRoutes, formatUsd, formatUsdRange, pricedKeys, routePriceUnconfirmed, RUN_TIME_VARIABLES, type PriceEntry, type PricingTable } from '../../src/lib/pricing';
 import type { ModelNodeDefinition } from '../../src/types';
 
 type Fixture = {
@@ -52,11 +52,20 @@ describe('the shipped price table', () => {
     // or the chip would read "unpriced" for a fresh node.
     // A dual-route node prices each route on its own: check every route.
     // A local node priced only in a paid mode (QC Jev) is free at its
-    // defaults, so it must resolve in that mode instead.
-    const missing = Object.entries(nodes)
+    // defaults, so it must resolve in that mode instead. A price that reads
+    // the source clip (FLUX Video Edit and Upscale) is known only once the
+    // run is, so it is the one kind left unpriced on a fresh node.
+    const runTime = (entry: PriceEntry) => RUN_TIME_VARIABLES.some((key) => pricedKeys(entry).has(key));
+    const routed = Object.entries(nodes)
       .flatMap(([id, entry]) => (entry.routes
-        ? Object.keys(entry.routes).map((provider) => [id, entry, provider, `${id} (${provider})`] as const)
-        : [[id, entry, entry.provider, id] as const]))
+        ? Object.entries(entry.routes).map(([provider, priced]) => [id, entry, provider, `${id} (${provider})`, priced] as const)
+        : [[id, entry, entry.provider, id, entry] as const]));
+    expect(routed.filter(([, , , , priced]) => runTime(priced)).map(([, , , label]) => label)).toEqual([
+      'flux-video-edit (bfl)', 'flux-video-edit (fal)',
+      'flux-video-upscale (bfl)', 'flux-video-upscale (fal)', 'flux-video-upscale (replicate)',
+    ]);
+    const missing = routed
+      .filter(([, , , , priced]) => !runTime(priced))
       .filter(([id, entry, provider]) => {
         const local = catalog[id]?.apiProvider === 'utility';
         const params = local ? { ...(entry.rows?.[0]?.match ?? {}) } : {};

@@ -102,10 +102,16 @@ async def drain_cancellations():
 def test_all_bundled_routes_have_valid_schemas_and_registered_handlers():
     from execution.sync_runner import get_handler_registry
     models = gateway.catalog_models()
-    assert len(models) == 108
+    assert len(models) == 109
     handlers = get_handler_registry()
+    routed = get_handler_registry(emit=AsyncMock())
     for definition_id, model in models.items():
         Draft202012Validator.check_schema(model["requestSchema"])
+        if model.get("foldedInto"):
+            # A Krea route of a route-table node: the node has the handler.
+            assert definition_id not in handlers and definition_id not in routed
+            assert getattr(routed[model["foldedInto"]], "multi_route", False)
+            continue
         assert definition_id in handlers
         assert gateway._model(definition_id) is model
     assert "krea-2-generate" in get_handler_registry(emit=AsyncMock())

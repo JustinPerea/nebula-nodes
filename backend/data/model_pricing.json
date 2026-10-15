@@ -35,6 +35,888 @@
         }
       }
     },
+    "flux-3-image": {
+      "routes": {
+        "bfl": {
+          "currency": "usd",
+          "per": "image",
+          "rows": [
+            {
+              "match": {
+                "resolution": "768sq"
+              },
+              "price": 0.041
+            },
+            {
+              "match": {
+                "resolution": "1k"
+              },
+              "price": 0.048
+            },
+            {
+              "match": {
+                "resolution": "1.5k"
+              },
+              "price": 0.07
+            },
+            {
+              "match": {
+                "resolution": "2k"
+              },
+              "price": 0.1
+            },
+            {
+              "match": {
+                "resolution": "4k"
+              },
+              "price": 0.607
+            }
+          ],
+          "notes": "Per image by resolution; text to image and edits cost the same. BFL returns the settled cost on submit.",
+          "sources": [
+            {
+              "url": "https://bfl.ai/pricing",
+              "quote": "imageTierRates (credits, 1 credit = $0.01) read from the page's CMS data"
+            },
+            {
+              "url": "https://docs.bfl.ai/quick_start/pricing",
+              "quote": "1 credit equals $0.01 USD."
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "fal": {
+          "currency": "usd",
+          "per": "image",
+          "provider": "fal",
+          "unconfirmed": true,
+          "rows": [
+            {
+              "match": {
+                "resolution": "768sq"
+              },
+              "price": 0.041
+            },
+            {
+              "match": {
+                "resolution": "1k"
+              },
+              "price": 0.048
+            },
+            {
+              "match": {
+                "resolution": "2k"
+              },
+              "price": 0.1
+            },
+            {
+              "match": {
+                "resolution": "4k"
+              },
+              "price": 0.607
+            }
+          ],
+          "notes": "fal's two price sources still disagree today. The model page (pricingInfoOverride) says \"starting at $0.0205 per image. A 1K (1 MP) image costs $0.024 ... promotional launch rates are 50% off ... The discount ends October 8, after which a 1K (1 MP) image will cost $0.048\"; the page's own endpointBilling (and the keyed GET api.fal.ai/v1/models/pricing read earlier today) says $0.024 per megapixel. Rule: the higher one, marked unconfirmed. 768sq $0.041 and 1k $0.048 are the page's post-promo prices (2 x its stated $0.0205 and the stated $0.048). The page names no 2k or 4k price: its two stated tiers equal BFL's schedule exactly, so 2k $0.10 and 4k $0.607 are BFL's schedule, which is also >= the per-MP rate (2k ~4.2 MP x 0.024 = ~$0.10; 4k ~16.8 MP x 0.024 = ~$0.40). Whether fal also bills edit input megapixels is not stated. A billed run would settle all of it.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/blackforestlabs/flux-3/text-to-image",
+              "quote": "The discount ends October 8, after which a 1K (1 MP) image will cost $0.048"
+            },
+            {
+              "url": "https://fal.ai/models/blackforestlabs/flux-3/text-to-image",
+              "quote": "\"endpointBilling\":{\"endpoint\":\"blackforestlabs/flux-3/text-to-image\",\"billing_unit\":\"megapixels\",\"price\":0.024"
+            },
+            {
+              "url": "https://api.fal.ai/v1/models/pricing",
+              "quote": "\"endpoint_id\":\"blackforestlabs/flux-3/text-to-image\",\"unit_price\":0.024,\"unit\":\"megapixels\" (keyed; read earlier on 2026-10-15, 401 without a key today)"
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "replicate": {
+          "currency": "usd",
+          "per": "image",
+          "provider": "replicate",
+          "rows": [
+            {
+              "match": {
+                "resolution": "768sq"
+              },
+              "price": 0.0205
+            },
+            {
+              "match": {
+                "resolution": "1k"
+              },
+              "price": 0.024
+            },
+            {
+              "match": {
+                "resolution": "1.5k"
+              },
+              "price": 0.035
+            },
+            {
+              "match": {
+                "resolution": "2k"
+              },
+              "price": 0.05
+            },
+            {
+              "match": {
+                "resolution": "4k"
+              },
+              "price": 0.3035
+            }
+          ],
+          "notes": "Replicate's per output image tiers by target resolution (criteria resolution equals 768sq/1k/1.5k/2k/4k).",
+          "sources": [
+            {
+              "url": "https://replicate.com/black-forest-labs/flux-3-image",
+              "quote": "768sq $0.0205, 1k $0.024, 1.5k $0.035, 2k $0.05, 4k $0.3035 per output image"
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "openrouter": {
+          "currency": "usd",
+          "per": "image",
+          "provider": "openrouter",
+          "rows": [
+            {
+              "match": {
+                "resolution": "768sq"
+              },
+              "price": 0.041
+            },
+            {
+              "match": {
+                "resolution": "1k"
+              },
+              "price": 0.048
+            },
+            {
+              "match": {
+                "resolution": "1.5k"
+              },
+              "price": 0.07
+            },
+            {
+              "match": {
+                "resolution": "2k"
+              },
+              "price": 0.1
+            },
+            {
+              "match": {
+                "resolution": "4k"
+              },
+              "price": 0.607
+            }
+          ],
+          "notes": "OpenRouter's endpoint pricing (served by Black Forest Labs), billable output_image, per image; the answer's usage.cost is the billed amount. Variants 768/1k/1.5k/2k/4k.",
+          "sources": [
+            {
+              "url": "https://openrouter.ai/api/v1/images/models/black-forest-labs/flux-3-image/endpoints",
+              "quote": "{\"billable\":\"output_image\",\"unit\":\"image\",\"cost_usd\":0.048,\"variant\":\"1k\"}"
+            }
+          ],
+          "checked": "2026-10-15"
+        }
+      }
+    },
+    "flux-3-image-klein": {
+      "routes": {
+        "bfl": {
+          "currency": "usd",
+          "per": "image",
+          "rows": [
+            {
+              "match": {
+                "resolution": "768sq"
+              },
+              "price": 0.008
+            },
+            {
+              "match": {
+                "resolution": "1k"
+              },
+              "price": 0.009
+            },
+            {
+              "match": {
+                "resolution": "1.5k"
+              },
+              "price": 0.011
+            },
+            {
+              "match": {
+                "resolution": "2k"
+              },
+              "price": 0.014
+            },
+            {
+              "match": {
+                "resolution": "4k"
+              },
+              "price": 0.036
+            }
+          ],
+          "notes": "Per image by output resolution; text to image and editing cost the same.",
+          "sources": [
+            {
+              "url": "https://bfl.ai/pricing",
+              "quote": "imageTierRates (credits, 1 credit = $0.01) read from the page's CMS data"
+            },
+            {
+              "url": "https://docs.bfl.ai/quick_start/pricing",
+              "quote": "1 credit equals $0.01 USD."
+            },
+            {
+              "url": "https://docs.bfl.ai/flux_3/flux3_image_klein",
+              "quote": "768 x 768 $0.008 | 1K $0.009 | 1.5K $0.011 | 2K $0.014 | 4K $0.036"
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "openrouter": {
+          "currency": "usd",
+          "per": "image",
+          "provider": "openrouter",
+          "rows": [
+            {
+              "match": {
+                "resolution": "768sq"
+              },
+              "price": 0.008
+            },
+            {
+              "match": {
+                "resolution": "1k"
+              },
+              "price": 0.009
+            },
+            {
+              "match": {
+                "resolution": "1.5k"
+              },
+              "price": 0.011
+            },
+            {
+              "match": {
+                "resolution": "2k"
+              },
+              "price": 0.014
+            },
+            {
+              "match": {
+                "resolution": "4k"
+              },
+              "price": 0.036
+            }
+          ],
+          "notes": "OpenRouter's endpoint pricing (served by Black Forest Labs), billable output_image, per image.",
+          "sources": [
+            {
+              "url": "https://openrouter.ai/api/v1/images/models/black-forest-labs/flux-3-image-klein/endpoints",
+              "quote": "{\"billable\":\"output_image\",\"unit\":\"image\",\"cost_usd\":0.009,\"variant\":\"1k\"}"
+            }
+          ],
+          "checked": "2026-10-15"
+        }
+      }
+    },
+    "flux-3-image-klein-base": {
+      "routes": {
+        "fal": {
+          "currency": "usd",
+          "per": "image",
+          "provider": "fal",
+          "unconfirmed": true,
+          "rows": [
+            {
+              "match": {
+                "image_size": "square_hd"
+              },
+              "price": 0.0283
+            },
+            {
+              "match": {
+                "image_size": "square"
+              },
+              "price": 0.024
+            },
+            {
+              "match": {
+                "image_size": "portrait_4_3"
+              },
+              "price": 0.027
+            },
+            {
+              "match": {
+                "image_size": "portrait_16_9"
+              },
+              "price": 0.024
+            },
+            {
+              "match": {
+                "image_size": "landscape_4_3"
+              },
+              "price": 0.027
+            },
+            {
+              "match": {
+                "image_size": "landscape_16_9"
+              },
+              "price": 0.024
+            }
+          ],
+          "notes": "fal states two prices: the page's 'Planned per-image pricing by output resolution: 768x768: $0.024, 1K: $0.027, 1.5K: $0.033, 2K: $0.042, and 4K: $0.108' and its billing record, $0.027 per megapixel. Neither maps a preset exactly, so each row is the higher of (a) the page tier covering the preset's area (<= 768x768 -> $0.024, <= 1024x1024 -> $0.027) and (b) $0.027 x the preset's megapixels (1 MP = 1,000,000 px): square_hd 1.05 MP -> $0.0283. Preset pixel sizes are fal's standard ones (repo .agents/skills/fal/skills/fal-ai__fast-sdxl.md); fal's Klein Base schema names the presets but not their sizes. Whether edit inputs are billed is not stated. All rows unconfirmed until a billed run.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/blackforestlabs/flux-3/klein/base/text-to-image",
+              "quote": "Planned per-image pricing by output resolution: **768x768: $0.024**, **1K: $0.027**, **1.5K: $0.033**, **2K: $0.042**, and **4K: $0.108**."
+            },
+            {
+              "url": "https://api.fal.ai/v1/models/pricing",
+              "quote": "\"endpoint_id\":\"blackforestlabs/flux-3/klein/base/text-to-image\",\"unit_price\":0.027,\"unit\":\"megapixels\" (keyed; read earlier on 2026-10-15)"
+            }
+          ],
+          "checked": "2026-10-15"
+        }
+      }
+    },
+    "flux-3-video": {
+      "routes": {
+        "bfl": {
+          "currency": "usd",
+          "per": "second",
+          "rows": [
+            {
+              "match": {
+                "draft": true,
+                "(mode)": "t2v"
+              },
+              "price": 0.06
+            },
+            {
+              "match": {
+                "draft": true,
+                "(mode)": "i2v"
+              },
+              "price": 0.06
+            },
+            {
+              "match": {
+                "(mode)": "t2v",
+                "resolution": "hd"
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "(mode)": "t2v",
+                "resolution": "fhd"
+              },
+              "price": 0.24
+            },
+            {
+              "match": {
+                "(mode)": "t2v",
+                "resolution": "qhd"
+              },
+              "price": 0.28
+            },
+            {
+              "match": {
+                "(mode)": "t2v",
+                "resolution": "uhd"
+              },
+              "price": 0.41
+            },
+            {
+              "match": {
+                "(mode)": "i2v",
+                "resolution": "hd"
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "(mode)": "i2v",
+                "resolution": "fhd"
+              },
+              "price": 0.24
+            },
+            {
+              "match": {
+                "(mode)": "i2v",
+                "resolution": "qhd"
+              },
+              "price": 0.28
+            },
+            {
+              "match": {
+                "(mode)": "i2v",
+                "resolution": "uhd"
+              },
+              "price": 0.41
+            },
+            {
+              "match": {
+                "(mode)": "v2v",
+                "draft": false,
+                "resolution": "hd"
+              },
+              "price": 0.21
+            },
+            {
+              "match": {
+                "(mode)": "v2v",
+                "draft": false,
+                "resolution": "fhd"
+              },
+              "price": 0.27
+            },
+            {
+              "match": {
+                "(mode)": "v2v",
+                "draft": false,
+                "resolution": "qhd"
+              },
+              "price": 0.31
+            },
+            {
+              "match": {
+                "(mode)": "v2v",
+                "draft": false,
+                "resolution": "uhd"
+              },
+              "price": 0.45
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "Per second of output by mode and resolution. BFL's card '/v1/flux-3' FLUX 3 Video (effort standard) lists t2v720 15, t2v1080 24, t2v1440 28, t2v2160 41, v2v720 21, v2v1080 27, v2v1440 31, v2v2160 45 credits a second; the docs table prices image to video with the t2v fields. The Draft card has only t2v720 (6 credits), used for text and image drafts; a video-continuation draft is 'Not listed', so it is unpriced. (mode) is read from the wired ports, not a saved param: v2v with start_video wired, i2v with start_image, keyframes or end_image, else t2v. A combination no row lists is unpriced.",
+          "sources": [
+            {
+              "url": "https://bfl.ai/pricing",
+              "quote": "FLUX 3 Video videoRates effort standard: t2v720 15, t2v1080 24, t2v1440 28, t2v2160 41, v2v720 21, v2v1080 27, v2v1440 31, v2v2160 45; FLUX 3 Video Draft effort draft: t2v720 6 (credits per second, read from the page's CMS data)"
+            },
+            {
+              "url": "https://docs.bfl.ai/quick_start/pricing",
+              "quote": "| Image to Video (`i2v`) | <Pricing endpoint=\"/v1/flux-3\" field=\"t2v720\" suffix=\"/s\" />"
+            },
+            {
+              "url": "https://docs.bfl.ai/quick_start/pricing",
+              "quote": "1 credit equals $0.01 USD."
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "fal": {
+          "currency": "usd",
+          "per": "second",
+          "unconfirmed": true,
+          "rows": [
+            {
+              "match": {
+                "draft": true,
+                "(mode)": "v2v"
+              },
+              "price": 0.12
+            },
+            {
+              "match": {
+                "draft": true
+              },
+              "price": 0.06
+            },
+            {
+              "match": {
+                "(mode)": "v2v",
+                "resolution": "hd"
+              },
+              "price": 0.41
+            },
+            {
+              "match": {
+                "(mode)": "v2v",
+                "resolution": "fhd"
+              },
+              "price": 0.53
+            },
+            {
+              "match": {
+                "resolution": "hd"
+              },
+              "price": 0.17
+            },
+            {
+              "match": {
+                "resolution": "fhd"
+              },
+              "price": 0.29
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "fal's two price sources disagree: the model pages say text, image, first-last-frame and keyframes runs cost $0.17 a second at 720p and $0.29 at 1080p, extend-video $0.41 / $0.53, the text-family drafts $0.06 and the extend-video draft $0.12; its pricing API lists lower rates. The higher (page) price is kept and marked unconfirmed. 1440p and 2160p are in fal's schema but priced nowhere, so they're unpriced. (mode) is read from the wired ports, not a saved param: v2v with start_video wired, i2v with start_image, keyframes or end_image, else t2v. A combination no row lists is unpriced.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/blackforestlabs/flux-3/text-to-video/llms.txt",
+              "quote": "Your request will be charged at **0.17** $ per second of generated video at 720p, and **0.29** $ per second at 1080p."
+            },
+            {
+              "url": "https://fal.ai/models/blackforestlabs/flux-3/extend-video/llms.txt",
+              "quote": "Your request will be charged at **0.41** $ per second of generated video at 720p, and **0.53** $ per second at 1080p."
+            },
+            {
+              "url": "https://fal.ai/models/blackforestlabs/flux-3/text-to-video/draft/llms.txt",
+              "quote": "Your request will be charged at **0.06** $ per second of generated draft video (720p)."
+            },
+            {
+              "url": "https://fal.ai/models/blackforestlabs/flux-3/extend-video/draft/llms.txt",
+              "quote": "Your request will be charged at **0.12** $ per second of generated draft video (720p)."
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "replicate": {
+          "currency": "usd",
+          "per": "second",
+          "rows": [
+            {
+              "match": {
+                "draft": true,
+                "(mode)": "v2v"
+              },
+              "price": 0.12
+            },
+            {
+              "match": {
+                "draft": true
+              },
+              "price": 0.06
+            },
+            {
+              "match": {
+                "(mode)": "v2v",
+                "resolution": "hd"
+              },
+              "price": 0.41
+            },
+            {
+              "match": {
+                "(mode)": "v2v",
+                "resolution": "fhd"
+              },
+              "price": 0.53
+            },
+            {
+              "match": {
+                "resolution": "hd"
+              },
+              "price": 0.17
+            },
+            {
+              "match": {
+                "resolution": "fhd"
+              },
+              "price": 0.29
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "Replicate's billing tiers, all per second of output video: t2v_i2v 720p $0.17, 1080p $0.29, t2v_i2v_draft $0.06, v2v 720p $0.41, 1080p $0.53, v2v_draft $0.12. (mode) is read from the wired ports, not a saved param: v2v with start_video wired, i2v with start_image, keyframes or end_image, else t2v. A combination no row lists is unpriced.",
+          "sources": [
+            {
+              "url": "https://replicate.com/black-forest-labs/flux-3",
+              "quote": "Text-to-video and image-to-video at 720p ... $0.17 per second of output video; at 1080p $0.29; Fast draft preview at 720p $0.06; Video continuation at 720p $0.41; at 1080p $0.53; v2v_draft $0.12"
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "openrouter": {
+          "currency": "usd",
+          "per": "second",
+          "rows": [
+            {
+              "match": {
+                "resolution": "hd"
+              },
+              "price": 0.17
+            },
+            {
+              "match": {
+                "resolution": "fhd"
+              },
+              "price": 0.29
+            },
+            {
+              "match": {
+                "resolution": "qhd"
+              },
+              "price": 0.28
+            },
+            {
+              "match": {
+                "resolution": "uhd"
+              },
+              "price": 0.41
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "OpenRouter's pricing_skus for black-forest-labs/flux-3-video, in cents a second of output. The 2K rate (28) is below the 1080p rate (29) as published; copied as is. Video continuation rates don't apply: this route takes no start video.",
+          "sources": [
+            {
+              "url": "https://openrouter.ai/api/v1/videos/models",
+              "quote": "\"cents_per_second_output_720p\": \"17\", \"cents_per_second_output_1080p\": \"29\", \"cents_per_second_output_2k\": \"28\", \"cents_per_second_output_4k\": \"41\""
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "krea": {
+          "currency": "usd",
+          "per": "second",
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "(mode)": "v2v",
+                "resolution": "hd"
+              },
+              "price": 0.41
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "(mode)": "v2v",
+                "resolution": "fhd"
+              },
+              "price": 0.53
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "hd"
+              },
+              "price": 0.17
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "fhd"
+              },
+              "price": 0.29
+            }
+          ],
+          "multiplyBy": [
+            "duration"
+          ],
+          "notes": "API-token runs only; Krea account (plan) runs bill workspace compute, which Krea doesn't publish. Krea's x-krea-pricing lists a fixed price per request by mode, resolution and duration, and every point is the per-second rate times the duration: t2v and i2v 720p $0.17, 1080p $0.29; v2v 720p $0.41, 1080p $0.53. (mode) is read from the wired ports, not a saved param: v2v with start_video wired, i2v with start_image, keyframes or end_image, else t2v. A combination no row lists is unpriced.",
+          "sources": [
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "POST /generate/video/black-forest-labs/flux-3-video x-krea-pricing price_points {\"amount\": 0.85, \"dimensions\": {\"mode\": \"t2v\", \"resolution\": \"720p\", \"duration\": 5}}, {\"amount\": 1.45, \"dimensions\": {\"mode\": \"t2v\", \"resolution\": \"1080p\", \"duration\": 5}}"
+            }
+          ],
+          "checked": "2026-10-15"
+        }
+      }
+    },
+    "flux-video-edit": {
+      "routes": {
+        "bfl": {
+          "currency": "usd",
+          "per": "second",
+          "rows": [
+            {
+              "match": {},
+              "price": 0.03
+            }
+          ],
+          "multiplyBy": [
+            "(source seconds)"
+          ],
+          "notes": "$0.03 a second of output (BFL's card secondPrice 3 credits); the output keeps the source clip's length, so the price is known once the source clip is: unpriced before the run.",
+          "sources": [
+            {
+              "url": "https://docs.bfl.ai/quick_start/pricing",
+              "quote": "FLUX Video Edit [fast] is priced **per second of output video**. The output keeps the source clip's length."
+            },
+            {
+              "url": "https://bfl.ai/pricing",
+              "quote": "/v1/flux-tools/video-edit-v1 FLUX Video Edit [fast] secondPrice 3 (credits, read from the page's CMS data)"
+            },
+            {
+              "url": "https://docs.bfl.ai/quick_start/pricing",
+              "quote": "1 credit equals $0.01 USD."
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "fal": {
+          "currency": "usd",
+          "per": "second",
+          "rows": [
+            {
+              "match": {},
+              "price": 0.03
+            }
+          ],
+          "multiplyBy": [
+            "(source seconds)"
+          ],
+          "notes": "$0.03 a second of output, the length of the source clip: unpriced before the run. fal's model page and pricing API agree.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/blackforestlabs/flux-3/edit-video/llms.txt",
+              "quote": "Your request will be charged at **$0.03** per second of generated video (720p)."
+            }
+          ],
+          "checked": "2026-10-15"
+        }
+      }
+    },
+    "flux-video-upscale": {
+      "routes": {
+        "bfl": {
+          "currency": "usd",
+          "per": "megapixel-second",
+          "rows": [
+            {
+              "match": {
+                "creativity": 0
+              },
+              "price": 0.07
+            },
+            {
+              "match": {
+                "creativity": 1
+              },
+              "price": 0.1
+            }
+          ],
+          "multiplyBy": [
+            "(output megapixels)",
+            "(source seconds)"
+          ],
+          "notes": "Per megapixel-second of output (1 MP = 1,048,576 px), $0.07 precise and $0.10 creative (BFL's cards mpSecondPrice 7 and 10 credits). Output frame size is the source's size times upscale_factor squared and the duration is the source's, both known only at run time: unpriced before the run.",
+          "sources": [
+            {
+              "url": "https://docs.bfl.ai/quick_start/pricing",
+              "quote": "FLUX Video Upscale is priced **per output megapixel-second**: the megapixels per output frame multiplied by the output duration in seconds."
+            },
+            {
+              "url": "https://bfl.ai/pricing",
+              "quote": "/v1/flux-tools/video-upscale-v1 FLUX 3 Upscale [precise] mpSecondPrice 7, FLUX 3 Upscale [creative] mpSecondPrice 10 (credits, read from the page's CMS data)"
+            },
+            {
+              "url": "https://docs.bfl.ai/quick_start/pricing",
+              "quote": "1 credit equals $0.01 USD."
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "fal": {
+          "currency": "usd",
+          "per": "second",
+          "unconfirmed": true,
+          "rows": [
+            {
+              "match": {
+                "creativity": 0,
+                "(output tier)": "1080p"
+              },
+              "price": 0.084
+            },
+            {
+              "match": {
+                "creativity": 0,
+                "(output tier)": "2K"
+              },
+              "price": 0.15
+            },
+            {
+              "match": {
+                "creativity": 0,
+                "(output tier)": "4K"
+              },
+              "price": 0.33
+            },
+            {
+              "match": {
+                "creativity": 1,
+                "(output tier)": "1080p"
+              },
+              "price": 0.12
+            },
+            {
+              "match": {
+                "creativity": 1,
+                "(output tier)": "2K"
+              },
+              "price": 0.21
+            },
+            {
+              "match": {
+                "creativity": 1,
+                "(output tier)": "4K"
+              },
+              "price": 0.474
+            }
+          ],
+          "multiplyBy": [
+            "(source seconds)"
+          ],
+          "notes": "Per second of output by output tier and mode. fal doesn't say where the tiers split or what an output under 1080p costs, and the tier depends on the source's size times upscale_factor: unconfirmed, and unpriced before the run.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/blackforestlabs/flux-video-upscale/llms.txt",
+              "quote": "In precise mode, **1080p** costs **$0.084** per second, **2K** costs **$0.15** per second, and **4K** costs **$0.33** per second. Creative mode costs more at each tier: **$0.12**, **$0.21**, and **$0.474** per second respectively."
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "replicate": {
+          "currency": "usd",
+          "per": "megapixel-second",
+          "unconfirmed": true,
+          "rows": [
+            {
+              "match": {
+                "creativity": 0
+              },
+              "price": 0.07
+            },
+            {
+              "match": {
+                "creativity": 1
+              },
+              "price": 0.1
+            }
+          ],
+          "multiplyBy": [
+            "(output megapixels)",
+            "(source seconds)"
+          ],
+          "notes": "Per output megapixel-second: precise $0.07, creative $0.10. Replicate doesn't say whether its megapixel is 1,048,576 or 1,000,000 px, so unconfirmed; unpriced before the run either way (output size and length come from the source).",
+          "sources": [
+            {
+              "url": "https://replicate.com/black-forest-labs/flux-video-upscale",
+              "quote": "\"metric\": \"video_output_megapixel_seconds\", \"price\": \"$0.07\", \"title\": \"per output video megapixel per second\" (Precise); \"$0.10\" (Creative)"
+            }
+          ],
+          "checked": "2026-10-15"
+        }
+      }
+    },
     "gpt-image-1-5": {
       "routes": {
         "openai": {
@@ -2014,6 +2896,97 @@
         }
       ],
       "checked": "2026-10-12"
+    },
+    "krea-3": {
+      "routes": {
+        "krea": {
+          "currency": "usd",
+          "per": "image",
+          "rows": [
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "1K"
+              },
+              "price": [
+                0.03,
+                0.59
+              ]
+            },
+            {
+              "match": {
+                "_kreaAuth": "api-token",
+                "resolution": "2K"
+              },
+              "price": [
+                0.06,
+                0.62
+              ]
+            }
+          ],
+          "extras": [
+            {
+              "match": {
+                "thinking_mode": "high"
+              },
+              "price": 0.02
+            }
+          ],
+          "notes": "API-token runs only; Krea account (plan) runs bill workspace compute units, which Krea doesn't publish, so they stay unpriced. The low end is a text-to-image run (base $0.03 at 1K, $0.06 at 2K). Each reference image adds $0.02 (a 1K reference) or $0.07 (a 2K reference), priced by the reference's own size, which isn't known before the run; the high end adds the most references Krea takes (8) at $0.07. thinking_mode high adds $0.02 per generation.",
+          "sources": [
+            {
+              "url": "https://www.krea.ai/docs/developers/krea-3/overview.md#pricing",
+              "quote": "Base price | $0.03 | $0.06 ... Each 1K reference image | +$0.02 | +$0.02 ... Each 2K reference image | +$0.07 | +$0.07 ... `high` thinking mode | +$0.02 per generation"
+            },
+            {
+              "url": "https://api.krea.ai/openapi.json",
+              "quote": "POST /generate/image/krea/krea-3 has no x-krea-pricing block; image_urls maxItems 8"
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "fal": {
+          "currency": "usd",
+          "per": "image",
+          "provider": "fal",
+          "unconfirmed": true,
+          "rows": [
+            {
+              "match": {
+                "image_size": "auto"
+              },
+              "price": [
+                0.1,
+                0.9056
+              ]
+            }
+          ],
+          "extras": [
+            {
+              "match": {
+                "reasoning_level": "high"
+              },
+              "price": 0.125
+            }
+          ],
+          "notes": "fal bills $0.025 per megapixel (1 MP = 1024x1024), counting the output plus each reference image at no more than the output's size. auto is 'about 2048x2048' (4 MP, $0.10), so the price isn't exact; the output can't exceed 4,220,160 px ($0.1006). The high end adds 8 references at that cap. reasoning_level high (edit only) bills 5 MP more ($0.125). The preset sizes (square_hd, square, portrait_*, landscape_*) aren't given in pixels for this endpoint (fal presets differ per model), so runs on them are unpriced.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/krea/v3/text-to-image/llms.txt",
+              "quote": "Billed per megapixel at $0.025/MP, counting the output image plus each reference image as the model processes it (references larger than the output are counted at the output's size). 1 MP = 1024x1024 pixels."
+            },
+            {
+              "url": "https://fal.ai/models/krea/v3/edit",
+              "quote": "endpointBilling {billing_unit: megapixels, price: 0.025}; reasoning_level high ... bills 5 megapixels more per request"
+            },
+            {
+              "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=krea/v3/text-to-image",
+              "quote": "auto lets the prompt expander pick the aspect ratio at about 2048x2048 ... at most 4,220,160 total pixels"
+            }
+          ],
+          "checked": "2026-10-15"
+        }
+      }
     },
     "krea-3d-hyper3d-rodin-2-5": {
       "currency": "usd",
