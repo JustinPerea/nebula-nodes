@@ -60,4 +60,17 @@ describe('applyPresetToComposer', () => {
     expect(out.params.aspect_ratio).toBe('16:9'); // current kept
     expect(out.params.imageSize).toBe('2K');       // preset overlaid
   });
+
+  it("leaves the current model and its billing alone for a preset whose model isn't in the catalog", () => {
+    const current = { modelId: 'krea-3', prompt: 'a cat', params: { _provider: 'auto', _kreaAuth: 'mcp', resolution: '1K' } };
+    const out = applyPresetToComposer(preset({ modelId: 'krea-video-black-forest-labs-flux-3-video', prompt: 'comet',
+      params: { _kreaAuth: 'api-token', resolution: '1080p' } }), current, {}, 'mcp');
+    expect(out).toEqual({ modelId: 'krea-3', prompt: 'a cat, comet', params: current.params });
+  });
+
+  it('never lets a style-only preset change who bills the current model', () => {
+    const out = applyPresetToComposer(preset({ params: { _provider: 'fal', _kreaAuth: 'api-token', aspect_ratio: '16:9' } }),
+      { modelId: 'flux-3-video', prompt: '', params: { _provider: 'krea', _kreaAuth: 'mcp' } });
+    expect(out.params).toEqual({ _provider: 'krea', _kreaAuth: 'mcp', aspect_ratio: '16:9' });
+  });
 });
