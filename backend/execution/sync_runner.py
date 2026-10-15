@@ -488,21 +488,6 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/kling-video/v2.1/pro/image-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
-        async def _sora2_handler(
-            node: GraphNode,
-            inputs: dict[str, PortValueDict],
-            api_keys: dict[str, str],
-        ) -> dict[str, Any]:
-            # Route to Standard or Pro endpoint based on `model` param.
-            # Pop `model` so FAL doesn't receive an unknown value (FAL's inner model key uses different values).
-            tier = node.params.get("model", "standard")
-            if str(tier).lower() == "pro":
-                endpoint_id = "fal-ai/sora-2/text-to-video/pro"
-            else:
-                endpoint_id = "fal-ai/sora-2/text-to-video"
-            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
-            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
-
         async def _veo3_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -662,6 +647,9 @@ def get_handler_registry(
             if api_keys.get("MESHY_API_KEY"):
                 from handlers.meshy import handle_meshy_text_to_3d
                 return await handle_meshy_text_to_3d(node, inputs, api_keys, emit=emit)
+            # fal takes smart-topology too, with Meshy's limits; refuse before it bills.
+            from handlers.meshy import check_smart_topology
+            check_smart_topology(node.params)
             node.params.setdefault("endpoint_id", "fal-ai/meshy/v6/text-to-3d")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
@@ -1038,7 +1026,6 @@ def get_handler_registry(
         registry["nous-portal-universal"] = _nous_portal_handler
         registry["flux-1-1-ultra"] = _flux_ultra_handler
         registry["kling-v2-1"] = _kling_handler
-        registry["sora-2"] = _sora2_handler
         registry["veo-3"] = _veo3_handler
         registry["gemini-omni-flash"] = _gemini_omni_flash_handler
         registry["flux-schnell"] = _flux_schnell_handler
@@ -1355,14 +1342,6 @@ def get_handler_registry(
                 routed_inputs.pop("images", None)
             return await handle_fal_universal(routed_node, routed_inputs, api_keys, emit=emit)
 
-        async def _sora2_i2v_handler(
-            node: GraphNode,
-            inputs: dict[str, PortValueDict],
-            api_keys: dict[str, str],
-        ) -> dict[str, Any]:
-            node.params.setdefault("endpoint_id", "fal-ai/sora-2/image-to-video")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
-
         async def _esrgan_upscale_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -1608,7 +1587,6 @@ def get_handler_registry(
         registry["clarity-upscaler"] = _clarity_upscaler_handler
         registry["seedvr-video-upscale"] = _seedvr_video_upscale_handler
         registry["seedream-4-5"] = _seedream45_handler
-        registry["sora-2-i2v"] = _sora2_i2v_handler
         registry["esrgan-upscale"] = _esrgan_upscale_handler
         registry["recraft-crisp-upscale"] = _recraft_crisp_upscale_handler
         registry["pika-i2v"] = _pika_i2v_handler

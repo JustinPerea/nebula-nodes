@@ -49,7 +49,6 @@ These describe how Nebula's single shared handler (`backend/handlers/fal_univers
 7. **Output parsing (port your downstream node expects).** `_parse_fal_output` detects type in priority order: **mesh** (`model_urls.glb` / `glb` / `model_glb` / `model_mesh`) → **image/SVG** (`images[]`; `content_type` containing `svg` routes to an `svg` port) → single **image** → **audio** → **video** → **text** fallback. Output URLs are signed and **expire** — downstream nodes download promptly.
 8. **Key gotchas.**
    - `gpt-image-1-5-edit` and `gpt-image-2-fal-edit` **require at least one reference image** on the `images` port, or the handler raises before submitting.
-   - `sora-2` selects the Pro endpoint (`fal-ai/sora-2/text-to-video/pro`) when its `model` param is `pro`; the param is popped before send (FAL doesn't receive `model`).
    - `fast-sdxl` (`loras`, `embeddings`) and `kling-v3` (`multi_prompt`) accept **JSON-string** params; the wrapper parses them to arrays/objects and drops them if empty or unparseable.
    - `recraft-v4-raster`/`-svg` post-process `colors`/`background_color` (comma-separated hex) in the wrapper before send.
    - Local-file inlining means a tiny PNG is fine but a 200 MB mp4 base64-encoded into JSON can fail the request — use a URL.
@@ -80,7 +79,6 @@ All 52 nodes below carry `apiProvider: "fal"` in `backend/data/node_definitions.
 | `ideogram-upscale` | Ideogram Upscale | image | `fal-ai/ideogram/upscale` | image, prompt (optional) | — |
 | `recraft-v4-raster` | Recraft V4 | image | `fal-ai/recraft/v4/text-to-image` | prompt | [`skills/fal-ai__recraft__v4__text-to-image.md`](skills/fal-ai__recraft__v4__text-to-image.md) |
 | `recraft-v4-svg` | Recraft V4 SVG | image (vector) | `fal-ai/recraft/v4/text-to-vector` | prompt → **svg** out | — |
-| `sora-2` | Sora 2 (sunsets Sep '26) | video (t2v) | `fal-ai/sora-2/text-to-video` (`/pro` when `model=pro`) | prompt | [`skills/fal-ai__sora-2__text-to-video.md`](skills/fal-ai__sora-2__text-to-video.md) |
 | `kling-v2-1` | Kling v2.1 | video (i2v) | `fal-ai/kling-video/v2.1/pro/image-to-video` | image, prompt, tail_image | [`skills/fal-ai__kling-video__v2.1__pro__image-to-video.md`](skills/fal-ai__kling-video__v2.1__pro__image-to-video.md) |
 | `kling-v3` | Kling V3 | video (t2v/i2v) | `fal-ai/kling-video/v3/standard/text-to-video` | prompt, image, end_image | [`skills/fal-ai__kling-video__v3__standard__text-to-video.md`](skills/fal-ai__kling-video__v3__standard__text-to-video.md) |
 | `kling-o3` | Kling Omni 3 | video (i2v) | `fal-ai/kling-video/o3/standard/image-to-video` | image, prompt, end_image | [`skills/fal-ai__kling-video__o3__standard__image-to-video.md`](skills/fal-ai__kling-video__o3__standard__image-to-video.md) |
@@ -146,7 +144,7 @@ Types, defaults, ranges, and enums below come straight from `backend/data/node_d
 
 **Video — text-to-video**
 
-- `sora-2` — display name now "Sora 2 (sunsets Sep '26)". in: `prompt*`. out: `video`. Params: `resolution` enum [720p (default), 1080p]; `aspect_ratio` enum [16:9 (default), 9:16]; `duration` enum [4 (default), 8, 12, 16, 20]. (A UI `model` toggle picks Standard vs Pro endpoint; it is consumed by the wrapper, not sent to FAL.) **Sunset:** OpenAI announced (2026-03-24) the Videos API + sora-2/sora-2-pro shut down on 2026-09-24 — the FAL endpoints proxy OpenAI, so this node dies then too; plan migrations to another t2v node.
+- `sora-2`, `sora-2-i2v` — Retired 2026-10-14: OpenAI shut down the Sora 2 API on 2026-09-24 (no one-to-one replacement), and fal's endpoints ran on it. Saved `sora-2` / `sora-2-i2v` nodes load as `veo-3` on Veo 3.1 Fast (Sora 2 Pro → Veo 3.1), titled "Veo 3.1 Fast (was Sora 2)"; `grok-imagine-video` and `runway-video` are the other choices.
 - `wan-2-6-t2v` — in: `prompt*`. out: `video`. Params: `duration` enum [5 (default), 10, 15]; `resolution` enum [720p (default), 1080p]; `aspect_ratio` enum [16:9 (default), 9:16, 1:1, 4:3, 3:4]; `negative_prompt` str; `seed` int; `generate_audio` bool (default true); `enable_prompt_expansion` bool (default true); `multi_shots` bool (default true); `enable_safety_checker` bool (default true).
 - `luma-ray2-t2v` — in: `prompt*`. out: `video`. Params: `aspect_ratio` enum [16:9 (default), 9:16, 4:3, 3:4, 21:9, 9:21]; `duration` enum [5s (default), 9s]; `loop` bool (default false); `resolution` enum [540p (default), 720p, 1080p].
 - `seedance-2-t2v` / `seedance-2-fast-t2v` — in: `prompt*`. out: `video`. Params: `aspect_ratio` enum [auto (default), 21:9, 16:9, 4:3, 1:1, 3:4, 9:16]; `duration` enum [auto (default), 4, 5, 6, 8, 10, 12, 15]; `resolution` enum (t2v: [480p, 720p (default), 1080p]; fast: [480p, 720p (default)]); `generate_audio` bool (default true); `seed` int.

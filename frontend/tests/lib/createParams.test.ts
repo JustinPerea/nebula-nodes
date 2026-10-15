@@ -50,14 +50,14 @@ describe('deriveVisibleParams', () => {
   it('renders exactly one provider-specific control per key for Veo', () => {
     const def = NODE_DEFINITIONS['veo-3'];
 
-    const fal = deriveVisibleParams(def, { model: 'veo-3.1-generate-preview' });
+    const fal = deriveVisibleParams(def, { model: 'veo-3.1-generate-001' });
     expect(fal.filter((p) => p.key === 'seed')).toHaveLength(1);
     expect(fal.some((p) => p.key === 'safety_tolerance')).toBe(true);
     expect(fal.some((p) => p.key === 'model')).toBe(false);
 
     const direct = deriveVisibleParams(
       def,
-      { model: 'veo-3.1-generate-preview' },
+      { model: 'veo-3.1-generate-001' },
       { GOOGLE_API_KEY: 'configured' },
     );
     expect(direct.filter((p) => p.key === 'seed')).toHaveLength(1);

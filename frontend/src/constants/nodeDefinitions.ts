@@ -33,11 +33,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gpt-image-1',
+        default: 'gpt-image-2.5-flare',
         options: [
-          { label: 'GPT Image 1', value: 'gpt-image-1' },
-          { label: 'GPT Image 1.5', value: 'gpt-image-1.5' },
-          { label: 'GPT Image 1 Mini', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 1 (shuts down Oct 23, 2026)', value: 'gpt-image-1' },
+          { label: 'GPT Image 1.5 (shuts down Dec 1, 2026)', value: 'gpt-image-1.5' },
+          { label: 'GPT Image 1 Mini (shuts down Dec 1, 2026)', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 2.5 Flare (fastest)', value: 'gpt-image-2.5-flare' },
+          { label: 'GPT Image 2.5 Sunburst (most precise edits)', value: 'gpt-image-2.5-sunburst' },
         ],
       },
       {
@@ -64,6 +66,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
+          { label: 'Extra High', value: 'xhigh', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
+          { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
         ],
       },
       {
@@ -2762,59 +2766,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
-  'sora-2': {
-    id: 'sora-2',
-    displayName: "Sora 2 (sunsets Sep '26)",
-    category: 'video-gen',
-    apiProvider: 'fal',
-    apiEndpoint: 'fal-ai/sora-2/text-to-video',
-    envKeyName: 'FAL_KEY',
-    executionPattern: 'async-poll',
-    inputPorts: [
-      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-    ],
-    outputPorts: [
-      { id: 'video', label: 'Video', dataType: 'Video', required: false },
-    ],
-    params: [
-      {
-        key: 'resolution',
-        label: 'Resolution',
-        type: 'enum',
-        required: false,
-        default: '720p',
-        options: [
-          { label: '720p', value: '720p' },
-          { label: '1080p', value: '1080p' },
-        ],
-      },
-      {
-        key: 'aspect_ratio',
-        label: 'Aspect Ratio',
-        type: 'enum',
-        required: false,
-        default: '16:9',
-        options: [
-          { label: '16:9', value: '16:9' },
-          { label: '9:16', value: '9:16' },
-        ],
-      },
-      {
-        key: 'duration',
-        label: 'Duration (s)',
-        type: 'enum',
-        required: false,
-        default: 4,
-        options: [
-          { label: '4s', value: 4 },
-          { label: '8s', value: 8 },
-          { label: '12s', value: 12 },
-          { label: '16s', value: 16 },
-          { label: '20s', value: 20 },
-        ],
-      },
-    ],
-  },
 
   'nano-banana': {
     id: 'nano-banana',
@@ -3189,11 +3140,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: false,
-        default: 'gemini-2.5-flash-preview-tts',
+        default: 'gemini-3.8-flash-tts',
         options: [
-          { label: '3.1 Flash TTS (preview)', value: 'gemini-3.1-flash-tts-preview' },
-          { label: '2.5 Flash TTS', value: 'gemini-2.5-flash-preview-tts' },
-          { label: '2.5 Pro TTS', value: 'gemini-2.5-pro-preview-tts' },
+          { label: '3.1 Flash TTS (preview, shuts down Nov 17, 2026)', value: 'gemini-3.1-flash-tts-preview' },
+          { label: '2.5 Flash TTS (shuts down Nov 17, 2026)', value: 'gemini-2.5-flash-preview-tts' },
+          { label: '2.5 Pro TTS (shuts down Nov 17, 2026)', value: 'gemini-2.5-pro-preview-tts' },
+          { label: '3.8 Flash TTS', value: 'gemini-3.8-flash-tts' },
+          { label: '3.8 Flash-Lite TTS', value: 'gemini-3.8-flash-lite-tts' },
         ],
       },
       {
@@ -3368,7 +3321,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     displayName: 'Veo 3.1',
     category: 'video-gen',
     apiProvider: 'google',
-    apiEndpoint: 'veo-3.1-generate-preview',
+    apiEndpoint: 'veo-3.1-generate-001',
     envKeyName: ['GOOGLE_VERTEX_CREDENTIALS', 'GOOGLE_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
     directKeyName: ['GOOGLE_VERTEX_CREDENTIALS', 'GOOGLE_API_KEY'],
@@ -3416,7 +3369,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: '720p', value: '720p' },
           { label: '1080p', value: '1080p' },
-          { label: '4K', value: '4k', visibleWhen: { model: ['veo-3.1-generate-preview', 'veo-3.1-fast-generate-preview'] } },
+          { label: '4K', value: '4k', visibleWhen: { model: ['veo-3.1-generate-001', 'veo-3.1-fast-generate-001'] } },
         ],
       },
       {
@@ -3438,11 +3391,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: false,
-        default: 'veo-3.1-generate-preview',
+        default: 'veo-3.1-generate-001',
         options: [
-          { label: 'Veo 3.1', value: 'veo-3.1-generate-preview' },
-          { label: 'Veo 3.1 Fast', value: 'veo-3.1-fast-generate-preview' },
-          { label: 'Veo 3.1 Lite', value: 'veo-3.1-lite-generate-preview' },
+          { label: 'Veo 3.1', value: 'veo-3.1-generate-001' },
+          { label: 'Veo 3.1 Fast', value: 'veo-3.1-fast-generate-001' },
+          { label: 'Veo 3.1 Lite (preview on Vertex)', value: 'veo-3.1-lite-generate-001' },
         ],
       },
       {
@@ -4194,7 +4147,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'standard',
         options: [
           { label: 'Standard', value: 'standard' },
-          { label: 'Low Poly', value: 'lowpoly' },
+          { label: 'Low Poly (retires Oct 30, 2026)', value: 'lowpoly' },
+          { label: 'Smart Topology (Meshy T2)', value: 'smart-topology' },
         ],
       },
       {
@@ -4255,6 +4209,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'T-Pose', value: 't-pose' },
         ],
       },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
     ],
     directParams: [
       {
@@ -4264,9 +4225,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Latest (Meshy 7.1)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 5', value: 'meshy-5' },
+          { label: 'Meshy 6 Lite (2K textures)', value: 'meshy-6-lite' },
+          { label: 'Meshy 7.1 (needs Meshy entitlement)', value: 'meshy-7.1' },
         ],
       },
       {
@@ -4313,13 +4275,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'boolean',
         required: false,
         default: true,
-      },
-      {
-        key: 'seed',
-        label: 'Seed',
-        type: 'integer',
-        required: false,
-        placeholder: 'Random',
       },
     ],
   },
@@ -4415,9 +4370,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Latest (Meshy 7.1)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 5', value: 'meshy-5' },
+          { label: 'Meshy 6 Lite (2K textures)', value: 'meshy-6-lite' },
+          { label: 'Meshy 7.1 (needs Meshy entitlement)', value: 'meshy-7.1' },
         ],
       },
       {
@@ -4428,7 +4384,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'standard',
         options: [
           { label: 'Standard', value: 'standard' },
-          { label: 'Low Poly', value: 'lowpoly' },
+          { label: 'Low Poly (retires Oct 30, 2026)', value: 'lowpoly' },
+          { label: 'Smart Topology (Meshy T2)', value: 'smart-topology' },
         ],
       },
       {
@@ -4508,9 +4465,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Latest (Meshy 7.1)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 5', value: 'meshy-5' },
+          { label: 'Meshy 6 Lite (2K textures)', value: 'meshy-6-lite' },
+          { label: 'Meshy 7.1 (needs Meshy entitlement)', value: 'meshy-7.1' },
         ],
       },
       {
@@ -4626,9 +4584,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Latest (Meshy 7)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 5', value: 'meshy-5' },
+          { label: 'Meshy 6 Lite', value: 'meshy-6-lite' },
+          { label: 'Meshy 7 (needs Meshy entitlement)', value: 'meshy-7' },
         ],
       },
       {
@@ -5072,6 +5031,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
+      { id: 'images', label: 'All images', dataType: 'Array', required: false },
     ],
     params: [
       {
@@ -5079,11 +5039,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gpt-image-1',
+        default: 'gpt-image-2.5-sunburst',
         options: [
-          { label: 'GPT Image 1', value: 'gpt-image-1' },
-          { label: 'GPT Image 1.5', value: 'gpt-image-1.5' },
-          { label: 'GPT Image 1 Mini', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 1 (shuts down Oct 23, 2026)', value: 'gpt-image-1' },
+          { label: 'GPT Image 1.5 (shuts down Dec 1, 2026)', value: 'gpt-image-1.5' },
+          { label: 'GPT Image 1 Mini (shuts down Dec 1, 2026)', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 2.5 Flare (fastest)', value: 'gpt-image-2.5-flare' },
+          { label: 'GPT Image 2.5 Sunburst (most precise edits)', value: 'gpt-image-2.5-sunburst' },
         ],
       },
       {
@@ -5119,6 +5081,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
+          { label: 'Extra High', value: 'xhigh', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
+          { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
         ],
       },
       {
@@ -11961,61 +11925,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'JPEG', value: 'jpeg' },
           { label: 'PNG', value: 'png' },
           { label: 'WebP', value: 'webp' },
-        ],
-      },
-    ],
-  },
-  'sora-2-i2v': {
-    id: 'sora-2-i2v',
-    displayName: 'Sora 2 Image-to-Video',
-    category: 'video-gen',
-    apiProvider: 'fal',
-    apiEndpoint: 'fal-ai/sora-2/image-to-video',
-    envKeyName: 'FAL_KEY',
-    executionPattern: 'async-poll',
-    inputPorts: [
-      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
-    ],
-    outputPorts: [
-      { id: 'video', label: 'Video', dataType: 'Video', required: false },
-    ],
-    params: [
-      {
-        key: 'resolution',
-        label: 'Resolution',
-        type: 'enum',
-        required: false,
-        default: 'auto',
-        options: [
-          { label: 'Auto', value: 'auto' },
-          { label: '720p', value: '720p' },
-        ],
-      },
-      {
-        key: 'aspect_ratio',
-        label: 'Aspect Ratio',
-        type: 'enum',
-        required: false,
-        default: 'auto',
-        options: [
-          { label: 'Auto', value: 'auto' },
-          { label: '9:16', value: '9:16' },
-          { label: '16:9', value: '16:9' },
-        ],
-      },
-      {
-        key: 'duration',
-        label: 'Duration',
-        type: 'enum',
-        required: false,
-        default: 4,
-        options: [
-          { label: '4s', value: 4 },
-          { label: '8s', value: 8 },
-          { label: '12s', value: 12 },
-          { label: '16s', value: 16 },
-          { label: '20s', value: 20 },
         ],
       },
     ],

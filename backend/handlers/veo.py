@@ -23,25 +23,48 @@ from execution.missing_credential import MissingCredentialError
 
 VEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
-# Google retires the Veo 3.1 previews on the Gemini API (and fal's Veo 3.1,
-# which runs on them) on 2026-10-22
-# (https://ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-10).
-# Vertex AI serves the GA models: veo-3.1-generate-001 and
-# veo-3.1-fast-generate-001 retire "Nov 17 2026 or later"; Lite is a preview.
+# Google shuts down the Veo 3.1 previews on the Gemini API (and fal's Veo 3.1,
+# which runs on them) on 2026-10-22, "the earliest possible date", and names no
+# GA Veo on the Gemini API (https://ai.google.dev/gemini-api/docs/deprecations,
+# checked 2026-10-14). Vertex AI (Gemini Enterprise Agent Platform) serves the
+# GA models: veo-3.1-generate-001 and veo-3.1-fast-generate-001 retire
+# "November 17, 2026 or later"; veo-3.1-lite-generate-001 is still Preview
+# (https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/veo/3-1-generate,
+# checked 2026-10-14). The node stores the Vertex IDs; the Gemini API route
+# translates them back to the preview IDs until the previews end.
 GEMINI_PREVIEWS_END = date(2026, 10, 22)
-VERTEX_MODELS = {
-    "veo-3.1-generate-preview": "veo-3.1-generate-001",
-    "veo-3.1-fast-generate-preview": "veo-3.1-fast-generate-001",
-    "veo-3.1-lite-generate-preview": "veo-3.1-lite-generate-001",
+STANDARD_MODEL = "veo-3.1-generate-001"
+FAST_MODEL = "veo-3.1-fast-generate-001"
+LITE_MODEL = "veo-3.1-lite-generate-001"
+VEO_MODELS = (STANDARD_MODEL, FAST_MODEL, LITE_MODEL)
+GEMINI_API_MODELS = {
+    STANDARD_MODEL: "veo-3.1-generate-preview",
+    FAST_MODEL: "veo-3.1-fast-generate-preview",
+    LITE_MODEL: "veo-3.1-lite-generate-preview",
 }
-VERTEX_DEFAULT_MODEL = "veo-3.1-generate-001"
-LITE_MODEL = "veo-3.1-lite-generate-preview"
+# Graphs saved before 2026-10-14 store the preview IDs. retired_nodes migrates
+# them on load; this covers any path that skips the migration.
+LEGACY_MODELS = {preview: model for model, preview in GEMINI_API_MODELS.items()}
+VERTEX_DEFAULT_MODEL = STANDARD_MODEL
 MAX_FRAME_BYTES = 20_000_000
 MAX_CLIP_BYTES = 100_000_000
 
 
 def previews_retired(today: date | None = None) -> bool:
     return (today or date.today()) >= GEMINI_PREVIEWS_END
+
+
+VERTEX_ONLY_MESSAGE = (
+    "Google retired the Veo 3.1 previews on the Gemini API on 2026-10-22, so a GOOGLE_API_KEY "
+    "can no longer run Veo. Add a Google Vertex AI service-account key (GOOGLE_VERTEX_CREDENTIALS) "
+    "in Settings to run Veo 3.1 on Vertex."
+)
+
+
+def canonical_model(value: Any) -> str:
+    """The node's Vertex model ID, mapping a saved Gemini API preview ID."""
+    model = str(value or STANDARD_MODEL)
+    return LEGACY_MODELS.get(model, model)
 
 
 def with_vertex_hint(message: str, today: date | None = None) -> str:
@@ -105,10 +128,7 @@ async def _image_to_veo_payload(img_str: str) -> dict[str, Any]:
 # and veo-3.1-fast-generate-preview with an AI Studio GOOGLE_API_KEY (verified live 2026-06-08),
 # so reference images are not exposed. Re-add a `referenceImages` instance field (bytesBase64Encoded
 # shape, referenceType "asset") if/when Google enables the use case on the public API.
-VEO_EXTEND_MODELS = {
-    "veo-3.1-generate-preview",
-    "veo-3.1-fast-generate-preview",
-}
+VEO_EXTEND_MODELS = {STANDARD_MODEL, FAST_MODEL}
 # Vertex also extends with Lite, and doesn't lock the output to 720p
 # (https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/video/extend-videos,
 # checked 2026-10-11).
@@ -116,7 +136,7 @@ VERTEX_EXTEND_MODELS = VEO_EXTEND_MODELS | {LITE_MODEL}
 # Only Standard renders 4K on Vertex; Fast and Lite stop at 1080p
 # (https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/veo/3-1-generate,
 # checked 2026-10-11). The Gemini API also renders Fast at 4K.
-VERTEX_4K_MODELS = {"veo-3.1-generate-preview"}
+VERTEX_4K_MODELS = {STANDARD_MODEL}
 # Vertex frames must be JPEG or PNG (VideoGenerationModelInstance.Image).
 VERTEX_FRAME_TYPES = {"image/jpeg", "image/png"}
 
@@ -135,7 +155,9 @@ async def handle_veo(
     prompt_input = inputs.get("prompt")
     prompt_text = str(prompt_input.value) if prompt_input and prompt_input.value else ""
 
-    model = node.params.get("model", "veo-3.1-generate-preview")
+    model = canonical_model(node.params.get("model"))
+    if model not in VEO_MODELS:
+        raise ValueError(f"'{model}' isn't a Veo 3.1 model")
 
     has_image = bool(inputs.get("image") and inputs["image"].value)
     has_last = bool(inputs.get("last_frame") and inputs["last_frame"].value)
@@ -158,6 +180,10 @@ async def handle_veo(
             has_image=has_image, has_last=has_last, has_video=has_video, emit=emit,
         )
     assert api_key is not None
+    if previews_retired():
+        # Checked before any request, so the run never reaches Google.
+        raise MissingCredentialError(VERTEX_ONLY_MESSAGE)
+    gemini_model = GEMINI_API_MODELS[model]
 
     instance: dict[str, Any] = {}
     if prompt_text:
@@ -204,14 +230,14 @@ async def handle_veo(
 
     _emit = emit or noop_emit
 
-    _log(f"submitting to {model}")
+    _log(f"submitting to {gemini_model}")
     auth_headers = {
         "x-goog-api-key": api_key,
         "Content-Type": "application/json",
     }
     async with httpx.AsyncClient(timeout=120.0) as client:
         # Submit long-running operation
-        url = f"{VEO_BASE_URL}/{model}:predictLongRunning"
+        url = f"{VEO_BASE_URL}/{gemini_model}:predictLongRunning"
         resp = await client.post(url, json=request_body, headers=auth_headers)
         _log(f"submit response: {resp.status_code}")
         if resp.status_code != 200:
@@ -486,9 +512,7 @@ async def _handle_veo_vertex(
     has_video: bool,
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None,
 ) -> dict[str, Any]:
-    vertex_model = VERTEX_MODELS.get(model)
-    if vertex_model is None:
-        raise ValueError(f"'{model}' isn't a Veo 3.1 model")
+    vertex_model = model
     # Lite's model card is contradictory about frames (modalities say no image
     # input, capabilities list image-to-video), so they're sent and Google decides.
     if str(node.params.get("resolution")) == "4k" and model not in VERTEX_4K_MODELS:
@@ -557,7 +581,7 @@ def fal_veo_route(
     if inputs.get("video") and inputs["video"].value:
         raise ValueError("Extending a clip needs the Google route: add a Vertex or Gemini API key in Settings")
     params = node.params
-    fast = params.get("model") in ("veo-3.1-fast-generate-preview", LITE_MODEL)
+    fast = canonical_model(params.get("model")) in (FAST_MODEL, LITE_MODEL)
     base = "fal-ai/veo3.1/fast" if fast else "fal-ai/veo3.1"
     fal_params: dict[str, Any] = {k: params[k] for k in FAL_VEO_PARAMS if params.get(k) not in (None, "")}
     if params.get("aspectRatio"):

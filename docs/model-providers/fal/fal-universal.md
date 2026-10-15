@@ -106,8 +106,8 @@ then reads `endpoint_id` from `node.params` exactly as it would for the
 
 Some wrappers choose the endpoint based on a param value:
 
-- `sora-2`: pops `model` param, selects `fal-ai/sora-2/text-to-video/pro` or
-  `fal-ai/sora-2/text-to-video` based on its value
+- `sora-2` (retired 2026-10-14; saved nodes load as `veo-3`): popped `model` and picked
+  `fal-ai/sora-2/text-to-video/pro` or `fal-ai/sora-2/text-to-video`
 - `veo-3`: uses Google's direct API if `GOOGLE_API_KEY` is present; falls back
   to `fal-ai/veo3` if only `FAL_KEY` is set
 

@@ -29,7 +29,7 @@ Sourced from docs.meshy.ai/en/api/pricing (fetched 2026-04-17). Meshy is pay-bef
 
 ## Key observations
 
-- **Meshy 6 is ~4× more expensive** than older models for 3D generation. Worth it for final quality; use meshy-5 for iteration.
+- **Iterate cheaply on `meshy-6-lite` or `smart-topology` previews** (5 credits each, llms.txt checked 2026-10-14). `meshy-5` is no longer accepted.
 - **Texture phase adds cost on image-to-3d flows** — `should_texture=true` costs 10–15 credits more than mesh-only on older models, 10 more on meshy-6.
 - **Rigging is a bargain.** 5 credits gets you the rig + walking + running. Additional animations are only 3 credits each.
 - **`texture_prompt` and `texture_image_url` add 10 credits** on top of the base image-to-3D cost when used (per the image-to-3d endpoint docs).
@@ -78,4 +78,4 @@ The pricing page states Meshy API is *"a pay-before-you-go product"* and directs
 
 ## Absent from official pricing table
 
-Only `meshy-6` and the "other models" category appear in the pricing page. Individual endpoint docs still reference `meshy-5` as a valid `ai_model` value — so meshy-5 is still accepted by the API, it just falls into the "other models / 5 credit" bucket.
+Only `meshy-6` and the "other models" category appear in the pricing page. As of 2026-10-14 the `ai_model` enums in openapi.yaml no longer list `meshy-5`; Nebula moves saved meshy-5 nodes to `meshy-6`.

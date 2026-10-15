@@ -145,8 +145,8 @@ def test_load_migrates_retired_nodes(tmp_path):
     }
     assert graph.nodes["n1"]["label"] == "Nano Banana (was Imagen 4)"
     assert graph.nodes["n2"]["label"] == "My still", "a renamed node keeps its own title"
-    assert graph.nodes["n3"]["params"] == {"model": "veo-3.1-generate-preview", "duration": "6"}
-    assert graph.nodes["n4"]["params"] == {"model": "veo-3.1-generate-preview"}
+    assert graph.nodes["n3"]["params"] == {"model": "veo-3.1-generate-001", "duration": "6"}
+    assert graph.nodes["n4"]["params"] == {"model": "veo-3.1-generate-001"}, "Gemini API preview IDs move to Vertex"
 
 
 class TestAutoPersist:
