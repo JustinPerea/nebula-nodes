@@ -860,8 +860,12 @@ def route_param_definitions(definition: Mapping[str, Any], route: str | None) ->
     route takes (main.py _valid_param_keys reads all_param_definitions), and
     route_block stays the run-time authority.
 
-    For every other node it is the same group route_param_keys sends, as
-    definitions, unchanged."""
+    For every other node ``route`` is a route kind or a computed route id
+    (routes_of): ``params`` when the node declares no ``sharedParams``, else
+    ``sharedParams`` plus ``directParams`` on the maker's route or
+    ``falParams`` on any other, unchanged, a later definition of a key
+    winning. That is the list directRoute.ts shows for a dual-route node
+    (route_tables.json ``routeParams`` pins every multi-route node)."""
     if has_routes(definition):
         spec = route_by_id(definition, route)
         rules = _route_rules(spec) if spec is not None else {}
@@ -872,8 +876,15 @@ def route_param_definitions(definition: Mapping[str, Any], route: str | None) ->
                 if isinstance(param, Mapping) and param.get("key"):
                     by_key[str(param["key"])] = _narrowed(param, rules)
         return list(by_key.values())
-    wanted = route_param_keys(definition, route)
-    return [param for param in all_param_definitions(definition) if str(param.get("key")) in wanted]
+    if definition.get("sharedParams") is None:  # an empty list still picks a group, as in TS
+        return [param for param in definition.get("params") or [] if isinstance(param, Mapping)]
+    maker = maker_route(definition) if route not in (DIRECT, FALLBACK, PLAN, ONLY, UNSET, LOCAL) else None
+    direct = route == DIRECT or (maker is not None and route == maker.get("id"))
+    by_key: dict[str, Mapping[str, Any]] = {}
+    for param in [*definition["sharedParams"], *(definition.get("directParams" if direct else "falParams") or [])]:
+        if isinstance(param, Mapping) and param.get("key"):
+            by_key[str(param["key"])] = param
+    return list(by_key.values())
 
 
 def shown_route_id(

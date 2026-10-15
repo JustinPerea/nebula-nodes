@@ -39,8 +39,9 @@ describe('routesOf (snapshot of backend node_route.routes_of)', () => {
       expect({ nodeId, routes: routesOf(definition).map(shown) }).toEqual({ nodeId, routes: expected.routes });
       expect({ nodeId, keys: allParamDefinitions(definition).map((param) => param.key) })
         .toEqual({ nodeId, keys: expected.allParamKeys });
-      if (hasRoutes(definition)) {
-        // Each route's options, as the switcher's Inspector shows them
+      if (hasRoutes(definition) || routesOf(definition).length > 1) {
+        // Each route's options, as the Inspector shows them: a route-table
+        // node's per route, a dual-route node's per group
         // (node_route.route_param_definitions).
         const offered = Object.fromEntries(routesOf(definition).map((route) => [route.id,
           routeParamDefinitions(definition, route.id).map((param) => ({
