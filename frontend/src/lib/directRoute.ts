@@ -455,6 +455,24 @@ function routeRules(route: RouteSpec): RouteRules {
   return rules;
 }
 
+/** Whether `route` takes this one value of `key` on its own: its `accepts`
+ * rule (which a `valueMap` implies) holds and its `rejects` doesn't list
+ * it. What routeParamDefinitions narrows by, and what a provider switch
+ * snaps (lib/providerSwitch.ts); rejectsWhen combinations aren't per value. */
+export function routeTakesValue(route: RouteSpec, key: string, value: unknown): boolean {
+  const rules = routeRules(route);
+  const accepts = rules.accepts && Object.hasOwn(rules.accepts, key) ? rules.accepts[key] : undefined;
+  if (accepts && !valueAccepted(value, accepts)) return false;
+  const rejected = rules.rejects && Object.hasOwn(rules.rejects, key) ? rules.rejects[key] : undefined;
+  return !(Array.isArray(rejected) && rejected.map(matchValue).includes(matchValue(value)));
+}
+
+/** The accepts rule `route` has for `key`, if any (its own or its valueMap's). */
+export function routeAcceptRule(route: RouteSpec, key: string): DirectAcceptRule | undefined {
+  const accepts = routeRules(route).accepts;
+  return accepts && Object.hasOwn(accepts, key) ? accepts[key] : undefined;
+}
+
 /** Why `route` can't take a run with these params, or null when it can
  * (node_route.route_block). */
 export function routeBlock(definition: RoutedDefinition, route: RouteSpec | undefined, params: Record<string, unknown>): DirectBlock | null {

@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import type { ModelNodeDefinition } from '../../types';
-import { deriveVisibleParams, resolveCreateParamDefinitions } from '../../lib/createParams';
+import { deriveVisibleParams } from '../../lib/createParams';
+import { allParamDefinitions, providerLabel, routeById, routeSwitch, shownRouteId } from '../../lib/directRoute';
 import { useUIStore } from '../../store/uiStore';
+import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
 
 interface ParamPillsProps {
   def: ModelNodeDefinition;
@@ -14,6 +17,13 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
     (p) => p.type === 'enum' || p.type === 'integer' || p.type === 'float' || p.type === 'boolean',
   );
 
+  // A route-table model: the provider pill comes first, and the pills show
+  // that provider's options (lib/directRoute.ts routeParamDefinitions).
+  const switchable = routeSwitch(def);
+  const shown = switchable ? routeById(def, shownRouteId(def, params, apiKeys)) : undefined;
+  const [switchNote, setSwitchNote] = useState<{ model: string; text: string } | null>(null);
+  const note = switchNote?.model === def.id ? switchNote.text : null;
+
   const set = (key: string, value: unknown) => onChange({ ...params, [key]: value });
   const unset = (key: string) => {
     const next = { ...params };
@@ -23,6 +33,19 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
 
   return (
     <div className="param-pills">
+      {switchable && (
+        <ProviderSwitcher definition={def} params={params} variant="pill" onPick={(next, notes) => {
+          onChange(next);
+          setSwitchNote(notes.length ? { model: def.id, text: notes.join('. ') } : null);
+        }} />
+      )}
+      {note && (
+        <span className="param-pills__note" role="status">
+          {note}
+          <button type="button" className="param-pills__note-dismiss" aria-label="Dismiss provider note"
+            onClick={() => setSwitchNote(null)}>&times;</button>
+        </span>
+      )}
       {visible.map((p) => {
         const optionalWithoutDefault = !p.required && p.default == null;
         if (p.disabledReason) {
@@ -38,8 +61,9 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
           const hasEmptyOption = p.options?.some((o) => o.value === '');
           const value = String(params[p.key] ?? p.default ?? '');
           const unavailableChoice = value !== '' && !p.options?.some((o) => String(o.value) === value);
-          const storedLabel = resolveCreateParamDefinitions(def, apiKeys, params).find((param) => param.key === p.key)
+          const storedLabel = allParamDefinitions(def).find((param) => param.key === p.key)
             ?.options?.find((o) => String(o.value) === value)?.label ?? 'Saved choice';
+          const unavailableNote = shown ? `not on ${providerLabel(shown.provider)}` : 'unavailable for selected model';
           return (
             <label key={p.key} className="param-pill" title={p.label}>
               <span className="param-pill__label">{p.label}</span>
@@ -55,7 +79,7 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
                   set(p.key, option?.value ?? e.target.value);
                 }}
               >
-                {unavailableChoice && <option value={value} disabled>{storedLabel} (unavailable for selected model)</option>}
+                {unavailableChoice && <option value={value} disabled>{storedLabel} ({unavailableNote})</option>}
                 {p.default == null && !hasEmptyOption && <option value="">{p.required ? 'Choose…' : 'Default'}</option>}
                 {(p.options ?? []).map((o) => (
                   <option key={String(o.value)} value={String(o.value)}>{o.label}</option>
