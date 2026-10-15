@@ -634,3 +634,91 @@ body.app-slava-restraint .jev-details__notes {
   }
   body.app-slava-restraint .jev-result__thumb { transition: none; }
 }
+
+/*
+ * The setting you type on a Jev card (JevCardField.tsx): Decide and Pick
+ * Best's question, Box's target. A labelled field in the card's own type, so
+ * it reads as part of the card rather than a form dropped onto it.
+ */
+.model-node__jev-field {
+  display: grid;
+  gap: 4px;
+}
+
+.model-node__jev-field-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #777;
+}
+
+.model-node__jev-field-note {
+  font-size: 10px;
+  color: #777;
+}
+
+body:not(.app-slava-restraint) .model-node__jev-field .model-node__jev-input {
+  min-height: 0;
+  resize: none;
+}
+
+body.app-slava-restraint .model-node__jev-field {
+  padding: 4px 14px 10px;
+}
+
+body.app-slava-restraint .model-node__jev-field-label {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-micro);
+}
+
+body.app-slava-restraint .model-node__jev-field-note {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-meta);
+  line-height: var(--sr-line-meta);
+}
+
+body.app-slava-restraint .model-node__jev-field .model-node__jev-input {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  max-height: 120px;
+  padding: 7px 9px;
+  border: 1px solid var(--sr-edge);
+  border-radius: var(--sr-radius-control);
+  background: var(--sr-surface-control);
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-control);
+  line-height: var(--sr-line-compact);
+  resize: none;
+  outline: none;
+  transition: border-color var(--sr-motion-fast), background-color var(--sr-motion-fast);
+  scrollbar-color: var(--sr-node-scrollbar-color) transparent;
+}
+
+body.app-slava-restraint .model-node__jev-field .model-node__jev-input:hover {
+  background: var(--sr-surface-control-hover);
+}
+
+body.app-slava-restraint .model-node__jev-field .model-node__jev-input:focus {
+  border-color: var(--sr-edge-strong);
+  caret-color: var(--sr-ink-bold);
+}
+
+body.app-slava-restraint .model-node__jev-field .model-node__jev-input:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: 0;
+}
+
+body.app-slava-restraint .model-node__jev-field .model-node__jev-input::placeholder {
+  color: var(--sr-ink-faint);
+}
+
+/* With the field above it, the result opens closer to the card's top. */
+body.app-slava-restraint .model-node__jev-field ~ .jev-result {
+  padding-top: 0;
+}

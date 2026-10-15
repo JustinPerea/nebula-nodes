@@ -22,6 +22,20 @@ interface JevResultViewProps {
   result: JevResult;
   params: Record<string, unknown>;
   inputs?: JevResultInputs;
+  /** On a node card: the text its editable field shows now (question or
+   * target). The result skips repeating it, and when the field was edited
+   * after the run it shows the text the result actually answered, marked as
+   * such. Leave unset where there is no field, e.g. a standalone preview. */
+  fieldText?: string | null;
+}
+
+/** What the result line should say, given the field above it. Null hides it. */
+function echoedText(asked: string | null, fieldText: string | null | undefined): { text: string; earlier: boolean } | null {
+  if (!asked) return null;
+  if (fieldText === undefined) return { text: asked, earlier: false };
+  // Handlers collapse runs of whitespace before asking, so compare the same way.
+  const same = (text: string) => text.split(/\s+/).filter(Boolean).join(' ');
+  return same(asked) === same(fieldText ?? '') ? null : { text: asked, earlier: true };
 }
 
 type Tone = JevVerdictLabel['tone'] | 'none';
@@ -57,8 +71,15 @@ function Footer({ confidence, model, label = 'Confidence' }: { confidence: strin
   );
 }
 
-function Question({ text }: { text: string | null }) {
-  return text ? <p className="jev-result__question" title={text}>{text}</p> : null;
+function Question({ asked, fieldText }: { asked: string | null; fieldText: string | null | undefined }) {
+  const echo = echoedText(asked, fieldText);
+  if (!echo) return null;
+  return (
+    <p className="jev-result__question" title={echo.text} data-testid="jev-asked">
+      {echo.earlier && <span className="jev-result__muted">Asked </span>}
+      {echo.text}
+    </p>
+  );
 }
 
 function YesNoMeter({ result, threshold, tone }: { result: JevDecideResult; threshold: number; tone: Tone }) {
@@ -173,7 +194,9 @@ function branchText(branch: JevDecideResult['branch']): string {
   return 'Held back on both branches';
 }
 
-function JevDecideView({ result, params, gated }: { result: JevDecideResult; params: Record<string, unknown>; gated: boolean }) {
+function JevDecideView({ result, params, gated, fieldText }: {
+  result: JevDecideResult; params: Record<string, unknown>; gated: boolean; fieldText: string | null | undefined;
+}) {
   const mode = decideMode(result, params);
   const verdict = verdictLabel(result.pass, mode, params);
   const question = askedQuestion(result.report, params, 'question', 'Question');
@@ -183,7 +206,7 @@ function JevDecideView({ result, params, gated }: { result: JevDecideResult; par
         <Chip tone={verdict.tone}>{verdict.label}</Chip>
         {judgedImages(result.report) && <ExperimentalBadge />}
       </div>
-      <Question text={question} />
+      <Question asked={question} fieldText={fieldText} />
       <div className="jev-result__headline">
         <span className="jev-result__answer" title={result.answer}>{displayAnswer(result.answer, mode)}</span>
         <span className="jev-result__headline-figure">{formatJevPercent(answerProbability(result))}</span>
@@ -201,8 +224,8 @@ function JevDecideView({ result, params, gated }: { result: JevDecideResult; par
   );
 }
 
-function JevPickBestView({ result, params, candidates }: {
-  result: JevPickBestResult; params: Record<string, unknown>; candidates: string[] | undefined;
+function JevPickBestView({ result, params, candidates, fieldText }: {
+  result: JevPickBestResult; params: Record<string, unknown>; candidates: string[] | undefined; fieldText: string | null | undefined;
 }) {
   const close = isCloseCall(result.confidence, params);
   const rows = probabilityRows(result);
@@ -217,7 +240,7 @@ function JevPickBestView({ result, params, candidates }: {
         <Chip tone={close ? 'unsure' : 'pass'}>{close ? 'Close call' : `Best of ${rows.length}`}</Chip>
         {judgedImages(result.report) && <ExperimentalBadge />}
       </div>
-      <Question text={question} />
+      <Question asked={question} fieldText={fieldText} />
       <div className="jev-result__hero">
         <img src={backendAssetUrlSync(result.winner)} alt={`Winner, candidate ${result.index + 1}`} draggable={false} />
         <span className="jev-result__hero-label">
@@ -265,12 +288,15 @@ function JevPickBestView({ result, params, candidates }: {
 
 const ASPECT_TOLERANCE = 0.02;
 
-function JevBoxView({ result, params, image }: { result: JevBoxResult; params: Record<string, unknown>; image: string | null | undefined }) {
+function JevBoxView({ result, params, image, fieldText }: {
+  result: JevBoxResult; params: Record<string, unknown>; image: string | null | undefined; fieldText: string | null | undefined;
+}) {
   // The overlay is drawn in fractions of the original image. If the wired image
   // no longer has the same shape (it changed since the run), show the run's own
   // annotated image instead, which already has the box burned in.
   const [mismatch, setMismatch] = useState(false);
   const target = askedQuestion(result.report, params, 'target', 'Target');
+  const targetEcho = echoedText(target, fieldText);
   const box = result.box;
   const useOriginal = Boolean(image) && !mismatch;
   const src = useOriginal ? image! : result.annotated;
@@ -298,7 +324,11 @@ function JevBoxView({ result, params, image }: { result: JevBoxResult; params: R
         <Chip tone={tone}>{label}</Chip>
         {judgedImages(result.report) && <ExperimentalBadge />}
       </div>
-      {target && <p className="jev-result__question" title={target}><span className="jev-result__muted">Find</span> {target}</p>}
+      {targetEcho && (
+        <p className="jev-result__question" title={targetEcho.text} data-testid="jev-asked">
+          <span className="jev-result__muted">{targetEcho.earlier ? 'Searched for' : 'Find'}</span> {targetEcho.text}
+        </p>
+      )}
       {src ? (
         <div
           className="jev-result__stage"
@@ -338,7 +368,7 @@ function JevBoxView({ result, params, image }: { result: JevBoxResult; params: R
           {noBox && (
             <div className="jev-result__missing" role="status">
               <span className="jev-result__missing-title">{label}</span>
-              {target && <span className="jev-result__missing-target">{target}</span>}
+              {targetEcho && <span className="jev-result__missing-target">{targetEcho.text}</span>}
             </div>
           )}
         </div>
@@ -346,7 +376,7 @@ function JevBoxView({ result, params, image }: { result: JevBoxResult; params: R
         noBox && (
           <div className="jev-result__missing jev-result__missing--plain" role="status">
             <span className="jev-result__missing-title">{label}</span>
-            {target && <span className="jev-result__missing-target">{target}</span>}
+            {targetEcho && <span className="jev-result__missing-target">{targetEcho.text}</span>}
           </div>
         )
       )}
@@ -371,8 +401,8 @@ function JevBoxView({ result, params, image }: { result: JevBoxResult; params: R
 
 /** A Jev node's result on its card: verdict, the numbers behind it, and for
  * Pick Best and Box the images it judged. */
-export function JevResultView({ result, params, inputs }: JevResultViewProps) {
-  if (result.kind === 'decide') return <JevDecideView result={result} params={params} gated={Boolean(inputs?.gated)} />;
-  if (result.kind === 'pick-best') return <JevPickBestView result={result} params={params} candidates={inputs?.candidates} />;
-  return <JevBoxView result={result} params={params} image={inputs?.image} />;
+export function JevResultView({ result, params, inputs, fieldText }: JevResultViewProps) {
+  if (result.kind === 'decide') return <JevDecideView result={result} params={params} gated={Boolean(inputs?.gated)} fieldText={fieldText} />;
+  if (result.kind === 'pick-best') return <JevPickBestView result={result} params={params} candidates={inputs?.candidates} fieldText={fieldText} />;
+  return <JevBoxView result={result} params={params} image={inputs?.image} fieldText={fieldText} />;
 }

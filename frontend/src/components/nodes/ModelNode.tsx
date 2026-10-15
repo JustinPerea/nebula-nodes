@@ -31,8 +31,9 @@ import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
 import { JevResultView, type JevResultInputs } from './JevResult';
+import { JevCardField } from './JevCardField';
 import { isJevNode, parseJevOutputs, JEV_BOX, JEV_DECIDE, JEV_PICK_BEST } from '../../lib/jev';
-import { jevResultKey, upstreamPortValues } from '../../lib/jevView';
+import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '../../lib/jevView';
 
 // Trigger a browser download for a URL produced by the backend. We fetch the
 // blob ourselves so the `download` attribute is honoured even across localhost
@@ -298,6 +299,16 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const inlineTextPlaceholder = inlineTextParam?.placeholder ?? 'Enter text...';
   const isNodeSelected = selected || selectedNodeId === id;
   const nextStepSource = currentMediaSource(definition, nodeData, previewOutputs);
+  // Jev cards carry their main setting (question / target) as an editable
+  // field on the face; the result below hides its echo of the same text.
+  const jevField = JEV_CARD_FIELDS[nodeData.definitionId] ?? null;
+  const jevFieldText = jevField
+    ? jevCardText(nodeData.params, jevField.key, definition.params.find((p) => p.key === jevField.key)?.default)
+    : null;
+  // Box's target also has an input port; wired text wins over the typed value.
+  const jevFieldPort = jevField ? definition.inputPorts.find((port) => port.id === jevField.key) : undefined;
+  const jevFieldPortWired = Boolean(jevFieldPort)
+    && edges.some((edge) => edge.target === id && edge.targetHandle === jevFieldPort?.id);
   const hasMediaPreview = Boolean(imageOutput || videoOutput);
   const latestPaperSourceReady = nodeData.outputFreshness?.paperInputs.every((input) => {
     const source = nodes.find((node) => node.id === input.nodeId)?.data.params._paperSource as PaperSourceRecord | undefined;
@@ -553,6 +564,17 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
+      {jevField && (
+        <JevCardField
+          nodeId={id}
+          definition={definition}
+          field={jevField}
+          params={nodeData.params}
+          portWired={jevFieldPortWired}
+          portLabel={jevFieldPort?.label}
+        />
+      )}
+
       <NodeRunStatus data={nodeData} definition={definition} nodeId={id} />
 
       {jevResult && (
@@ -561,6 +583,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           result={jevResult}
           params={nodeData.params}
           inputs={jevInputs}
+          fieldText={jevFieldText}
         />
       )}
 

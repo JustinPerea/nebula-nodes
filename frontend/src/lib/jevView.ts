@@ -8,7 +8,7 @@
  */
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../types';
-import type { JevDecideResult, JevReport, JevVerdict } from './jev';
+import { JEV_BOX, JEV_DECIDE, JEV_PICK_BEST, type JevDecideResult, type JevReport, type JevVerdict } from './jev';
 import { formatUsd } from './pricing';
 
 /** TypeSafe bills input tokens only, at $0.042 per million (output is free).
@@ -19,6 +19,30 @@ export const JEV_USD_PER_INPUT_TOKEN = 0.042 / 1_000_000;
 export const JEV_DEFAULT_MIN_CONFIDENCE = 0.5;
 
 export type JevDecideMode = 'yes_no' | 'choice' | 'score';
+
+/** The one setting each Jev card lets you type on its face: the question for
+ * Decide and Pick Best, the target for Box. The card edits the same node param
+ * the Inspector does. */
+export interface JevCardField {
+  key: string;
+  label: string;
+  /** Box's target is a short phrase, so it gets a one-line input. */
+  multiline: boolean;
+}
+
+export const JEV_CARD_FIELDS: Readonly<Record<string, JevCardField>> = {
+  [JEV_PICK_BEST]: { key: 'question', label: 'Question', multiline: true },
+  [JEV_DECIDE]: { key: 'question', label: 'Question', multiline: true },
+  [JEV_BOX]: { key: 'target', label: 'Find', multiline: false },
+};
+
+/** The text a Jev card's field stands for right now: what's typed, or the
+ * param's default when it's blank (Pick Best asks its default question then). */
+export function jevCardText(params: Record<string, unknown> | undefined, key: string, fallback: unknown): string {
+  const typed = params?.[key];
+  if (typeof typed === 'string' && typed.trim()) return typed.trim();
+  return typeof fallback === 'string' ? fallback.trim() : '';
+}
 
 /** "93%", "<1%", ">99%". Whole percents read faster on a card than decimals. */
 export function formatJevPercent(value: number): string {
