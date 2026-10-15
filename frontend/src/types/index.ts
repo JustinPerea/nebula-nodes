@@ -134,6 +134,10 @@ export interface ModelNodeDefinition {
   capabilityNote?: string;
   inputPorts: PortDefinition[];
   outputPorts: PortDefinition[];
+  /** Values a node keeps in its outputs only to show them on the card, with no
+   *  handle to wire from. Image Compare keeps its two inputs here to draw the
+   *  before/after slider. Saving accepts these handles; edges never do. */
+  displayOutputs?: PortDefinition[];
   params: ParamDefinition[];
   /** Dual-param architecture for nodes with both FAL and direct API support.
    *  When present, Inspector renders sharedParams + (falParams or directParams)

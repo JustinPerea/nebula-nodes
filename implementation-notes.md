@@ -3195,3 +3195,46 @@ Tradeoffs and surprises:
   the sidecar test that sets all four from a shell (fails with the old list).
 - **Left for later:** the `nebula` CLI's own commands still read only `NEBULA_APP_TOKEN`, not the file. Connect
   only sets up the MCP server, so nothing needs it yet.
+
+## Image Compare autosave fix (2026-10-14)
+
+- **Root cause:** the engine writes every result into the node's `outputs`, the frontend saves those outputs with
+  the project, and saving (also graph import and backup restore) rejects any output handle the definition doesn't
+  declare (`_validate_imported_outputs`, added 2026-09-11). Image Compare passes its two inputs through as
+  `imageA`/`imageB` so the card can draw the before/after slider, but its definition had `outputPorts: []`. The
+  first autosave after a run got a 400 and the top bar stuck on "Save failed · Retry". Validation was right; the
+  definitions were incomplete.
+- **Same bug, other nodes:** Preview (echoes `input`), Meshy Text-to-3D and Image-to-3D on the direct Meshy route
+  (`model_url`, added in April without a port) and the Remotion node (echoed its `manifest` param as an output).
+  Any of them broke autosave the same way.
+- **Decision: new optional `displayOutputs` field instead of more output ports.** Image Compare and Preview are
+  sinks. Declaring their echoes as `outputPorts` would add wire handles to both cards, and Preview would get an
+  output named `input`. `displayOutputs` says "saved with the node, never wired". Save accepts these handles;
+  edge validation still uses `outputPorts` only, so an edge from `imageA` is still a 400 (tested). The frontend's
+  "Add next step" already reads only `outputPorts`.
+- **Meshy `model_url` became a real output port** (Text, optional). Retexture, Auto-Rig and Remesh take a
+  `model_url` Text input, so this is the wire that was missing. Only the direct route fills it; the FAL fallback
+  leaves it empty. Meshy's hosted URLs are signed and expire, so a saved graph's value can go stale.
+- **Remotion: dropped the `manifest` echo** rather than declaring it. It's already in params and nothing read the
+  output. Handler tests now check what was passed to the renderer instead.
+- **Tests that guard the whole class:** `backend/tests/test_output_handle_contract.py` runs Image Compare and
+  Preview through the engine and autosaves the result (the original failure, reproduced first). It also scans
+  `engine.py` branch by branch, checks every `SYNC_HANDLERS` function against its own definition, and checks that
+  every literal output key in `handlers/` and `execution/` is declared by some definition. The last one is a
+  broad net: it can't map helpers outside `SYNC_HANDLERS` to their exact node. `frontend/tests/nodeDefinitionHandles.test.ts`
+  checks that the frontend and backend definitions list the same port ids and types, so the canvas can't draw a
+  handle the backend rejects.
+- **Reference-roles fingerprint test:** recorded the four definition changes as exact approved additions
+  (`APPROVED_OUTPUT_PORT_ADDITIONS` plus `displayOutputs` entries in `APPROVED_TOP_LEVEL_FIELD_ADDITIONS`) rather
+  than rewriting the baseline hashes.
+- **Not fixed, worth knowing:**
+  - `fal_universal._parse_fal_output` picks the output key from the response shape. A fixed FAL-backed node
+    whose response falls through to the JSON dump writes `text`, which most image/video nodes don't declare. Saving
+    would then fail the same way. That depends on what the provider returns, so the static test can't see it.
+  - The JSON registry and `nodeDefinitions.ts` already differ in a few labels and `_note` fields (gemini-tts,
+    gemini-omni-flash, veo-3, quiver-arrow-generate), so `scripts/export-node-defs.ts` would undo them. Port ids
+    and types match; the new parity test checks only those.
+- **Browser check:** isolated backend on 8131 and Vite on 5231 (temp settings/state/output; the proxy was
+  repointed by a temp Vite config because `vite.config.ts` hardcodes 8000). Two Image Inputs into Image Compare,
+  run, autosave. Before the fix: PUT 400 with the `imageA` message and "Save failed · Retry". After: PUT 200, "Saved",
+  and the saved snapshot keeps `imageA`/`imageB`.

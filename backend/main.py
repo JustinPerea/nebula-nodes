@@ -1440,9 +1440,11 @@ def _validate_imported_outputs(
     definition = node_registry.get(definition_id) or {}
     output_ports = (cinema_output_ports(params) if definition_id == "cinema-scene"
                     else definition.get("outputPorts", []) or [])
+    # displayOutputs are values a node keeps only to show on its card (Image
+    # Compare's two inputs). They are saved with the node but never wired.
     declared_ports = {
         str(port["id"]): str(port.get("dataType") or "Any")
-        for port in output_ports
+        for port in [*output_ports, *(definition.get("displayOutputs", []) or [])]
         if isinstance(port, dict) and isinstance(port.get("id"), str)
     }
     handles_are_dynamic = (

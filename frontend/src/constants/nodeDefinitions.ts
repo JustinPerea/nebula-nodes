@@ -2021,6 +2021,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'input', label: 'Input', dataType: 'Any', required: true },
     ],
     outputPorts: [],
+    displayOutputs: [
+      { id: 'input', label: 'Input', dataType: 'Any', required: false },
+    ],
     params: [],
   },
 
@@ -4172,6 +4175,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     outputPorts: [
       { id: 'mesh', label: 'Mesh', dataType: 'Mesh', required: false },
+      { id: 'model_url', label: 'Model URL', dataType: 'Text', required: false },
     ],
     params: [],
     sharedParams: [
@@ -4338,6 +4342,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     outputPorts: [
       { id: 'mesh', label: 'Mesh', dataType: 'Mesh', required: false },
+      { id: 'model_url', label: 'Model URL', dataType: 'Text', required: false },
     ],
     params: [],
     sharedParams: [
@@ -6442,6 +6447,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'imageB', label: 'Image B', dataType: 'Image', required: true },
     ],
     outputPorts: [],
+    displayOutputs: [
+      { id: 'imageA', label: 'Image A', dataType: 'Image', required: false },
+      { id: 'imageB', label: 'Image B', dataType: 'Image', required: false },
+    ],
     params: [],
   },
 

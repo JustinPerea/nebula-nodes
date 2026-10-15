@@ -53,7 +53,6 @@ async def handle_remotion_node(
         _asyncio.create_task(emit(ProgressEvent(node_id=node.id, value=value)))
 
     output_path = await render_remotion_manifest(manifest, on_progress=_on_progress)
-    return {
-        "video": {"type": "Video", "value": str(output_path)},
-        "manifest": {"type": "Any", "value": manifest},
-    }
+    # The manifest stays in params; echoing it as an output would add a handle
+    # the definition doesn't declare, and saving the project would fail.
+    return {"video": {"type": "Video", "value": str(output_path)}}

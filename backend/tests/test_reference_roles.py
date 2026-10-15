@@ -108,6 +108,21 @@ APPROVED_TOP_LEVEL_FIELD_ADDITIONS = {
         "default": "seedream-4-5", "fallbackFor": ["flux-1-dev", "flux.1-dev", "flux-dev"],
     }},
 }
+# Output handle contract (2026-10-14): saving rejects output handles a
+# definition doesn't declare. Meshy's direct route always wrote model_url, so it
+# is now a declared port, and the two sink nodes declare what they keep only to
+# show on the card. See tests/test_output_handle_contract.py.
+APPROVED_OUTPUT_PORT_ADDITIONS = {
+    node_id: [{"id": "model_url", "label": "Model URL", "dataType": "Text", "required": False}]
+    for node_id in ("meshy-text-to-3d", "meshy-image-to-3d")
+}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["image-compare"] = {"displayOutputs": [
+    {"id": "imageA", "label": "Image A", "dataType": "Image", "required": False},
+    {"id": "imageB", "label": "Image B", "dataType": "Image", "required": False},
+]}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["preview"] = {"displayOutputs": [
+    {"id": "input", "label": "Input", "dataType": "Any", "required": False},
+]}
 APPROVED_LEADING_PARAM_ADDITIONS = {
     "krea-2-generate": _KREA_AUTH_PARAM,
     "krea-style-search": _KREA_AUTH_PARAM,
@@ -213,6 +228,12 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
         port = _sole_entry(normalized["inputPorts"], "id", approved_port["id"])
         assert port == approved_port, f"unapproved added port: {node_id}.{approved_port['id']}"
         normalized["inputPorts"].remove(port)
+    added_outputs = APPROVED_OUTPUT_PORT_ADDITIONS.get(node_id, [])
+    if added_outputs:
+        assert normalized["outputPorts"][-len(added_outputs):] == added_outputs, (
+            f"unapproved appended output ports: {node_id}"
+        )
+        del normalized["outputPorts"][-len(added_outputs):]
     capability_note = APPROVED_CAPABILITY_NOTE_ADDITIONS.get(node_id)
     if capability_note is not None:
         _remove_approved_fields(normalized, {"capabilityNote": capability_note})

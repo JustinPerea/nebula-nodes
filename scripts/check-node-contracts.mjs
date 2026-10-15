@@ -117,6 +117,15 @@ function validateRegistryShape() {
     }
     validatePorts(nodeId, 'inputPorts', definition.inputPorts);
     validatePorts(nodeId, 'outputPorts', definition.outputPorts);
+    if ('displayOutputs' in definition) {
+      // Display-only outputs are saved with the node but never wired, so an id
+      // here must not also be a wireable output.
+      validatePorts(nodeId, 'displayOutputs', definition.displayOutputs);
+      const wireable = new Set((definition.outputPorts ?? []).map((port) => port?.id));
+      for (const port of Array.isArray(definition.displayOutputs) ? definition.displayOutputs : []) {
+        if (wireable.has(port?.id)) errors.push(`${nodeId}.displayOutputs.${port.id} repeats an outputPorts id`);
+      }
+    }
     for (const group of PARAM_GROUPS) validateParams(nodeId, group, definition[group]);
   }
 }
