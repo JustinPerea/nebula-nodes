@@ -20,6 +20,7 @@ Shape of one entry (keyed by node definition id)::
       "plus": "input images",                        # a known cost the vendor doesn't publish
       "defaults": {"duration": 8},                   # what the handler sends when unset
       "unconfirmed": true,                           # the page doesn't state this price exactly
+                                                     # (also on one row: that row's price only)
       "notes": "...",
       "sources": [{"url": "https://...", "quote": "..."}],
       "checked": "2026-10-10"
@@ -271,6 +272,8 @@ def _validate_entry(
             continue
         if _price_bounds(row.get("price")) is None:
             problems.append(f"{where} row {index} price must be a non-negative number or [low, high]")
+        if "unconfirmed" in row and not isinstance(row.get("unconfirmed"), bool):
+            problems.append(f"{where} row {index} unconfirmed must be true or false")
         for key, value in (row.get("match") or {}).items():
             if key not in known_keys:
                 problems.append(f"{where} row {index} matches unknown param '{key}'")
@@ -391,6 +394,21 @@ def _multiplier(value: Any) -> float | None:
     return amount if math.isfinite(amount) and amount > 0 else None
 
 
+def _price_values(entry: Mapping[str, Any], definition: Mapping[str, Any], params: Mapping[str, Any] | None,
+                  wired: Iterable[str]) -> dict[str, Any]:
+    """The values an entry's rows are matched against: the effective params
+    plus the price variables read from the wired ports."""
+    priced = priced_keys(entry)
+    # Price what will run: a retired value is replaced before the run (retired_nodes).
+    params = migrate_params(str(definition.get("id") or ""), dict(params or {}))
+    values = effective_params(entry, definition, params)
+    if VIDEO_MODE in priced:
+        values[VIDEO_MODE] = video_mode(wired)
+    if REFERENCES in priced:
+        values[REFERENCES] = references(wired)
+    return values
+
+
 def estimate_node(
     entry: Mapping[str, Any] | None,
     definition: Mapping[str, Any],
@@ -421,13 +439,7 @@ def estimate_node(
     priced = priced_keys(entry)
     if priced & wired or priced & set(RUN_TIME_VARIABLES):
         return None
-    # Price what will run: a retired value is replaced before the run (retired_nodes).
-    params = migrate_params(str(definition.get("id") or ""), dict(params or {}))
-    values = effective_params(entry, definition, params)
-    if VIDEO_MODE in priced:
-        values[VIDEO_MODE] = video_mode(wired)
-    if REFERENCES in priced:
-        values[REFERENCES] = references(wired)
+    values = _price_values(entry, definition, params, wired)
     for row in entry.get("rows") or []:
         if _matches(values, row.get("match") or {}):
             bounds = _price_bounds(row.get("price"))
@@ -719,18 +731,28 @@ def estimate_run(
     }
 
 
-def route_price_unconfirmed(entry: Mapping[str, Any] | None, definition: Mapping[str, Any], route_id: str) -> bool:
+def route_price_unconfirmed(entry: Mapping[str, Any] | None, definition: Mapping[str, Any], route_id: str,
+                            params: Mapping[str, Any] | None = None, wired: Iterable[str] = ()) -> bool:
     """A route's price that its provider's page doesn't state exactly (its
     entry's ``unconfirmed``, e.g. a higher page price kept when the exact
-    one isn't published). The switcher marks it with "*"; pricing.ts
-    routePriceUnconfirmed is the same."""
+    one isn't published), or, at these params (the defaults when None), the
+    row they price at says so: one fal route can sell some models at a
+    stated price and others not (FLUX.2's Flash and Klein). The switcher
+    marks it with "*"; pricing.ts routePriceUnconfirmed is the same."""
     from services import node_route
 
     spec = node_route.route_by_id(definition, route_id)
     if spec is None:
         return False
     routed = entry_for_route(entry, str(spec.get("pricing") or spec.get("id")))
-    return bool(routed and routed.get("unconfirmed") is True)
+    if not routed:
+        return False
+    if routed.get("unconfirmed") is True:
+        return True
+    wired = [str(port) for port in wired]
+    values = _price_values(routed, definition, params, wired)
+    row = next((row for row in routed.get("rows") or [] if _matches(values, row.get("match") or {})), None)
+    return bool(row and row.get("unconfirmed") is True)
 
 
 def estimate_routes(

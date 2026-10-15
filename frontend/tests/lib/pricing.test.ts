@@ -81,7 +81,7 @@ describe('estimateRoutes on the shipped table (cases shared with the backend)', 
   // (pricing_cases.json shippedRouteCases; test_flux3_nodes.py runs them too).
   const cases = (shared as unknown as {
     shippedRouteCases: Array<{ name: string; nodeId: string; params: Record<string, unknown>; wired: string[];
-      expected: Record<string, number | [number, number] | null> }>;
+      expected: Record<string, number | [number, number] | null>; unconfirmed?: Record<string, boolean> }>;
   }).shippedRouteCases;
   const table = shippedTable as unknown as PricingTable;
   const registry = backendCatalog as unknown as Record<string, ModelNodeDefinition>;
@@ -95,6 +95,10 @@ describe('estimateRoutes on the shipped table (cases shared with the backend)', 
         const [low, high] = Array.isArray(price) ? price : [price, price];
         expect(estimate?.low, routeId).toBeCloseTo(low, 6);
         expect(estimate?.high, routeId).toBeCloseTo(high, 6);
+      }
+      for (const [routeId, marked] of Object.entries(testCase.unconfirmed ?? {})) {
+        expect(routePriceUnconfirmed(registry[testCase.nodeId], routeId, table, testCase.params, testCase.wired), routeId)
+          .toBe(marked);
       }
     });
   }
@@ -144,6 +148,15 @@ describe('estimateRoutes (cases shared with the backend)', () => {
       .toEqual({ bfl: false, fal: true, replicate: false, openrouter: false, krea: false });
     expect(routePriceUnconfirmed(definition, 'nope', pricing)).toBe(false);
     expect(routePriceUnconfirmed(definition, 'fal', null)).toBe(false);
+  });
+
+  it('marks one row on its own: the mark follows the row the params price at', () => {
+    const definition = fixture.definitions.table as unknown as ModelNodeDefinition;
+    const pricing = structuredClone(fixture.pricing) as unknown as PricingTable;
+    const rows = pricing.nodes.table.routes!.bfl.rows;
+    rows[rows.length - 1].unconfirmed = true;
+    expect(routePriceUnconfirmed(definition, 'bfl', pricing, rows[rows.length - 1].match)).toBe(true);
+    for (const row of rows.slice(0, -1)) expect(routePriceUnconfirmed(definition, 'bfl', pricing, row.match)).toBe(false);
   });
 
   it('is empty for a node without a route table', () => {
