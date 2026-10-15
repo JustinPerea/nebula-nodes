@@ -297,6 +297,13 @@ async def test_fal_text_to_image_sends_only_the_routes_params_and_keys_the_outpu
     ("blackforestlabs/flux-3/extend-video/draft", {"duration": 5}, {"start_video": "https://e.com/v.mp4"},
      {"video_url": "https://e.com/v.mp4"}),
     ("blackforestlabs/flux-3/edit-video", {}, {"start_video": "https://e.com/v.mp4"}, {"video_url": "https://e.com/v.mp4"}),
+    # Endpoints outside the FLUX 3 family are keyed by their whole id.
+    ("blackforestlabs/flux-video-upscale", {"creativity": 0, "upscale_factor": 1.5}, {"video": "https://e.com/v.mp4"},
+     {"video_url": "https://e.com/v.mp4"}),
+    ("krea/v3/edit", {"model": "berry"}, {"images": ["https://e.com/a.png"]}, {"image_urls": ["https://e.com/a.png"]}),
+    ("krea/v3/text-to-image", {"model": "jam"}, {}, {}),
+    ("blackforestlabs/flux-3/klein/base/edit-image", {"image_size": "square_hd"}, {"images": ["https://e.com/a.png"]},
+     {"image_urls": ["https://e.com/a.png"]}),
 ])
 def test_fal_media_fields_match_each_endpoints_schema(endpoint, params, wired, expected):
     fields = route_clients.fal_fields(endpoint, params, ports(prompt="p", **wired))
@@ -312,6 +319,60 @@ def test_fal_refuses_what_an_endpoint_cant_take():
                                  ports(prompt="p", keyframes=["a.png"]))
     with pytest.raises(ValueError, match="no request shape for fal.ai's blackforestlabs/flux-3/draft-enhance"):
         route_clients.fal_fields("blackforestlabs/flux-3/draft-enhance", {}, ports(prompt="p"))
+
+
+def test_fal_whole_endpoint_shapes_dont_leak_to_a_shared_last_segment():
+    # krea/v3/edit has its own row; another fal endpoint ending in /edit has none.
+    assert route_clients.fal_shape("krea/v3/edit") == "krea/v3/edit"
+    assert route_clients.fal_shape("blackforestlabs/flux-3/text-to-video/draft") == "text-to-video"
+    with pytest.raises(ValueError, match="no request shape for fal.ai's someone/other/edit"):
+        route_clients.fal_fields("someone/other/edit", {}, ports(prompt="p"))
+    with pytest.raises(ValueError, match="can't take the wired images"):
+        route_clients.fal_fields("krea/v3/text-to-image", {}, ports(prompt="p", images=["https://e.com/a.png"]))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint, wired, sent", [
+    ("blackforestlabs/flux-3/text-to-video/draft", {}, {"duration": 5, "aspect_ratio": "16:9", "generate_audio": True}),
+    ("blackforestlabs/flux-3/image-to-video", {"start_image": "https://e.com/s.png"},
+     {"duration": 5, "aspect_ratio": "16:9", "generate_audio": True, "resolution": "720p",
+      "image_url": "https://e.com/s.png"}),
+])
+async def test_fal_never_sends_draft_and_drops_resolution_on_a_draft_endpoint(monkeypatch, endpoint, wired, sent):
+    """draft only picks fal's /draft endpoint (endpointWhen); no FLUX 3 video
+    schema has it, and the /draft schemas have no resolution."""
+    hosts = fal_hosts(monkeypatch, {"video": {"url": "https://fal.media/x.mp4"}})
+    draft = endpoint.endswith("/draft")
+    await run("fal", "clients-video", "fal", {"draft": draft, "resolution": "720p", "duration": 5,
+                                              "aspect_ratio": "16:9", "generate_audio": True},
+              ports(prompt="p", **wired), endpoint=endpoint)
+    body = hosts.json("POST", FAL + re.escape(endpoint))
+    assert body == {"prompt": "p", **sent}
+    validate(SCHEMAS["fal"][endpoint], body)
+
+
+def test_replicate_upscale_takes_its_source_as_input_video_and_an_optional_prompt():
+    model = "black-forest-labs/flux-video-upscale"
+    body, media = route_clients.replicate_input({"creativity": 0, "upscale_factor": 1.5},
+                                                ports(video="https://e.com/v.mp4"), "Replicate's upscale", model)
+    assert body == {"creativity": 0, "upscale_factor": 1.5, "input_video": "https://e.com/v.mp4"} and media == {"input_video"}
+    validate(SCHEMAS["replicate"][model], body)
+    body, _ = route_clients.replicate_input({}, ports(video="https://e.com/v.mp4", prompt="sharper"), "x", model)
+    assert body["prompt"] == "sharper"
+    with pytest.raises(ValueError, match="needs a video"):
+        route_clients.replicate_input({}, ports(prompt="p"), "Replicate's upscale", model)
+    with pytest.raises(ValueError, match="can't take the wired start_video"):
+        route_clients.replicate_input({}, ports(video="https://e.com/v.mp4", start_video="https://e.com/w.mp4"), "x", model)
+    # Every other model still needs a prompt and takes no 'video' port.
+    with pytest.raises(ValueError, match="can't take the wired video"):
+        route_clients.replicate_input({}, ports(prompt="p", video="https://e.com/v.mp4"), "x",
+                                      "black-forest-labs/flux-3")
+
+
+def test_krea_ports_go_under_a_folded_entrys_port_fields():
+    inputs = ports(prompt="p", images=["https://e.com/a.png"])
+    assert set(route_clients.krea_inputs({"portFields": {"images": "image_urls"}}, inputs)) == {"prompt", "image_urls"}
+    assert route_clients.krea_inputs({}, inputs) == inputs
 
 
 def test_keyframes_spread_evenly_over_the_clip():

@@ -214,6 +214,59 @@
    ],
    "title": "Input",
    "type": "object"
+  },
+  "black-forest-labs/flux-video-upscale": {
+   "type": "object",
+   "title": "Input",
+   "required": [
+    "input_video"
+   ],
+   "properties": {
+    "prompt": {
+     "type": "string",
+     "title": "Prompt",
+     "default": "",
+     "x-order": 3,
+     "description": "Optional description of the clip's content to steer the enhanced detail. Leave empty for a neutral upscale."
+    },
+    "creativity": {
+     "enum": [
+      0,
+      1
+     ],
+     "type": "integer",
+     "title": "creativity",
+     "description": "How the upscaler treats your footage. 0 (precise) preserves the source exactly and sharpens it \u2014 use it for faces, products, and real people. 1 (creative) restores and invents fine detail more aggressively \u2014 use it for generated footage, textures, and scenery, but it doesn't preserve identity as strictly.",
+     "default": 1,
+     "x-order": 2
+    },
+    "input_video": {
+     "type": "string",
+     "title": "Input Video",
+     "format": "uri",
+     "x-order": 0,
+     "description": "The video to upscale. Must be an mp4, at most 50MB, 20 seconds, and 2560x1440 (2K) of source footage."
+    },
+    "upscale_factor": {
+     "type": "number",
+     "title": "Upscale Factor",
+     "default": 2,
+     "maximum": 3,
+     "minimum": 1.5,
+     "x-order": 1,
+     "description": "How much to scale the output relative to the source resolution. The output keeps the source aspect ratio. Output frames are capped at about 14.4 megapixels (4K), so very large sources are upscaled by less than the requested factor."
+    },
+    "safety_tolerance": {
+     "type": "integer",
+     "title": "Safety Tolerance",
+     "default": 2,
+     "maximum": 4,
+     "minimum": 0,
+     "x-order": 4,
+     "description": "Moderation strictness for the prompt and the delivered frames, 0 (strictest) to 4 (most permissive)."
+    }
+   }
   }
- }
+ },
+ "_note": "black-forest-labs/flux-video-upscale added for PR 3 from https://replicate.com/black-forest-labs/flux-video-upscale/api/schema, read 2026-10-15."
 }
