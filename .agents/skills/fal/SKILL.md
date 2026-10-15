@@ -75,6 +75,21 @@ The source of truth for this routing is `backend/execution/sync_runner.py`. Each
 
 **Routing note:** Dual-route nodes have two handlers (direct + FAL); the configured keys pick one, not a param. Params split into `sharedParams` (both routes), `falParams` (FAL only) and `directParams` (direct only). The router (`backend/execution/maker_routes.py` `dual_route`, or `_ideogram_router`/the Veo router) sends each route only its own params, on a copy of the node; the Inspector and Create show the active route's set. Prices can differ per route: `model_pricing.json` `routes` (e.g. `nano-banana-fal` bills FAL's rate on FAL and Google's on the Gemini API). `seedream-4-5` (and `cinema-scene` through it) runs on BytePlus ModelArk when `BYTEPLUS_API_KEY` is saved, unless `seed` is set or the size is one ModelArk can't render (`square`, `auto_3K` on 4.5, a custom size outside its pixel range); `seed` and `enable_safety_checker` are FAL-only. The Seedance nodes (`seedance-2-t2v`, `-2-i2v`, `-2-r2v`, `-2-fast-t2v`, `-2-fast-i2v`, `seedance-v1-5`, `seedance-1-0-t2v`) also run on BytePlus with that key; `seed` is FAL-only on the 2.0 nodes (a set one keeps the run on FAL) and `enable_safety_checker` on `seedance-1-0-t2v`. See the `byteplus` skill.
 
+## fal as a route (FLUX 3 and Krea 3, 2026-10-15)
+
+Route-table nodes are one node per model with a provider switcher (`_provider`, `docs/PROVIDER-ROUTES.md`); fal is one of their routes. They aren't in the table above and aren't `sync_runner.py` wrappers: the `fal` route client in `backend/execution/route_clients.py` calls `handle_fal_universal` on the endpoint the route picks. fal forwards every param it gets, so the route sends only its own settings plus the media fields. Auto takes the maker's route first; when a setting doesn't fit fal (1.5k, 9:21), the run stops and offers the routes that take it.
+
+| Node | Maker | fal endpoint | Notes |
+|---|---|---|---|
+| `flux-3-image` | BFL | `blackforestlabs/flux-3/text-to-image`, `/edit-image` when images are wired | no 1.5k or 9:21; fal-only `enable_prompt_expansion` (default off); prices unconfirmed |
+| `flux-3-image-klein-base` | (fal only) | `blackforestlabs/flux-3/klein/base/text-to-image`, `/edit-image` | fal's names: `image_size` presets, `seed`, `output_format`, `enable_prompt_expansion`, `enable_safety_checker` |
+| `flux-3-video` | BFL | `blackforestlabs/flux-3/{text-to-video, image-to-video, first-last-frame-to-video, keyframes-to-video, extend-video}`, each with a `/draft` variant, picked by the wired ports and `draft` | resolution sent as 720p / 1080p / 1440p / 2160p; no 9:21; drafts at hd only; 30-minute poll budget |
+| `flux-video-edit` | BFL | `blackforestlabs/flux-3/edit-video` | the same model as BFL's Video Edit [fast] (fal's title, price, limits and fields match) |
+| `flux-video-upscale` | BFL | `blackforestlabs/flux-video-upscale` | `creativity`, `upscale_factor`; prices unconfirmed |
+| `krea-3` | Krea | `krea/v3/text-to-image`, `krea/v3/edit` when images are wired | fal-only `model` berry/jam, `reasoning_level` (high needs references), `image_size`, `negative_prompt`, `output_format`; $0.025/MP (unconfirmed) |
+
+`flux-3-image-klein` has no fal route: fal's Klein takes only exact pixel sizes, and BFL publishes no exact size for its tiers. Details per node: the `bfl` and `krea` skills.
+
 ## How to use this skill
 
 **When the user configures or builds with a FAL-backed node:**
