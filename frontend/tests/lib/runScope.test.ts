@@ -220,7 +220,7 @@ describe('local nodes that call a provider, and wired price settings', () => {
     const qc = (mode: string) => priced(`qc-${mode}`, 'qc-loop-safety', { mode }, `QC ${mode}`);
     const run = summarizeRunScope([qc('jev'), qc('vision-llm'), qc('heuristic')], [], { kind: 'graph' }, shipped);
     expect(run.paid).toEqual(['QC jev', 'QC vision-llm']);
-    expect(run.cost?.lines).toEqual([{ name: 'QC jev', low: 0.00001, high: 0.0027, runs: [1, 1] }]);
+    expect(run.cost?.lines).toEqual([{ name: 'QC jev', low: 0.0000128, high: 0.0027, runs: [1, 1] }]);
     expect(run.cost?.unpriced).toEqual(['QC vision-llm']);
     expect(run.cost?.plus).toEqual(['input images']);
     // Without the table entry, Jev mode is paid but unpriced like vision-llm.
