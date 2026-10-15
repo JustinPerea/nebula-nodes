@@ -27,6 +27,8 @@ Tradeoffs and surprises:
 
 - `test_reference_roles.py` needed an exact `APPROVED_ROUTE_TABLE_CONVERSIONS["flux-2-pro"]` entry and `APPROVED_APPENDED_OPTIONS["flux-2-pro"]` (Flex, Klein 9B, Klein 4B), plus a drift test that the conversion still fingerprints every param. Approval needed.
 - `fal.json` and `bfl.json` provider schemas gained the FLUX.2 inputs, `$ref`s inlined, from each provider's OpenAPI.
+- The BFL key row in Settings now lists six nodes (FLUX.2 joins the FLUX 3 five), and fal's summary leads "Kling V3, FLUX.2"; `providerCatalog.test.ts` and `Settings.test.tsx` were updated to match.
+- Live check (isolated backend :8146, Vite :5266, placeholder keys, no run started; `flux3/pr4-shots/`): library "FLUX.2 · BFL · fal"; card "Auto · BFL" at $0.03; on BFL the model list has no Flash and no Safety Checker; on fal Flash shows $0.005* and the BFL row "Doesn't take flash"; clicking BFL from fal Flash with the checker off lands on Flex at $0.05 with both notes on the card. Seen and left alone: the stop line names the raw value ("flash isn't on Black Forest Labs"), as PR 3's do; number fields don't render `placeholder`, so "Provider default" for Flex steps/guidance isn't shown (existing Inspector behaviour).
 - Left out: image inputs/editing, preview endpoints, prompt upsampling, `safety_tolerance` 0, exact sizes, Flash/Klein steps on fal, finetunes, FLUX.2 [dev] and Klein Base, other providers.
 
 ## 2026-10-15 — PR 3 integration: nodes, merge and docs lanes on flux-3-nodes
