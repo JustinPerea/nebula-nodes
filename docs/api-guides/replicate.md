@@ -16,6 +16,8 @@ The single Nebula node reaches all of these — the only thing that changes betw
 
 ## Nodes available in Nebula (1)
 
+Since 2026-10-15 Replicate is also a provider you can pick on three FLUX 3 nodes (`flux-3-image`, `flux-3-video`, `flux-video-upscale`), through the provider switcher on the card. Those runs use Replicate's official-model route and upload local files through the Files API; the gaps below are about `replicate-universal`. See [Black Forest Labs](./bfl.md) and [provider routes](../PROVIDER-ROUTES.md).
+
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
 | Replicate | `replicate-universal` | universal (async-poll) | None pre-defined — connected input ports are passed straight through to the model's `input` (port name = model input field) | `model_id` (required, format `owner/name`, e.g. `stability-ai/sdxl`) | Running any Replicate-hosted model — image, video, audio, 3D, or text — by typing its `owner/name` slug |

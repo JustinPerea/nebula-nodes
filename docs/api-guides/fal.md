@@ -26,6 +26,8 @@ FAL is a *universal gateway* — a single provider that proxies many different d
 
 ## Nodes available in Nebula (52) (updated 2026-06-10)
 
+Since 2026-10-15 fal is also a provider you can pick, through the provider switcher on the card, on the FLUX 3 nodes (`flux-3-image`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale`), on Krea 3 (`krea-3`), and as the only provider of `flux-3-image-klein-base`. Those nodes aren't in the table below; see [Black Forest Labs](./bfl.md), the `fal` agent skill's "fal as a route" section and [provider routes](../PROVIDER-ROUTES.md).
+
 Names, node IDs, and parameter keys below are taken directly from `backend/data/node_definitions.json`. "Key inputs" are the node's input ports; "Notable params" are the exposed settings (every node also implicitly takes a `prompt` and/or `image` where listed).
 
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |

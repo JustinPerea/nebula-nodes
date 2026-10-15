@@ -2,6 +2,7 @@
   "version": 1,
   "paths": [
     ".agents/skills/anthropic/SKILL.md",
+    ".agents/skills/bfl/SKILL.md",
     ".agents/skills/byteplus/SKILL.md",
     ".agents/skills/elevenlabs/SKILL.md",
     ".agents/skills/fal/SKILL.md",
@@ -256,6 +257,7 @@
     "docs/fal-model-schemas.md",
     "docs/model-providers/anthropic/claude-chat.md",
     "docs/model-providers/bfl/_provider.md",
+    "docs/model-providers/bfl/flux-3.md",
     "docs/model-providers/elevenlabs/elevenlabs.md",
     "docs/model-providers/fal/fal-universal.md",
     "docs/model-providers/fal/flux.md",
@@ -271,6 +273,7 @@
     "docs/model-providers/higgsfield/higgsfield.md",
     "docs/model-providers/hunyuan/hunyuan3d.md",
     "docs/model-providers/krea/krea-2.md",
+    "docs/model-providers/krea/krea-3.md",
     "docs/model-providers/krea/krea-full-coverage.md",
     "docs/model-providers/krea/krea-gateway.md",
     "docs/model-providers/krea/krea-workspace.md",

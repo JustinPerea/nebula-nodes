@@ -17,7 +17,7 @@ sources:
 
 # Krea 2
 
-Direct Krea support only: the Krea API (API token) or the signed-in Krea account (Krea's hosted MCP server). FAL Krea routes are intentionally out of scope.
+Direct Krea support only: the Krea API (API token) or the signed-in Krea account (Krea's hosted MCP server). FAL Krea routes are out of scope for Krea 2. (Krea 3 is different: its `krea-3` node has a fal route; see `krea-3.md`.)
 
 ## Auth
 
