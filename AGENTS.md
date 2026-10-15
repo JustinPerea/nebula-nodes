@@ -1,6 +1,6 @@
 # Nebula Nodes — Agent Instructions
 
-AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph. 307 nodes once the FLUX 3 PR is integrated (303 before it, plus 7 new route-table nodes, minus the 3 Krea FLUX nodes folded into them; recount after the merge), written in `frontend/src/constants/nodeDefinitions.ts` and exported to `backend/data/node_definitions.json` (`scripts/export-node-defs.ts`), which the backend and every script read. `docs/MODEL_REFERENCE.md` is generated from it via `node scripts/generate-model-reference.mjs` — never edit it by hand.
+AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph. 307 nodes, written in `frontend/src/constants/nodeDefinitions.ts` and mirrored in `backend/data/node_definitions.json`, which the backend and every script read. `scripts/export-node-defs.ts` writes the JSON from the TS, but four existing nodes (`gemini-tts`, `veo-3`, `gemini-omni-flash`, `quiver-arrow-generate`) carry JSON-only fixes it would undo, so check its diff before keeping it. `docs/MODEL_REFERENCE.md` is generated from it via `node scripts/generate-model-reference.mjs` — never edit it by hand.
 
 ## Standing task: Flora gap audit
 
@@ -10,7 +10,7 @@ We also produce content in Flora (app.flora.ai, via the `user-flora` MCP). Flora
 
 Before logging, check it's a real gap:
 
-1. Search `backend/data/node_definitions.json` — including `params` model enums. Several nodes are multi-model: `nano-banana` covers the whole Nano Banana family incl. Pro; `runway-video` covers Gen-4.5 / Gen-4 Turbo / Seedance 2.0 (+ Fast, Mini) / Seedance 2.5 / Happy Horse / Veo 3.1; `runway-image` covers Seedream 5.0 Pro / Lite (via Runway, a reseller); `minimax-*` covers Hailuo 2.3; the `veo-3` node is actually Veo 3.1. Route-table nodes cover one model on several providers: `flux-3-video` is also Krea's Flux 3 Video, and `krea-3` is Krea 3 on Krea or fal.
+1. Search `backend/data/node_definitions.json` — including `params` model enums. Several nodes are multi-model: `nano-banana` covers the whole Nano Banana family incl. Pro; `runway-video` covers Gen-4.5 / Gen-4 Turbo / Seedance 2.0 (+ Fast, Mini) / Seedance 2.5 / Happy Horse / Veo 3.1; `runway-image` covers Seedream 5.0 Pro / Lite (via Runway, a reseller); `minimax-*` covers Hailuo 2.3; the `veo-3` node is actually Veo 3.1. Route-table nodes cover one model on several providers: `flux-3-video`, `flux-video-edit` and `flux-video-upscale` also cover Krea's Flux 3 Video, Video Edit and Video Upscale, and `krea-3` is Krea 3 on Krea or fal.
 2. Reachability through universal nodes (`fal-universal`, `replicate-universal`, `openrouter-universal`, `nous-portal-universal`) does **not** count as coverage — log it anyway, noting the universal fallback.
 
 The full baseline comparison (2026-07-25) lives in `docs/flora-gap-audit.md`. Known top gaps: Enhancor skin-realism i2i, audio-driven lipsync/avatar models, first/last-frame video category, Kling Pro/Edit/Motion tiers, Magnific/Topaz upscalers.
