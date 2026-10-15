@@ -3333,3 +3333,90 @@ deprecations/model pages/image guide, Meshy openapi.yaml and llms.txt, Gemini sp
 - Noticed, not fixed (pre-existing on main): 14 definitions differ between nodeDefinitions.ts and
   node_definitions.json (e.g. gemini-tts's 3.1 label says "Gemini 3.1 Flash TTS" in JSON and "3.1 Flash TTS" in
   TS; veo-3's port `_note`s exist only in JSON).
+
+## 2026-10-14 — Runway nodes against Runway's current API (+ ByteDance models)
+
+Sources, all fetched 2026-10-14: `https://docs.dev.runwayml.com/openapi.json` (per-model request
+fields), `guides/models.md`, `guides/pricing.md`, `llms-full.txt` (changelog, inputs page) and
+`assets/uploads.md`. Mapping entry `runway-ideogram` (with the verifier's corrections) used as the
+starting point; every ID, enum and price below was re-read from those files.
+
+- **Per-model limits live in the handler.** `RUNWAY_VIDEO_MODELS` / `RUNWAY_IMAGE_MODELS` in
+  `backend/handlers/runway.py` hold each model's ratios (per endpoint), durations, prompt length,
+  and which optional fields it takes. The node definitions were generated from those tables, and
+  `tests/test_runway_models.py` checks the two agree both ways, so they can't drift.
+- **How the UI offers only valid values.** Duplicate param keys are a contract error, so there is
+  one `ratio` and one `duration` param, with `visibleWhen: {model: [...]}` on each option (the
+  Inspector and Create composer already filter options this way and mark a saved value
+  "unavailable for selected model"). `duration` changed from `integer` (2–10) to `enum` with
+  numeric values 2–30 plus `"auto"`, so saved numeric durations still match an option. Default
+  stays 5. The handler accepts `5`, `"5"` (CLI) and `"auto"`.
+  - Limit: `visibleWhen` sees params, not wires, so the ratio list is the union of the model's
+    image-to-video and text-to-video ratios. Gen-4.5 text-only at 4:3 is still offered and
+    fails in the handler with the valid list (before any billed call).
+  - No auto-reset: switching models leaves an invalid ratio/duration in place (shown as
+    unavailable), and the run errors clearly. I didn't add snapping, since that would change
+    values silently.
+- **HappyHorse image-to-video takes no `ratio`** (schema: `resolution` 720p/1080p, output follows
+  the image). New `resolution` param (default 720p, visible for HappyHorse only); the handler
+  sends it instead of `ratio` when an image is wired. HappyHorse has no `seed` either, so seed
+  isn't sent for it.
+- **Seed goes only to models whose schema has it.** On runway-image that's Gen-4 Image (+ Turbo)
+  only; GPT Image 2, both Gemini models and Seedream reject `seed`, and the handler used to send
+  it. The param is hidden for those models and a stale saved seed is dropped, not an error,
+  because the person can't see or clear a hidden param.
+- **Aleph 2.0 has no `references` field** (schema `additionalProperties: false`). The old handler
+  sent `references: [{type: image, uri}]`, which only `gen4_aleph` took. The reference image now
+  goes as `keyframes: [{uri, at: 0}]`, the shape Runway's own aleph2 example uses. Not tested
+  live; if Justin wants the keyframe elsewhere in the clip, it needs an `at` param.
+- **New `audio` param** (bool, default true, Veo 3.1 and Seedance). Runway's default is true, so
+  the default changes nothing; it matters for Veo's price (40 vs 20 credits/s).
+- **Seedream lives on runway-image, not a new node.** The mapping suggested a `runway-seedream`
+  node because runway-image had one ratio list. With per-option `visibleWhen`, runway-image can
+  carry per-model ratio lists, the handler and output are the same, and one node avoids a
+  duplicate in the palette. Added `grounding` (Seedream only). Not exposed: `outputCount` (the
+  node has one image output), `outputFormat` (the handler saves PNG), Lite's freeform sizes.
+- **Seedance 2.0 Mini / 2.5:** text and image-to-video only. Video-to-video skipped: runway-video
+  has no video input. Draft mode (`draft`, then `draftTaskId` to enhance) skipped: the node has
+  no way to carry a task id to a second run. Runway is a reseller here; under the "buy from the
+  model maker" rule this doesn't close the ByteDance maker route (still unconfirmed).
+- **Reference-count limits are now errors.** runway-image used to keep the first 3 references
+  silently. It now allows each model's maximum (3/3/14/16/3/10/14) and errors past it.
+  gen4_image_turbo requires one (schema `minItems: 1`).
+- **Prompt length** is clipped to each model's maximum (was 1000 for all), keeping the old
+  silent-clip behavior but at the right length (Seedance 3500, Seedance 2.5 15000, GPT Image 2
+  32000, etc.). Gen-4.5 image-to-video without a prompt now errors (schema requires
+  `promptText`).
+- **Retired values.** `gen3a_turbo` -> `gen4_turbo` (Runway names Gen-4.5 or Gen-4 Turbo; Gen-4
+  Turbo keeps the image-to-video shape and 2–10 s range, so saved image-to-video nodes keep
+  working; text-only ones get "requires an image input ... Nodes saved with the retired Gen-3a
+  Turbo now use Gen-4 Turbo"). `veo3` -> `veo3.1`, with duration rounded up to 4/6/8 like the
+  existing Veo 3.0 migration. `gen4_aleph` -> `aleph2`. All in `RETIRED_PARAMS`; not date-gated
+  because every shutdown is past. veo3's removal date isn't in the changelog (it was live
+  2026-07-10). The handlers also refuse the retired IDs directly, for paths that skip migration
+  (`POST /api/graph/node`).
+- **5MB data URI cap -> ephemeral uploads.** The schema caps every data URI at 5,242,880 chars;
+  the inputs guide lists 16MB for video/audio. I used the schema's 5MB (it validates the request,
+  and the task said 5MB). Local files whose *encoded* URI is over 5MB go through `POST
+  /v1/uploads` -> presigned multipart POST (no API key on the storage URL) -> `runway://` URI.
+  Applied to every Runway handler (aleph, act-two, sts, dubbing, image references, upscale), not
+  just aleph, since they all had the same inline-base64 code. 200MB max is checked before any
+  request. `http://` inputs still pass through unchanged (Runway wants HTTPS; out of scope).
+- **Pricing** (`model_pricing.json`): runway-video per second × duration, runway-image per image,
+  credits at $0.01 ("Credits can be purchased for $0.01 per credit"). Runway prices Seedance by
+  480p/720p/1080p/4K and the images by 720p/1080p or 1K/2K/4K, but never maps ratios to tiers;
+  I priced ratios by pixel size only where the tier is plain (e.g. 3840:2160 = 4K, 1024:1024 =
+  1K) and used `[low, high]` ranges otherwise (Gen-4 Image 1360:768, GPT Image 2's 2560px sizes,
+  HappyHorse when the resolution setting and ratio disagree). Minimum charges (Mini 64, 2.5 80)
+  equal the 4 s price, so they never bind. `duration: auto` is unpriced (billed at max, refunded).
+  runway-aleph stays unpriced: it bills per second of the input video, which isn't a param.
+- **Fingerprint fixture.** `test_reference_roles.py` fingerprints every baseline node; the three
+  Runway nodes changed on purpose, so their entries in `reference_roles_baseline_sha256.json` were
+  recomputed (same as the Veo retirement commit did).
+- **Not checked live.** No Runway call was made; all of this is schema comparison plus mocked
+  HTTP tests.
+
+### Review fixes (2026-10-14)
+
+- A saved `veo3` node with no `duration` key ran at the 5 s default, which Veo 3.1 rejects. The migration now treats a missing or empty duration as 5 and rounds it to 6, the same as an explicit 5 (and the same 5 to 6 intent as the Google Veo migration). The old test that expected `{"model": "veo3"}` to become `{"model": "veo3.1"}` with no duration was asserting the bug; it now expects `duration: 6`.
+- Added an image-to-video ratio rejection test (Veo 3.1 and Seedance 2.0 Fast at 1104:832). Checked it by disabling the `i2v_ratios` guard: the new test fails, the rest pass.

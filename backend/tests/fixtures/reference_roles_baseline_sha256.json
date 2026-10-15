@@ -3,9 +3,9 @@
   "nodes": {
     "gpt-image-1-generate": "de587a1089c9e9448df8a299ad929f5591bdaa0c2e79c9023ec3d2b3794d5fdb",
     "claude-chat": "0ced29793940d713c0fe6ca3e89f638e48e717e8aeef6bb6d0f41bfe2ede1405",
-    "runway-video": "b6f78ecd4e5fcd4662e53f0e48ffa27bc6800c56b457557042fa88e5406eded2",
-    "runway-aleph": "ccfbf38ccc0d2ba7d6f43f36b111926a317fcad8e11723ee2e4e38ff3fc303ad",
-    "runway-image": "0b5b7e904533a675efd48ff10621011c8e47766535253c84fc71ef06019c4936",
+    "runway-video": "bd0b1244af28572f5207ccfe7344cdfba200bcc699dd5e4486d4b7535428a85c",
+    "runway-aleph": "3dab3198e42f44d187b4e1d949c400df42a10c289629c013a25a6995f587b723",
+    "runway-image": "f2ee6c2a8078ea0b4f58d821ff3a637639526ba034bd686196b7ef435605bc58",
     "runway-act-two": "9a2d91a2049c694f229e8f66e31516477c4a0336292d74350a4a2b73f15c15d4",
     "runway-tts": "bbf26a467ae99b00e983786205052f0587cbb901c523f70e6d7e3c6bf0dfc7d7",
     "runway-sts": "934cb4ff7dda33ab8eb5988fef79152580cb7cf7ed1e58f737ff3f2fbf9bb0a0",

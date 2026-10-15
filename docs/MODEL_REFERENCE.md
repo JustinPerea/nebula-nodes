@@ -1869,13 +1869,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Reference Images (Image ×n) |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gen4_image | Gen-4 Image, Gen-4 Image Turbo, Nano Banana Pro (Gemini 3), GPT Image 2, Gemini 2.5 Flash |
+| Model | enum | gen4_image | Gen-4 Image, Gen-4 Image Turbo, Nano Banana Pro (Gemini 3), GPT Image 2, Gemini 2.5 Flash, Seedream 5.0 Pro, Seedream 5.0 Lite |
 | Ratio | enum | 1360:768 | 1360x768 (16:9), 720x1280 (9:16), 1024x1024 (1:1), 1080x1080, 1168x880, 1440x1080, 1080x1440, 1920x1080, … |
 | Seed | int | — | 0–4294967295 |
+| Web grounding | bool | false | — |
 
 ---
 
@@ -3486,7 +3487,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Character Image (Image), Character Video (Video), Performance Video (Video)* |
 | **Outputs** | Video (Video) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3508,11 +3509,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Video (Video)*, Prompt (Text)*, Reference Image (Image) |
 | **Outputs** | Video (Video) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gen4_aleph | Aleph 2.0, Gen-4 Aleph |
+| Model | enum | aleph2 | Aleph 2.0 |
 | Seed | int | — | 0–4294967295 |
 
 ---
@@ -3532,10 +3533,12 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gen4.5 | Gen-4.5, Seedance 2.0, Seedance 2.0 Fast, HappyHorse 1.0, Gen-4 Turbo, Gen-3a Turbo (legacy), Veo 3.1, Veo 3.1 Fast, … |
-| Duration | int | 5 | 2–10 |
-| Ratio | enum | 1280:720 | 1280x720 (16:9), 720x1280 (9:16), 1104x832 (4:3), 832x1104 (3:4), 960x960 (1:1), 1584x672 (21:9) |
+| Model | enum | gen4.5 | Gen-4.5, Seedance 2.0, Seedance 2.0 Fast, HappyHorse 1.0, Gen-4 Turbo, Veo 3.1, Veo 3.1 Fast, Seedance 2.0 Mini, … |
+| Duration | enum | 5 | 2 s, 3 s, 4 s, 5 s, 6 s, 7 s, 8 s, 9 s, … |
+| Ratio | enum | 1280:720 | 1280x720 (16:9), 720x1280 (9:16), 1104x832 (4:3), 832x1104 (3:4), 960x960 (1:1), 1584x672 (21:9), 1080x1920 (9:16), 1920x1080 (16:9), … |
 | Seed | int | — | 0–4294967295 |
+| Resolution (with image) | enum | 720p | 720p, 1080p |
+| Audio | bool | true | — |
 
 ---
 
@@ -4491,7 +4494,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Audio (Audio)* |
 | **Outputs** | Audio (Audio) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -4513,7 +4516,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Audio (Audio), Video (Video) |
 | **Outputs** | Audio (Audio) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -4533,7 +4536,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Text (Text)* |
 | **Outputs** | Audio (Audio) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -6661,7 +6664,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | sync |
 | **Inputs** | — |
 | **Outputs** | Character (Character) |
-| **Audited** | 2026-05-17 |
+| **Audited** | 2026-10-14 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|

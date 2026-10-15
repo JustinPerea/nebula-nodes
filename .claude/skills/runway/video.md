@@ -1,35 +1,34 @@
 # Runway Video Endpoints
 
-Three endpoints, one node family (`runway-video`, `runway-aleph`).
+Three endpoints, two Nebula nodes (`runway-video`, `runway-aleph`). Fields and limits are
+from Runway's request schema (https://docs.dev.runwayml.com/openapi.json), read 2026-10-14.
+Runway rejects any field a model doesn't list, so the handler sends only what the chosen
+model takes. The per-model tables live in `backend/handlers/runway.py`
+(`RUNWAY_VIDEO_MODELS`), and the node shows each ratio/duration option only for the
+models that take it.
 
-## `POST /v1/image_to_video`
+**Retired:** `gen3a_turbo` and `gen4_aleph` (2026-07-30, Runway changelog) and `veo3`
+(gone from the schema). Saved nodes migrate: gen3a_turbo -> gen4_turbo, veo3 -> veo3.1
+(duration rounded up to 4/6/8), gen4_aleph -> aleph2.
 
-Union of 7 model-specific payloads. The handler picks the right shape based on the `model` field.
+## `runway-video`: image connected -> `POST /v1/image_to_video`, prompt only -> `POST /v1/text_to_video`
 
-### Required base
-
-| Field (wire) | SDK alias | Notes |
-|---|---|---|
-| `model` | `model` | See model matrix below. |
-| `promptImage` | `prompt_image` | Either an HTTPS URL string OR an array of `{position, uri}` objects. Position values differ by model. |
-| `promptText` | `prompt_text` | ≤1000 chars (UTF-16). Some models require, others optional. |
-| `ratio` | `ratio` | Model-specific enum; see matrix. |
-
-### Model matrix
-
-| `model` value | Ratios | Duration | Required text? | Prompt image positions | Extras |
+| `model` | Durations | Image-to-video ratios | Text-to-video ratios | Prompt | Extras the node sends |
 |---|---|---|---|---|---|
-| `gen4.5` | `1280:720`, `720:1280`, `1104:832`, `960:960`, `832:1104`, `1584:672` | `2`–`10` (int, required) | Yes | `first` | `seed`, `contentModeration` |
-| `gen4_turbo` | same as gen4.5 | int (optional) | Optional | `first` | `seed`, `contentModeration` |
-| `gen3a_turbo` | `768:1280`, `1280:768` | `5` or `10` | Yes | `first`, `last` | `seed`, `contentModeration` |
-| `veo3.1` | `1280:720`, `720:1280`, `1080:1920`, `1920:1080` | `4`, `6`, `8` | Optional | `first`, `last` | `audio` (bool, affects price) |
-| `veo3.1_fast` | same as veo3.1 | `4`, `6`, `8` | Optional | `first`, `last` | `audio` |
-| `seedance2` | twelve options (see below) | int | Optional | `first`, `last`, or omit for reference | `audio`, `outputCount` |
-| `veo3` | `1280:720`, `720:1280`, `1080:1920`, `1920:1080` | `8` (only) | Optional | `first` | — |
+| `gen4.5` | 2–10 | `1280:720`, `720:1280`, `1104:832`, `960:960`, `832:1104`, `1584:672` | `1280:720`, `720:1280` | ≤1000; **required with an image** | `seed` |
+| `gen4_turbo` | 2–10 | same as gen4.5 | none (image required) | ≤1000, optional | `seed` |
+| `veo3.1`, `veo3.1_fast` | 4, 6, 8 | `1280:720`, `720:1280`, `1080:1920`, `1920:1080` | same | ≤1000 | `audio` (default true; without it Veo bills less, see prices), `seed` |
+| `happyhorse_1_0` | 3–15 | **no ratio**: `resolution` `720p` / `1080p` (output follows the image) | `1280:720`, `720:1280`, `960:960`, `1108:832`, `832:1108`, `1920:1080`, `1080:1920`, `1440:1440`, `1662:1248`, `1248:1662` | 2–2500 | `resolution` (image only). No seed. |
+| `seedance2` | 4–15 or `auto` | 24: the 12 below + 1080p (`2206:946`, `1920:1080`, `1664:1248`, `1440:1440`, `1248:1664`, `1080:1920`) + 4K (`3840:1646`, `3840:2160`, `3840:2880`, `3840:3840`, `2880:3840`, `2160:3840`) | same | ≤3500 | `audio`, `seed` |
+| `seedance2_fast`, `seedance2_mini` | 4–15 or `auto` | 12 (480p/720p): `992:432`, `864:496`, `752:560`, `640:640`, `560:752`, `496:864`, `1470:630`, `1280:720`, `1112:834`, `960:960`, `834:1112`, `720:1280` | same | ≤3500 | `audio`, `seed` |
+| `seedance2_5` | 4–30 or `auto` | 18 (480p–1080p): `992:432`, `854:480`, `752:560`, `640:640`, `560:752`, `480:854`, then the 720p and 1080p ratios above | same | ≤15000 | `audio`, `seed` |
 
-**seedance2 ratios:** `992:432`, `864:496`, `752:560`, `640:640`, `560:752`, `496:864`, `1470:630`, `1280:720`, `1112:834`, `960:960`, `834:1112`, `720:1280`.
+`duration: "auto"` lets Seedance pick; Runway bills the model maximum up front and
+refunds the rest, so Nebula leaves it unpriced. The inspector filters ratios by model,
+not by whether an image is wired, so a gen4.5 text-only run with a 4:3 ratio fails in
+the handler with a list of the valid ones (before any billed call).
 
-### Example (Gen-4.5, first frame from URL)
+### Example (Gen-4.5 image-to-video)
 
 ```json
 POST /v1/image_to_video
@@ -43,74 +42,55 @@ POST /v1/image_to_video
 }
 ```
 
-### Example (Veo 3.1 with first + last frame + audio)
+### Example (HappyHorse image-to-video: resolution, no ratio, no seed)
 
 ```json
-{
-  "model": "veo3.1",
-  "promptImage": [
-    { "position": "first", "uri": "https://example.com/start.png" },
-    { "position": "last",  "uri": "https://example.com/end.png" }
-  ],
-  "ratio": "1920:1080",
-  "duration": 6,
-  "audio": true
-}
+{ "model": "happyhorse_1_0", "promptImage": "data:image/png;base64,...", "resolution": "1080p", "duration": 12 }
 ```
 
----
+### What the API takes that `runway-video` doesn't send
 
-## `POST /v1/text_to_video`
-
-Union of 5 models: `gen4.5`, `veo3.1`, `veo3.1_fast`, `seedance2`, `veo3`.
-
-### Required base
-
-| Field | Notes |
-|---|---|
-| `model` | See models above. |
-| `promptText` | ≤1000 chars for most, 3500 for `seedance2`. |
-| `ratio` | Model-specific. |
-| `duration` | Model-specific. |
-
-### Model matrix
-
-| `model` | Ratios | Duration | Extras |
-|---|---|---|---|
-| `gen4.5` | `1280:720`, `720:1280` | `2`–`10` (required int) | `seed`, `contentModeration` |
-| `veo3.1` | `1280:720`, `720:1280`, `1080:1920`, `1920:1080` | `4`/`6`/`8` | `audio` |
-| `veo3.1_fast` | same | `4`/`6`/`8` | `audio` |
-| `seedance2` | (same twelve as image_to_video) | int | `audio`, `outputCount` |
-| `veo3` | `1280:720`, `720:1280`, `1080:1920`, `1920:1080` | `8` (only) | — |
-
----
+- `promptImage` as `[{uri, position: "first"|"last"}]` (first + last keyframes) or as
+  reference images (Seedance: omit `position`). The node sends one first-frame image.
+- Text-to-video `references` (images), `referenceVideos`, `referenceAudio` (Seedance).
+- Veo `negativePrompt`; Gen-4.5 `outputFormat` (ProRes / HDR, extra cost) and
+  `contentModeration`.
+- Seedance 2.5 `draft: true` (cheap 480p preview) and enhancing it with
+  `{model: "seedance2_5", draftTaskId}` on text_to_video within 7 days.
+- Seedance video-to-video (below): the node has no video input.
 
 ## `POST /v1/video_to_video`
 
-Union of 2 models: `gen4_aleph`, `seedance2`.
-
-### Gen-4 Aleph (video restyling)
+### Aleph 2.0 (`runway-aleph`)
 
 | Field | Required | Notes |
 |---|---|---|
-| `model` | yes | `"gen4_aleph"` |
-| `videoUri` | yes | HTTPS URL to source video. |
-| `promptText` | yes | ≤1000 chars describing the transformation. |
-| `references[]` | no | Up to 1 reference image `{ type: "image", uri }` for style emulation. |
+| `model` | yes | `"aleph2"` (the only Aleph model; default) |
+| `videoUri` | yes | Input video, 2–30 s. HTTPS URL, data URI ≤5MB, or `runway://` upload URI. |
+| `promptText` | no on the API, required by the node | ≤1000 chars. |
+| `keyframes` | no | 1–5 guidance images `{uri, at: 0-1}` or `{uri, seconds}`. The node's `reference` image goes as `[{uri, at: 0}]`. |
 | `seed` | no | int |
-| `contentModeration.publicFigureThreshold` | no | `"auto"` \| `"low"` |
-| `ratio` | **ignored** | Deprecated; output resolution is inherited from input video. |
+| `targetAspectRatio`, `outputFormat`, `proresProfile`, `contentModeration` | no | Not exposed by the node. |
 
-### Seedance 2 video-to-video
+Aleph 2.0 has **no `references` field** (that was Gen-4 Aleph).
 
-| Field | Required | Notes |
-|---|---|---|
-| `model` | yes | `"seedance2"` |
-| `promptVideo` | yes | HTTPS URL to source. |
-| `promptText` | no | ≤3500 chars. |
-| `audio` | no | bool |
-| `duration` | no | int, `4`–`15` |
-| `outputCount` | no | int, how many generations. |
-| `ratio` | no | twelve seedance2 options. |
-| `references` | no | Up to 9 image references (array of `{uri, position?}` or a single URL string). |
-| `referenceVideos` | no | Up to 3 video references `{ type: "video", uri }`. |
+### Seedance video-to-video (not exposed in Nebula)
+
+`seedance2`, `seedance2_fast`, `seedance2_mini`, `seedance2_5` take `promptVideo`
+(required), `promptText`, `audio`, `duration`, `ratio`, `references` (up to 9 images; 30
+for 2.5), `referenceVideos` (up to 2 for 2.0 / Fast / Mini, 9 for 2.5) and
+`referenceAudio`. `seedance2_5` also takes `mode`: `reference` (default), `extend` or
+`edit`, and `draft`.
+
+## Local files
+
+Local paths become a data URI while the encoded URI fits Runway's 5MB cap; larger files
+(up to 200MB) go through `POST /v1/uploads` (`{filename, type: "ephemeral"}` -> presigned
+form -> `runway://` URI, valid 24 h). Public HTTPS URLs pass through unchanged.
+
+## Prices (credits, $0.01 each; guides/pricing.md 2026-10-14)
+
+Per second: gen4.5 12, gen4_turbo 5, veo3.1 40 with audio / 20 without, veo3.1_fast 15 /
+10, seedance2 36 (480p/720p) / 40 (1080p) / 150 (4K), seedance2_fast 29, seedance2_mini 16
+(64 minimum), seedance2_5 20 / 30 / 68 at 480p / 720p / 1080p (80 minimum), happyhorse 15
+(720p) / 30 (1080p), aleph2 28 (56 minimum).
