@@ -3,6 +3,7 @@ import pricingCases from '../../../backend/tests/fixtures/pricing_cases.json';
 import routeCases from '../../../backend/tests/fixtures/route_cases.json';
 import { applyProviderPick, providerKeyWarnings, providerSwitchState, snapForRoute, type SwitchContext } from '../../src/lib/providerSwitch';
 import type { PricingTable } from '../../src/lib/pricing';
+import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../../src/types';
 
 /** The five-route fixture with its prices (pricing_cases.json `table`) and
@@ -102,6 +103,17 @@ describe('providerSwitchState', () => {
     expect(five.rows.find((row) => row.id === 'openrouter')?.block).toBe('Takes at most 4 images');
     const four = providerSwitchState(TABLE, { _provider: 'openrouter' }, context(keys, { wired: new Map([['images', 4]]) }));
     expect(four.blocked).toBe(false);
+  });
+
+  it("shows a route's note on its API row (Krea 3's early access), not on the plan row", () => {
+    const krea3 = (NODE_DEFINITIONS as Record<string, ModelNodeDefinition>)['krea-3'];
+    const state = providerSwitchState(krea3, {}, context({ KREA_API_TOKEN: KEY }));
+    expect(state.rows.map((row) => [row.id, row.info])).toEqual([
+      ['auto', undefined],
+      ['krea', "Early access: Krea 3 on Krea's API is for beta workspaces"],
+      ['krea:plan', undefined],
+      ['fal', undefined],
+    ]);
   });
 });
 

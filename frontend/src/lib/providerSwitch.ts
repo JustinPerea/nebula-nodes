@@ -45,6 +45,9 @@ export interface ProviderRow {
   priceTitle?: string;
   /** Why this route can't take the recipe as it is ("Doesn't take 1.5k"). */
   block: string | null;
+  /** The route's own note (RouteSpec.note, e.g. Krea 3's early access),
+   *  on its API row; a block note replaces it. */
+  info?: string;
   selected: boolean;
   /** The billing params a pick writes (BILLING_PARAMS). */
   writes: Params;
@@ -175,6 +178,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
         setup: spec.keys[0] ? { kind: 'api-key', key: spec.keys[0] } : undefined,
         ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, false)),
         block: note,
+        ...(spec.note && !note ? { info: spec.note } : {}),
         selected: choice === spec.id && !(both && kreaPlanPicked(saved)),
         writes: billingWrites(definition, spec.id, false),
       });

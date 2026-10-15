@@ -144,11 +144,11 @@ export function ProviderMenu({ state, onPick, inline = false, labelledBy, label,
       onKeyDown={onKeyDown} onMouseDown={(event) => event.stopPropagation()}>
       {state.rows.map((row, index) => (
         <div key={row.id} role="none" data-provider-row={index}
-          className={`provider-switcher__row${row.selected ? ' provider-switcher__row--selected' : ''}${row.block ? ' provider-switcher__row--blocked' : ''}${row.routeId === null ? ' provider-switcher__row--auto' : ''}`}>
+          className={`provider-switcher__row${row.selected ? ' provider-switcher__row--selected' : ''}${row.block ? ' provider-switcher__row--blocked' : ''}${row.routeId === null ? ' provider-switcher__row--auto' : ''}${row.info ? ' provider-switcher__row--info' : ''}`}>
           <button type="button" role="menuitemradio" aria-checked={row.selected}
             tabIndex={inline && index === active ? 0 : -1}
             className="provider-switcher__item"
-            title={row.block ?? undefined}
+            title={row.block ?? row.info}
             onClick={() => { onPick(row); onClose?.(true); }}>
             <span className="provider-switcher__check" aria-hidden="true">
               {row.selected && <Check size={12} strokeWidth={2} />}
@@ -158,6 +158,7 @@ export function ProviderMenu({ state, onPick, inline = false, labelledBy, label,
               {row.block && <span className="provider-switcher__block">{row.block}</span>}
             </span>
             <span className="provider-switcher__price" title={row.priceTitle}>{row.price}</span>
+            {row.info && <span className="provider-switcher__info">{row.info}</span>}
           </button>
           {row.routeId !== null && keyCell(row, setup)}
         </div>
