@@ -11,6 +11,11 @@ export interface PriceEntry {
   currency: string;
   per: 'image' | 'video' | 'second' | 'request';
   rows: PriceRow[];
+  /** A node that can run on more than one provider prices each route on its
+   * own: provider -> a single-route entry (model_pricing.py). The run prices
+   * the route it bills (lib/directRoute.ts selectRoute). */
+  routes?: Record<string, PriceEntry>;
+  generatedBy?: string;
   extras?: PriceRow[];
   multiplyBy?: string[];
   defaults?: Record<string, unknown>;
@@ -98,16 +103,29 @@ function multiplier(value: unknown): number | null {
   return Number.isFinite(amount) && amount > 0 ? amount : null;
 }
 
+/** The single-route entry that prices a run billed to `provider`: a `routes`
+ * entry gives that route's (undefined when the route has no price or isn't
+ * known); a plain entry comes back as is (model_pricing.entry_for_route). */
+export function entryForRoute(entry: PriceEntry | undefined, provider: string | null | undefined): PriceEntry | undefined {
+  if (!entry) return undefined;
+  if (entry.routes === undefined) return entry;
+  if (!provider || typeof entry.routes !== 'object' || entry.routes === null) return undefined;
+  const routed = Object.hasOwn(entry.routes, provider) ? entry.routes[provider] : undefined;
+  return routed && typeof routed === 'object' ? routed : undefined;
+}
+
 /** One run of this node, or null when it's unpriced (no entry, no matching
  * row, the run bills a different provider than the entry prices, or a
- * setting the price reads arrives by wire, so it's only known at run time). */
+ * setting the price reads arrives by wire, so it's only known at run time).
+ * A `routes` entry prices the route `routeProvider` names. */
 export function estimateNode(
-  entry: PriceEntry | undefined,
+  priceEntry: PriceEntry | undefined,
   definition: Partial<ModelNodeDefinition>,
   params: Record<string, unknown> | undefined,
   routeProvider?: string | null,
   wired: Iterable<string> = [],
 ): NodeEstimate | null {
+  const entry = entryForRoute(priceEntry, routeProvider);
   if (!entry) return null;
   if (entry.provider && routeProvider && entry.provider !== routeProvider) return null;
   const priced = pricedKeys(entry);

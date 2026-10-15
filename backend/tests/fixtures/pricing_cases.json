@@ -166,6 +166,45 @@
           "id": "multi_prompt"
         }
       ]
+    },
+    "routed": {
+      "id": "routed",
+      "apiProvider": "fal",
+      "envKeyName": [
+        "GOOGLE_API_KEY",
+        "FAL_KEY"
+      ],
+      "directKeyName": "GOOGLE_API_KEY",
+      "params": [],
+      "sharedParams": [
+        {
+          "key": "resolution",
+          "type": "enum",
+          "default": "1K",
+          "options": [
+            {
+              "value": "1K",
+              "label": "1K"
+            },
+            {
+              "value": "4K",
+              "label": "4K"
+            }
+          ]
+        },
+        {
+          "key": "num_images",
+          "type": "integer",
+          "default": 1
+        }
+      ],
+      "falParams": [
+        {
+          "key": "seed",
+          "type": "integer"
+        }
+      ],
+      "directParams": []
     }
   },
   "pricing": {
@@ -375,6 +414,72 @@
           }
         ],
         "checked": "2026-10-12"
+      },
+      "routed": {
+        "routes": {
+          "fal": {
+            "currency": "usd",
+            "per": "image",
+            "priceParams": [
+              "resolution"
+            ],
+            "rows": [
+              {
+                "match": {
+                  "resolution": "1K"
+                },
+                "price": 0.08
+              },
+              {
+                "match": {
+                  "resolution": "4K"
+                },
+                "price": 0.16
+              }
+            ],
+            "multiplyBy": [
+              "num_images"
+            ],
+            "sources": [
+              {
+                "url": "https://example.com/pricing",
+                "quote": "fixture"
+              }
+            ],
+            "checked": "2026-10-14"
+          },
+          "google": {
+            "currency": "usd",
+            "per": "image",
+            "priceParams": [
+              "resolution"
+            ],
+            "rows": [
+              {
+                "match": {
+                  "resolution": "1K"
+                },
+                "price": 0.067
+              },
+              {
+                "match": {
+                  "resolution": "4K"
+                },
+                "price": 0.151
+              }
+            ],
+            "multiplyBy": [
+              "num_images"
+            ],
+            "sources": [
+              {
+                "url": "https://example.com/pricing",
+                "quote": "fixture"
+              }
+            ],
+            "checked": "2026-10-14"
+          }
+        }
       }
     }
   },
@@ -676,6 +781,45 @@
         "low": 1.0,
         "high": 1.0
       }
+    },
+    {
+      "name": "a routed entry prices the maker route",
+      "nodeId": "routed",
+      "params": {
+        "num_images": 2
+      },
+      "routeProvider": "google",
+      "expected": {
+        "currency": "usd",
+        "low": 0.134,
+        "high": 0.134
+      }
+    },
+    {
+      "name": "a routed entry prices the fal route with its own rows",
+      "nodeId": "routed",
+      "params": {
+        "resolution": "4K"
+      },
+      "routeProvider": "fal",
+      "expected": {
+        "currency": "usd",
+        "low": 0.16,
+        "high": 0.16
+      }
+    },
+    {
+      "name": "a routed entry without a route is unpriced",
+      "nodeId": "routed",
+      "params": {},
+      "expected": null
+    },
+    {
+      "name": "a route the entry doesn't price is unpriced",
+      "nodeId": "routed",
+      "params": {},
+      "routeProvider": "krea",
+      "expected": null
     }
   ]
 }

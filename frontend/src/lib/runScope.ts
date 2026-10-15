@@ -192,7 +192,7 @@ export function summarizeRunScope(
     }
     const estimate = estimateNode(
       pricing.nodes[definition.id], definition, params,
-      runRouteProvider(definition, costContext.apiKeys), ports,
+      runRouteProvider(definition, costContext.apiKeys, params), ports,
     );
     if (!estimate || estimate.currency !== 'usd') {
       cost.unpriced.push(name);

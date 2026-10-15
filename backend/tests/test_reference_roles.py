@@ -108,6 +108,29 @@ APPROVED_TOP_LEVEL_FIELD_ADDITIONS = {
         "default": "seedream-4-5", "fallbackFor": ["flux-1-dev", "flux.1-dev", "flux-dev"],
     }},
 }
+# Direct maker routes (2026-10-14): Nano Banana's two fal copies also run on
+# the Gemini API with the person's GOOGLE_API_KEY (execution/maker_routes.py).
+# The only contract change is the route split: GOOGLE_API_KEY joins
+# envKeyName and becomes directKeyName, and the unchanged params move into
+# sharedParams + falParams (none are direct-only). Normalizing rebuilds the
+# baseline `params` list in its original order, so any change to a param
+# itself still fails the fingerprint.
+_NANO_BANANA_FAL_ORDER = ["model", "aspect_ratio", "resolution", "num_images", "output_format",
+                          "thinking_level", "enable_web_search", "seed"]
+APPROVED_DUAL_ROUTE_SPLITS = {
+    node_id: {"envKeyName": ("FAL_KEY", ["GOOGLE_API_KEY", "FAL_KEY"]), "directKeyName": "GOOGLE_API_KEY",
+              "falParams": ["output_format", "seed"], "order": _NANO_BANANA_FAL_ORDER}
+    for node_id in ("nano-banana-fal", "nano-banana-fal-edit")
+}
+# Direct maker routes, review fix (2026-10-14): Meshy's own image-to-3D API
+# takes texture_prompt ("Provide a text prompt to guide the texturing
+# process", https://docs.meshy.ai/en/api/image-to-3d), so it moves from
+# falParams to the end of sharedParams and reaches both routes. The param
+# itself is unchanged; normalizing moves it back to its baseline slot
+# (group, index), so any edit to it still fails the fingerprint.
+APPROVED_PARAM_GROUP_MOVES = {
+    "meshy-image-to-3d": {"texture_prompt": ("sharedParams", "falParams", 0)},
+}
 APPROVED_LEADING_PARAM_ADDITIONS = {
     "krea-2-generate": _KREA_AUTH_PARAM,
     "krea-style-search": _KREA_AUTH_PARAM,
@@ -203,6 +226,24 @@ def _remove_approved_fields(container: dict[str, Any], additions: dict[str, Any]
 def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any]:
     """Normalize exact approved deltas without mutating shared fixture data."""
     normalized = deepcopy(node)
+    for key, (now_in, baseline_in, index) in APPROVED_PARAM_GROUP_MOVES.get(node_id, {}).items():
+        moved = [param for param in normalized.get(now_in) or [] if param.get("key") == key]
+        assert len(moved) == 1, f"unapproved param move: {node_id}.{key}"
+        normalized[now_in] = [param for param in normalized[now_in] if param.get("key") != key]
+        normalized.setdefault(baseline_in, []).insert(index, moved[0])
+    split = APPROVED_DUAL_ROUTE_SPLITS.get(node_id)
+    if split is not None:
+        baseline_env, current_env = split["envKeyName"]
+        assert normalized.get("envKeyName") == current_env, f"unapproved envKeyName: {node_id}"
+        normalized["envKeyName"] = baseline_env
+        _remove_approved_fields(normalized, {"directKeyName": split["directKeyName"], "params": [],
+                                             "directParams": []})
+        shared, fal = normalized.pop("sharedParams"), normalized.pop("falParams")
+        assert [param["key"] for param in fal] == split["falParams"], f"unapproved falParams: {node_id}"
+        by_key = {param["key"]: param for param in shared + fal}
+        assert sorted(by_key) == sorted(split["order"]) and len(by_key) == len(shared + fal), (
+            f"unapproved route split: {node_id}")
+        normalized["params"] = [by_key[key] for key in split["order"]]
     added_ports = APPROVED_INPUT_PORT_ADDITIONS.get(node_id, [])
     if added_ports:
         assert normalized["inputPorts"][-len(added_ports):] == added_ports, (

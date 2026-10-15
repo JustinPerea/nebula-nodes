@@ -83,7 +83,7 @@ from services.settings import (
 )
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
-from services import agent_connect, agent_spend, backend_address, app_tokens, model_pricing, node_readiness, output_preview
+from services import agent_connect, agent_spend, backend_address, app_tokens, model_pricing, node_readiness, node_route, output_preview
 from services.cli_graph import CLIGraph
 from services.retired_nodes import migrate_node, migrate_param_update, migrate_params, retired_message
 from services.project_store import (
@@ -3437,13 +3437,22 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         result["description"] = definition["description"]
     shown = lambda key: [_brief_param(param) for param in definition.get(key) or []  # noqa: E731
                          if not str(param.get("key", "")).startswith("_") and not param.get("hidden")]
-    result["params"] = shown("params") + shown("sharedParams")
-    if definition.get("directParams") or definition.get("falParams"):
-        # Dual-route nodes take different extra params on each route.
-        direct = node_readiness._keys(definition.get("directKeyName"))
-        result["route"] = "direct" if any(k in keys for k in direct) else "fal" if access else None
+    # A dual-route node lists its shared params here and each route's own
+    # below (a generated Krea copy keeps its full Krea list in `params` too).
+    result["params"] = shown("sharedParams") if "sharedParams" in definition else shown("params")
+    fallback = node_route.fallback_provider(definition)
+    if fallback:
+        # Which route a run takes here at defaults (services/node_route.py):
+        # "direct" (the maker's API with your key), the fallback copy ("fal" or
+        # "krea"), or None when none of its keys are set. A node whose
+        # _kreaAuth is "mcp" bills the Krea plan whatever keys are set.
+        route = node_route.select_route(definition, {}, settings.get("apiKeys") or {})
+        result["route"] = ("direct" if route.kind == node_route.DIRECT
+                           else fallback if route.kind == node_route.FALLBACK else None)
+        result["routeProvider"] = route.provider if result["route"] else None
+        result["fallback"] = fallback
         result["paramsDirect"] = shown("directParams")
-        result["paramsFal"] = shown("falParams")
+        result["paramsFallback"] = shown("falParams")
     if access is None:
         result["missing"] = node_readiness.missing(definition, krea_signed_in, definitions)
     options = node_readiness.detail(definition, keys, krea_signed_in, definitions)
@@ -3485,18 +3494,24 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
             else:
                 result["priceNote"] = "No list price; agent runs of it must be proposed (propose_change)."
         else:
-            estimate = model_pricing.estimate_node(
-                entry, definition, {}, model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
-            rows = [{**row.get("match", {}), "usd": row.get("price")} for row in entry.get("rows") or []]
+            provider = model_pricing.route_provider(definition, settings.get("apiKeys") or {})
+            estimate = model_pricing.estimate_node(entry, definition, {}, provider)
+
+            def price_table(priced: Mapping[str, Any]) -> dict[str, Any]:
+                rows = [{**row.get("match", {}), "usd": row.get("price")} for row in priced.get("rows") or []]
+                return {"per": priced.get("per"), "dependsOn": priced.get("priceParams") or [], "rows": rows[:40]}
+
+            routed = model_pricing.entry_for_route(entry, provider)
             result["price"] = {
-                "per": entry.get("per"),
-                "dependsOn": entry.get("priceParams") or [],
+                **price_table(routed or entry),
                 "atDefaultsUsd": ([round(estimate["low"], 4), round(estimate["high"], 4)]
                                   if estimate and estimate.get("currency") == "usd" else None),
-                "rows": rows[:40],
             }
-            if entry.get("price") is not None and not rows:
-                result["price"]["usd"] = entry.get("price")
+            if isinstance(entry.get("routes"), Mapping):
+                # Each route's own price; the run bills the route it takes.
+                result["price"]["billedBy"] = provider if routed else None
+                result["price"]["routes"] = {name: price_table(priced)
+                                             for name, priced in entry["routes"].items()}
     return result
 
 

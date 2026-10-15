@@ -505,6 +505,27 @@ def _node_def_for(definition_id: str) -> dict[str, Any] | None:
     return _registry_node_defs().get(definition_id) or NODE_DEFS.get(definition_id)
 
 
+def _cache_route_tag(
+    node: GraphNode, definition: dict[str, Any] | None, api_keys: dict[str, str],
+) -> str | None:
+    """The route a multi-route node runs on, for its cache key (or that of a
+    cinema scene's base model, which the scene calls through the registry)."""
+    from services import node_route
+
+    definition = definition or {}
+    params: dict[str, Any] = node.params
+    if node.definition_id == "cinema-scene":
+        from services.model_pricing import cinema_scene_base
+        nested = cinema_scene_base(node.params)
+        base = _node_def_for(nested[0]) if nested else None
+        if not nested or not base:
+            return None
+        definition, params = base, nested[1]
+        tag = node_route.cache_tag(definition, params, api_keys)
+        return f"{nested[0]}={tag}" if tag else None
+    return node_route.cache_tag(definition, params, api_keys)
+
+
 def _multiple_input_ports(definition_id: str) -> set[str]:
     node_def = _node_def_for(definition_id)
     if not node_def:
@@ -1081,6 +1102,11 @@ async def _execute_graph(
                 if uses_account(node, definition_metadata):
                     from services.krea_connector import connection_revision
                     cache_params["_kreaConnectionRevision"] = connection_revision()
+                # Which route this run takes (maker key, fal or Krea copy, Krea
+                # plan). Adding a maker key must not replay a fal/Krea result.
+                route_tag = _cache_route_tag(node, definition_metadata, api_keys)
+                if route_tag:
+                    cache_params["_route"] = route_tag
                 cache_key = ExecutionCache.get_key(
                     node.definition_id, cache_params, inputs_for_key, node_id=node.id,
                     batch_context=context if any(

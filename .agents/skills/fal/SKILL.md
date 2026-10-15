@@ -16,7 +16,7 @@ description: FAL.ai model catalog access — image, video, audio, 3D, LoRA train
 
 All FAL endpoints (there are 1,312+ models on the platform, 160 curated here) share the same API shape:
 
-- **Auth:** `Authorization: Key <FAL_KEY>` header. Our backend uses `FAL_KEY`. Some models also accept native-provider keys (e.g. `BFL_API_KEY` for Flux, `GOOGLE_API_KEY` for Veo) — nebula handlers prefer native when set, fall back to FAL.
+- **Auth:** `Authorization: Key <FAL_KEY>` header. Our backend uses `FAL_KEY`. A few nodes are dual-route: they list the maker's key first in `envKeyName` and name it in `directKeyName`, run on the maker's own API when that key is set and fall back to FAL otherwise: `veo-3` (Vertex, then `GOOGLE_API_KEY`), `veo-3-flf` (Vertex), `meshy-text-to-3d`/`meshy-image-to-3d` (`MESHY_API_KEY`), the seven `ideogram-*` nodes (`IDEOGRAM_API_KEY`) and, since 2026-10-14, `nano-banana-fal`/`nano-banana-fal-edit` (`GOOGLE_API_KEY`, Gemini API). Route precedence, the same in the router, pricing, the spend gate, readiness and the cache key (`backend/services/node_route.py`, mirrored by `frontend/src/lib/directRoute.ts`).
 - **Two base URLs:** `https://fal.run/{endpoint_id}` (sync, for fast models) and `https://queue.fal.run/{endpoint_id}` (queue, for slow/long-running models). Nebula's `fal_universal.py` handler uses queue for everything since most models benefit from async.
 - **Queue flow:**
   1. `POST https://queue.fal.run/{endpoint_id}` with JSON body → returns `{"request_id": "...", "status_url": "...", "response_url": "..."}`
@@ -73,7 +73,7 @@ The source of truth for this routing is `backend/execution/sync_runner.py`. Each
 | `seedvr2-upscale` | `fal-ai/seedvr/upscale/image` | Upscaling | [`skills/fal-ai__seedvr__upscale__image.md`](skills/fal-ai__seedvr__upscale__image.md) |
 | `fal-universal` | user-provided slug | Any | route to the matching file under `skills/` |
 
-**Routing note:** Some nebula nodes have two handlers (direct + FAL) with a `routing` param selecting which. The dual-param convention (`sharedParams`, `falParams`, `directParams`) comes from that — `falParams` only apply when routed through FAL.
+**Routing note:** Dual-route nodes have two handlers (direct + FAL); the configured keys pick one, not a param. Params split into `sharedParams` (both routes), `falParams` (FAL only) and `directParams` (direct only). The router (`backend/execution/maker_routes.py` `dual_route`, or `_ideogram_router`/the Veo router) sends each route only its own params, on a copy of the node; the Inspector and Create show the active route's set. Prices can differ per route: `model_pricing.json` `routes` (e.g. `nano-banana-fal` bills FAL's rate on FAL and Google's on the Gemini API).
 
 ## How to use this skill
 

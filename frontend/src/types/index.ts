@@ -135,16 +135,25 @@ export interface ModelNodeDefinition {
   inputPorts: PortDefinition[];
   outputPorts: PortDefinition[];
   params: ParamDefinition[];
-  /** Dual-param architecture for nodes with both FAL and direct API support.
-   *  When present, Inspector renders sharedParams + (falParams or directParams)
-   *  based on which API key is available. `params` is ignored when these are set. */
+  /** Dual-route nodes: a fal or Krea copy that also runs on its maker's API
+   *  with the person's key. Inspector and Create render sharedParams plus the
+   *  group of the route the run takes (lib/directRoute.ts selectRoute, the
+   *  backend's services/node_route.py): directParams on the maker key,
+   *  falParams on the fal or Krea copy (for a Krea node, its Krea-only
+   *  fields) and on the Krea plan. A Krea node keeps its full list in
+   *  `params` too; other dual-route nodes leave `params` empty. */
   sharedParams?: ParamDefinition[];
   falParams?: ParamDefinition[];
   directParams?: ParamDefinition[];
-  /** Which env key name selects the "direct" route (vs FAL). Used by Inspector
-   *  to decide which param set to show. e.g. 'MESHY_API_KEY' or 'GOOGLE_API_KEY'.
-   *  A list means any of them, tried in order (Veo: Vertex, then Gemini API). */
+  /** Which env key name selects the "direct" route (vs fal or Krea). e.g.
+   *  'MESHY_API_KEY' or 'GOOGLE_API_KEY'. A list means any of them, tried in
+   *  order (Veo: Vertex, then Gemini API). */
   directKeyName?: string | string[];
+  /** A generated Krea node's maker route (scripts/sync-krea-catalog.py
+   *  DIRECT_ROUTES): the backend translation and the maker's model id.
+   *  `blockedBy` lists Krea-only params that keep a run on Krea when set
+   *  (the maker can't honor them; lib/directRoute.ts directBlock). */
+  directRoute?: { translation: string; model: string; blockedBy?: string[] };
   docUrl?: string;
   /** A local (utility) node that still calls a provider. `utility` only means
    *  "no top-level key"; this says what the node really needs. Readiness, the

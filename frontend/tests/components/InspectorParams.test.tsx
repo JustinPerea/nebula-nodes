@@ -69,6 +69,42 @@ describe('Canvas inspector enum controls', () => {
     expect(currentParams()).toEqual({ [key]: 0.37 });
   });
 
+  it.each([
+    [{ _kreaAuth: 'api-token' }, { GOOGLE_API_KEY: 'fixture-only', KREA_API_TOKEN: 'fixture-only' }, false],
+    [{ _kreaAuth: 'api-token' }, { KREA_API_TOKEN: 'fixture-only' }, true],
+    // The Krea plan is the person's choice: a Google key never takes it over.
+    [{ _kreaAuth: 'mcp' }, { GOOGLE_API_KEY: 'fixture-only' }, true],
+  ])('shows Krea-only sizing on a Krea copy only when Krea runs it (%o, %o)', (params, apiKeys, kreaFields) => {
+    useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true, apiKeys } });
+    renderModel('krea-image-google-nano-banana-pro', params);
+    expect(screen.queryByLabelText('Width') !== null).toBe(kreaFields);
+    expect(screen.getByRole('combobox', { name: 'Resolution' })).toBeVisible();
+  });
+
+  it('keeps Krea-only sizing visible when a saved size keeps the run on Krea', () => {
+    useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true,
+      apiKeys: { GOOGLE_API_KEY: 'fixture-only', KREA_API_TOKEN: 'fixture-only' } } });
+    renderModel('krea-image-google-nano-banana-pro', { _kreaAuth: 'api-token', width: 1920, height: 1080 });
+    expect(screen.getByLabelText('Width')).toBeVisible();
+  });
+
+  it('lets an Ideogram key opt a reframe saved without a resolution into the direct route', () => {
+    // An agent-made node (no seeded defaults) with only the Ideogram key: the
+    // run needs `resolution` to go direct, so it shows unset until picked.
+    useUIStore.setState({ settingsCache: { ...useUIStore.getState().settingsCache, loaded: true,
+      apiKeys: { IDEOGRAM_API_KEY: 'fixture-only' } } });
+    renderModel('ideogram-reframe', {});
+    const resolution = screen.getByRole('combobox', { name: 'Target Resolution' });
+    expect(resolution).toHaveValue('');
+    expect(resolution.querySelector('option[value=""]')).toHaveTextContent('Choose…');
+    expect(screen.getByRole('combobox', { name: 'Target Size' })).toBeVisible();
+    fireEvent.change(resolution, { target: { value: '1024x1024' } });
+    expect(currentParams()).toEqual({ resolution: '1024x1024' });
+    // Now the direct route runs it: fal's sizing goes away.
+    expect(screen.queryByRole('combobox', { name: 'Target Size' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Target Resolution' })).toHaveValue('1024x1024');
+  });
+
   it('writes original numeric Krea duration choices and preserves the default', () => {
     renderModel('krea-video-kling-kling-2-5', { prompt: 'Orbit the logo' });
     const duration = screen.getByRole('combobox', { name: 'Duration' });

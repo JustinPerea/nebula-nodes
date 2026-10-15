@@ -22,4 +22,5 @@ Implementation work to add missing nodes should run in a **dedicated Cursor chat
 ## Other conventions
 
 - Repo-backed agent skills live in `.agents/skills/` (indexed by the backend Codex runner). Keep them free of secrets and user outputs.
+- Dual-route nodes (a fal or Krea copy that also runs on the maker's API with the person's key) pick their route through `backend/services/node_route.py` (mirrored by `frontend/src/lib/directRoute.ts`): Krea plan, else maker key, else the fal/Krea key. Krea maker routes are declared in `scripts/sync-krea-catalog.py` `DIRECT_ROUTES`; never hand-edit generated Krea nodes.
 - When adding a node, regenerate `docs/MODEL_REFERENCE.md` and check the corresponding entry off in `docs/flora-gap-audit.md` if it closes a logged gap.

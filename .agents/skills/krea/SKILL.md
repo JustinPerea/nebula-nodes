@@ -27,6 +27,32 @@ propose`) and let the user accept it. Agent runs billed to the plan count
 against the "Krea plan runs" limit in Settings (10 until the user picks one). Krea Moodboards and Krea Moodboard
 Create only offer `mcp`; Krea 3D Export only works with an API token.
 
+## Maker routes (Nano Banana on your Google key)
+
+Since 2026-10-14 four Krea copies also run on Google's Gemini API with the
+person's `GOOGLE_API_KEY`: `krea-image-google-nano-banana-2`
+(`gemini-3.1-flash-image`), `-pro` (`gemini-3-pro-image`), `-flash-lite`
+(`gemini-3.1-flash-lite-image`) and `krea-image-google-nano-banana`
+(`gemini-2.5-flash-image`). The list lives in `scripts/sync-krea-catalog.py`
+`DIRECT_ROUTES`; the generator writes `envKeyName: ["GOOGLE_API_KEY",
+"KREA_API_TOKEN"]`, `directKeyName`, `sharedParams`/`falParams` (the
+Krea-only `width`/`height`) and `directRoute`, plus a `routes` price entry
+(Krea and Google). Never hand-edit those nodes.
+
+Precedence, the same in the router, pricing, the spend gate, readiness and
+the cache key (`backend/services/node_route.py`):
+
+1. `_kreaAuth == "mcp"`: the Krea plan, whatever keys are set.
+2. else `GOOGLE_API_KEY` set and the recipe has no explicit `width`/`height`
+   (`directRoute.blockedBy`; Google can't render an exact size): Google, billed
+   by Google. `krea-image-google-nano-banana` (2.5) leaves Google on
+   2027-03-15, Google's listed shutdown (`node_route.DIRECT_RETIRES`).
+3. else `KREA_API_TOKEN`: the Krea API, billed to API balance.
+
+So an `api-token` node runs on Google once a Google key is saved; a person
+who wants Krea's API for it removes the key or picks the Krea plan. On the
+Google route the node fills `image`, `images` and `artifacts` (no Krea `job`).
+
 ## Gateway Model Nodes
 
 The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108) included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.

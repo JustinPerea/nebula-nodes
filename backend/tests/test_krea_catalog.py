@@ -35,7 +35,23 @@ def test_each_model_has_a_valid_request_contract_and_valid_control_defaults(node
     Draft202012Validator.check_schema(schema)
     definition = REGISTRY[node_id]
     assert definition["apiProvider"] == "krea"
-    assert definition["envKeyName"] == "KREA_API_TOKEN"
+    direct = SYNC.DIRECT_ROUTES.get(model["endpoint"])
+    if direct is None:
+        assert definition["envKeyName"] == "KREA_API_TOKEN"
+        assert "directKeyName" not in definition and "sharedParams" not in definition
+    else:
+        # A model its maker also sells: the maker key wins, Krea is the fallback.
+        assert definition["envKeyName"] == [direct["directKeyName"], "KREA_API_TOKEN"]
+        assert definition["directKeyName"] == direct["directKeyName"]
+        shared = {param["key"] for param in definition["sharedParams"]}
+        krea_only = {param["key"] for param in definition["falParams"]}
+        assert shared | krea_only == {param["key"] for param in definition["params"]}
+        assert not shared & krea_only and "_kreaAuth" in shared
+        # Krea-only fields that keep a run on Krea when set: never defaulted,
+        # or every new node would skip the maker route.
+        blocked = definition["directRoute"].get("blockedBy", [])
+        assert blocked == direct.get("directBlockedBy", []) and set(blocked) <= krea_only
+        assert not [p for p in definition["falParams"] if p["key"] in blocked and p.get("default") is not None]
     assert definition["apiEndpoint"] == model["endpoint"]
     assert model["endpoint"].startswith(tuple(SYNC.MEDIA_ROUTES))
     assert definition["category"] == SYNC.category_for(model["endpoint"], model["mediaType"])
@@ -131,10 +147,39 @@ def test_generated_prices_keep_the_kling_multi_shot_guard_and_the_audio_note():
     assert kling["rows"] and all(row["match"]["multi_prompt"] == "" for row in kling["rows"])
     assert "multi_prompt" in kling["priceParams"] and "Multi-prompt runs are unpriced" in kling["notes"]
     assert any(source["url"].startswith("https://kling.ai/") for source in kling["sources"])
-    audio_free = {node_id for node_id, entry in entries.items() if "doesn't vary with generate_audio" in entry["notes"]}
+    krea_prices = {node_id: entry["routes"]["krea"] if "routes" in entry else entry for node_id, entry in entries.items()}
+    audio_free = {node_id for node_id, entry in krea_prices.items()
+                  if "doesn't vary with generate_audio" in entry["notes"]}
     assert audio_free == {
         "krea-video-alibaba-wan-2-5", "krea-video-alibaba-wan-3-0", "krea-video-lightricks-ltx-video-2-5-fast",
         "krea-video-lightricks-ltx-video-2-5-pro", "krea-video-vidu-q3",
     }
     # Where Krea does charge for audio, the price keys on it and there is no such note.
     assert "generate_audio" in kling["priceParams"]
+
+
+def test_direct_route_models_price_both_routes():
+    """A Krea node its maker also sells carries Krea's price and the maker's,
+    so the estimate follows the route the run takes (maker key wins, the Krea
+    plan wins over both)."""
+    entries, _ = SYNC.pricing_entries(CATALOG)
+    for node_id, model in CATALOG["models"].items():
+        direct = SYNC.DIRECT_ROUTES.get(model["endpoint"])
+        entry = entries.get(node_id)
+        if direct is None:
+            assert entry is None or "routes" not in entry
+            continue
+        assert set(entry["routes"]) == {"krea", direct["pricing"]["provider"]}
+        google = entry["routes"]["google"]
+        assert google.get("provider", "google") == "google"
+        assert google["rows"] and google["checked"] == SYNC.GOOGLE_CHECKED
+        assert all(source["url"].startswith("https://ai.google.dev/gemini-api/docs/") for source in google["sources"])
+        assert any(source["url"] == SYNC.GOOGLE_PRICING_URL for source in google["sources"])
+        # Every row is a range: the output image, up to it plus 14 reference
+        # images at the model's input rate (input tokens Google bills per call).
+        per_image = SYNC.REFERENCE_IMAGE_COST[direct["model"]][0]
+        for row, source_row in zip(google["rows"], direct["pricing"]["rows"]):
+            low, high = row["price"]
+            assert low == source_row["price"]
+            assert high >= low + SYNC.MAX_REFERENCE_IMAGES * per_image > low
+        assert entry["routes"]["krea"].get("provider", "krea") == "krea"

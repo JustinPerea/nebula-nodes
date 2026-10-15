@@ -62,6 +62,161 @@ UNPRICED_FIELD_NOTES = {
 }
 
 
+# Krea copies that can also run on the model maker's own API with the
+# person's key (backend execution/maker_routes.py, services/node_route.py).
+# Keyed by Krea endpoint. Each generated node then gets envKeyName [maker key,
+# KREA_API_TOKEN], directKeyName, and its params split by route: `params`
+# keeps the full Krea request list (so every `_kreaAuth` reader still finds the
+# billing choice there), sharedParams are what both routes read, falParams
+# the Krea-only fields the maker has no equivalent for (`kreaOnly`), and
+# directParams the maker-only extras. `directRoute` names the backend
+# translation and the maker's model id, plus `blockedBy` (`directBlockedBy`):
+# Krea-only fields that keep a run on Krea when set, since the maker can't
+# honor them (an explicit width/height would otherwise silently become
+# Google's default shape). `pricing` is the maker route's
+# model_pricing.json entry, in the node's own param names; the Krea route's
+# entry is generated from x-krea-pricing as for every other model.
+#
+# Route precedence (the same in pricing, readiness, the engine and the
+# router): _kreaAuth "mcp" bills the Krea plan; else the maker key; else
+# KREA_API_TOKEN.
+GOOGLE_PRICING_URL = "https://ai.google.dev/gemini-api/docs/pricing"
+GOOGLE_CHECKED = "2026-10-14"
+# Reference images cost input tokens on every call. Google: "Up to 14
+# reference images" (https://ai.google.dev/gemini-api/docs/image-generation),
+# so a Google-route price is a range: the output image alone, up to the output
+# plus 14 references. Per-image input cost, by model:
+# - gemini-3-pro-image: "Image input is set at 560 tokens or $0.0011 per image"
+#   (pricing page).
+# - gemini-3.1-flash-image / -flash-lite-image: Gemini 3's default image media
+#   resolution, 1120 tokens (docs/media-resolution), at $0.50 / $0.25 per 1M.
+# - gemini-2.5-flash-image: 258 tokens per 768x768 tile (docs/image-
+#   understanding); up to 8 tiles for an image up to 21:9, at $0.30 per 1M.
+MAX_REFERENCE_IMAGES = 14
+REFERENCE_IMAGE_COST = {
+    "gemini-3-pro-image": (0.0011, "$0.0011 per reference image"),
+    "gemini-3.1-flash-image": (1120 * 0.50 / 1e6, "1,120 tokens per reference image at $0.50 per 1M"),
+    "gemini-3.1-flash-lite-image": (1120 * 0.25 / 1e6, "1,120 tokens per reference image at $0.25 per 1M"),
+    "gemini-2.5-flash-image": (8 * 258 * 0.30 / 1e6,
+                               "up to 8 tiles of 258 tokens per reference image (up to 21:9) at $0.30 per 1M"),
+}
+_GOOGLE_NOTE = ("Gemini API standard (paid tier) price, for runs on the person's GOOGLE_API_KEY (model {model}). "
+                "The low end is the output image; the high end adds up to {refs} reference images "
+                "(Google's limit) at {ref_cost}. Prompt text input isn't counted (well under $0.01 for a normal "
+                "prompt). Ignores Batch/Flex/Priority rates.")
+_GOOGLE_INPUT_SOURCES = {
+    "gemini-3-pro-image": {"url": GOOGLE_PRICING_URL,
+                           "quote": "Image input is set at 560 tokens or $0.0011 per image."},
+    "gemini-3.1-flash-image": {"url": "https://ai.google.dev/gemini-api/docs/media-resolution",
+                               "quote": "`unspecified` (Default) | 1120 | ... (Gemini 3 models, Image)"},
+    "gemini-3.1-flash-lite-image": {"url": "https://ai.google.dev/gemini-api/docs/media-resolution",
+                                    "quote": "`unspecified` (Default) | 1120 | ... (Gemini 3 models, Image)"},
+    "gemini-2.5-flash-image": {"url": "https://ai.google.dev/gemini-api/docs/image-understanding",
+                               "quote": "Larger images are tiled into 768x768 pixel tiles, each costing 258 tokens."},
+}
+_REFERENCE_LIMIT_SOURCE = {"url": "https://ai.google.dev/gemini-api/docs/image-generation",
+                           "quote": "Up to 14 reference images: Mix up to 14 reference images to produce the final image."}
+
+
+def with_references(price, model):
+    """[output price, output price + the most reference images Google takes]."""
+    import math
+
+    per_image = REFERENCE_IMAGE_COST[model][0]
+    return [price, math.ceil((price + MAX_REFERENCE_IMAGES * per_image) * 1e5) / 1e5]
+
+
+DIRECT_ROUTES = {
+    "/generate/image/google/nano-banana-2": {
+        "directKeyName": "GOOGLE_API_KEY", "translation": "krea-nano-banana", "model": "gemini-3.1-flash-image",
+        "kreaOnly": ["width", "height"], "directBlockedBy": ["width", "height"], "directParams": [],
+        "pricing": {"provider": "google", "per": "image", "priceParams": ["resolution"],
+                    "rows": [{"match": {"resolution": "1K"}, "price": 0.067},
+                             {"match": {"resolution": "2K"}, "price": 0.101},
+                             {"match": {"resolution": "4K"}, "price": 0.151}],
+                    "sources": [{"url": GOOGLE_PRICING_URL,
+                                 "quote": "$60.00 (images) Equivalent to $0.045 per 0.5K image* $0.067 per 1K "
+                                          "image*, $0.101 per 2K image*, and $0.151 per 4K image*."},
+                                {"url": GOOGLE_PRICING_URL, "quote": "Input price | Not available | $0.50 (text/image)"}]},
+    },
+    "/generate/image/google/nano-banana-pro": {
+        "directKeyName": "GOOGLE_API_KEY", "translation": "krea-nano-banana", "model": "gemini-3-pro-image",
+        "kreaOnly": ["width", "height"], "directBlockedBy": ["width", "height"], "directParams": [],
+        "pricing": {"provider": "google", "per": "image", "priceParams": ["resolution"],
+                    "rows": [{"match": {"resolution": "1K"}, "price": 0.134},
+                             {"match": {"resolution": "2K"}, "price": 0.134},
+                             {"match": {"resolution": "4K"}, "price": 0.24}],
+                    "sources": [{"url": GOOGLE_PRICING_URL,
+                                 "quote": "$120.00 (images) Equivalent to $0.134 per 1K/2K image** and $0.24 per "
+                                          "4K image**"}]},
+    },
+    "/generate/image/google/nano-banana-flash-lite": {
+        "directKeyName": "GOOGLE_API_KEY", "translation": "krea-nano-banana",
+        "model": "gemini-3.1-flash-lite-image", "kreaOnly": ["width", "height"],
+        "directBlockedBy": ["width", "height"], "directParams": [],
+        "pricing": {"provider": "google", "per": "image", "priceParams": [],
+                    "rows": [{"match": {}, "price": 0.0336}],
+                    "sources": [{"url": GOOGLE_PRICING_URL,
+                                 "quote": "$30.00 (images) Equivalent to $0.0336 per 1K resolution image*"},
+                                {"url": GOOGLE_PRICING_URL,
+                                 "quote": "Input price | Not available | $0.25 (text/image/video)"}]},
+    },
+    "/generate/image/google/nano-banana": {
+        "directKeyName": "GOOGLE_API_KEY", "translation": "krea-nano-banana", "model": "gemini-2.5-flash-image",
+        "kreaOnly": ["width", "height"], "directBlockedBy": ["width", "height"], "directParams": [],
+        "pricing": {"provider": "google", "per": "image", "priceParams": [],
+                    "rows": [{"match": {}, "price": 0.039}],
+                    "sources": [{"url": GOOGLE_PRICING_URL,
+                                 "quote": "Output images up to 1024x1024px consume 1290 tokens and are equivalent "
+                                          "to $0.039 per image."},
+                                {"url": GOOGLE_PRICING_URL, "quote": "Input price | Not available | $0.30 (text / image)"}]},
+    },
+}
+
+
+def direct_route_definition(endpoint, params):
+    """The dual-route fields a Krea node with a maker route adds (DIRECT_ROUTES)."""
+    route = DIRECT_ROUTES.get(endpoint)
+    if not route:
+        return {}
+    keys = {param["key"] for param in params}
+    unknown = sorted(set(route["kreaOnly"]) - keys)
+    if unknown:
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: kreaOnly names fields Krea doesn't take: {unknown}")
+    blocked = route.get("directBlockedBy") or []
+    if set(blocked) - set(route["kreaOnly"]):
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedBy must be kreaOnly fields")
+    defaulted = sorted(param["key"] for param in params if param["key"] in blocked and param.get("default") is not None)
+    if defaulted:
+        # A default would block the maker route for every new node.
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: directBlockedBy fields have defaults: {defaulted}")
+    clash = sorted(keys & {param["key"] for param in route["directParams"]})
+    if clash:
+        raise ValueError(f"DIRECT_ROUTES {endpoint}: directParams repeat Krea fields: {clash}")
+    return {
+        "envKeyName": [route["directKeyName"], "KREA_API_TOKEN"],
+        "directKeyName": route["directKeyName"],
+        "sharedParams": [param for param in params if param["key"] not in route["kreaOnly"]],
+        "falParams": [param for param in params if param["key"] in route["kreaOnly"]],
+        "directParams": list(route["directParams"]),
+        "directRoute": {"translation": route["translation"], "model": route["model"],
+                        **({"blockedBy": list(blocked)} if blocked else {})},
+    }
+
+
+def direct_route_pricing(endpoint):
+    route = DIRECT_ROUTES.get(endpoint)
+    if not route:
+        return None
+    pricing = dict(route["pricing"])
+    provider = pricing.pop("provider")
+    model = route["model"]
+    pricing["rows"] = [{**row, "price": with_references(row["price"], model)} for row in pricing["rows"]]
+    pricing["sources"] = [*pricing["sources"], _GOOGLE_INPUT_SOURCES[model], _REFERENCE_LIMIT_SOURCE]
+    note = _GOOGLE_NOTE.format(model=model, refs=MAX_REFERENCE_IMAGES, ref_cost=REFERENCE_IMAGE_COST[model][1])
+    return provider, {"currency": "usd", **pricing, "notes": note, "checked": GOOGLE_CHECKED}
+
+
 def route_family(endpoint):
     return endpoint[len("/generate/"):].split("/", 1)[0]
 
@@ -240,6 +395,7 @@ def definitions(catalog):
             ],
             "params": params, "docUrl": DOC_URL,
         }
+        result[node_id].update(direct_route_definition(model["endpoint"], params))
     return result
 
 
@@ -248,65 +404,79 @@ def pricing_entries(catalog):
     onto its own request fields. Returns (entries, skipped reasons)."""
     entries, skipped = {}, {}
     for node_id, model in catalog["models"].items():
-        if model.get("pricingUnmapped"):
-            skipped[node_id] = ("price depends on " + ", ".join(model["pricingUnmapped"])
-                                + ", which the request doesn't set directly")
-            continue
-        pricing = model.get("pricing")
-        if not pricing:
-            continue
-        points = pricing.get("price_points") or []
-        fields = set(model["requestSchema"].get("properties", {}))
-        if pricing.get("currency") != "USD" or pricing.get("unit") != "request" or not points:
-            skipped[node_id] = f"unsupported pricing {pricing.get('currency')}/{pricing.get('unit')}"
-            continue
-        unmapped = sorted({key for point in points for key in point.get("dimensions", {})
-                           if snake(key) not in fields})
-        if unmapped:
-            skipped[node_id] = "price depends on " + ", ".join(unmapped) + ", which the request doesn't set directly"
-            continue
-        properties = model["requestSchema"].get("properties", {})
-
-        def reachable(point):
-            # Krea's price list sometimes covers values its own request schema
-            # rejects (e.g. a 5 s Veo clip); a run can never match those.
-            for key, value in point.get("dimensions", {}).items():
-                allowed = simple_schema(properties[snake(key)]).get("enum")
-                if allowed is not None and value not in allowed:
-                    return False
-            return True
-
-        guard = PRICE_GUARDS.get(model["endpoint"], {})
-        rows = [{"match": {"_kreaAuth": "api-token",
-                           **{snake(key): value for key, value in point.get("dimensions", {}).items()},
-                           **guard.get("match", {})},
-                 "price": point["amount"]} for point in points if reachable(point)]
-        if not rows:
-            skipped[node_id] = "no price point matches values the request accepts"
-            continue
-        notes = ["API-token runs only. Krea account runs bill workspace compute units, "
-                 "which Krea doesn't publish per option, so they stay unpriced."]
-        if guard.get("note"):
-            notes.append(guard["note"])
-        dimensions = sorted({snake(key) for point in points for key in point.get("dimensions", {})})
-        for field, note in UNPRICED_FIELD_NOTES.items():
-            if field in properties and field not in dimensions:
-                notes.append(note.format(dims=", ".join(dimensions) or "none"))
-        sources = [{"url": catalog["sourceUrl"],
-                    "quote": f"x-krea-pricing on POST {model['endpoint']} "
-                             f"(spec sha256 {catalog['openapiSha256'][:12]})"}]
-        if guard.get("source"):
-            sources.append(guard["source"])
-        entries[node_id] = {
-            "currency": "usd", "per": "request",
-            "priceParams": sorted({key for row in rows for key in row["match"]}),
-            "rows": rows,
-            "notes": " ".join(notes),
-            "sources": sources,
-            "checked": catalog["fetchedAt"],
-            "generatedBy": PRICING_GENERATOR,
-        }
+        krea_entry(node_id, model, catalog, entries, skipped)
+        direct = direct_route_pricing(model["endpoint"])
+        if direct:
+            # A dual-route node prices each route; the Krea plan stays unpriced.
+            routes = {}
+            if node_id in entries:
+                entries[node_id].pop("generatedBy")
+                routes["krea"] = entries[node_id]
+            routes[direct[0]] = direct[1]
+            entries[node_id] = {"routes": routes, "generatedBy": PRICING_GENERATOR}
     return entries, skipped
+
+
+def krea_entry(node_id, model, catalog, entries, skipped):
+    """The Krea API-token entry for one model, into ``entries`` (or a reason into ``skipped``)."""
+    if model.get("pricingUnmapped"):
+        skipped[node_id] = ("price depends on " + ", ".join(model["pricingUnmapped"])
+                            + ", which the request doesn't set directly")
+        return
+    pricing = model.get("pricing")
+    if not pricing:
+        return
+    points = pricing.get("price_points") or []
+    fields = set(model["requestSchema"].get("properties", {}))
+    if pricing.get("currency") != "USD" or pricing.get("unit") != "request" or not points:
+        skipped[node_id] = f"unsupported pricing {pricing.get('currency')}/{pricing.get('unit')}"
+        return
+    unmapped = sorted({key for point in points for key in point.get("dimensions", {})
+                       if snake(key) not in fields})
+    if unmapped:
+        skipped[node_id] = "price depends on " + ", ".join(unmapped) + ", which the request doesn't set directly"
+        return
+    properties = model["requestSchema"].get("properties", {})
+
+    def reachable(point):
+        # Krea's price list sometimes covers values its own request schema
+        # rejects (e.g. a 5 s Veo clip); a run can never match those.
+        for key, value in point.get("dimensions", {}).items():
+            allowed = simple_schema(properties[snake(key)]).get("enum")
+            if allowed is not None and value not in allowed:
+                return False
+        return True
+
+    guard = PRICE_GUARDS.get(model["endpoint"], {})
+    rows = [{"match": {"_kreaAuth": "api-token",
+                       **{snake(key): value for key, value in point.get("dimensions", {}).items()},
+                       **guard.get("match", {})},
+             "price": point["amount"]} for point in points if reachable(point)]
+    if not rows:
+        skipped[node_id] = "no price point matches values the request accepts"
+        return
+    notes = ["API-token runs only. Krea account runs bill workspace compute units, "
+             "which Krea doesn't publish per option, so they stay unpriced."]
+    if guard.get("note"):
+        notes.append(guard["note"])
+    dimensions = sorted({snake(key) for point in points for key in point.get("dimensions", {})})
+    for field, note in UNPRICED_FIELD_NOTES.items():
+        if field in properties and field not in dimensions:
+            notes.append(note.format(dims=", ".join(dimensions) or "none"))
+    sources = [{"url": catalog["sourceUrl"],
+                "quote": f"x-krea-pricing on POST {model['endpoint']} "
+                         f"(spec sha256 {catalog['openapiSha256'][:12]})"}]
+    if guard.get("source"):
+        sources.append(guard["source"])
+    entries[node_id] = {
+        "currency": "usd", "per": "request",
+        "priceParams": sorted({key for row in rows for key in row["match"]}),
+        "rows": rows,
+        "notes": " ".join(notes),
+        "sources": sources,
+        "checked": catalog["fetchedAt"],
+        "generatedBy": PRICING_GENERATOR,
+    }
 
 
 def pricing_source(source, entries):

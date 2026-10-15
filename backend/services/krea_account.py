@@ -32,10 +32,10 @@ def is_account_only(definition: dict | None) -> bool:
 
 def uses_account(node: GraphNode, definition: dict | None) -> bool:
     """A saved node uses the Krea account only if it offers that choice and
-    chose it; old nodes without the param keep API-token billing."""
-    if not account_param(definition):
-        return False
-    return is_account_only(definition) or node.params.get("_kreaAuth", "api-token") == "mcp"
+    chose it; old nodes without the param keep API-token billing. The plan
+    wins over a maker key on a dual-route Krea node (services/node_route.py)."""
+    from services.node_route import uses_krea_plan
+    return bool(definition) and uses_krea_plan(definition, node.params)
 
 
 class AccountTools:
