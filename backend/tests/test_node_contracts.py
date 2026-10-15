@@ -9,6 +9,7 @@ import pytest
 
 from execution.engine import LOCAL_EXECUTION_NODE_IDS
 from execution.sync_runner import get_handler_registry
+from services.credential_catalog import KEYS_AHEAD_OF_NODES
 from services.node_registry import NodeRegistry
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -269,16 +270,21 @@ def _registry_api_keys(definitions: dict[str, dict[str, Any]]) -> set[str]:
     return required_keys
 
 
+def test_keys_ahead_of_nodes_are_not_used_by_a_node_yet(definitions: dict[str, dict[str, Any]]) -> None:
+    # Once a node lists one, it must leave KEYS_AHEAD_OF_NODES.
+    assert KEYS_AHEAD_OF_NODES.isdisjoint(_registry_api_keys(definitions))
+
+
 def test_settings_example_covers_all_registry_api_keys(definitions: dict[str, dict[str, Any]]) -> None:
     settings_example = json.loads((REPO_ROOT / "settings.example.json").read_text())
     example_keys = set(settings_example.get("apiKeys", {}))
-    assert example_keys == _registry_api_keys(definitions)
+    assert example_keys == _registry_api_keys(definitions) | KEYS_AHEAD_OF_NODES
 
 
 def test_settings_ui_covers_all_registry_api_keys(definitions: dict[str, dict[str, Any]]) -> None:
     catalog_source = (REPO_ROOT / "frontend" / "src" / "lib" / "providerCatalog.ts").read_text()
     ui_keys = set(re.findall(r"\{ key: '([A-Z0-9_]+)'", catalog_source))
-    assert ui_keys == _registry_api_keys(definitions)
+    assert ui_keys == _registry_api_keys(definitions) | KEYS_AHEAD_OF_NODES
 
 
 def test_env_example_does_not_advertise_inert_provider_credentials(

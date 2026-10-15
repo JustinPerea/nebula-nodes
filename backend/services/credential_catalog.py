@@ -42,3 +42,13 @@ CREDENTIAL_PROVIDERS: frozenset[str] = frozenset({
     "XAI_API_KEY",
     "WORLDLABS_API_KEY",
 })
+
+# Keys Settings stores before any node lists them in ``envKeyName``. Each one
+# is waiting for the nodes that use it; the contract checks
+# (tests/test_node_contracts.py, scripts/check-node-contracts.mjs,
+# tests/test_provider_key_validation.py) accept it as unused and fail once a
+# node lists it, so the entry can't outlive its reason.
+# - BFL_API_KEY: the FLUX 3 nodes (routing series, PR 3).
+KEYS_AHEAD_OF_NODES: frozenset[str] = frozenset({
+    "BFL_API_KEY",
+})

@@ -26,6 +26,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import services.settings as settings_service  # noqa: E402
+from services.credential_catalog import KEYS_AHEAD_OF_NODES  # noqa: E402
 from services.nous_auth import (  # noqa: E402
     NousCredential,
     NousCredentialExpiredError,
@@ -626,10 +627,10 @@ def test_provider_checks_cover_every_catalog_credential():
     }
     # GOOGLE_VERTEX_CREDENTIALS is a Settings credential that may be read by
     # a handler as an alternate route without being a node's envKeyName.
-    # BFL_API_KEY lands before the FLUX 3 nodes that list it (the routing
-    # series' PR 3); drop it from here when they do.
-    optional = {"GOOGLE_VERTEX_CREDENTIALS", "BFL_API_KEY"}
-    assert health_keys - optional == catalog_keys - optional
+    optional = {"GOOGLE_VERTEX_CREDENTIALS"}
+    assert health_keys - optional == (catalog_keys | KEYS_AHEAD_OF_NODES) - optional
+    # A key ahead of its nodes is still checked by health once it is saved.
+    assert KEYS_AHEAD_OF_NODES <= health_keys
 
 
 def test_settings_health_rows_find_their_check_by_name():
