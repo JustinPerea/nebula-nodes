@@ -24,6 +24,29 @@ Tradeoffs and surprises:
 - **Test transport.** Patching `httpx.AsyncClient` with a function, as test_bfl.py does, breaks any module imported afterwards that uses `httpx.AsyncClient | None` in an annotation (`mcp`, pulled in by `sync_runner`). The new tests patch in a subclass instead.
 - **Provider schemas are copied, not fetched.** `tests/fixtures/provider_schemas/{bfl,fal,replicate}.json` were extracted from the 2026-10-15 dumps with `$ref`s inlined. `openrouter.json` is hand-written from the docs' parameter tables, because OpenRouter publishes no JSON schema for these bodies.
 
+## 2026-10-15 — PR 2: provider switcher and per-provider options
+
+Branch `switcher-ui`. The switcher (card chip, Inspector section, Create pill), the per-route option lists in both languages, and the agent/CLI views of them. The route clients (`execution/route_clients.py`, `handlers/`) belong to another lane and weren't touched. Plain-language guide: `docs/PROVIDER-ROUTES.md` "The switcher".
+
+Decisions the spec didn't make:
+- **`routeSwitch` is TypeScript-only and equals `hasRoutes`.** The spec allowed a backend marker on GET /api/nodes, but the frontend never fetches that endpoint (it uses the static `NODE_DEFINITIONS`), and `register_route_nodes` gives every route-table node `multi_route` (pinned by `test_maker_routes`). Exporting a flag nothing reads would have been dead weight.
+- **Narrowing.** An enum is cut to the values a route takes (`valueMap` keys and `accepts`, minus `rejects`). A number range is narrowed by `accepts` min/max. Booleans a route rejects and `rejectsWhen` combinations are not narrowed: they stay run-time blocks, because hiding them would hide why a run stops.
+- **Legacy nodes** keep `all_param_definitions` order filtered by `route_param_keys`; nothing about them changes.
+- **describe_node's route row `params`** now lists the route's full offered params (shared + own, narrowed), not only its own keys. Rows also carry `priceUnconfirmed`.
+- **Unconfirmed prices** are a new boolean `unconfirmed` on a route's price entry (`model_pricing.validate_entry` checks the type). The switcher shows `*`. No real node uses it yet; the pricing fixture's fal route does.
+- **Snap order.** The closest enum value is by the param's union option order, a tie going up (1.5k -> 2k). Numbers clamp. Anything else falls back to the default. Picking Auto snaps onto the route Auto would take with the current keys.
+- **Plan rows show `-` for price** (they bill the Krea plan's compute, not USD). Picking Auto keeps `_kreaAuth` as saved.
+- **Import summary** uses `alert()`, the pattern `GraphFileActions.tsx` already uses for import warnings. It names explicit routes with no key (plan rows excluded, since sign-in is a separate state) and Auto nodes with no key at all.
+- **Card note** lives in a small Zustand store (`providerNoteStore`) keyed by node id, not in node data, so it never saves into the graph or a `.nebula` file.
+- **Popover measurement** sets state in a layout effect (an eslint-disable with the reason): the menu has to measure its trigger before it can place itself above or below.
+
+Live check (isolated backend :8141 + Vite :5261, temp HOME/state/settings with placeholder keys, a temporary `fixture-routes` definition reverted before commit): screenshots in the session scratchpad `flux3/pr2-shots/`. Fixes from looking at them:
+- In the Inspector (about 234px wide) the route names were cut ("Black Forest La..."). Names and block notes now wrap there, and every column top-aligns so "Key set" stays on the name's first line.
+- Auto's "can't run: <reason>" label now wraps everywhere instead of cutting off the reason.
+- Tried lining Auto's price up with the route prices (padding past the key column); it forced "Auto · runs on Black Forest Labs" onto two lines in the popover, so it was reverted. Auto's price sits at the right edge.
+
+Seen, not changed: switching to Creator Studio logs React's "Cannot update a component while rendering a different component" from `CreateView`. `CreateView.tsx` isn't modified on this branch; not traced further here.
+
 ## 2026-10-15 — PR 1 review fixes
 
 ### Review follow-up

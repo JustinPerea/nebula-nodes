@@ -19,6 +19,7 @@ Shape of one entry (keyed by node definition id)::
       "provider": "google",                          # dual-route nodes: whose price this is
       "plus": "input images",                        # a known cost the vendor doesn't publish
       "defaults": {"duration": 8},                   # what the handler sends when unset
+      "unconfirmed": true,                           # the page doesn't state this price exactly
       "notes": "...",
       "sources": [{"url": "https://...", "quote": "..."}],
       "checked": "2026-10-10"
@@ -214,6 +215,8 @@ def _validate_entry(
             date.fromisoformat(checked)
         except ValueError:
             problems.append(f"{where} checked is not a real date")
+    if "unconfirmed" in entry and not isinstance(entry.get("unconfirmed"), bool):
+        problems.append(f"{where} unconfirmed must be true or false")
     sources = entry.get("sources")
     if not isinstance(sources, list) or not sources:
         problems.append(f"{where} needs at least one source")
@@ -658,6 +661,20 @@ def estimate_run(
         "plus": plus,
         "unavailable": unavailable,
     }
+
+
+def route_price_unconfirmed(entry: Mapping[str, Any] | None, definition: Mapping[str, Any], route_id: str) -> bool:
+    """A route's price that its provider's page doesn't state exactly (its
+    entry's ``unconfirmed``, e.g. a higher page price kept when the exact
+    one isn't published). The switcher marks it with "*"; pricing.ts
+    routePriceUnconfirmed is the same."""
+    from services import node_route
+
+    spec = node_route.route_by_id(definition, route_id)
+    if spec is None:
+        return False
+    routed = entry_for_route(entry, str(spec.get("pricing") or spec.get("id")))
+    return bool(routed and routed.get("unconfirmed") is True)
 
 
 def estimate_routes(

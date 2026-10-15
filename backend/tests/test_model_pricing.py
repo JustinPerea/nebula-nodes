@@ -289,6 +289,19 @@ def test_estimate_routes_matches_shared_cases(case):
             assert result[route_id] == {"currency": "usd", "low": pytest.approx(price), "high": pytest.approx(price)}
 
 
+def test_a_route_price_can_be_marked_unconfirmed():
+    definition = CASES["definitions"]["table"]
+    entry = CASES["pricing"]["nodes"]["table"]
+    marked = {route["id"]: model_pricing.route_price_unconfirmed(entry, definition, route["id"])
+              for route in definition["routes"]}
+    assert marked == {"bfl": False, "fal": True, "replicate": False, "openrouter": False, "krea": False}
+    assert model_pricing.route_price_unconfirmed(entry, definition, "nope") is False
+    problems: list[str] = []
+    model_pricing._validate_entry("x", {**entry["routes"]["fal"], "unconfirmed": "yes"}, definition, {}, problems,
+                                  multi_route_ok=True)
+    assert "x unconfirmed must be true or false" in problems
+
+
 def test_estimate_routes_is_empty_for_a_legacy_node():
     assert model_pricing.estimate_routes(CASES["definitions"]["dual"], {}, (), CASES["pricing"]) == {}
 

@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes).",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed).",
   "definitions": {
     "img": {
       "id": "img",
@@ -972,6 +972,7 @@
             "currency": "usd",
             "per": "image",
             "provider": "fal",
+            "unconfirmed": true,
             "rows": [
               {
                 "match": {},

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import tables from '../../../backend/tests/fixtures/route_tables.json';
 import cases from '../../../backend/tests/fixtures/route_cases.json';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
-import { allParamDefinitions, KEY_PROVIDERS, PROVIDER_LABELS, routesOf } from '../../src/lib/directRoute';
+import { allParamDefinitions, hasRoutes, KEY_PROVIDERS, PROVIDER_LABELS, routeParamDefinitions, routesOf } from '../../src/lib/directRoute';
 import type { ModelNodeDefinition, RouteSpec } from '../../src/types';
 
 /** backend/tests/fixtures/route_tables.json is node_route.routes_of over every
@@ -11,7 +11,7 @@ import type { ModelNodeDefinition, RouteSpec } from '../../src/types';
 type Snapshot = {
   keyProviders: Record<string, string>;
   providerLabels: Record<string, string>;
-  nodes: Record<string, { routes: Record<string, unknown>[]; allParamKeys: string[] }>;
+  nodes: Record<string, { routes: Record<string, unknown>[]; allParamKeys: string[]; routeParams?: Record<string, Record<string, unknown>[]> }>;
 };
 const snapshot = tables as unknown as Snapshot;
 const inline = (cases as unknown as { definitions: Record<string, ModelNodeDefinition> }).definitions;
@@ -39,6 +39,20 @@ describe('routesOf (snapshot of backend node_route.routes_of)', () => {
       expect({ nodeId, routes: routesOf(definition).map(shown) }).toEqual({ nodeId, routes: expected.routes });
       expect({ nodeId, keys: allParamDefinitions(definition).map((param) => param.key) })
         .toEqual({ nodeId, keys: expected.allParamKeys });
+      if (hasRoutes(definition)) {
+        // Each route's options, as the switcher's Inspector shows them
+        // (node_route.route_param_definitions).
+        const offered = Object.fromEntries(routesOf(definition).map((route) => [route.id,
+          routeParamDefinitions(definition, route.id).map((param) => ({
+            key: param.key,
+            ...(Array.isArray(param.options) ? { options: param.options.map((option) => option.value) } : {}),
+            ...(param.min !== undefined ? { min: param.min } : {}),
+            ...(param.max !== undefined ? { max: param.max } : {}),
+          }))]));
+        expect({ nodeId, offered }).toEqual({ nodeId, offered: expected.routeParams });
+      } else {
+        expect(expected.routeParams).toBeUndefined();
+      }
     }
   });
 

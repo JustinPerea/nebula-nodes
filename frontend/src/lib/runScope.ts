@@ -145,6 +145,17 @@ export function nodeWiredPorts(nodeId: string, edges: readonly Pick<Edge, 'targe
   return [...ports].sort();
 }
 
+/** One node's input ports with how many edges reach each: what the provider
+ * switcher and the card chip give a route's `ports` rule
+ * (lib/directRoute.ts withWiredBlockers), as the preflight counts them. */
+export function nodeWiredCounts(nodeId: string, edges: readonly Pick<Edge, 'target' | 'targetHandle'>[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const edge of edges) {
+    if (edge.target === nodeId && edge.targetHandle) counts.set(edge.targetHandle, (counts.get(edge.targetHandle) ?? 0) + 1);
+  }
+  return counts;
+}
+
 /** Each run node's input ports that have an edge into them, with how many
  * edges reach each. A priced setting that arrives by wire is only known at
  * run time (pricing.estimateNode).

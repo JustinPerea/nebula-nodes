@@ -391,8 +391,8 @@ def edit_canvas(
     Limits per call: 12 new nodes, 24 wires, 12 param changes.
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
-    or auto; describe_node lists them). Send a change to either with
-    propose_change; edit_canvas refuses it.
+    or auto; describe_node lists them and the values each takes). Send a change
+    to either with propose_change; edit_canvas refuses it.
     Nothing runs; call run_nodes next. Returns `idMap` (ref → node id) and a summary.
     """
     body: dict[str, Any] = {key: value for key, value in {
