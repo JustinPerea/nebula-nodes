@@ -293,6 +293,14 @@ PROVIDER_CHECKS: dict[str, ProviderCheck] = {
         lambda key: {},
         local_validator=validate_google_service_account_json,
     ),
+    # Black Forest Labs (FLUX). GET /v1/credits is free and needs the key
+    # ({"credits": n} on 200). A bad key gets 403 or 422, read as invalid
+    # below.
+    "Black Forest Labs": ProviderCheck(
+        ("BFL_API_KEY",),
+        "https://api.bfl.ai/v1/credits",
+        lambda key: {"x-key": key},
+    ),
     # BytePlus ModelArk (Seedream, Seedance). BytePlus documents no free,
     # read-only data-plane call an API key can make (its management APIs use
     # AK/SK signing on another host), so the key is never probed: a check
@@ -524,6 +532,12 @@ async def _check_one(
     if 200 <= resp.status_code < 300:
         result["status"] = PROVIDER_STATUS_VALID
     elif resp.status_code == 401:
+        result["status"] = PROVIDER_STATUS_INVALID
+        result["detail"] = f"authentication rejected (HTTP {resp.status_code})"
+    elif name == "Black Forest Labs" and resp.status_code in (403, 422):
+        # BFL answers a made-up key with 403 "Not authenticated" and a
+        # malformed one with 422 "Invalid API key format"; /v1/credits has no
+        # other permission to lack, so either one means the key is wrong.
         result["status"] = PROVIDER_STATUS_INVALID
         result["detail"] = f"authentication rejected (HTTP {resp.status_code})"
     elif resp.status_code == 403:

@@ -97,6 +97,12 @@ const envExample = await readFile(ENV_EXAMPLE_PATH, 'utf8');
 const settingsExample = JSON.parse(await readFile(SETTINGS_EXAMPLE_PATH, 'utf8'));
 const routeFixtures = JSON.parse(await readFile(ROUTE_CASES_PATH, 'utf8')).definitions ?? {};
 const keyProviders = JSON.parse(await readFile(ROUTE_TABLES_PATH, 'utf8')).keyProviders ?? {};
+// backend/services/credential_catalog.py KEYS_AHEAD_OF_NODES: keys Settings
+// lists before any node uses them.
+const catalogSource = await readFile(join(REPO_ROOT, 'backend', 'services', 'credential_catalog.py'), 'utf8');
+const keysAheadOfNodes = new Set([
+  ...(catalogSource.match(/KEYS_AHEAD_OF_NODES[^=]*= frozenset\(\{([\s\S]*?)\}\)/)?.[1] ?? '').matchAll(/"([A-Z0-9_]+)"/g),
+].map((match) => match[1]));
 const errors = [];
 
 validateRegistryShape();
@@ -361,7 +367,10 @@ function validateCredentialExampleCoverage() {
     }
   }
   for (const key of [...settingsKeys].sort()) {
-    if (!keys.has(key)) errors.push(`settings.example.json apiKeys has unused key ${key}`);
+    if (!keys.has(key) && !keysAheadOfNodes.has(key)) errors.push(`settings.example.json apiKeys has unused key ${key}`);
+  }
+  for (const key of [...keysAheadOfNodes].sort()) {
+    if (keys.has(key)) errors.push(`${key} is used by a node now; remove it from credential_catalog.py KEYS_AHEAD_OF_NODES`);
   }
 }
 
