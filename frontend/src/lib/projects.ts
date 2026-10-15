@@ -20,7 +20,9 @@ export interface ProjectList {
   projects: ProjectSummary[]; trash?: TrashedProject[]; activeProjectId: string | null;
   workspaceRevision: string; migratedProjectId?: string | null;
 }
-export interface ProjectActivation { project: SavedProject; workspaceRevision: string }
+/** ``warnings``: what opening changed that the person should know (a folded
+ * Krea node's dropped connections, services/retired_nodes.py MERGED). */
+export interface ProjectActivation { project: SavedProject; workspaceRevision: string; warnings?: string[] }
 export interface ProjectDeletion {
   deletedProjectId: string; trashedProject: TrashedProject;
   activeProjectId: string | null; workspaceRevision: string;

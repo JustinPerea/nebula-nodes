@@ -216,7 +216,9 @@ def test_definitions_and_frontend_mirror_match_contract() -> None:
     repo = Path(__file__).resolve().parents[2]
     definitions = json.loads((repo / "backend/data/node_definitions.json").read_text())
     # The local Batch source extends the current 288-node catalog (Krea gateway now covers every generation route).
-    assert len(definitions) == 303  # +3 Jev nodes; Sora 2 and Sora 2 I2V retired 2026-10-14
+    # +3 Jev nodes; Sora 2 and Sora 2 I2V retired 2026-10-14; +7 route-table
+    # nodes, 3 Krea FLUX copies folded into them (routing series PR 3).
+    assert len(definitions) == 307
     frontend = (repo / "frontend/src/constants/nodeDefinitions.ts").read_text()
     for definition_id in QC_IDS:
         definition = definitions[definition_id]

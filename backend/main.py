@@ -86,7 +86,7 @@ from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services.cli_graph import CLIGraph
-from services.retired_nodes import migrate_node, migrate_param_update, migrate_params, retired_message
+from services.retired_nodes import MERGED, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, now as project_now,
@@ -1040,6 +1040,8 @@ def _validate_restore_graph(graph: Any) -> dict[str, Any]:
     # Exercise the same registry, param, handle, duplicate-edge, and cycle
     # validation as /api/graph/import against a persistence-free candidate.
     candidate = CLIGraph()
+    ingress_nodes, ingress_edges, _warnings, _folded = _migrate_ingress(
+        ingress_nodes, ingress_edges, reference_key="id")
     id_map = _stage_graph_nodes(
         candidate,
         ingress_nodes,
@@ -4124,11 +4126,13 @@ def _stage_proposal(
         }
         for node in spec.nodes
     ]
+    raw_nodes, raw_edges, _warnings, _folded = _migrate_ingress(
+        raw_nodes, [edge.as_dict() for edge in spec.edges], reference_key="tempId")
     id_map = _stage_graph_nodes(candidate, raw_nodes, reference_key="tempId", include_outputs=False)
     new_ids = set(id_map.values())
     refs: dict[str, str] = {node_id: node_id for node_id in candidate.nodes if node_id not in new_ids}
     refs.update(id_map)
-    edge_ids = _stage_graph_edges(candidate, [edge.as_dict() for edge in spec.edges], refs)
+    edge_ids = _stage_graph_edges(candidate, raw_edges, refs)
     run_ids: list[str] = []
     for item in spec.run:
         if item not in refs:
@@ -4719,6 +4723,8 @@ async def get_settings() -> dict:
             k: ("***" + v[-4:] if len(v) > 4 else "***") if v else ""
             for k, v in masked["apiKeys"].items()
         }
+    if agent_spend.CAPS_KEY in masked:
+        masked[agent_spend.CAPS_KEY] = agent_spend.saved_caps_view(masked[agent_spend.CAPS_KEY])
     return masked
 
 
@@ -7903,6 +7909,37 @@ def _validate_graph_ingress_complexity(value: Any) -> None:
     validate_file_references(value)
 
 
+def _migrate_ingress(
+    raw_nodes: list[dict[str, Any]],
+    raw_edges: list[dict[str, Any]],
+    *,
+    reference_key: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], set[str]]:
+    """Ingress nodes and edges with folded Krea nodes moved onto their new
+    node (services/retired_nodes.py MERGED): (nodes, edges, warnings, the
+    references of the folded nodes). Runs before staging, so validation sees
+    the new definitions and ports; malformed items pass through for staging
+    to refuse as before."""
+    if not any(isinstance(node, dict) and node.get("definitionId") in MERGED for node in raw_nodes):
+        return raw_nodes, raw_edges, [], set()
+    folded = {str(node.get(reference_key)) for node in raw_nodes
+              if isinstance(node, dict) and node.get("definitionId") in MERGED}
+    nodes, edges, warnings = migrate_graph(
+        [node for node in raw_nodes if isinstance(node, dict)],
+        [edge for edge in raw_edges if isinstance(edge, dict)],
+        key=reference_key,
+    )
+    return nodes, edges, warnings, folded
+
+
+def _folded_billing_baseline(reference: str, folded: set[str]) -> dict[str, Any] | None:
+    """What a folded Krea node billed before it loaded as its new node, for
+    _refuse_agent_billing_change: the Krea route on the default mode. Moving
+    it to the Krea route isn't the agent's change; a plan mode it carries
+    still is, as it was on the old node."""
+    return {node_route.PROVIDER_PARAM: "krea"} if reference in folded else None
+
+
 def _stage_graph_nodes(
     candidate: CLIGraph,
     raw_nodes: list[dict[str, Any]],
@@ -8084,6 +8121,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
     candidate = CLIGraph()
     raw_nodes = _graph_ingress_items(body, "nodes")
     raw_edges = _graph_ingress_items(body, "edges")
+    raw_nodes, raw_edges, warnings, folded = _migrate_ingress(raw_nodes, raw_edges, reference_key="id")
     id_map = _stage_graph_nodes(
         candidate,
         raw_nodes,
@@ -8091,8 +8129,8 @@ async def import_graph(body: dict[str, Any]) -> dict:
         include_outputs=True,
     )
     _refuse_agent_billing_change(
-        (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), None,
-         candidate.nodes[node_id].get("params") or {}) for node_id in id_map.values())
+        (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
+         candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
     _stage_graph_edges(candidate, raw_edges, id_map)
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
@@ -8122,6 +8160,9 @@ async def import_graph(body: dict[str, Any]) -> dict:
         "edgeCount": len(cli_graph.edges),
         "nodes": exported["nodes"],
         "edges": exported["edges"],
+        # What loading changed that the person should know (a folded Krea
+        # node's dropped job-output connections).
+        "warnings": warnings,
     }
 
 
@@ -8187,6 +8228,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
     raw_edges = _graph_ingress_items(body, "edges")
     with _paid_graph_mutation("add a graph cluster"):
         candidate = cli_graph.clone()
+        raw_nodes, raw_edges, _warnings, folded = _migrate_ingress(raw_nodes, raw_edges, reference_key="tempId")
         id_map = _stage_graph_nodes(
             candidate,
             raw_nodes,
@@ -8194,8 +8236,8 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
             include_outputs=False,
         )
         _refuse_agent_billing_change(
-            (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), None,
-             candidate.nodes[node_id].get("params") or {}) for node_id in id_map.values())
+            (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
+             candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
         created_edge_ids = _stage_graph_edges(candidate, raw_edges, id_map)
         _refuse_agent_change_to_approved_runs(candidate)
         _commit_graph_candidate_with_recoveries(
@@ -8346,12 +8388,69 @@ def _project_revision(body: dict[str, Any], catalog: dict[str, Any], *, required
         raise HTTPException(status_code=409, detail="This project view is out of date. Reload projects before saving or switching.")
 
 
-def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None = None) -> tuple[dict[str, Any], CLIGraph]:
+_INPUT_DATA_TYPES = {"text": "Text", "image": "Image", "video": "Video"}
+
+
+def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """A saved React Flow graph with its folded Krea nodes moved onto their
+    new node (retired_nodes.migrate_graph), still in React Flow shape. Input
+    nodes it adds take the next free ``<node>-<port>`` id; edges, a fresh
+    ``migrated-<n>`` id."""
+    if not any(isinstance(node.get("data"), dict) and node["data"].get("definitionId") in MERGED for node in nodes):
+        return nodes, edges, []
+    flat: list[dict[str, Any]] = []
+    for node in nodes:
+        data = node.get("data") if isinstance(node.get("data"), dict) else {}
+        item = {"id": node.get("id"), "definitionId": data.get("definitionId"), "params": data.get("params"),
+                "position": node.get("position")}
+        if "label" in data:
+            item["label"] = data["label"]
+        if "outputs" in data:
+            item["outputs"] = data["outputs"]
+        flat.append(item)
+    flat_out, edges_out, warnings = migrate_graph(flat, edges)
+    # migrate_graph hands back the nodes it didn't change as the same objects.
+    unchanged = {id(item): node for item, node in zip(flat, nodes)}
+    by_id = {node.get("id"): node for node in nodes}
+    rf_nodes: list[dict[str, Any]] = []
+    for item in flat_out:
+        if id(item) in unchanged:
+            rf_nodes.append(unchanged[id(item)])
+            continue
+        original = by_id.get(item["id"])
+        definition_id = str(item["definitionId"])
+        label = item.get("label") or (node_registry.get(definition_id) or {}).get("displayName") or definition_id
+        if original is not None:
+            data = {**original["data"], "definitionId": definition_id, "params": item["params"], "label": label}
+            if "outputs" in item:
+                data["outputs"] = item["outputs"]
+            rf_nodes.append({**original, "data": data})
+        else:
+            rf_nodes.append({"id": item["id"], "type": "model-node", "position": item.get("position") or {"x": 0.0, "y": 0.0},
+                             "data": {"definitionId": definition_id, "params": item["params"], "label": label,
+                                      "outputs": {}, "state": "idle"}})
+    edge_ids = {edge.get("id") for edge in edges_out}
+    counter = 0
+    for edge in edges_out:
+        if edge.get("id"):
+            continue
+        counter += 1
+        while f"migrated-{counter}" in edge_ids:
+            counter += 1
+        edge.update({"id": f"migrated-{counter}", "type": "typed-edge",
+                     "data": {"dataType": _INPUT_DATA_TYPES.get(str(edge.get("sourceHandle")), "Any")}})
+        edge_ids.add(edge["id"])
+    return rf_nodes, edges_out, warnings
+
+
+def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None = None,
+                            warnings: list[str] | None = None) -> tuple[dict[str, Any], CLIGraph]:
     """Validate a saved RF graph with canonical definitions, retaining its IDs.
 
     A removed definition can still be viewed when it was already in this
     project's history or live canvas. It cannot acquire execution authority
-    from a frontend-supplied definition object.
+    from a frontend-supplied definition object. A folded Krea node loads as
+    its new node (_migrate_rf_graph); what that dropped goes in ``warnings``.
     """
     if not isinstance(snapshot, dict):
         raise HTTPException(status_code=400, detail="Project snapshot must be an object")
@@ -8388,8 +8487,12 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
     if snapshot.get("createDraft") is not None and not isinstance(snapshot["createDraft"], dict):
         raise HTTPException(status_code=400, detail="Creator Studio draft must be an object")
 
+    nodes, edges, folded_warnings = _migrate_rf_graph(nodes, edges)
+    if warnings is not None:
+        warnings.extend(folded_warnings)
     result = copy.deepcopy(snapshot)
-    result.update({"runHistory": copy.deepcopy(history), "viewport": copy.deepcopy(viewport), "createSessionId": session_id})
+    result.update({"runHistory": copy.deepcopy(history), "viewport": copy.deepcopy(viewport), "createSessionId": session_id,
+                   "nodes": copy.deepcopy(nodes), "edges": copy.deepcopy(edges)})
     candidate = CLIGraph()
     known: set[str] = set()
     for index, node in enumerate(nodes):
@@ -8433,7 +8536,8 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         if staged_node["definitionId"] != definition_id:
             # Migrated from a retired definition: the canvas shows the replacement.
             result["nodes"][index]["data"]["definitionId"] = staged_node["definitionId"]
-            result["nodes"][index]["data"]["label"] = staged_node.get("label")
+            result["nodes"][index]["data"]["label"] = staged_node.get("label") or (
+                node_registry.get(staged_node["definitionId"]) or {}).get("displayName")
         result["nodes"][index]["data"]["params"] = copy.deepcopy(staged_node["params"])
         result["nodes"][index]["data"]["outputs"] = _rewrite_output_paths(staged_node["outputs"])
         if match := re.fullmatch(r"n(\d+)", node_id):
@@ -8474,7 +8578,12 @@ def _snapshot_nodes(snapshot: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
         data = node.get("data") if isinstance(node, dict) else None
         if isinstance(data, dict) and isinstance(node.get("id"), str):
             params = data.get("params")
-            nodes[node["id"]] = {"definitionId": data.get("definitionId"), "params": params if isinstance(params, dict) else {}}
+            params = params if isinstance(params, dict) else {}
+            definition_id = data.get("definitionId")
+            if definition_id in MERGED:
+                # Saved before the fold: what it loads as (same provider and mode).
+                definition_id, params, _label = migrate_node(definition_id, params)
+            nodes[node["id"]] = {"definitionId": definition_id, "params": params}
     return nodes
 
 
@@ -8688,7 +8797,8 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         if active := catalog["activeProjectId"]:
             _overlay_live_project(catalog["projects"][active], exported)
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
-        project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical)
+        warnings: list[str] = []
+        project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings)
         candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
         project["lastOpenedAt"] = project_now()
         catalog["activeProjectId"] = project_id
@@ -8696,7 +8806,10 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         _commit_project_workspace(catalog, candidate)
         revision = catalog["workspaceRevision"]
     await _broadcast_graph_sync(graph_replaced=True, reason="project-open")
-    return {"project": public_project(project), "workspaceRevision": revision}
+    # What opening changed that the person should know (a folded Krea node's
+    # dropped job-output connections); the snapshot is saved migrated, so
+    # this is said once.
+    return {"project": public_project(project), "workspaceRevision": revision, "warnings": warnings}
 
 
 @app.put("/api/projects/{project_id}")

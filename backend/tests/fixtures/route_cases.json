@@ -5097,6 +5097,2437 @@
         "provider": "google",
         "key": "GOOGLE_API_KEY"
       }
+    },
+    {
+      "name": "flux-3-image: bfl chosen runs there with its key",
+      "nodeId": "flux-3-image",
+      "params": {
+        "_provider": "bfl"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "grounding",
+        "resolution",
+        "safety_tolerance"
+      ],
+      "shownRoute": "bfl",
+      "routeParams": [
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "3:2",
+            "7:5",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "5:7",
+            "2:3",
+            "9:16",
+            "1:2",
+            "9:21"
+          ]
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "768sq",
+            "1k",
+            "1.5k",
+            "2k",
+            "4k"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "min": 0,
+          "max": 4
+        },
+        {
+          "key": "grounding"
+        }
+      ]
+    },
+    {
+      "name": "flux-3-image: Auto with only BFL_API_KEY runs on bfl",
+      "nodeId": "flux-3-image",
+      "params": {},
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "grounding",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "flux-3-image: fal chosen runs there with its key",
+      "nodeId": "flux-3-image",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "enable_prompt_expansion",
+        "resolution",
+        "safety_tolerance"
+      ],
+      "shownRoute": "fal",
+      "routeParams": [
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "3:2",
+            "7:5",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "5:7",
+            "2:3",
+            "9:16",
+            "1:2"
+          ]
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "768sq",
+            "1k",
+            "2k",
+            "4k"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "min": 0,
+          "max": 4
+        },
+        {
+          "key": "enable_prompt_expansion"
+        }
+      ]
+    },
+    {
+      "name": "flux-3-image: Auto with only FAL_KEY runs on fal",
+      "nodeId": "flux-3-image",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "enable_prompt_expansion",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "flux-3-image: replicate chosen runs there with its key",
+      "nodeId": "flux-3-image",
+      "params": {
+        "_provider": "replicate"
+      },
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "replicate",
+        "key": "REPLICATE_API_TOKEN",
+        "routeId": "replicate",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "grounding",
+        "resolution",
+        "safety_tolerance"
+      ],
+      "shownRoute": "replicate",
+      "routeParams": [
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "3:2",
+            "7:5",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "5:7",
+            "2:3",
+            "9:16",
+            "1:2",
+            "9:21"
+          ]
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "768sq",
+            "1k",
+            "1.5k",
+            "2k",
+            "4k"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "min": 0,
+          "max": 4
+        },
+        {
+          "key": "grounding"
+        }
+      ]
+    },
+    {
+      "name": "flux-3-image: Auto with only REPLICATE_API_TOKEN runs on replicate",
+      "nodeId": "flux-3-image",
+      "params": {},
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "replicate",
+        "key": "REPLICATE_API_TOKEN",
+        "routeId": "replicate",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "grounding",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "flux-3-image: openrouter chosen runs there with its key",
+      "nodeId": "flux-3-image",
+      "params": {
+        "_provider": "openrouter"
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "openrouter",
+        "key": "OPENROUTER_API_KEY",
+        "routeId": "openrouter",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "resolution",
+        "safety_tolerance"
+      ],
+      "shownRoute": "openrouter",
+      "routeParams": [
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "3:2",
+            "7:5",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "5:7",
+            "2:3",
+            "9:16",
+            "1:2",
+            "9:21"
+          ]
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "768sq",
+            "1k",
+            "1.5k",
+            "2k",
+            "4k"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "min": 0,
+          "max": 4
+        }
+      ]
+    },
+    {
+      "name": "flux-3-image: Auto with only OPENROUTER_API_KEY runs on openrouter",
+      "nodeId": "flux-3-image",
+      "params": {},
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "openrouter",
+        "key": "OPENROUTER_API_KEY",
+        "routeId": "openrouter",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "flux-3-image: Auto with no key names every route's key",
+      "nodeId": "flux-3-image",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": null,
+        "block": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY",
+          "REPLICATE_API_TOKEN",
+          "OPENROUTER_API_KEY"
+        ]
+      },
+      "unavailable": {
+        "routeId": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY",
+          "REPLICATE_API_TOKEN",
+          "OPENROUTER_API_KEY"
+        ],
+        "block": null,
+        "alternatives": [],
+        "message": "FLUX 3 Image needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN or OPENROUTER_API_KEY in Settings > Providers."
+      }
+    },
+    {
+      "name": "flux-3-image-klein: bfl chosen runs there with its key",
+      "nodeId": "flux-3-image-klein",
+      "params": {
+        "_provider": "bfl"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "output_format",
+        "resolution",
+        "safety_tolerance",
+        "seed",
+        "steps"
+      ],
+      "shownRoute": "bfl",
+      "routeParams": [
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "3:2",
+            "7:5",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "5:7",
+            "2:3",
+            "9:16",
+            "1:2",
+            "9:21"
+          ]
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "768sq",
+            "1k",
+            "1.5k",
+            "2k",
+            "4k"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "min": 0,
+          "max": 4
+        },
+        {
+          "key": "seed",
+          "min": 0,
+          "max": 4294967295
+        },
+        {
+          "key": "steps",
+          "min": 1,
+          "max": 16
+        },
+        {
+          "key": "output_format",
+          "options": [
+            "jpeg",
+            "png"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "flux-3-image-klein: Auto with only BFL_API_KEY runs on bfl",
+      "nodeId": "flux-3-image-klein",
+      "params": {},
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "output_format",
+        "resolution",
+        "safety_tolerance",
+        "seed",
+        "steps"
+      ]
+    },
+    {
+      "name": "flux-3-image-klein: openrouter chosen runs there with its key",
+      "nodeId": "flux-3-image-klein",
+      "params": {
+        "_provider": "openrouter"
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "openrouter",
+        "key": "OPENROUTER_API_KEY",
+        "routeId": "openrouter",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "resolution",
+        "safety_tolerance",
+        "seed"
+      ],
+      "shownRoute": "openrouter",
+      "routeParams": [
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "3:2",
+            "7:5",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "5:7",
+            "2:3",
+            "9:16",
+            "1:2",
+            "9:21"
+          ]
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "768sq",
+            "1k",
+            "1.5k",
+            "2k",
+            "4k"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "min": 0,
+          "max": 4
+        },
+        {
+          "key": "seed",
+          "min": 0,
+          "max": 4294967295
+        }
+      ]
+    },
+    {
+      "name": "flux-3-image-klein: Auto with only OPENROUTER_API_KEY runs on openrouter",
+      "nodeId": "flux-3-image-klein",
+      "params": {},
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "openrouter",
+        "key": "OPENROUTER_API_KEY",
+        "routeId": "openrouter",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "resolution",
+        "safety_tolerance",
+        "seed"
+      ]
+    },
+    {
+      "name": "flux-3-image-klein: Auto with no key names every route's key",
+      "nodeId": "flux-3-image-klein",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": null,
+        "block": null,
+        "missing": [
+          "BFL_API_KEY",
+          "OPENROUTER_API_KEY"
+        ]
+      },
+      "unavailable": {
+        "routeId": null,
+        "missing": [
+          "BFL_API_KEY",
+          "OPENROUTER_API_KEY"
+        ],
+        "block": null,
+        "alternatives": [],
+        "message": "FLUX 3 Image Klein needs BFL_API_KEY or OPENROUTER_API_KEY in Settings > Providers."
+      }
+    },
+    {
+      "name": "flux-3-image-klein-base: fal chosen runs there with its key",
+      "nodeId": "flux-3-image-klein-base",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "enable_prompt_expansion",
+        "enable_safety_checker",
+        "image_size",
+        "output_format",
+        "seed"
+      ],
+      "shownRoute": "fal",
+      "routeParams": [
+        {
+          "key": "image_size",
+          "options": [
+            "square_hd",
+            "square",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        {
+          "key": "seed"
+        },
+        {
+          "key": "output_format",
+          "options": [
+            "png",
+            "jpeg",
+            "webp"
+          ]
+        },
+        {
+          "key": "enable_prompt_expansion"
+        },
+        {
+          "key": "enable_safety_checker"
+        }
+      ]
+    },
+    {
+      "name": "flux-3-image-klein-base: Auto with only FAL_KEY runs on fal",
+      "nodeId": "flux-3-image-klein-base",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "enable_prompt_expansion",
+        "enable_safety_checker",
+        "image_size",
+        "output_format",
+        "seed"
+      ]
+    },
+    {
+      "name": "flux-3-image-klein-base: Auto with no key names every route's key",
+      "nodeId": "flux-3-image-klein-base",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": null,
+        "block": null,
+        "missing": [
+          "FAL_KEY"
+        ]
+      },
+      "unavailable": {
+        "routeId": null,
+        "missing": [
+          "FAL_KEY"
+        ],
+        "block": null,
+        "alternatives": [],
+        "message": "FLUX 3 Image Klein Base needs FAL_KEY in Settings > Providers."
+      }
+    },
+    {
+      "name": "flux-3-video: bfl chosen runs there with its key",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "bfl"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "draft",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ],
+      "shownRoute": "bfl",
+      "routeParams": [
+        {
+          "key": "duration",
+          "min": 5,
+          "max": 20
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "hd",
+            "fhd",
+            "qhd",
+            "uhd"
+          ]
+        },
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16",
+            "9:21"
+          ]
+        },
+        {
+          "key": "generate_audio"
+        },
+        {
+          "key": "draft"
+        }
+      ]
+    },
+    {
+      "name": "flux-3-video: Auto with only BFL_API_KEY runs on bfl",
+      "nodeId": "flux-3-video",
+      "params": {},
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "draft",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "flux-3-video: fal chosen runs there with its key",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "draft",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ],
+      "shownRoute": "fal",
+      "routeParams": [
+        {
+          "key": "duration",
+          "min": 5,
+          "max": 20
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "hd",
+            "fhd",
+            "qhd",
+            "uhd"
+          ]
+        },
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        {
+          "key": "generate_audio"
+        },
+        {
+          "key": "draft"
+        }
+      ]
+    },
+    {
+      "name": "flux-3-video: Auto with only FAL_KEY runs on fal",
+      "nodeId": "flux-3-video",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "draft",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "flux-3-video: replicate chosen runs there with its key",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "replicate"
+      },
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "replicate",
+        "key": "REPLICATE_API_TOKEN",
+        "routeId": "replicate",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "draft",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ],
+      "shownRoute": "replicate",
+      "routeParams": [
+        {
+          "key": "duration",
+          "min": 5,
+          "max": 20
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "hd",
+            "fhd"
+          ]
+        },
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        {
+          "key": "generate_audio"
+        },
+        {
+          "key": "draft"
+        }
+      ]
+    },
+    {
+      "name": "flux-3-video: Auto with only REPLICATE_API_TOKEN runs on replicate",
+      "nodeId": "flux-3-video",
+      "params": {},
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "replicate",
+        "key": "REPLICATE_API_TOKEN",
+        "routeId": "replicate",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "draft",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "flux-3-video: openrouter chosen runs there with its key",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "openrouter"
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "openrouter",
+        "key": "OPENROUTER_API_KEY",
+        "routeId": "openrouter",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ],
+      "shownRoute": "openrouter",
+      "routeParams": [
+        {
+          "key": "duration",
+          "min": 5,
+          "max": 20
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "hd",
+            "fhd",
+            "qhd",
+            "uhd"
+          ]
+        },
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "21:9",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        {
+          "key": "generate_audio"
+        }
+      ]
+    },
+    {
+      "name": "flux-3-video: Auto with only OPENROUTER_API_KEY runs on openrouter",
+      "nodeId": "flux-3-video",
+      "params": {},
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "openrouter",
+        "key": "OPENROUTER_API_KEY",
+        "routeId": "openrouter",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "flux-3-video: krea chosen runs there with its key",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "krea"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN",
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ],
+      "shownRoute": "krea",
+      "routeParams": [
+        {
+          "key": "duration",
+          "min": 5,
+          "max": 20
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "hd",
+            "fhd"
+          ]
+        },
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "21:9",
+            "2:1",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        {
+          "key": "generate_audio"
+        }
+      ]
+    },
+    {
+      "name": "flux-3-video: Auto with only KREA_API_TOKEN runs on krea",
+      "nodeId": "flux-3-video",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN",
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "flux-3-video: Auto with no key names every route's key",
+      "nodeId": "flux-3-video",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": null,
+        "block": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY",
+          "REPLICATE_API_TOKEN",
+          "OPENROUTER_API_KEY",
+          "KREA_API_TOKEN"
+        ]
+      },
+      "unavailable": {
+        "routeId": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY",
+          "REPLICATE_API_TOKEN",
+          "OPENROUTER_API_KEY",
+          "KREA_API_TOKEN"
+        ],
+        "block": null,
+        "alternatives": [],
+        "message": "FLUX 3 Video needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
+      }
+    },
+    {
+      "name": "flux-video-edit: bfl chosen runs there with its key",
+      "nodeId": "flux-video-edit",
+      "params": {
+        "_provider": "bfl"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [],
+      "shownRoute": "bfl",
+      "routeParams": []
+    },
+    {
+      "name": "flux-video-edit: Auto with only BFL_API_KEY runs on bfl",
+      "nodeId": "flux-video-edit",
+      "params": {},
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": []
+    },
+    {
+      "name": "flux-video-edit: fal chosen runs there with its key",
+      "nodeId": "flux-video-edit",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [],
+      "shownRoute": "fal",
+      "routeParams": []
+    },
+    {
+      "name": "flux-video-edit: Auto with only FAL_KEY runs on fal",
+      "nodeId": "flux-video-edit",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": []
+    },
+    {
+      "name": "flux-video-edit: krea chosen runs there with its key",
+      "nodeId": "flux-video-edit",
+      "params": {
+        "_provider": "krea"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN",
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [],
+      "shownRoute": "krea",
+      "routeParams": []
+    },
+    {
+      "name": "flux-video-edit: Auto with only KREA_API_TOKEN runs on krea",
+      "nodeId": "flux-video-edit",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN",
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": []
+    },
+    {
+      "name": "flux-video-edit: Auto with no key names every route's key",
+      "nodeId": "flux-video-edit",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": null,
+        "block": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY",
+          "KREA_API_TOKEN"
+        ]
+      },
+      "unavailable": {
+        "routeId": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY",
+          "KREA_API_TOKEN"
+        ],
+        "block": null,
+        "alternatives": [],
+        "message": "FLUX Video Edit needs BFL_API_KEY, FAL_KEY or KREA_API_TOKEN in Settings > Providers."
+      }
+    },
+    {
+      "name": "flux-video-upscale: bfl chosen runs there with its key",
+      "nodeId": "flux-video-upscale",
+      "params": {
+        "_provider": "bfl"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "creativity",
+        "upscale_factor"
+      ],
+      "shownRoute": "bfl",
+      "routeParams": [
+        {
+          "key": "creativity",
+          "options": [
+            0,
+            1
+          ]
+        },
+        {
+          "key": "upscale_factor",
+          "min": 1.5,
+          "max": 3
+        }
+      ]
+    },
+    {
+      "name": "flux-video-upscale: Auto with only BFL_API_KEY runs on bfl",
+      "nodeId": "flux-video-upscale",
+      "params": {},
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "creativity",
+        "upscale_factor"
+      ]
+    },
+    {
+      "name": "flux-video-upscale: fal chosen runs there with its key",
+      "nodeId": "flux-video-upscale",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "creativity",
+        "upscale_factor"
+      ],
+      "shownRoute": "fal",
+      "routeParams": [
+        {
+          "key": "creativity",
+          "options": [
+            0,
+            1
+          ]
+        },
+        {
+          "key": "upscale_factor",
+          "min": 1.5,
+          "max": 3
+        }
+      ]
+    },
+    {
+      "name": "flux-video-upscale: Auto with only FAL_KEY runs on fal",
+      "nodeId": "flux-video-upscale",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "creativity",
+        "upscale_factor"
+      ]
+    },
+    {
+      "name": "flux-video-upscale: replicate chosen runs there with its key",
+      "nodeId": "flux-video-upscale",
+      "params": {
+        "_provider": "replicate"
+      },
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "replicate",
+        "key": "REPLICATE_API_TOKEN",
+        "routeId": "replicate",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "creativity",
+        "upscale_factor"
+      ],
+      "shownRoute": "replicate",
+      "routeParams": [
+        {
+          "key": "creativity",
+          "options": [
+            0,
+            1
+          ]
+        },
+        {
+          "key": "upscale_factor",
+          "min": 1.5,
+          "max": 3
+        }
+      ]
+    },
+    {
+      "name": "flux-video-upscale: Auto with only REPLICATE_API_TOKEN runs on replicate",
+      "nodeId": "flux-video-upscale",
+      "params": {},
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "replicate",
+        "key": "REPLICATE_API_TOKEN",
+        "routeId": "replicate",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "creativity",
+        "upscale_factor"
+      ]
+    },
+    {
+      "name": "flux-video-upscale: krea chosen runs there with its key",
+      "nodeId": "flux-video-upscale",
+      "params": {
+        "_provider": "krea"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN",
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "creativity",
+        "upscale_factor"
+      ],
+      "shownRoute": "krea",
+      "routeParams": [
+        {
+          "key": "creativity",
+          "options": [
+            0,
+            1
+          ]
+        },
+        {
+          "key": "upscale_factor",
+          "min": 1.5,
+          "max": 3
+        }
+      ]
+    },
+    {
+      "name": "flux-video-upscale: Auto with only KREA_API_TOKEN runs on krea",
+      "nodeId": "flux-video-upscale",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN",
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "creativity",
+        "upscale_factor"
+      ]
+    },
+    {
+      "name": "flux-video-upscale: Auto with no key names every route's key",
+      "nodeId": "flux-video-upscale",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": null,
+        "block": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY",
+          "REPLICATE_API_TOKEN",
+          "KREA_API_TOKEN"
+        ]
+      },
+      "unavailable": {
+        "routeId": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY",
+          "REPLICATE_API_TOKEN",
+          "KREA_API_TOKEN"
+        ],
+        "block": null,
+        "alternatives": [],
+        "message": "FLUX Video Upscale needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN or KREA_API_TOKEN in Settings > Providers."
+      }
+    },
+    {
+      "name": "krea-3: krea chosen runs there with its key",
+      "nodeId": "krea-3",
+      "params": {
+        "_provider": "krea"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN",
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "regional_edit",
+        "resolution",
+        "seed",
+        "thinking_mode"
+      ],
+      "shownRoute": "krea",
+      "routeParams": [
+        {
+          "key": "seed"
+        },
+        {
+          "key": "thinking_mode",
+          "options": [
+            "fast",
+            "high"
+          ]
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "1K",
+            "2K"
+          ]
+        },
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "1:1",
+            "4:5",
+            "3:4",
+            "2:3",
+            "9:16",
+            "5:4",
+            "4:3",
+            "3:2",
+            "16:9",
+            "21:9"
+          ]
+        },
+        {
+          "key": "regional_edit"
+        }
+      ]
+    },
+    {
+      "name": "krea-3: Auto with only KREA_API_TOKEN runs on krea",
+      "nodeId": "krea-3",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN",
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "regional_edit",
+        "resolution",
+        "seed",
+        "thinking_mode"
+      ]
+    },
+    {
+      "name": "krea-3: fal chosen runs there with its key",
+      "nodeId": "krea-3",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "image_size",
+        "model",
+        "negative_prompt",
+        "output_format",
+        "reasoning_level",
+        "seed"
+      ],
+      "shownRoute": "fal",
+      "routeParams": [
+        {
+          "key": "seed"
+        },
+        {
+          "key": "model",
+          "options": [
+            "berry",
+            "jam"
+          ]
+        },
+        {
+          "key": "reasoning_level",
+          "options": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "key": "image_size",
+          "options": [
+            "auto",
+            "square_hd",
+            "square",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        {
+          "key": "negative_prompt"
+        },
+        {
+          "key": "output_format",
+          "options": [
+            "png",
+            "jpeg"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "krea-3: Auto with only FAL_KEY runs on fal",
+      "nodeId": "krea-3",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "image_size",
+        "model",
+        "negative_prompt",
+        "output_format",
+        "reasoning_level",
+        "seed"
+      ]
+    },
+    {
+      "name": "krea-3: Auto with no key names every route's key",
+      "nodeId": "krea-3",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null,
+        "routeId": null,
+        "block": null,
+        "missing": [
+          "KREA_API_TOKEN",
+          "FAL_KEY"
+        ]
+      },
+      "unavailable": {
+        "routeId": null,
+        "missing": [
+          "KREA_API_TOKEN",
+          "FAL_KEY"
+        ],
+        "block": null,
+        "alternatives": [],
+        "message": "Krea 3 needs KREA_API_TOKEN or FAL_KEY in Settings > Providers."
+      }
+    },
+    {
+      "name": "flux-3-image: Auto on fal can't take 1.5k, so it stops and offers the routes that can",
+      "nodeId": "flux-3-image",
+      "params": {
+        "resolution": "1.5k"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "REPLICATE_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": "fal",
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "resolution 1.5k"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "fal",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "resolution 1.5k"
+        },
+        "alternatives": [
+          "replicate"
+        ],
+        "message": "FLUX 3 Image can't run on fal.ai: it doesn't take resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Replicate can take it."
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "enable_prompt_expansion",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "flux-3-image: 9:21 is BFL, Replicate and OpenRouter only",
+      "nodeId": "flux-3-image",
+      "params": {
+        "_provider": "fal",
+        "aspect_ratio": "9:21"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": "fal",
+        "block": {
+          "reason": "unsupported",
+          "param": "aspect_ratio",
+          "detail": "aspect_ratio 9:21"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "fal",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "aspect_ratio",
+          "detail": "aspect_ratio 9:21"
+        },
+        "alternatives": [
+          "bfl"
+        ],
+        "message": "FLUX 3 Image can't run on fal.ai: it doesn't take aspect_ratio 9:21. Pick auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, 1:1, 4:5, 3:4, 5:7, 2:3, 9:16 or 1:2, or switch provider. Black Forest Labs can take it."
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "enable_prompt_expansion",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "flux-3-image-klein: OpenRouter can't take a seed",
+      "nodeId": "flux-3-image-klein",
+      "params": {
+        "seed": 7
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "output_format",
+        "resolution",
+        "safety_tolerance",
+        "seed",
+        "steps"
+      ]
+    },
+    {
+      "name": "flux-3-image-klein: Auto on OpenRouter stops on a seed",
+      "nodeId": "flux-3-image-klein",
+      "params": {
+        "seed": 7
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "openrouter",
+        "key": null,
+        "routeId": "openrouter",
+        "block": {
+          "reason": "unsupported",
+          "param": "seed",
+          "detail": "a seed"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "openrouter",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "seed",
+          "detail": "a seed"
+        },
+        "alternatives": [],
+        "message": "FLUX 3 Image Klein can't run on OpenRouter: it doesn't take a seed. Change that setting, or switch provider."
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "resolution",
+        "safety_tolerance",
+        "seed"
+      ]
+    },
+    {
+      "name": "flux-3-video: OpenRouter takes no draft",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "openrouter",
+        "draft": true
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "openrouter",
+        "key": null,
+        "routeId": "openrouter",
+        "block": {
+          "reason": "unsupported",
+          "param": "draft",
+          "detail": "draft true"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "openrouter",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "draft",
+          "detail": "draft true"
+        },
+        "alternatives": [
+          "fal"
+        ],
+        "message": "FLUX 3 Video can't run on OpenRouter: it doesn't take draft true. Change that setting, or switch provider. fal.ai can take it."
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "flux-3-video: OpenRouter takes no keyframes",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "openrouter"
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "wired": [
+        "keyframes"
+      ],
+      "expected": {
+        "kind": "unset",
+        "provider": "openrouter",
+        "key": null,
+        "routeId": "openrouter",
+        "block": {
+          "reason": "ports",
+          "param": "keyframes",
+          "detail": "keyframes 1"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "openrouter",
+        "missing": [],
+        "block": {
+          "reason": "ports",
+          "param": "keyframes",
+          "detail": "keyframes 1"
+        },
+        "alternatives": [
+          "bfl"
+        ],
+        "message": "FLUX 3 Video can't run on OpenRouter: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider. Black Forest Labs can take it."
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "flux-3-video: a video continuation past 15 s stops on BFL",
+      "nodeId": "flux-3-video",
+      "params": {
+        "duration": 18
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "wired": [
+        "start_video"
+      ],
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": "bfl",
+        "block": {
+          "reason": "unsupported",
+          "param": "start_video",
+          "detail": "a video continuation longer than 15 s"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "bfl",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "start_video",
+          "detail": "a video continuation longer than 15 s"
+        },
+        "alternatives": [
+          "fal"
+        ],
+        "message": "FLUX 3 Video can't run on Black Forest Labs: it doesn't take a video continuation longer than 15 s. Change that setting, or switch provider. fal.ai can take it."
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "draft",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "flux-3-video: a 4K run stops on Krea",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "krea",
+        "resolution": "uhd"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "resolution uhd"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "krea",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "resolution uhd"
+        },
+        "alternatives": [
+          "bfl"
+        ],
+        "message": "FLUX 3 Video can't run on Krea: it doesn't take resolution uhd. Pick hd or fhd, or switch provider. Black Forest Labs can take it."
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "flux-3-video: under Auto the plan isn't the first route, so a run with no key needs one",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": null,
+        "block": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY",
+          "REPLICATE_API_TOKEN",
+          "OPENROUTER_API_KEY",
+          "KREA_API_TOKEN"
+        ]
+      },
+      "unavailable": {
+        "routeId": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY",
+          "REPLICATE_API_TOKEN",
+          "OPENROUTER_API_KEY",
+          "KREA_API_TOKEN"
+        ],
+        "block": null,
+        "alternatives": [],
+        "message": "FLUX 3 Video needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
+      }
+    },
+    {
+      "name": "flux-3-video: under Auto a BFL key runs on BFL with the plan connected",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "draft",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "flux-3-video: Krea chosen with the plan bills the plan",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {},
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "flux-3-video: an end image alone stops on every route",
+      "nodeId": "flux-3-video",
+      "params": {},
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "wired": [
+        "end_image"
+      ],
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": "bfl",
+        "block": {
+          "reason": "unsupported",
+          "param": "end_image",
+          "detail": "an end image without a start image or keyframes"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "bfl",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "end_image",
+          "detail": "an end image without a start image or keyframes"
+        },
+        "alternatives": [],
+        "message": "FLUX 3 Video can't run on Black Forest Labs: it doesn't take an end image without a start image or keyframes. Change that setting, or switch provider."
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "draft",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "krea-3: Auto with the Krea plan bills the plan",
+      "nodeId": "krea-3",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {},
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "regional_edit",
+        "resolution",
+        "seed",
+        "thinking_mode"
+      ]
+    },
+    {
+      "name": "krea-3: fal reasons high only on an edit",
+      "nodeId": "krea-3",
+      "params": {
+        "_provider": "fal",
+        "reasoning_level": "high"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": "fal",
+        "block": {
+          "reason": "unsupported",
+          "param": "reasoning_level",
+          "detail": "high reasoning without a reference image (fal.ai takes it on krea/v3/edit only)"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "fal",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "reasoning_level",
+          "detail": "high reasoning without a reference image (fal.ai takes it on krea/v3/edit only)"
+        },
+        "alternatives": [
+          "krea"
+        ],
+        "message": "Krea 3 can't run on fal.ai: it doesn't take high reasoning without a reference image (fal.ai takes it on krea/v3/edit only). Change that setting, or switch provider. Krea can take it."
+      },
+      "paramKeys": [
+        "image_size",
+        "model",
+        "negative_prompt",
+        "output_format",
+        "reasoning_level",
+        "seed"
+      ]
+    },
+    {
+      "name": "krea-3: fal reasons high on an edit",
+      "nodeId": "krea-3",
+      "params": {
+        "_provider": "fal",
+        "reasoning_level": "high"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "wired": [
+        "images"
+      ],
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "image_size",
+        "model",
+        "negative_prompt",
+        "output_format",
+        "reasoning_level",
+        "seed"
+      ]
+    },
+    {
+      "name": "krea-3: a regional edit needs a reference image on Krea",
+      "nodeId": "krea-3",
+      "params": {
+        "regional_edit": true
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": {
+          "reason": "unsupported",
+          "param": "regional_edit",
+          "detail": "a regional edit without a reference image"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "krea",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "regional_edit",
+          "detail": "a regional edit without a reference image"
+        },
+        "alternatives": [
+          "fal"
+        ],
+        "message": "Krea 3 can't run on Krea: it doesn't take a regional edit without a reference image. Change that setting, or switch provider. fal.ai can take it."
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "regional_edit",
+        "resolution",
+        "seed",
+        "thinking_mode"
+      ]
+    },
+    {
+      "name": "flux-video-upscale: Krea chosen with the plan bills the plan",
+      "nodeId": "flux-video-upscale",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {},
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "creativity",
+        "upscale_factor"
+      ]
     }
   ]
 }

@@ -128,6 +128,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from services import model_pricing
+from services.retired_nodes import merged_into
 
 SETTING_KEY = "runCostConfirmUsd"
 CAPS_KEY = "agentSpend"
@@ -157,6 +158,43 @@ _LEGACY_PREFIX = "unverified:"
 
 
 # -- settings ----------------------------------------------------------------------
+
+def _fold_models(models: Mapping[str, dict[str, float | None]]) -> dict[str, dict[str, float | None]]:
+    """Per-model limits with a folded node's limits moved to the node it
+    became (retired_nodes.MERGED: Krea's FLUX copies are now routes on the
+    FLUX nodes, one limit per model across providers). Where both are set,
+    the lower of each limit holds, so folding never loosens one."""
+    folded: dict[str, dict[str, float | None]] = {}
+    for definition_id, limits in models.items():
+        target = merged_into(definition_id)
+        if target not in folded:
+            folded[target] = dict(limits)
+            continue
+        merged = folded[target]
+        for key, value in limits.items():
+            if value is not None and (merged.get(key) is None or value < merged[key]):
+                merged[key] = value
+    return folded
+
+
+def saved_caps_view(raw: Any) -> Any:
+    """``agentSpend`` as saved, with folded nodes' limits under the node they
+    became (``_fold_models``), for Settings to show and save back. Anything
+    unreadable is left as it is; caps_from_settings reads it as before."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("models"), dict):
+        return raw
+    models = raw["models"]
+    if not any(merged_into(str(k)) != k for k in models):
+        return raw
+    readable: dict[str, dict[str, float | None]] = {}
+    rest: dict[str, Any] = {}
+    for definition_id, limits in models.items():
+        try:
+            readable[str(definition_id)] = {key: validate_threshold(limits.get(key)) for key in ("perRunUsd", "sessionUsd")}
+        except (AttributeError, ValueError):
+            rest[str(definition_id)] = limits
+    return {**raw, "models": {**rest, **_fold_models(readable)}}
+
 
 def validate_threshold(value: Any) -> float | None:
     """A positive finite number of USD, or None for no limit."""
@@ -209,7 +247,7 @@ def validate_caps(value: Any, known_definitions: Mapping[str, Any]) -> dict[str,
         raise ValueError(f"{CAPS_KEY}.models must be an object keyed by node id")
     models: dict[str, dict[str, float | None]] = {}
     for definition_id, limits in models_in.items():
-        if definition_id not in known_definitions:
+        if definition_id not in known_definitions and merged_into(definition_id) not in known_definitions:
             raise ValueError(f"{CAPS_KEY}.models names an unknown node: {str(definition_id)[:60]}")
         if not isinstance(limits, dict) or set(limits) - {"perRunUsd", "sessionUsd"}:
             raise ValueError(f"{CAPS_KEY}.models.{definition_id} takes perRunUsd and sessionUsd")
@@ -221,7 +259,7 @@ def validate_caps(value: Any, known_definitions: Mapping[str, Any]) -> dict[str,
         caps["outsideDailyUsd"] = validate_threshold(value["outsideDailyUsd"])
     if "kreaPlanRuns" in value:
         caps["kreaPlanRuns"] = validate_plan_runs(value["kreaPlanRuns"])
-    caps["models"] = models
+    caps["models"] = _fold_models(models)
     return caps
 
 
@@ -264,7 +302,7 @@ def caps_from_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
                 entry[key] = None
         if entry["perRunUsd"] is not None or entry["sessionUsd"] is not None:
             models[str(definition_id)] = entry
-    return {"sessionUsd": session, "outsideDailyUsd": outside, "kreaPlanRuns": plan_runs, "models": models}
+    return {"sessionUsd": session, "outsideDailyUsd": outside, "kreaPlanRuns": plan_runs, "models": _fold_models(models)}
 
 
 # -- what a session has spent ------------------------------------------------------
@@ -376,7 +414,9 @@ class SpendLedger:
             total += float(amount)
             runs += int(plan_runs)
             if amount:
-                models[str(definition_id)] = models.get(str(definition_id), 0.0) + float(amount)
+                # Spend recorded under a folded node counts as the node it became.
+                model = merged_into(str(definition_id))
+                models[model] = models.get(model, 0.0) + float(amount)
         return Spent(max(0.0, round(total, 6)),
                      {k: round(v, 6) for k, v in models.items() if round(v, 6) > 0 and k},
                      max(0, runs))
@@ -387,8 +427,11 @@ class SpendLedger:
             if is_outside(key):
                 return self._sum(self._events(entry))
         models = entry.get("models") if isinstance(entry.get("models"), dict) else {}
-        return Spent(float(entry.get("total") or 0.0), {str(k): float(v) for k, v in models.items()},
-                     int(entry.get("planRuns") or 0))
+        spent_models: dict[str, float] = {}
+        for k, v in models.items():
+            model = merged_into(str(k))
+            spent_models[model] = spent_models.get(model, 0.0) + float(v)
+        return Spent(float(entry.get("total") or 0.0), spent_models, int(entry.get("planRuns") or 0))
 
     def spent_outside(self) -> Spent:
         """Everything every outside agent (shared or with an app token) spent in the last 24 hours."""

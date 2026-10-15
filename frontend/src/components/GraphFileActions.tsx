@@ -41,12 +41,7 @@ export function GraphFileActions() {
     try {
       const result = await loadFromFile();
       if (!result || !canLoadGraph(useGraphStore.getState())) return;
-      // Nodes set to a provider with no key here keep their choice and values
-      // (the chip shows the stop); the import summary names them.
-      const keys = useUIStore.getState().settingsCache;
-      const providerWarnings = keys.loaded ? providerKeyWarnings(result.nodes, NODE_DEFINITIONS, keys.apiKeys) : [];
-      const warnings = [...result.warnings, ...providerWarnings];
-      if (warnings.length > 0) console.warn('[nebula] Load warnings:', warnings);
+      if (result.warnings.length > 0) console.warn('[nebula] Load warnings:', result.warnings);
 
       // graphSync can publish the imported graph before this HTTP response.
       // Fence every local generation admission through that entire interval.
@@ -72,7 +67,17 @@ export function GraphFileActions() {
         try { detail = (await response.json()).detail ?? ''; } catch { /* status fallback */ }
         throw new Error(detail || `Import failed: ${response.status}`);
       }
-      const imported = await response.json() as { nodes: Node<NodeData>[]; edges: Edge[] };
+      const imported = await response.json() as { nodes: Node<NodeData>[]; edges: Edge[]; warnings?: string[] };
+      // Read from what the backend loaded: a node folded into another
+      // (services/retired_nodes.py MERGED) arrives as its new node.
+      // Nodes set to a provider with no key here keep their choice and values
+      // (the chip shows the stop); the import summary names them.
+      const keys = useUIStore.getState().settingsCache;
+      const providerWarnings = keys.loaded ? providerKeyWarnings(imported.nodes, NODE_DEFINITIONS, keys.apiKeys) : [];
+      const loadWarnings = imported.warnings ?? [];
+      if (providerWarnings.length > 0 || loadWarnings.length > 0) {
+        console.warn('[nebula] Import warnings:', [...loadWarnings, ...providerWarnings]);
+      }
       // Local starts are fenced; an external backend run can still acquire
       // ownership through WebSocket reconciliation. Preserve its workspace.
       const state = useGraphStore.getState();
@@ -97,10 +102,13 @@ export function GraphFileActions() {
         if (ui.canvasViewportRevision !== viewportRevision) return;
         void fitView({ padding: computeCanvasFitPadding(), duration: 300 });
       }, 120);
+      const notes: string[] = [];
+      if (loadWarnings.length > 0) notes.push(loadWarnings.map((line) => `• ${line}`).join('\n'));
       if (providerWarnings.length > 0) {
-        alert(`Imported. Set to a provider you have no key for:\n${providerWarnings.map((line) => `• ${line}`).join('\n')}`
+        notes.push(`Set to a provider you have no key for:\n${providerWarnings.map((line) => `• ${line}`).join('\n')}`
           + '\nAdd the key in Settings > Providers, or pick another provider on the node.');
       }
+      if (notes.length > 0) alert(`Imported.\n${notes.join('\n')}`);
     } catch (error) {
       console.error('Graph import failed; existing graph preserved:', error);
       alert(error instanceof Error ? error.message : 'Graph import failed. Existing graph was preserved.');

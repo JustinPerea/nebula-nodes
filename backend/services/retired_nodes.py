@@ -67,11 +67,25 @@ gen4_turbo (both image-to-video only, same 2-10 s range, so a saved
 image-to-video node keeps working; a text-only one gets the handler's "needs
 an image" error) and veo3 to veo3.1. Saved ``runway-aleph`` nodes move to
 aleph2. All of these shutdowns are past, so nothing is date-gated.
+
+Some nodes weren't shut down but folded into a one-node-per-model node with
+a provider switcher (``MERGED``, docs/PROVIDER-ROUTES.md). Nebula's three
+synced Krea FLUX nodes (FLUX 3 Video, FLUX Video Edit, FLUX Video Upscale on
+Krea's gateway) became Krea routes on ``flux-3-video``, ``flux-video-edit``
+and ``flux-video-upscale`` on 2026-10-15. A saved one loads as the new node
+set to the Krea route (``_provider: "krea"``) with its ``_kreaAuth`` kept, so
+the same provider bills it the same way (API token or plan) as before. The
+person's title stays; values are renamed where the new node spells them
+differently (``720p`` is ``hd``). The new nodes read the prompt and media
+only from ports, so a value typed on the old node moves into a Text, Image or
+Video Input node wired to that port (``migrate_graph``). The old nodes' Krea
+job outputs (All videos, All artifacts, Job) have no counterpart; a
+connection from one is dropped, and the load says which.
 """
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any, Callable
 
 
 def _today() -> date:
@@ -279,13 +293,109 @@ def default_until(shutdown: date, old: str, new: str) -> str:
     return old if _today() < shutdown else new
 
 
+# -- folded nodes (MERGED) ------------------------------------------------------
+
+# node_route.PROVIDER_PARAM; spelled out so this module imports nothing.
+PROVIDER_PARAM = "_provider"
+MERGED_ROUTE = "krea"
+# The old Krea handler's billing mode when a node saved none
+# (handlers/krea_gateway.py: params.get("_kreaAuth", "api-token")).
+_KREA_DEFAULT_AUTH = "api-token"
+
+# Values typed on an old Krea node that the new node reads only from a port:
+# param key -> (input node, its value param, its output port). The old Krea
+# handler sent a wired port's value instead of the typed one, so a typed value
+# under a wired port was never used and is dropped.
+_TEXT_INPUT = ("text-input", "value", "text")
+_IMAGE_INPUT = ("image-input", "filePath", "image")
+_VIDEO_INPUT = ("video-input", "filePath", "video")
+
+
+def _folded(kept: tuple[str, ...], value_maps: dict[str, dict[Any, Any]] | None = None):
+    """Params for a folded Krea node: the kept keys (renamed values where
+    ``value_maps`` says), set to the Krea route with the saved billing mode.
+    A saved value outside the old options is kept as it is; the run then
+    stops before billing (node_route.route_block), never a silent rewrite."""
+    value_maps = value_maps or {}
+
+    def migrate(params: dict[str, Any]) -> dict[str, Any]:
+        migrated: dict[str, Any] = {}
+        for key in kept:
+            if key in params:
+                value = params[key]
+                mapping = value_maps.get(key, {})
+                migrated[key] = mapping.get(value, value) if isinstance(value, (str, int, float)) else value
+        # Frontend-internal keys (previews, notes, _kreaAuth) carry over.
+        migrated.update({k: v for k, v in params.items() if k.startswith("_")})
+        migrated[PROVIDER_PARAM] = MERGED_ROUTE
+        migrated["_kreaAuth"] = params.get("_kreaAuth") or _KREA_DEFAULT_AUTH
+        return migrated
+    return migrate
+
+
+_FOLD_REASON = "it is now one node with a provider switcher, set to Krea"
+
+# Old id -> the node it folded into. ``inputs`` and ``outputs`` map the old
+# port ids to the new ones (None: no counterpart). ``typed`` lists the old
+# params whose value moves to an input node wired to that new port. Old ports
+# and params from backend/data/node_definitions.json and the Krea catalog at
+# ab436602 (pr3-spec/migration-map.json, 2026-10-15).
+_KREA_JOB_OUTPUTS = {"video": "video", "videos": None, "artifacts": None, "job": None}
+MERGED: dict[str, dict[str, Any]] = {
+    "krea-video-black-forest-labs-flux-3-video": {
+        "into": "flux-3-video",
+        "displayName": "Flux 3 Video (Krea)",
+        "params": _folded(("duration", "resolution", "aspect_ratio", "generate_audio"),
+                          {"resolution": {"720p": "hd", "1080p": "fhd"}}),
+        "inputs": {"prompt": "prompt", "start_image": "start_image", "start_video": "start_video",
+                   "end_image": "end_image"},
+        "outputs": _KREA_JOB_OUTPUTS,
+        "typed": {"prompt": _TEXT_INPUT, "start_image": _IMAGE_INPUT, "start_video": _VIDEO_INPUT,
+                  "end_image": _IMAGE_INPUT},
+        "reason": _FOLD_REASON,
+    },
+    "krea-video-black-forest-labs-flux-video-edit": {
+        "into": "flux-video-edit",
+        "displayName": "Flux Video Edit (Krea)",
+        "params": _folded(()),
+        "inputs": {"prompt": "prompt", "start_video": "start_video"},
+        "outputs": _KREA_JOB_OUTPUTS,
+        "typed": {"prompt": _TEXT_INPUT, "start_video": _VIDEO_INPUT},
+        "reason": _FOLD_REASON,
+    },
+    "krea-enhance-black-forest-labs-flux-video-upscale": {
+        "into": "flux-video-upscale",
+        "displayName": "Flux Video Upscale (Krea)",
+        "params": _folded(("creativity", "upscale_factor"), {"creativity": {"precise": 0, "creative": 1}}),
+        "inputs": {"prompt": "prompt", "video_url": "video"},
+        "outputs": _KREA_JOB_OUTPUTS,
+        "typed": {"prompt": _TEXT_INPUT, "video_url": _VIDEO_INPUT},
+        "reason": _FOLD_REASON,
+    },
+}
+
+
+def merged_into(definition_id: str) -> str:
+    """The node a folded definition became, or the id itself."""
+    merged = MERGED.get(definition_id)
+    return merged["into"] if merged else definition_id
+
+
 def migrate_node(
     definition_id: str, params: dict[str, Any] | None, label: str | None = None,
 ) -> tuple[str, dict[str, Any], str | None]:
-    """(definitionId, params, label) for a node, replaced if its definition is retired.
+    """(definitionId, params, label) for a node, replaced if its definition is
+    retired or folded into another.
 
-    A node the person renamed keeps its own title; any other takes the
-    retirement title, so the canvas says what changed."""
+    A node the person renamed keeps its own title. Any other retired node
+    takes the retirement title, so the canvas says what changed; a folded one
+    takes the new node's own name (it is the same model, on the same
+    provider). Values typed into a folded node's ports are dropped here;
+    ``migrate_graph`` moves them to input nodes first."""
+    merged = MERGED.get(definition_id)
+    if merged is not None:
+        custom = label if isinstance(label, str) and label.strip() and label.strip() != merged["displayName"] else None
+        return merged["into"], merged["params"](dict(params or {})), custom
     retired = RETIRED.get(definition_id)
     if retired is None:
         return definition_id, migrate_params(definition_id, params), label
@@ -293,8 +403,123 @@ def migrate_node(
     return retired["replacement"], retired["params"](dict(params or {})), custom or retired["label"]
 
 
+_OUTPUT_LABELS = {"videos": "All videos", "artifacts": "All artifacts", "job": "Job"}
+
+
+def migrate_graph(
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+    *,
+    key: str = "id",
+    new_id: Callable[[str], str] | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """A saved graph with its folded nodes (``MERGED``) moved onto the new
+    nodes: (nodes, edges, warnings). Other nodes are left for ``migrate_node``.
+
+    ``nodes`` carry ``key`` (their reference), ``definitionId``, ``params``
+    and optionally ``label``, ``position`` and ``outputs``; ``edges`` carry
+    source/sourceHandle/target/targetHandle by reference. Other fields pass
+    through. On a folded node:
+
+    - the node becomes its new definition (``migrate_node``) and its saved
+      outputs keep only the ports the new node has;
+    - connections into it and out of it use the new port ids; one from a
+      Krea job output with no counterpart is dropped, with a warning;
+    - a prompt or media value typed on it, with nothing wired to that port,
+      becomes a Text, Image or Video Input node wired to it (the new nodes
+      read these only from ports). ``new_id(hint)`` names the added node;
+      by default ``<ref>-<port>``.
+
+    Added nodes have no ``label``; added edges have no ``id``."""
+    if not any(node.get("definitionId") in MERGED for node in nodes):
+        return nodes, edges, []
+    taken = {str(node.get(key)) for node in nodes}
+
+    def fresh(hint: str) -> str:
+        if new_id is not None:
+            return new_id(hint)
+        candidate, n = hint, 2
+        while candidate in taken:
+            candidate, n = f"{hint}-{n}", n + 1
+        taken.add(candidate)
+        return candidate
+
+    folded: dict[str, dict[str, Any]] = {}
+    names: dict[str, str] = {}
+    for node in nodes:
+        ref = str(node.get(key))
+        names[ref] = node.get("label") if isinstance(node.get("label"), str) and node["label"].strip() else ref
+        if node.get("definitionId") in MERGED:
+            folded[ref] = MERGED[node["definitionId"]]
+            merged = folded[ref]
+            if not (isinstance(node.get("label"), str) and node["label"].strip()):
+                names[ref] = merged["displayName"]
+
+    warnings: list[str] = []
+    out_edges: list[dict[str, Any]] = []
+    wired: set[tuple[str, str]] = set()
+    for edge in edges:
+        edge = dict(edge)
+        source, target = str(edge.get("source")), str(edge.get("target"))
+        if source in folded and edge.get("sourceHandle") in folded[source]["outputs"]:
+            handle = folded[source]["outputs"][edge["sourceHandle"]]
+            if handle is None:
+                warnings.append(
+                    f"'{names[source]}' no longer has its Krea '{_OUTPUT_LABELS.get(edge['sourceHandle'], edge['sourceHandle'])}' "
+                    f"output, so its connection to '{names.get(target, target)}' was removed.")
+                continue
+            edge["sourceHandle"] = handle
+        if target in folded and edge.get("targetHandle") in folded[target]["inputs"]:
+            edge["targetHandle"] = folded[target]["inputs"][edge["targetHandle"]]
+        if target in folded:
+            wired.add((target, str(edge.get("targetHandle"))))
+        out_edges.append(edge)
+
+    out_nodes: list[dict[str, Any]] = []
+    for node in nodes:
+        ref = str(node.get(key))
+        merged = folded.get(ref)
+        if merged is None:
+            out_nodes.append(node)
+            continue
+        params = node.get("params") if isinstance(node.get("params"), dict) else {}
+        definition_id, new_params, label = migrate_node(str(node["definitionId"]), params, node.get("label"))
+        migrated = {**node, "definitionId": definition_id, "params": new_params}
+        if label is None:
+            migrated.pop("label", None)
+        else:
+            migrated["label"] = label
+        if isinstance(node.get("outputs"), dict):
+            migrated["outputs"] = {
+                merged["outputs"][handle]: value for handle, value in node["outputs"].items()
+                if merged["outputs"].get(handle)
+            }
+        out_nodes.append(migrated)
+        position = node.get("position") if isinstance(node.get("position"), dict) else None
+        placed = 0
+        for param, (input_id, value_key, output_port) in merged["typed"].items():
+            value = params.get(param)
+            port = merged["inputs"][param]
+            if not isinstance(value, str) or not value.strip() or (ref, port) in wired:
+                continue
+            added: dict[str, Any] = {key: fresh(f"{ref}-{port}"), "definitionId": input_id, "params": {value_key: value}}
+            if position is not None:
+                try:
+                    added["position"] = {"x": float(position["x"]) - 360.0, "y": float(position["y"]) + 160.0 * placed}
+                except (KeyError, TypeError, ValueError):
+                    pass
+            placed += 1
+            out_nodes.append(added)
+            out_edges.append({"source": added[key], "sourceHandle": output_port, "target": ref, "targetHandle": port})
+            wired.add((ref, port))
+    return out_nodes, out_edges, warnings
+
+
 def retired_message(definition_id: str) -> str | None:
     """Why a definition is gone and what to use instead, for error messages."""
+    merged = MERGED.get(definition_id)
+    if merged is not None:
+        return f"'{definition_id}' is now part of '{merged['into']}' (provider: Krea). Use '{merged['into']}' instead."
     retired = RETIRED.get(definition_id)
     if retired is None:
         return None

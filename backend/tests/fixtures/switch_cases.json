@@ -1,5 +1,5 @@
 {
-  "_note": "PR 2's two halves joined: a person's pick in the provider switcher (frontend lib/providerSwitch.ts) to the route client that runs it (backend execution/route_clients.py). Each case runs on a fixture node in route_client_definitions.json. `saved` is what the node holds before the click, on top of every param's default; `keys` the key names set (values are fixtures); `wired` the input ports and what each carries (one edge each). `click` is a menu row id ('auto', a route id, '<route id>:plan'), 'alternative:<route id>' for the one-click switch under a stopped run, or null for no click. `switcher` is what the switcher shows before (`before`) and after the click, and `writes` the params the click changes on the saved node (snapped values included). Python (test_route_clients.py) saves `saved` + `writes` on the node and runs it through multi_route: `run.route` is the route the router picks, and `run.request` the one provider request it makes (`body` exactly, checked against `schema`), or `run.refused` the message it stops with before any request. TS (frontend/tests/components/switchToClient.test.tsx) seeds the node in the graph store, clicks the row in the Inspector's switcher and checks the store holds `saved` + `writes`, the card note is `notes`, and the switcher shows `switcher`.",
+  "_note": "PR 2's two halves joined: a person's pick in the provider switcher (frontend lib/providerSwitch.ts) to the route client that runs it (backend execution/route_clients.py). Each case runs on a fixture node in route_client_definitions.json or on a real route-table node of the registry (PR 3). `saved` is what the node holds before the click, on top of every param's default; `keys` the key names set (values are fixtures); `wired` the input ports and what each carries (one edge each). `click` is a menu row id ('auto', a route id, '<route id>:plan'), 'alternative:<route id>' for the one-click switch under a stopped run, or null for no click. `switcher` is what the switcher shows before (`before`) and after the click, and `writes` the params the click changes on the saved node (snapped values included). Python (test_route_clients.py) saves `saved` + `writes` on the node and runs it through multi_route: `run.route` is the route the router picks, and `run.request` the one provider request it makes (`body` exactly, checked against `schema`), or `run.refused` the message it stops with before any request. TS (frontend/tests/components/switchToClient.test.tsx) seeds the node in the graph store, clicks the row in the Inspector's switcher and checks the store holds `saved` + `writes`, the card note is `notes`, and the switcher shows `switcher`.",
   "cases": [
     {
       "name": "a click on fal snaps 1.5k to 2k and sends the wired image to fal's edit endpoint",
@@ -227,6 +227,99 @@
           "body": { "prompt": "p", "duration": 5, "resolution": "720p", "aspect_ratio": "16:9", "generate_audio": true }
         }
       }
+    },
+    {
+      "name": "FLUX 3 Image: a click on fal snaps 1.5k to 2k and sends the wired image to fal's edit endpoint",
+      "definition": "flux-3-image",
+      "saved": { "resolution": "1.5k" },
+      "keys": ["BFL_API_KEY", "FAL_KEY"],
+      "wired": { "images": ["https://e.com/a.png"] },
+      "click": "fal",
+      "switcher": {
+        "before": { "chip": "Auto · BFL", "blocked": false, "alternatives": [] },
+        "chip": "fal", "blocked": false, "alternatives": [], "notes": ["1.5K isn't on fal.ai: set to 2K"]
+      },
+      "writes": { "_provider": "fal", "resolution": "2k" },
+      "run": {
+        "route": "fal",
+        "request": {
+          "method": "POST", "url": "https://queue.fal.run/blackforestlabs/flux-3/edit-image",
+          "schema": ["fal", "blackforestlabs/flux-3/edit-image"],
+          "body": {
+            "prompt": "p", "aspect_ratio": "auto", "resolution": "2k", "safety_tolerance": 2,
+            "enable_prompt_expansion": false, "image_urls": ["https://e.com/a.png"]
+          }
+        }
+      }
+    },
+    {
+      "name": "FLUX 3 Image: no click: Auto lands on fal, which can't take 1.5k, so the run stops and offers Replicate",
+      "definition": "flux-3-image",
+      "saved": { "resolution": "1.5k" },
+      "keys": ["FAL_KEY", "REPLICATE_API_TOKEN"],
+      "wired": {},
+      "click": null,
+      "switcher": {
+        "before": { "chip": "Auto · fal", "blocked": true, "alternatives": ["replicate"] },
+        "chip": "Auto · fal", "blocked": true, "alternatives": ["replicate"], "notes": []
+      },
+      "writes": {},
+      "run": { "route": null, "refused": "can't run on fal.ai" }
+    },
+    {
+      "name": "FLUX 3 Video: a click on Krea snaps QHD to Full HD and runs the catalog model on the API token",
+      "definition": "flux-3-video",
+      "saved": { "resolution": "qhd" },
+      "keys": ["BFL_API_KEY", "KREA_API_TOKEN"],
+      "wired": {},
+      "click": "krea",
+      "switcher": {
+        "before": { "chip": "Auto · BFL", "blocked": false, "alternatives": [] },
+        "chip": "Krea", "blocked": false, "alternatives": [], "notes": ["QHD (1440p) isn't on Krea: set to Full HD (1080p)"]
+      },
+      "writes": { "_provider": "krea", "_kreaAuth": "api-token", "resolution": "fhd" },
+      "run": {
+        "route": "krea",
+        "request": {
+          "method": "POST", "url": "https://api.krea.ai/generate/video/black-forest-labs/flux-3-video",
+          "body": { "prompt": "p", "duration": 5, "resolution": "1080p", "aspect_ratio": "16:9", "generate_audio": true }
+        }
+      }
+    },
+    {
+      "name": "FLUX 3 Video: a click on Krea's plan row bills the plan through the account path",
+      "definition": "flux-3-video",
+      "saved": {},
+      "keys": ["BFL_API_KEY"],
+      "kreaSignedIn": true,
+      "wired": {},
+      "click": "krea:plan",
+      "switcher": {
+        "before": { "chip": "Auto · BFL", "blocked": false, "alternatives": [] },
+        "chip": "Krea plan", "blocked": false, "alternatives": [], "notes": []
+      },
+      "writes": { "_provider": "krea", "_kreaAuth": "mcp" },
+      "run": {
+        "route": "krea",
+        "plan": {
+          "body": { "prompt": "p", "duration": 5, "resolution": "720p", "aspect_ratio": "16:9", "generate_audio": true },
+          "endpoint": "/generate/video/black-forest-labs/flux-3-video"
+        }
+      }
+    },
+    {
+      "name": "FLUX 3 Video: no click: a wired keyframe on the saved OpenRouter route stops the run and offers fal",
+      "definition": "flux-3-video",
+      "saved": { "_provider": "openrouter" },
+      "keys": ["OPENROUTER_API_KEY", "FAL_KEY"],
+      "wired": { "keyframes": ["https://e.com/a.png"] },
+      "click": null,
+      "switcher": {
+        "before": { "chip": "OR", "blocked": true, "alternatives": ["fal"] },
+        "chip": "OR", "blocked": true, "alternatives": ["fal"], "notes": []
+      },
+      "writes": {},
+      "run": { "route": null, "refused": "can't run on OpenRouter" }
     }
   ]
 }

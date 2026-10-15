@@ -92,7 +92,9 @@ def _fal_defaults(definition_id):
 
 def test_every_maker_routed_node_has_a_router():
     registry = get_handler_registry(emit=AsyncMock())
-    routed = {node_id for node_id, handler in registry.items() if getattr(handler, "dual_route", False)}
+    # Route-table routers say dual_route too; test_every_route_table_node_has_a_multi_router has them.
+    routed = {node_id for node_id, handler in registry.items()
+              if getattr(handler, "dual_route", False) and not getattr(handler, "multi_route", False)}
     assert routed == MAKER_ROUTED
     for node_id in MAKER_ROUTED:
         assert node_route.direct_keys(DEFINITIONS[node_id]), node_id
@@ -360,8 +362,11 @@ import json  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 ROUTE_FIXTURES = json.loads((Path(__file__).parent / "fixtures" / "route_cases.json").read_text())["definitions"]
-# Route-table nodes in the registry; none ship before the first FLUX 3 nodes.
-MULTI_ROUTED: set[str] = set()
+# Route-table nodes in the registry (routing series PR 3).
+MULTI_ROUTED: set[str] = {
+    "flux-3-image", "flux-3-image-klein", "flux-3-image-klein-base", "flux-3-video", "flux-video-edit",
+    "flux-video-upscale", "krea-3",
+}
 
 
 def test_every_route_table_node_has_a_multi_router():
@@ -491,7 +496,8 @@ async def test_register_route_nodes_builds_a_router_from_the_route_clients(route
     route_clients.register_route_nodes(registry, {**DEFINITIONS, **ROUTE_FIXTURES}, emit="emit")
     handler = registry["routes-image"]
     assert handler.multi_route and handler.dual_route
-    assert {node_id for node_id, h in registry.items() if getattr(h, "multi_route", False)} == set(ROUTE_FIXTURES)
+    assert {node_id for node_id, h in registry.items() if getattr(h, "multi_route", False)} == \
+        set(ROUTE_FIXTURES) | MULTI_ROUTED
     node = GraphNode(id="n", definitionId="routes-image", params={**IMAGE_DEFAULTS, "_provider": "fal"})
     await handler(node, PROMPT, {"FAL_KEY": "f"})
     assert run.await_args.kwargs["route"]["id"] == "fal" and run.await_args.kwargs["emit"] == "emit"

@@ -21,7 +21,7 @@ vi.mock('../../src/lib/api', async (importOriginal) => ({
 /**
  * PR 2's two halves joined (backend/tests/fixtures/switch_cases.json): a
  * person's click in the Inspector's provider switcher, on the fixture nodes
- * of route_client_definitions.json, writes each case's `writes` to the node
+ * of route_client_definitions.json or the registry's route-table nodes, writes each case's `writes` to the node
  * in the graph store, and the switcher then shows its `switcher` state. The
  * backend half (test_route_clients.py test_switch_cases_*) saves the same
  * values and checks the router sends them to the right client.
@@ -79,7 +79,8 @@ function view(definition: ModelNodeDefinition, params: Params, context: SwitchCo
 
 describe('switch_cases.json: a switcher click writes what the backend run expects', () => {
   it.each(CASES.map((c) => [c.name, c] as const))('%s', (_name, c) => {
-    const definition = DEFINITIONS[c.definition];
+    // A fixture node, else a real route-table node (PR 3).
+    const definition = DEFINITIONS[c.definition] ?? NODE_DEFINITIONS[c.definition];
     const apiKeys = Object.fromEntries(c.keys.map((key) => [key, KEY]));
     const wired = new Map(Object.keys(c.wired).map((port) => [port, 1]));
     const context: SwitchContext = { apiKeys, kreaSignedIn: Boolean(c.kreaSignedIn), wired };

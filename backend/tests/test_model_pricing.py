@@ -334,3 +334,29 @@ def test_wired_counts_counts_each_edge_into_a_port():
     edges = [("a", "k", "images"), ("b", "k", "images"), ("c", "k", "prompt"), ("d", "other", "images"), ("e", "k", None)]
     assert model_pricing.wired_counts(items, edges) == {"k": {"images": 2, "prompt": 1}}
     assert model_pricing.wired_ports(items, edges) == {"k": {"images", "prompt"}}
+
+
+def test_price_variables_that_arent_params_are_validated():
+    """(mode) takes only the three video modes; run-time quantities and the
+    megapixel-second unit are known names, any other parenthesised name isn't."""
+    definitions = CASES["definitions"]
+    moded = CASES["pricing"]["nodes"]["moded"]
+    bad = {"nodes": {
+        "moded": {**moded, "rows": [{"match": {"(mode)": "x2v"}, "price": 0.1},
+                                    {"match": {"(frames)": 1}, "price": 0.1}]},
+        "tooled": {**CASES["pricing"]["nodes"]["tooled"], "per": "megapixel"},
+    }}
+    problems = "\n".join(model_pricing.validate_pricing(bad, definitions))
+    assert "(mode) must be one of ('t2v', 'i2v', 'v2v')" in problems
+    assert "matches unknown param '(frames)'" in problems
+    assert "per must be one of" in problems
+    assert model_pricing.validate_pricing({"nodes": {"moded": moded, "tooled": CASES["pricing"]["nodes"]["tooled"]}},
+                                          definitions) == []
+
+
+@pytest.mark.parametrize("wired, mode", [
+    ((), "t2v"), (("prompt",), "t2v"), (("start_image",), "i2v"), (("keyframes",), "i2v"),
+    (("end_image", "start_image"), "i2v"), (("start_video",), "v2v"), (("start_video", "keyframes"), "v2v"),
+])
+def test_video_mode_follows_the_wired_ports_like_the_bfl_client(wired, mode):
+    assert model_pricing.video_mode(wired) == mode

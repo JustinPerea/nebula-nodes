@@ -2119,6 +2119,376 @@
    ],
    "title": "Flux3TextToVideoDraftInput",
    "type": "object"
+  },
+  "blackforestlabs/flux-video-upscale": {
+   "required": [
+    "video_url"
+   ],
+   "x-fal-order-properties": [
+    "video_url",
+    "upscale_factor",
+    "creativity",
+    "prompt",
+    "safety_tolerance"
+   ],
+   "title": "FluxVideoUpscaleInput",
+   "type": "object",
+   "properties": {
+    "upscale_factor": {
+     "default": 2,
+     "minimum": 1.5,
+     "description": "Output scaling factor. The source aspect ratio is preserved.",
+     "title": "Upscale Factor",
+     "maximum": 3,
+     "type": "number"
+    },
+    "video_url": {
+     "examples": [
+      "https://v3b.fal.media/files/b/0a93a27d/-iFpecUCsSdwXVMevsZa3_output_5s_448x256.mp4"
+     ],
+     "description": "URL of the MP4 video to upscale. The video must be at most 20 seconds and 50 MB.",
+     "title": "Video Url",
+     "type": "string"
+    },
+    "creativity": {
+     "default": 1,
+     "enum": [
+      0,
+      1
+     ],
+     "description": "Use 0 for a source-faithful upscale or 1 for creative detail enhancement.",
+     "title": "Creativity",
+     "type": "integer"
+    },
+    "prompt": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Prompt",
+     "description": "Optional description used to guide creative detail enhancement."
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "minimum": 0,
+     "description": "Moderation strictness. Lower values are stricter.",
+     "title": "Safety Tolerance",
+     "maximum": 4,
+     "type": "integer"
+    }
+   }
+  },
+  "krea/v3/edit": {
+   "title": "EditInput",
+   "required": [
+    "prompt",
+    "image_urls"
+   ],
+   "x-fal-order-properties": [
+    "prompt",
+    "image_urls",
+    "model",
+    "image_size",
+    "reasoning_level",
+    "negative_prompt",
+    "seed",
+    "output_format",
+    "sync_mode",
+    "enable_safety_checker"
+   ],
+   "properties": {
+    "reasoning_level": {
+     "title": "Reasoning Level",
+     "default": "low",
+     "description": "How much effort the harness spends reasoning about the given editing task. Higher reasoning effort means slower generation time. high plans the edit with segmentation, web search and reference photos, keeps unedited areas of a single input image, corrects required text, and bills 5 megapixels more per request.",
+     "enum": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "type": "string"
+    },
+    "output_format": {
+     "title": "Output Format",
+     "default": "png",
+     "description": "Output image format.",
+     "enum": [
+      "png",
+      "jpeg"
+     ],
+     "type": "string"
+    },
+    "image_size": {
+     "title": "Image Size",
+     "default": "auto",
+     "x-fal": {
+      "max_area": 4220160,
+      "multiple_of": 16,
+      "max_height": 3200,
+      "min_height": 256,
+      "min_width": 256,
+      "max_width": 3200
+     },
+     "anyOf": [
+      {
+       "title": "ImageSize",
+       "properties": {
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The width of the generated image.",
+         "type": "integer"
+        },
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The height of the generated image.",
+         "type": "integer"
+        }
+       },
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9",
+        "auto"
+       ],
+       "type": "string"
+      }
+     ],
+     "description": "Output size, rounded up to multiples of 16, at most 4,220,160 total pixels (1680×2512). auto lets the prompt expander pick the aspect ratio at about 2048×2048."
+    },
+    "seed": {
+     "title": "Seed",
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Latent noise seed. Use a new seed when editing a previous output again."
+    },
+    "negative_prompt": {
+     "maxLength": 1024,
+     "default": "",
+     "title": "Negative Prompt",
+     "description": "What to keep out of the image. Used by berry only.",
+     "type": "string"
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "default": false,
+     "description": "Return images as data URIs instead of saving them in request history.",
+     "type": "boolean"
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "default": true,
+     "description": "Check output images for unsafe content. Disabling requires account authorization.",
+     "type": "boolean"
+    },
+    "model": {
+     "title": "Model",
+     "default": "berry",
+     "description": "Model variant: berry favors quality, jam favors speed.",
+     "enum": [
+      "berry",
+      "jam"
+     ],
+     "type": "string"
+    },
+    "image_urls": {
+     "title": "Image Urls",
+     "minItems": 1,
+     "description": "Reference images to edit or combine (1-8). Order sets the <image-N> tags.",
+     "examples": [
+      [
+       "https://v3b.fal.media/files/b/0a90b2a1/i89tMXz0SmiwL0ZvbnUvS_image_00240.png"
+      ]
+     ],
+     "items": {
+      "_fal_ui_field": "image",
+      "type": "string"
+     },
+     "maxItems": 8,
+     "type": "array"
+    },
+    "prompt": {
+     "title": "Prompt",
+     "maxLength": 5000,
+     "minLength": 1,
+     "examples": [
+      "A red fox curled up asleep in fresh snow at dawn, soft pink light on the pine trees behind it"
+     ],
+     "description": "Description of the image to generate.",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "krea/v3/text-to-image": {
+   "title": "TextToImageInput",
+   "required": [
+    "prompt"
+   ],
+   "x-fal-order-properties": [
+    "prompt",
+    "model",
+    "image_size",
+    "reasoning_level",
+    "negative_prompt",
+    "seed",
+    "output_format",
+    "sync_mode",
+    "enable_safety_checker"
+   ],
+   "properties": {
+    "output_format": {
+     "title": "Output Format",
+     "default": "png",
+     "description": "Output image format.",
+     "enum": [
+      "png",
+      "jpeg"
+     ],
+     "type": "string"
+    },
+    "image_size": {
+     "title": "Image Size",
+     "default": "auto",
+     "x-fal": {
+      "max_area": 4220160,
+      "multiple_of": 16,
+      "max_height": 3200,
+      "min_height": 256,
+      "min_width": 256,
+      "max_width": 3200
+     },
+     "anyOf": [
+      {
+       "title": "ImageSize",
+       "properties": {
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The width of the generated image.",
+         "type": "integer"
+        },
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The height of the generated image.",
+         "type": "integer"
+        }
+       },
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9",
+        "auto"
+       ],
+       "type": "string"
+      }
+     ],
+     "description": "Output size, rounded up to multiples of 16, at most 4,220,160 total pixels (1680×2512). auto lets the prompt expander pick the aspect ratio at about 2048×2048."
+    },
+    "seed": {
+     "title": "Seed",
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Latent noise seed. Use a new seed when editing a previous output again."
+    },
+    "negative_prompt": {
+     "maxLength": 1024,
+     "default": "",
+     "title": "Negative Prompt",
+     "description": "What to keep out of the image. Used by berry only.",
+     "type": "string"
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "default": false,
+     "description": "Return images as data URIs instead of saving them in request history.",
+     "type": "boolean"
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "default": true,
+     "description": "Check output images for unsafe content. Disabling requires account authorization.",
+     "type": "boolean"
+    },
+    "model": {
+     "title": "Model",
+     "default": "berry",
+     "description": "Model variant: berry favors quality, jam favors speed.",
+     "enum": [
+      "berry",
+      "jam"
+     ],
+     "type": "string"
+    },
+    "reasoning_level": {
+     "title": "Reasoning Level",
+     "default": "low",
+     "description": "How much effort the harness spends reasoning about the given prompt. Higher reasoning effort means slower generation time.",
+     "enum": [
+      "low",
+      "medium"
+     ],
+     "type": "string"
+    },
+    "prompt": {
+     "title": "Prompt",
+     "maxLength": 5000,
+     "minLength": 1,
+     "examples": [
+      "A red fox curled up asleep in fresh snow at dawn, soft pink light on the pine trees behind it"
+     ],
+     "description": "Description of the image to generate.",
+     "type": "string"
+    }
+   },
+   "type": "object"
   }
- }
+ },
+ "_note": "blackforestlabs/flux-video-upscale (FluxVideoUpscaleInput), krea/v3/text-to-image (V3TextToImageInput) and krea/v3/edit (V3EditInput) added for PR 3 from the same per-endpoint queue OpenAPI, read 2026-10-15, with $refs inlined."
 }

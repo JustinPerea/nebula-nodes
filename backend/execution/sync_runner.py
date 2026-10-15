@@ -337,7 +337,11 @@ def get_handler_registry(
     registry = dict(SYNC_HANDLERS)
     from execution import maker_routes, maker_routes_google
     from handlers.krea_gateway import catalog_models, handle_krea_gateway
-    for definition_id in catalog_models():
+    for definition_id, model in catalog_models().items():
+        if model.get("foldedInto"):
+            # A route of a route-table node (scripts/sync-krea-catalog.py
+            # FOLDED), not a node: route_clients registers that node.
+            continue
         # Krea copies with a maker route (scripts/sync-krea-catalog.py
         # DIRECT_ROUTES) run on the maker's API when its key is set, unless
         # the node bills the Krea plan; otherwise the Krea gateway.
