@@ -15,7 +15,9 @@ from models.events import (
     ProviderRecoveryEvent,
 )
 from services.execution_runs import ExecutionRunRegistry
+from services.agent_presence import request_headers_scope
 from services.provider_recovery import ProviderRecoveryPersistenceError
+from tests.conftest import PERSON
 
 
 @pytest.mark.asyncio
@@ -171,12 +173,13 @@ async def test_execute_cancel_endpoint_stops_backend_task_and_emits_terminal_eve
 @pytest.mark.asyncio
 @pytest.mark.parametrize("single_node", [False, True])
 async def test_canvas_stop_syncs_recovery_params_before_cancelled_event(
-    monkeypatch, single_node: bool,
+    monkeypatch, person, single_node: bool,
 ) -> None:
     """A stopped paid operation must remain resumable in the visible graph."""
     main_module.execution_runs.clear()
     main_module.cli_graph.clear()
-    assert main_module.cli_graph.add_node("text-input", {"value": "before"}) == "n1"
+    # World Labs declares resume_operation_id; a run syncs only declared params.
+    assert main_module.cli_graph.add_node("worldlabs-environment", {"display_name": "before"}) == "n1"
 
     started = asyncio.Event()
 
@@ -194,29 +197,33 @@ async def test_canvas_stop_syncs_recovery_params_before_cancelled_event(
         sequence.append(str(event.type))
 
     monkeypatch.setattr(main_module, "execute_graph", fake_execute_graph)
+    # The person's own run (a World Labs node has no list price, so an
+    # agent's run would need a proposal); no World Labs key is configured here.
+    monkeypatch.setattr(main_module, "validate_graph", lambda *args, **kwargs: [])
     monkeypatch.setattr(main_module.manager, "broadcast_raw", capture_raw)
     monkeypatch.setattr(main_module.manager, "broadcast", capture_event)
 
     node = GraphNode(
         id="n1",
-        definitionId="text-input",
-        params={"value": "before"},
+        definitionId="worldlabs-environment",
+        params={"display_name": "before"},
         outputs={},
     )
     run_id = "recovery-sync-node" if single_node else "recovery-sync-graph"
-    if single_node:
-        response = await main_module.execute_node(
-            ExecuteNodeRequest(
-                nodes=[node],
-                edges=[],
-                targetNodeId="n1",
-                runId=run_id,
+    with request_headers_scope(PERSON):
+        if single_node:
+            response = await main_module.execute_node(
+                ExecuteNodeRequest(
+                    nodes=[node],
+                    edges=[],
+                    targetNodeId="n1",
+                    runId=run_id,
+                )
             )
-        )
-    else:
-        response = await main_module.execute(
-            ExecuteRequest(nodes=[node], edges=[], runId=run_id)
-        )
+        else:
+            response = await main_module.execute(
+                ExecuteRequest(nodes=[node], edges=[], runId=run_id)
+            )
 
     record = main_module.execution_runs.get(response["runId"])
     assert record is not None

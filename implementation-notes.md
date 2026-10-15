@@ -3238,3 +3238,17 @@ Tradeoffs and surprises:
   repointed by a temp Vite config because `vite.config.ts` hardcodes 8000). Two Image Inputs into Image Compare,
   run, autosave. Before the fix: PUT 400 with the `imageA` message and "Save failed · Retry". After: PUT 200, "Saved",
   and the saved snapshot keeps `imageA`/`imageB`.
+
+## Jev tournament demo (2026-10-14)
+
+- **Branch.** `jev-tournament-demo` in the demo worktree, off `jev-nodes` at `03db7088`. It carries a cherry-pick of `63e2071d` from `fix-image-compare-autosave` (Preview now declares its `input` display output) and one new fix below. The demo graph has a Preview node (Box's crop), so without `63e2071d` the first autosave after a run fails with "output handle 'input' is not declared by definition 'preview'".
+- **Run params leaked onto the canvas and broke autosave.** About 50 fal handlers in `execution/sync_runner.py` route by `node.params.setdefault("endpoint_id", ...)`. A person's run mirrors `node.params` back to the canvas (`_sync_params_to_cli_graph`), and saving a project then rejects the undeclared key: "Unknown param(s) for flux-fill-inpaint: ['endpoint_id']" and the top bar stuck on "Save failed · Retry". This predates the Jev work (the same sync and save check are on main).
+  - Fixed at the sync, not in each handler: `_declared_run_params` keeps only keys the definition declares and `_`-prefixed canvas state, using the same `_valid_param_keys` as the save check, so no handler (today's fifty or a future one) can write a key the save will refuse. Universal nodes still sync every key.
+  - A key that already leaked is dropped by the node's next run, because the canvas sends it back with the run.
+  - Checked the handlers that legitimately write params back (Video Edit clips and source info, Recraft colours, Ideogram seed, World Labs resume ids on `worldlabs-environment`): all declared, so they still sync.
+  - Not changed: the handlers still mutate `node.params` (the manifest and agents' `/api/graph/export` of the run's own nodes don't see it now). Switching them to `_fal_wrapper_node` is a cleaner follow-up.
+  - Test: `backend/tests/test_run_param_sync.py`, including the real FLUX Fill handler (fal mocked) followed by a project save. Three of its four tests fail without the fix.
+- **Box -> FLUX Fill without shims.** The demo's mock backend dropped `--shim-mask`. A mocked run sent FLUX Fill the winner as a data URI and Box's mask at the image's size (1024 x 1024), white box = Box's crop rectangle, and the mock painted the swap into exactly that area. Nothing failed.
+- **Two older tests relied on the leak.** `test_paper_replay.py` and `test_execution_cancellation.py::test_canvas_stop_syncs_recovery_params_before_cancelled_event` synced made-up param keys back to the canvas, which the stricter sync now drops.
+  - Paper replay now uses a sticky note's declared `content` and `color` instead of keys a text input doesn't declare.
+  - The cancellation test now uses `worldlabs-environment` with its declared `display_name`, the node whose resume ids are the real reason that sync runs on stop. It runs as a person and skips graph validation; the comments say why.
