@@ -201,6 +201,36 @@ async def test_bfl_refuses_a_recipe_it_cant_send_before_any_request(monkeypatch,
     assert not hosts.requests
 
 
+END_ONLY = {"end_image": "https://e.com/e.png"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("handler, route_id, hosts_for", [
+    ("fal", "fal", lambda mp: fal_hosts(mp, {"video": {"url": "https://fal.media/x.mp4"}})),
+    ("replicate-model", "replicate", lambda mp: FakeHosts(mp, [])),
+    ("openrouter-videos", "openrouter", lambda mp: FakeHosts(mp, [])),
+    ("krea", "krea", lambda mp: krea_hosts(mp)),
+])
+async def test_every_video_route_refuses_an_end_image_alone_before_any_request(monkeypatch, handler, route_id,
+                                                                                hosts_for):
+    # The rule BFL's test above pins, on every route: no provider may open
+    # the clip on the frame meant to close it, or bill a run that would.
+    hosts = hosts_for(monkeypatch)
+    spec = route("clients-video", route_id)
+    params = {"_kreaAuth": "api-token", "duration": 5} if route_id == "krea" else {"duration": 5}
+    endpoint = None
+    if route_id == "fal":  # the endpoint the router picks for a wired end_image
+        from services import node_route
+
+        definition = DEFINITIONS["clients-video"]
+        endpoint = node_route.route_endpoint(definition, spec, node_route.with_wired_blockers(
+            definition, params, {"end_image": 1}))
+        assert endpoint == "blackforestlabs/flux-3/first-last-frame-to-video"
+    with pytest.raises(ValueError, match="needs a start image"):
+        await run(handler, "clients-video", route_id, params, ports(prompt="p", **END_ONLY), endpoint=endpoint)
+    assert not hosts.requests
+
+
 @pytest.mark.asyncio
 async def test_bfl_path_without_a_request_shape_is_refused(monkeypatch):
     hosts = bfl_hosts(monkeypatch)

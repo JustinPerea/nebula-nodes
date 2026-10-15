@@ -80,14 +80,22 @@ def refuse_unwired(inputs: Mapping[str, Any], takes: set[str], where: str) -> No
         raise ValueError(f"{where} can't take the wired {', '.join(extra)}. Disconnect it or choose another provider.")
 
 
+def refuse_end_alone(inputs: Mapping[str, Any], where: str) -> None:
+    """A video node's end image needs a start image or keyframes before it,
+    or the provider would open the clip on the frame meant to close it. Every
+    video client checks this before its first request, so the recipe stops
+    the same way on every route (and none bills it)."""
+    if port_values(inputs, "end_image") and not (port_values(inputs, "start_image") or port_values(inputs, "keyframes")):
+        raise ValueError(f"{where} needs a start image (or keyframes) to end on an end image")
+
+
 def video_frames(inputs: Mapping[str, Any], where: str) -> list[Any]:
-    """A video node's images in time order: start, keyframes, end. An end
-    image needs one before it, or the provider would open the clip with it."""
+    """A video node's images in time order: start, keyframes, end
+    (refuse_end_alone)."""
+    refuse_end_alone(inputs, where)
     start = port_values(inputs, "start_image")[:1]
     frames = [*start, *port_values(inputs, "keyframes")]
     end = port_values(inputs, "end_image")[:1]
-    if end and not frames:
-        raise ValueError(f"{where} needs a start image (or keyframes) to end on an end image")
     return [*frames, *end]
 
 
@@ -300,6 +308,7 @@ def fal_fields(endpoint: str, params: Mapping[str, Any], inputs: Mapping[str, An
     fields: dict[str, Any] = {}
     table = _FAL_FIELDS[shape]
     refuse_unwired(inputs, {"prompt", *table}, where)
+    refuse_end_alone(inputs, where)
     for port, (field, many) in table.items():
         values = port_values(inputs, port)
         if not values:
@@ -401,6 +410,7 @@ async def run_openrouter_videos(node: GraphNode, inputs: dict[str, PortValueDict
     # frame_images takes only a first and a last frame; a source video has no
     # documented request shape (handlers/openrouter_media.py).
     refuse_unwired(inputs, {"prompt", "start_image", "end_image"}, where)
+    refuse_end_alone(inputs, where)
     prompt = prompt_of(inputs)
     if prompt is None:
         raise ValueError(f"{where} needs a prompt")
@@ -428,6 +438,9 @@ async def run_krea(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: 
 
     definition = _definition(node)
     key = catalog_key_for(endpoint if endpoint is not None else route.get("endpoint"))
+    if output_port(definition)[1] == "Video":
+        # Krea's catalog schema leaves end_image optional on its own.
+        refuse_end_alone(inputs, f"Krea's {key}")
     result = await handle_krea_catalog(key, node, inputs, api_keys, emit=emit)
     return rekey(definition, result, "Krea")
 
