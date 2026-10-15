@@ -90,7 +90,7 @@ async def _fast_sleep(_seconds: float = 0, *args: Any) -> None:
 @pytest.fixture(autouse=True)
 def quick(monkeypatch):
     """No waiting between polls, video bytes accepted without ffprobe, the
-    fixture definitions in place of the registry's."""
+    fixture definitions ahead of the registry's (a case may name a real node)."""
     from handlers import bfl, fal_universal, krea_gateway, openrouter_media, replicate_model
 
     monkeypatch.setattr(bfl, "POLL_INTERVAL", {"Image": 0.0, "Video": 0.0})
@@ -101,7 +101,9 @@ def quick(monkeypatch):
     monkeypatch.setattr(krea_gateway, "POLL_INTERVAL", 0.0)
     monkeypatch.setattr(poll_retry, "POLL_RETRY_DELAYS", (0.0, 0.0))
     monkeypatch.setattr("services.output.ffprobe_video", AsyncMock(return_value={}))
-    monkeypatch.setattr(maker_routes, "definition_for", lambda definition_id: DEFINITIONS[definition_id])
+    real = maker_routes.definition_for
+    monkeypatch.setattr(maker_routes, "definition_for", lambda definition_id: (
+        DEFINITIONS[definition_id] if definition_id in DEFINITIONS else real(definition_id)))
 
 
 @pytest.fixture
@@ -678,9 +680,18 @@ async def test_krea_needs_the_billing_mode_and_a_known_catalog_model(monkeypatch
 # -- End to end through multi_route ----------------------------------------------
 
 
+def definition_of(definition_id: str) -> dict[str, Any]:
+    """A fixture node, else the registry's (the real route-table nodes)."""
+    if definition_id in DEFINITIONS:
+        return DEFINITIONS[definition_id]
+    from services.node_registry import NodeRegistry
+
+    return NodeRegistry().get_all()[definition_id]
+
+
 def registry_handler(definition_id: str):
     registry: dict[str, Any] = {}
-    route_clients.register_route_nodes(registry, DEFINITIONS)
+    route_clients.register_route_nodes(registry, {definition_id: definition_of(definition_id)})
     return registry[definition_id]
 
 
@@ -771,7 +782,7 @@ SWITCH_HOSTS: dict[str, Callable[[pytest.MonkeyPatch, bool], FakeHosts]] = {
 
 def switch_node(case: dict[str, Any]) -> GraphNode:
     """The node as the switcher leaves it: defaults, the saved values, then what the click wrote."""
-    definition = DEFINITIONS[case["definition"]]
+    definition = definition_of(case["definition"])
     defaults = {p["key"]: p["default"] for group in ("params", "sharedParams") for p in definition[group]}
     defaults.update({p["key"]: p["default"] for r in definition["routes"] for p in r.get("params") or []})
     return node(case["definition"], **{**defaults, **case["saved"], **case["writes"]})
@@ -781,7 +792,7 @@ def switch_node(case: dict[str, Any]) -> GraphNode:
 def test_switch_cases_pick_the_route_the_switcher_shows(case):
     from services import node_route
 
-    definition = DEFINITIONS[case["definition"]]
+    definition = definition_of(case["definition"])
     graph_node = switch_node(case)
     keys = {key: KEYS[key] for key in case["keys"]}
     routed = node_route.with_wired_blockers(definition, graph_node.params,
@@ -810,7 +821,7 @@ async def test_switch_cases_reach_the_right_client(monkeypatch, case):
         return {"status": "completed", "result": {"urls": [KREA_RESULT]}}
 
     monkeypatch.setattr(krea_mcp_generation, "generate", plan_generate)
-    video = route_clients.output_port(DEFINITIONS[case["definition"]])[1] == "Video"
+    video = route_clients.output_port(definition_of(case["definition"]))[1] == "Video"
     hosts = (FakeHosts(monkeypatch, []) if run_["route"] is None
              else SWITCH_HOSTS[run_["route"]](monkeypatch, video))
     keys = {key: KEYS[key] for key in case["keys"]}
@@ -822,7 +833,7 @@ async def test_switch_cases_reach_the_right_client(monkeypatch, case):
         assert not hosts.requests and not seen
         return
     out = await handler(switch_node(case), inputs, keys)
-    port, data_type = route_clients.output_port(DEFINITIONS[case["definition"]])
+    port, data_type = route_clients.output_port(definition_of(case["definition"]))
     assert out[port]["type"] == data_type
     if "plan" in run_:
         assert seen == run_["plan"]

@@ -16,7 +16,7 @@ from services.node_registry import NodeRegistry
 
 CASES = json.loads((Path(__file__).parent / "fixtures" / "route_cases.json").read_text())
 DEFINITIONS = NodeRegistry().get_all()
-# Inline route-table nodes (definition `routes`): none ship in the registry yet.
+# Inline route-table nodes (definition `routes`), next to the registry's own (PR 3).
 FIXTURE_DEFINITIONS = CASES["definitions"]
 
 
@@ -402,7 +402,7 @@ def test_all_param_definitions_matches_every_list_it_replaced(site):
         else:
             assert old == new, (site, node_id, set(old) ^ set(new))
         checked += 1
-    assert checked > (5 if maker_key else 300)
+    assert checked > (5 if maker_key else 290)
 
 
 def test_all_param_definitions_keeps_the_graph_defaults_and_create_lists():

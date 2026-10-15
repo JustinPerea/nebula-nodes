@@ -76,6 +76,30 @@ describe('the shipped price table', () => {
   });
 });
 
+describe('estimateRoutes on the shipped table (cases shared with the backend)', () => {
+  // The registry's route-table nodes priced by backend/data/model_pricing.json
+  // (pricing_cases.json shippedRouteCases; test_flux3_nodes.py runs them too).
+  const cases = (shared as unknown as {
+    shippedRouteCases: Array<{ name: string; nodeId: string; params: Record<string, unknown>; wired: string[];
+      expected: Record<string, number | [number, number] | null> }>;
+  }).shippedRouteCases;
+  const table = shippedTable as unknown as PricingTable;
+  const registry = backendCatalog as unknown as Record<string, ModelNodeDefinition>;
+  for (const testCase of cases) {
+    it(testCase.name, () => {
+      const result = estimateRoutes(registry[testCase.nodeId], testCase.params, testCase.wired, table);
+      expect(Object.keys(result).sort()).toEqual(Object.keys(testCase.expected).sort());
+      for (const [routeId, price] of Object.entries(testCase.expected)) {
+        const estimate = result[routeId];
+        if (price === null) { expect(estimate, routeId).toBeNull(); continue; }
+        const [low, high] = Array.isArray(price) ? price : [price, price];
+        expect(estimate?.low, routeId).toBeCloseTo(low, 6);
+        expect(estimate?.high, routeId).toBeCloseTo(high, 6);
+      }
+    });
+  }
+});
+
 describe('formatUsd', () => {
   it('keeps two significant figures under a dollar', () => {
     expect(formatUsd(0.04)).toBe('$0.04');

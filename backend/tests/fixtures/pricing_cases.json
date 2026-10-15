@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run.",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null.",
   "definitions": {
     "img": {
       "id": "img",
@@ -1962,6 +1962,196 @@
         "replicate": 0.04,
         "openrouter": null,
         "krea": 0.05
+      }
+    }
+  ],
+  "shippedRouteCases": [
+    {
+      "name": "FLUX 3 Image: the cheapest size on each route",
+      "nodeId": "flux-3-image",
+      "params": {
+        "resolution": "768sq"
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.041,
+        "fal": 0.041,
+        "replicate": 0.0205,
+        "openrouter": 0.041
+      }
+    },
+    {
+      "name": "FLUX 3 Image: fal can't take 1.5k",
+      "nodeId": "flux-3-image",
+      "params": {
+        "resolution": "1.5k"
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.07,
+        "fal": null,
+        "replicate": 0.035,
+        "openrouter": 0.07
+      }
+    },
+    {
+      "name": "FLUX 3 Image Klein at its defaults",
+      "nodeId": "flux-3-image-klein",
+      "params": {},
+      "wired": [],
+      "expected": {
+        "bfl": 0.009,
+        "openrouter": 0.009
+      }
+    },
+    {
+      "name": "FLUX 3 Image Klein Base at its defaults (fal, unconfirmed)",
+      "nodeId": "flux-3-image-klein-base",
+      "params": {},
+      "wired": [],
+      "expected": {
+        "fal": 0.0283
+      }
+    },
+    {
+      "name": "FLUX 3 Video: a 5 s text run at hd",
+      "nodeId": "flux-3-video",
+      "params": {},
+      "wired": [],
+      "expected": {
+        "bfl": 0.75,
+        "fal": 0.85,
+        "replicate": 0.85,
+        "openrouter": 0.85,
+        "krea": 0.85
+      }
+    },
+    {
+      "name": "FLUX 3 Video: a 10 s continuation is v2v; OpenRouter takes no start video",
+      "nodeId": "flux-3-video",
+      "params": {
+        "duration": 10
+      },
+      "wired": [
+        "start_video"
+      ],
+      "expected": {
+        "bfl": 2.1,
+        "fal": 4.1,
+        "replicate": 4.1,
+        "openrouter": null,
+        "krea": 4.1
+      }
+    },
+    {
+      "name": "FLUX 3 Video: an image draft; OpenRouter and Krea take no draft",
+      "nodeId": "flux-3-video",
+      "params": {
+        "draft": true
+      },
+      "wired": [
+        "start_image"
+      ],
+      "expected": {
+        "bfl": 0.3,
+        "fal": 0.3,
+        "replicate": 0.3,
+        "openrouter": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "FLUX 3 Video: a continuation draft BFL doesn't price",
+      "nodeId": "flux-3-video",
+      "params": {
+        "draft": true
+      },
+      "wired": [
+        "start_video"
+      ],
+      "expected": {
+        "bfl": null,
+        "fal": 0.6,
+        "replicate": 0.6,
+        "openrouter": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "FLUX 3 Video: 4K is priced on BFL and OpenRouter only",
+      "nodeId": "flux-3-video",
+      "params": {
+        "resolution": "uhd"
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 2.05,
+        "fal": null,
+        "replicate": null,
+        "openrouter": 2.05,
+        "krea": null
+      }
+    },
+    {
+      "name": "FLUX Video Edit: priced by the source clip, so unpriced before the run",
+      "nodeId": "flux-video-edit",
+      "params": {},
+      "wired": [
+        "start_video"
+      ],
+      "expected": {
+        "bfl": null,
+        "fal": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "FLUX Video Upscale: priced by the source clip, so unpriced before the run",
+      "nodeId": "flux-video-upscale",
+      "params": {},
+      "wired": [
+        "video"
+      ],
+      "expected": {
+        "bfl": null,
+        "fal": null,
+        "replicate": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "Krea 3: a range over the references each route takes",
+      "nodeId": "krea-3",
+      "params": {},
+      "wired": [],
+      "expected": {
+        "krea": [
+          0.03,
+          0.59
+        ],
+        "fal": [
+          0.1,
+          0.9056
+        ]
+      }
+    },
+    {
+      "name": "Krea 3: high thinking at 2K on Krea",
+      "nodeId": "krea-3",
+      "params": {
+        "thinking_mode": "high",
+        "resolution": "2K"
+      },
+      "wired": [],
+      "expected": {
+        "krea": [
+          0.08,
+          0.64
+        ],
+        "fal": [
+          0.1,
+          0.9056
+        ]
       }
     }
   ]
