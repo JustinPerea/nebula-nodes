@@ -14,7 +14,9 @@ import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from './MaskPainterModal';
 import { JevResultDetails } from './JevResultDetails';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
-import { configuredDirectKey } from '../../lib/directRoute';
+import { paramDefinitionsForRun, selectRoute, withWiredBlockers } from '../../lib/directRoute';
+import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
+import { nodeWiredPorts } from '../../lib/runScope';
 import { skippedLabel } from '../../lib/gating';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
@@ -221,20 +223,44 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const nodeData = selectedNodeData ?? (exiting ? lastSelectionRef.current?.data : undefined);
   const definition = nodeData ? NODE_DEFINITIONS[nodeData.definitionId] : undefined;
 
-  // Resolve params: dual-param nodes use sharedParams + (falParams or directParams)
+  // Resolve params: dual-route nodes show sharedParams plus the params of the
+  // route this run takes (lib/directRoute.ts selectRoute, the backend's rule):
+  // directParams on the maker's key, falParams on the fal or Krea copy and on
+  // the Krea plan. With the maker key set but a direct param still missing
+  // (Ideogram Reframe without `resolution`), that param shows unset so the
+  // person can opt in. Until settings load, no key counts as set.
+  // A Krea-only input that arrives by wire keeps the run on the copy
+  // (withWiredBlockers, as the backend router reads it), so show that route's params.
   const settingsCache = useUIStore((s) => s.settingsCache);
+  const nodeParams = nodeData?.params;
+  const renderNodeId = renderNode?.id;
+  const wiredKey = useMemo(() => (renderNodeId ? nodeWiredPorts(renderNodeId, edges).join('\n') : ''), [renderNodeId, edges]);
   const resolvedParams: ParamDefinition[] = useMemo(() => {
     if (!definition) return [];
-    if (definition.sharedParams) {
-      const useDirectRoute = settingsCache.loaded
-        && Boolean(configuredDirectKey(definition, settingsCache.apiKeys));
-      const routeParams = useDirectRoute
-        ? (definition.directParams ?? [])
-        : (definition.falParams ?? []);
-      return [...definition.sharedParams, ...routeParams];
+    const routed = withWiredBlockers(definition, nodeParams, wiredKey ? wiredKey.split('\n') : []);
+    return paramDefinitionsForRun(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {}, { seedOptIn: false });
+  }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
+
+  // A maker that takes a fixed size list (Ideogram 3, Ideogram 2a, Runway
+  // Gen-4 Image) gets the nearest one on its route, and Seedance 2.5 on
+  // BytePlus makes a start-image run in the start image's shape
+  // (lib/makerSizes.ts, the backend's rules). Say so under the size or the
+  // aspect ratio when that isn't what was asked; on the Krea copy it is sent
+  // as given, so nothing is said.
+  const makerSizeNote = useMemo((): { param: string; text: string } | null => {
+    const route = definition?.directRoute;
+    if (!definition || !(route?.snap || route?.startShape) || !settingsCache.loaded) return null;
+    const wired = wiredKey ? wiredKey.split('\n') : [];
+    const routed = withWiredBlockers(definition, nodeParams, wired);
+    if (selectRoute(definition, routed, settingsCache.apiKeys).kind !== 'direct') return null;
+    if (route.snap) {
+      const text = sizeNote(definitionSnap(definition, nodeParams));
+      return text ? { param: route.snap.heightParam, text } : null;
     }
-    return definition.params;
-  }, [definition, settingsCache.loaded, settingsCache.apiKeys]);
+    if (!route.startShape) return null;
+    const text = definitionStartShapeNote(definition, nodeParams, wired);
+    return text ? { param: route.startShape.ratioParam, text } : null;
+  }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
 
   // Filter params by visibleWhen conditions
   const visibleParams = useMemo(() => {
@@ -874,6 +900,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
         {'disabledReason' in param && param.disabledReason && (
           <div className="inspector__notice" role="note">{param.disabledReason}</div>
         )}
+        {source === 'definition' && makerSizeNote && param.key === makerSizeNote.param && (
+          <div className="inspector__notice" role="note" data-inspector-size-note="true">{makerSizeNote.text}</div>
+        )}
         {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && (
           <button
             type="button"
@@ -1020,6 +1049,18 @@ export function Inspector({ embedded = false }: InspectorProps) {
         })()}
 
         {visibleParams.map((param) => renderParamSection(param, 'definition'))}
+
+        {/* What the last run said beside its outputs (the executed event's
+            notes), e.g. the size a maker made when it couldn't make the one
+            asked for. */}
+        {nodeData.runNotes && nodeData.runNotes.length > 0 && (
+          <div className="inspector__section" data-inspector-run-notes="true">
+            <div className="inspector__label">Last run</div>
+            {nodeData.runNotes.map((note) => (
+              <div key={note} className="inspector__notice" role="note">{note}</div>
+            ))}
+          </div>
+        )}
 
         {/* Mask Painter: paint the mask over the connected upstream image. The
             painted data rides params._maskData (white = painted; polarity is

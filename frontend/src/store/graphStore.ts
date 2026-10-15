@@ -389,6 +389,7 @@ function createSnapshot(nodes: Node<NodeData>[], edges: Edge[]): UndoSnapshot {
         batchOutputs: undefined,
         batchVariants: undefined,
         batchRunId: undefined,
+        runNotes: undefined,
         error: undefined,
         progress: undefined,
         runStartedAt: undefined,
@@ -418,6 +419,7 @@ function restoreWithOutputs(
       batchOutputs?: NodeData['batchOutputs'];
       batchVariants?: NodeData['batchVariants'];
       batchRunId?: string;
+      runNotes?: string[];
     }
   >();
   for (const n of currentNodes) {
@@ -429,6 +431,7 @@ function restoreWithOutputs(
         batchOutputs: n.data.batchOutputs,
         batchVariants: n.data.batchVariants,
         batchRunId: n.data.batchRunId,
+        runNotes: n.data.runNotes,
       });
     }
   }
@@ -446,6 +449,7 @@ function restoreWithOutputs(
           batchOutputs: preserved.batchOutputs,
           batchVariants: preserved.batchVariants,
           batchRunId: preserved.batchRunId,
+          runNotes: preserved.runNotes,
         },
       };
     }
@@ -2408,6 +2412,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           batchOutputs: undefined,
           batchVariants: undefined,
           batchRunId: undefined,
+          runNotes: undefined,
           error: undefined,
           progress: undefined,
           streamingText: undefined,
@@ -2480,6 +2485,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           batchOutputs: undefined,
           batchVariants: undefined,
           batchRunId: undefined,
+          runNotes: undefined,
           error: undefined,
           progress: undefined,
           streamingText: undefined,
@@ -4428,6 +4434,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         batchOutputs: undefined,
         batchVariants: undefined,
         batchRunId: undefined,
+        runNotes: undefined,
         error: undefined,
         progress: undefined,
         streamingText: undefined,
@@ -5211,7 +5218,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         const runId = event.runId ?? currentRunId ?? undefined;
         const live = get().nodes.find((node) => node.id === event.nodeId);
         get().updateNodeData(event.nodeId, { state: 'executing', progress: 0, runStartedAt: Date.now(), streamingText: undefined,
-          streamingPartials: undefined, streamingSvg: undefined, ...CLEAR_GATE_STATE,
+          streamingPartials: undefined, streamingSvg: undefined, runNotes: undefined, ...CLEAR_GATE_STATE,
           ...(live?.data.batchRunId !== runId ? clearBatchPreview(runId) : {}),
         });
         break;
@@ -5259,8 +5266,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           paperInputs,
           outOfDateReasons: paperRunOutOfDateReasons(record, captureRunSnapshot(get().nodes, get().edges), event.nodeId),
         } : undefined;
+        const runNotes = Array.isArray(event.notes)
+          ? event.notes.filter((note): note is string => typeof note === 'string' && note !== '') : [];
         get().updateNodeData(event.nodeId, { state: 'complete', outputs: liveOutputs as NodeData['outputs'],
-          batchOutputs, batchVariants, batchRunId: runId ?? undefined,
+          batchOutputs, batchVariants, batchRunId: runId ?? undefined, runNotes: runNotes.length ? runNotes : undefined,
           outputFreshness, progress: undefined, streamingText: undefined, streamingPartials: undefined, streamingSvg: undefined,
           skipReason: undefined, skipGateNodeId: undefined, withheldPorts: withheldPorts(event.withheld) });
         break;
@@ -5280,6 +5289,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           skipReason: typeof event.reason === 'string' && event.reason ? event.reason : 'A gate upstream withheld its input',
           skipGateNodeId: typeof event.gateNodeId === 'string' ? event.gateNodeId : undefined,
           withheldPorts: undefined,
+          // Notes describe a run; a skipped node didn't run this time.
+          runNotes: undefined,
           progress: undefined,
           streamingText: undefined,
           streamingPartials: undefined,

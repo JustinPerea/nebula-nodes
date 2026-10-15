@@ -5,7 +5,7 @@ project: nebula_nodes
 provider: runway
 model: runway-video, runway-aleph, runway-image, runway-act-two, runway-tts, runway-sts, runway-dubbing
 status: active
-verified: 2026-05-17
+verified: 2026-10-14
 stale_after_days: 30
 ---
 
@@ -15,6 +15,33 @@ Nebula-specific integration notes for the seven Runway nodes:
 `runway-video`, `runway-aleph`, `runway-image`, `runway-act-two`, `runway-tts`, `runway-sts`, `runway-dubbing`.
 
 All share `backend/handlers/runway.py`.
+
+## 2026-10-14 update
+
+Checked against Runway's request schema (`https://docs.dev.runwayml.com/openapi.json`),
+models guide, pricing page and changelog (`llms-full.txt`), all fetched 2026-10-14.
+
+- **Retired:** `gen3a_turbo` and `gen4_aleph` ("no longer available on Runway Dev",
+  2026-07-30); `veo3` is gone from the image/text-to-video schema. Options removed;
+  `runway-aleph` defaults to `aleph2`. Saved graphs migrate in
+  `backend/services/retired_nodes.py` (gen3a_turbo -> gen4_turbo, veo3 -> veo3.1 with
+  duration rounded up to 4/6/8, gen4_aleph -> aleph2). The handler refuses the old IDs.
+- **Per-model limits:** `RUNWAY_VIDEO_MODELS` / `RUNWAY_IMAGE_MODELS` in the handler hold
+  each model's ratios, durations and fields. The node definitions show each option only
+  for the models that take it (`visibleWhen` on options), and the handler checks every
+  value before the billed submit. `duration` is now an enum (2-30 + `auto`, per model).
+- **New models:** `seedance2_mini`, `seedance2_5` on `runway-video`; `seedream5_pro`,
+  `seedream5_lite` on `runway-image` (Runway resells ByteDance; not a maker route).
+- **New params:** `runway-video` `audio` (Veo, Seedance) and `resolution` (HappyHorse
+  image-to-video, which takes no `ratio`); `runway-image` `grounding` (Seedream). Seed is
+  sent only to models whose schema has it.
+- **Aleph 2.0 has no `references` field.** The reference image now goes as
+  `keyframes: [{uri, at: 0}]`, as in Runway's own aleph2 example.
+- **Local files over 5MB** (encoded data URI) go through `POST /v1/uploads` (ephemeral,
+  `runway://`, 24 h, 200MB max) on every Runway handler. The schema caps data URIs at
+  5MB; the inputs guide says 16MB for video/audio, and the stricter value is used.
+- **Pricing:** `runway-video` and `runway-image` have entries in
+  `backend/data/model_pricing.json` (credits at $0.01).
 
 ## Sources
 
@@ -72,7 +99,7 @@ Note: base URL uses `api.dev.runwayml.com` — this is the current production do
 
 ### runway-video: dual-endpoint routing not reflected in node's apiEndpoint field (INFO, no fix needed)
 
-**Severity:** Info only. The `runway-video` node has `"apiEndpoint": "/v1/image_to_video"` in its definition, but the handler dynamically routes to either `/v1/image_to_video` or `/v1/text_to_video` depending on whether an image is provided. The handler uses `TEXT_TO_VIDEO_MODELS = {"gen4.5", "veo3.1", "veo3.1_fast", "veo3"}` to gate text-only requests. This is correct behavior — `gen4_turbo` and `gen3a_turbo` require an image. The `apiEndpoint` field in the node definition is metadata only (not used at runtime) so the mismatch is cosmetic. Noted but not changed.
+**Severity:** Info only. The `runway-video` node has `"apiEndpoint": "/v1/image_to_video"` in its definition, but the handler dynamically routes to either `/v1/image_to_video` or `/v1/text_to_video` depending on whether an image is provided. The handler gates text-only requests per model (`RUNWAY_VIDEO_MODELS`; every model but `gen4_turbo` has text-to-video as of 2026-10-14). The `apiEndpoint` field in the node definition is metadata only (not used at runtime) so the mismatch is cosmetic. Noted but not changed.
 
 ### All nodes: auth headers, base URL, version string — PASS
 
@@ -82,9 +109,11 @@ Handler uses `RUNWAY_API_BASE = "https://api.dev.runwayml.com/v1"`, `X-Runway-Ve
 
 Handler sends `"videoUri"` in the request body. SDK confirms the Python alias is `video_uri` → JSON alias `videoUri`. Correct.
 
-### runway-aleph: `references` structure — PASS
+### runway-aleph: `references` structure — SUPERSEDED 2026-10-14
 
-Handler sends `[{"type": "image", "uri": ref_uri}]`. SDK confirms `Reference` type requires `type: Literal["image"]` and `uri: str`. Correct.
+This was right for `gen4_aleph`. `aleph2` (now the only Aleph model) has no `references`
+field and rejects unknown fields; the handler sends the reference as
+`keyframes: [{"uri": ref_uri, "at": 0}]`.
 
 ### runway-act-two: `character` and `reference` structures — PASS
 
@@ -115,24 +144,28 @@ The node definition exposes `gemini_2.5_flash` alongside `gen4_image` and `gen4_
 
 | Param | Type | Required | Default | API field | Notes |
 |---|---|---|---|---|---|
-| `model` | enum | yes | `gen4.5` | `model` | gen4.5, gen4_turbo, gen3a_turbo, veo3.1, veo3.1_fast, veo3 |
-| `duration` | int | no | 5 | `duration` | 2–10; gen4.5 requires image for values other than default |
-| `ratio` | enum | no | `1280:720` | `ratio` | Model-dependent valid values |
-| `seed` | int | no | — | `seed` | 0–4294967295 |
+| `model` | enum | yes | `gen4.5` | `model` | gen4.5, seedance2, seedance2_fast, happyhorse_1_0, gen4_turbo, veo3.1, veo3.1_fast, seedance2_mini, seedance2_5 |
+| `duration` | enum | no | 5 | `duration` | Per model: gen4.5/gen4_turbo 2–10, veo3.1(_fast) 4/6/8, happyhorse 3–15, seedance2/_fast/_mini 4–15 + auto, seedance2_5 4–30 + auto |
+| `ratio` | enum | no | `1280:720` | `ratio` | Per model and endpoint (see `RUNWAY_VIDEO_MODELS`); not sent for happyhorse image-to-video |
+| `seed` | int | no | — | `seed` | 0–4294967295; not for happyhorse |
+| `resolution` | enum | no | `720p` | `resolution` | happyhorse image-to-video only (720p/1080p) |
+| `audio` | bool | no | true | `audio` | veo3.1(_fast), seedance*; Veo bills less without audio |
 
 ### runway-aleph
 
 | Param | Type | Required | Default | API field | Notes |
 |---|---|---|---|---|---|
+| `model` | enum | no | `aleph2` | `model` | aleph2 (gen4_aleph retired 2026-07-30) |
 | `seed` | int | no | — | `seed` | 0–4294967295 |
 
 ### runway-image
 
 | Param | Type | Required | Default | API field | Notes |
 |---|---|---|---|---|---|
-| `model` | enum | yes | `gen4_image` | `model` | gen4_image, gen4_image_turbo, gemini_2.5_flash |
-| `ratio` | enum | no | `1360:768` | `ratio` | 16 options; `768:1360` fixed (was `720:1280`) |
-| `seed` | int | no | — | `seed` | 0–4294967295 |
+| `model` | enum | yes | `gen4_image` | `model` | gen4_image, gen4_image_turbo, gemini_image3_pro, gpt_image_2, gemini_2.5_flash, seedream5_pro, seedream5_lite |
+| `ratio` | enum | no | `1360:768` | `ratio` | Each model's own list (`RUNWAY_IMAGE_MODELS`); 1360:768 is Gen-4 only |
+| `seed` | int | no | — | `seed` | 0–4294967295; Gen-4 Image (+ Turbo) only |
+| `grounding` | bool | no | false | `grounding` | Seedream only; sent when true |
 
 ### runway-act-two
 
@@ -195,8 +228,8 @@ The `async_poll_execute` runner handles the full loop. `AsyncPollConfig` is cons
 
 1. **`runway-dubbing` model string** — Handler sends `"eleven_voice_dubbing"` as the `model` field. The SDK `VoiceDubbingCreateParams` does not specify a `model` literal in the type definition; the field appears in the body but is not in the typed params. This may be an undocumented internal routing string. Risk: low (the field is present in existing integration; would fail loudly if wrong).
 
-2. **Veo3.1 `audio` param** — The SDK `image_to_video` and `text_to_video` Veo3.1/Veo3.1Fast variants expose an `audio: bool` field (affects pricing). The handler does not surface this param. If audio generation pricing matters to users, this could be a future addition.
+2. **Veo3.1 `audio` param** — Resolved 2026-10-14: `audio` is a node param for Veo 3.1 and Seedance.
 
 3. **Gen4.5 `duration` field (image_to_video)** — SDK marks `duration` as `Required` for `gen4.5` in image_to_video context (must be integer 2–10). Handler defaults to 5 if not set, which is valid. No issue, but worth noting the field is required by the API, not optional.
 
-4. **`text_to_video` ratios for gen4.5** — The SDK limits gen4.5 text_to_video to `"1280:720"` and `"720:1280"`. The handler enforces this with `TEXT_ONLY_RATIOS`. The UI does not currently enforce this pre-validation; a user could select a 4:3 ratio in the UI and only get the error at submission time.
+4. **`text_to_video` ratios for gen4.5** — The schema limits gen4.5 text_to_video to `"1280:720"` and `"720:1280"`. The handler checks it before submitting. The inspector filters ratios by model but can't see whether an image is wired, so it still offers the image-to-video ratios for gen4.5 text-only runs; the handler's error names the valid ones.

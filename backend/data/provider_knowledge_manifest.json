@@ -2,6 +2,7 @@
   "version": 1,
   "paths": [
     ".agents/skills/anthropic/SKILL.md",
+    ".agents/skills/byteplus/SKILL.md",
     ".agents/skills/elevenlabs/SKILL.md",
     ".agents/skills/fal/SKILL.md",
     ".agents/skills/fal/by_category.json",
@@ -233,6 +234,7 @@
     "docs/MODEL_REFERENCE.md",
     "docs/api-guides/README.md",
     "docs/api-guides/anthropic.md",
+    "docs/api-guides/byteplus.md",
     "docs/api-guides/elevenlabs.md",
     "docs/api-guides/fal.md",
     "docs/api-guides/google.md",

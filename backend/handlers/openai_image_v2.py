@@ -8,7 +8,7 @@ from execution.stream_runner import StreamConfig, stream_execute_image
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
 from services.edit_masks import image_size, openai_edit_mask
-from services.file_access import require_allowed_path
+from services.media_input import read_local_media
 from services.output import get_run_dir
 from execution.missing_credential import MissingCredentialError
 
@@ -140,7 +140,12 @@ async def handle_gpt_image_2_generate(
     return {"image": {"type": "Image", "value": final_path}}
 
 
-MAX_EDIT_IMAGES = 10
+# "For GPT image models, you can provide up to 16 images."
+# (https://developers.openai.com/api/reference/resources/images, checked 2026-10-14)
+MAX_EDIT_IMAGES = 16
+# "The image to edit and mask must be of the same format and size (less than
+# 50MB in size)" (OpenAI images reference; execution/maker_routes_openai.py).
+MAX_EDIT_IMAGE_BYTES = 50_000_000
 
 
 def _normalize_image_input(value: Any) -> list[str]:
@@ -186,17 +191,20 @@ async def handle_gpt_image_2_edit(
     files: list[tuple[str, tuple[str, bytes, str]]] = []
     for path in image_paths:
         p = Path(path)
-        files.append(("image[]", (p.name, require_allowed_path(p).read_bytes(), _guess_mime(p))))
+        _checked, data = read_local_media(p, label="Edit image", max_bytes=MAX_EDIT_IMAGE_BYTES)
+        files.append(("image[]", (p.name, data, _guess_mime(p))))
     mask_input = inputs.get("mask")
     if mask_input and mask_input.value:
         # OpenAI edits only where the mask is transparent; Nebula's masks are
         # white-on-black. openai_edit_mask converts (services/edit_masks.py).
         mp = Path(str(mask_input.value))
-        mask_bytes = openai_edit_mask(require_allowed_path(mp).read_bytes(), image_size(image_paths[0]))
+        _checked, data = read_local_media(mp, label="Mask", max_bytes=MAX_EDIT_IMAGE_BYTES)
+        mask_bytes = openai_edit_mask(data, image_size(image_paths[0]))
         files.append(("mask", ("mask.png", mask_bytes, "image/png")))
 
     form: dict[str, str] = {}
-    for key in ("model", "prompt", "size", "quality", "moderation", "output_format", "background"):
+    # input_fidelity only reaches here for gpt-image-1.5 (execution/maker_routes_openai.py build_body).
+    for key in ("model", "prompt", "size", "quality", "moderation", "output_format", "background", "input_fidelity"):
         if key in body:
             form[key] = str(body[key])
     if "output_compression" in body:

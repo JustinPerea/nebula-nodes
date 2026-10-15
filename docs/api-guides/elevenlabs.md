@@ -41,7 +41,7 @@ Notes that match the handler (`backend/handlers/elevenlabs.py`):
 
 **API-key setup.** Get a key from your ElevenLabs account dashboard (Profile → API Keys). Open Nebula **Settings** → **Providers**, choose **Add key** on the **ElevenLabs** row (`ELEVENLABS_API_KEY`), paste it and choose **Save key**. Saving checks the key without generating anything. Nebula stores it under `apiKeys.ELEVENLABS_API_KEY` in the project-root `settings.json`; no restart is required. Every ElevenLabs node uses this same key; if it is missing, the node fails with "ELEVENLABS_API_KEY is required."
 
-**Picking a voice.** The `voice_id` param defaults to Rachel (`21m00Tcm4TlvDq8ikWAM`). To use a different voice, paste its voice ID into the `voice_id` field. You find voice IDs in the ElevenLabs Voice Library / your Voices page on the ElevenLabs site — Nebula does not browse or list voices for you, so keep the IDs you want handy.
+**Picking a voice.** The `voice_id` param defaults to Rachel (`21m00Tcm4TlvDq8ikWAM`). To use a different voice, paste its voice ID into the `voice_id` field. You find voice IDs in the ElevenLabs Voice Library / your Voices page on the ElevenLabs site — Nebula does not browse or list voices for you, so keep the IDs you want handy. A voice ID is letters and digits only (ElevenLabs' IDs look like `JBFqnCBsd6RMkjVDRZzb`); anything else (a `/`, `?`, `.`, `%`, `-` or space) is refused before any call, because the ID is part of the request URL, and the accepted ID is still URL-escaped. `output_format` is checked the same way (`codec_sample_rate[_bitrate]`, e.g. `mp3_44100_128`). Speech-to-speech reads at most 250 MB of audio (Nebula's own bound; ElevenLabs gives a 5-minute limit, not a byte limit), and dubbing streams its file from disk up to ElevenLabs' 3 GB API limit. The same check covers the Krea and Runway copies on your ElevenLabs key.
 
 ### Example pipelines
 
@@ -63,6 +63,23 @@ Notes that match the handler (`backend/handlers/elevenlabs.py`):
 - Option B (new language, same speaker): feed it into `elevenlabs-dubbing`, set `target_lang` (e.g. `ja` for Japanese), leave `source_lang` on Auto-detect, and keep `disable_voice_cloning` off so the original speaker's voice is preserved.
 - For a noisy source, chain `elevenlabs-isolation` first (audio → isolated audio) and feed the clean result into dubbing or STS.
 
+## ElevenLabs copies on your ElevenLabs key (2026-10-14)
+
+Nebula also has fal, Krea and Runway copies of ElevenLabs models. With an ElevenLabs key saved, each one runs on ElevenLabs' own API, billed by ElevenLabs, instead of on the copy:
+
+| Node | Copy (fallback) | On ElevenLabs |
+|---|---|---|
+| `elevenlabs-music` (ElevenLabs Music) | fal (`FAL_KEY`) | `POST /v1/music`; a direct-only `model_id` picks `music_v1` (default, ElevenLabs' own default), `music_v2` or `music_v2_5` |
+| `krea-audio-elevenlabs-music`, `-music-v2`, `-music-v2-5` | Krea (`KREA_API_TOKEN`) | `POST /v1/music` with `music_v1` / `music_v2` / `music_v2_5` |
+| `krea-audio-elevenlabs-tts` | Krea | `POST /v1/text-to-speech/{voice_id}` with the node's `voice_id` (Krea's default Bella, `hpp4J3VqNfWAUOO0d1Us`) and `model_id`; no voice settings are sent, so the voice's stored settings apply |
+| `runway-tts` | Runway (`RUNWAY_API_KEY`) | `POST /v1/text-to-speech/{voice_id}`, `eleven_multilingual_v2`, **only when the recipe sets an ElevenLabs `voice_id`** |
+| `runway-sts` | Runway | `POST /v1/speech-to-speech/{voice_id}`, `eleven_multilingual_sts_v2`, **only with an ElevenLabs `voice_id`**; audio input only (a run with only the video input wired stays on Runway, `directRoute.rejectsWhen`) |
+| `runway-dubbing` | Runway | `POST /v1/dubbing` (the API reference files it under Legacy) with the same four settings, renamed |
+
+Which route runs: a Krea node set to the Krea plan stays on the plan; otherwise the ElevenLabs key wins; otherwise the copy's key. Runway's voices are Runway presets (Maya, Arjun, ...) and nothing maps them to ElevenLabs voice ids, so a Runway TTS or speech-to-speech recipe with only a preset (or a blank, whitespace-only voice ID) stays on Runway. Once the ElevenLabs key is saved the Inspector shows an "ElevenLabs voice ID" field; set it to move the recipe to ElevenLabs. Readiness says which route runs and why.
+
+Prices (checked 2026-10-14 on https://elevenlabs.io/pricing/api): Music is "$0.15 Price per minute", priced from `music_length_ms` (30 s = $0.075); a Krea music recipe with no length lets the model choose, so its estimate is the 3-600 s range ($0.0075-$1.50). TTS ($0.08 per 1K characters on Multilingual v2 / v3 / v4), Voice Changer ($0.12 per minute of input) and Dubbing ($0.33 per minute with watermark, $0.50 without, on Dubbing v1) bill by text length or input duration, which the node's settings don't give, so those routes are unpriced and agent runs of them must be proposed.
+
 ## API coverage — what Nebula uses vs. what ElevenLabs offers
 
 | Capability / Endpoint | In the API | In Nebula | Notes |
@@ -73,7 +90,7 @@ Notes that match the handler (`backend/handlers/elevenlabs.py`):
 | Audio Isolation — `POST /v1/audio-isolation` | Yes | **full** | `elevenlabs-isolation`. Single-purpose; output always MP3. |
 | Dubbing — `POST /v1/dubbing` (+ poll + download) | Yes | **partial** | `elevenlabs-dubbing` submits, polls, and downloads dubbed audio. Does not expose transcripts, per-segment editing, speaker rendering, or watch/CSV-script dubbing. |
 | Speech-to-Text — `POST /v1/speech-to-text` | Yes | **full** | `elevenlabs-stt`. Transcription with optional diarization; plain text or SRT/VTT subtitles (subtitle formats auto-enable diarization + timestamps, per the API). |
-| Music generation — `POST /v1/music/compose` (+ stream, video-to-music, stems) | Yes | **none** | Prompt-to-music, stem separation, composition plans. No node. |
+| Music generation — `POST /v1/music` (+ stream, composition plans, video-to-music, stems) | Yes | **partial** | `elevenlabs-music` and the three Krea music copies run `POST /v1/music` (prompt, `music_length_ms`, `force_instrumental`, `model_id`) on your ElevenLabs key. Composition plans, streaming, inpainting, stems and video-to-music have no node. |
 | Text-to-Dialogue — `POST /v1/text-to-dialogue` | Yes | **none** | Multi-speaker dialogue in one call. No node (TTS handles single-voice only). |
 | Voice Design — `POST /v1/text-to-voice/design` `/create` `/remix` | Yes | **none** | Generate a brand-new voice from a text description. No node. |
 | Voice Cloning — `POST /v1/voices/add` (IVC), `/add/professional` (PVC) | Yes | **none** | Clone a voice from samples. No node. |

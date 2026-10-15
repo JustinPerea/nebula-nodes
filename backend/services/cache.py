@@ -42,7 +42,8 @@ def _cached_artifacts_exist(value: Any) -> bool:
 
 class ExecutionCache:
     def __init__(self, ttl: int = 3600) -> None:
-        self._store: dict[str, tuple[dict[str, Any], float, dict[str, Any] | None]] = {}
+        # key -> (outputs, stored at, effective params, run notes)
+        self._store: dict[str, tuple[dict[str, Any], float, dict[str, Any] | None, tuple[str, ...]]] = {}
         self._ttl = ttl
 
     @staticmethod
@@ -71,7 +72,7 @@ class ExecutionCache:
         entry = self._store.get(key)
         if entry is None:
             return None
-        outputs, timestamp, _params = entry
+        outputs, timestamp, _params, _notes = entry
         if time.monotonic() - timestamp > self._ttl:
             del self._store[key]
             return None
@@ -87,11 +88,19 @@ class ExecutionCache:
         params = self._store[key][2]
         return copy.deepcopy(params) if params is not None else None
 
-    def set(self, key: str, outputs: dict[str, Any], *, effective_params: dict[str, Any] | None = None) -> None:
+    def get_notes(self, key: str) -> list[str]:
+        """The run notes (models/events.py execution_notes) stored with an
+        entry, so a replay says what the original run said."""
+        if self.get(key) is None:
+            return []
+        return list(self._store[key][3])
+
+    def set(self, key: str, outputs: dict[str, Any], *, effective_params: dict[str, Any] | None = None,
+            notes: list[str] | tuple[str, ...] | None = None) -> None:
         # Handlers may enrich a node's parameters with an effective seed or
         # timeline. Keep that artifact provenance when a later run reuses it.
         params = copy.deepcopy(effective_params) if effective_params is not None else None
-        self._store[key] = (outputs, time.monotonic(), params)
+        self._store[key] = (outputs, time.monotonic(), params, tuple(notes or ()))
 
     def delete(self, key: str) -> None:
         self._store.pop(key, None)

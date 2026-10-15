@@ -204,10 +204,12 @@ Built in `handle_openai_image_generate`:
 
 ```json
 {
-  "model": "gpt-image-1",
+  "model": "gpt-image-2.5-flare",
   "prompt": "<from port prompt>"
 }
 ```
+
+`model` defaults to `gpt-image-2.5-flare` on generate and `gpt-image-2.5-sunburst` on edit (gpt-image-1 shuts down 2026-10-23; saved nodes on it migrate from that date). A transparent `background` with `jpeg` output is refused before the request.
 
 **Forwarding rules (generate)**
 
@@ -229,7 +231,7 @@ Full URL: `https://api.openai.com/v1/images/edits`
 |------|---------|
 | `image` | PNG bytes from local path (`image.png`) |
 | `prompt` | Text |
-| `model` | From params (default `gpt-image-1`) |
+| `model` | From params (default `gpt-image-2.5-sunburst`) |
 | `mask` | Optional PNG bytes |
 | `n` | Stringified int when > 1 |
 | `size`, `quality` | When ≠ `auto` |
@@ -266,6 +268,7 @@ Handler return value (both nodes):
 ```
 
 - Files saved under run directory via `save_base64_image`
+- Edit also returns `images` (`Array` of `/api/outputs/...` refs): every image OpenAI sent back, so `n` > 1 keeps them all; `image` is the first
 - Extension follows `output_format` (`png` / `jpeg` / `webp`)
 - Default extension `png` when format unset or `png`
 
@@ -276,7 +279,7 @@ Handler return value (both nodes):
 | Condition | Behavior |
 |-----------|----------|
 | HTTP ≠ 200 | `RuntimeError` with status + body text |
-| `background: transparent` | **Forwarded** on GPT Image 1 (contrast gpt-image-2) |
+| `background: transparent` | **Forwarded** on GPT Image 1 and 2.5 (contrast gpt-image-2); with `output_format: jpeg` it raises `ValueError` before the request |
 | `output_format: png` (generate) | Omitted from JSON body (API default) |
 | `output_format` on edit | Always forwarded when set in params |
 | Legacy `style` in saved graph | Silently dropped |

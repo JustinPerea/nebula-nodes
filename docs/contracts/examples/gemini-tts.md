@@ -6,13 +6,14 @@ handler_family: google
 handler_pattern: sync
 nodes:
   - gemini-tts
-verified: 2026-07-01
-pricing_verified: 2026-07-01
+verified: 2026-10-14
+pricing_verified: 2026-10-14
 stale_after_days: 14
 sources:
   - https://ai.google.dev/gemini-api/docs/speech-generation
   - https://ai.google.dev/gemini-api/docs/pricing
   - https://ai.google.dev/api/generate-content
+  - https://ai.google.dev/gemini-api/docs/deprecations
 oracle:
   handler: backend/handlers/google_gemini.py::handle_gemini_tts
   tests: backend/tests/test_google_gemini_handler.py
@@ -23,7 +24,7 @@ oracle:
 
 Template for porting agents. **Sync** text-to-speech via `generateContent` with `responseModalities: ["AUDIO"]`.
 
-**In scope:** single node `gemini-tts` (three TTS model variants, 30 prebuilt voices).
+**In scope:** single node `gemini-tts` (five TTS model variants, three of them shutting down 2026-11-17; 30 prebuilt voices).
 
 **Out of scope:** music generation → [lyria-3.md](./lyria-3.md). Other Google audio → [../03-handler-families/google.md](../03-handler-families/google.md).
 
@@ -54,9 +55,11 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 
 | Model (registry id) | Notes |
 |---------------------|-------|
-| `gemini-3.1-flash-tts-preview` | Newest flash TTS |
-| `gemini-2.5-flash-preview-tts` | Default in registry |
-| `gemini-2.5-pro-preview-tts` | Higher quality |
+| `gemini-3.8-flash-tts` | Default in registry. $0.50 / 1M text in, $9.00 / 1M audio out (through 2026-12-31; doubles 2027-01-01) |
+| `gemini-3.8-flash-lite-tts` | $0.50 / 1M text in, $6.00 / 1M audio out (through 2026-12-31; doubles 2027-01-01) |
+| `gemini-3.1-flash-tts-preview` | Shuts down 2026-11-17 → saved nodes move to 3.8 Flash-Lite |
+| `gemini-2.5-flash-preview-tts` | Shuts down 2026-11-17 → saved nodes move to 3.8 Flash |
+| `gemini-2.5-pro-preview-tts` | Shuts down 2026-11-17 → saved nodes move to 3.8 Flash |
 
 **Nebula params that move the bill**
 
@@ -76,7 +79,7 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 | 2 | Implement Vol 1 from §2 |
 | 3 | Implement sync HTTP mapping §4 |
 | 4 | Match `test_google_request_body_matches_fixture[gemini-tts-generate-request.json]` |
-| 5 | Wrap raw PCM in WAV on disk (24 kHz, 16-bit mono) |
+| 5 | Save 3.8 WAV bytes as is; wrap legacy raw PCM in WAV (24 kHz, 16-bit mono) |
 
 ---
 
@@ -102,13 +105,13 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 
 | `id` | `dataType` | Notes |
 |------|------------|-------|
-| `audio` | `Audio` | `.wav` — handler wraps raw PCM |
+| `audio` | `Audio` | `.wav` — 3.8 WAV saved as is; legacy raw PCM wrapped |
 
 **Params**
 
 | `key` | `type` | `default` | Values |
 |-------|--------|-----------|--------|
-| `model` | enum | `gemini-2.5-flash-preview-tts` | `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts` |
+| `model` | enum | `gemini-3.8-flash-tts` | `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`, `gemini-3.8-flash-tts`, `gemini-3.8-flash-lite-tts` |
 | `voiceName` | enum | `Kore` | Zephyr, Puck, Charon, Kore, Fenrir, Leda, Orus, Aoede, Callirrhoe, Autonoe, Enceladus, Iapetus, Umbriel, Algieba, Despina, Erinome, Algenib, Rasalgethi, Laomedeia, Achernar, Alnilam, Schedar, Gacrux, Pulcherrima, Achird, Zubenelgenubi, Vindemiatrix, Sadachbia, Sadaltager, Sulafat |
 
 **Handler-pinned**
@@ -184,8 +187,8 @@ Content-Type: application/json
 | Step | Action |
 |------|--------|
 | 1 | Find `inlineData` in `candidates[0].content.parts` |
-| 2 | Base64-decode → raw PCM bytes |
-| 3 | Write WAV: 1 channel, 2-byte sample width, 24000 Hz |
+| 2 | Base64-decode the audio bytes |
+| 3 | `_write_tts_wav`: bytes starting `RIFF` (or a `wav` mime type, the 3.8 unary default) are written as is; otherwise raw PCM is wrapped: 1 channel, 2-byte samples, rate from the mime type's `rate=` (24000 Hz if absent) |
 | 4 | Return `audio` port with file path |
 
 No audio part → `RuntimeError("Gemini TTS returned no audio content: …")`.
@@ -251,7 +254,7 @@ Assertions on fixture body:
       "id": "n2",
       "definitionId": "gemini-tts",
       "params": {
-        "model": "gemini-2.5-flash-preview-tts",
+        "model": "gemini-3.8-flash-tts",
         "voiceName": "Kore"
       },
       "outputs": {}

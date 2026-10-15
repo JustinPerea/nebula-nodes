@@ -32,7 +32,9 @@ describe('local nodes that call a provider', () => {
     // A scene that can't be read, or a base the handler refuses: fail closed.
     expect(nodeKeyStatus(cinema, { scene: 'text' }, keys({ FAL_KEY: '***f' }))).toBe('missing');
     expect(nodeKeyStatus(cinema, scene('world-labs'), keys({ FAL_KEY: '***f' }))).toBe('missing');
-    expect(missingKeyTitle(cinema, scene('seedream-4-5'))).toBe('Needs FAL_KEY for base seedream-4-5');
+    // Seedream also runs on BytePlus with BYTEPLUS_API_KEY (2026-10-14).
+    expect(missingKeyTitle(cinema, scene('seedream-4-5'))).toBe('Needs BYTEPLUS_API_KEY or FAL_KEY for base seedream-4-5');
+    expect(nodeKeyStatus(cinema, scene('seedream-4-5'), keys({ BYTEPLUS_API_KEY: '***b' }))).toBeUndefined();
   });
 
   it('badges a QC node only in a mode that calls a vision model', () => {

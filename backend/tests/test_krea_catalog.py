@@ -35,7 +35,23 @@ def test_each_model_has_a_valid_request_contract_and_valid_control_defaults(node
     Draft202012Validator.check_schema(schema)
     definition = REGISTRY[node_id]
     assert definition["apiProvider"] == "krea"
-    assert definition["envKeyName"] == "KREA_API_TOKEN"
+    direct = SYNC.DIRECT_ROUTES.get(model["endpoint"])
+    if direct is None:
+        assert definition["envKeyName"] == "KREA_API_TOKEN"
+        assert "directKeyName" not in definition and "sharedParams" not in definition
+    else:
+        # A model its maker also sells: the maker key wins, Krea is the fallback.
+        assert definition["envKeyName"] == [direct["directKeyName"], "KREA_API_TOKEN"]
+        assert definition["directKeyName"] == direct["directKeyName"]
+        shared = {param["key"] for param in definition["sharedParams"]}
+        krea_only = {param["key"] for param in definition["falParams"]}
+        assert shared | krea_only == {param["key"] for param in definition["params"]}
+        assert not shared & krea_only and "_kreaAuth" in shared
+        # Krea-only fields that keep a run on Krea when set: never defaulted,
+        # or every new node would skip the maker route.
+        blocked = definition["directRoute"].get("blockedBy", [])
+        assert blocked == direct.get("directBlockedBy", []) and set(blocked) <= krea_only
+        assert not [p for p in definition["falParams"] if p["key"] in blocked and p.get("default") is not None]
     assert definition["apiEndpoint"] == model["endpoint"]
     assert model["endpoint"].startswith(tuple(SYNC.MEDIA_ROUTES))
     assert definition["category"] == SYNC.category_for(model["endpoint"], model["mediaType"])
@@ -131,10 +147,76 @@ def test_generated_prices_keep_the_kling_multi_shot_guard_and_the_audio_note():
     assert kling["rows"] and all(row["match"]["multi_prompt"] == "" for row in kling["rows"])
     assert "multi_prompt" in kling["priceParams"] and "Multi-prompt runs are unpriced" in kling["notes"]
     assert any(source["url"].startswith("https://kling.ai/") for source in kling["sources"])
-    audio_free = {node_id for node_id, entry in entries.items() if "doesn't vary with generate_audio" in entry["notes"]}
+    krea_prices = {node_id: entry["routes"].get("krea") if "routes" in entry else entry
+                   for node_id, entry in entries.items()}
+    krea_prices = {node_id: entry for node_id, entry in krea_prices.items() if entry}
+    audio_free = {node_id for node_id, entry in krea_prices.items()
+                  if "doesn't vary with generate_audio" in entry["notes"]}
     assert audio_free == {
         "krea-video-alibaba-wan-2-5", "krea-video-alibaba-wan-3-0", "krea-video-lightricks-ltx-video-2-5-fast",
         "krea-video-lightricks-ltx-video-2-5-pro", "krea-video-vidu-q3",
     }
     # Where Krea does charge for audio, the price keys on it and there is no such note.
     assert "generate_audio" in kling["priceParams"]
+
+
+def test_direct_route_models_price_both_routes():
+    """A Krea node its maker also sells carries Krea's price and the maker's,
+    so the estimate follows the route the run takes (maker key wins, the Krea
+    plan wins over both)."""
+    entries, _ = SYNC.pricing_entries(CATALOG)
+    for node_id, model in CATALOG["models"].items():
+        direct = SYNC.DIRECT_ROUTES.get(model["endpoint"])
+        entry = entries.get(node_id)
+        if direct is None:
+            assert entry is None or "routes" not in entry
+            continue
+        if not direct.get("pricing"):
+            # Unpriced on the maker (OpenAI GPT Image 2 / 2.5, Runway Ruby):
+            # the entry holds only Krea's own price, if Krea publishes one.
+            assert entry is None or set(entry["routes"]) == {"krea"}, node_id
+            continue
+        provider = direct["pricing"]["provider"]
+        # Krea's own route is priced when Krea's price maps onto the request
+        # (Gemini Omni Flash 1.1 has no x-krea-pricing block; Grok Imagine
+        # 2.0's depends on a count the request doesn't set).
+        krea_alone: dict = {}
+        SYNC.krea_entry(node_id, model, CATALOG, krea_alone, {})
+        krea = {"krea"} if node_id in krea_alone else set()
+        assert set(entry["routes"]) == krea | {provider}, node_id
+        if krea:
+            assert entry["routes"]["krea"].get("provider", "krea") == "krea"
+        if provider != "google":
+            maker = entry["routes"][provider]
+            assert maker.get("provider", provider) == provider, node_id
+            assert maker["rows"] and maker["notes"] and maker["sources"], node_id
+            assert all(source["url"].startswith("https://") and source["quote"] for source in maker["sources"]), node_id
+            if provider in ("ideogram", "runway"):
+                assert maker["checked"] == SYNC.MAKER_CHECKED
+                assert all(source["url"] in (SYNC.IDEOGRAM_PRICING_URL, SYNC.RUNWAY_PRICING_URL)
+                           for source in maker["sources"])
+            if provider == "elevenlabs":
+                assert maker["checked"] == SYNC.ELEVENLABS_CHECKED
+                assert any(source["url"] == SYNC.ELEVENLABS_PRICING_URL for source in maker["sources"])
+                assert maker["multiplyBy"] == ["music_length_ms"]
+            if provider == "bytedance":
+                assert maker["sources"] == direct["pricing"]["sources"]
+            continue
+        google = entry["routes"]["google"]
+        assert google.get("provider", "google") == "google"
+        assert google["rows"] and google["checked"] == SYNC.GOOGLE_CHECKED
+        maker_pages = ("https://ai.google.dev/gemini-api/docs/", "https://cloud.google.com/gemini-enterprise-agent-platform/",
+                       "https://docs.cloud.google.com/gemini-enterprise-agent-platform/")
+        assert all(source["url"].startswith(maker_pages) for source in google["sources"])
+        assert any(source["url"] in (SYNC.GOOGLE_PRICING_URL, SYNC.VERTEX_PRICING_URL) for source in google["sources"])
+        if direct["model"] not in SYNC.REFERENCE_IMAGE_COST:
+            # Video routes: one price per second of the node's duration.
+            assert google["per"] == "second" and google["multiplyBy"] == ["duration"]
+            continue
+        # Every image row is a range: the output image, up to it plus 14
+        # reference images at the model's input rate (billed per call).
+        per_image = SYNC.REFERENCE_IMAGE_COST[direct["model"]][0]
+        for row, source_row in zip(google["rows"], direct["pricing"]["rows"]):
+            low, high = row["price"]
+            assert low == source_row["price"]
+            assert high >= low + SYNC.MAX_REFERENCE_IMAGES * per_image > low

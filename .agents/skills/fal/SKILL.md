@@ -16,7 +16,7 @@ description: FAL.ai model catalog access — image, video, audio, 3D, LoRA train
 
 All FAL endpoints (there are 1,312+ models on the platform, 160 curated here) share the same API shape:
 
-- **Auth:** `Authorization: Key <FAL_KEY>` header. Our backend uses `FAL_KEY`. Some models also accept native-provider keys (e.g. `BFL_API_KEY` for Flux, `GOOGLE_API_KEY` for Veo) — nebula handlers prefer native when set, fall back to FAL.
+- **Auth:** `Authorization: Key <FAL_KEY>` header. Our backend uses `FAL_KEY`. A few nodes are dual-route: they list the maker's key first in `envKeyName` and name it in `directKeyName`, run on the maker's own API when that key is set and fall back to FAL otherwise: `veo-3` (Vertex, then `GOOGLE_API_KEY`), `veo-3-flf` (Vertex), `meshy-text-to-3d`/`meshy-image-to-3d` (`MESHY_API_KEY`), the seven `ideogram-*` nodes (`IDEOGRAM_API_KEY`) and, since 2026-10-14, `nano-banana-fal`/`nano-banana-fal-edit` (`GOOGLE_API_KEY`, Gemini API), plus `gpt-image-1-5`/`gpt-image-1-5-edit` and `gpt-image-2-fal-generate`/`gpt-image-2-fal-edit` (`OPENAI_API_KEY`, OpenAI's Images API; every param reaches both routes, GPT Image 1.5 leaves OpenAI on 2026-12-01, and GPT Image 2's Square and 16:9 presets stay on FAL). Route precedence, the same in the router, pricing, the spend gate, readiness and the cache key (`backend/services/node_route.py`, mirrored by `frontend/src/lib/directRoute.ts`).
 - **Two base URLs:** `https://fal.run/{endpoint_id}` (sync, for fast models) and `https://queue.fal.run/{endpoint_id}` (queue, for slow/long-running models). Nebula's `fal_universal.py` handler uses queue for everything since most models benefit from async.
 - **Queue flow:**
   1. `POST https://queue.fal.run/{endpoint_id}` with JSON body → returns `{"request_id": "...", "status_url": "...", "response_url": "..."}`
@@ -49,7 +49,6 @@ The source of truth for this routing is `backend/execution/sync_runner.py`. Each
 | `kling-v2-1` | `fal-ai/kling-video/v2.1/pro/image-to-video` | Image-to-Video | [`skills/fal-ai__kling-video__v2.1__master__text-to-video.md`](skills/fal-ai__kling-video__v2.1__master__text-to-video.md) |
 | `kling-v3` | `fal-ai/kling-video/v3/standard/text-to-video` | Text-to-Video | [`skills/fal-ai__kling-video__v3__standard__text-to-video.md`](skills/fal-ai__kling-video__v3__standard__text-to-video.md) |
 | `kling-o3` | `fal-ai/kling-video/o3/standard/image-to-video` | Image-to-Video | [`skills/fal-ai__kling-video__o3__pro__image-to-video.md`](skills/fal-ai__kling-video__o3__pro__image-to-video.md) |
-| `sora-2` | `fal-ai/sora-2/text-to-video` (standard) or `.../pro` (when `model=pro`) | Text-to-Video | [`skills/fal-ai__sora-2__text-to-video.md`](skills/fal-ai__sora-2__text-to-video.md), [`skills/fal-ai__sora-2__text-to-video__pro.md`](skills/fal-ai__sora-2__text-to-video__pro.md) |
 | `veo-3` | `fal-ai/veo3` | Text-to-Video | [`skills/fal-ai__veo3.md`](skills/fal-ai__veo3.md) |
 | `wan-2-6-t2v` | `wan/v2.6/text-to-video` | Text-to-Video | [`skills/wan__v2.6__text-to-video.md`](skills/wan__v2.6__text-to-video.md) |
 | `wan-2-6-i2v` | `wan/v2.6/image-to-video` | Image-to-Video | [`skills/wan__v2.6__image-to-video.md`](skills/wan__v2.6__image-to-video.md) |
@@ -74,7 +73,7 @@ The source of truth for this routing is `backend/execution/sync_runner.py`. Each
 | `seedvr2-upscale` | `fal-ai/seedvr/upscale/image` | Upscaling | [`skills/fal-ai__seedvr__upscale__image.md`](skills/fal-ai__seedvr__upscale__image.md) |
 | `fal-universal` | user-provided slug | Any | route to the matching file under `skills/` |
 
-**Routing note:** Some nebula nodes have two handlers (direct + FAL) with a `routing` param selecting which. The dual-param convention (`sharedParams`, `falParams`, `directParams`) comes from that — `falParams` only apply when routed through FAL.
+**Routing note:** Dual-route nodes have two handlers (direct + FAL); the configured keys pick one, not a param. Params split into `sharedParams` (both routes), `falParams` (FAL only) and `directParams` (direct only). The router (`backend/execution/maker_routes.py` `dual_route`, or `_ideogram_router`/the Veo router) sends each route only its own params, on a copy of the node; the Inspector and Create show the active route's set. Prices can differ per route: `model_pricing.json` `routes` (e.g. `nano-banana-fal` bills FAL's rate on FAL and Google's on the Gemini API). `seedream-4-5` (and `cinema-scene` through it) runs on BytePlus ModelArk when `BYTEPLUS_API_KEY` is saved, unless `seed` is set or the size is one ModelArk can't render (`square`, `auto_3K` on 4.5, a custom size outside its pixel range); `seed` and `enable_safety_checker` are FAL-only. The Seedance nodes (`seedance-2-t2v`, `-2-i2v`, `-2-r2v`, `-2-fast-t2v`, `-2-fast-i2v`, `seedance-v1-5`, `seedance-1-0-t2v`) also run on BytePlus with that key; `seed` is FAL-only on the 2.0 nodes (a set one keeps the run on FAL) and `enable_safety_checker` on `seedance-1-0-t2v`. See the `byteplus` skill.
 
 ## How to use this skill
 
@@ -115,7 +114,7 @@ FAL doesn't publish public rate-limit numbers. Empirically:
 The bundle's skill files each have a "Prompting best practices" section. High-leverage universal patterns across FAL models:
 
 1. **Narrative > keyword soup** — full prose descriptions beat comma-separated tags on every FAL image model (Flux, Nano Banana, Imagen, Recraft, Seedream, Ideogram).
-2. **Quote dialogue in video prompts** — Veo, Sora 2, Kling all parse quoted strings as speech. SFX as plain text.
+2. **Quote dialogue in video prompts** — Veo and Kling parse quoted strings as speech. SFX as plain text.
 3. **Specify camera terms explicitly** — "dolly," "pan," "POV," "tracking shot," "extreme close-up" work across Veo 3.1, Kling v3, Seedance 2.
 4. **Put reference images first** in multi-image prompts — most models prioritize the first reference.
 5. **Seeds are reproducibility, not style-transfer** — fixing a seed preserves a generation, not a style. For style transfer use model-specific `image_prompt` or `reference_image_urls` params.

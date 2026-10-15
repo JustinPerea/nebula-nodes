@@ -162,8 +162,12 @@ OPAQUE_CALLS = {"__import__", "create_subprocess_exec", "create_subprocess_shell
 # import into one of them fails test_the_walk_stops_only_where_it_was_reviewed
 # until someone checks it and updates the pin.
 NOT_PROVIDER_CALLS = {
-    # Downloads a finished output URL into the output folder.
-    "services.output": {"httpx", "services.ffmpeg", "services.file_access", "services.settings"},
+    # Downloads a finished output URL into the output folder. image_to_data_uri
+    # reads a local image through services.media_input (file policy + size cap;
+    # its only network use is public_url's credential-free public https fetch)
+    # and takes its default bound from services.image_input (local reads only).
+    "services.output": {"httpx", "services.ffmpeg", "services.file_access", "services.settings",
+                        "services.image_input", "services.media_input"},
     # The settings store; its httpx use is Settings > Providers' key check, which
     # the person starts and which costs nothing (google_vertex and nous_auth are
     # the credential checks for those two providers).

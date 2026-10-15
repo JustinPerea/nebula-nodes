@@ -1,6 +1,6 @@
 # Nebula Nodes — Agent Instructions
 
-AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph. 305 nodes defined in `backend/data/node_definitions.json` (source of truth). `docs/MODEL_REFERENCE.md` is generated from it via `node scripts/generate-model-reference.mjs` — never edit it by hand.
+AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph. 303 nodes defined in `backend/data/node_definitions.json` (source of truth). `docs/MODEL_REFERENCE.md` is generated from it via `node scripts/generate-model-reference.mjs` — never edit it by hand.
 
 ## Standing task: Flora gap audit
 
@@ -10,7 +10,7 @@ We also produce content in Flora (app.flora.ai, via the `user-flora` MCP). Flora
 
 Before logging, check it's a real gap:
 
-1. Search `backend/data/node_definitions.json` — including `params` model enums. Several nodes are multi-model: `nano-banana` covers the whole Nano Banana family incl. Pro; `runway-video` covers Gen-4.5 / Seedance 2.0 / Happy Horse; `minimax-*` covers Hailuo 2.3; the `veo-3` node is actually Veo 3.1.
+1. Search `backend/data/node_definitions.json` — including `params` model enums. Several nodes are multi-model: `nano-banana` covers the whole Nano Banana family incl. Pro; `runway-video` covers Gen-4.5 / Gen-4 Turbo / Seedance 2.0 (+ Fast, Mini) / Seedance 2.5 / Happy Horse / Veo 3.1; `runway-image` covers Seedream 5.0 Pro / Lite (via Runway, a reseller); `minimax-*` covers Hailuo 2.3; the `veo-3` node is actually Veo 3.1.
 2. Reachability through universal nodes (`fal-universal`, `replicate-universal`, `openrouter-universal`, `nous-portal-universal`) does **not** count as coverage — log it anyway, noting the universal fallback.
 
 The full baseline comparison (2026-07-25) lives in `docs/flora-gap-audit.md`. Known top gaps: Enhancor skin-realism i2i, audio-driven lipsync/avatar models, first/last-frame video category, Kling Pro/Edit/Motion tiers, Magnific/Topaz upscalers.
@@ -22,4 +22,5 @@ Implementation work to add missing nodes should run in a **dedicated Cursor chat
 ## Other conventions
 
 - Repo-backed agent skills live in `.agents/skills/` (indexed by the backend Codex runner). Keep them free of secrets and user outputs.
+- Dual-route nodes (a fal or Krea copy that also runs on the maker's API with the person's key) pick their route through `backend/services/node_route.py` (mirrored by `frontend/src/lib/directRoute.ts`): Krea plan, else maker key, else the fal/Krea key. Krea maker routes are declared in `scripts/sync-krea-catalog.py` `DIRECT_ROUTES`; never hand-edit generated Krea nodes.
 - When adding a node, regenerate `docs/MODEL_REFERENCE.md` and check the corresponding entry off in `docs/flora-gap-audit.md` if it closes a logged gap.

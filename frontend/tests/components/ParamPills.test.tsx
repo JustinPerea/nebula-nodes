@@ -152,7 +152,8 @@ describe('Create parameter values', () => {
   it('keeps actual numeric defaults and explicit required enum choices', () => {
     const onChange = vi.fn();
     const def = {
-      ...GPT_IMAGE,
+      // Only `params`: drop the copy's route split (GPT Image 2 also runs on OpenAI).
+      ...GPT_IMAGE, sharedParams: undefined, falParams: undefined, directParams: undefined,
       params: [
         { key: 'required_count', label: 'Required count', type: 'integer' as const, required: true, min: 1 },
         { key: 'default_count', label: 'Default count', type: 'integer' as const, required: false, default: 4 },

@@ -31,7 +31,7 @@ def _make_tts_node(params: dict | None = None) -> GraphNode:
         definitionId="elevenlabs-tts",
         params=params
         or {
-            "voice_id": "voice-test",
+            "voice_id": "voiceTest",
             "model_id": "eleven_multilingual_v2",
             "stability": 0.4,
             "similarity_boost": 0.8,
@@ -64,7 +64,7 @@ def _make_sts_node(params: dict | None = None) -> GraphNode:
         definitionId="elevenlabs-sts",
         params=params
         or {
-            "voice_id": "voice-test",
+            "voice_id": "voiceTest",
             "model_id": "eleven_english_sts_v2",
             "stability": 0.5,
             "similarity_boost": 0.75,
@@ -166,7 +166,7 @@ async def test_tts_maps_voice_settings_and_query_params() -> None:
     body = call.kwargs["json"]
     headers = call.kwargs["headers"]
 
-    assert url.endswith("/voice-test?output_format=mp3_44100_128")
+    assert url.endswith("/voiceTest?output_format=mp3_44100_128")
     assert body["text"] == "read this"
     assert body["model_id"] == "eleven_multilingual_v2"
     assert body["voice_settings"]["stability"] == 0.4
@@ -192,7 +192,7 @@ async def test_tts_defaults_speaker_boost_to_true() -> None:
         MockClient.return_value = mock_client
 
         await handle_elevenlabs_tts(
-            _make_tts_node({"voice_id": "voice-test"}),
+            _make_tts_node({"voice_id": "voiceTest"}),
             {"text": PortValueDict(type="Text", value="read this")},
             {"ELEVENLABS_API_KEY": "el-test"},
         )
@@ -353,7 +353,7 @@ async def test_sts_sends_multipart_with_voice_settings(tmp_path: Path) -> None:
     data = call.kwargs["data"]
     headers = call.kwargs["headers"]
 
-    assert "speech-to-speech/voice-test" in url
+    assert "speech-to-speech/voiceTest" in url
     assert "output_format=mp3_44100_128" in url
     assert "audio" in files
     assert data["model_id"] == "eleven_english_sts_v2"

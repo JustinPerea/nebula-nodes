@@ -11,12 +11,13 @@ import httpx
 
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
-from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir
+from services.media_input import read_local_media
 from services.public_url import fetch_public_media
 from services.provider_capabilities import enforce_gemini_omni_capabilities
 from execution.missing_credential import MissingCredentialError
+from execution.poll_retry import UpstreamTask, poll_request
 
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 FILES_URL = "https://generativelanguage.googleapis.com/v1beta/files"
@@ -74,21 +75,24 @@ async def _load_bytes(value: str) -> tuple[bytes, str]:
     path = Path(value)
     if not path.exists():
         raise ValueError(f"Media not found: {value}")
-    return require_allowed_path(path).read_bytes(), _mime_for_path(path)
+    return read_local_media(path, label="Gemini Omni input", max_bytes=MAX_INPUT_BYTES)[1], _mime_for_path(path)
 
 
 async def _build_input_parts(
     prompt: str,
     image_values: list[str],
-    video_value: str | None,
+    video_value: str | list[str] | None,
 ) -> str | list[dict[str, Any]]:
     parts: list[dict[str, Any]] = []
 
-    if video_value:
-        if "generativelanguage.googleapis.com" in video_value and "/files/" in video_value:
-            parts.append({"type": "document", "uri": video_value})
+    # One clip to edit, or up to three reference clips (the Krea copy's
+    # reference_videos; "Video references support a maximum of 3 clips").
+    clips = [video_value] if isinstance(video_value, str) else list(video_value or [])
+    for clip in clips:
+        if "generativelanguage.googleapis.com" in clip and "/files/" in clip:
+            parts.append({"type": "document", "uri": clip})
         else:
-            data, mime = await _load_bytes(video_value)
+            data, mime = await _load_bytes(clip)
             parts.append({
                 "type": "video",
                 "mime_type": mime,
@@ -145,7 +149,7 @@ async def _wait_for_file_active(
     file_id = file_uri.rstrip("/").split("/files/")[-1].split(":")[0]
     poll_url = f"{FILES_URL}/{file_id}"
     for _ in range(max_polls):
-        resp = await client.get(poll_url, headers={"x-goog-api-key": api_key})
+        resp = await poll_request(lambda: client.get(poll_url, headers={"x-goog-api-key": api_key}))
         if resp.status_code != 200:
             raise RuntimeError(f"Gemini file poll failed ({resp.status_code}): {resp.text}")
         state = str(resp.json().get("state", "")).upper()
@@ -166,16 +170,19 @@ async def _poll_interaction(
     *,
     max_polls: int = 300,
     poll_interval: float = 3.0,
+    upstream: UpstreamTask | None = None,
 ) -> dict[str, Any]:
     poll_url = f"{INTERACTIONS_URL}/{interaction_id}"
     for poll_num in range(1, max_polls + 1):
         await asyncio.sleep(poll_interval)
-        resp = await client.get(poll_url, headers={"x-goog-api-key": api_key})
+        resp = await poll_request(lambda: client.get(poll_url, headers={"x-goog-api-key": api_key}))
         if resp.status_code != 200:
             raise RuntimeError(f"Gemini Omni poll failed ({resp.status_code}): {resp.text}")
         data = resp.json()
         status = str(data.get("status", "")).lower()
         await emit(ProgressEvent(node_id=node_id, value=min(poll_num / max_polls, 0.99)))
+        if status in {"completed", "failed", "cancelled", "canceled"} and upstream is not None:
+            upstream.finished = True
         if status == "completed":
             return data
         if status in {"failed", "cancelled", "canceled"}:
@@ -202,10 +209,11 @@ async def handle_gemini_omni(
         raw = images_input.value
         image_values = [str(v) for v in raw if v] if isinstance(raw, list) else [str(raw)]
 
-    video_value = None
+    video_value: str | list[str] | None = None
     video_input = inputs.get("video")
     if video_input and video_input.value:
-        video_value = str(video_input.value)
+        raw_video = video_input.value
+        video_value = [str(v) for v in raw_video if v] if isinstance(raw_video, list) else str(raw_video)
 
     previous_input = inputs.get("previous_interaction_id")
     previous_id = (
@@ -241,6 +249,17 @@ async def handle_gemini_omni(
     if aspect_ratio:
         request_body["response_format"]["aspect_ratio"] = str(aspect_ratio)
 
+    # The Krea copy's duration (3-10 s): VideoResponseFormat "duration string
+    # (optional) The duration for the video output"
+    # (https://ai.google.dev/api/interactions-api), written "8s" as Google's
+    # Vertex page for the same API does. The gemini-omni-flash node has none.
+    duration = node.params.get("duration")
+    if duration not in (None, ""):
+        seconds = int(str(duration).rstrip("s"))
+        if not 3 <= seconds <= 10:
+            raise ValueError(f"Gemini Omni makes 3-10 second videos (got {seconds})")
+        request_body["response_format"]["duration"] = f"{seconds}s"
+
     if task:
         request_body["generation_config"] = {"video_config": {"task": str(task)}}
 
@@ -265,15 +284,13 @@ async def handle_gemini_omni(
         if status not in {"completed", "succeeded"}:
             if not interaction_id:
                 raise RuntimeError(f"Gemini Omni did not return interaction id: {data}")
-            try:
+            # Transient poll errors are retried; polling that stops before a
+            # terminal state cancels the interaction (execution/poll_retry.py).
+            with UpstreamTask(lambda: _cancel_interaction(interaction_id, api_key),
+                              schedule_detached_cancel) as upstream:
                 data = await _poll_interaction(
-                    client, interaction_id, api_key, node.id, _emit
+                    client, interaction_id, api_key, node.id, _emit, upstream=upstream
                 )
-            except asyncio.CancelledError:
-                schedule_detached_cancel(
-                    lambda: _cancel_interaction(interaction_id, api_key)
-                )
-                raise
             interaction_id = str(data.get("id") or interaction_id)
 
         video_bytes, video_uri = _video_from_interaction(data)

@@ -24,6 +24,22 @@ Shape of one entry (keyed by node definition id)::
       "checked": "2026-10-10"
     }
 
+A node that runs on more than one provider (a fal or Krea copy that can also
+run on its maker's API, services/node_route.py) can price each route instead::
+
+    {
+      "routes": {"fal": {...one entry as above...},
+                 "google": {...one entry as above...}},
+      "generatedBy": "..."                           # optional, as above
+    }
+
+Each route is a complete entry, keyed by the provider that bills it (the
+``provider`` field inside is implied and, when given, must match). The run is
+priced by the route it takes (``route_provider``); a route without an entry is
+unpriced. An entry without ``routes`` is a single-route entry, unchanged.
+Price rows always match the node's own params (fal's or Krea's names), since
+those are what is saved, whichever route translates them.
+
 Rows are tried in order; the first whose every ``match`` key equals the
 node's effective value wins, so list specific rows before general ones. A
 price is a number or a ``[low, high]`` range for settings (like ``auto``) that
@@ -44,6 +60,8 @@ import re
 from datetime import date
 from pathlib import Path
 from typing import Any, Iterable, Mapping
+
+from services.retired_nodes import migrate_params
 
 PRICING_PATH = Path(__file__).resolve().parent.parent / "data" / "model_pricing.json"
 CURRENCIES = ("usd", "krea_cu")
@@ -87,6 +105,34 @@ def _definition_params(definition: Mapping[str, Any]) -> list[Mapping[str, Any]]
     return params
 
 
+def route_providers(definition: Mapping[str, Any]) -> set[str]:
+    """Every provider a run of this node can bill, by its keys."""
+    from services import node_route
+
+    providers = {node_route.KEY_PROVIDERS[key] for key in node_route.env_keys(definition)
+                 if key in node_route.KEY_PROVIDERS}
+    if definition.get("apiProvider") and len(node_route.env_keys(definition)) < 2:
+        providers.add(str(definition["apiProvider"]))
+    return providers
+
+
+def entry_for_route(entry: Mapping[str, Any] | None, provider: str | None) -> Mapping[str, Any] | None:
+    """The single-route entry that prices a run billed to ``provider``.
+
+    A ``routes`` entry gives that route's entry (None when the route has no
+    price, or when the route isn't known); a plain entry is returned as is,
+    and ``estimate_node`` still checks its ``provider``."""
+    if not entry:
+        return None
+    routes = entry.get("routes")
+    if routes is None:
+        return entry
+    if not isinstance(routes, Mapping) or not provider:
+        return None
+    routed = routes.get(provider)
+    return routed if isinstance(routed, Mapping) else None
+
+
 def validate_pricing(pricing: Mapping[str, Any], definitions: Mapping[str, Mapping[str, Any]]) -> list[str]:
     """Every problem with the file, as readable strings. Empty means valid."""
     problems: list[str] = []
@@ -102,68 +148,101 @@ def validate_pricing(pricing: Mapping[str, Any], definitions: Mapping[str, Mappi
             continue
         if definition.get("apiProvider") == "utility":
             problems += _utility_entry_problems(where, entry, definition)
-        currency = entry.get("currency")
-        if currency not in CURRENCIES:
-            problems.append(f"{where} currency must be one of {CURRENCIES}")
-        elif currency != "usd" and currency not in currencies:
-            problems.append(f"{where} currency {currency} is not described under 'currencies'")
-        if entry.get("per") not in PER_UNITS:
-            problems.append(f"{where} per must be one of {PER_UNITS}")
-        checked = entry.get("checked")
-        if not isinstance(checked, str) or not _DATE_RE.match(checked):
-            problems.append(f"{where} checked must be an ISO date")
-        else:
-            try:
-                date.fromisoformat(checked)
-            except ValueError:
-                problems.append(f"{where} checked is not a real date")
-        sources = entry.get("sources")
-        if not isinstance(sources, list) or not sources:
-            problems.append(f"{where} needs at least one source")
-        else:
-            for source in sources:
-                url = source.get("url") if isinstance(source, Mapping) else None
-                quote = source.get("quote") if isinstance(source, Mapping) else None
-                if not isinstance(url, str) or not url.startswith("https://"):
-                    problems.append(f"{where} every source needs an https url")
-                if not isinstance(quote, str) or not quote.strip():
-                    problems.append(f"{where} every source needs the quoted price line")
-
-        params = {p.get("key"): p for p in _definition_params(definition)}
-        known_keys = set(params) | set((entry.get("defaults") or {}).keys())
-        rows = entry.get("rows")
-        if not isinstance(rows, list) or not rows:
-            problems.append(f"{where} needs at least one row")
-            rows = []
-        for index, row in enumerate(rows):
-            if not isinstance(row, Mapping) or not isinstance(row.get("match", {}), Mapping):
-                problems.append(f"{where} row {index} must be an object with a 'match' object")
+        if "routes" in entry:
+            routes = entry.get("routes")
+            stray = sorted(set(entry) - {"routes", "generatedBy", "notes"})
+            if stray:
+                problems.append(f"{where} a routes entry keeps its prices inside each route, not {stray}")
+            if not isinstance(routes, Mapping) or not routes:
+                problems.append(f"{where} routes must be an object with at least one provider")
                 continue
-            if _price_bounds(row.get("price")) is None:
-                problems.append(f"{where} row {index} price must be a non-negative number or [low, high]")
-            for key, value in (row.get("match") or {}).items():
-                if key not in known_keys:
-                    problems.append(f"{where} row {index} matches unknown param '{key}'")
+            allowed = route_providers(definition)
+            for provider, routed in routes.items():
+                route_where = f"{node_id} ({provider} route):"
+                if provider not in allowed:
+                    problems.append(f"{route_where} the node can't bill {provider!r}; it bills {sorted(allowed)}")
+                if not isinstance(routed, Mapping):
+                    problems.append(f"{route_where} entry must be an object")
                     continue
-                options = (params.get(key) or {}).get("options")
-                if isinstance(options, list) and options:
-                    allowed = {str(o.get("value") if isinstance(o, Mapping) else o) for o in options}
-                    if str(value) not in allowed:
-                        problems.append(f"{where} row {index} value {key}={value!r} is not an option of the node")
-        for index, extra in enumerate(entry.get("extras") or []):
-            if not isinstance(extra, Mapping) or _price_bounds(extra.get("price")) is None:
-                problems.append(f"{where} extra {index} needs a 'match' object and a price")
-                continue
-            for key in (extra.get("match") or {}):
-                if key not in known_keys:
-                    problems.append(f"{where} extra {index} matches unknown param '{key}'")
-        env_keys = definition.get("envKeyName")
-        if isinstance(env_keys, list) and len([k for k in env_keys if k]) > 1 and not entry.get("provider"):
-            problems.append(f"{where} can run on more than one provider, so it must name whose price this is")
-        for key in entry.get("multiplyBy") or []:
-            if key not in known_keys:
-                problems.append(f"{where} multiplyBy names unknown param '{key}'")
+                if "routes" in routed:
+                    problems.append(f"{route_where} routes don't nest")
+                if routed.get("provider") not in (None, provider):
+                    problems.append(f"{route_where} provider must be {provider!r} or left out")
+                _validate_entry(route_where, routed, definition, currencies, problems, multi_route_ok=True)
+            continue
+        _validate_entry(where, entry, definition, currencies, problems)
     return problems
+
+
+def _validate_entry(
+    where: str, entry: Mapping[str, Any], definition: Mapping[str, Any], currencies: Mapping[str, Any],
+    problems: list[str], *, multi_route_ok: bool = False,
+) -> None:
+    currency = entry.get("currency")
+    if currency not in CURRENCIES:
+        problems.append(f"{where} currency must be one of {CURRENCIES}")
+    elif currency != "usd" and currency not in currencies:
+        problems.append(f"{where} currency {currency} is not described under 'currencies'")
+    if entry.get("per") not in PER_UNITS:
+        problems.append(f"{where} per must be one of {PER_UNITS}")
+    checked = entry.get("checked")
+    if not isinstance(checked, str) or not _DATE_RE.match(checked):
+        problems.append(f"{where} checked must be an ISO date")
+    else:
+        try:
+            date.fromisoformat(checked)
+        except ValueError:
+            problems.append(f"{where} checked is not a real date")
+    sources = entry.get("sources")
+    if not isinstance(sources, list) or not sources:
+        problems.append(f"{where} needs at least one source")
+    else:
+        for source in sources:
+            url = source.get("url") if isinstance(source, Mapping) else None
+            quote = source.get("quote") if isinstance(source, Mapping) else None
+            if not isinstance(url, str) or not url.startswith("https://"):
+                problems.append(f"{where} every source needs an https url")
+            if not isinstance(quote, str) or not quote.strip():
+                problems.append(f"{where} every source needs the quoted price line")
+
+    params = {p.get("key"): p for p in _definition_params(definition)}
+    known_keys = set(params) | set((entry.get("defaults") or {}).keys())
+    rows = entry.get("rows")
+    if not isinstance(rows, list) or not rows:
+        problems.append(f"{where} needs at least one row")
+        rows = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, Mapping) or not isinstance(row.get("match", {}), Mapping):
+            problems.append(f"{where} row {index} must be an object with a 'match' object")
+            continue
+        if _price_bounds(row.get("price")) is None:
+            problems.append(f"{where} row {index} price must be a non-negative number or [low, high]")
+        for key, value in (row.get("match") or {}).items():
+            if key not in known_keys:
+                problems.append(f"{where} row {index} matches unknown param '{key}'")
+                continue
+            options = (params.get(key) or {}).get("options")
+            if isinstance(options, list) and options:
+                allowed = {str(o.get("value") if isinstance(o, Mapping) else o) for o in options}
+                if str(value) not in allowed:
+                    problems.append(f"{where} row {index} value {key}={value!r} is not an option of the node")
+    for index, extra in enumerate(entry.get("extras") or []):
+        if not isinstance(extra, Mapping) or _price_bounds(extra.get("price")) is None:
+            problems.append(f"{where} extra {index} needs a 'match' object and a price")
+            continue
+        for key in (extra.get("match") or {}):
+            if key not in known_keys:
+                problems.append(f"{where} extra {index} matches unknown param '{key}'")
+    env_keys = definition.get("envKeyName")
+    if (not multi_route_ok and isinstance(env_keys, list) and len([k for k in env_keys if k]) > 1
+            and not entry.get("provider")):
+        problems.append(f"{where} can run on more than one provider, so it must name whose price this is "
+                        "(provider) or price each route (routes)")
+    elif entry.get("provider") and entry["provider"] not in route_providers(definition):
+        problems.append(f"{where} provider {entry['provider']!r} isn't a route this node can bill")
+    for key in entry.get("multiplyBy") or []:
+        if key not in known_keys:
+            problems.append(f"{where} multiplyBy names unknown param '{key}'")
 
 
 def _utility_entry_problems(where: str, entry: Mapping[str, Any], definition: Mapping[str, Any]) -> list[str]:
@@ -254,13 +333,17 @@ def estimate_node(
     node's input ports that have an edge into them: a priced setting among
     them is only known at run time (the wire's value replaces the param), so
     the run is unpriced. Not just the rows that name it: a more general row
-    or a skipped extra would price it wrong."""
+    or a skipped extra would price it wrong. A ``routes`` entry prices the
+    route ``route_provider`` names, or nothing when it isn't given."""
+    entry = entry_for_route(entry, route_provider)
     if not entry:
         return None
     if entry.get("provider") and route_provider and entry["provider"] != route_provider:
         return None
     if priced_keys(entry) & {str(port) for port in wired}:
         return None
+    # Price what will run: a retired value is replaced before the run (retired_nodes).
+    params = migrate_params(str(definition.get("id") or ""), dict(params or {}))
     values = effective_params(entry, definition, params)
     for row in entry.get("rows") or []:
         if _matches(values, row.get("match") or {}):
@@ -291,50 +374,29 @@ def estimate_node(
 
 
 # -- a whole run ---------------------------------------------------------------
-# These mirror frontend/src/lib/runScope.ts and modelDiscovery.runRouteProvider.
+# These mirror frontend/src/lib/runScope.ts and lib/directRoute.selectRoute.
 
-CREDENTIAL_PROVIDERS: dict[str, str] = {
-    "OPENAI_API_KEY": "openai", "ANTHROPIC_API_KEY": "anthropic", "GOOGLE_API_KEY": "google",
-    "OPENROUTER_API_KEY": "openrouter", "REPLICATE_API_TOKEN": "replicate", "FAL_KEY": "fal",
-    "MESHY_API_KEY": "meshy", "RUNWAY_API_KEY": "runway", "ELEVENLABS_API_KEY": "elevenlabs",
-    "MINIMAX_API_KEY": "minimax", "XAI_API_KEY": "xai", "HIGGSFIELD_API_KEY": "higgsfield",
-    "QUIVER_API_KEY": "quiver", "KREA_API_TOKEN": "krea", "IDEOGRAM_API_KEY": "ideogram",
-    "WORLDLABS_API_KEY": "worldlabs", "TYPESAFE_API_KEY": "typesafe",
-    # Vertex bills Veo at the same listed amounts as the Gemini API.
-    "GOOGLE_VERTEX_CREDENTIALS": "google",
-}
+from services.node_route import KEY_PROVIDERS as CREDENTIAL_PROVIDERS  # noqa: E402  (kept for callers)
 FANOUT_IDS = frozenset({"batch", "iterator-image", "iterator-text"})
 
 
-def route_provider(definition: Mapping[str, Any], api_keys: Mapping[str, Any]) -> str | None:
-    """The provider a run of this node bills: the direct key when it is set,
-    else the first other configured key (dual-route nodes fall back to FAL)."""
-    provider = definition.get("apiProvider")
-    if provider == "utility":
-        return None
-    env = definition.get("envKeyName")
-    keys = [k for k in (env if isinstance(env, list) else [env]) if k]
-    if len(keys) < 2:
-        return provider
-    raw_direct = definition.get("directKeyName")
-    direct = [k for k in (raw_direct if isinstance(raw_direct, list) else [raw_direct]) if k]
-    route_key = next((k for k in direct if api_keys.get(k)), None) or next(
-        (k for k in keys if k not in direct and api_keys.get(k)), None
-    )
-    return CREDENTIAL_PROVIDERS.get(route_key or "", provider)
+def route_provider(
+    definition: Mapping[str, Any], api_keys: Mapping[str, Any], params: Mapping[str, Any] | None = None,
+) -> str | None:
+    """The provider a run of this node bills (services/node_route.py): the
+    Krea plan when chosen, else the maker key when it is set, else the first
+    other configured key (the fal or Krea copy). With nothing set, the node's
+    own apiProvider."""
+    from services import node_route
+
+    return node_route.select_route(definition, params, api_keys).provider
 
 
 def uses_krea_account(definition: Mapping[str, Any], params: Mapping[str, Any]) -> bool:
     """Krea runs billed to a signed-in account's plan rather than per call."""
-    if definition.get("apiProvider") != "krea":
-        return False
-    auth = next((p for p in definition.get("params") or [] if p.get("key") == "_kreaAuth"), None)
-    if auth is None:
-        return False
-    options = [o.get("value") if isinstance(o, Mapping) else o for o in auth.get("options") or []]
-    if options == ["mcp"]:
-        return True
-    return params.get("_kreaAuth") == "mcp"
+    from services import node_route
+
+    return node_route.uses_krea_plan(definition, params)
 
 
 def _batch_item_count(params: Mapping[str, Any]) -> int:
@@ -476,6 +538,8 @@ def estimate_run(
     each of those to {model, runs}: how many runs it bills to the Krea plan
     (batch runs times a cinema scene's shots). ``low``/``high`` are None when
     nothing is priced."""
+    from services import node_route
+
     nodes_pricing = pricing.get("nodes") or {}
     low = high = 0.0
     priced: dict[str, dict[str, float]] = {}
@@ -511,9 +575,12 @@ def estimate_run(
             plan_runs[node_id] = {"model": str(definition.get("id") or item.get("definitionId") or ""),
                                   "runs": (multipliers or {}).get(node_id, (1, 1))[1] * calls}
             continue
+        # A Krea-only setting that arrives by wire keeps the run on Krea
+        # (node_route.with_wired_blockers), as the router does.
+        routed = node_route.with_wired_blockers(definition, params, ports)
         estimate = estimate_node(
             nodes_pricing.get(definition.get("id") or item.get("definitionId")),
-            definition, params, route_provider(definition, api_keys), ports,
+            definition, params, route_provider(definition, api_keys, routed), ports,
         )
         if estimate is None or estimate["currency"] != "usd":
             unpriced.append(node_id)

@@ -152,5 +152,5 @@ def test_context_says_what_local_provider_nodes_need():
 
     google = format_context({"apiKeys": {"GOOGLE_API_KEY": "g"}}, nodes)
     assert "cinema-scene" in google and "(set here)" in google
-    assert "cinema-scene: default seedream-4-5 needs FAL_KEY; set scene.base.model to nano-banana" in google
+    assert "cinema-scene: default seedream-4-5 needs BYTEPLUS_API_KEY or FAL_KEY; set scene.base.model to nano-banana" in google
     assert "cinema-scene: default" not in format_context({"apiKeys": {"FAL_KEY": "f"}}, nodes)

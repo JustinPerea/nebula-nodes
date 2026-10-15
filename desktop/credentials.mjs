@@ -30,6 +30,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
  */
 export const ALLOWED_PROVIDERS = Object.freeze([
   'ANTHROPIC_API_KEY',
+  'BYTEPLUS_API_KEY',
   'ELEVENLABS_API_KEY',
   'FAL_KEY',
   'GOOGLE_API_KEY',

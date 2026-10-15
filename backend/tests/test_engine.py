@@ -448,7 +448,10 @@ class TestVideoOutputProbe:
         vid.write_bytes(b"fake")
         node = GraphNode(id="n1", definitionId="veo-3", params={"_sourceDuration": 2})
         cache = ExecutionCache()
-        cache.set(cache.get_key("veo-3", node.params, {}), {"video": {"type": "Video", "value": str(vid)}})
+        # veo-3 runs on the Gemini API or Vertex, so its cache key names the
+        # route the run takes (none of its keys set here: "unset:google").
+        cache.set(cache.get_key("veo-3", {**node.params, "_route": "unset:google"}, {}),
+                  {"video": {"type": "Video", "value": str(vid)}})
         handler = AsyncMock()
         probe = type("PR", (), {"duration": 5.0, "fps": 30.0, "is_vfr": False})()
         async def emit(_event):

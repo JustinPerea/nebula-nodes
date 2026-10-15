@@ -177,6 +177,7 @@ describe('Published constants', () => {
   test('ALLOWED_PROVIDERS contains all documented providers', () => {
     const expected = [
       'ANTHROPIC_API_KEY',
+      'BYTEPLUS_API_KEY',
       'ELEVENLABS_API_KEY',
       'FAL_KEY',
       'GOOGLE_API_KEY',

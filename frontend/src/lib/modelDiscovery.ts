@@ -1,5 +1,5 @@
 import type { APIProvider, ModelNodeDefinition, NodeCategory, PortDefinition } from '../types';
-import { directKeyNames } from './directRoute';
+import { directKeyNames, KEY_PROVIDERS, selectRoute } from './directRoute';
 
 export const CATEGORY_LABELS: Record<NodeCategory, string> = {
   'image-gen': 'Image Generation',
@@ -29,15 +29,7 @@ export function providerLabel(provider: string): string {
   return PROVIDER_LABELS[provider as APIProvider] ?? provider;
 }
 
-const CREDENTIAL_PROVIDER_IDS: Readonly<Record<string, APIProvider>> = {
-  OPENAI_API_KEY: 'openai', ANTHROPIC_API_KEY: 'anthropic', GOOGLE_API_KEY: 'google',
-  GOOGLE_VERTEX_CREDENTIALS: 'google',
-  OPENROUTER_API_KEY: 'openrouter', REPLICATE_API_TOKEN: 'replicate', FAL_KEY: 'fal',
-  MESHY_API_KEY: 'meshy', RUNWAY_API_KEY: 'runway', ELEVENLABS_API_KEY: 'elevenlabs',
-  MINIMAX_API_KEY: 'minimax', XAI_API_KEY: 'xai', HIGGSFIELD_API_KEY: 'higgsfield',
-  QUIVER_API_KEY: 'quiver', KREA_API_TOKEN: 'krea', IDEOGRAM_API_KEY: 'ideogram',
-  WORLDLABS_API_KEY: 'worldlabs', TYPESAFE_API_KEY: 'typesafe',
-};
+const CREDENTIAL_PROVIDER_IDS = KEY_PROVIDERS;
 
 /** Discovery includes every declared provider route, regardless of which
  * credential is currently configured. Readiness describes the selected route. */
@@ -51,22 +43,16 @@ export function supportedModelProviders(definition: ModelNodeDefinition): APIPro
   return [...providers];
 }
 
-/** The provider a run actually goes through, for "OpenAI · 6s" on a running
- * node. Mirrors the backend: a dual-route node uses its own API when that key
- * is set and falls back to the other configured route (FAL) otherwise. Local
- * tools have no provider. */
+/** The provider a run actually goes through and bills, for "OpenAI · 6s" on
+ * a running node and for the run estimate: lib/directRoute.ts selectRoute,
+ * the backend's rule (the Krea plan when chosen, else the maker key, else the
+ * fal or Krea copy). Local tools have no provider. */
 export function runRouteProvider(
   definition: ModelNodeDefinition,
   apiKeys: Readonly<Record<string, string>>,
+  params?: Record<string, unknown>,
 ): APIProvider | null {
-  if (definition.apiProvider === 'utility') return null;
-  const keys = (Array.isArray(definition.envKeyName) ? definition.envKeyName : [definition.envKeyName]).filter(Boolean);
-  if (keys.length < 2) return definition.apiProvider;
-  const configured = (key: string) => Boolean(apiKeys[key]);
-  const direct = directKeyNames(definition);
-  const routeKey = direct.find(configured) ?? keys.find((key) => !direct.includes(key) && configured(key));
-  const provider = routeKey && Object.hasOwn(CREDENTIAL_PROVIDER_IDS, routeKey) ? CREDENTIAL_PROVIDER_IDS[routeKey] : undefined;
-  return provider ?? definition.apiProvider;
+  return selectRoute(definition, params, apiKeys).provider as APIProvider | null;
 }
 
 export function matchesModelProvider(definition: ModelNodeDefinition, provider: string): boolean {

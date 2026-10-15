@@ -24,6 +24,16 @@ describe('provider catalog', () => {
     for (const key of keys) expect(PROVIDER_KEY_LABELS[key], key).toBeTruthy();
   });
 
+  it('says plainly where BytePlus is sold and what it needs before a run', () => {
+    // BytePlus Service Specific Terms: "The BytePlus Model Services are not
+    // available in the United States." Models need activating first.
+    const byteplus = PROVIDER_KEYS.find((spec) => spec.key === 'BYTEPLUS_API_KEY');
+    expect(byteplus?.caveat).toMatch(/doesn't offer its model services in the United States/);
+    expect(byteplus?.caveat).toMatch(/activate each model/);
+    expect(byteplus?.caveat).toMatch(/USD 30/);
+    expect(nodesForKey('BYTEPLUS_API_KEY').map((node) => node.id)).toContain('seedream-4-5');
+  });
+
   it('highlights only real nodes that use the row\'s own key', () => {
     for (const spec of PROVIDER_KEYS) {
       const ids = new Set(nodesForKey(spec.key).map((node) => node.id));

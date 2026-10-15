@@ -1,0 +1,248 @@
+{
+  "about": "Maker size cases shared by backend services/maker_sizes.py and frontend/src/lib/makerSizes.ts: a Krea copy's width x height on the maker route -> the value the maker gets (in its own spelling) and the Inspector's note (null when the maker can make the size asked for). Both read each node's directRoute.snap from the real node catalog. startShapeCases: a Krea copy whose maker doesn't use the aspect ratio on a start-image run (directRoute.startShape) -> the Inspector's note on the maker route (null when the maker uses the ratio as given). `wired` lists wired input ports.",
+  "cases": [
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 1024,
+      "height": 1024,
+      "value": "1024x1024",
+      "note": null
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 1280,
+      "height": 768,
+      "value": "1280x768",
+      "note": null
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 768,
+      "height": 1344,
+      "value": "768x1344",
+      "note": null
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 1000,
+      "height": 560,
+      "value": "1312x736",
+      "note": "Ideogram makes 1312x736, the closest it can get to your 1000x560."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 1920,
+      "height": 1080,
+      "value": "1312x736",
+      "note": "Ideogram makes 1312x736, the closest it can get to your 1920x1080."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 1000,
+      "height": 1000,
+      "value": "1024x1024",
+      "note": "Ideogram makes 1024x1024, the closest it can get to your 1000x1000."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 512,
+      "height": 512,
+      "value": "1024x1024",
+      "note": "Ideogram makes 1024x1024, the closest it can get to your 512x512."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 8192,
+      "height": 1024,
+      "value": "1536x512",
+      "note": "Ideogram makes 1536x512, the closest it can get to your 8192x1024."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 1024,
+      "height": 8192,
+      "value": "512x1536",
+      "note": "Ideogram makes 512x1536, the closest it can get to your 1024x8192."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 600,
+      "height": 1000,
+      "value": "768x1280",
+      "note": "Ideogram makes 768x1280, the closest it can get to your 600x1000."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 4096,
+      "height": 2304,
+      "value": "1312x736",
+      "note": "Ideogram makes 1312x736, the closest it can get to your 4096x2304."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 1024,
+      "height": 1000,
+      "value": "1024x1024",
+      "note": "Ideogram makes 1024x1024, the closest it can get to your 1024x1000."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "width": 1000.5,
+      "height": 560.25,
+      "value": "1312x736",
+      "note": "Ideogram makes 1312x736, the closest it can get to your 1000.5x560.25."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-2-turbo",
+      "width": 1024,
+      "height": 1024,
+      "value": "1x1",
+      "note": null
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-2-turbo",
+      "width": 1920,
+      "height": 1080,
+      "value": "16x9",
+      "note": null
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-2-turbo",
+      "width": 1024,
+      "height": 768,
+      "value": "4x3",
+      "note": null
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-2-turbo",
+      "width": 1000,
+      "height": 560,
+      "value": "16x9",
+      "note": "Ideogram makes a 16:9 image at a size it picks, the closest shape it has to your 1000x560."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-2-turbo",
+      "width": 2048,
+      "height": 512,
+      "value": "3x1",
+      "note": "Ideogram makes a 3:1 image at a size it picks, the closest shape it has to your 2048x512."
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-2-turbo",
+      "width": 1200,
+      "height": 1500,
+      "value": "4x5",
+      "note": null
+    },
+    {
+      "nodeId": "krea-image-ideogram-ideogram-2-turbo",
+      "width": 1000.5,
+      "height": 560.25,
+      "value": "16x9",
+      "note": "Ideogram makes a 16:9 image at a size it picks, the closest shape it has to your 1000.5x560.25."
+    },
+    {
+      "nodeId": "krea-image-runway-gen-4-image",
+      "width": 1920,
+      "height": 1080,
+      "value": "1920:1080",
+      "note": null
+    },
+    {
+      "nodeId": "krea-image-runway-gen-4-image",
+      "width": 1024,
+      "height": 1024,
+      "value": "1024:1024",
+      "note": null
+    },
+    {
+      "nodeId": "krea-image-runway-gen-4-image",
+      "width": 1000,
+      "height": 560,
+      "value": "1280:720",
+      "note": "Runway makes 1280x720, the closest it can get to your 1000x560."
+    },
+    {
+      "nodeId": "krea-image-runway-gen-4-image",
+      "width": 2000,
+      "height": 2000,
+      "value": "1080:1080",
+      "note": "Runway makes 1080x1080, the closest it can get to your 2000x2000."
+    },
+    {
+      "nodeId": "krea-image-runway-gen-4-image",
+      "width": 1080,
+      "height": 1920,
+      "value": "1080:1920",
+      "note": null
+    },
+    {
+      "nodeId": "krea-image-runway-gen-4-image",
+      "width": 4000,
+      "height": 1000,
+      "value": "1808:768",
+      "note": "Runway makes 1808x768, the closest it can get to your 4000x1000."
+    },
+    {
+      "nodeId": "krea-image-runway-gen-4-image",
+      "width": 1920,
+      "height": 1100,
+      "value": "1360:768",
+      "note": "Runway makes 1360x768, the closest it can get to your 1920x1100."
+    },
+    {
+      "nodeId": "krea-image-runway-gen-4-image",
+      "width": 1080,
+      "height": 1100,
+      "value": "1080:1080",
+      "note": "Runway makes 1080x1080, the closest it can get to your 1080x1100."
+    }
+  ],
+  "startShapeCases": [
+    {
+      "nodeId": "krea-video-bytedance-seedance-2-5",
+      "params": {
+        "start_image": "https://example.com/start.png",
+        "aspect_ratio": "9:16"
+      },
+      "wired": [],
+      "note": "BytePlus makes this video in your start image's shape: Seedance 2.5 doesn't use the 9:16 aspect ratio when it starts from an image."
+    },
+    {
+      "nodeId": "krea-video-bytedance-seedance-2-5",
+      "params": {},
+      "wired": [
+        "start_image"
+      ],
+      "note": "BytePlus makes this video in your start image's shape: Seedance 2.5 doesn't use the 16:9 aspect ratio when it starts from an image."
+    },
+    {
+      "nodeId": "krea-video-bytedance-seedance-2-5",
+      "params": {
+        "start_image": "",
+        "aspect_ratio": "1:1"
+      },
+      "wired": [],
+      "note": null
+    },
+    {
+      "nodeId": "krea-video-bytedance-seedance-2-5",
+      "params": {
+        "aspect_ratio": "1:1"
+      },
+      "wired": [
+        "end_image"
+      ],
+      "note": null
+    },
+    {
+      "nodeId": "krea-video-bytedance-seedance-2",
+      "params": {
+        "start_image": "https://example.com/start.png",
+        "aspect_ratio": "9:16"
+      },
+      "wired": [],
+      "note": null
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Nebula Nodes - API Guides
 
-Nebula integrates **18 external AI/media API families** (image, video, audio, 3D/world, text/LLM, SVG, and typed decisions). This directory holds the **user-facing guide** for each provider plus a **coverage + agent-skill audit** measuring how much of each provider's API surface Nebula actually wires up, and whether an agent skill exists to drive those nodes.
+Nebula integrates **19 external AI/media API families** (image, video, audio, 3D/world, text/LLM, SVG, and typed decisions). This directory holds the **user-facing guide** for each provider plus a **coverage + agent-skill audit** measuring how much of each provider's API surface Nebula actually wires up, and whether an agent skill exists to drive those nodes.
 
 Per-provider guides live alongside this file at `./<provider>.md` (e.g. [`./fal.md`](./fal.md)).
 
@@ -16,12 +16,13 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 | [Meshy](./meshy.md) | 8 | ~35% | complete | Creative Lab product line (Keychain, Fridge Magnet, Figure, Lamp) — entirely unused |
 | [Runway](./runway.md) | 8 | ~65% | complete | Sound-effect generation (POST /v1/sound_effect) — no node |
 | [Google (Gemini / Imagen / Veo / Lyria)](./google.md) | 7 | ~50% | complete | Imagen 4 retired (node removed 2026-10-10; saved nodes migrate to Nano Banana 2.1); Veo 3.1 runs on Vertex AI, the Gemini API (previews end 2026-10-22) or fal; Veo reference images unavailable (live API: "use case not supported") |
-| [ElevenLabs](./elevenlabs.md) | 6 | ~33% | complete | Music generation (prompt-to-music + stems) — no node |
+| [ElevenLabs](./elevenlabs.md) | 6 (+8 direct routes) | ~33% | complete | Music stems; prompt-to-music itself runs on the ElevenLabs key since 2026-10-14 (`elevenlabs-music`, Krea Music copies) |
 | [MiniMax (Hailuo)](./minimax.md) | 3 | ~12% | complete | Entire audio stack: TTS (40+ languages), voice cloning, voice design |
 | [Krea](./krea.md) | 3 | ~10% | complete | Video generation entirely unused (Veo, Kling, Runway, Hailuo, Seedance, Wan, Ray 2, LTX, Grok — 30+ models) |
+| [BytePlus ModelArk](./byteplus.md) | 18 (as direct routes) | Seedream images and Seedance video tasks | complete | Seedream 5.0 flash; eu-west-1 region; billing from the reported usage tokens |
 | [QuiverAI (Arrow)](./quiver.md) | 2 | ~85% | complete | No user-facing model browser (GET /v1/models data only fills the dropdown) |
 | [World Labs (Marble)](./worldlabs.md) | 2 | ~42% | complete | World/media lifecycle, listing, sharing, and depth-panorama conversion are not exposed as nodes |
-| [xAI (Grok Imagine)](./xai.md) | 1 | ~20% | complete | Image generation (grok-imagine-image / -quality) — entire text-to-image modality absent |
+| [xAI (Grok Imagine)](./xai.md) | 1 (+6 direct routes) | ~20% | complete | `grok-imagine-image-quality` and video extensions; Grok Imagine images run on the xAI key since 2026-10-14 (fal and Krea copies) |
 | [Replicate](./replicate.md) | 1 | ~20% | complete | Real-time streaming of model output (SSE via urls.stream) — the big one for chat/LLM models |
 | [OpenRouter](./openrouter.md) | 1 | ~30% | complete | Tool / function calling (tools, tool_choice) |
 | [Nous Portal (Hermes)](./nous.md) | 1 | ~70% | complete | Legacy POST /completions endpoint (and `<think>` prefill via it) not exposed |

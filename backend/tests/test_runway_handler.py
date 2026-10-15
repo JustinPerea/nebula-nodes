@@ -153,13 +153,16 @@ def test_text_to_video_models_set():
     assert "gen4.5" in TEXT_TO_VIDEO_MODELS
     assert "veo3.1" in TEXT_TO_VIDEO_MODELS
     assert "veo3.1_fast" in TEXT_TO_VIDEO_MODELS
-    assert "veo3" in TEXT_TO_VIDEO_MODELS
     assert "seedance2" in TEXT_TO_VIDEO_MODELS
+    assert "seedance2_mini" in TEXT_TO_VIDEO_MODELS
+    assert "seedance2_5" in TEXT_TO_VIDEO_MODELS
     assert "seedance2_fast" in TEXT_TO_VIDEO_MODELS
     assert "happyhorse_1_0" in TEXT_TO_VIDEO_MODELS
     # gen4_turbo requires an image per SDK image_to_video_create_params
     assert "gen4_turbo" not in TEXT_TO_VIDEO_MODELS
+    # Retired on Runway (gen3a_turbo 2026-07-30) or gone from its schema (veo3).
     assert "gen3a_turbo" not in TEXT_TO_VIDEO_MODELS
+    assert "veo3" not in TEXT_TO_VIDEO_MODELS
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +185,10 @@ async def test_video_image_to_video_submits_prompt_image(tmp_path):
 
             result = await handle_runway_video(
                 _video_node(),
-                {"image": PortValueDict(type="Image", value=str(img_path))},
+                {
+                    "image": PortValueDict(type="Image", value=str(img_path)),
+                    "prompt": PortValueDict(type="Text", value="Slow push in"),
+                },
                 {"RUNWAY_API_KEY": "rw-test"},
                 emit=AsyncMock(),
             )
@@ -243,7 +249,7 @@ async def test_video_poll_failure_propagates(tmp_path):
         mock_poll.side_effect = RuntimeError("Async job failed: moderation")
         with pytest.raises(RuntimeError, match="moderation"):
             await handle_runway_video(
-                _video_node(),
+                _video_node({"model": "gen4_turbo", "duration": 5}),
                 {"image": PortValueDict(type="Image", value=str(img_path))},
                 {"RUNWAY_API_KEY": "rw-test"},
             )
@@ -299,7 +305,7 @@ async def test_video_text_only_invalid_ratio_raises():
 
 @pytest.mark.asyncio
 async def test_aleph_submits_correct_model_and_fields(tmp_path):
-    """Model must be gen4_aleph; videoUri and promptText must be present."""
+    """Default model is aleph2 (gen4_aleph retired 2026-07-30); videoUri and promptText present."""
     video_path = _create_test_video(tmp_path)
     with patch("handlers.runway.async_poll_execute", new_callable=AsyncMock) as mock_poll:
         mock_poll.return_value = {"id": "t3", "status": "SUCCEEDED", "output": ["https://ex.com/v.mp4"]}
@@ -317,7 +323,7 @@ async def test_aleph_submits_correct_model_and_fields(tmp_path):
 
     assert result["video"]["type"] == "Video"
     body = mock_poll.call_args.kwargs.get("submit_body") or mock_poll.call_args[1]["submit_body"]
-    assert body["model"] == "gen4_aleph"
+    assert body["model"] == "aleph2"
     assert "videoUri" in body
     assert body["videoUri"].startswith("data:video/mp4;base64,")
     assert body["promptText"] == "Transform to night"
@@ -346,7 +352,7 @@ async def test_aleph_missing_prompt_raises(tmp_path):
 
 @pytest.mark.asyncio
 async def test_aleph_optional_reference_image(tmp_path):
-    """Optional reference image must be sent as references array."""
+    """Aleph 2.0 has no `references`; the reference image goes in as a keyframe at the start."""
     video_path = _create_test_video(tmp_path)
     img_path = _create_test_image(tmp_path)
     with patch("handlers.runway.async_poll_execute", new_callable=AsyncMock) as mock_poll:
@@ -364,9 +370,9 @@ async def test_aleph_optional_reference_image(tmp_path):
                 {"RUNWAY_API_KEY": "rw-test"},
             )
     body = mock_poll.call_args.kwargs.get("submit_body") or mock_poll.call_args[1]["submit_body"]
-    assert "references" in body
-    assert body["references"][0]["type"] == "image"
-    assert body["references"][0]["uri"].startswith("data:")
+    assert "references" not in body
+    assert body["keyframes"] == [{"uri": body["keyframes"][0]["uri"], "at": 0}]
+    assert body["keyframes"][0]["uri"].startswith("data:image/")
 
 
 @pytest.mark.asyncio
@@ -391,7 +397,7 @@ async def test_aleph_uses_correct_endpoint():
 
 @pytest.mark.asyncio
 async def test_aleph_model_param_selects_aleph2(tmp_path):
-    """The model param must flow through so Aleph 2.0 is selectable (default stays gen4_aleph)."""
+    """The model param flows through as aleph2."""
     video_path = _create_test_video(tmp_path)
     with patch("handlers.runway.async_poll_execute", new_callable=AsyncMock) as mock_poll:
         mock_poll.return_value = {"id": "t3b", "status": "SUCCEEDED", "output": ["https://ex.com/v.mp4"]}

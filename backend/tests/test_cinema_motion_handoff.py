@@ -68,7 +68,7 @@ def test_create_returns_confirmed_frontend_node_and_exact_image_edge_and_persist
     assert result["node"]["data"]["state"] == "idle"
     assert result["node"]["data"]["outputs"] == {}
     assert result["node"]["data"]["params"]["aspectRatio"] == "16:9"
-    assert result["node"]["data"]["params"]["model"] == "veo-3.1-generate-preview"
+    assert result["node"]["data"]["params"]["model"] == "veo-3.1-generate-001"
     assert result["edge"] == {"id": "e1", "source": "n1", "sourceHandle": "shot_opening",
                               "target": "n3", "targetHandle": "image", "type": "typed-edge", "data": {"dataType": "Image"}}
     assert {node_id: graph.nodes[node_id] for node_id in originals} == originals
@@ -82,7 +82,7 @@ def test_retry_reuses_target_and_preserves_target_authoring_results_and_source_v
     client, graph, path, broadcast = handoff
     first = client.post(ROUTE, json=BODY).json()
     target = graph.nodes[first["node"]["id"]]
-    target["params"].update({"duration": "4", "model": "veo-3.1-fast-generate-preview", "_editorNote": "Keep motion edits"})
+    target["params"].update({"duration": "4", "model": "veo-3.1-fast-generate-001", "_editorNote": "Keep motion edits"})
     target["outputs"] = {"video": {"type": "Video", "value": "/api/outputs/synthetic-motion/earlier.mp4"}}
     graph.save(path)
     before, bytes_before = copy.deepcopy(graph.get_state()), path.read_bytes()

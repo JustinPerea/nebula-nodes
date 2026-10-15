@@ -123,6 +123,52 @@ The submit body is `{model, type, name, urls}` plus optional `trigger_word`, `ma
 2. Run it. When training completes it emits `style_id` (Text) and a `style` object on `style`.
 3. Wire the `style` output into a `krea-2-generate` node's `styles` port (or paste the `style_id` into the `style_id` param), set `style_strength`, add a `prompt`, and generate. Optionally toggle `share_with_workspace` on the train node to make the style available to your whole API workspace.
 
+## Maker routes (MiniMax and Meshy on your own keys)
+
+Since 2026-10-14 five more Krea copies run on the maker's own API when the
+maker key is saved (same precedence as Nano Banana: the Krea plan first, then
+the maker key, then `KREA_API_TOKEN`; overlay `MINIMAX_MESHY_ROUTES` in
+`scripts/sync-krea-catalog.py`, translations in
+`backend/execution/maker_routes_minimax_meshy.py`):
+
+| Krea node | Maker key | Maker model / endpoint | Stays on Krea when |
+|---|---|---|---|
+| `krea-video-minimax-hailuo-02` | `MINIMAX_API_KEY` | `MiniMax-Hailuo-02`, `POST /v1/video_generation` (T2V, I2V, first+last frame) | duration isn't 6 or 10; 1080p at 10 s |
+| `krea-video-minimax-hailuo-2-3` | `MINIMAX_API_KEY` | `MiniMax-Hailuo-2.3` | a saved `end_image`; 1080p at 10 s |
+| `krea-video-minimax-hailuo-2-3-fast` | `MINIMAX_API_KEY` | `MiniMax-Hailuo-2.3-Fast` (image-to-video only) | a saved `end_image`; 1080p at 10 s |
+| `krea-video-minimax-hailuo-3` | `MINIMAX_API_KEY` | `MiniMax-H3`, `POST /v2/video_generation` | a saved `reference_video_seconds` |
+| `krea-3d-meshy-meshy-7` | `MESHY_API_KEY` | `ai_model: meshy-7` on text-to-3D / image-to-3D / multi-image-to-3D | (none) |
+
+What route selection can't see (a wired port) is refused before any call, with
+the fix: an end image wired into Hailuo 2.3 / 2.3 Fast, 2.3 Fast with no start
+image, Hailuo 02 at 512p without a start image (or with an end image), H3
+text-to-video with `aspect_ratio: adaptive`, H3 frames mixed with references,
+and Meshy image mode with more than 4 images. To keep any of these on Krea,
+pick the Krea plan or remove the maker key.
+
+H3's direct route adds `resolution` (`2K` default, matching Krea's H3 price;
+or `768P`). MiniMax says H3 needs its pay-as-you-go API (or an M Plan
+Explore/Build Subscription Key); Video Packages don't cover it, and the error
+says so. Not routed: `krea-video-minimax-hailuo` (upstream model not
+confirmed), `-h3-max` and `-h3-max-turbo` (which Krea node is MiniMax's
+`MiniMax-H3-Max` is ambiguous), `-h3-max-camera-controls` (no maker field).
+
+### ElevenLabs copies on the person's ElevenLabs key
+
+Same mechanism (`DIRECT_ROUTES`, translations in
+`backend/execution/maker_routes_elevenlabs.py`): `krea-audio-elevenlabs-tts`
+(`POST /v1/text-to-speech/{voice_id}`, Krea's `voice_id`/`model_id` are
+ElevenLabs ids) and `krea-audio-elevenlabs-music`, `-music-v2`, `-music-v2-5`
+(`POST /v1/music` with `music_v1`, `music_v2`, `music_v2_5`) run on
+`ELEVENLABS_API_KEY` when it is set, unless `_kreaAuth` is `mcp`. Nothing is
+Krea-only on these, so there is no blocker. The music copies carry an
+ElevenLabs route price ($0.15 per minute from `music_length_ms`); TTS has none.
+
+The other Krea maker routes (Nano Banana and Veo/Omni on Google, GPT Image on
+OpenAI, Grok Imagine on xAI, Ideogram and Runway, Seedream and Seedance on
+BytePlus) and the shared rule set that keeps a run on Krea are in
+`.agents/skills/krea/SKILL.md` (this file is the older Krea 2 skill, not a mirror).
+
 ## In the nebula_nodes context
 
 - **Node IDs (provider `krea`):** `krea-2-generate`, `krea-style-search`, `krea-style-train`. All three set `envKeyName: KREA_API_TOKEN`. In the palette, **Krea 2** and **Krea Style Train** sit under image-gen; **Krea Style Search** is an analyzer node.
@@ -134,6 +180,22 @@ The submit body is `{model, type, name, urls}` plus optional `trigger_word`, `ma
   - `krea-style-train` consumes `images` (Image, required); emits `style` + `style_id` (Text) + `job`. The `style` output (a `{kind:"krea_style", id, strength}` object) plugs into `krea-2-generate.styles`; or route the `style_id` Text into the `style_id` param.
   - **Internal resource shapes** the handler recognizes on input ports (not user-facing nodes, but useful to know when an agent emits them): `krea_image_style_reference` (`{kind, image, strength}`) on `image_style_references`; `krea_style` (`{kind, id, strength}`) on `styles`; `nebula_moodboard` on `moodboard`. A `nebula_moodboard` is treated specially — its representative images become style references (default strength 0.7, filling only remaining slots) and its `styleBrief` is appended to the prompt — whereas a raw `moodboard_id` string/object goes into the `moodboards` body field for Krea-side lookup.
 - **How outputs render:** the `image` port is a downloaded local file served via `/api/outputs/…`; the canvas image preview renders it. The `job` port carries the raw Krea job JSON (seeds, all result URLs, status) for debugging or fan-out.
+
+
+**GPT Image on your OpenAI key.**
+
+Also since 2026-10-14, `krea-image-openai-gpt-image-2` (`gpt-image-2`),
+`krea-image-openai-gpt-image-2-5-flare` (`gpt-image-2.5-flare`) and
+`krea-image-openai-gpt-image-2-5-sunburst` (`gpt-image-2.5-sunburst`) run on
+OpenAI's Images API with the person's `OPENAI_API_KEY` (same precedence).
+`aspect_ratio` x `resolution` become a fixed OpenAI size (16:9 at 2K =
+2048x1152, 1:1 at 4K = 2880x2880; table `KREA_OPENAI_SIZES` in
+`backend/execution/maker_routes_openai.py`), and only one of the two set means
+1:1 or 1K. GPT Image 2's explicit `width`/`height` keep the run on Krea.
+Reference images go to `/v1/images/edits` (public https URLs are fetched
+first). The OpenAI route is unpriced: OpenAI publishes no per-image price for
+these models' default sizes. `krea-image-openai-gpt-image` (ChatGPT Image)
+stays Krea-only, since its upstream OpenAI model isn't confirmed.
 
 ### Capability boundaries — what Krea's API can do that Nebula does NOT expose
 

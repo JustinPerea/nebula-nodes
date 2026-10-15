@@ -1,7 +1,7 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../types';
 import { supportsKreaAccount, usesKreaAccount, type CredentialReadiness } from './kreaConnection';
-import { configuredDirectKey, directKeyNames } from './directRoute';
+import { directBlock, directKeyNames, fallbackKeyNames, KEY_PROVIDERS, selectRoute, type DirectBlock, type NodeRoute } from './directRoute';
 import { modelChoice, paramCallsProvider, paramRoute, paramValue } from './nodeKeys';
 
 export type ProviderSetupTarget =
@@ -38,7 +38,7 @@ export const PROVIDER_KEY_LABELS: Readonly<Record<string, string>> = {
   MESHY_API_KEY: 'Meshy', RUNWAY_API_KEY: 'Runway', ELEVENLABS_API_KEY: 'ElevenLabs',
   MINIMAX_API_KEY: 'MiniMax', XAI_API_KEY: 'xAI', HIGGSFIELD_API_KEY: 'Higgsfield',
   QUIVER_API_KEY: 'QuiverAI', KREA_API_TOKEN: 'Krea', KREA_USAGE_KEY: 'Krea usage', IDEOGRAM_API_KEY: 'Ideogram',
-  WORLDLABS_API_KEY: 'World Labs', TYPESAFE_API_KEY: 'TypeSafe',
+  WORLDLABS_API_KEY: 'World Labs', TYPESAFE_API_KEY: 'TypeSafe', BYTEPLUS_API_KEY: 'BytePlus',
 };
 
 export function providerCheckIsCurrent(entry: ProviderHealthEntry | undefined, completedAt: number | null, now = Date.now()): entry is ProviderHealthEntry {
@@ -142,11 +142,82 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
   const keys = (Array.isArray(def.envKeyName) ? def.envKeyName : [def.envKeyName]).filter(Boolean);
   if (!keys.length) return { label: 'No API key required', tone: 'neutral',
     detail: 'This node has no API-key requirement. Its inputs and local tools may still need setup.' };
-  // Runtime selects a configured direct route first. A valid alternate must not mask a rejected direct key.
-  const needsFalReframe = def.id === 'ideogram-reframe' && !params.resolution;
-  const key = needsFalReframe ? 'FAL_KEY' : configuredDirectKey(def, cache.apiKeys)
-    ?? keys.find((candidate) => cache.apiKeys[candidate]?.trim()) ?? directKeyNames(def)[0] ?? keys[0];
+  // The run's route (lib/directRoute.ts, the backend's rule): a configured
+  // direct key first, so a valid alternate never masks a rejected direct key.
+  // With none of a multi-route node's keys set, setup points at the maker's
+  // key, unless this recipe can't take the direct route (directBlock: Ideogram
+  // Reframe saved without a direct resolution, a Krea copy with explicit
+  // width/height, a size the maker can't render exactly, a value the maker
+  // doesn't take, or a model the maker has retired), or the node asks to
+  // suggest the copy's key first (directRoute.setup: BytePlus Seedream).
+  const route = selectRoute(def, params, cache.loaded ? cache.apiKeys : {});
+  const block = keys.length > 1 && directKeyNames(def).length ? directBlock(def, params) : null;
+  const directOk = block === null;
+  const suggestDirect = directOk && def.directRoute?.setup !== 'fallback';
+  const key = route.key ?? (suggestDirect ? directKeyNames(def)[0] : fallbackKeyNames(def)[0]) ?? keys[0];
   const ready = keyReadiness(key, cache, health);
-  return { ...ready, connectionLabel: key === 'KREA_API_TOKEN' ? 'Krea API token' : `${key === 'FAL_KEY' ? 'fal.ai' : PROVIDER_KEY_LABELS[key] ?? key} API`,
-    detail: `${PROVIDER_KEY_LABELS[key] ?? key}${supportsKreaAccount(def) ? ' API token · API balance' : keys.length > 1 ? ' route' : ''}.${needsFalReframe ? ' This saved recipe has no direct resolution, so it uses FAL.' : ''} ${ready.detail}` };
+  const blockNote = block ? ` ${directBlockNote(def, block)}` : '';
+  return { ...ready, connectionLabel: connectionLabelFor(key),
+    detail: `${routeDetail(def, route, key, directOk)}${blockNote} ${ready.detail}` };
+}
+
+/** Why this recipe can't run on the maker's own API (lib/directRoute.ts directBlock). */
+function directBlockNote(def: ModelNodeDefinition, block: DirectBlock): string {
+  const direct = directKeyNames(def)[0];
+  const fallback = fallbackKeyNames(def)[0];
+  const directName = direct ? keyProviderName(direct) : 'the maker';
+  const fallbackName = fallback ? (fallback === 'FAL_KEY' ? 'FAL' : keyProviderName(fallback)) : 'the copy';
+  if (block.reason === 'requires') {
+    // Ideogram Reframe without a direct resolution; Runway TTS/STS without an
+    // ElevenLabs voice_id (Runway's voice presets don't map to one).
+    return `This recipe sets no ${directName} ${block.param}, so it uses ${fallbackName}. Set it to run on ${directName}.`;
+  }
+  if (block.reason === 'blocked') {
+    return `This recipe sets ${block.param}, which only ${fallbackName} takes, so it runs on ${fallbackName}. Clear it to run on ${directName}.`;
+  }
+  if (block.reason === 'unsupported') {
+    // directRoute.accepts / rejects / rejectsWhen: "resolution 4K", "1080p at 10 seconds".
+    return `${directName}'s own API doesn't take ${block.detail}, so it runs on ${fallbackName}. Change ${block.param} to run on ${directName}.`;
+  }
+  if (block.reason === 'size') {
+    return `${directName} can't render this recipe's ${block.param} exactly, so it runs on ${fallbackName}. Pick a size ${directName} takes to run on ${directName}.`;
+  }
+  return `${directName} retires this model on its own API from ${block.on}, so it runs on ${fallbackName}.`;
+}
+
+function connectionLabelFor(key: string): string {
+  if (key === 'KREA_API_TOKEN') return 'Krea API token';
+  return `${key === 'FAL_KEY' ? 'fal.ai' : PROVIDER_KEY_LABELS[key] ?? key} API`;
+}
+
+function keyProviderName(key: string): string {
+  const provider = Object.hasOwn(KEY_PROVIDERS, key) ? KEY_PROVIDERS[key] : undefined;
+  return provider === 'fal' ? 'fal.ai' : PROVIDER_KEY_LABELS[key] ?? key;
+}
+
+/** Which route the run takes and whose key it uses: "Runs on Google with your
+ * Google key" on the maker route, the fal or Krea copy's key otherwise. */
+function routeDetail(def: ModelNodeDefinition, route: NodeRoute, key: string, directOk: boolean): string {
+  const label = PROVIDER_KEY_LABELS[key] ?? key;
+  const kreaToken = key === 'KREA_API_TOKEN' && supportsKreaAccount(def);
+  const fallback = fallbackKeyNames(def)[0];
+  const direct = directKeyNames(def)[0];
+  if (!direct || !fallback) {
+    return `${label}${kreaToken ? ' API token · API balance' : (Array.isArray(def.envKeyName) && def.envKeyName.length > 1) ? ' route' : ''}.`;
+  }
+  const directName = keyProviderName(direct);
+  const fallbackName = keyProviderName(fallback);
+  const fallbackKey = fallback === 'KREA_API_TOKEN' ? 'Krea API token' : `${PROVIDER_KEY_LABELS[fallback] ?? fallback} key`;
+  const fallbackCopy = `${fallbackName} with your ${fallbackKey}${kreaToken ? ' (API balance)' : ''}`;
+  if (route.kind === 'direct') {
+    return `Runs on ${directName}'s own API with your ${PROVIDER_KEY_LABELS[key] ?? key} key, billed by ${directName}.`;
+  }
+  if (route.kind === 'fallback') {
+    const directLabel = PROVIDER_KEY_LABELS[direct] ?? direct;
+    const article = /^[AEIOU]/i.test(directLabel) ? 'an' : 'a';
+    return `Runs on ${fallbackCopy}.${directOk ? ` Add ${article} ${directLabel} key to run on ${directName} directly.` : ''}`;
+  }
+  return directOk
+    ? `Runs on ${directName} with your ${PROVIDER_KEY_LABELS[direct] ?? direct} key, or on ${fallbackName} with a ${fallbackKey}.`
+    : `Runs on ${fallbackCopy}.`;
 }

@@ -1,6 +1,6 @@
 ---
 name: openai
-description: OpenAI (BYOK, direct) in Nebula — text-to-image (GPT Image 1/1.5/mini, GPT Image 2 up to 4K), image edit + inpaint (single image or up to 10 refs, optional mask), text-to-speech (13 voices, 6 formats, voice instructions), Whisper/GPT-4o transcription (text/json/srt/vtt), audio translation to English, and OpenAI Chat (GPT-5.5/5.4 + legacy GPT-4o/4.1) with vision and JSON-object output. Activate when the user configures any gpt-image-1-generate, gpt-image-1-edit, gpt-image-2-generate, gpt-image-2-edit, openai-tts, openai-stt, openai-translate, or gpt-4o-chat node, or asks about OpenAI in Nebula. For gpt-image-2 prompting craft and the FAL-routed gpt-image-2 nodes, see .claude/skills/gpt-image-2/SKILL.md. Sourced from the official OpenAI API docs (platform.openai.com / developers.openai.com) and the Nebula audit guide docs/api-guides/openai.md, verified against the backend handlers on 2026-06-04 (updated 2026-06-10).
+description: OpenAI (BYOK, direct) in Nebula — text-to-image (GPT Image 1/1.5/mini, GPT Image 2 up to 4K), image edit + inpaint (single image or up to 16 refs, optional mask), text-to-speech (13 voices, 6 formats, voice instructions), Whisper/GPT-4o transcription (text/json/srt/vtt), audio translation to English, and OpenAI Chat (GPT-5.5/5.4 + legacy GPT-4o/4.1) with vision and JSON-object output. Activate when the user configures any gpt-image-1-generate, gpt-image-1-edit, gpt-image-2-generate, gpt-image-2-edit, openai-tts, openai-stt, openai-translate, or gpt-4o-chat node, or asks about OpenAI in Nebula. Also covers the fal and Krea GPT Image copies (gpt-image-1-5, gpt-image-1-5-edit, gpt-image-2-fal-generate, gpt-image-2-fal-edit, krea-image-openai-gpt-image-2, -2-5-flare, -2-5-sunburst), which run on OpenAI with the same key (2026-10-14). For gpt-image-2 prompting craft and the FAL-routed gpt-image-2 nodes, see .claude/skills/gpt-image-2/SKILL.md. Sourced from the official OpenAI API docs (platform.openai.com / developers.openai.com) and the Nebula audit guide docs/api-guides/openai.md, verified against the backend handlers on 2026-06-04 (updated 2026-06-10).
 ---
 
 # OpenAI Skill
@@ -37,10 +37,10 @@ These are the **eight OpenAI-direct nodes** (all BYOK, one key). For prompting *
 
 | Node (display) | Node ID | Endpoint / model | Key inputs | Key params |
 |---|---|---|---|---|
-| GPT Image 1 | `gpt-image-1-generate` | `/v1/images/generations` · `gpt-image-1` \| `gpt-image-1.5` \| `gpt-image-1-mini` | `prompt` (Text) | `model`, `size`, `quality`, `output_format`, `background` (transparent OK) |
+| GPT Image 1 | `gpt-image-1-generate` | `/v1/images/generations` · `gpt-image-2.5-flare` (default) \| `gpt-image-2.5-sunburst` \| `gpt-image-1` \| `gpt-image-1.5` \| `gpt-image-1-mini` | `prompt` (Text) | `model`, `size`, `quality`, `output_format`, `background` (transparent OK) |
 | GPT Image 2 | `gpt-image-2-generate` | `/v1/images/generations` · `gpt-image-2` (streams) | `prompt` (Text) | `size` (→4K), `quality`, `output_format`, `output_compression`, `moderation` |
-| GPT Image 1 Edit | `gpt-image-1-edit` | `/v1/images/edits` · `gpt-image-1*` | `image` (Image), `prompt` (Text), `mask` (Mask) | `model`, `n` (1–10), `size`, `quality`, `output_format`, `background` |
-| GPT Image 2 Edit | `gpt-image-2-edit` | `/v1/images/edits` · `gpt-image-2` (streams) | `images` (Image, ≤10), `prompt` (Text), `mask` (Mask) | `size`, `quality`, `output_format`, `output_compression`, `moderation` |
+| GPT Image 1 Edit | `gpt-image-1-edit` | `/v1/images/edits` · `gpt-image-2.5-sunburst` (default), 2.5 Flare, `gpt-image-1*` | `image` (Image), `prompt` (Text), `mask` (Mask) | `model`, `n` (1–10), `size`, `quality`, `output_format`, `background` |
+| GPT Image 2 Edit | `gpt-image-2-edit` | `/v1/images/edits` · `gpt-image-2` (streams) | `images` (Image, ≤16), `prompt` (Text), `mask` (Mask) | `size`, `quality`, `output_format`, `output_compression`, `moderation` |
 | OpenAI TTS | `openai-tts` | `/v1/audio/speech` · `tts-1` \| `tts-1-hd` \| `gpt-4o-mini-tts` | `text` (Text) | `model`, `voice` (13), `speed`, `response_format` (6), `instructions` (mini-tts only) |
 | OpenAI Whisper STT | `openai-stt` | `/v1/audio/transcriptions` · `whisper-1` \| `gpt-4o-transcribe` \| `gpt-4o-mini-transcribe` | `audio` (Audio) | `model`, `language`, `response_format` (text/json/verbose_json/srt/vtt), `temperature`, `prompt` |
 | OpenAI Audio Translate | `openai-translate` | `/v1/audio/translations` · **`whisper-1` (fixed)** → English | `audio` (Audio) | `response_format`, `temperature`, `prompt` (must be English) |
@@ -51,7 +51,8 @@ These are the **eight OpenAI-direct nodes** (all BYOK, one key). For prompting *
 Types/ranges/enums/defaults are from `node_definitions.json`; behavior notes are from the handlers.
 
 ### `gpt-image-1-generate` (sync)
-- `model` *(enum, req, default `gpt-image-1`)*: `gpt-image-1` · `gpt-image-1.5` · `gpt-image-1-mini`.
+- `model` *(enum, req, default `gpt-image-2.5-flare` since 2026-10-14)*: `gpt-image-1` (shuts down 2026-10-23) · `gpt-image-1.5` · `gpt-image-1-mini` (both shut down 2026-12-01) · `gpt-image-2.5-flare` · `gpt-image-2.5-sunburst`. OpenAI names the two 2.5 models as the replacement for all three; saved `gpt-image-1` nodes move to Flare from 2026-10-23 (on load and at run time). A node with no stored `model` runs gpt-image-1 until then.
+- `quality` also offers `xhigh` and `max` on the 2.5 models. A transparent background needs `png` or `webp` (checked before the request).
 - `size` *(enum, default `auto`)*: `auto` · `1024x1024` · `1536x1024` · `1024x1536`. `auto` is omitted from the request (lets OpenAI pick).
 - `quality` *(enum, default `auto`)*: `auto` · `low` · `medium` · `high`. `auto` omitted.
 - `output_format` *(enum, default `png`)*: `png` · `jpeg` · `webp`. Drives the saved file extension (so downstream MIME is correct). Only sent when ≠ `png`.
@@ -66,14 +67,14 @@ Types/ranges/enums/defaults are from `node_definitions.json`; behavior notes are
 - Handler **always** sets `stream: true`, `partial_images: 0`, and strips `background`/`input_fidelity`/`n`. For prompting craft + cost table, see the gpt-image-2 skill.
 
 ### `gpt-image-1-edit` (sync, multipart)
-- `model` *(enum, req, default `gpt-image-1`)*: `gpt-image-1` · `gpt-image-1.5` · `gpt-image-1-mini`.
-- `n` *(int 1–10, default 1)*: number of variations; only sent when >1.
+- `model` *(enum, req, default `gpt-image-2.5-sunburst` since 2026-10-14)*: same options as `gpt-image-1-generate`. Sunburst is OpenAI's pick "for workflows where editing precision matters most"; saved `gpt-image-1` nodes move to it from 2026-10-23 (on load and at run time). A node with no stored `model` runs gpt-image-1 until then.
+- `n` *(int 1–10, default 1)*: number of variations; only sent when >1. Every image comes back: the first on `image`, all of them on the `images` (Array) output.
 - `size` / `quality` / `output_format` / `background`: same enums/defaults as `gpt-image-1-generate`.
 - Inputs: `image` (req), `prompt` (req), `mask` (optional PNG). Image + mask are read from disk and uploaded multipart.
 
 ### `gpt-image-2-edit` (stream, multipart)
 - Same param set as `gpt-image-2-generate` (`size`, `quality`, `output_format`, `output_compression`, `moderation`). No `model` param (fixed `gpt-image-2`), no `n`, no `background`.
-- Inputs: `images` (req, **multiple, ≤10** — handler rejects >10), `prompt` (req), `mask` (optional, applies to first image).
+- Inputs: `images` (req, **multiple, ≤16** — handler rejects >16 (OpenAI: "up to 16 images")), `prompt` (req), `mask` (optional, applies to first image).
 
 ### `openai-tts` (sync)
 - `model` *(enum, default `tts-1`)*: `tts-1` · `tts-1-hd` · `gpt-4o-mini-tts`.
@@ -105,6 +106,23 @@ Types/ranges/enums/defaults are from `node_definitions.json`; behavior notes are
 - `response_format` *(enum, default `text`)*: `text` · `json_object`. `json_object` sends `{"type":"json_object"}` and enables **JSON mode** — **JSON-mode only, no strict `json_schema`** (see boundaries). **Gotcha:** OpenAI requires the literal word **"json"** to appear somewhere in the prompt (`messages`/`system`) when `json_object` is set, or the request errors. Instruct the model to "respond in JSON."
 - Inputs: `messages` (req, Text — becomes the user message text) and `images` (optional, **multiple** — each appended as an `image_url` content part for vision). A single user message is constructed; there is no multi-turn history or system-role port.
 
+## Your OpenAI key on the fal and Krea copies (since 2026-10-14)
+
+Seven non-OpenAI nodes also run on OpenAI's Images API when `OPENAI_API_KEY` is saved (dual-route: `envKeyName` lists `OPENAI_API_KEY` first, `directKeyName` names it). Translation and handlers: `backend/execution/maker_routes_openai.py`; route rule: `backend/services/node_route.py` (Krea plan, else the OpenAI key, else `FAL_KEY` / `KREA_API_TOKEN`).
+
+| Node | OpenAI model | Stays on the copy when |
+|---|---|---|
+| `gpt-image-1-5`, `gpt-image-1-5-edit` (fal) | `gpt-image-1.5` | on/after **2026-12-01** (OpenAI shutdown; `DIRECT_RETIRES`) |
+| `gpt-image-2-fal-generate`, `gpt-image-2-fal-edit` (fal) | `gpt-image-2` | `image_size` is `square`, `portrait_16_9` or `landscape_16_9` (under OpenAI's 655,360-pixel minimum; `directRoute.rejects`) |
+| `krea-image-openai-gpt-image-2` (Krea) | `gpt-image-2` | Krea's `width` or `height` is set (`directRoute.blockedBy`) |
+| `krea-image-openai-gpt-image-2-5-flare` / `-sunburst` (Krea) | `gpt-image-2.5-flare` / `-sunburst` | only `_kreaAuth: "mcp"` |
+
+- **No param changes on the fal nodes.** Every fal param maps to an OpenAI field: `image_size` -> `size` (gpt-image-1.5 values are OpenAI's standard sizes; gpt-image-2 presets: `square_hd` 1024x1024, `portrait_4_3` 768x1024, `landscape_4_3` 1024x768), `quality`, `background`, `output_format`, `partial_images`, and `input_fidelity` on GPT Image 1.5 Edit. `num_images` becomes that many streamed calls; the node's `image` port shows the first, as on fal.
+- **Krea sizes.** `aspect_ratio` x `resolution` -> `KREA_OPENAI_SIZES` (exact ratio, multiples of 16; 1K uses OpenAI's standard sizes where the ratio has one, 4K is OpenAI's largest and "experimental"). Neither set -> OpenAI's `auto`; one set -> the other defaults to 1:1 / 1K.
+- **References.** Wired images or `image_urls` send the run to `/v1/images/edits` (`image[]`, up to 16). Public https URLs are downloaded first (SSRF-checked, 50 MB cap); local and `/api/outputs/` refs are read from disk.
+- **Pricing.** gpt-image-1.5 copies: OpenAI's per-image table x Count (+ input images unpriced on edit). GPT Image 2 / 2.5 copies: OpenAI route unpriced (defaults aren't in OpenAI's three-size table; no 2.5 per-image figure).
+- **Not routed:** `krea-image-openai-gpt-image` (Krea's "Original ChatGPT image model"; the OpenAI model id isn't confirmed).
+
 ## Recipes
 
 All node ids below are real and in `node_definitions.json`.
@@ -112,7 +130,7 @@ All node ids below are real and in `node_definitions.json`.
 1. **Illustrated quote card (text → image).** `Text` (your quote) → `gpt-image-2-generate` (`size 1024x1536`, `quality high`) → canvas. Iterate at `quality low` to save cost, then bump to `high`. Use `gpt-image-1-generate` (`background transparent`) for a cut-out sticker.
 2. **Narrated image caption (three OpenAI nodes, one key).** `Text` (image brief) → `gpt-image-1-generate` → feed its `image` output into `gpt-4o-chat`'s `images` port with a `messages` prompt like "Write a 2-sentence caption" → take the `text` output into `openai-tts` (`voice coral`) → an `Audio` clip of the spoken caption. (Chains text-gen → vision → audio-gen.)
 3. **Subtitle a voiceover.** `Audio` → `openai-stt` (`model gpt-4o-transcribe`, `response_format srt`) → the `Text` output is SRT content; save as `.srt`. If the audio is in another language and you want **English** subtitles, swap `openai-stt` for `openai-translate` (same `response_format srt`).
-4. **Masked inpaint.** `Image` + `Mask` + `Text` ("replace the sky with aurora") → `gpt-image-2-edit` (or `gpt-image-1-edit` for a single image + the `n` Count param). The prompt must describe the **whole** desired image; the mask marks where edits are allowed and applies to the first image. `gpt-image-2-edit` accepts up to 10 reference images for compositing.
+4. **Masked inpaint.** `Image` + `Mask` + `Text` ("replace the sky with aurora") → `gpt-image-2-edit` (or `gpt-image-1-edit` for a single image + the `n` Count param). The prompt must describe the **whole** desired image; the mask marks where edits are allowed and applies to the first image. `gpt-image-2-edit` accepts up to 16 reference images for compositing.
 
 ## In the nebula_nodes context
 
@@ -148,7 +166,7 @@ Do not promise these — they aren't wired. (From the audit guide's gap table, `
 - **Audio-in/out chat** (`gpt-4o-audio-preview`) — not wired.
 - **Realtime API** (gpt-realtime, speech-to-speech) — entire family unsupported.
 - **Responses API** (`/v1/responses`) — Nebula uses the older Chat Completions endpoint.
-- **Embeddings / Moderations / Batch / Files / Assistants / Sora video** — out of scope (Sora's Videos API + sora-2/sora-2-pro shut down 2026-09-24 anyway).
+- **Embeddings / Moderations / Batch / Files / Assistants / Sora video** — out of scope (Sora's Videos API + sora-2/sora-2-pro shut down 2026-09-24; Nebula's fal `sora-2` / `sora-2-i2v` nodes were retired and load as `veo-3`).
 
 Coverage: roughly 60% of OpenAI's media-generation surface (images + audio + chat) is exposed; ~30% of the entire OpenAI platform.
 

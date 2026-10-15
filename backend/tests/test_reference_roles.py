@@ -108,6 +108,159 @@ APPROVED_TOP_LEVEL_FIELD_ADDITIONS = {
         "default": "seedream-4-5", "fallbackFor": ["flux-1-dev", "flux.1-dev", "flux-dev"],
     }},
 }
+# Direct maker routes (2026-10-14): Nano Banana's two fal copies also run on
+# the Gemini API with the person's GOOGLE_API_KEY (execution/maker_routes.py).
+# The only contract change is the route split: GOOGLE_API_KEY joins
+# envKeyName and becomes directKeyName, and the unchanged params move into
+# sharedParams + falParams (none are direct-only). Normalizing rebuilds the
+# baseline `params` list in its original order, so any change to a param
+# itself still fails the fingerprint.
+_NANO_BANANA_FAL_ORDER = ["model", "aspect_ratio", "resolution", "num_images", "output_format",
+                          "thinking_level", "enable_web_search", "seed"]
+APPROVED_DUAL_ROUTE_SPLITS = {
+    node_id: {"envKeyName": ("FAL_KEY", ["GOOGLE_API_KEY", "FAL_KEY"]), "directKeyName": "GOOGLE_API_KEY",
+              "falParams": ["output_format", "seed"], "order": _NANO_BANANA_FAL_ORDER}
+    for node_id in ("nano-banana-fal", "nano-banana-fal-edit")
+}
+# Direct maker routes, Google lane (2026-10-14): identity-edit also runs on
+# the Gemini API (gemini-3.1-flash-image) with GOOGLE_API_KEY. Same approved
+# split as the Nano Banana fal copies; its three params all move, unchanged
+# and in order, to sharedParams (none are route-only).
+APPROVED_DUAL_ROUTE_SPLITS["identity-edit"] = {
+    "envKeyName": ("FAL_KEY", ["GOOGLE_API_KEY", "FAL_KEY"]), "directKeyName": "GOOGLE_API_KEY",
+    "falParams": [], "order": ["resolution", "thinking_level", "identity_strength"],
+}
+# Direct maker routes, xAI (2026-10-14): Grok Imagine's two fal copies also
+# run on xAI's own API with the person's XAI_API_KEY
+# (execution/maker_routes_xai.py). Same approved split: XAI_API_KEY joins
+# envKeyName and becomes directKeyName; output_format (fal-only, xAI has no
+# output-format field) is the only falParam; every param is unchanged and
+# rebuilt in its baseline order.
+APPROVED_DUAL_ROUTE_SPLITS.update({
+    "grok-imagine-image": {"envKeyName": ("FAL_KEY", ["XAI_API_KEY", "FAL_KEY"]), "directKeyName": "XAI_API_KEY",
+                           "falParams": ["output_format"],
+                           "order": ["num_images", "aspect_ratio", "resolution", "output_format"]},
+    "grok-imagine-image-edit": {"envKeyName": ("FAL_KEY", ["XAI_API_KEY", "FAL_KEY"]),
+                                "directKeyName": "XAI_API_KEY", "falParams": ["output_format"],
+                                "order": ["num_images", "resolution", "output_format"]},
+})
+# Direct ElevenLabs routes (2026-10-14): ElevenLabs Music on fal and Runway's
+# resold ElevenLabs TTS / speech-to-speech / dubbing also run on ElevenLabs'
+# own API with the person's ELEVENLABS_API_KEY
+# (execution/maker_routes_elevenlabs.py). Same rule as above: the unchanged
+# params are only split by route (order rebuilt from `order`), and the one
+# direct-only param each gains is pinned exactly here (`directParams`), so a
+# change to any existing param, or to the new one, still fails.
+_ELEVENLABS_VOICE_ID = {"key": "voice_id", "label": "ElevenLabs voice ID", "type": "string", "required": False,
+                        "placeholder": "ElevenLabs voice ID (runs on your ElevenLabs key)"}
+APPROVED_DUAL_ROUTE_SPLITS.update({
+    "elevenlabs-music": {
+        "envKeyName": ("FAL_KEY", ["ELEVENLABS_API_KEY", "FAL_KEY"]), "directKeyName": "ELEVENLABS_API_KEY",
+        "falParams": [], "order": ["music_length_ms", "force_instrumental"],
+        "directParams": [{"key": "model_id", "label": "Model", "type": "enum", "required": False,
+                          "default": "music_v1", "options": [
+                              {"label": "Music v1", "value": "music_v1"},
+                              {"label": "Music v2", "value": "music_v2"},
+                              {"label": "Music v2.5", "value": "music_v2_5"}]}],
+    },
+    "runway-tts": {
+        "envKeyName": ("RUNWAY_API_KEY", ["ELEVENLABS_API_KEY", "RUNWAY_API_KEY"]),
+        "directKeyName": "ELEVENLABS_API_KEY", "falParams": ["voiceId"], "order": ["voiceId"],
+        "directParams": [_ELEVENLABS_VOICE_ID],
+    },
+    "runway-sts": {
+        "envKeyName": ("RUNWAY_API_KEY", ["ELEVENLABS_API_KEY", "RUNWAY_API_KEY"]),
+        "directKeyName": "ELEVENLABS_API_KEY", "falParams": ["voiceId"],
+        "order": ["voiceId", "removeBackgroundNoise"], "directParams": [_ELEVENLABS_VOICE_ID],
+    },
+    "runway-dubbing": {
+        "envKeyName": ("RUNWAY_API_KEY", ["ELEVENLABS_API_KEY", "RUNWAY_API_KEY"]),
+        "directKeyName": "ELEVENLABS_API_KEY", "falParams": [],
+        "order": ["targetLang", "disableVoiceCloning", "dropBackgroundAudio", "numSpeakers"],
+    },
+})
+# Seedream on BytePlus ModelArk (2026-10-14, execution/maker_routes_byteplus.py):
+# BYTEPLUS_API_KEY joins envKeyName as the direct key, the unchanged params
+# split into sharedParams (model, image_size, num_images, max_images) +
+# falParams (enable_safety_checker, seed), and the exact directRoute rules
+# below are the only new field.
+APPROVED_DUAL_ROUTE_SPLITS["seedream-4-5"] = {
+    "envKeyName": ("FAL_KEY", ["BYTEPLUS_API_KEY", "FAL_KEY"]), "directKeyName": "BYTEPLUS_API_KEY",
+    "falParams": ["enable_safety_checker", "seed"],
+    "order": ["model", "image_size", "num_images", "max_images", "enable_safety_checker", "seed"],
+}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedream-4-5"] = {"directRoute": {
+    "setup": "fallback",
+    "blockedBy": ["seed"],
+    "size": {"param": "image_size", "minPixels": 3686400, "maxPixels": 16777216, "maxAspect": 16,
+             "unsupported": ["square"]},
+    # Review fix: ModelArk always runs its own content filter, so fal's
+    # safety checker switched off keeps the run on fal.
+    "accepts": {"enable_safety_checker": {"values": [True]}},
+}}
+# Seedance on BytePlus ModelArk (2026-10-14,
+# execution/maker_routes_byteplus_seedance.py): BYTEPLUS_API_KEY joins
+# envKeyName as the direct key and the unchanged params split into
+# sharedParams + falParams (seed on the 2.x nodes, which BytePlus documents
+# for 1.x only; enable_safety_checker on 1.0 T2V). The exact directRoute rules
+# below are the only new field.
+_SEEDANCE_2_ORDER = ["aspect_ratio", "duration", "resolution", "generate_audio", "seed"]
+for _node_id in ("seedance-2-t2v", "seedance-2-i2v", "seedance-2-r2v", "seedance-2-fast-t2v", "seedance-2-fast-i2v"):
+    APPROVED_DUAL_ROUTE_SPLITS[_node_id] = {
+        "envKeyName": ("FAL_KEY", ["BYTEPLUS_API_KEY", "FAL_KEY"]), "directKeyName": "BYTEPLUS_API_KEY",
+        "falParams": ["seed"], "order": _SEEDANCE_2_ORDER,
+    }
+    APPROVED_TOP_LEVEL_FIELD_ADDITIONS[_node_id] = {"directRoute": {"setup": "fallback", "blockedBy": ["seed"]}}
+APPROVED_DUAL_ROUTE_SPLITS["seedance-v1-5"] = {
+    "envKeyName": ("FAL_KEY", ["BYTEPLUS_API_KEY", "FAL_KEY"]), "directKeyName": "BYTEPLUS_API_KEY",
+    "falParams": [], "order": ["model", "duration", "aspect_ratio", "resolution", "generate_audio", "camera_fixed",
+                               "seed"],
+}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedance-v1-5"] = {"directRoute": {"setup": "fallback"}}
+APPROVED_DUAL_ROUTE_SPLITS["seedance-1-0-t2v"] = {
+    "envKeyName": ("FAL_KEY", ["BYTEPLUS_API_KEY", "FAL_KEY"]), "directKeyName": "BYTEPLUS_API_KEY",
+    "falParams": ["enable_safety_checker"],
+    "order": ["aspect_ratio", "resolution", "duration", "camera_fixed", "seed", "enable_safety_checker"],
+}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedance-1-0-t2v"] = {"directRoute": {
+    "setup": "fallback", "accepts": {"enable_safety_checker": {"values": [True]}},  # review fix, as Seedream
+}}
+# Direct maker routes, review fix (2026-10-14): Meshy's own image-to-3D API
+# takes texture_prompt ("Provide a text prompt to guide the texturing
+# process", https://docs.meshy.ai/en/api/image-to-3d), so it moves from
+# falParams to the end of sharedParams and reaches both routes. The param
+# itself is unchanged; normalizing moves it back to its baseline slot
+# (group, index), so any edit to it still fails the fingerprint.
+APPROVED_PARAM_GROUP_MOVES = {
+    "meshy-image-to-3d": {"texture_prompt": ("sharedParams", "falParams", 0)},
+}
+# Direct maker routes, OpenAI lane (2026-10-14): the fal copies of GPT Image
+# 1.5 and 2 also run on OpenAI's Images API with the person's OPENAI_API_KEY
+# (execution/maker_routes_openai.py). Every param reaches both routes, so
+# nothing splits: only OPENAI_API_KEY joins envKeyName and becomes
+# directKeyName. `params` is still hashed as it was.
+APPROVED_DIRECT_KEY_ADDITIONS = {
+    node_id: {"envKeyName": ("FAL_KEY", ["OPENAI_API_KEY", "FAL_KEY"]), "directKeyName": "OPENAI_API_KEY"}
+    for node_id in ("gpt-image-1-5", "gpt-image-1-5-edit", "gpt-image-2-fal-generate", "gpt-image-2-fal-edit")
+}
+# GPT Image 2's fal presets under OpenAI's 655,360-pixel minimum stay on fal
+# (execution/maker_routes_openai.py FAL_GPT_IMAGE_2_SIZES): the rule is the
+# only new field.
+for _node_id in ("gpt-image-2-fal-generate", "gpt-image-2-fal-edit"):
+    APPROVED_TOP_LEVEL_FIELD_ADDITIONS[_node_id] = {
+        "directRoute": {"rejects": {"image_size": ["square", "portrait_16_9", "landscape_16_9"]}}}
+# Grok Imagine's fal copies: xAI's images API has no output-format field and
+# returns JPEG (docs.x.ai images REST reference: no format field; upload_urls
+# "`image/jpeg` unless the requested quality produces PNG"), so a recipe that
+# asks fal for PNG or WebP stays on fal. The rule is the only new field.
+for _node_id in ("grok-imagine-image", "grok-imagine-image-edit"):
+    APPROVED_TOP_LEVEL_FIELD_ADDITIONS[_node_id] = {
+        "directRoute": {"accepts": {"output_format": {"values": ["jpeg"]}}}}
+# Runway speech-to-speech with only a video wired stays on Runway: ElevenLabs'
+# speech-to-speech takes an audio file only (execution/maker_routes_elevenlabs.py
+# runway_sts_to_elevenlabs). The rule is the only new field.
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["runway-sts"] = {"directRoute": {"rejectsWhen": [
+    {"match": {"video": "(set)", "audio": "(unset)"}, "label": "a video input without an audio input"}]}}
 APPROVED_LEADING_PARAM_ADDITIONS = {
     "krea-2-generate": _KREA_AUTH_PARAM,
     "krea-style-search": _KREA_AUTH_PARAM,
@@ -174,7 +327,6 @@ EXPECTED_ROLES: dict[str, dict[str, str]] = {
     "minimax-i2v": {"first_frame_image": "subject"},
     "seedance-v1-5": {"image": "subject"},
     "seedance-2-i2v": {"image": "subject"},
-    "sora-2-i2v": {"image": "subject"},
 }
 
 # Mask ports (and any other non-reference ports) must never receive a role.
@@ -204,6 +356,30 @@ def _remove_approved_fields(container: dict[str, Any], additions: dict[str, Any]
 def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any]:
     """Normalize exact approved deltas without mutating shared fixture data."""
     normalized = deepcopy(node)
+    for key, (now_in, baseline_in, index) in APPROVED_PARAM_GROUP_MOVES.get(node_id, {}).items():
+        moved = [param for param in normalized.get(now_in) or [] if param.get("key") == key]
+        assert len(moved) == 1, f"unapproved param move: {node_id}.{key}"
+        normalized[now_in] = [param for param in normalized[now_in] if param.get("key") != key]
+        normalized.setdefault(baseline_in, []).insert(index, moved[0])
+    keys_added = APPROVED_DIRECT_KEY_ADDITIONS.get(node_id)
+    if keys_added is not None:
+        baseline_env, current_env = keys_added["envKeyName"]
+        assert normalized.get("envKeyName") == current_env, f"unapproved envKeyName: {node_id}"
+        normalized["envKeyName"] = baseline_env
+        _remove_approved_fields(normalized, {"directKeyName": keys_added["directKeyName"]})
+    split = APPROVED_DUAL_ROUTE_SPLITS.get(node_id)
+    if split is not None:
+        baseline_env, current_env = split["envKeyName"]
+        assert normalized.get("envKeyName") == current_env, f"unapproved envKeyName: {node_id}"
+        normalized["envKeyName"] = baseline_env
+        _remove_approved_fields(normalized, {"directKeyName": split["directKeyName"], "params": [],
+                                             "directParams": split.get("directParams", [])})
+        shared, fal = normalized.pop("sharedParams"), normalized.pop("falParams")
+        assert [param["key"] for param in fal] == split["falParams"], f"unapproved falParams: {node_id}"
+        by_key = {param["key"]: param for param in shared + fal}
+        assert sorted(by_key) == sorted(split["order"]) and len(by_key) == len(shared + fal), (
+            f"unapproved route split: {node_id}")
+        normalized["params"] = [by_key[key] for key in split["order"]]
     added_ports = APPROVED_INPUT_PORT_ADDITIONS.get(node_id, [])
     if added_ports:
         assert normalized["inputPorts"][-len(added_ports):] == added_ports, (
@@ -421,24 +597,44 @@ def test_approved_art_direction_normalization_preserves_fixture_and_other_fields
     ("cinema-scene", None, None, "capabilityNote", "Native camera control"),
     ("seedream-4-5", "inputPorts", "images", "maxConnections", 14),
     ("character", "params", "strength_override", "disabledReason", "Strength works"),
-    ("identity-edit", "params", "identity_strength", "disabledReason", "Strength works"),
+    # identity-edit's params live in sharedParams since its Google route (2026-10-14).
+    ("identity-edit", "sharedParams", "identity_strength", "disabledReason", "Strength works"),
     ("reference-set", "params", "style_weight", "label", "Style Strength"),
-    ("seedream-4-5", "params", "seed", "visibleWhen", {"model": ["4.5", "5.0-lite"]}),
+    ("seedream-4-5", "falParams", "seed", "visibleWhen", {"model": ["4.5", "5.0-lite"]}),
+    ("seedream-4-5", None, None, "directKeyName", "FAL_KEY"),
     ("identity-edit", "inputPorts", "mask", "label", "Mask"),
 ])
 def test_approved_art_direction_values_cannot_drift(definitions, node_id, section, selector, field, value):
     changed = deepcopy(definitions[node_id])
     target = changed if section is None else _sole_entry(
-        changed[section], "key" if section == "params" else "id", selector,
+        changed[section], "key" if section.endswith(("params", "Params")) else "id", selector,
     )
     target[field] = value
     with pytest.raises(AssertionError):
         _node_fingerprint(node_id, changed)
 
 
+@pytest.mark.parametrize("change", [
+    lambda node: _sole_entry(node["sharedParams"], "key", "image_size").update(default="landscape_16_9"),
+    lambda node: node["falParams"].reverse(),
+    lambda node: node["sharedParams"].append(node["falParams"].pop()),
+    lambda node: node["directRoute"]["size"].update(minPixels=921600),
+])
+def test_seedream_route_split_still_fingerprints_every_param(definitions, change):
+    """The approved BytePlus split rebuilds the baseline params, so a real
+    param edit, a regrouping or a looser size rule still fails."""
+    changed = deepcopy(definitions["seedream-4-5"])
+    change(changed)
+    try:
+        fingerprint = _node_fingerprint("seedream-4-5", changed)
+    except AssertionError:
+        return
+    assert fingerprint != _baseline_fingerprints()["seedream-4-5"]
+
+
 def test_seedream_auto_3k_approved_visibility_cannot_expand(definitions):
     changed = deepcopy(definitions["seedream-4-5"])
-    sizes = _sole_entry(changed["params"], "key", "image_size")
+    sizes = _sole_entry(changed["sharedParams"], "key", "image_size")
     _sole_entry(sizes["options"], "value", "auto_3K")["visibleWhen"] = {"model": ["4.5", "5.0-lite"]}
     with pytest.raises(AssertionError):
         _node_fingerprint("seedream-4-5", changed)

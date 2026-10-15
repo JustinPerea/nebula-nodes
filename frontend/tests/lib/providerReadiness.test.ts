@@ -32,7 +32,8 @@ function entry(status: ProviderHealthEntry['status'], checkedAt = NOW): Provider
   return { configured: status !== 'not_configured', status, last_checked: new Date(checkedAt).toISOString() };
 }
 
-const kreaImage = NODE_DEFINITIONS['krea-image-openai-gpt-image-2'];
+// A Krea copy with no maker route (GPT Image 2 now also runs on OpenAI's API).
+const kreaImage = NODE_DEFINITIONS['krea-image-openai-gpt-image'];
 const kreaVideo = NODE_DEFINITIONS['krea-video-kling-kling-3-0'];
 const dualRoute = NODE_DEFINITIONS['veo-3'];
 
@@ -138,6 +139,151 @@ describe('provider readiness without generation', () => {
     expect(modelReadiness(dualRoute, {}, credentials(), bothValid)).toMatchObject({
       label: 'Setup required', setupTarget: { kind: 'api-key', key: 'GOOGLE_VERTEX_CREDENTIALS' },
     });
+  });
+
+  it.each([
+    ['nano-banana-fal', 'fal.ai', 'FAL key', 'FAL_KEY'],
+    ['krea-image-google-nano-banana-2', 'Krea', 'Krea API token', 'KREA_API_TOKEN'],
+  ])('says which route %s takes: your Google key, else its fal or Krea copy', (id, copy, copyKey, fallbackKey) => {
+    const definition = NODE_DEFINITIONS[id];
+    const direct = modelReadiness(definition, {}, credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN, [fallbackKey]: TOKEN } }), health());
+    expect(direct).toMatchObject({ connectionLabel: 'Google API', setupTarget: { kind: 'api-key', key: 'GOOGLE_API_KEY' } });
+    expect(direct.detail).toContain("Runs on Google's own API with your Google key");
+    const fallback = modelReadiness(definition, {}, credentials({ apiKeys: { [fallbackKey]: TOKEN } }), health());
+    expect(fallback).toMatchObject({ setupTarget: { kind: 'api-key', key: fallbackKey } });
+    expect(fallback.detail).toContain(`Runs on ${copy} with your ${copyKey}`);
+    expect(fallback.detail).toContain('Add a Google key to run on Google directly');
+    const none = modelReadiness(definition, {}, credentials(), health());
+    expect(none).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'GOOGLE_API_KEY' } });
+    expect(none.detail).toContain(`or on ${copy} with a ${copyKey}`);
+  });
+
+  it('keeps a Krea copy with an explicit size on Krea and says why', () => {
+    const definition = NODE_DEFINITIONS['krea-image-google-nano-banana-2'];
+    const keys = { GOOGLE_API_KEY: TOKEN, KREA_API_TOKEN: TOKEN };
+    const ready = modelReadiness(definition, freeze({ _kreaAuth: 'api-token', width: 1920 }), credentials({ apiKeys: keys }), health());
+    expect(ready).toMatchObject({ connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+    expect(ready.detail).toContain('This recipe sets width, which only Krea takes, so it runs on Krea.');
+    const googleOnly = modelReadiness(definition, freeze({ width: 1920 }), credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN } }), health());
+    expect(googleOnly).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+  });
+
+  it('keeps Veo 3.1 Fast at 4K on Krea (Vertex renders Fast at 1080p at most) and says why', () => {
+    const definition = NODE_DEFINITIONS['krea-video-google-veo-3-1-fast'];
+    const keys = { GOOGLE_VERTEX_CREDENTIALS: TOKEN, KREA_API_TOKEN: TOKEN };
+    const ready = modelReadiness(definition, freeze({ _kreaAuth: 'api-token', resolution: '4K' }), credentials({ apiKeys: keys }), health());
+    expect(ready).toMatchObject({ connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+    expect(ready.detail).toContain("Google Vertex's own API doesn't take resolution 4K, so it runs on Krea. Change resolution to run on Google Vertex.");
+    const hd = modelReadiness(definition, freeze({ _kreaAuth: 'api-token', resolution: '1080p' }), credentials({ apiKeys: keys }), health());
+    expect(hd).toMatchObject({ setupTarget: { kind: 'api-key', key: 'GOOGLE_VERTEX_CREDENTIALS' } });
+    expect(hd.detail).toContain("Runs on Google Vertex's own API");
+  });
+
+  it('keeps a GPT Image 2 fal size OpenAI can\'t render on fal and says why', () => {
+    const definition = NODE_DEFINITIONS['gpt-image-2-fal-generate'];
+    const cache = credentials({ apiKeys: { OPENAI_API_KEY: TOKEN, FAL_KEY: TOKEN } });
+    const direct = modelReadiness(definition, freeze({ image_size: 'landscape_4_3' }), cache, health());
+    expect(direct.connectionLabel).toBe('OpenAI API');
+    expect(direct.detail).toContain("Runs on OpenAI's own API with your OpenAI key");
+    const ready = modelReadiness(definition, freeze({ image_size: 'square' }), cache, health());
+    expect(ready).toMatchObject({ connectionLabel: 'fal.ai API', setupTarget: { kind: 'api-key', key: 'FAL_KEY' } });
+    expect(ready.detail).toContain("OpenAI's own API doesn't take image_size square, so it runs on FAL. Change image_size to run on OpenAI.");
+  });
+
+  it('points a Krea GPT Image 2 recipe with no keys at the OpenAI key, and keeps a sized one on Krea', () => {
+    const definition = NODE_DEFINITIONS['krea-image-openai-gpt-image-2'];
+    expect(modelReadiness(definition, freeze({}), credentials(), health()))
+      .toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'OPENAI_API_KEY' } });
+    const sized = modelReadiness(definition, freeze({ width: 1920 }), credentials({ apiKeys: { OPENAI_API_KEY: TOKEN } }), health());
+    expect(sized).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+    expect(sized.detail).toContain('This recipe sets width, which only Krea takes, so it runs on Krea.');
+  });
+
+  it('moves GPT Image 1.5 to fal from OpenAI\'s shutdown date', () => {
+    const definition = NODE_DEFINITIONS['gpt-image-1-5'];
+    const cache = credentials({ apiKeys: { OPENAI_API_KEY: TOKEN, FAL_KEY: TOKEN } });
+    vi.setSystemTime(Date.parse('2026-11-30T12:00:00'));
+    expect(modelReadiness(definition, freeze({}), cache, health()).connectionLabel).toBe('OpenAI API');
+    vi.setSystemTime(Date.parse('2026-12-01T12:00:00'));
+    const ready = modelReadiness(definition, freeze({}), cache, health());
+    expect(ready.connectionLabel).toBe('fal.ai API');
+    expect(ready.detail).toContain('OpenAI retires this model on its own API from 2026-12-01, so it runs on FAL.');
+  });
+
+  it('keeps a Hailuo duration MiniMax does not sell on Krea and says why', () => {
+    const definition = NODE_DEFINITIONS['krea-video-minimax-hailuo-02'];
+    const keys = { MINIMAX_API_KEY: TOKEN, KREA_API_TOKEN: TOKEN };
+    const ready = modelReadiness(definition, freeze({ duration: 8 }), credentials({ apiKeys: keys }), health());
+    expect(ready).toMatchObject({ connectionLabel: 'Krea API token', setupTarget: { kind: 'api-key', key: 'KREA_API_TOKEN' } });
+    expect(ready.detail).toContain("MiniMax's own API doesn't take duration 8, so it runs on Krea. Change duration to run on MiniMax.");
+    const combo = modelReadiness(definition, freeze({ resolution: '1080p', duration: 10 }), credentials({ apiKeys: keys }), health());
+    expect(combo.detail).toContain("MiniMax's own API doesn't take 1080p at 10 seconds, so it runs on Krea. Change resolution to run on MiniMax.");
+    const direct = modelReadiness(definition, freeze({ duration: 6 }), credentials({ apiKeys: keys }), health());
+    expect(direct.detail).toContain("Runs on MiniMax's own API with your MiniMax key, billed by MiniMax.");
+  });
+
+  it.each([
+    ['seedream-4-5', 'fal.ai', 'FAL_KEY', freeze({ image_size: 'square' }), 'image_size'],
+    ['krea-image-bytedance-seedream-5-lite', 'Krea', 'KREA_API_TOKEN', freeze({ width: 1024, height: 1024 }), 'width'],
+  ])('runs %s on BytePlus, keeps a size BytePlus can\'t render on its copy, and suggests the copy\'s key first',
+    (id, copy, fallbackKey, unsized, param) => {
+      const definition = NODE_DEFINITIONS[id];
+      const keys = credentials({ apiKeys: { BYTEPLUS_API_KEY: TOKEN, [fallbackKey]: TOKEN } });
+      const sized = id === 'seedream-4-5' ? freeze({}) : freeze({ width: 2048, height: 2048 });
+      const direct = modelReadiness(definition, sized, keys, health());
+      expect(direct).toMatchObject({ connectionLabel: 'BytePlus API', setupTarget: { kind: 'api-key', key: 'BYTEPLUS_API_KEY' } });
+      expect(direct.detail).toContain("Runs on BytePlus's own API with your BytePlus key, billed by BytePlus.");
+      const blocked = modelReadiness(definition, unsized, keys, health());
+      expect(blocked.setupTarget).toEqual({ kind: 'api-key', key: fallbackKey });
+      expect(blocked.detail).toContain(`BytePlus can't render this recipe's ${param} exactly, so it runs on ${copy === 'fal.ai' ? 'FAL' : copy}.`);
+      // Nothing set: BytePlus isn't sold in the United States, so setup points at the copy.
+      const none = modelReadiness(definition, sized, credentials(), health());
+      expect(none).toMatchObject({ label: 'Setup required', setupTarget: { kind: 'api-key', key: fallbackKey } });
+      expect(none.detail).toContain('Runs on BytePlus with your BytePlus key, or on');
+    });
+
+  it.each([
+    ['krea-video-bytedance-seedance-2', freeze({ upscale: true }), 'upscale', 'upscale true'],
+    ['krea-video-bytedance-seedance-2-5', freeze({ duration: 7.5 }), 'duration', 'duration 7.5'],
+    ['krea-video-bytedance-seedance-1-0-pro', freeze({ aspect_ratio: '9:21' }), 'aspect_ratio', 'aspect_ratio 9:21'],
+  ])('keeps %s on Krea for a %s value BytePlus doesn\'t take, and says which setting', (id, params, param, detail) => {
+    const definition = NODE_DEFINITIONS[id];
+    const keys = credentials({ apiKeys: { BYTEPLUS_API_KEY: TOKEN, KREA_API_TOKEN: TOKEN } });
+    expect(modelReadiness(definition, freeze({}), keys, health()).connectionLabel).toBe('BytePlus API');
+    const kept = modelReadiness(definition, params, keys, health());
+    expect(kept.setupTarget).toEqual({ kind: 'api-key', key: 'KREA_API_TOKEN' });
+    expect(kept.detail).toContain(`BytePlus's own API doesn't take ${detail}, so it runs on Krea. Change ${param} to run on BytePlus.`);
+  });
+
+  it('moves Nano Banana (2.5) to fal from Google\'s shutdown date and says so', () => {
+    const definition = NODE_DEFINITIONS['nano-banana-fal'];
+    const cache = credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN, FAL_KEY: TOKEN } });
+    expect(modelReadiness(definition, freeze({ model: 'nano-banana' }), cache, health()).connectionLabel).toBe('Google API');
+    vi.setSystemTime(Date.parse('2027-03-15T12:00:00'));
+    const ready = modelReadiness(definition, freeze({ model: 'nano-banana' }), cache, health());
+    expect(ready).toMatchObject({ connectionLabel: 'fal.ai API', setupTarget: { kind: 'api-key', key: 'FAL_KEY' } });
+    expect(ready.detail).toContain('Google retires this model on its own API from 2027-03-15, so it runs on FAL.');
+    expect(modelReadiness(definition, freeze({ model: 'nano-banana-2' }), cache, health()).connectionLabel).toBe('Google API');
+  });
+
+  it('names Runway as the copy for its resold ElevenLabs models and asks for an ElevenLabs voice', () => {
+    const definition = NODE_DEFINITIONS['runway-tts'];
+    const keys = { ELEVENLABS_API_KEY: TOKEN, RUNWAY_API_KEY: TOKEN };
+    const preset = modelReadiness(definition, freeze({ voiceId: 'Maya' }), credentials({ apiKeys: keys }), health());
+    expect(preset).toMatchObject({ connectionLabel: 'Runway API', setupTarget: { kind: 'api-key', key: 'RUNWAY_API_KEY' } });
+    expect(preset.detail).toContain('Runs on Runway with your Runway key.');
+    expect(preset.detail).toContain('This recipe sets no ElevenLabs voice_id, so it uses Runway. Set it to run on ElevenLabs.');
+    const voiced = modelReadiness(definition, freeze({ voice_id: 'pNInz6obpgDQGcFmaJgB' }), credentials({ apiKeys: keys }), health());
+    expect(voiced).toMatchObject({ connectionLabel: 'ElevenLabs API', setupTarget: { kind: 'api-key', key: 'ELEVENLABS_API_KEY' } });
+    expect(voiced.detail).toContain("Runs on ElevenLabs's own API with your ElevenLabs key, billed by ElevenLabs.");
+    const dubbing = modelReadiness(NODE_DEFINITIONS['runway-dubbing'], freeze({}), credentials({ apiKeys: { RUNWAY_API_KEY: TOKEN } }), health());
+    expect(dubbing.detail).toContain('Runs on Runway with your Runway key. Add an ElevenLabs key to run on ElevenLabs directly.');
+  });
+
+  it('keeps a Krea copy on the signed-in plan even with a Google key', () => {
+    const ready = modelReadiness(NODE_DEFINITIONS['krea-image-google-nano-banana-pro'], freeze({ _kreaAuth: 'mcp' }),
+      credentials({ apiKeys: { GOOGLE_API_KEY: TOKEN }, kreaConnection: { status: 'connected' } }), health());
+    expect(ready).toMatchObject({ label: 'Krea signed in', setupTarget: { kind: 'krea-mcp' } });
   });
 
   it('prefers Vertex over the Gemini API key when both direct credentials are set', () => {
@@ -251,7 +397,9 @@ describe('provider readiness without generation', () => {
     ['flux-1-dev', 'FAL_KEY', 'Seedream 4.5'],
     ['seedream-4-5', 'FAL_KEY', 'Seedream 4.5'],
     ['nano-banana', 'GOOGLE_API_KEY', 'Nano Banana'],
-    ['nano-banana-fal-edit', 'FAL_KEY', 'Nano Banana Edit (FAL)'],
+    // Nano Banana's fal copy also runs on the Gemini API (2026-10-14); with
+    // no key set, setup points at the maker's key, as for Veo and Meshy.
+    ['nano-banana-fal-edit', 'GOOGLE_API_KEY', 'Nano Banana Edit (FAL)'],
     ['flux-kontext', 'FAL_KEY', 'FLUX Kontext'],
   ])('derives Cinema %s readiness from the actual scene base model', (model, key, name) => {
     const params = freeze({ scene: { base: { model }, shots: [{ id: 'retained-shot', prompt: 'fixture' }] } });

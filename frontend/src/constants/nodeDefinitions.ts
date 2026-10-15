@@ -52,11 +52,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gpt-image-1',
+        default: 'gpt-image-2.5-flare',
         options: [
-          { label: 'GPT Image 1', value: 'gpt-image-1' },
-          { label: 'GPT Image 1.5', value: 'gpt-image-1.5' },
-          { label: 'GPT Image 1 Mini', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 1 (shuts down Oct 23, 2026)', value: 'gpt-image-1' },
+          { label: 'GPT Image 1.5 (shuts down Dec 1, 2026)', value: 'gpt-image-1.5' },
+          { label: 'GPT Image 1 Mini (shuts down Dec 1, 2026)', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 2.5 Flare (fastest)', value: 'gpt-image-2.5-flare' },
+          { label: 'GPT Image 2.5 Sunburst (most precise edits)', value: 'gpt-image-2.5-sunburst' },
         ],
       },
       {
@@ -83,6 +85,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
+          { label: 'Extra High', value: 'xhigh', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
+          { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
         ],
       },
       {
@@ -246,20 +250,50 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Seedance 2.0 Fast', value: 'seedance2_fast' },
           { label: 'HappyHorse 1.0', value: 'happyhorse_1_0' },
           { label: 'Gen-4 Turbo', value: 'gen4_turbo' },
-          { label: 'Gen-3a Turbo (legacy)', value: 'gen3a_turbo' },
           { label: 'Veo 3.1', value: 'veo3.1' },
           { label: 'Veo 3.1 Fast', value: 'veo3.1_fast' },
-          { label: 'Veo 3', value: 'veo3' },
+          { label: 'Seedance 2.0 Mini', value: 'seedance2_mini' },
+          { label: 'Seedance 2.5', value: 'seedance2_5' },
         ],
       },
       {
         key: 'duration',
         label: 'Duration',
-        type: 'integer',
+        type: 'enum',
         required: false,
         default: 5,
-        min: 2,
-        max: 10,
+        options: [
+          { label: '2 s', value: 2, visibleWhen: { model: ['gen4.5', 'gen4_turbo'] } },
+          { label: '3 s', value: 3, visibleWhen: { model: ['gen4.5', 'happyhorse_1_0', 'gen4_turbo'] } },
+          { label: '4 s', value: 4 },
+          { label: '5 s', value: 5, visibleWhen: { model: ['gen4.5', 'seedance2', 'seedance2_fast', 'happyhorse_1_0', 'gen4_turbo', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '6 s', value: 6 },
+          { label: '7 s', value: 7, visibleWhen: { model: ['gen4.5', 'seedance2', 'seedance2_fast', 'happyhorse_1_0', 'gen4_turbo', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '8 s', value: 8 },
+          { label: '9 s', value: 9, visibleWhen: { model: ['gen4.5', 'seedance2', 'seedance2_fast', 'happyhorse_1_0', 'gen4_turbo', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '10 s', value: 10, visibleWhen: { model: ['gen4.5', 'seedance2', 'seedance2_fast', 'happyhorse_1_0', 'gen4_turbo', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '11 s', value: 11, visibleWhen: { model: ['seedance2', 'seedance2_fast', 'happyhorse_1_0', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '12 s', value: 12, visibleWhen: { model: ['seedance2', 'seedance2_fast', 'happyhorse_1_0', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '13 s', value: 13, visibleWhen: { model: ['seedance2', 'seedance2_fast', 'happyhorse_1_0', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '14 s', value: 14, visibleWhen: { model: ['seedance2', 'seedance2_fast', 'happyhorse_1_0', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '15 s', value: 15, visibleWhen: { model: ['seedance2', 'seedance2_fast', 'happyhorse_1_0', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '16 s', value: 16, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '17 s', value: 17, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '18 s', value: 18, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '19 s', value: 19, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '20 s', value: 20, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '21 s', value: 21, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '22 s', value: 22, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '23 s', value: 23, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '24 s', value: 24, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '25 s', value: 25, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '26 s', value: 26, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '27 s', value: 27, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '28 s', value: 28, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '29 s', value: 29, visibleWhen: { model: ['seedance2_5'] } },
+          { label: '30 s', value: 30, visibleWhen: { model: ['seedance2_5'] } },
+          { label: 'Auto', value: 'auto', visibleWhen: { model: ['seedance2', 'seedance2_fast', 'seedance2_mini', 'seedance2_5'] } },
+        ],
       },
       {
         key: 'ratio',
@@ -270,10 +304,37 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: '1280x720 (16:9)', value: '1280:720' },
           { label: '720x1280 (9:16)', value: '720:1280' },
-          { label: '1104x832 (4:3)', value: '1104:832' },
-          { label: '832x1104 (3:4)', value: '832:1104' },
-          { label: '960x960 (1:1)', value: '960:960' },
-          { label: '1584x672 (21:9)', value: '1584:672' },
+          { label: '1104x832 (4:3)', value: '1104:832', visibleWhen: { model: ['gen4.5', 'gen4_turbo'] } },
+          { label: '832x1104 (3:4)', value: '832:1104', visibleWhen: { model: ['gen4.5', 'gen4_turbo'] } },
+          { label: '960x960 (1:1)', value: '960:960', visibleWhen: { model: ['gen4.5', 'seedance2', 'seedance2_fast', 'happyhorse_1_0', 'gen4_turbo', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '1584x672 (21:9)', value: '1584:672', visibleWhen: { model: ['gen4.5', 'gen4_turbo'] } },
+          { label: '1080x1920 (9:16)', value: '1080:1920', visibleWhen: { model: ['seedance2', 'happyhorse_1_0', 'veo3.1', 'veo3.1_fast', 'seedance2_5'] } },
+          { label: '1920x1080 (16:9)', value: '1920:1080', visibleWhen: { model: ['seedance2', 'happyhorse_1_0', 'veo3.1', 'veo3.1_fast', 'seedance2_5'] } },
+          { label: '1108x832 (4:3)', value: '1108:832', visibleWhen: { model: ['happyhorse_1_0'] } },
+          { label: '832x1108 (3:4)', value: '832:1108', visibleWhen: { model: ['happyhorse_1_0'] } },
+          { label: '1440x1440 (1:1)', value: '1440:1440', visibleWhen: { model: ['seedance2', 'happyhorse_1_0', 'seedance2_5'] } },
+          { label: '1662x1248 (4:3)', value: '1662:1248', visibleWhen: { model: ['happyhorse_1_0'] } },
+          { label: '1248x1662 (3:4)', value: '1248:1662', visibleWhen: { model: ['happyhorse_1_0'] } },
+          { label: '992x432 (21:9)', value: '992:432', visibleWhen: { model: ['seedance2', 'seedance2_fast', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '864x496 (16:9)', value: '864:496', visibleWhen: { model: ['seedance2', 'seedance2_fast', 'seedance2_mini'] } },
+          { label: '752x560 (4:3)', value: '752:560', visibleWhen: { model: ['seedance2', 'seedance2_fast', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '640x640 (1:1)', value: '640:640', visibleWhen: { model: ['seedance2', 'seedance2_fast', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '560x752 (3:4)', value: '560:752', visibleWhen: { model: ['seedance2', 'seedance2_fast', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '496x864 (9:16)', value: '496:864', visibleWhen: { model: ['seedance2', 'seedance2_fast', 'seedance2_mini'] } },
+          { label: '1470x630 (21:9)', value: '1470:630', visibleWhen: { model: ['seedance2', 'seedance2_fast', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '1112x834 (4:3)', value: '1112:834', visibleWhen: { model: ['seedance2', 'seedance2_fast', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '834x1112 (3:4)', value: '834:1112', visibleWhen: { model: ['seedance2', 'seedance2_fast', 'seedance2_mini', 'seedance2_5'] } },
+          { label: '2206x946 (21:9)', value: '2206:946', visibleWhen: { model: ['seedance2', 'seedance2_5'] } },
+          { label: '1664x1248 (4:3)', value: '1664:1248', visibleWhen: { model: ['seedance2', 'seedance2_5'] } },
+          { label: '1248x1664 (3:4)', value: '1248:1664', visibleWhen: { model: ['seedance2', 'seedance2_5'] } },
+          { label: '3840x1646 (21:9)', value: '3840:1646', visibleWhen: { model: ['seedance2'] } },
+          { label: '3840x2160 (16:9)', value: '3840:2160', visibleWhen: { model: ['seedance2'] } },
+          { label: '3840x2880 (4:3)', value: '3840:2880', visibleWhen: { model: ['seedance2'] } },
+          { label: '3840x3840 (1:1)', value: '3840:3840', visibleWhen: { model: ['seedance2'] } },
+          { label: '2880x3840 (3:4)', value: '2880:3840', visibleWhen: { model: ['seedance2'] } },
+          { label: '2160x3840 (9:16)', value: '2160:3840', visibleWhen: { model: ['seedance2'] } },
+          { label: '854x480 (16:9)', value: '854:480', visibleWhen: { model: ['seedance2_5'] } },
+          { label: '480x854 (9:16)', value: '480:854', visibleWhen: { model: ['seedance2_5'] } },
         ],
       },
       {
@@ -284,6 +345,27 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
         min: 0,
         max: 4294967295,
+        visibleWhen: { model: ['gen4.5', 'seedance2', 'seedance2_fast', 'gen4_turbo', 'veo3.1', 'veo3.1_fast', 'seedance2_mini', 'seedance2_5'] },
+      },
+      {
+        key: 'resolution',
+        label: 'Resolution (with image)',
+        type: 'enum',
+        required: false,
+        default: '720p',
+        options: [
+          { label: '720p', value: '720p' },
+          { label: '1080p', value: '1080p' },
+        ],
+        visibleWhen: { model: ['happyhorse_1_0'] },
+      },
+      {
+        key: 'audio',
+        label: 'Audio',
+        type: 'boolean',
+        required: false,
+        default: true,
+        visibleWhen: { model: ['seedance2', 'seedance2_fast', 'veo3.1', 'veo3.1_fast', 'seedance2_mini', 'seedance2_5'] },
       },
     ],
   },
@@ -310,10 +392,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: false,
-        default: 'gen4_aleph',
+        default: 'aleph2',
         options: [
           { label: 'Aleph 2.0', value: 'aleph2' },
-          { label: 'Gen-4 Aleph', value: 'gen4_aleph' },
         ],
       },
       {
@@ -356,6 +437,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Nano Banana Pro (Gemini 3)', value: 'gemini_image3_pro' },
           { label: 'GPT Image 2', value: 'gpt_image_2' },
           { label: 'Gemini 2.5 Flash', value: 'gemini_2.5_flash' },
+          { label: 'Seedream 5.0 Pro', value: 'seedream5_pro' },
+          { label: 'Seedream 5.0 Lite', value: 'seedream5_lite' },
         ],
       },
       {
@@ -365,17 +448,107 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: '1360:768',
         options: [
-          { label: '1360x768 (16:9)', value: '1360:768' },
-          { label: '720x1280 (9:16)', value: '720:1280' },
-          { label: '1024x1024 (1:1)', value: '1024:1024' },
-          { label: '1080x1080', value: '1080:1080' },
-          { label: '1168x880', value: '1168:880' },
-          { label: '1440x1080', value: '1440:1080' },
-          { label: '1080x1440', value: '1080:1440' },
-          { label: '1920x1080', value: '1920:1080' },
-          { label: '1080x1920', value: '1080:1920' },
-          { label: '1808x768', value: '1808:768' },
-          { label: '2112x912', value: '2112:912' },
+          { label: '1360x768 (16:9)', value: '1360:768', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '720x1280 (9:16)', value: '720:1280', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '1024x1024 (1:1)', value: '1024:1024', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo', 'gemini_image3_pro', 'gemini_2.5_flash', 'seedream5_pro'] } },
+          { label: '1080x1080', value: '1080:1080', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '1168x880', value: '1168:880', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '1440x1080', value: '1440:1080', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '1080x1440', value: '1080:1440', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '1920x1080', value: '1920:1080', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '1080x1920', value: '1080:1920', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '1808x768', value: '1808:768', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '2112x912', value: '2112:912', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '1280x720 (16:9)', value: '1280:720', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '720x720 (1:1)', value: '720:720', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '960x720 (4:3)', value: '960:720', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '720x960 (3:4)', value: '720:960', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '1680x720 (21:9)', value: '1680:720', visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] } },
+          { label: '2048x880 (21:9)', value: '2048:880', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1920x1088 (16:9)', value: '1920:1088', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1920x1280 (3:2)', value: '1920:1280', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1920x1440 (4:3)', value: '1920:1440', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1920x1536 (5:4)', value: '1920:1536', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1920x1920 (1:1)', value: '1920:1920', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1536x1920 (4:5)', value: '1536:1920', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1440x1920 (3:4)', value: '1440:1920', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1280x1920 (2:3)', value: '1280:1920', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1088x1920 (9:16)', value: '1088:1920', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '2912x1248 (21:9)', value: '2912:1248', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '2560x1440 (16:9)', value: '2560:1440', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '2560x1712 (3:2)', value: '2560:1712', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '2560x1920 (4:3)', value: '2560:1920', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '2560x2048 (5:4)', value: '2560:2048', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '2560x2560 (1:1)', value: '2560:2560', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '2048x2560 (4:5)', value: '2048:2560', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1920x2560 (3:4)', value: '1920:2560', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1712x2560 (2:3)', value: '1712:2560', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1440x2560 (9:16)', value: '1440:2560', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '3840x1648 (21:9)', value: '3840:1648', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '3840x2160 (16:9)', value: '3840:2160', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '3504x2336 (3:2)', value: '3504:2336', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '3264x2448 (4:3)', value: '3264:2448', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '3200x2560 (5:4)', value: '3200:2560', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '2880x2880 (1:1)', value: '2880:2880', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '2560x3200 (4:5)', value: '2560:3200', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '2448x3264 (3:4)', value: '2448:3264', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '2336x3504 (2:3)', value: '2336:3504', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '2160x3840 (9:16)', value: '2160:3840', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: 'Auto (model picks)', value: 'auto', visibleWhen: { model: ['gpt_image_2'] } },
+          { label: '1344x768 (16:9)', value: '1344:768', visibleWhen: { model: ['gemini_image3_pro', 'gemini_2.5_flash'] } },
+          { label: '768x1344 (9:16)', value: '768:1344', visibleWhen: { model: ['gemini_image3_pro', 'gemini_2.5_flash'] } },
+          { label: '1184x864 (4:3)', value: '1184:864', visibleWhen: { model: ['gemini_image3_pro', 'gemini_2.5_flash'] } },
+          { label: '864x1184 (3:4)', value: '864:1184', visibleWhen: { model: ['gemini_image3_pro', 'gemini_2.5_flash'] } },
+          { label: '1536x672 (21:9)', value: '1536:672', visibleWhen: { model: ['gemini_image3_pro', 'gemini_2.5_flash'] } },
+          { label: '832x1248 (2:3)', value: '832:1248', visibleWhen: { model: ['gemini_image3_pro', 'gemini_2.5_flash'] } },
+          { label: '1248x832 (3:2)', value: '1248:832', visibleWhen: { model: ['gemini_image3_pro', 'gemini_2.5_flash'] } },
+          { label: '896x1152 (4:5)', value: '896:1152', visibleWhen: { model: ['gemini_image3_pro', 'gemini_2.5_flash'] } },
+          { label: '1152x896 (5:4)', value: '1152:896', visibleWhen: { model: ['gemini_image3_pro', 'gemini_2.5_flash'] } },
+          { label: '2048x2048 (1:1)', value: '2048:2048', visibleWhen: { model: ['gemini_image3_pro', 'seedream5_pro', 'seedream5_lite'] } },
+          { label: '1696x2528 (2:3)', value: '1696:2528', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '2528x1696 (3:2)', value: '2528:1696', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '1792x2400 (3:4)', value: '1792:2400', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '2400x1792 (4:3)', value: '2400:1792', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '1856x2304 (4:5)', value: '1856:2304', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '2304x1856 (5:4)', value: '2304:1856', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '1536x2752 (9:16)', value: '1536:2752', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '2752x1536 (16:9)', value: '2752:1536', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '3168x1344 (21:9)', value: '3168:1344', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '4096x4096 (1:1)', value: '4096:4096', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '3392x5056 (2:3)', value: '3392:5056', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '5056x3392 (3:2)', value: '5056:3392', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '3584x4800 (3:4)', value: '3584:4800', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '4800x3584 (4:3)', value: '4800:3584', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '3712x4608 (4:5)', value: '3712:4608', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '4608x3712 (5:4)', value: '4608:3712', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '3072x5504 (9:16)', value: '3072:5504', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '5504x3072 (16:9)', value: '5504:3072', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '6336x2688 (21:9)', value: '6336:2688', visibleWhen: { model: ['gemini_image3_pro'] } },
+          { label: '1184x896 (4:3)', value: '1184:896', visibleWhen: { model: ['seedream5_pro'] } },
+          { label: '896x1184 (3:4)', value: '896:1184', visibleWhen: { model: ['seedream5_pro'] } },
+          { label: '1376x768 (16:9)', value: '1376:768', visibleWhen: { model: ['seedream5_pro'] } },
+          { label: '768x1376 (9:16)', value: '768:1376', visibleWhen: { model: ['seedream5_pro'] } },
+          { label: '1296x864 (3:2)', value: '1296:864', visibleWhen: { model: ['seedream5_pro'] } },
+          { label: '864x1296 (2:3)', value: '864:1296', visibleWhen: { model: ['seedream5_pro'] } },
+          { label: '2304x1728 (4:3)', value: '2304:1728', visibleWhen: { model: ['seedream5_pro', 'seedream5_lite'] } },
+          { label: '1728x2304 (3:4)', value: '1728:2304', visibleWhen: { model: ['seedream5_pro', 'seedream5_lite'] } },
+          { label: '2720x1530 (16:9)', value: '2720:1530', visibleWhen: { model: ['seedream5_pro'] } },
+          { label: '1530x2720 (9:16)', value: '1530:2720', visibleWhen: { model: ['seedream5_pro'] } },
+          { label: '2496x1664 (3:2)', value: '2496:1664', visibleWhen: { model: ['seedream5_pro', 'seedream5_lite'] } },
+          { label: '1664x2496 (2:3)', value: '1664:2496', visibleWhen: { model: ['seedream5_pro', 'seedream5_lite'] } },
+          { label: 'Auto 1K', value: 'auto_1k', visibleWhen: { model: ['seedream5_pro'] } },
+          { label: 'Auto 2K', value: 'auto_2k', visibleWhen: { model: ['seedream5_pro'] } },
+          { label: '2848x1600 (16:9)', value: '2848:1600', visibleWhen: { model: ['seedream5_lite'] } },
+          { label: '1600x2848 (9:16)', value: '1600:2848', visibleWhen: { model: ['seedream5_lite'] } },
+          { label: '3136x1344 (21:9)', value: '3136:1344', visibleWhen: { model: ['seedream5_lite'] } },
+          { label: '3072x3072 (1:1)', value: '3072:3072', visibleWhen: { model: ['seedream5_lite'] } },
+          { label: '3456x2592 (4:3)', value: '3456:2592', visibleWhen: { model: ['seedream5_lite'] } },
+          { label: '2592x3456 (3:4)', value: '2592:3456', visibleWhen: { model: ['seedream5_lite'] } },
+          { label: '4096x2304 (16:9)', value: '4096:2304', visibleWhen: { model: ['seedream5_lite'] } },
+          { label: '2304x4096 (9:16)', value: '2304:4096', visibleWhen: { model: ['seedream5_lite'] } },
+          { label: '3744x2496 (3:2)', value: '3744:2496', visibleWhen: { model: ['seedream5_lite'] } },
+          { label: '2496x3744 (2:3)', value: '2496:3744', visibleWhen: { model: ['seedream5_lite'] } },
+          { label: '4704x2016 (21:9)', value: '4704:2016', visibleWhen: { model: ['seedream5_lite'] } },
         ],
       },
       {
@@ -386,6 +559,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
         min: 0,
         max: 4294967295,
+        visibleWhen: { model: ['gen4_image', 'gen4_image_turbo'] },
+      },
+      {
+        key: 'grounding',
+        label: 'Web grounding',
+        type: 'boolean',
+        required: false,
+        default: false,
+        visibleWhen: { model: ['seedream5_pro', 'seedream5_lite'] },
       },
     ],
   },
@@ -526,7 +708,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'audio-gen',
     apiProvider: 'runway',
     apiEndpoint: '/v1/text_to_speech',
-    envKeyName: 'RUNWAY_API_KEY',
+    envKeyName: ['ELEVENLABS_API_KEY', 'RUNWAY_API_KEY'],
+    directKeyName: 'ELEVENLABS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'text', label: 'Text', dataType: 'Text', required: true },
@@ -534,7 +717,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [],
+    falParams: [
       {
         key: 'voiceId',
         label: 'Voice',
@@ -575,6 +760,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
     ],
+    directParams: [
+      {
+        key: 'voice_id',
+        label: 'ElevenLabs voice ID',
+        type: 'string',
+        required: false,
+        placeholder: 'ElevenLabs voice ID (runs on your ElevenLabs key)',
+      },
+    ],
   },
 
   'runway-sts': {
@@ -583,7 +777,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'audio-gen',
     apiProvider: 'runway',
     apiEndpoint: '/v1/speech_to_speech',
-    envKeyName: 'RUNWAY_API_KEY',
+    envKeyName: ['ELEVENLABS_API_KEY', 'RUNWAY_API_KEY'],
+    directKeyName: 'ELEVENLABS_API_KEY',
+    // ElevenLabs' speech-to-speech takes only an `audio` file ("The audio file
+    // which holds the content and emotion that will control the generated
+    // speech", api-reference/speech-to-speech/convert, read 2026-10-14), so a
+    // run with only Runway's video input stays on Runway.
+    directRoute: {
+      rejectsWhen: [{ match: { video: '(set)', audio: '(unset)' }, label: 'a video input without an audio input' }],
+    },
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
@@ -592,7 +794,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
+      {
+        key: 'removeBackgroundNoise',
+        label: 'Remove Background Noise',
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+    ],
+    falParams: [
       {
         key: 'voiceId',
         label: 'Voice',
@@ -621,12 +833,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Tom', value: 'Tom' },
         ],
       },
+    ],
+    directParams: [
       {
-        key: 'removeBackgroundNoise',
-        label: 'Remove Background Noise',
-        type: 'boolean',
+        key: 'voice_id',
+        label: 'ElevenLabs voice ID',
+        type: 'string',
         required: false,
-        default: false,
+        placeholder: 'ElevenLabs voice ID (runs on your ElevenLabs key)',
       },
     ],
   },
@@ -637,7 +851,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'audio-gen',
     apiProvider: 'runway',
     apiEndpoint: '/v1/voice_dubbing',
-    envKeyName: 'RUNWAY_API_KEY',
+    envKeyName: ['ELEVENLABS_API_KEY', 'RUNWAY_API_KEY'],
+    directKeyName: 'ELEVENLABS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: true },
@@ -645,7 +860,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'targetLang',
         label: 'Target Language',
@@ -707,6 +923,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 10,
       },
     ],
+    falParams: [],
+    directParams: [],
   },
 
   'elevenlabs-tts': {
@@ -2781,59 +2999,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
   },
 
-  'sora-2': {
-    id: 'sora-2',
-    displayName: "Sora 2 (sunsets Sep '26)",
-    category: 'video-gen',
-    apiProvider: 'fal',
-    apiEndpoint: 'fal-ai/sora-2/text-to-video',
-    envKeyName: 'FAL_KEY',
-    executionPattern: 'async-poll',
-    inputPorts: [
-      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-    ],
-    outputPorts: [
-      { id: 'video', label: 'Video', dataType: 'Video', required: false },
-    ],
-    params: [
-      {
-        key: 'resolution',
-        label: 'Resolution',
-        type: 'enum',
-        required: false,
-        default: '720p',
-        options: [
-          { label: '720p', value: '720p' },
-          { label: '1080p', value: '1080p' },
-        ],
-      },
-      {
-        key: 'aspect_ratio',
-        label: 'Aspect Ratio',
-        type: 'enum',
-        required: false,
-        default: '16:9',
-        options: [
-          { label: '16:9', value: '16:9' },
-          { label: '9:16', value: '9:16' },
-        ],
-      },
-      {
-        key: 'duration',
-        label: 'Duration (s)',
-        type: 'enum',
-        required: false,
-        default: 4,
-        options: [
-          { label: '4s', value: 4 },
-          { label: '8s', value: 8 },
-          { label: '12s', value: 12 },
-          { label: '16s', value: 16 },
-          { label: '20s', value: 20 },
-        ],
-      },
-    ],
-  },
 
   'nano-banana': {
     id: 'nano-banana',
@@ -2912,7 +3077,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/nano-banana-2',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['GOOGLE_API_KEY', 'FAL_KEY'],
+    directKeyName: 'GOOGLE_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -2920,7 +3086,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'model',
         label: 'Model',
@@ -2983,18 +3150,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 4,
       },
       {
-        key: 'output_format',
-        label: 'Format',
-        type: 'enum',
-        required: false,
-        default: 'png',
-        options: [
-          { label: 'PNG', value: 'png' },
-          { label: 'JPEG', value: 'jpeg' },
-          { label: 'WebP', value: 'webp' },
-        ],
-      },
-      {
         key: 'thinking_level',
         label: 'Thinking Level',
         type: 'enum',
@@ -3015,6 +3170,20 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: false,
         visibleWhen: { model: ['nano-banana-2', 'nano-banana-pro'] },
       },
+    ],
+    falParams: [
+      {
+        key: 'output_format',
+        label: 'Format',
+        type: 'enum',
+        required: false,
+        default: 'png',
+        options: [
+          { label: 'PNG', value: 'png' },
+          { label: 'JPEG', value: 'jpeg' },
+          { label: 'WebP', value: 'webp' },
+        ],
+      },
       {
         key: 'seed',
         label: 'Seed',
@@ -3023,6 +3192,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
   },
 
   'nano-banana-fal-edit': {
@@ -3031,7 +3201,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/nano-banana-2/edit',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['GOOGLE_API_KEY', 'FAL_KEY'],
+    directKeyName: 'GOOGLE_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -3040,7 +3211,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'model',
         label: 'Model',
@@ -3103,18 +3275,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 4,
       },
       {
-        key: 'output_format',
-        label: 'Format',
-        type: 'enum',
-        required: false,
-        default: 'png',
-        options: [
-          { label: 'PNG', value: 'png' },
-          { label: 'JPEG', value: 'jpeg' },
-          { label: 'WebP', value: 'webp' },
-        ],
-      },
-      {
         key: 'thinking_level',
         label: 'Thinking Level',
         type: 'enum',
@@ -3135,6 +3295,20 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: false,
         visibleWhen: { model: ['nano-banana-2', 'nano-banana-pro'] },
       },
+    ],
+    falParams: [
+      {
+        key: 'output_format',
+        label: 'Format',
+        type: 'enum',
+        required: false,
+        default: 'png',
+        options: [
+          { label: 'PNG', value: 'png' },
+          { label: 'JPEG', value: 'jpeg' },
+          { label: 'WebP', value: 'webp' },
+        ],
+      },
       {
         key: 'seed',
         label: 'Seed',
@@ -3143,6 +3317,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
   },
 
   'lyria-3': {
@@ -3208,11 +3383,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: false,
-        default: 'gemini-2.5-flash-preview-tts',
+        default: 'gemini-3.8-flash-tts',
         options: [
-          { label: '3.1 Flash TTS (preview)', value: 'gemini-3.1-flash-tts-preview' },
-          { label: '2.5 Flash TTS', value: 'gemini-2.5-flash-preview-tts' },
-          { label: '2.5 Pro TTS', value: 'gemini-2.5-pro-preview-tts' },
+          { label: '3.1 Flash TTS (preview, shuts down Nov 17, 2026)', value: 'gemini-3.1-flash-tts-preview' },
+          { label: '2.5 Flash TTS (shuts down Nov 17, 2026)', value: 'gemini-2.5-flash-preview-tts' },
+          { label: '2.5 Pro TTS (shuts down Nov 17, 2026)', value: 'gemini-2.5-pro-preview-tts' },
+          { label: '3.8 Flash TTS', value: 'gemini-3.8-flash-tts' },
+          { label: '3.8 Flash-Lite TTS', value: 'gemini-3.8-flash-lite-tts' },
         ],
       },
       {
@@ -3387,7 +3564,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     displayName: 'Veo 3.1',
     category: 'video-gen',
     apiProvider: 'google',
-    apiEndpoint: 'veo-3.1-generate-preview',
+    apiEndpoint: 'veo-3.1-generate-001',
     envKeyName: ['GOOGLE_VERTEX_CREDENTIALS', 'GOOGLE_API_KEY', 'FAL_KEY'],
     executionPattern: 'async-poll',
     directKeyName: ['GOOGLE_VERTEX_CREDENTIALS', 'GOOGLE_API_KEY'],
@@ -3435,7 +3612,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: '720p', value: '720p' },
           { label: '1080p', value: '1080p' },
-          { label: '4K', value: '4k', visibleWhen: { model: ['veo-3.1-generate-preview', 'veo-3.1-fast-generate-preview'] } },
+          { label: '4K', value: '4k', visibleWhen: { model: ['veo-3.1-generate-001', 'veo-3.1-fast-generate-001'] } },
         ],
       },
       {
@@ -3457,11 +3634,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: false,
-        default: 'veo-3.1-generate-preview',
+        default: 'veo-3.1-generate-001',
         options: [
-          { label: 'Veo 3.1', value: 'veo-3.1-generate-preview' },
-          { label: 'Veo 3.1 Fast', value: 'veo-3.1-fast-generate-preview' },
-          { label: 'Veo 3.1 Lite', value: 'veo-3.1-lite-generate-preview' },
+          { label: 'Veo 3.1', value: 'veo-3.1-generate-001' },
+          { label: 'Veo 3.1 Fast', value: 'veo-3.1-fast-generate-001' },
+          { label: 'Veo 3.1 Lite (preview on Vertex)', value: 'veo-3.1-lite-generate-001' },
         ],
       },
       {
@@ -4213,7 +4390,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'standard',
         options: [
           { label: 'Standard', value: 'standard' },
-          { label: 'Low Poly', value: 'lowpoly' },
+          { label: 'Low Poly (retires Oct 30, 2026)', value: 'lowpoly' },
+          { label: 'Smart Topology (Meshy T2)', value: 'smart-topology' },
         ],
       },
       {
@@ -4274,6 +4452,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'T-Pose', value: 't-pose' },
         ],
       },
+      {
+        key: 'seed',
+        label: 'Seed',
+        type: 'integer',
+        required: false,
+        placeholder: 'Random',
+      },
     ],
     directParams: [
       {
@@ -4283,9 +4468,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Latest (Meshy 7.1)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 5', value: 'meshy-5' },
+          { label: 'Meshy 6 Lite (2K textures)', value: 'meshy-6-lite' },
+          { label: 'Meshy 7.1 (needs Meshy entitlement)', value: 'meshy-7.1' },
         ],
       },
       {
@@ -4332,13 +4518,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'boolean',
         required: false,
         default: true,
-      },
-      {
-        key: 'seed',
-        label: 'Seed',
-        type: 'integer',
-        required: false,
-        placeholder: 'Random',
       },
     ],
   },
@@ -4425,6 +4604,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'T-Pose', value: 't-pose' },
         ],
       },
+      {
+        key: 'texture_prompt',
+        label: 'Texture Prompt',
+        type: 'string',
+        required: false,
+        placeholder: 'Guide the texturing process',
+      },
     ],
     directParams: [
       {
@@ -4434,9 +4620,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Latest (Meshy 7.1)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 5', value: 'meshy-5' },
+          { label: 'Meshy 6 Lite (2K textures)', value: 'meshy-6-lite' },
+          { label: 'Meshy 7.1 (needs Meshy entitlement)', value: 'meshy-7.1' },
         ],
       },
       {
@@ -4447,7 +4634,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'standard',
         options: [
           { label: 'Standard', value: 'standard' },
-          { label: 'Low Poly', value: 'lowpoly' },
+          { label: 'Low Poly (retires Oct 30, 2026)', value: 'lowpoly' },
+          { label: 'Smart Topology (Meshy T2)', value: 'smart-topology' },
         ],
       },
       {
@@ -4481,13 +4669,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
     ],
     falParams: [
-      {
-        key: 'texture_prompt',
-        label: 'Texture Prompt',
-        type: 'string',
-        required: false,
-        placeholder: 'Guide the texturing process',
-      },
       {
         key: 'enable_safety_checker',
         label: 'Safety Checker',
@@ -4527,9 +4708,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Latest (Meshy 7.1)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 5', value: 'meshy-5' },
+          { label: 'Meshy 6 Lite (2K textures)', value: 'meshy-6-lite' },
+          { label: 'Meshy 7.1 (needs Meshy entitlement)', value: 'meshy-7.1' },
         ],
       },
       {
@@ -4645,9 +4827,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'latest',
         options: [
-          { label: 'Latest (Meshy 6)', value: 'latest' },
+          { label: 'Latest (Meshy 7)', value: 'latest' },
           { label: 'Meshy 6', value: 'meshy-6' },
-          { label: 'Meshy 5', value: 'meshy-5' },
+          { label: 'Meshy 6 Lite', value: 'meshy-6-lite' },
+          { label: 'Meshy 7 (needs Meshy entitlement)', value: 'meshy-7' },
         ],
       },
       {
@@ -5091,6 +5274,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
+      { id: 'images', label: 'All images', dataType: 'Array', required: false },
     ],
     params: [
       {
@@ -5098,11 +5282,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gpt-image-1',
+        default: 'gpt-image-2.5-sunburst',
         options: [
-          { label: 'GPT Image 1', value: 'gpt-image-1' },
-          { label: 'GPT Image 1.5', value: 'gpt-image-1.5' },
-          { label: 'GPT Image 1 Mini', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 1 (shuts down Oct 23, 2026)', value: 'gpt-image-1' },
+          { label: 'GPT Image 1.5 (shuts down Dec 1, 2026)', value: 'gpt-image-1.5' },
+          { label: 'GPT Image 1 Mini (shuts down Dec 1, 2026)', value: 'gpt-image-1-mini' },
+          { label: 'GPT Image 2.5 Flare (fastest)', value: 'gpt-image-2.5-flare' },
+          { label: 'GPT Image 2.5 Sunburst (most precise edits)', value: 'gpt-image-2.5-sunburst' },
         ],
       },
       {
@@ -5138,6 +5324,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
+          { label: 'Extra High', value: 'xhigh', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
+          { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] } },
         ],
       },
       {
@@ -6086,7 +6274,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/bytedance/seedance/v1.5/pro/image-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -6096,7 +6285,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'model',
         label: 'Model',
@@ -6176,6 +6366,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    falParams: [],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py) with
+    // BYTEPLUS_API_KEY, else fal. With no key set, setup suggests the fal key
+    // (BytePlus doesn't serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback' },
   },
   'kling-o3': {
     id: 'kling-o3',
@@ -6578,7 +6774,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'bytedance/seedance-2.0/text-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -6586,7 +6783,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -6639,6 +6837,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    falParams: [
       {
         key: 'seed',
         label: 'Seed',
@@ -6647,6 +6847,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py): a saved
+    // seed keeps the run on fal (BytePlus documents seed for Seedance 1.x
+    // only). With no key set, setup suggests the fal key (BytePlus doesn't
+    // serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback', blockedBy: ['seed'] },
   },
 
   'seedance-2-i2v': {
@@ -6655,7 +6861,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'bytedance/seedance-2.0/image-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
@@ -6665,7 +6872,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -6718,6 +6926,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    falParams: [
       {
         key: 'seed',
         label: 'Seed',
@@ -6726,6 +6936,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py): a saved
+    // seed keeps the run on fal (BytePlus documents seed for Seedance 1.x
+    // only). With no key set, setup suggests the fal key (BytePlus doesn't
+    // serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback', blockedBy: ['seed'] },
   },
 
   'seedance-2-r2v': {
@@ -6734,7 +6950,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'bytedance/seedance-2.0/reference-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -6743,7 +6960,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -6794,6 +7012,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    falParams: [
       {
         key: 'seed',
         label: 'Seed',
@@ -6802,6 +7022,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py): a saved
+    // seed keeps the run on fal (BytePlus documents seed for Seedance 1.x
+    // only). With no key set, setup suggests the fal key (BytePlus doesn't
+    // serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback', blockedBy: ['seed'] },
   },
 
   'seedance-2-fast-t2v': {
@@ -6810,7 +7036,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'bytedance/seedance-2.0/fast/text-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -6818,7 +7045,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -6870,6 +7098,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    falParams: [
       {
         key: 'seed',
         label: 'Seed',
@@ -6878,6 +7108,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py): a saved
+    // seed keeps the run on fal (BytePlus documents seed for Seedance 1.x
+    // only). With no key set, setup suggests the fal key (BytePlus doesn't
+    // serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback', blockedBy: ['seed'] },
   },
 
   'seedance-2-fast-i2v': {
@@ -6886,7 +7122,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'bytedance/seedance-2.0/fast/image-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
@@ -6896,7 +7133,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -6948,6 +7186,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: true,
       },
+    ],
+    falParams: [
       {
         key: 'seed',
         label: 'Seed',
@@ -6956,6 +7196,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py): a saved
+    // seed keeps the run on fal (BytePlus documents seed for Seedance 1.x
+    // only). With no key set, setup suggests the fal key (BytePlus doesn't
+    // serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback', blockedBy: ['seed'] },
   },
 
   'flux-kontext': {
@@ -7155,7 +7401,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/gpt-image-1.5',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['OPENAI_API_KEY', 'FAL_KEY'],
+    directKeyName: 'OPENAI_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -7230,7 +7477,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/gpt-image-1.5/edit',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['OPENAI_API_KEY', 'FAL_KEY'],
+    directKeyName: 'OPENAI_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -7725,7 +7973,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'openai/gpt-image-2',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['OPENAI_API_KEY', 'FAL_KEY'],
+    directKeyName: 'OPENAI_API_KEY',
+    directRoute: { rejects: { image_size: ['square', 'portrait_16_9', 'landscape_16_9'] } },
     executionPattern: 'stream',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -7801,7 +8051,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'openai/gpt-image-2/edit',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['OPENAI_API_KEY', 'FAL_KEY'],
+    directKeyName: 'OPENAI_API_KEY',
+    directRoute: { rejects: { image_size: ['square', 'portrait_16_9', 'landscape_16_9'] } },
     executionPattern: 'stream',
     inputPorts: [
       { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true },
@@ -9943,7 +10195,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/bytedance/seedream/v4.5/text-to-image',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -9952,7 +10205,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'model',
         label: 'Model',
@@ -10000,6 +10254,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 1,
         max: 6,
       },
+    ],
+    falParams: [
       {
         key: 'enable_safety_checker',
         label: 'Safety Checker',
@@ -10016,6 +10272,20 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         placeholder: 'Random',
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus.py): a saved seed
+    // keeps the run on fal (ModelArk has no seed), and so does a size
+    // ModelArk can't render exactly: 4.5 and 5.0 lite take "WxH" with
+    // 3,686,400 to 16,777,216 pixels and a 1/16 to 16 ratio. With no key
+    // set, setup suggests the fal key (BytePlus doesn't serve the US).
+    directRoute: {
+      setup: 'fallback',
+      blockedBy: ['seed'],
+      size: { param: 'image_size', minPixels: 3686400, maxPixels: 16777216, maxAspect: 16, unsupported: ['square'] },
+      // ModelArk always runs its own content filter, so fal's safety checker
+      // switched off keeps the run on fal.
+      accepts: { enable_safety_checker: { values: [true] } },
+    },
   },
 
   'ideogram-v4': {
@@ -11873,7 +12143,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'xai/grok-imagine-image',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['XAI_API_KEY', 'FAL_KEY'],
+    directKeyName: 'XAI_API_KEY',
+    // xAI's images API has no output-format field (it returns JPEG), so a
+    // recipe that asks fal for PNG or WebP stays on fal.
+    directRoute: { accepts: { output_format: { values: ['jpeg'] } } },
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -11881,7 +12155,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'num_images',
         label: 'Number of Images',
@@ -11920,6 +12195,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '2K', value: '2k' },
         ],
       },
+    ],
+    falParams: [
       {
         key: 'output_format',
         label: 'Output Format',
@@ -11933,6 +12210,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
     ],
+    directParams: [],
   },
   'grok-imagine-image-edit': {
     id: 'grok-imagine-image-edit',
@@ -11940,7 +12218,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'xai/grok-imagine-image/edit',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['XAI_API_KEY', 'FAL_KEY'],
+    directKeyName: 'XAI_API_KEY',
+    // xAI's images API has no output-format field (it returns JPEG), so a
+    // recipe that asks fal for PNG or WebP stays on fal.
+    directRoute: { accepts: { output_format: { values: ['jpeg'] } } },
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -11949,7 +12231,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'num_images',
         label: 'Number of Images',
@@ -11970,6 +12253,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: '2K', value: '2k' },
         ],
       },
+    ],
+    falParams: [
       {
         key: 'output_format',
         label: 'Output Format',
@@ -11983,61 +12268,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
       },
     ],
-  },
-  'sora-2-i2v': {
-    id: 'sora-2-i2v',
-    displayName: 'Sora 2 Image-to-Video',
-    category: 'video-gen',
-    apiProvider: 'fal',
-    apiEndpoint: 'fal-ai/sora-2/image-to-video',
-    envKeyName: 'FAL_KEY',
-    executionPattern: 'async-poll',
-    inputPorts: [
-      { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
-      { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'subject' },
-    ],
-    outputPorts: [
-      { id: 'video', label: 'Video', dataType: 'Video', required: false },
-    ],
-    params: [
-      {
-        key: 'resolution',
-        label: 'Resolution',
-        type: 'enum',
-        required: false,
-        default: 'auto',
-        options: [
-          { label: 'Auto', value: 'auto' },
-          { label: '720p', value: '720p' },
-        ],
-      },
-      {
-        key: 'aspect_ratio',
-        label: 'Aspect Ratio',
-        type: 'enum',
-        required: false,
-        default: 'auto',
-        options: [
-          { label: 'Auto', value: 'auto' },
-          { label: '9:16', value: '9:16' },
-          { label: '16:9', value: '16:9' },
-        ],
-      },
-      {
-        key: 'duration',
-        label: 'Duration',
-        type: 'enum',
-        required: false,
-        default: 4,
-        options: [
-          { label: '4s', value: 4 },
-          { label: '8s', value: 8 },
-          { label: '12s', value: 12 },
-          { label: '16s', value: 16 },
-          { label: '20s', value: 20 },
-        ],
-      },
-    ],
+    directParams: [],
   },
   'esrgan-upscale': {
     id: 'esrgan-upscale',
@@ -12265,7 +12496,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'audio-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/elevenlabs/music',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['ELEVENLABS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'ELEVENLABS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -12273,7 +12505,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'music_length_ms',
         label: 'Duration (ms)',
@@ -12289,6 +12522,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'boolean',
         required: false,
         default: false,
+      },
+    ],
+    falParams: [],
+    directParams: [
+      {
+        key: 'model_id',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'music_v1',
+        options: [
+          { label: 'Music v1', value: 'music_v1' },
+          { label: 'Music v2', value: 'music_v2' },
+          { label: 'Music v2.5', value: 'music_v2_5' },
+        ],
       },
     ],
   },
@@ -12463,7 +12711,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'video-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/bytedance/seedance/v1/pro/text-to-video',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['BYTEPLUS_API_KEY', 'FAL_KEY'],
+    directKeyName: 'BYTEPLUS_API_KEY',
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -12471,7 +12720,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'video', label: 'Video', dataType: 'Video', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'aspect_ratio',
         label: 'Aspect Ratio',
@@ -12533,6 +12783,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         placeholder: 'Random',
       },
+    ],
+    falParams: [
       {
         key: 'enable_safety_checker',
         label: 'Safety Checker',
@@ -12541,6 +12793,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: true,
       },
     ],
+    directParams: [],
+    // BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py) with
+    // BYTEPLUS_API_KEY, else fal. With no key set, setup suggests the fal key
+    // (BytePlus doesn't serve the US and each model must be activated first).
+    directRoute: { setup: 'fallback', accepts: { enable_safety_checker: { values: [true] } } },
   },
   'ltx-audio-to-video': {
     id: 'ltx-audio-to-video',
@@ -12967,12 +13224,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'fal-ai/nano-banana-2/edit',
-    envKeyName: 'FAL_KEY',
+    envKeyName: ['GOOGLE_API_KEY', 'FAL_KEY'],
+    directKeyName: 'GOOGLE_API_KEY',
     executionPattern: 'async-poll',
     capabilityNote: 'Identity guidance uses Character reference images and traits. This model has no identity-strength or mask control.',
     // nano-banana-2/edit with optional Character-bundle identity preservation:
     // when a Character is wired in, its trait string leads the prompt and its
     // reference views ride as additional images behind the base edit target.
+    // With a Google key it runs on the Gemini API (gemini-3.1-flash-image,
+    // backend execution/maker_routes_google.py); otherwise on fal.
     inputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: true, role: 'identity' },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
@@ -12982,7 +13242,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
     ],
-    params: [
+    params: [],
+    sharedParams: [
       {
         key: 'resolution',
         label: 'Resolution',
@@ -13018,6 +13279,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         step: 0.05,
       },
     ],
+    falParams: [],
+    directParams: [],
   },
   // BEGIN GENERATED KREA CATALOG (scripts/sync-krea-catalog.py)
   'krea-image-krea-krea-2-medium': {
@@ -14306,7 +14569,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/google/nano-banana-pro",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "GOOGLE_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -14464,7 +14730,134 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "1K"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "GOOGLE_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "5:4",
+            "value": "5:4"
+          },
+          {
+            "label": "4:5",
+            "value": "4:5"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          },
+          {
+            "label": "4K",
+            "value": "4K"
+          }
+        ],
+        "default": "1K"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-nano-banana",
+      "model": "gemini-3-pro-image",
+      "blockedBy": [
+        "width",
+        "height"
+      ]
+    }
   },
   'krea-image-google-nano-banana-2': {
     "id": "krea-image-google-nano-banana-2",
@@ -14472,7 +14865,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/google/nano-banana-2",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "GOOGLE_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -14642,7 +15038,146 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "1K"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "GOOGLE_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "4:1",
+            "value": "4:1"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "5:4",
+            "value": "5:4"
+          },
+          {
+            "label": "4:5",
+            "value": "4:5"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "1:4",
+            "value": "1:4"
+          },
+          {
+            "label": "1:8",
+            "value": "1:8"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          },
+          {
+            "label": "4K",
+            "value": "4K"
+          }
+        ],
+        "default": "1K"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-nano-banana",
+      "model": "gemini-3.1-flash-image",
+      "blockedBy": [
+        "width",
+        "height"
+      ]
+    }
   },
   'krea-image-google-nano-banana-2-1': {
     "id": "krea-image-google-nano-banana-2-1",
@@ -14650,7 +15185,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/google/nano-banana-2.1",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "GOOGLE_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -14841,7 +15379,167 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "medium"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "GOOGLE_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "4:1",
+            "value": "4:1"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "5:4",
+            "value": "5:4"
+          },
+          {
+            "label": "4:5",
+            "value": "4:5"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "1:4",
+            "value": "1:4"
+          },
+          {
+            "label": "1:8",
+            "value": "1:8"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          },
+          {
+            "label": "4K",
+            "value": "4K"
+          }
+        ],
+        "default": "1K"
+      },
+      {
+        "key": "thinking_level",
+        "label": "Thinking level",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "minimal",
+            "value": "minimal"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          }
+        ],
+        "default": "medium"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-nano-banana-2-1",
+      "model": "gemini-nano-banana-2.1",
+      "blockedBy": [
+        "width",
+        "height"
+      ]
+    }
   },
   'krea-image-google-nano-banana-flash-lite': {
     "id": "krea-image-google-nano-banana-flash-lite",
@@ -14849,7 +15547,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/google/nano-banana-flash-lite",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "GOOGLE_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -14987,7 +15688,113 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ]
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "GOOGLE_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "5:4",
+            "value": "5:4"
+          },
+          {
+            "label": "4:5",
+            "value": "4:5"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      }
+    ],
+    "falParams": [
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-nano-banana",
+      "model": "gemini-3.1-flash-lite-image",
+      "blockedBy": [
+        "width",
+        "height"
+      ]
+    }
   },
   'krea-image-google-nano-banana': {
     "id": "krea-image-google-nano-banana",
@@ -14995,7 +15802,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/google/nano-banana",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "GOOGLE_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -15132,7 +15942,113 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ]
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "GOOGLE_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "5:4",
+            "value": "5:4"
+          },
+          {
+            "label": "4:5",
+            "value": "4:5"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      }
+    ],
+    "falParams": [
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-nano-banana",
+      "model": "gemini-2.5-flash-image",
+      "blockedBy": [
+        "width",
+        "height"
+      ]
+    }
   },
   'krea-image-bfl-flux-1-1-pro': {
     "id": "krea-image-bfl-flux-1-1-pro",
@@ -15339,7 +16255,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/ideogram/ideogram-2-turbo",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "IDEOGRAM_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -15428,7 +16347,92 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": 1337
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "IDEOGRAM_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "min": 512,
+        "max": 8192,
+        "step": 0.01,
+        "default": 1024
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "min": 512,
+        "max": 8192,
+        "step": 0.01,
+        "default": 1024
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-ideogram-2a",
+      "model": "ideogram-2a",
+      "snap": {
+        "widthParam": "width",
+        "heightParam": "height",
+        "maker": "Ideogram",
+        "field": "aspect_ratio",
+        "kind": "shape",
+        "sep": "x",
+        "choices": [
+          "1x1",
+          "1x3",
+          "3x1",
+          "1x2",
+          "2x1",
+          "9x16",
+          "16x9",
+          "10x16",
+          "16x10",
+          "2x3",
+          "3x2",
+          "3x4",
+          "4x3",
+          "4x5",
+          "5x4"
+        ]
+      }
+    }
   },
   'krea-image-ideogram-ideogram-3': {
     "id": "krea-image-ideogram-ideogram-3",
@@ -15436,7 +16440,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/ideogram/ideogram-3",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "IDEOGRAM_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -15553,7 +16560,164 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "IDEOGRAM_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "min": 512,
+        "max": 8192,
+        "step": 0.01,
+        "default": 1024
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "min": 512,
+        "max": 8192,
+        "step": 0.01,
+        "default": 1024
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "character_reference_images",
+        "label": "Character reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "style_images",
+        "label": "Style images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-ideogram-3",
+      "model": "ideogram-v3",
+      "blockedBy": [
+        "style_images"
+      ],
+      "snap": {
+        "widthParam": "width",
+        "heightParam": "height",
+        "maker": "Ideogram",
+        "field": "resolution",
+        "kind": "size",
+        "sep": "x",
+        "choices": [
+          "512x1536",
+          "576x1408",
+          "576x1472",
+          "576x1536",
+          "640x1344",
+          "640x1408",
+          "640x1472",
+          "640x1536",
+          "704x1152",
+          "704x1216",
+          "704x1280",
+          "704x1344",
+          "704x1408",
+          "704x1472",
+          "736x1312",
+          "768x1088",
+          "768x1216",
+          "768x1280",
+          "768x1344",
+          "800x1280",
+          "832x960",
+          "832x1024",
+          "832x1088",
+          "832x1152",
+          "832x1216",
+          "832x1248",
+          "864x1152",
+          "896x960",
+          "896x1024",
+          "896x1088",
+          "896x1120",
+          "896x1152",
+          "960x832",
+          "960x896",
+          "960x1024",
+          "960x1088",
+          "1024x832",
+          "1024x896",
+          "1024x960",
+          "1024x1024",
+          "1088x768",
+          "1088x832",
+          "1088x896",
+          "1088x960",
+          "1120x896",
+          "1152x704",
+          "1152x832",
+          "1152x864",
+          "1152x896",
+          "1216x704",
+          "1216x768",
+          "1216x832",
+          "1248x832",
+          "1280x704",
+          "1280x768",
+          "1280x800",
+          "1312x736",
+          "1344x640",
+          "1344x704",
+          "1344x768",
+          "1408x576",
+          "1408x640",
+          "1408x704",
+          "1472x576",
+          "1472x640",
+          "1472x704",
+          "1536x512",
+          "1536x576",
+          "1536x640"
+        ]
+      }
+    }
   },
   'krea-image-runway-gen-4-image': {
     "id": "krea-image-runway-gen-4-image",
@@ -15561,7 +16725,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/runway/gen-4-image",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "RUNWAY_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -15665,7 +16832,100 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "RUNWAY_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "min": 512,
+        "max": 8192,
+        "step": 0.01,
+        "default": 1024
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "min": 512,
+        "max": 8192,
+        "step": 0.01,
+        "default": 1024
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": true,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-runway-gen4-image",
+      "model": "gen4_image",
+      "snap": {
+        "widthParam": "width",
+        "heightParam": "height",
+        "maker": "Runway",
+        "field": "ratio",
+        "kind": "size",
+        "sep": ":",
+        "choices": [
+          "1024:1024",
+          "1080:1080",
+          "1168:880",
+          "1360:768",
+          "1440:1080",
+          "1080:1440",
+          "1808:768",
+          "1920:1080",
+          "1080:1920",
+          "2112:912",
+          "1280:720",
+          "720:1280",
+          "720:720",
+          "960:720",
+          "720:960",
+          "1680:720"
+        ]
+      }
+    }
   },
   'krea-image-openai-gpt-image': {
     "id": "krea-image-openai-gpt-image",
@@ -15817,7 +17077,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/openai/gpt-image-2",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "OPENAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -15996,7 +17259,154 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ]
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "OPENAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          },
+          {
+            "label": "auto",
+            "value": "auto"
+          }
+        ],
+        "default": "high"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "2:1",
+            "value": "2:1"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "1:2",
+            "value": "1:2"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          },
+          {
+            "label": "4K",
+            "value": "4K"
+          }
+        ]
+      }
+    ],
+    "falParams": [
+      {
+        "key": "width",
+        "label": "Width",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-openai-image",
+      "model": "gpt-image-2",
+      "blockedBy": [
+        "width",
+        "height"
+      ]
+    }
   },
   'krea-image-openai-gpt-image-2-5-flare': {
     "id": "krea-image-openai-gpt-image-2-5-flare",
@@ -16004,7 +17414,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/openai/gpt-image-2.5-flare",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "OPENAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -16193,7 +17606,159 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ]
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "OPENAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          },
+          {
+            "label": "xhigh",
+            "value": "xhigh"
+          },
+          {
+            "label": "max",
+            "value": "max"
+          }
+        ],
+        "default": "high"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "2:1",
+            "value": "2:1"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "1:2",
+            "value": "1:2"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          },
+          {
+            "label": "4K",
+            "value": "4K"
+          }
+        ]
+      },
+      {
+        "key": "background",
+        "label": "Background",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "transparent",
+            "value": "transparent"
+          },
+          {
+            "label": "opaque",
+            "value": "opaque"
+          },
+          {
+            "label": "auto",
+            "value": "auto"
+          }
+        ]
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-openai-image",
+      "model": "gpt-image-2.5-flare"
+    }
   },
   'krea-image-openai-gpt-image-2-5-sunburst': {
     "id": "krea-image-openai-gpt-image-2-5-sunburst",
@@ -16201,7 +17766,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/openai/gpt-image-2.5-sunburst",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "OPENAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -16370,7 +17938,139 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ]
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "OPENAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          },
+          {
+            "label": "xhigh",
+            "value": "xhigh"
+          },
+          {
+            "label": "max",
+            "value": "max"
+          }
+        ],
+        "default": "high"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "2:1",
+            "value": "2:1"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "1:2",
+            "value": "1:2"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          },
+          {
+            "label": "4K",
+            "value": "4K"
+          }
+        ]
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-openai-image",
+      "model": "gpt-image-2.5-sunburst"
+    }
   },
   'krea-image-xai-grok-imagine-2': {
     "id": "krea-image-xai-grok-imagine-2",
@@ -16378,7 +18078,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/xai/grok-imagine-2",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "XAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -16547,7 +18250,143 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "XAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          }
+        ],
+        "default": "medium"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "2:1",
+            "value": "2:1"
+          },
+          {
+            "label": "20:9",
+            "value": "20:9"
+          },
+          {
+            "label": "19.5:9",
+            "value": "19.5:9"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "9:19.5",
+            "value": "9:19.5"
+          },
+          {
+            "label": "9:20",
+            "value": "9:20"
+          },
+          {
+            "label": "1:2",
+            "value": "1:2"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": true,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          }
+        ]
+      }
+    ],
+    "falParams": [
+      {
+        "key": "style_images",
+        "label": "Style images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-xai-image",
+      "model": "grok-imagine-image-2.0",
+      "blockedBy": [
+        "style_images"
+      ]
+    }
   },
   'krea-image-xai-grok-imagine-2-edit': {
     "id": "krea-image-xai-grok-imagine-2-edit",
@@ -16555,7 +18394,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/xai/grok-imagine-2-edit",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "XAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -16665,7 +18507,80 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "XAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          }
+        ],
+        "default": "medium"
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1K",
+            "value": "1K"
+          },
+          {
+            "label": "2K",
+            "value": "2K"
+          }
+        ],
+        "default": "1K"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": true,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-xai-image",
+      "model": "grok-imagine-image-2.0"
+    }
   },
   'krea-image-meta-muse-image': {
     "id": "krea-image-meta-muse-image",
@@ -17323,7 +19238,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/bytedance/seedream-4",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -17422,7 +19340,89 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "max": 4096,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "max": 4096,
+        "step": 0.01
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "style_images",
+        "label": "Style images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedream",
+      "model": "seedream-4-0-250828",
+      "blockedBy": [
+        "style_images"
+      ],
+      "accepts": {
+        "seed": {
+          "values": [
+            1337
+          ]
+        }
+      },
+      "size": {
+        "widthParam": "width",
+        "heightParam": "height",
+        "minPixels": 921600,
+        "maxPixels": 16777216,
+        "maxAspect": 16
+      },
+      "setup": "fallback"
+    }
   },
   'krea-image-bytedance-seedream-5-lite': {
     "id": "krea-image-bytedance-seedream-5-lite",
@@ -17430,7 +19430,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/bytedance/seedream-5-lite",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -17530,7 +19533,89 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "max": 4096,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "max": 4096,
+        "step": 0.01
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "style_images",
+        "label": "Style images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedream",
+      "model": "seedream-5-0-lite-260128",
+      "blockedBy": [
+        "style_images"
+      ],
+      "accepts": {
+        "seed": {
+          "values": [
+            1337
+          ]
+        }
+      },
+      "size": {
+        "widthParam": "width",
+        "heightParam": "height",
+        "minPixels": 3686400,
+        "maxPixels": 16777216,
+        "maxAspect": 16
+      },
+      "setup": "fallback"
+    }
   },
   'krea-image-bytedance-seedream-5-pro': {
     "id": "krea-image-bytedance-seedream-5-pro",
@@ -17538,7 +19623,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/bytedance/seedream-5-pro",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -17638,7 +19726,89 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "width",
+        "label": "Width",
+        "required": true,
+        "type": "float",
+        "max": 4096,
+        "step": 0.01
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "required": true,
+        "type": "float",
+        "max": 4096,
+        "step": 0.01
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 1337
+      },
+      {
+        "key": "style_images",
+        "label": "Style images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedream",
+      "model": "dola-seedream-5-0-pro-260628",
+      "blockedBy": [
+        "style_images"
+      ],
+      "accepts": {
+        "seed": {
+          "values": [
+            1337
+          ]
+        }
+      },
+      "size": {
+        "widthParam": "width",
+        "heightParam": "height",
+        "minPixels": 921600,
+        "maxPixels": 4624220,
+        "maxAspect": 16
+      },
+      "setup": "fallback"
+    }
   },
   'krea-image-qwen-2512': {
     "id": "krea-image-qwen-2512",
@@ -20612,7 +22782,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/minimax/hailuo-02",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "MINIMAX_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -20735,7 +22908,106 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": 6
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "MINIMAX_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "expand_prompt",
+        "label": "Expand prompt",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "512p",
+            "value": "512p"
+          },
+          {
+            "label": "768p",
+            "value": "768p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "768p"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 6,
+        "max": 10,
+        "step": 0.01,
+        "default": 6
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-minimax-hailuo",
+      "model": "MiniMax-Hailuo-02",
+      "accepts": {
+        "duration": {
+          "values": [
+            6,
+            10
+          ]
+        }
+      },
+      "rejectsWhen": [
+        {
+          "match": {
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "label": "1080p at 10 seconds"
+        }
+      ]
+    }
   },
   'krea-video-minimax-hailuo-2-3': {
     "id": "krea-video-minimax-hailuo-2-3",
@@ -20743,7 +23015,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/minimax/hailuo-2.3",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "MINIMAX_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -20869,7 +23144,105 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": 6
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "MINIMAX_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "expand_prompt",
+        "label": "Expand prompt",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "768p",
+            "value": "768p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "768p"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "6",
+            "value": 6
+          },
+          {
+            "label": "10",
+            "value": 10
+          }
+        ],
+        "default": 6
+      }
+    ],
+    "falParams": [
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-minimax-hailuo",
+      "model": "MiniMax-Hailuo-2.3",
+      "blockedBy": [
+        "end_image"
+      ],
+      "rejectsWhen": [
+        {
+          "match": {
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "label": "1080p at 10 seconds"
+        }
+      ]
+    }
   },
   'krea-video-minimax-hailuo-2-3-fast': {
     "id": "krea-video-minimax-hailuo-2-3-fast",
@@ -20877,7 +23250,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/minimax/hailuo-2.3-fast",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "MINIMAX_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -21003,7 +23379,105 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": 6
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "MINIMAX_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "expand_prompt",
+        "label": "Expand prompt",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "768p",
+            "value": "768p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "768p"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "6",
+            "value": 6
+          },
+          {
+            "label": "10",
+            "value": 10
+          }
+        ],
+        "default": 6
+      }
+    ],
+    "falParams": [
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-minimax-hailuo",
+      "model": "MiniMax-Hailuo-2.3-Fast",
+      "blockedBy": [
+        "end_image"
+      ],
+      "rejectsWhen": [
+        {
+          "match": {
+            "resolution": "1080p",
+            "duration": 10
+          },
+          "label": "1080p at 10 seconds"
+        }
+      ]
+    }
   },
   'krea-video-minimax-hailuo-3': {
     "id": "krea-video-minimax-hailuo-3",
@@ -21011,7 +23485,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/minimax/hailuo-3",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "MINIMAX_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -21197,7 +23674,150 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": 5
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "MINIMAX_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "adaptive",
+            "value": "adaptive"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_videos",
+        "label": "Reference videos (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_audios",
+        "label": "Reference audios (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "integer",
+        "min": 5,
+        "max": 15,
+        "step": 1,
+        "default": 5
+      }
+    ],
+    "falParams": [
+      {
+        "key": "reference_video_seconds",
+        "label": "Reference video seconds",
+        "required": false,
+        "type": "float",
+        "min": 0,
+        "max": 15,
+        "step": 0.01
+      }
+    ],
+    "directParams": [
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "label": "2K",
+            "value": "2K"
+          },
+          {
+            "label": "768P",
+            "value": "768P"
+          }
+        ],
+        "default": "2K"
+      }
+    ],
+    "directRoute": {
+      "translation": "krea-minimax-h3",
+      "model": "MiniMax-H3",
+      "blockedBy": [
+        "reference_video_seconds"
+      ]
+    }
   },
   'krea-video-minimax-h3-max': {
     "id": "krea-video-minimax-h3-max",
@@ -22842,7 +25462,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/google/veo-3.1",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "GOOGLE_VERTEX_CREDENTIALS",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -23007,7 +25630,124 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "GOOGLE_VERTEX_CREDENTIALS",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "4",
+            "value": 4
+          },
+          {
+            "label": "6",
+            "value": 6
+          },
+          {
+            "label": "8",
+            "value": 8
+          }
+        ],
+        "default": 8
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate audio",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          },
+          {
+            "label": "4K",
+            "value": "4K"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-veo-vertex",
+      "model": "veo-3.1-generate-001"
+    }
   },
   'krea-video-google-veo-3-1-fast': {
     "id": "krea-video-google-veo-3-1-fast",
@@ -23015,7 +25755,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/google/veo-3.1-fast",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "GOOGLE_VERTEX_CREDENTIALS",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -23180,7 +25923,129 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "GOOGLE_VERTEX_CREDENTIALS",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "4",
+            "value": 4
+          },
+          {
+            "label": "6",
+            "value": 6
+          },
+          {
+            "label": "8",
+            "value": 8
+          }
+        ],
+        "default": 8
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate audio",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          },
+          {
+            "label": "4K",
+            "value": "4K"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-veo-vertex",
+      "model": "veo-3.1-fast-generate-001",
+      "rejects": {
+        "resolution": [
+          "4K"
+        ]
+      }
+    }
   },
   'krea-video-google-veo-3-1-lite': {
     "id": "krea-video-google-veo-3-1-lite",
@@ -23188,7 +26053,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/google/veo-3.1-lite",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "GOOGLE_VERTEX_CREDENTIALS",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -23328,7 +26196,106 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "string"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "GOOGLE_VERTEX_CREDENTIALS",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "4",
+            "value": 4
+          },
+          {
+            "label": "6",
+            "value": 6
+          },
+          {
+            "label": "8",
+            "value": 8
+          }
+        ],
+        "default": 8
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-veo-vertex",
+      "model": "veo-3.1-lite-generate-001"
+    }
   },
   'krea-video-google-gemini-omni-flash': {
     "id": "krea-video-google-gemini-omni-flash",
@@ -23474,7 +26441,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/google/gemini-omni-flash-1.1",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "GOOGLE_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -23604,7 +26574,86 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "placeholder": "JSON array or object matching this model"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "GOOGLE_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "integer",
+        "min": 3,
+        "max": 10,
+        "step": 1,
+        "default": 8
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_videos",
+        "label": "Reference videos (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-gemini-omni",
+      "model": "gemini-omni-1.1-flash"
+    }
   },
   'krea-video-bytedance-seedance-1-0-pro': {
     "id": "krea-video-bytedance-seedance-1-0-pro",
@@ -23612,7 +26661,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/bytedance/seedance-1.0-pro",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -23786,7 +26838,149 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "720p"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "9:21",
+            "value": "9:21"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "720p"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "start_video",
+        "label": "Start video",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedance",
+      "model": "seedance-1-0-pro-250528",
+      "blockedBy": [
+        "start_video",
+        "reference_images"
+      ],
+      "accepts": {
+        "aspect_ratio": {
+          "values": [
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16",
+            "21:9"
+          ]
+        },
+        "duration": {
+          "integer": true,
+          "min": 2,
+          "max": 12
+        }
+      },
+      "setup": "fallback"
+    }
   },
   'krea-video-bytedance-seedance-1-0-pro-fast': {
     "id": "krea-video-bytedance-seedance-1-0-pro-fast",
@@ -23794,7 +26988,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/bytedance/seedance-1.0-pro-fast",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -23947,7 +27144,141 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "720p"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "9:21",
+            "value": "9:21"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 2,
+        "max": 12,
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "720p"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "start_video",
+        "label": "Start video",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedance",
+      "model": "seedance-1-0-pro-fast-251015",
+      "blockedBy": [
+        "start_video"
+      ],
+      "accepts": {
+        "aspect_ratio": {
+          "values": [
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16",
+            "21:9"
+          ]
+        },
+        "duration": {
+          "integer": true,
+          "min": 2,
+          "max": 12
+        }
+      },
+      "setup": "fallback"
+    }
   },
   'krea-video-bytedance-seedance-2': {
     "id": "krea-video-bytedance-seedance-2",
@@ -23955,7 +27286,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/bytedance/seedance-2",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -24197,7 +27531,199 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": false
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_videos",
+        "label": "Reference videos (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_audios",
+        "label": "Reference audios (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 4,
+        "max": 15,
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          },
+          {
+            "label": "4k",
+            "value": "4k"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate audio",
+        "required": false,
+        "type": "boolean"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "integer",
+        "min": -9007199254740991,
+        "max": 9007199254740991,
+        "step": 1
+      },
+      {
+        "key": "effects",
+        "label": "Effects (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "upscale",
+        "label": "Upscale",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "enhance_prompt",
+        "label": "Enhance prompt",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedance",
+      "model": "dreamina-seedance-2-0-260128",
+      "blockedBy": [
+        "seed",
+        "effects"
+      ],
+      "accepts": {
+        "duration": {
+          "integer": true,
+          "min": 4,
+          "max": 15
+        },
+        "upscale": {
+          "values": [
+            false
+          ]
+        },
+        "enhance_prompt": {
+          "values": [
+            false
+          ]
+        }
+      },
+      "setup": "fallback"
+    }
   },
   'krea-video-bytedance-seedance-2-fast': {
     "id": "krea-video-bytedance-seedance-2-fast",
@@ -24205,7 +27731,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/bytedance/seedance-2-fast",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -24439,7 +27968,191 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": false
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_videos",
+        "label": "Reference videos (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_audios",
+        "label": "Reference audios (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 4,
+        "max": 15,
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate audio",
+        "required": false,
+        "type": "boolean"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "integer",
+        "min": -9007199254740991,
+        "max": 9007199254740991,
+        "step": 1
+      },
+      {
+        "key": "effects",
+        "label": "Effects (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "upscale",
+        "label": "Upscale",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "enhance_prompt",
+        "label": "Enhance prompt",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedance",
+      "model": "dreamina-seedance-2-0-fast-260128",
+      "blockedBy": [
+        "seed",
+        "effects"
+      ],
+      "accepts": {
+        "duration": {
+          "integer": true,
+          "min": 4,
+          "max": 15
+        },
+        "upscale": {
+          "values": [
+            false
+          ]
+        },
+        "enhance_prompt": {
+          "values": [
+            false
+          ]
+        }
+      },
+      "setup": "fallback"
+    }
   },
   'krea-video-bytedance-seedance-2-mini': {
     "id": "krea-video-bytedance-seedance-2-mini",
@@ -24447,7 +28160,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/bytedance/seedance-2-mini",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -24652,7 +28368,159 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "boolean"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_videos",
+        "label": "Reference videos (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_audios",
+        "label": "Reference audios (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 4,
+        "max": 15,
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate audio",
+        "required": false,
+        "type": "boolean"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "integer",
+        "min": -9007199254740991,
+        "max": 9007199254740991,
+        "step": 1
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedance",
+      "model": "dreamina-seedance-2-0-mini-260615",
+      "blockedBy": [
+        "seed"
+      ],
+      "accepts": {
+        "duration": {
+          "integer": true,
+          "min": 4,
+          "max": 15
+        }
+      },
+      "setup": "fallback"
+    }
   },
   'krea-video-bytedance-seedance-2-5': {
     "id": "krea-video-bytedance-seedance-2-5",
@@ -24660,7 +28528,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/bytedance/seedance-2-5",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "BYTEPLUS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -24898,7 +28769,201 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": false
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "BYTEPLUS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          }
+        ],
+        "default": "16:9"
+      },
+      {
+        "key": "end_image",
+        "label": "End image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_videos",
+        "label": "Reference videos (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "reference_audios",
+        "label": "Reference audios (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 4,
+        "max": 30,
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate audio",
+        "required": false,
+        "type": "boolean"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "integer",
+        "min": -9007199254740991,
+        "max": 9007199254740991,
+        "step": 1
+      },
+      {
+        "key": "effects",
+        "label": "Effects (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "enhance_prompt",
+        "label": "Enhance prompt",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "draft",
+        "label": "Draft",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-seedance",
+      "model": "dreamina-seedance-2-5-260628",
+      "blockedBy": [
+        "seed",
+        "effects"
+      ],
+      "accepts": {
+        "duration": {
+          "integer": true,
+          "min": 4,
+          "max": 30
+        },
+        "enhance_prompt": {
+          "values": [
+            false
+          ]
+        },
+        "draft": {
+          "values": [
+            false
+          ]
+        }
+      },
+      "startShape": {
+        "maker": "BytePlus",
+        "model": "Seedance 2.5",
+        "ratioParam": "aspect_ratio",
+        "imageParam": "start_image"
+      },
+      "setup": "fallback"
+    }
   },
   'krea-video-lightricks-ltx-video-2-3-22b': {
     "id": "krea-video-lightricks-ltx-video-2-3-22b",
@@ -25933,7 +29998,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/runway/gen-4.5",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "RUNWAY_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -26060,7 +30128,134 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "step": 0.01
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "RUNWAY_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "1280:720",
+            "value": "1280:720"
+          },
+          {
+            "label": "720:1280",
+            "value": "720:1280"
+          },
+          {
+            "label": "1104:832",
+            "value": "1104:832"
+          },
+          {
+            "label": "832:1104",
+            "value": "832:1104"
+          },
+          {
+            "label": "960:960",
+            "value": "960:960"
+          },
+          {
+            "label": "1584:672",
+            "value": "1584:672"
+          },
+          {
+            "label": "672:1584",
+            "value": "672:1584"
+          }
+        ],
+        "default": "1280:720"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 2,
+        "max": 10,
+        "step": 0.01,
+        "default": 5
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-runway-gen4-5",
+      "model": "gen4.5",
+      "rejects": {
+        "aspect_ratio": [
+          "672:1584"
+        ]
+      },
+      "rejectsWhen": [
+        {
+          "match": {
+            "aspect_ratio": "1104:832",
+            "start_image": "(unset)"
+          },
+          "label": "text-to-video at 1104:832"
+        },
+        {
+          "match": {
+            "aspect_ratio": "832:1104",
+            "start_image": "(unset)"
+          },
+          "label": "text-to-video at 832:1104"
+        },
+        {
+          "match": {
+            "aspect_ratio": "960:960",
+            "start_image": "(unset)"
+          },
+          "label": "text-to-video at 960:960"
+        },
+        {
+          "match": {
+            "aspect_ratio": "1584:672",
+            "start_image": "(unset)"
+          },
+          "label": "text-to-video at 1584:672"
+        }
+      ]
+    }
   },
   'krea-video-xai-grok-video': {
     "id": "krea-video-xai-grok-video",
@@ -26068,7 +30263,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/xai/grok-video",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "XAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -26243,7 +30441,161 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "type": "string"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "XAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 15,
+        "step": 0.01,
+        "default": 6
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          }
+        ]
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model"
+      },
+      {
+        "key": "edit_video",
+        "label": "Edit video",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "start_video",
+        "label": "Start video",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-xai-video",
+      "model": "grok-imagine-video",
+      "blockedBy": [
+        "start_video"
+      ],
+      "accepts": {
+        "duration": {
+          "integer": true,
+          "min": 1,
+          "max": 15
+        }
+      },
+      "rejectsWhen": [
+        {
+          "match": {
+            "edit_video": "(set)",
+            "start_image": "(set)"
+          },
+          "label": "an edit video with a start image"
+        },
+        {
+          "match": {
+            "edit_video": "(set)",
+            "reference_images": "(set)"
+          },
+          "label": "an edit video with reference images"
+        },
+        {
+          "match": {
+            "start_image": "(set)",
+            "reference_images": "(set)"
+          },
+          "label": "a start image with reference images"
+        }
+      ]
+    }
   },
   'krea-video-xai-grok-video-1-5': {
     "id": "krea-video-xai-grok-video-1-5",
@@ -26251,7 +30603,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "video-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/video/xai/grok-video-1.5",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "XAI_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -26388,7 +30743,114 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "16:9"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "XAI_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "start_image",
+        "label": "Start image",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "duration",
+        "label": "Duration",
+        "required": false,
+        "type": "float",
+        "min": 1,
+        "max": 15,
+        "step": 0.01,
+        "default": 6
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "480p",
+            "value": "480p"
+          },
+          {
+            "label": "720p",
+            "value": "720p"
+          },
+          {
+            "label": "1080p",
+            "value": "1080p"
+          }
+        ],
+        "default": "720p"
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          }
+        ],
+        "default": "16:9"
+      }
+    ],
+    "falParams": [
+      {
+        "key": "start_video",
+        "label": "Start video",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-xai-video",
+      "model": "grok-imagine-video-1.5",
+      "blockedBy": [
+        "start_video"
+      ],
+      "accepts": {
+        "duration": {
+          "integer": true,
+          "min": 1,
+          "max": 15
+        }
+      }
+    }
   },
   'krea-video-black-forest-labs-flux-3-video': {
     "id": "krea-video-black-forest-labs-flux-3-video",
@@ -28477,7 +32939,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "transform",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/enhance/runway/ruby",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "RUNWAY_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -28579,7 +33044,80 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ]
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "RUNWAY_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "output_format",
+        "label": "Output format",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "hdr10",
+            "value": "hdr10"
+          },
+          {
+            "label": "hlg",
+            "value": "hlg"
+          },
+          {
+            "label": "hdr_prores",
+            "value": "hdr_prores"
+          }
+        ],
+        "default": "hdr10"
+      },
+      {
+        "key": "video_url",
+        "label": "Video URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "prores_profile",
+        "label": "Prores profile",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "422",
+            "value": "422"
+          },
+          {
+            "label": "4444",
+            "value": "4444"
+          },
+          {
+            "label": "422 HQ",
+            "value": "422 HQ"
+          }
+        ]
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-runway-ruby",
+      "model": "ruby"
+    }
   },
   'krea-3d-tencent-hunyuan3d-3-1-pro': {
     "id": "krea-3d-tencent-hunyuan3d-3-1-pro",
@@ -29660,7 +34198,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "3d-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/3d/meshy/meshy-7",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "MESHY_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -29782,7 +34323,93 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "[]"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "MESHY_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": false,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "float",
+        "step": 0.01
+      },
+      {
+        "key": "input_mode",
+        "label": "Input mode",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "image",
+            "value": "image"
+          },
+          {
+            "label": "text",
+            "value": "text"
+          }
+        ],
+        "default": "image"
+      },
+      {
+        "key": "generate_texture",
+        "label": "Generate texture",
+        "required": false,
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "target_polycount",
+        "label": "Target polycount",
+        "required": false,
+        "type": "float",
+        "min": 100,
+        "max": 300000,
+        "step": 0.01
+      },
+      {
+        "key": "enable_pbr",
+        "label": "Enable pbr",
+        "required": false,
+        "type": "boolean"
+      },
+      {
+        "key": "image_urls",
+        "label": "Image URLs (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-meshy",
+      "model": "meshy-7"
+    }
   },
   'krea-3d-microsoft-trellis': {
     "id": "krea-3d-microsoft-trellis",
@@ -29912,7 +34539,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/ideogram/ideogram-4.5-precise",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "IDEOGRAM_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -30047,7 +34677,93 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "[]"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "IDEOGRAM_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "required": false,
+        "type": "integer",
+        "min": 0,
+        "max": 2147483647,
+        "step": 1
+      },
+      {
+        "key": "quality",
+        "label": "Quality",
+        "required": false,
+        "type": "enum",
+        "options": [
+          {
+            "label": "very_low",
+            "value": "very_low"
+          },
+          {
+            "label": "low",
+            "value": "low"
+          },
+          {
+            "label": "medium",
+            "value": "medium"
+          },
+          {
+            "label": "high",
+            "value": "high"
+          }
+        ],
+        "default": "high"
+      },
+      {
+        "key": "image_url",
+        "label": "Image URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "key": "mask_url",
+        "label": "Mask URL",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "key": "reference_images",
+        "label": "Reference images (JSON)",
+        "required": false,
+        "type": "textarea",
+        "placeholder": "JSON array or object matching this model",
+        "default": "[]"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-ideogram-precise-edit",
+      "model": "ideogram-4-5"
+    }
   },
   'krea-image-bytedance-seededit': {
     "id": "krea-image-bytedance-seededit",
@@ -30213,7 +34929,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "audio-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/audio/elevenlabs/tts",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "ELEVENLABS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -30288,7 +35007,53 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": "eleven_multilingual_v2"
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "ELEVENLABS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "voice_id",
+        "label": "Voice id",
+        "required": false,
+        "type": "string",
+        "default": "hpp4J3VqNfWAUOO0d1Us"
+      },
+      {
+        "key": "model_id",
+        "label": "Model id",
+        "required": false,
+        "type": "string",
+        "default": "eleven_multilingual_v2"
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-elevenlabs-tts",
+      "model": "eleven_multilingual_v2"
+    }
   },
   'krea-audio-elevenlabs-music': {
     "id": "krea-audio-elevenlabs-music",
@@ -30296,7 +35061,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "audio-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/audio/elevenlabs/music",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "ELEVENLABS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -30373,7 +35141,55 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": false
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "ELEVENLABS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "music_length_ms",
+        "label": "Music length ms",
+        "required": false,
+        "type": "integer",
+        "min": 3000,
+        "max": 600000,
+        "step": 1
+      },
+      {
+        "key": "force_instrumental",
+        "label": "Force instrumental",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-elevenlabs-music",
+      "model": "music_v1"
+    }
   },
   'krea-audio-elevenlabs-music-v2': {
     "id": "krea-audio-elevenlabs-music-v2",
@@ -30381,7 +35197,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "audio-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/audio/elevenlabs/music-v2",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "ELEVENLABS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -30458,7 +35277,55 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": false
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "ELEVENLABS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "music_length_ms",
+        "label": "Music length ms",
+        "required": false,
+        "type": "integer",
+        "min": 3000,
+        "max": 600000,
+        "step": 1
+      },
+      {
+        "key": "force_instrumental",
+        "label": "Force instrumental",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-elevenlabs-music",
+      "model": "music_v2"
+    }
   },
   'krea-audio-elevenlabs-music-v2-5': {
     "id": "krea-audio-elevenlabs-music-v2-5",
@@ -30466,7 +35333,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     "category": "audio-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/audio/elevenlabs/music-v2.5",
-    "envKeyName": "KREA_API_TOKEN",
+    "envKeyName": [
+      "ELEVENLABS_API_KEY",
+      "KREA_API_TOKEN"
+    ],
     "executionPattern": "async-poll",
     "inputPorts": [
       {
@@ -30543,7 +35413,55 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         "default": false
       }
     ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
+    "docUrl": "docs/model-providers/krea/krea-gateway.md",
+    "directKeyName": "ELEVENLABS_API_KEY",
+    "sharedParams": [
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ],
+        "default": "api-token"
+      },
+      {
+        "key": "prompt",
+        "label": "Prompt",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "key": "music_length_ms",
+        "label": "Music length ms",
+        "required": false,
+        "type": "integer",
+        "min": 3000,
+        "max": 600000,
+        "step": 1
+      },
+      {
+        "key": "force_instrumental",
+        "label": "Force instrumental",
+        "required": false,
+        "type": "boolean",
+        "default": false
+      }
+    ],
+    "falParams": [],
+    "directParams": [],
+    "directRoute": {
+      "translation": "krea-elevenlabs-music",
+      "model": "music_v2_5"
+    }
   },
   // END GENERATED KREA CATALOG
 };
