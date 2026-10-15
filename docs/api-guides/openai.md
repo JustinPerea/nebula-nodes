@@ -5,7 +5,7 @@
 ## What you can make
 
 - **Images (text → image)** — Generate pictures from a prompt with GPT Image 1, GPT Image 2 (up to 4K) or GPT Image 2.5 (Flare for speed, Sunburst for precision). Pick size, quality, format, and (on v1 and 2.5) transparent backgrounds.
-- **Image edits & inpainting (image → image)** — Edit an existing image from a prompt, optionally with a mask to change only part of it. GPT Image 2 Edit and GPT Image 2.5 Edit take up to 10 reference images at once.
+- **Image edits & inpainting (image → image)** — Edit an existing image from a prompt, optionally with a mask to change only part of it. GPT Image 2 Edit and GPT Image 2.5 Edit take up to 16 reference images at once (OpenAI's limit for GPT image models).
 - **Speech (text → audio)** — Read any text aloud with 13 voices, 6 audio formats, adjustable speed, and free-text "voice instructions" (tone/accent) on the newest model.
 - **Transcription (audio → text)** — Turn speech into text with Whisper or the GPT-4o transcribe models. Output plain text, JSON, or SRT/VTT subtitle files.
 - **Translation (audio → English text)** — Take spoken audio in any language and get English text back.
@@ -19,14 +19,25 @@
 | GPT Image 2 | `gpt-image-2-generate` | image-gen | `prompt` (Text) | `size` (up to `3840x2160` 4K), `quality`, `output_format`, `output_compression`, `moderation` | Highest-detail text→image with streaming previews |
 | GPT Image 2.5 | `gpt-image-2-5-generate` | image-gen | `prompt` (Text) | `model` (Flare / Sunburst), `size` (to 4K, >2560x1440 experimental), `quality` (adds xhigh / max), `background` (transparent needs png/webp), `output_format`, `output_compression`, `moderation` | Newest OpenAI image model, with transparent backgrounds |
 | GPT Image 1 Edit | `gpt-image-1-edit` | image-gen | `image` (Image), `prompt` (Text), `mask` (Mask) | `model` (2.5 Sunburst default), `n` (1–10, every image kept on `images`), `size`, `quality`, `output_format`, `background` | Edit / inpaint a single image, optional mask |
-| GPT Image 2 Edit | `gpt-image-2-edit` | image-gen | `images` (Image, multiple ≤10), `prompt` (Text), `mask` (Mask) | `size`, `quality`, `output_format`, `output_compression`, `moderation` | Edit / compose from up to 10 reference images |
-| GPT Image 2.5 Edit | `gpt-image-2-5-edit` | image-gen | `images` (Image, multiple ≤10), `prompt` (Text), `mask` (Mask) | same as GPT Image 2.5 | Edit / compose with GPT Image 2.5 |
+| GPT Image 2 Edit | `gpt-image-2-edit` | image-gen | `images` (Image, multiple ≤16), `prompt` (Text), `mask` (Mask) | `size`, `quality`, `output_format`, `output_compression`, `moderation` | Edit / compose from up to 16 reference images |
+| GPT Image 2.5 Edit | `gpt-image-2-5-edit` | image-gen | `images` (Image, multiple ≤16), `prompt` (Text), `mask` (Mask) | same as GPT Image 2.5 | Edit / compose with GPT Image 2.5 |
 | OpenAI TTS | `openai-tts` | audio-gen | `text` (Text) | `model` (tts-1 / tts-1-hd / gpt-4o-mini-tts), `voice` (13), `speed`, `response_format`, `instructions` | Read text aloud in a chosen voice |
 | OpenAI Whisper STT | `openai-stt` | audio-gen | `audio` (Audio) | `model` (whisper-1 / gpt-4o-transcribe / gpt-4o-mini-transcribe), `language`, `response_format` (text/json/srt/vtt), `temperature`, `prompt` | Transcribe speech to text or subtitles |
 | OpenAI Audio Translate | `openai-translate` | audio-gen | `audio` (Audio) | `response_format` (text/json/srt/vtt), `temperature`, `prompt` | Translate spoken audio into English text |
 | OpenAI Chat | `gpt-4o-chat` | text-gen | `messages` (Text), `images` (Image, multiple) | `model` (gpt-5.5 / gpt-5.4 / gpt-5.4-mini / gpt-5.4-nano, plus legacy gpt-4o / gpt-4o-mini / gpt-4.1 / gpt-4.1-mini / gpt-4.1-nano), `reasoning_effort` (gpt-5.x only), `max_completion_tokens`, `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` (legacy models only), `response_format` (text/json_object) | Text reasoning + vision (describe/caption images) |
 
 > DALL-E 3 node removed 2026-06-10 — OpenAI shut down dall-e-2/3 on 2026-05-12; use the GPT Image nodes.
+
+**Your OpenAI key also runs the fal and Krea copies of GPT Image** (since 2026-10-14). With `OPENAI_API_KEY` saved, these nodes call OpenAI's Images API instead of fal or Krea, billed by OpenAI:
+
+| Copy | Node ID | Runs on OpenAI as | Stays on fal / Krea when |
+|---|---|---|---|
+| GPT Image 1.5 / Edit (fal) | `gpt-image-1-5`, `gpt-image-1-5-edit` | `gpt-image-1.5` | from **2026-12-01**, when OpenAI shuts gpt-image-1.5 down |
+| GPT Image 2 / Edit (FAL) | `gpt-image-2-fal-generate`, `gpt-image-2-fal-edit` | `gpt-image-2` | Size is Square (512x512) or a 16:9 preset (576x1024, 1024x576): all under OpenAI's 655,360-pixel minimum |
+| GPT Image 2 (Krea) | `krea-image-openai-gpt-image-2` | `gpt-image-2` | the recipe sets Krea's `width` or `height` |
+| GPT Image 2.5 Flare / Sunburst (Krea) | `krea-image-openai-gpt-image-2-5-flare`, `-sunburst` | `gpt-image-2.5-flare` / `-sunburst` | never (only the Krea plan choice) |
+
+A Krea node set to the Krea plan stays on Krea. Without an OpenAI key, every copy runs on fal or Krea as before. Every fal param has an OpenAI field: `image_size` becomes `size` (fal's 4:3 presets render 1024x768 / 768x1024, Square HD 1024x1024), Count becomes that many calls (first image shown, as on fal), and GPT Image 1.5 Edit's `input_fidelity` is sent. Krea's aspect ratio and 1K/2K/4K become an exact-ratio OpenAI size from a fixed table (`backend/execution/maker_routes_openai.py` `KREA_OPENAI_SIZES`; e.g. 16:9 is 1280x720 / 2048x1152 / 3840x2160, and 4K is above 2560x1440, which OpenAI calls experimental). Krea references must be public https URLs or Nebula outputs; they are sent to `/v1/images/edits`. Prices: the GPT Image 1.5 copies use OpenAI's per-image table; the GPT Image 2 and 2.5 copies' OpenAI route is unpriced (OpenAI tabulates GPT Image 2 only at three sizes the defaults don't hit, and publishes no per-image figure for 2.5), so the run estimate says so.
 
 ## How to use it in Nebula
 
@@ -48,12 +59,12 @@
 | Capability / Endpoint | In the API | In Nebula | Notes |
 |---|---|---|---|
 | Image generation `/v1/images/generations` | yes | full | gpt-image-1, gpt-image-1.5 (via model enum), gpt-image-1-mini, gpt-image-2, gpt-image-2.5-flare, gpt-image-2.5-sunburst all reachable |
-| Image edit / inpaint `/v1/images/edits` | yes | full | Single image (v1) and up to 10 images (v2), with optional mask |
+| Image edit / inpaint `/v1/images/edits` | yes | full | Single image (v1) and up to 16 images (v2), with optional mask |
 | Image variations `/v1/images/variations` (dall-e-2) | yes | none | No variations node; largely moot since OpenAI retired dall-e-2/3 on 2026-05-12 |
 | Image `background: transparent` | yes (GPT image v1, 2.5) | partial | Exposed on GPT Image 1 / Edit and GPT Image 2.5 / Edit (png/webp only); **not** on gpt-image-2 (API doesn't support it there) |
 | Image `n > 1` (multiple per call) | yes | partial | Exposed on GPT Image 1 Edit (Count 1–10); dropped on gpt-image-2 / 2.5 nodes (they stream, and OpenAI rejects `n>1` while streaming) |
 | Image streaming previews (`partial_images`) | yes (0–3) | partial | gpt-image-2 / 2.5 nodes stream partials to the canvas internally, but the count isn't a user param (fixed at 0) |
-| Image `input_fidelity` (edit) | yes | none | Not forwarded; gpt-image-2 always processes inputs at high fidelity |
+| Image `input_fidelity` (edit) | yes | partial | Sent only by GPT Image 1.5 Edit (the fal copy) on the OpenAI route; gpt-image-2 always processes inputs at high fidelity and must omit it |
 | Text-to-speech `/v1/audio/speech` | yes | full | tts-1, tts-1-hd, gpt-4o-mini-tts; 13 voices, 6 formats, speed, instructions |
 | TTS streaming (`stream_format: sse`) | yes (gpt-4o-mini-tts) | none | Node writes the whole audio file; no live audio streaming |
 | Transcription `/v1/audio/transcriptions` | yes | full | whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe; text/json/verbose_json/srt/vtt |

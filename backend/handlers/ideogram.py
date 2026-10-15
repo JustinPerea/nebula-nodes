@@ -28,14 +28,15 @@ from __future__ import annotations
 
 import base64
 import json
-from pathlib import Path
 from typing import Any, Awaitable, Callable
+from urllib.parse import quote, urlsplit
 
 import httpx
 
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
-from services.file_access import require_allowed_path
+from services.maker_sizes import IDEOGRAM_V3_RESOLUTIONS as _V3_RESOLUTIONS
+from services.media_input import load_media
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
 
@@ -50,26 +51,15 @@ IDEOGRAM_V4_RESOLUTIONS = frozenset(
         "3072x1280", "1024x3072", "3072x1024",
     }
 )
-IDEOGRAM_V3_RESOLUTIONS = frozenset(
-    {
-        "512x1536", "576x1408", "576x1472", "576x1536", "640x1344",
-        "640x1408", "640x1472", "640x1536", "704x1152", "704x1216",
-        "704x1280", "704x1344", "704x1408", "704x1472", "736x1312",
-        "768x1088", "768x1216", "768x1280", "768x1344", "800x1280",
-        "832x960", "832x1024", "832x1088", "832x1152", "832x1216",
-        "832x1248", "864x1152", "896x960", "896x1024", "896x1088",
-        "896x1120", "896x1152", "960x832", "960x896", "960x1024",
-        "960x1088", "1024x832", "1024x896", "1024x960", "1024x1024",
-        "1088x768", "1088x832", "1088x896", "1088x960", "1120x896",
-        "1152x704", "1152x832", "1152x864", "1152x896", "1216x704",
-        "1216x768", "1216x832", "1248x832", "1280x704", "1280x768",
-        "1280x800", "1312x736", "1344x640", "1344x704", "1344x768",
-        "1408x576", "1408x640", "1408x704", "1472x576", "1472x640",
-        "1472x704", "1536x512", "1536x576", "1536x640",
-    }
-)
+# Ideogram 3.0's resolutions live in services/maker_sizes.py (the Krea copy's
+# maker route snaps to the same list).
+IDEOGRAM_V3_RESOLUTIONS = frozenset(_V3_RESOLUTIONS)
 IDEOGRAM_DIRECT_RENDERING_SPEEDS = frozenset({"TURBO", "DEFAULT", "QUALITY"})
 IDEOGRAM_CHARACTER_STYLES = frozenset({"AUTO", "REALISTIC", "FICTION"})
+
+# "The image being edited (max size 25MB)"; reference images "max size 25MB
+# per image" (developer.ideogram.ai edit-v3 reference, read 2026-10-14).
+MAX_INPUT_IMAGE_BYTES = 25_000_000
 
 _MIME_BY_SUFFIX = {
     "png": "image/png",
@@ -87,22 +77,19 @@ def _require_key(api_keys: dict[str, str]) -> str:
 
 
 async def _load_binary(value: str) -> tuple[bytes, str]:
-    """Resolve an image reference (data URI / URL / local path) to (bytes, mime)."""
-    if value.startswith("data:"):
-        header, _, b64_data = value.partition(",")
-        mime = header.split(":", 1)[1].split(";", 1)[0] if ":" in header else "image/png"
-        return base64.b64decode(b64_data), mime
-    if value.startswith(("http://", "https://")):
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.get(value, follow_redirects=True)
-            resp.raise_for_status()
-        mime = resp.headers.get("content-type", "image/png").split(";", 1)[0]
-        return resp.content, mime
-    path = Path(value)
-    if not path.exists():
-        raise ValueError(f"Image file not found: {value}")
-    mime = _MIME_BY_SUFFIX.get(path.suffix.lstrip(".").lower(), "image/png")
-    return require_allowed_path(path).read_bytes(), mime
+    """Resolve an image reference (data URI / URL / owned output / local path) to (bytes, mime).
+
+    Shared by the first-party Ideogram nodes and the Krea copies routed here
+    (execution/maker_routes_ideogram_runway.py), whose URLs come from saved
+    params. services.media_input.load_media fetches a URL only from a public
+    https host (each redirect re-checked), resolves /api/outputs refs to their
+    files, and checks local paths against the file policy and the size cap
+    before reading."""
+    content, mime = await load_media(value, label="Ideogram image input", max_bytes=MAX_INPUT_IMAGE_BYTES)
+    if not mime.startswith("image/"):
+        suffix = urlsplit(value).path.rsplit(".", 1)[-1].lower() if not value.startswith("data:") else ""
+        mime = _MIME_BY_SUFFIX.get(suffix, "image/png")
+    return content, mime
 
 
 async def _file_part(field: str, value: str) -> tuple[str, tuple[str, bytes, str]]:
@@ -641,7 +628,7 @@ async def handle_ideogram_train_model(
 
     # 2. Upload the training assets (repeated `files` parts).
     files = [await _file_part("files", ref) for ref in refs]
-    upload = await _post_multipart(f"/datasets/{dataset_id}/upload_assets", api_key, {}, files)
+    upload = await _post_multipart(f"/datasets/{quote(str(dataset_id), safe='')}/upload_assets", api_key, {}, files)
     if upload.get("success_count", 0) == 0:
         raise RuntimeError(f"Ideogram asset upload failed: {upload}")
 
@@ -661,7 +648,7 @@ async def handle_ideogram_train_model(
         for poll_num in range(1, max_polls + 1):
             await asyncio.sleep(poll_interval)
             resp = await client.get(
-                f"{IDEOGRAM_API_BASE}/models/{model_id}", headers={"Api-Key": api_key}
+                f"{IDEOGRAM_API_BASE}/models/{quote(str(model_id), safe='')}", headers={"Api-Key": api_key}
             )
             if resp.status_code != 200:
                 raise RuntimeError(f"Ideogram model poll failed ({resp.status_code}): {resp.text}")

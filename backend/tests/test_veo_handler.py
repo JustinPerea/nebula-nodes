@@ -330,7 +330,7 @@ async def test_vertex_extension_sends_saved_clip_bytes(tmp_path):
     clip.write_bytes(b"CLIP")
     mock = _VertexMock()
     a, b, c, d = _vertex_patches(mock, tmp_path)
-    with a, b, c, d, patch("handlers.veo.require_allowed_path", side_effect=lambda p: p):
+    with a, b, c, d:
         await handle_veo(
             _make_node({"model": "veo-3.1-fast-generate-001", "resolution": "1080p"}),
             {"prompt": PortValueDict(type="Text", value="go on"), "video": PortValueDict(type="Video", value=str(clip))},
@@ -537,7 +537,7 @@ async def test_vertex_extends_with_lite(tmp_path):
     clip.write_bytes(b"CLIP")
     mock = _VertexMock()
     a, b, c, d = _vertex_patches(mock, tmp_path)
-    with a, b, c, d, patch("handlers.veo.require_allowed_path", side_effect=lambda p: p):
+    with a, b, c, d:
         await handle_veo(
             _make_node({"model": "veo-3.1-lite-generate-001"}),
             {"prompt": PortValueDict(type="Text", value="go on"), "video": PortValueDict(type="Video", value=str(clip))},

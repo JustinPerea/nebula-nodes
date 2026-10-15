@@ -4,6 +4,7 @@ import { NodeRunStatus } from '../../src/components/nodes/NodeRunStatus';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { runRouteProvider } from '../../src/lib/modelDiscovery';
 import { formatElapsed } from '../../src/lib/runStatus';
+import { useGraphStore } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
 import type { NodeData } from '../../src/types';
 
@@ -54,5 +55,20 @@ describe('NodeRunStatus', () => {
     expect(container.querySelector('.model-node__progress-bar')).not.toBeNull();
     rerender(<NodeRunStatus data={data({ state: 'complete' })} definition={definition} />);
     expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('names the copy when a Krea-only input arrives by wire, as the router and the estimate do', () => {
+    const definition = NODE_DEFINITIONS['krea-video-xai-grok-video-1-5'];
+    useUIStore.setState({ settingsCache: { apiKeys: { XAI_API_KEY: 'k', KREA_API_TOKEN: 'k' }, loaded: true } });
+    const running = data({ definitionId: definition.id, state: 'executing', progress: 0, runStartedAt: Date.now() });
+    useGraphStore.setState({ edges: [] });
+    const { rerender } = render(<NodeRunStatus data={running} definition={definition} nodeId="grok" />);
+    expect(screen.getByRole('status').textContent).toBe('xAI · 0s');
+    act(() => {
+      useGraphStore.setState({ edges: [{ id: 'e', source: 'clip', target: 'grok', sourceHandle: 'video', targetHandle: 'start_video' }] });
+    });
+    rerender(<NodeRunStatus data={running} definition={definition} nodeId="grok" />);
+    expect(screen.getByRole('status').textContent).toBe('Krea · 0s');
+    useGraphStore.setState({ edges: [] });
   });
 });

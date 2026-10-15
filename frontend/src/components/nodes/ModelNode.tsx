@@ -526,7 +526,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      <NodeRunStatus data={nodeData} definition={definition} />
+      <NodeRunStatus data={nodeData} definition={definition} nodeId={id} />
 
       {showCompare && compareBefore && compareAfter && (
         <div className="model-node__preview">

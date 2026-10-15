@@ -1,5 +1,5 @@
 {
-  "about": "Route selection cases shared by backend/services/node_route.py select_route and frontend/src/lib/directRoute.ts selectRoute, against the real node catalog. paramKeys (when given) are the params that route shows and sends, sorted. Each case runs on its 'today' (YYYY-MM-DD), else on defaultToday, so date-gated routes (node_route.DIRECT_RETIRES) don't flip when the calendar does.",
+  "about": "Route selection cases shared by backend/services/node_route.py select_route and frontend/src/lib/directRoute.ts selectRoute, against the real node catalog. paramKeys (when given) are the params that route shows and sends, sorted. wired (when given) are input ports with a value, added to params as with_wired_blockers / withWiredBlockers do before routing. block (when given) is direct_block / directBlock for those params: null, or its reason, param, and detail / on when set. Each case runs on its 'today' (YYYY-MM-DD), else on defaultToday, so date-gated routes (node_route.DIRECT_RETIRES) don't flip when the calendar does.",
   "defaultToday": "2026-10-14",
   "cases": [
     {
@@ -162,7 +162,7 @@
     },
     {
       "name": "a Krea node without a maker route stays on Krea",
-      "nodeId": "krea-image-openai-gpt-image-2",
+      "nodeId": "krea-image-openai-gpt-image",
       "params": {},
       "apiKeys": {
         "OPENAI_API_KEY": "fixture-only",
@@ -216,6 +216,10 @@
         "kind": "fallback",
         "provider": "fal",
         "key": "FAL_KEY"
+      },
+      "block": {
+        "reason": "requires",
+        "param": "resolution"
       }
     },
     {
@@ -321,7 +325,12 @@
         "resolution",
         "seed",
         "thinking_level"
-      ]
+      ],
+      "block": {
+        "reason": "retired",
+        "param": "model",
+        "on": "2027-03-15"
+      }
     },
     {
       "name": "fal's 2.5 Flash Image alias runs on fal after the shutdown too",
@@ -445,6 +454,2371 @@
         "kind": "direct",
         "provider": "google",
         "key": "GOOGLE_API_KEY"
+      }
+    },
+    {
+      "name": "Veo 3.1 Fast's Krea copy runs on Vertex at 1080p",
+      "nodeId": "krea-video-google-veo-3-1-fast",
+      "params": {
+        "_kreaAuth": "api-token",
+        "resolution": "1080p"
+      },
+      "apiKeys": {
+        "GOOGLE_VERTEX_CREDENTIALS": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_VERTEX_CREDENTIALS"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "duration",
+        "end_image",
+        "generate_audio",
+        "prompt",
+        "reference_images",
+        "resolution",
+        "start_image"
+      ],
+      "block": null
+    },
+    {
+      "name": "Veo 3.1 Fast at 4K stays on Krea (Vertex renders Fast at 720p and 1080p)",
+      "nodeId": "krea-video-google-veo-3-1-fast",
+      "params": {
+        "_kreaAuth": "api-token",
+        "resolution": "4K"
+      },
+      "apiKeys": {
+        "GOOGLE_VERTEX_CREDENTIALS": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "resolution",
+        "detail": "resolution 4K"
+      }
+    },
+    {
+      "name": "Veo 3.1 at 4K runs on Vertex (Standard renders 4K)",
+      "nodeId": "krea-video-google-veo-3-1",
+      "params": {
+        "resolution": "4K"
+      },
+      "apiKeys": {
+        "GOOGLE_VERTEX_CREDENTIALS": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_VERTEX_CREDENTIALS"
+      }
+    },
+    {
+      "name": "a Gemini API key alone doesn't move Krea's Veo off Krea",
+      "nodeId": "krea-video-google-veo-3-1-lite",
+      "params": {},
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "Gemini Omni Flash 1.1's Krea copy runs on the Gemini API",
+      "nodeId": "krea-video-google-gemini-omni-flash-1-1",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_API_KEY"
+      }
+    },
+    {
+      "name": "the Krea plan keeps Nano Banana 2.1 on Krea",
+      "nodeId": "krea-image-google-nano-banana-2-1",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Identity Edit runs on Google with a Google key",
+      "nodeId": "identity-edit",
+      "params": {
+        "resolution": "1024"
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_API_KEY"
+      },
+      "paramKeys": [
+        "identity_strength",
+        "resolution",
+        "thinking_level"
+      ]
+    },
+    {
+      "name": "Identity Edit stays on fal without a Google key",
+      "nodeId": "identity-edit",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "Nano Banana 2.1's Krea copy runs on the Gemini API with a Google key",
+      "nodeId": "krea-image-google-nano-banana-2-1",
+      "params": {
+        "_kreaAuth": "api-token",
+        "resolution": "2K",
+        "thinking_level": "high"
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "image_urls",
+        "prompt",
+        "resolution",
+        "thinking_level"
+      ]
+    },
+    {
+      "name": "Nano Banana 2.1 with an explicit width stays on Krea (Google can't render an exact size)",
+      "nodeId": "krea-image-google-nano-banana-2-1",
+      "params": {
+        "_kreaAuth": "api-token",
+        "width": 1200
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "height",
+        "image_urls",
+        "prompt",
+        "resolution",
+        "thinking_level",
+        "width"
+      ]
+    },
+    {
+      "name": "the Krea plan keeps Veo 3.1 on Krea even with Vertex credentials",
+      "nodeId": "krea-video-google-veo-3-1",
+      "params": {
+        "_kreaAuth": "mcp",
+        "resolution": "1080p"
+      },
+      "apiKeys": {
+        "GOOGLE_VERTEX_CREDENTIALS": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "GPT Image 1.5's fal copy runs on OpenAI with the OpenAI key",
+      "nodeId": "gpt-image-1-5",
+      "params": {},
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "openai",
+        "key": "OPENAI_API_KEY"
+      },
+      "paramKeys": [
+        "background",
+        "image_size",
+        "num_images",
+        "output_format",
+        "quality"
+      ]
+    },
+    {
+      "name": "GPT Image 1.5 Edit leaves OpenAI on its Dec 1, 2026 shutdown",
+      "nodeId": "gpt-image-1-5-edit",
+      "params": {},
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "today": "2026-12-01",
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "GPT Image 1.5 still runs on OpenAI the day before its shutdown",
+      "nodeId": "gpt-image-1-5",
+      "params": {},
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "today": "2026-11-30",
+      "expected": {
+        "kind": "direct",
+        "provider": "openai",
+        "key": "OPENAI_API_KEY"
+      }
+    },
+    {
+      "name": "GPT Image 2's fal copy runs on OpenAI at its default size",
+      "nodeId": "gpt-image-2-fal-generate",
+      "params": {},
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "openai",
+        "key": "OPENAI_API_KEY"
+      }
+    },
+    {
+      "name": "a fal size OpenAI can't render keeps GPT Image 2 on fal",
+      "nodeId": "gpt-image-2-fal-edit",
+      "params": {
+        "image_size": "landscape_16_9"
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "with only the OpenAI key, a fal-only size has no route",
+      "nodeId": "gpt-image-2-fal-generate",
+      "params": {
+        "image_size": "square"
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null
+      }
+    },
+    {
+      "name": "Krea's GPT Image 2 runs on OpenAI with the OpenAI key",
+      "nodeId": "krea-image-openai-gpt-image-2",
+      "params": {
+        "aspect_ratio": "16:9",
+        "resolution": "2K"
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "openai",
+        "key": "OPENAI_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "image_urls",
+        "prompt",
+        "quality",
+        "resolution"
+      ]
+    },
+    {
+      "name": "an explicit Krea width keeps GPT Image 2 on Krea",
+      "nodeId": "krea-image-openai-gpt-image-2",
+      "params": {
+        "width": 1920
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "height",
+        "image_urls",
+        "prompt",
+        "quality",
+        "resolution",
+        "width"
+      ]
+    },
+    {
+      "name": "the Krea plan wins over the OpenAI key on GPT Image 2.5 Flare",
+      "nodeId": "krea-image-openai-gpt-image-2-5-flare",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "GPT Image 2.5 Sunburst's Krea copy runs on OpenAI",
+      "nodeId": "krea-image-openai-gpt-image-2-5-sunburst",
+      "params": {},
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "openai",
+        "key": "OPENAI_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "image_urls",
+        "prompt",
+        "quality",
+        "resolution"
+      ]
+    },
+    {
+      "name": "GPT Image 2's fal Portrait 16:9 preset stays on fal",
+      "nodeId": "gpt-image-2-fal-generate",
+      "params": {
+        "image_size": "portrait_16_9"
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "GPT Image 2's fal Square preset stays on fal",
+      "nodeId": "gpt-image-2-fal-edit",
+      "params": {
+        "image_size": "square"
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "image_size",
+        "detail": "image_size square"
+      }
+    },
+    {
+      "name": "GPT Image 2's fal Square HD preset runs on OpenAI",
+      "nodeId": "gpt-image-2-fal-edit",
+      "params": {
+        "image_size": "square_hd"
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "openai",
+        "key": "OPENAI_API_KEY"
+      }
+    },
+    {
+      "name": "GPT Image 1.5 stays on fal without the OpenAI key",
+      "nodeId": "gpt-image-1-5-edit",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "Krea's GPT Image 2 stays on the Krea token without the OpenAI key",
+      "nodeId": "krea-image-openai-gpt-image-2",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "the Krea plan wins over the OpenAI key on GPT Image 2",
+      "nodeId": "krea-image-openai-gpt-image-2",
+      "params": {
+        "_kreaAuth": "mcp",
+        "aspect_ratio": "16:9"
+      },
+      "apiKeys": {
+        "OPENAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "xAI key wins over the fal key on Grok Imagine",
+      "nodeId": "grok-imagine-image",
+      "params": {},
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "xai",
+        "key": "XAI_API_KEY"
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "num_images",
+        "resolution"
+      ]
+    },
+    {
+      "name": "a fal Grok recipe that asks for PNG stays on fal (xAI returns JPEG and has no format field)",
+      "nodeId": "grok-imagine-image",
+      "params": {
+        "output_format": "png"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "output_format",
+        "detail": "output_format png"
+      }
+    },
+    {
+      "name": "a fal Grok edit saved with JPEG output runs on xAI",
+      "nodeId": "grok-imagine-image-edit",
+      "params": {
+        "output_format": "jpeg"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "xai",
+        "key": "XAI_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "with only the xAI key, a fal Grok edit that asks for WebP has no route",
+      "nodeId": "grok-imagine-image-edit",
+      "params": {
+        "output_format": "webp"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null
+      }
+    },
+    {
+      "name": "Grok Imagine Edit on fal keeps output_format",
+      "nodeId": "grok-imagine-image-edit",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "paramKeys": [
+        "num_images",
+        "output_format",
+        "resolution"
+      ]
+    },
+    {
+      "name": "xAI key wins over the Krea token on Grok Imagine 2.0",
+      "nodeId": "krea-image-xai-grok-imagine-2",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "xai",
+        "key": "XAI_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "prompt",
+        "quality",
+        "resolution"
+      ]
+    },
+    {
+      "name": "saved Krea style images keep Grok Imagine 2.0 on Krea",
+      "nodeId": "krea-image-xai-grok-imagine-2",
+      "params": {
+        "style_images": "[{\"url\": \"https://example.com/s.png\", \"strength\": 1}]"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "prompt",
+        "quality",
+        "resolution",
+        "style_images"
+      ]
+    },
+    {
+      "name": "the Krea plan wins over the xAI key on Grok Imagine video",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "a start video keeps Grok Imagine 1.5 on Krea",
+      "nodeId": "krea-video-xai-grok-video-1-5",
+      "params": {
+        "start_video": "https://example.com/v.mp4"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "only an xAI key and a start video on Grok Imagine 1.5: no route",
+      "nodeId": "krea-video-xai-grok-video-1-5",
+      "params": {
+        "start_video": "https://example.com/v.mp4"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "a start video keeps Grok Imagine on Krea",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "start_video": "https://example.com/v.mp4"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "xAI key wins over the fal key on Grok Imagine Edit, without output_format",
+      "nodeId": "grok-imagine-image-edit",
+      "params": {},
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "xai",
+        "key": "XAI_API_KEY"
+      },
+      "paramKeys": [
+        "num_images",
+        "resolution"
+      ]
+    },
+    {
+      "name": "xAI key wins over the Krea token on Grok Imagine 2.0 Edit",
+      "nodeId": "krea-image-xai-grok-imagine-2-edit",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "xai",
+        "key": "XAI_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "image_urls",
+        "prompt",
+        "quality",
+        "resolution"
+      ]
+    },
+    {
+      "name": "the Krea plan wins over the xAI key on Grok Imagine 2.0 Edit",
+      "nodeId": "krea-image-xai-grok-imagine-2-edit",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "an Ideogram key runs Krea's Ideogram 3 on Ideogram, without Krea's style images",
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "ideogram",
+        "key": "IDEOGRAM_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "character_reference_images",
+        "height",
+        "prompt",
+        "seed",
+        "width"
+      ]
+    },
+    {
+      "name": "Krea style images keep Ideogram 3 on Krea",
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "params": {
+        "style_images": "[{\"url\":\"https://example.com/s.png\",\"strength\":1}]"
+      },
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "character_reference_images",
+        "height",
+        "prompt",
+        "seed",
+        "style_images",
+        "width"
+      ],
+      "block": {
+        "reason": "blocked",
+        "param": "style_images"
+      }
+    },
+    {
+      "name": "Krea style images with only an Ideogram key need the Krea token",
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "params": {
+        "style_images": "[{\"url\":\"https://example.com/s.png\",\"strength\":1}]"
+      },
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "an Ideogram key runs Krea's Ideogram 4.5 Precise on Ideogram",
+      "nodeId": "krea-image-ideogram-ideogram-4-5-precise",
+      "params": {},
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "ideogram",
+        "key": "IDEOGRAM_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "image_url",
+        "mask_url",
+        "prompt",
+        "quality",
+        "reference_images",
+        "seed"
+      ]
+    },
+    {
+      "name": "the Krea plan wins over an Ideogram key",
+      "nodeId": "krea-image-ideogram-ideogram-2-turbo",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "a Runway key runs Krea's Gen-4.5 on Runway",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "duration",
+        "prompt",
+        "seed",
+        "start_image"
+      ]
+    },
+    {
+      "name": "the Krea plan wins over a Runway key",
+      "nodeId": "krea-enhance-runway-ruby",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Krea runs Gen-4 Image without a Runway key",
+      "nodeId": "krea-image-runway-gen-4-image",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "height",
+        "prompt",
+        "reference_images",
+        "seed",
+        "width"
+      ]
+    },
+    {
+      "name": "Krea's Gen-4 video copy has no maker route",
+      "nodeId": "krea-video-runway-gen-4-video",
+      "params": {},
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "only",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "a MiniMax key runs Krea's Hailuo 02 on MiniMax",
+      "nodeId": "krea-video-minimax-hailuo-02",
+      "params": {
+        "_kreaAuth": "api-token",
+        "resolution": "1080p",
+        "duration": 6
+      },
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "minimax",
+        "key": "MINIMAX_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "duration",
+        "end_image",
+        "expand_prompt",
+        "prompt",
+        "resolution",
+        "start_image"
+      ]
+    },
+    {
+      "name": "a duration MiniMax doesn't sell stays on Krea",
+      "nodeId": "krea-video-minimax-hailuo-02",
+      "params": {
+        "duration": 8
+      },
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "duration",
+        "detail": "duration 8"
+      }
+    },
+    {
+      "name": "1080p at 10 seconds stays on Krea",
+      "nodeId": "krea-video-minimax-hailuo-2-3",
+      "params": {
+        "resolution": "1080p",
+        "duration": 10
+      },
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "resolution",
+        "detail": "1080p at 10 seconds"
+      }
+    },
+    {
+      "name": "a saved end image keeps Hailuo 2.3 Fast on Krea",
+      "nodeId": "krea-video-minimax-hailuo-2-3-fast",
+      "params": {
+        "end_image": "https://example.com/end.png"
+      },
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "H3 on MiniMax shows the direct resolution, not Krea's reference seconds",
+      "nodeId": "krea-video-minimax-hailuo-3",
+      "params": {},
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "minimax",
+        "key": "MINIMAX_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "duration",
+        "end_image",
+        "prompt",
+        "reference_audios",
+        "reference_images",
+        "reference_videos",
+        "resolution",
+        "start_image"
+      ]
+    },
+    {
+      "name": "H3 reference seconds with only a MiniMax key has no route",
+      "nodeId": "krea-video-minimax-hailuo-3",
+      "params": {
+        "reference_video_seconds": 3
+      },
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "the Krea plan keeps Meshy 7 on Krea over a Meshy key",
+      "nodeId": "krea-3d-meshy-meshy-7",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "MESHY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "a Meshy key runs Krea's Meshy 7 on Meshy",
+      "nodeId": "krea-3d-meshy-meshy-7",
+      "params": {},
+      "apiKeys": {
+        "MESHY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "meshy",
+        "key": "MESHY_API_KEY"
+      }
+    },
+    {
+      "name": "Runway TTS with only a Runway voice preset stays on Runway",
+      "nodeId": "runway-tts",
+      "params": {
+        "voiceId": "Maya"
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "paramKeys": [
+        "voiceId"
+      ]
+    },
+    {
+      "name": "Runway TTS with an ElevenLabs voice runs on ElevenLabs",
+      "nodeId": "runway-tts",
+      "params": {
+        "voiceId": "Maya",
+        "voice_id": "pNInz6obpgDQGcFmaJgB"
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "paramKeys": [
+        "voice_id"
+      ]
+    },
+    {
+      "name": "Runway speech-to-speech without a voice_id and only the ElevenLabs key has no route",
+      "nodeId": "runway-sts",
+      "params": {},
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "runway",
+        "key": null
+      }
+    },
+    {
+      "name": "Runway dubbing runs on ElevenLabs with the key",
+      "nodeId": "runway-dubbing",
+      "params": {},
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "paramKeys": [
+        "disableVoiceCloning",
+        "dropBackgroundAudio",
+        "numSpeakers",
+        "targetLang"
+      ]
+    },
+    {
+      "name": "fal ElevenLabs Music runs on ElevenLabs with the key",
+      "nodeId": "elevenlabs-music",
+      "params": {},
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "paramKeys": [
+        "force_instrumental",
+        "model_id",
+        "music_length_ms"
+      ]
+    },
+    {
+      "name": "fal ElevenLabs Music on fal never shows model_id",
+      "nodeId": "elevenlabs-music",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "paramKeys": [
+        "force_instrumental",
+        "music_length_ms"
+      ]
+    },
+    {
+      "name": "the Krea plan keeps Krea ElevenLabs TTS on Krea",
+      "nodeId": "krea-audio-elevenlabs-tts",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Krea ElevenLabs Music v2.5 runs on ElevenLabs with the key",
+      "nodeId": "krea-audio-elevenlabs-music-v2-5",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "force_instrumental",
+        "music_length_ms",
+        "prompt"
+      ]
+    },
+    {
+      "name": "Krea ElevenLabs TTS on the API token runs on ElevenLabs with the key",
+      "nodeId": "krea-audio-elevenlabs-tts",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "model_id",
+        "prompt",
+        "voice_id"
+      ]
+    },
+    {
+      "name": "Krea ElevenLabs Music runs on Krea without the ElevenLabs key",
+      "nodeId": "krea-audio-elevenlabs-music",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only",
+        "ELEVENLABS_API_KEY": "  "
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "a cleared ElevenLabs voice_id keeps Runway TTS on Runway",
+      "nodeId": "runway-tts",
+      "params": {
+        "voiceId": "Maya",
+        "voice_id": ""
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "paramKeys": [
+        "voiceId"
+      ]
+    },
+    {
+      "name": "Runway speech-to-speech with an ElevenLabs voice sends only the shared and ElevenLabs params",
+      "nodeId": "runway-sts",
+      "params": {
+        "voiceId": "Maya",
+        "voice_id": "pNInz6obpgDQGcFmaJgB",
+        "removeBackgroundNoise": true
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "paramKeys": [
+        "removeBackgroundNoise",
+        "voice_id"
+      ]
+    },
+    {
+      "name": "Runway dubbing stays on Runway without the ElevenLabs key",
+      "nodeId": "runway-dubbing",
+      "params": {},
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "paramKeys": [
+        "disableVoiceCloning",
+        "dropBackgroundAudio",
+        "numSpeakers",
+        "targetLang"
+      ]
+    },
+    {
+      "name": "Seedream runs on BytePlus with the BytePlus key",
+      "nodeId": "seedream-4-5",
+      "params": {},
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      },
+      "paramKeys": [
+        "image_size",
+        "max_images",
+        "model",
+        "num_images"
+      ]
+    },
+    {
+      "name": "Seedream stays on fal without the BytePlus key",
+      "nodeId": "seedream-4-5",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "paramKeys": [
+        "enable_safety_checker",
+        "image_size",
+        "max_images",
+        "model",
+        "num_images",
+        "seed"
+      ]
+    },
+    {
+      "name": "a saved Seedream seed keeps the run on fal",
+      "nodeId": "seedream-4-5",
+      "params": {
+        "seed": 7
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "block": {
+        "reason": "blocked",
+        "param": "seed"
+      }
+    },
+    {
+      "name": "fal's 512px Square has no BytePlus size",
+      "nodeId": "seedream-4-5",
+      "params": {
+        "image_size": "square"
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "block": {
+        "reason": "size",
+        "param": "image_size"
+      }
+    },
+    {
+      "name": "a Seedream size under BytePlus's pixel minimum stays on fal",
+      "nodeId": "seedream-4-5",
+      "params": {
+        "image_size": {
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "a Seedream size BytePlus takes goes direct",
+      "nodeId": "seedream-4-5",
+      "params": {
+        "image_size": {
+          "width": 4096,
+          "height": 1714
+        }
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      }
+    },
+    {
+      "name": "a Krea Seedream size inside the model's window goes to BytePlus",
+      "nodeId": "krea-image-bytedance-seedream-4",
+      "params": {
+        "_kreaAuth": "api-token",
+        "width": 2048,
+        "height": 2048
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "height",
+        "prompt",
+        "width"
+      ]
+    },
+    {
+      "name": "a Krea Seedream 5 Lite size under 3.69 MP stays on Krea",
+      "nodeId": "krea-image-bytedance-seedream-5-lite",
+      "params": {
+        "width": 1024,
+        "height": 1024
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "height",
+        "prompt",
+        "seed",
+        "style_images",
+        "width"
+      ],
+      "block": {
+        "reason": "size",
+        "param": "width"
+      }
+    },
+    {
+      "name": "a fractional Krea size stays on Krea",
+      "nodeId": "krea-image-bytedance-seedream-4",
+      "params": {
+        "width": 1024.5,
+        "height": 1024
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "a Krea Seedream recipe with its own seed stays on Krea (ModelArk has no seed)",
+      "nodeId": "krea-image-bytedance-seedream-4",
+      "params": {
+        "_kreaAuth": "api-token",
+        "width": 2048,
+        "height": 2048,
+        "seed": 42
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "seed",
+        "detail": "seed 42"
+      }
+    },
+    {
+      "name": "a Krea Seedream recipe at Krea's default seed (saved as a float) still goes to BytePlus",
+      "nodeId": "krea-image-bytedance-seedream-5-pro",
+      "params": {
+        "_kreaAuth": "api-token",
+        "width": 1024,
+        "height": 1024,
+        "seed": 1337.0
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "Krea style images keep Seedream on Krea",
+      "nodeId": "krea-image-bytedance-seedream-5-pro",
+      "params": {
+        "width": 2048,
+        "height": 2048,
+        "style_images": "[{\"strength\": 1}]"
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "the Krea plan wins over the BytePlus key",
+      "nodeId": "krea-image-bytedance-seedream-5-pro",
+      "params": {
+        "_kreaAuth": "mcp",
+        "width": 2048,
+        "height": 2048
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Seedance 2.0 on fal runs on BytePlus with the BytePlus key",
+      "nodeId": "seedance-2-t2v",
+      "params": {},
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "duration",
+        "generate_audio",
+        "resolution"
+      ]
+    },
+    {
+      "name": "a saved seed keeps Seedance 2.0 on fal (BytePlus has seed on 1.x only)",
+      "nodeId": "seedance-2-i2v",
+      "params": {
+        "seed": 7
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "duration",
+        "generate_audio",
+        "resolution",
+        "seed"
+      ]
+    },
+    {
+      "name": "Seedance 1.5/1.0 on fal sends seed and camera_fixed to BytePlus",
+      "nodeId": "seedance-v1-5",
+      "params": {
+        "model": "1.0",
+        "seed": 7
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "camera_fixed",
+        "duration",
+        "generate_audio",
+        "model",
+        "resolution",
+        "seed"
+      ]
+    },
+    {
+      "name": "Seedance 1.0 T2V's safety checker stays on fal",
+      "nodeId": "seedance-1-0-t2v",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      },
+      "paramKeys": [
+        "aspect_ratio",
+        "camera_fixed",
+        "duration",
+        "enable_safety_checker",
+        "resolution",
+        "seed"
+      ]
+    },
+    {
+      "name": "a Krea Seedance on the Krea plan ignores the BytePlus key",
+      "nodeId": "krea-video-bytedance-seedance-2",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "a Krea Seedance on the API token runs on BytePlus",
+      "nodeId": "krea-video-bytedance-seedance-2-mini",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      },
+      "paramKeys": [
+        "_kreaAuth",
+        "aspect_ratio",
+        "duration",
+        "end_image",
+        "generate_audio",
+        "prompt",
+        "reference_audios",
+        "reference_images",
+        "reference_videos",
+        "resolution",
+        "start_image"
+      ]
+    },
+    {
+      "name": "Krea's upscale switched on keeps Seedance 2.0 on Krea",
+      "nodeId": "krea-video-bytedance-seedance-2",
+      "params": {
+        "upscale": true
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "Krea's upscale left off still runs Seedance 2.0 on BytePlus",
+      "nodeId": "krea-video-bytedance-seedance-2-fast",
+      "params": {
+        "upscale": false,
+        "enhance_prompt": false
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      }
+    },
+    {
+      "name": "a fractional duration keeps Seedance 2.5 on Krea",
+      "nodeId": "krea-video-bytedance-seedance-2-5",
+      "params": {
+        "duration": 7.5
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "duration",
+        "detail": "duration 7.5"
+      }
+    },
+    {
+      "name": "Krea's 9:21 ratio keeps Seedance 1.0 Pro on Krea",
+      "nodeId": "krea-video-bytedance-seedance-1-0-pro",
+      "params": {
+        "aspect_ratio": "9:21"
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "Seedance 1.0 Pro reference images with only a BytePlus key have no route",
+      "nodeId": "krea-video-bytedance-seedance-1-0-pro",
+      "params": {
+        "reference_images": "[\"https://example.com/a.png\"]"
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Seedance 2.5 draft switched on keeps it on Krea",
+      "nodeId": "krea-video-bytedance-seedance-2-5",
+      "params": {
+        "draft": true
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      }
+    },
+    {
+      "name": "fal's safety checker switched off keeps Seedream on fal (ModelArk always filters)",
+      "nodeId": "seedream-4-5",
+      "params": {
+        "enable_safety_checker": false
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "fal's safety checker left on still runs Seedance 1.0 T2V on BytePlus",
+      "nodeId": "seedance-1-0-t2v",
+      "params": {
+        "enable_safety_checker": true
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bytedance",
+        "key": "BYTEPLUS_API_KEY"
+      }
+    },
+    {
+      "name": "fal's safety checker switched off keeps Seedance 1.0 T2V on fal",
+      "nodeId": "seedance-1-0-t2v",
+      "params": {
+        "enable_safety_checker": false
+      },
+      "apiKeys": {
+        "BYTEPLUS_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY"
+      }
+    },
+    {
+      "name": "a fractional duration keeps Grok Imagine on Krea",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "duration": 6.5
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "duration",
+        "detail": "duration 6.5"
+      }
+    },
+    {
+      "name": "a saved edit video and start image keep Grok Imagine on Krea",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "edit_video": "https://example.com/v.mp4",
+        "start_image": "https://example.com/i.png"
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "edit_video",
+        "detail": "an edit video with a start image"
+      }
+    },
+    {
+      "name": "a start image alone runs Grok Imagine on xAI",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "start_image": "https://example.com/i.png"
+      },
+      "wired": [
+        "prompt"
+      ],
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "xai",
+        "key": "XAI_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "wired reference images with a saved start image keep Grok Imagine on Krea",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "start_image": "https://example.com/i.png"
+      },
+      "wired": [
+        "reference_images",
+        "prompt"
+      ],
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "start_image",
+        "detail": "a start image with reference images"
+      }
+    },
+    {
+      "name": "wired Krea style images keep Ideogram 3 on Krea",
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "params": {
+        "_kreaAuth": "api-token"
+      },
+      "wired": [
+        "style_images"
+      ],
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "blocked",
+        "param": "style_images"
+      }
+    },
+    {
+      "name": "a wired end image keeps Hailuo 2.3 on Krea",
+      "nodeId": "krea-video-minimax-hailuo-2-3",
+      "params": {},
+      "wired": [
+        "start_image",
+        "end_image"
+      ],
+      "apiKeys": {
+        "MINIMAX_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "blocked",
+        "param": "end_image"
+      }
+    },
+    {
+      "name": "Krea's 672:1584 ratio keeps Gen-4.5 on Krea",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "672:1584",
+        "start_image": "https://example.com/i.png"
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "aspect_ratio",
+        "detail": "aspect_ratio 672:1584"
+      }
+    },
+    {
+      "name": "Gen-4.5 text-to-video at 960:960 stays on Krea",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "960:960"
+      },
+      "wired": [
+        "prompt"
+      ],
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "aspect_ratio",
+        "detail": "text-to-video at 960:960"
+      }
+    },
+    {
+      "name": "Gen-4.5 text-to-video at 1584:672 with only a Runway key: no route",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "1584:672"
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Gen-4.5 at 960:960 with a saved start image runs on Runway",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "960:960",
+        "start_image": "https://example.com/i.png"
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "Gen-4.5 at 1104:832 with a wired start image runs on Runway",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "1104:832"
+      },
+      "wired": [
+        "start_image"
+      ],
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "a blank start image is no start image on Gen-4.5",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "832:1104",
+        "start_image": "  "
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "aspect_ratio",
+        "detail": "text-to-video at 832:1104"
+      }
+    },
+    {
+      "name": "Gen-4.5 text-to-video at 720:1280 runs on Runway",
+      "nodeId": "krea-video-runway-gen-4-5",
+      "params": {
+        "aspect_ratio": "720:1280"
+      },
+      "apiKeys": {
+        "RUNWAY_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "a saved start image and reference images keep Grok Imagine on Krea",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "start_image": "https://example.com/i.png",
+        "reference_images": [
+          "https://example.com/r.png"
+        ]
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "start_image",
+        "detail": "a start image with reference images"
+      }
+    },
+    {
+      "name": "a wired start image and wired reference images keep Grok Imagine on Krea",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {},
+      "wired": [
+        "start_image",
+        "reference_images"
+      ],
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "start_image",
+        "detail": "a start image with reference images"
+      }
+    },
+    {
+      "name": "a fractional duration on Grok Imagine 1.5 stays on Krea",
+      "nodeId": "krea-video-xai-grok-video-1-5",
+      "params": {
+        "duration": 6.5
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "duration",
+        "detail": "duration 6.5"
+      }
+    },
+    {
+      "name": "a fractional duration with only an xAI key: no route",
+      "nodeId": "krea-video-xai-grok-video",
+      "params": {
+        "duration": 6.5
+      },
+      "apiKeys": {
+        "XAI_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "wired Krea style images with only an Ideogram key: no route",
+      "nodeId": "krea-image-ideogram-ideogram-3",
+      "params": {},
+      "wired": [
+        "style_images"
+      ],
+      "apiKeys": {
+        "IDEOGRAM_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null
+      }
+    },
+    {
+      "name": "Runway speech-to-speech with only a video wired stays on Runway",
+      "nodeId": "runway-sts",
+      "params": {
+        "voice_id": "pNInz6obpgDQGcFmaJgB"
+      },
+      "wired": [
+        "video"
+      ],
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "block": {
+        "reason": "unsupported",
+        "param": "video",
+        "detail": "a video input without an audio input"
+      }
+    },
+    {
+      "name": "Runway speech-to-speech with audio and video wired runs on ElevenLabs",
+      "nodeId": "runway-sts",
+      "params": {
+        "voice_id": "pNInz6obpgDQGcFmaJgB"
+      },
+      "wired": [
+        "video",
+        "audio"
+      ],
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "elevenlabs",
+        "key": "ELEVENLABS_API_KEY"
+      },
+      "block": null
+    },
+    {
+      "name": "Runway speech-to-speech with only a video and only the ElevenLabs key: no route",
+      "nodeId": "runway-sts",
+      "params": {
+        "voice_id": "pNInz6obpgDQGcFmaJgB"
+      },
+      "wired": [
+        "video"
+      ],
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "runway",
+        "key": null
+      }
+    },
+    {
+      "name": "a blank ElevenLabs voice_id keeps Runway speech-to-speech on Runway",
+      "nodeId": "runway-sts",
+      "params": {
+        "voice_id": "   "
+      },
+      "wired": [
+        "audio"
+      ],
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "block": {
+        "reason": "requires",
+        "param": "voice_id"
+      }
+    },
+    {
+      "name": "a blank ElevenLabs voice_id keeps Runway TTS on Runway",
+      "nodeId": "runway-tts",
+      "params": {
+        "voice_id": " \t"
+      },
+      "apiKeys": {
+        "ELEVENLABS_API_KEY": "fixture-only",
+        "RUNWAY_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "runway",
+        "key": "RUNWAY_API_KEY"
+      },
+      "block": {
+        "reason": "requires",
+        "param": "voice_id"
       }
     }
   ]

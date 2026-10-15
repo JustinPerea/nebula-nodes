@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any, Awaitable, Callable
+from urllib.parse import quote
 
 import httpx
 
@@ -15,6 +16,9 @@ import sys
 from execution.missing_credential import MissingCredentialError
 
 MESHY_API_BASE = "https://api.meshy.ai/openapi"
+# "Maximum file size: 20 MB" for image_url and texture_image_url
+# (docs.meshy.ai/en/api/image-to-3d, read 2026-10-14).
+MAX_IMAGE_BYTES = 20_000_000
 
 # Smart topology runs on Meshy T2: triangles only, at most 15,000 faces, and no
 # image enhancement or lighting removal (https://docs.meshy.ai/openapi.yaml,
@@ -94,7 +98,7 @@ async def handle_meshy_image_to_3d(
         image_path = Path(image_value)
         if not image_path.exists():
             raise ValueError(f"Image file not found: {image_value}")
-        image_value = image_to_data_uri(image_path)
+        image_value = image_to_data_uri(image_path, max_bytes=MAX_IMAGE_BYTES)
         _log(f"converted to data URI, length={len(image_value)}")
 
     headers = {
@@ -140,7 +144,7 @@ async def handle_meshy_image_to_3d(
             raise RuntimeError(f"Meshy did not return task ID: {task_data}")
 
         _log(f"polling task {task_id}")
-        poll_url = f"{MESHY_API_BASE}/v1/image-to-3d/{task_id}"
+        poll_url = f"{MESHY_API_BASE}/v1/image-to-3d/{quote(str(task_id), safe='')}"
         poll_data = await _poll_meshy_task(client, api_key, poll_url, _emit, node.id)
         model_urls = poll_data.get("model_urls", {})
         glb_url = model_urls.get("glb", "")
@@ -228,7 +232,7 @@ async def handle_meshy_text_to_3d(
 
         # Poll preview
         result_data = await _poll_meshy_task(
-            client, api_key, f"{MESHY_API_BASE}/v2/text-to-3d/{task_id}", _emit, node.id
+            client, api_key, f"{MESHY_API_BASE}/v2/text-to-3d/{quote(str(task_id), safe='')}", _emit, node.id
         )
 
         # Step 2: If mode is "full", submit refine task
@@ -260,7 +264,7 @@ async def handle_meshy_text_to_3d(
                 raise RuntimeError(f"Meshy refine did not return task ID: {refine_data}")
 
             result_data = await _poll_meshy_task(
-                client, api_key, f"{MESHY_API_BASE}/v2/text-to-3d/{refine_id}", _emit, node.id
+                client, api_key, f"{MESHY_API_BASE}/v2/text-to-3d/{quote(str(refine_id), safe='')}", _emit, node.id
             )
 
         model_urls = result_data.get("model_urls", {})
@@ -334,7 +338,7 @@ async def handle_meshy_multi_image_to_3d(
             img_path = Path(img_str)
             if not img_path.exists():
                 raise ValueError(f"Image file not found: {img_str}")
-            img_str = image_to_data_uri(img_path)
+            img_str = image_to_data_uri(img_path, max_bytes=MAX_IMAGE_BYTES)
         image_urls.append(img_str)
 
     headers = {
@@ -370,7 +374,7 @@ async def handle_meshy_multi_image_to_3d(
             raise RuntimeError(f"Meshy did not return task ID: {task_data}")
 
         result_data = await _poll_meshy_task(
-            client, api_key, f"{MESHY_API_BASE}/v1/multi-image-to-3d/{task_id}", _emit, node.id
+            client, api_key, f"{MESHY_API_BASE}/v1/multi-image-to-3d/{quote(str(task_id), safe='')}", _emit, node.id
         )
 
         model_urls = result_data.get("model_urls", {})
@@ -436,7 +440,7 @@ async def handle_meshy_retexture(
             raise RuntimeError(f"Meshy did not return task ID: {task_data}")
 
         result_data = await _poll_meshy_task(
-            client, api_key, f"{MESHY_API_BASE}/v1/retexture/{task_id}", _emit, node.id
+            client, api_key, f"{MESHY_API_BASE}/v1/retexture/{quote(str(task_id), safe='')}", _emit, node.id
         )
 
         model_urls = result_data.get("model_urls", {})
@@ -497,7 +501,7 @@ async def handle_meshy_rigging(
             raise RuntimeError(f"Meshy did not return task ID: {task_data}")
 
         result_data = await _poll_meshy_task(
-            client, api_key, f"{MESHY_API_BASE}/v1/rigging/{task_id}", _emit, node.id
+            client, api_key, f"{MESHY_API_BASE}/v1/rigging/{quote(str(task_id), safe='')}", _emit, node.id
         )
 
         # Rigging response uses result.rigged_character_glb_url
@@ -570,7 +574,7 @@ async def handle_meshy_animate(
             raise RuntimeError(f"Meshy did not return task ID: {task_data}")
 
         result_data = await _poll_meshy_task(
-            client, api_key, f"{MESHY_API_BASE}/v1/animations/{task_id}", _emit, node.id
+            client, api_key, f"{MESHY_API_BASE}/v1/animations/{quote(str(task_id), safe='')}", _emit, node.id
         )
 
         result_obj = result_data.get("result", {})
@@ -635,7 +639,7 @@ async def handle_meshy_remesh(
             raise RuntimeError(f"Meshy did not return task ID: {task_data}")
 
         result_data = await _poll_meshy_task(
-            client, api_key, f"{MESHY_API_BASE}/v1/remesh/{task_id}", _emit, node.id
+            client, api_key, f"{MESHY_API_BASE}/v1/remesh/{quote(str(task_id), safe='')}", _emit, node.id
         )
 
         model_urls = result_data.get("model_urls", {})
@@ -697,7 +701,7 @@ async def handle_meshy_text_to_image(
             raise RuntimeError(f"Meshy did not return task ID: {task_data}")
 
         result_data = await _poll_meshy_task(
-            client, api_key, f"{MESHY_API_BASE}/v1/text-to-image/{task_id}", _emit, node.id
+            client, api_key, f"{MESHY_API_BASE}/v1/text-to-image/{quote(str(task_id), safe='')}", _emit, node.id
         )
 
         image_urls = result_data.get("image_urls", [])
@@ -745,7 +749,7 @@ async def handle_meshy_image_to_image(
             img_path = Path(img_str)
             if not img_path.exists():
                 raise ValueError(f"Image file not found: {img_str}")
-            img_str = image_to_data_uri(img_path)
+            img_str = image_to_data_uri(img_path, max_bytes=MAX_IMAGE_BYTES)
         image_urls.append(img_str)
 
     headers = {
@@ -783,7 +787,7 @@ async def handle_meshy_image_to_image(
             raise RuntimeError(f"Meshy did not return task ID: {task_data}")
 
         result_data = await _poll_meshy_task(
-            client, api_key, f"{MESHY_API_BASE}/v1/image-to-image/{task_id}", _emit, node.id
+            client, api_key, f"{MESHY_API_BASE}/v1/image-to-image/{quote(str(task_id), safe='')}", _emit, node.id
         )
 
         image_result_urls = result_data.get("image_urls", [])
@@ -855,7 +859,7 @@ async def handle_meshy_3d_print(
             raise RuntimeError(f"Meshy did not return task ID: {task_data}")
 
         result_data = await _poll_meshy_task(
-            client, api_key, f"{MESHY_API_BASE}/v1/print/multi-color/{task_id}", _emit, node.id
+            client, api_key, f"{MESHY_API_BASE}/v1/print/multi-color/{quote(str(task_id), safe='')}", _emit, node.id
         )
 
         model_urls = result_data.get("model_urls", {})

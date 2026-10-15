@@ -32,6 +32,35 @@ MAKER_ROUTED = {
     "nano-banana-fal", "nano-banana-fal-edit", "meshy-text-to-3d", "meshy-image-to-3d",
     "krea-image-google-nano-banana-2", "krea-image-google-nano-banana-pro",
     "krea-image-google-nano-banana-flash-lite", "krea-image-google-nano-banana",
+    # Google lane (execution/maker_routes_google.py)
+    "identity-edit", "krea-image-google-nano-banana-2-1", "krea-video-google-veo-3-1",
+    "krea-video-google-veo-3-1-fast", "krea-video-google-veo-3-1-lite", "krea-video-google-gemini-omni-flash-1-1",
+    # OpenAI lane (execution/maker_routes_openai.py)
+    "gpt-image-1-5", "gpt-image-1-5-edit", "gpt-image-2-fal-generate", "gpt-image-2-fal-edit",
+    "krea-image-openai-gpt-image-2", "krea-image-openai-gpt-image-2-5-flare",
+    "krea-image-openai-gpt-image-2-5-sunburst",
+    # xAI (execution/maker_routes_xai.py)
+    "grok-imagine-image", "grok-imagine-image-edit", "krea-image-xai-grok-imagine-2",
+    "krea-image-xai-grok-imagine-2-edit", "krea-video-xai-grok-video", "krea-video-xai-grok-video-1-5",
+    # Ideogram and Runway (tests/test_maker_routes_ideogram_runway.py)
+    "krea-image-ideogram-ideogram-4-5-precise", "krea-image-ideogram-ideogram-3",
+    "krea-image-ideogram-ideogram-2-turbo", "krea-image-runway-gen-4-image", "krea-video-runway-gen-4-5",
+    "krea-enhance-runway-ruby",
+    # MiniMax and Meshy copies (tests/test_maker_routes_minimax_meshy.py)
+    "krea-video-minimax-hailuo-02", "krea-video-minimax-hailuo-2-3", "krea-video-minimax-hailuo-2-3-fast",
+    "krea-video-minimax-hailuo-3", "krea-3d-meshy-meshy-7",
+    # ElevenLabs (test_maker_routes_elevenlabs.py)
+    "elevenlabs-music", "krea-audio-elevenlabs-music", "krea-audio-elevenlabs-music-v2",
+    "krea-audio-elevenlabs-music-v2-5", "krea-audio-elevenlabs-tts", "runway-tts", "runway-sts", "runway-dubbing",
+    # BytePlus ModelArk: Seedream (execution/maker_routes_byteplus.py).
+    "seedream-4-5", "krea-image-bytedance-seedream-4", "krea-image-bytedance-seedream-5-lite",
+    "krea-image-bytedance-seedream-5-pro",
+    # Seedance on BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py).
+    "seedance-2-t2v", "seedance-2-i2v", "seedance-2-r2v", "seedance-2-fast-t2v", "seedance-2-fast-i2v",
+    "seedance-v1-5", "seedance-1-0-t2v", "krea-video-bytedance-seedance-1-0-pro",
+    "krea-video-bytedance-seedance-1-0-pro-fast", "krea-video-bytedance-seedance-2",
+    "krea-video-bytedance-seedance-2-fast", "krea-video-bytedance-seedance-2-mini",
+    "krea-video-bytedance-seedance-2-5",
 }
 
 
@@ -276,7 +305,8 @@ def test_retired_direct_routes_cover_every_route_to_the_retiring_model():
     krea = {node_id for node_id, definition in DEFINITIONS.items()
             if (definition.get("directRoute") or {}).get("model") == maker_routes.GEMINI_25_FLASH_IMAGE}
     assert krea and krea <= set(node_route.DIRECT_RETIRES)
-    assert {entry["on"] for entry in node_route.DIRECT_RETIRES.values()} == {"2027-03-15"}
+    assert {node_route.DIRECT_RETIRES[node_id]["on"] for node_id in ("nano-banana-fal", "nano-banana-fal-edit", *krea)} == {
+        "2027-03-15"}
 
 
 @pytest.mark.asyncio

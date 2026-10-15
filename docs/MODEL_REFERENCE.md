@@ -176,7 +176,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `gpt-image-1-5` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/gpt-image-1.5` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
@@ -199,7 +199,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `gpt-image-1-5-edit` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/gpt-image-1.5/edit` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Reference Images (Image ×n)* |
@@ -343,7 +343,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `gpt-image-2-fal-edit` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `openai/gpt-image-2/edit` |
 | **Execution** | stream |
 | **Inputs** | Reference Images (Image ×n)*, Prompt (Text)* |
@@ -366,7 +366,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `gpt-image-2-fal-generate` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `openai/gpt-image-2` |
 | **Execution** | stream |
 | **Inputs** | Prompt (Text)* |
@@ -412,18 +412,25 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `grok-imagine-image` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | XAI_API_KEY, FAL_KEY |
 | **Endpoint** | `xai/grok-imagine-image` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Number of Images | int | 1 | 1–4 |
 | Aspect Ratio | enum | 1:1 | 1:1, 16:9, 9:16, 4:3, 3:4, 3:2, 2:3, 2:1, … |
 | Resolution | enum | 1k | 1K, 2K |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Output Format | enum | jpeg | JPEG, PNG, WebP |
 
 ---
@@ -434,17 +441,24 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `grok-imagine-image-edit` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | XAI_API_KEY, FAL_KEY |
 | **Endpoint** | `xai/grok-imagine-image/edit` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Source Images (Image ×n)* |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Number of Images | int | 1 | 1–10 |
 | Resolution | enum | 1k | 1K, 2K |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Output Format | enum | jpeg | JPEG, PNG, WebP |
 
 ---
@@ -455,7 +469,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `identity-edit` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | GOOGLE_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/nano-banana-2/edit` |
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)*, Prompt (Text)*, Character (Character), Mask (unavailable) (Mask) |
@@ -936,12 +950,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-bytedance-seedream-4` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | BYTEPLUS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/bytedance/seedream-4` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Style images (Any ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -949,6 +965,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Prompt | textarea | — | — |
 | Width | float | — | …–4096 |
 | Height | float | — | …–4096 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Seed | float | 1337 | — |
 | Style images (JSON) | textarea | — | — |
 
@@ -960,12 +981,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-bytedance-seedream-5-lite` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | BYTEPLUS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/bytedance/seedream-5-lite` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Style images (Any ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -973,6 +996,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Prompt | textarea | — | — |
 | Width | float | — | …–4096 |
 | Height | float | — | …–4096 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Seed | float | 1337 | — |
 | Style images (JSON) | textarea | — | — |
 
@@ -984,12 +1012,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-bytedance-seedream-5-pro` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | BYTEPLUS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/bytedance/seedream-5-pro` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Style images (Any ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -997,6 +1027,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Prompt | textarea | — | — |
 | Width | float | — | …–4096 |
 | Height | float | — | …–4096 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Seed | float | 1337 | — |
 | Style images (JSON) | textarea | — | — |
 
@@ -1071,23 +1106,30 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-google-nano-banana-2-1` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/google/nano-banana-2.1` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
-| Width | float | — | — |
-| Height | float | — | — |
 | Image URLs (JSON) | textarea | — | — |
 | Aspect ratio | enum | — | 4:1, 21:9, 1:1, 4:3, 3:2, 2:3, 5:4, 4:5, … |
 | Resolution | enum | 1K | 1K, 2K, 4K |
 | Thinking level | enum | medium | minimal, medium, high |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Width | float | — | — |
+| Height | float | — | — |
 
 ---
 
@@ -1160,7 +1202,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-ideogram-ideogram-2-turbo` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | IDEOGRAM_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/ideogram/ideogram-2-turbo` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text) |
@@ -1183,12 +1225,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-ideogram-ideogram-3` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | IDEOGRAM_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/ideogram/ideogram-3` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Character reference images (Image ×n), Style images (Any ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1198,6 +1242,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Height | float | 1024 | 512–8192 |
 | Seed | float | 1337 | — |
 | Character reference images (JSON) | textarea | — | — |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Style images (JSON) | textarea | — | — |
 
 ---
@@ -1235,7 +1284,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-ideogram-ideogram-4-5-precise` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | IDEOGRAM_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/ideogram/ideogram-4.5-precise` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URL (Image), Mask URL (Mask), Reference images (Image ×n) |
@@ -1430,12 +1479,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-openai-gpt-image-2` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | OPENAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/openai/gpt-image-2` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | 2026-10-09 |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1443,10 +1494,15 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Prompt | textarea | — | — |
 | Quality | enum | high | low, medium, high, auto |
 | Image URLs (JSON) | textarea | — | — |
-| Width | float | — | — |
-| Height | float | — | — |
 | Aspect ratio | enum | — | 16:9, 2:1, 3:2, 4:3, 1:1, 3:4, 2:3, 1:2, … |
 | Resolution | enum | — | 1K, 2K, 4K |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Width | float | — | — |
+| Height | float | — | — |
 
 ---
 
@@ -1456,7 +1512,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-openai-gpt-image-2-5-flare` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | OPENAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/openai/gpt-image-2.5-flare` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
@@ -1481,7 +1537,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-openai-gpt-image-2-5-sunburst` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | OPENAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/openai/gpt-image-2.5-sunburst` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
@@ -1554,7 +1610,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-runway-gen-4-image` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | RUNWAY_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/runway/gen-4-image` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Reference images (Any ×n) |
@@ -1578,12 +1634,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-xai-grok-imagine-2` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | XAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/xai/grok-imagine-2` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Style images (Any ×n) |
 | **Outputs** | Image (Image)*, All images (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1592,6 +1650,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Quality | enum | medium | low, medium |
 | Aspect ratio | enum | — | 2:1, 20:9, 19.5:9, 16:9, 3:2, 4:3, 1:1, 3:4, … |
 | Resolution | enum | — | 1K, 2K |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Style images (JSON) | textarea | — | — |
 
 ---
@@ -1602,7 +1665,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-image-xai-grok-imagine-2-edit` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | XAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/image/xai/grok-imagine-2-edit` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
@@ -1928,12 +1991,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `seedream-4-5` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/bytedance/seedream/v4.5/text-to-image` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, References (Image ×n) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -1941,6 +2006,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Size | enum | square_hd | Square HD (2048x2048), Square (512x512), Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9, Auto 2K, Auto 4K, … |
 | Generations | int | 1 | 1–6 |
 | Images per Generation | int | 1 | 1–6 |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Safety Checker | bool | true | — |
 | Seed | int | — | — |
 
@@ -2336,24 +2406,31 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-bytedance-seedance-1-0-pro` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | BYTEPLUS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/bytedance/seedance-1.0-pro` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), Start video (Video), End image (Image), Reference images (Image ×n) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
 | Start image | string | — | — |
-| Start video | string | — | — |
 | Aspect ratio | enum | 16:9 | 1:1, 16:9, 9:16, 4:3, 3:4, 21:9, 9:21 |
 | End image | string | — | — |
-| Reference images (JSON) | textarea | — | — |
 | Duration | float | 5 | — |
 | Resolution | enum | 720p | 720p, 1080p |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Start video | string | — | — |
+| Reference images (JSON) | textarea | — | — |
 
 ---
 
@@ -2363,22 +2440,29 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-bytedance-seedance-1-0-pro-fast` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | BYTEPLUS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/bytedance/seedance-1.0-pro-fast` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), Start video (Video) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
 | Start image | string | — | — |
-| Start video | string | — | — |
 | Aspect ratio | enum | 16:9 | 1:1, 16:9, 9:16, 4:3, 3:4, 21:9, 9:21 |
 | Duration | float | 5 | 2–12 |
 | Resolution | enum | 720p | 480p, 720p, 1080p |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Start video | string | — | — |
 
 ---
 
@@ -2388,12 +2472,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-bytedance-seedance-2` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | BYTEPLUS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/bytedance/seedance-2` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image), Reference images (Image ×n), Reference videos (Video ×n), Reference audios (Audio ×n), Effects (Any ×n) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | 2026-10-09 |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -2407,8 +2493,13 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Reference audios (JSON) | textarea | — | — |
 | Duration | float | 5 | 4–15 |
 | Resolution | enum | 720p | 480p, 720p, 1080p, 4k |
-| Seed | int | — | -9007199254740991–9007199254740991 |
 | Generate audio | bool | — | — |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Seed | int | — | -9007199254740991–9007199254740991 |
 | Effects (JSON) | textarea | — | — |
 | Upscale | bool | false | — |
 | Enhance prompt | bool | false | — |
@@ -2421,12 +2512,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-bytedance-seedance-2-5` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | BYTEPLUS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/bytedance/seedance-2-5` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image), Reference images (Image ×n), Reference videos (Video ×n), Reference audios (Audio ×n), Effects (Any ×n) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -2440,8 +2533,13 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Reference audios (JSON) | textarea | — | — |
 | Duration | float | 5 | 4–30 |
 | Resolution | enum | 720p | 480p, 720p, 1080p |
-| Seed | int | — | -9007199254740991–9007199254740991 |
 | Generate audio | bool | — | — |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Seed | int | — | -9007199254740991–9007199254740991 |
 | Effects (JSON) | textarea | — | — |
 | Enhance prompt | bool | false | — |
 | Draft | bool | false | — |
@@ -2454,12 +2552,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-bytedance-seedance-2-fast` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | BYTEPLUS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/bytedance/seedance-2-fast` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image), Reference images (Image ×n), Reference videos (Video ×n), Reference audios (Audio ×n), Effects (Any ×n) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -2473,8 +2573,13 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Reference audios (JSON) | textarea | — | — |
 | Duration | float | 5 | 4–15 |
 | Resolution | enum | 720p | 480p, 720p |
-| Seed | int | — | -9007199254740991–9007199254740991 |
 | Generate audio | bool | — | — |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Seed | int | — | -9007199254740991–9007199254740991 |
 | Effects (JSON) | textarea | — | — |
 | Upscale | bool | false | — |
 | Enhance prompt | bool | false | — |
@@ -2487,12 +2592,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-bytedance-seedance-2-mini` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | BYTEPLUS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/bytedance/seedance-2-mini` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image), Reference images (Image ×n), Reference videos (Video ×n), Reference audios (Audio ×n) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -2506,8 +2613,13 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Reference audios (JSON) | textarea | — | — |
 | Duration | float | 5 | 4–15 |
 | Resolution | enum | 720p | 480p, 720p |
-| Seed | int | — | -9007199254740991–9007199254740991 |
 | Generate audio | bool | — | — |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Seed | int | — | -9007199254740991–9007199254740991 |
 
 ---
 
@@ -2542,7 +2654,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-google-gemini-omni-flash-1-1` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/google/gemini-omni-flash-1.1` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), Reference images (Image ×n), Reference videos (Video ×n) |
@@ -2616,7 +2728,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-google-veo-3-1` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_VERTEX_CREDENTIALS, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/google/veo-3.1` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image), Reference images (Image ×n) |
@@ -2643,7 +2755,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-google-veo-3-1-fast` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_VERTEX_CREDENTIALS, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/google/veo-3.1-fast` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image), Reference images (Image ×n) |
@@ -2670,7 +2782,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-google-veo-3-1-lite` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | GOOGLE_VERTEX_CREDENTIALS, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/google/veo-3.1-lite` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image) |
@@ -3036,7 +3148,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-minimax-hailuo-02` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | MINIMAX_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/minimax/hailuo-02` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image) |
@@ -3061,12 +3173,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-minimax-hailuo-2-3` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | MINIMAX_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/minimax/hailuo-2.3` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3074,9 +3188,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Prompt | textarea | — | — |
 | Start image | string | — | — |
 | Expand prompt | bool | true | — |
-| End image | string | — | — |
 | Resolution | enum | 768p | 768p, 1080p |
 | Duration | enum | 6 | 6, 10 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| End image | string | — | — |
 
 ---
 
@@ -3086,12 +3205,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-minimax-hailuo-2-3-fast` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | MINIMAX_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/minimax/hailuo-2.3-fast` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3099,9 +3220,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Prompt | textarea | — | — |
 | Start image | string | — | — |
 | Expand prompt | bool | true | — |
-| End image | string | — | — |
 | Resolution | enum | 768p | 768p, 1080p |
 | Duration | enum | 6 | 6, 10 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| End image | string | — | — |
 
 ---
 
@@ -3111,12 +3237,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-minimax-hailuo-3` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | MINIMAX_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/minimax/hailuo-3` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), End image (Image), Reference images (Image ×n), Reference videos (Video ×n), Reference audios (Audio ×n) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3127,9 +3255,20 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | End image | string | — | — |
 | Reference images (JSON) | textarea | — | — |
 | Reference videos (JSON) | textarea | — | — |
-| Reference video seconds | float | — | 0–15 |
 | Reference audios (JSON) | textarea | — | — |
 | Duration | int | 5 | 5–15 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Reference video seconds | float | — | 0–15 |
+
+**Direct Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Resolution | enum | 2K | 2K, 768P |
 
 ---
 
@@ -3139,7 +3278,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-runway-gen-4-5` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | RUNWAY_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/runway/gen-4.5` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image) |
@@ -3214,24 +3353,31 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-xai-grok-video` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | XAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/xai/grok-video` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), Start video (Video), Reference images (Image ×n), Edit video (Video) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
 | Start image | string | — | — |
-| Start video | string | — | — |
 | Duration | float | 6 | 1–15 |
 | Resolution | enum | 720p | 480p, 720p |
 | Aspect ratio | enum | — | 16:9, 9:16, 1:1, 4:3, 3:4, 3:2, 2:3 |
 | Reference images (JSON) | textarea | — | — |
 | Edit video | string | — | — |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Start video | string | — | — |
 
 ---
 
@@ -3241,22 +3387,29 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-video-xai-grok-video-1-5` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | XAI_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/video/xai/grok-video-1.5` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Start image (Image), Start video (Video) |
 | **Outputs** | Video (Video)*, All videos (Array), All artifacts (Array), Job (Any) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API token · API balance, Krea account · workspace compute |
 | Prompt | textarea | — | — |
 | Start image | string | — | — |
-| Start video | string | — | — |
 | Duration | float | 6 | 1–15 |
 | Resolution | enum | 720p | 480p, 720p, 1080p |
 | Aspect ratio | enum | 16:9 | 16:9, 9:16, 1:1 |
+
+**Krea Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Start video | string | — | — |
 
 ---
 
@@ -3590,12 +3743,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `seedance-1-0-t2v` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/bytedance/seedance/v1/pro/text-to-video` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Video (Video) |
 | **Audited** | — |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3604,6 +3759,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Duration | enum | 5 | 2s, 3s, 4s, 5s, 6s, 7s, 8s, 9s, … |
 | Camera Fixed | bool | false | — |
 | Seed | int | — | — |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Safety Checker | bool | true | — |
 
 ---
@@ -3614,12 +3774,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `seedance-2-fast-i2v` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `bytedance/seedance-2.0/fast/image-to-video` |
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)*, Prompt (Text)*, End Frame (Image) |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3627,6 +3789,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Duration | enum | auto | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
 | Resolution | enum | 720p | 480p, 720p |
 | Generate Audio | bool | true | — |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Seed | int | — | — |
 
 ---
@@ -3637,12 +3804,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `seedance-2-fast-t2v` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `bytedance/seedance-2.0/fast/text-to-video` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3650,6 +3819,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Duration | enum | auto | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
 | Resolution | enum | 720p | 480p, 720p |
 | Generate Audio | bool | true | — |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Seed | int | — | — |
 
 ---
@@ -3660,12 +3834,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `seedance-2-i2v` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `bytedance/seedance-2.0/image-to-video` |
 | **Execution** | async-poll |
 | **Inputs** | Image (Image)*, Prompt (Text)*, End Frame (Image) |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3673,6 +3849,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Duration | enum | auto | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
 | Resolution | enum | 720p | 480p, 720p, 1080p |
 | Generate Audio | bool | true | — |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Seed | int | — | — |
 
 ---
@@ -3683,12 +3864,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `seedance-2-r2v` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `bytedance/seedance-2.0/reference-to-video` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Reference Images (Image ×n)* |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3696,6 +3879,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Duration | enum | auto | Auto, 4s, 6s, 8s, 10s, 15s |
 | Resolution | enum | 720p | 480p, 720p, 1080p |
 | Generate Audio | bool | true | — |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Seed | int | — | — |
 
 ---
@@ -3706,12 +3894,14 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `seedance-2-t2v` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `bytedance/seedance-2.0/text-to-video` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Video (Video) |
 | **Audited** | 2026-05-17 |
+
+**Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
@@ -3719,6 +3909,11 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Duration | enum | auto | Auto, 4s, 5s, 6s, 8s, 10s, 12s, 15s |
 | Resolution | enum | 720p | 480p, 720p, 1080p |
 | Generate Audio | bool | true | — |
+
+**FAL Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
 | Seed | int | — | — |
 
 ---
@@ -3729,7 +3924,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `seedance-v1-5` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | BYTEPLUS_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/bytedance/seedance/v1.5/pro/image-to-video` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Image (Image)*, End Image (Image) |
@@ -4153,17 +4348,25 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `elevenlabs-music` |
 | **Provider** | FAL |
-| **API Key** | FAL_KEY |
+| **API Key** | ELEVENLABS_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/elevenlabs/music` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)* |
 | **Outputs** | Audio (Audio) |
 | **Audited** | — |
 
+**Shared Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Duration (ms) | int | 30000 | 3000–600000 |
 | Instrumental Only | bool | false | — |
+
+**Direct Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Model | enum | music_v1 | Music v1, Music v2, Music v2.5 |
 
 ---
 
@@ -4332,7 +4535,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-audio-elevenlabs-music` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | ELEVENLABS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/audio/elevenlabs/music` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text) |
@@ -4354,7 +4557,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-audio-elevenlabs-music-v2` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | ELEVENLABS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/audio/elevenlabs/music-v2` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text) |
@@ -4376,7 +4579,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-audio-elevenlabs-music-v2-5` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | ELEVENLABS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/audio/elevenlabs/music-v2.5` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text) |
@@ -4398,7 +4601,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-audio-elevenlabs-tts` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | ELEVENLABS_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/audio/elevenlabs/tts` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text) |
@@ -4531,7 +4734,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `runway-dubbing` |
 | **Provider** | Runway |
-| **API Key** | RUNWAY_API_KEY |
+| **API Key** | ELEVENLABS_API_KEY, RUNWAY_API_KEY |
 | **Endpoint** | `/v1/voice_dubbing` |
 | **Execution** | async-poll |
 | **Inputs** | Audio (Audio)* |
@@ -4553,17 +4756,30 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `runway-sts` |
 | **Provider** | Runway |
-| **API Key** | RUNWAY_API_KEY |
+| **API Key** | ELEVENLABS_API_KEY, RUNWAY_API_KEY |
 | **Endpoint** | `/v1/speech_to_speech` |
 | **Execution** | async-poll |
 | **Inputs** | Audio (Audio), Video (Video) |
 | **Outputs** | Audio (Audio) |
 | **Audited** | 2026-10-14 |
 
+**Shared Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| Remove Background Noise | bool | false | — |
+
+**Runway Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Voice | enum | Maya | Maya, Arjun, Serene, Bernard, Billy, Mark, Clint, Mabel, … |
-| Remove Background Noise | bool | false | — |
+
+**Direct Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| ElevenLabs voice ID | string | — | — |
 
 ---
 
@@ -4573,16 +4789,24 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `runway-tts` |
 | **Provider** | Runway |
-| **API Key** | RUNWAY_API_KEY |
+| **API Key** | ELEVENLABS_API_KEY, RUNWAY_API_KEY |
 | **Endpoint** | `/v1/text_to_speech` |
 | **Execution** | async-poll |
 | **Inputs** | Text (Text)* |
 | **Outputs** | Audio (Audio) |
 | **Audited** | 2026-10-14 |
 
+**Runway Parameters**
+
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Voice | enum | Maya | Maya, Arjun, Serene, Bernard, Billy, Mark, Clint, Mabel, … |
+
+**Direct Parameters**
+
+| Parameter | Type | Default | Options/Range |
+|-----------|------|---------|---------------|
+| ElevenLabs voice ID | string | — | — |
 
 ---
 
@@ -4708,7 +4932,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-3d-meshy-meshy-7` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | MESHY_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/3d/meshy/meshy-7` |
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text), Image URLs (Image ×n) |
@@ -5532,7 +5756,7 @@ Nodes: 300 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|
 | **ID** | `krea-enhance-runway-ruby` |
 | **Provider** | Krea |
-| **API Key** | KREA_API_TOKEN |
+| **API Key** | RUNWAY_API_KEY, KREA_API_TOKEN |
 | **Endpoint** | `/generate/enhance/runway/ruby` |
 | **Execution** | async-poll |
 | **Inputs** | Video URL (Video) |

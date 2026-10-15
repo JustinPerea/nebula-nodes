@@ -139,6 +139,10 @@ async def handle_gemini_chat(
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 INTERACTIONS_IMAGE_MODELS = {"gemini-nano-banana-2.1"}
 _INTERACTION_SIZES = {"gemini-nano-banana-2.1": {"1K", "2K", "4K"}}
+# "Gemini Nano Banana 2.1 | minimal, medium, high | medium", sent as
+# generation_config.thinking_level (image-generation guide, checked 2026-10-14).
+# Only the Krea copy sends it (execution/maker_routes_google.py).
+_INTERACTION_THINKING = {"gemini-nano-banana-2.1": {"minimal", "medium", "high"}}
 _INTERACTION_ASPECTS = {
     "1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9",
 }
@@ -204,6 +208,9 @@ async def _nano_banana_interaction(
             "response_format": response_format,
             "store": False,
         }
+        thinking = str(node.params.get("thinkingLevel") or "").lower()
+        if thinking in _INTERACTION_THINKING.get(model, set()):
+            body["generation_config"] = {"thinking_level": thinking}
         response = await client.post(
             INTERACTIONS_URL, json=body,
             headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},

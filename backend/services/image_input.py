@@ -43,7 +43,14 @@ def is_remote_or_data_uri(value: str) -> bool:
     return value.startswith(("http://", "https://", "data:"))
 
 
-def load_local_image(path_str: str) -> tuple[str, str]:
+# Nebula's own bound on one local image read into memory for upload, when the
+# caller names no provider limit. Provider limits are smaller (OpenAI 50 MB,
+# BytePlus and MiniMax 30 MB, Ideogram 25 MB, Meshy 20 MB), so this only stops
+# a mistaken path to a huge file from being read and base64-encoded whole.
+DEFAULT_MAX_IMAGE_BYTES = 100_000_000
+
+
+def load_local_image(path_str: str, *, max_bytes: int = DEFAULT_MAX_IMAGE_BYTES) -> tuple[str, str]:
     """Load a local image file into ``(mime_type, base64_data)`` for a vision API.
 
     Raises :class:`ValueError` when an image input was provided but can't be turned
@@ -86,8 +93,13 @@ def load_local_image(path_str: str) -> tuple[str, str]:
         logger.warning(msg)
         raise ValueError(msg)
 
+    from services.media_input import too_large
+
     try:
-        raw = path.read_bytes()
+        if path.stat().st_size > max_bytes:
+            raise too_large(f"Image input {path_str!r}", max_bytes)
+        with path.open("rb") as handle:
+            raw = handle.read(max_bytes + 1)
     except OSError as exc:
         msg = (
             f"Could not read image input {path_str!r}: {exc}. "
@@ -96,4 +108,6 @@ def load_local_image(path_str: str) -> tuple[str, str]:
         logger.warning(msg)
         raise ValueError(msg) from exc
 
+    if len(raw) > max_bytes:
+        raise too_large(f"Image input {path_str!r}", max_bytes)
     return mime_type, base64.b64encode(raw).decode("ascii")

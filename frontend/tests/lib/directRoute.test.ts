@@ -4,7 +4,7 @@ import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { buildDefaultParamsForUi, resolveCreateParamDefinitions } from '../../src/lib/createParams';
 import {
   configuredDirectKey, directBlock, directKeyNames, fallbackProvider, paramDefinitionsForRun, routeParamDefinitions,
-  selectRoute,
+  selectRoute, WIRED, withWiredBlockers,
 } from '../../src/lib/directRoute';
 import { runRouteProvider } from '../../src/lib/modelDiscovery';
 
@@ -16,6 +16,8 @@ type RouteCase = {
   apiKeys: Record<string, string>;
   expected: { kind: string; provider: string | null; key: string | null };
   paramKeys?: string[];
+  wired?: string[];
+  block?: { reason: string; param: string | null; detail?: string; on?: string } | null;
 };
 
 describe('selectRoute (cases shared with backend services/node_route.py)', () => {
@@ -27,14 +29,32 @@ describe('selectRoute (cases shared with backend services/node_route.py)', () =>
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(new Date(`${testCase.today ?? fixture.defaultToday}T12:00:00`));
       const definition = NODE_DEFINITIONS[testCase.nodeId];
-      const route = selectRoute(definition, testCase.params, testCase.apiKeys);
+      const params = withWiredBlockers(definition, testCase.params, testCase.wired ?? []);
+      const route = selectRoute(definition, params, testCase.apiKeys);
       expect(route).toEqual(testCase.expected);
-      expect(runRouteProvider(definition, testCase.apiKeys, testCase.params)).toBe(testCase.expected.provider);
+      expect(runRouteProvider(definition, testCase.apiKeys, params)).toBe(testCase.expected.provider);
+      if (testCase.block !== undefined) {
+        const block = directBlock(definition, params);
+        const got = block && Object.fromEntries(Object.entries(block).filter(([, value]) => value !== null && value !== undefined));
+        expect(got).toEqual(testCase.block);
+      }
       if (testCase.paramKeys) {
         expect(routeParamDefinitions(definition, route.kind).map((param) => param.key).sort()).toEqual(testCase.paramKeys);
       }
     });
   }
+});
+
+describe('withWiredBlockers (node_route.with_wired_blockers)', () => {
+  it('marks only Krea-only blockers that arrive by wire and have no saved value', () => {
+    const grok15 = NODE_DEFINITIONS['krea-video-xai-grok-video-1-5'];
+    expect(withWiredBlockers(grok15, { prompt: 'p' }, ['start_video', 'start_image'])).toEqual({ prompt: 'p', start_video: WIRED });
+    expect(withWiredBlockers(grok15, { start_video: 'x' }, ['start_video'])).toEqual({ start_video: 'x' });
+    expect(withWiredBlockers(NODE_DEFINITIONS['grok-imagine-image'], {}, ['prompt'])).toEqual({});
+    const keys = { XAI_API_KEY: 'k', KREA_API_TOKEN: 'k' };
+    expect(selectRoute(grok15, withWiredBlockers(grok15, {}, ['start_video']), keys).kind).toBe('fallback');
+    expect(selectRoute(grok15, {}, keys).kind).toBe('direct');
+  });
 });
 
 describe('maker routes for fal and Krea copies', () => {
@@ -113,12 +133,29 @@ describe('when the direct route can\'t take a run', () => {
     expect(paramDefinitionsForRun(reframe, {}, { FAL_KEY: 'k' }).map((param) => param.key)).not.toContain('resolution');
   });
 
+  it('offers Runway TTS an ElevenLabs voice_id once the ElevenLabs key is set', () => {
+    const tts = NODE_DEFINITIONS['runway-tts'];
+    const keys = { ELEVENLABS_API_KEY: 'k', RUNWAY_API_KEY: 'r' };
+    expect(fallbackProvider(tts)).toBe('runway');
+    // On Runway it shows Runway's preset, plus the ElevenLabs voice to opt in.
+    expect(paramDefinitionsForRun(tts, { voiceId: 'Maya' }, keys).map((param) => param.key)).toEqual(['voiceId', 'voice_id']);
+    // With a voice set it runs on ElevenLabs, where Runway's preset means nothing.
+    expect(paramDefinitionsForRun(tts, { voice_id: 'v' }, keys).map((param) => param.key)).toEqual(['voice_id']);
+    expect(paramDefinitionsForRun(tts, {}, { RUNWAY_API_KEY: 'r' }).map((param) => param.key)).toEqual(['voiceId']);
+    // A new node doesn't get a made-up voice: the field has no default.
+    expect(buildDefaultParamsForUi(tts, keys)).not.toHaveProperty('voice_id');
+  });
+
   it('names the reason: a missing direct param, a Krea-only size, a retired model', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-14T12:00:00'));
     expect(directBlock(reframe, {})).toEqual({ reason: 'requires', param: 'resolution', on: null });
     const kreaPro = NODE_DEFINITIONS['krea-image-google-nano-banana-pro'];
     expect(directBlock(kreaPro, { width: 1024 })).toEqual({ reason: 'blocked', param: 'width', on: null });
+    const veoFast = NODE_DEFINITIONS['krea-video-google-veo-3-1-fast'];
+    expect(directBlock(veoFast, { resolution: '4K' })).toEqual({ reason: 'unsupported', param: 'resolution', on: null, detail: 'resolution 4K' });
+    expect(directBlock(veoFast, {})).toBeNull();
+    expect(directBlock(NODE_DEFINITIONS['krea-video-google-veo-3-1'], { resolution: '4K' })).toBeNull();
     const nano = NODE_DEFINITIONS['nano-banana-fal'];
     expect(directBlock(nano, { model: 'nano-banana' })).toBeNull();
     vi.setSystemTime(new Date('2027-03-15T00:30:00'));
@@ -126,5 +163,27 @@ describe('when the direct route can\'t take a run', () => {
     expect(directBlock(nano, {})).toBeNull();
     expect(directBlock(NODE_DEFINITIONS['krea-image-google-nano-banana'], {}))
       .toEqual({ reason: 'retired', param: null, on: '2027-03-15' });
+    // A shared param's value the maker can't render keeps the run on the copy;
+    // the default is never one of them.
+    const gpt2 = NODE_DEFINITIONS['gpt-image-2-fal-generate'];
+    expect(directBlock(gpt2, {})).toBeNull();
+    expect(directBlock(gpt2, { image_size: 'square_hd' })).toBeNull();
+    expect(directBlock(gpt2, { image_size: 'landscape_16_9' })).toEqual({
+      reason: 'unsupported', param: 'image_size', on: null, detail: 'image_size landscape_16_9' });
+  });
+
+  it('keeps values and combinations the maker doesn\'t take on the copy (directRoute.accepts / rejectsWhen)', () => {
+    const hailuo = NODE_DEFINITIONS['krea-video-minimax-hailuo-02'];
+    // The defaults (768p, 6 s) are values MiniMax takes.
+    expect(directBlock(hailuo, {})).toBeNull();
+    expect(directBlock(hailuo, { duration: 10 })).toBeNull();
+    expect(directBlock(hailuo, { duration: 7.5 })).toEqual({
+      reason: 'unsupported', param: 'duration', on: null, detail: 'duration 7.5' });
+    // 10.0 and '10' are 10, as the backend's match_value spells them.
+    expect(directBlock(hailuo, { resolution: '1080p', duration: '10' })?.detail).toBe('1080p at 10 seconds');
+    expect(directBlock(hailuo, { resolution: '1080p', duration: 10 })).toEqual({
+      reason: 'unsupported', param: 'resolution', on: null, detail: '1080p at 10 seconds' });
+    expect(selectRoute(hailuo, { duration: 8 }, { MINIMAX_API_KEY: 'k', KREA_API_TOKEN: 'k' }))
+      .toEqual({ kind: 'fallback', provider: 'krea', key: 'KREA_API_TOKEN' });
   });
 });

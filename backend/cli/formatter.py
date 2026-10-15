@@ -5,6 +5,7 @@ from typing import Any
 
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import detail, krea_modes, node_access, provider_via  # noqa: F401 (node_access is re-exported)
+from services.maker_sizes import rule_note
 
 
 def format_node_table(nodes: list[dict[str, Any]]) -> str:
@@ -98,6 +99,11 @@ def format_node_detail(node: dict[str, Any]) -> str:
                 conds = [f"{k}={v}" for k, vals in vis.items() for v in vals]
                 detail += f"  (when {', '.join(conds[:3])})"
             lines.append(f"  {detail}")
+        lines.append("")
+
+    size_note = rule_note(node)
+    if size_note:
+        lines.append(f"SIZE: {size_note}")
         lines.append("")
 
     return "\n".join(lines)
@@ -321,6 +327,10 @@ def format_run_results(results: dict[str, Any], node_defs: dict[str, dict[str, A
                 lines.append(f"{nid}: {val}")
         else:
             lines.append(f"{nid}: done")
+
+    for nid, notes in (results.get("notes") or {}).items():
+        for note in notes:
+            lines.append(f"{nid}: note — {note}")
 
     for nid, err in errors.items():
         lines.append(f"{nid}: ERROR — {err}")

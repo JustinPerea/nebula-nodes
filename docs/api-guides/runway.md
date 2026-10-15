@@ -32,6 +32,24 @@
 | Runway Speech-to-Speech | `runway-sts` | audio-gen | `audio` OR `video` | `voiceId` (20 preset voices), `removeBackgroundNoise` (bool) | Re-voice existing speech (or a video's audio track) into a different preset voice, keeping the original delivery. |
 | Runway Voice Dubbing | `runway-dubbing` | audio-gen | `audio` (required) | `targetLang` (28 languages), `disableVoiceCloning` (bool), `dropBackgroundAudio` (bool), `numSpeakers` (1–10) | Dub a clip into another language, optionally cloning the original speaker. |
 
+## Krea copies on your Runway key (2026-10-14)
+
+Three Krea copies of Runway's models also run on Runway's own API when
+`RUNWAY_API_KEY` is saved. The Krea plan wins when chosen, then your Runway key
+(Runway bills), then your Krea API token.
+
+| Krea node | Runway model and endpoint | Notes |
+|---|---|---|
+| `krea-image-runway-gen-4-image` | `gen4_image`, POST `/v1/text_to_image` | width/height go as the nearest of gen4_image's 16 output sizes (`backend/services/maker_sizes.py`); the Inspector notes a size that changes, and the run's notes give the size Runway made; reference images keep their tags. 5 credits (720p) or 8 credits (1080p) per image, shown as $0.05-0.08. |
+| `krea-video-runway-gen-4-5` | `gen4.5`, `/v1/image_to_video` or `/v1/text_to_video` | Duration rounds to whole seconds (Runway takes 2-10). Krea's 672:1584 isn't in Runway's gen4.5 request schema, and text-to-video takes only 1280:720 or 720:1280; both runs stay on Krea (route rules), and the handler still refuses them before submit if called directly. 12 credits per second. |
+| `krea-enhance-runway-ruby` | `ruby`, POST `/v1/video_to_hdr` | hdr10 / hlg (.mp4) or hdr_prores (.mov, `proresProfile` only there). Local videos over the 5MB data URI cap go up through `/v1/uploads`. Unpriced: 20 credits per second, 40 above 4 MP, and the source's length and size are only known at run time. |
+
+Not routed: `krea-video-runway-gen-4-video`. Krea calls it "Runway Gen-4" and
+runs it from text alone, but Runway's only Gen-4 video model, `gen4_turbo`,
+needs an image, so the upstream model isn't confirmed.
+
+**Voice nodes on your ElevenLabs key (2026-10-14).** Runway's voice nodes are ElevenLabs models, so with an ElevenLabs key saved they can run on ElevenLabs directly, billed by ElevenLabs. `runway-dubbing` switches as soon as the key is saved. `runway-tts` and `runway-sts` switch only when you set an **ElevenLabs voice ID** (the Inspector shows the field once the key is saved): Runway's preset voices (Maya, Arjun, ...) have no ElevenLabs equivalent Nebula can look up, so a recipe with only a preset keeps running on Runway (a blank voice ID counts as unset). `runway-sts` with only the video input wired also stays on Runway: ElevenLabs' speech-to-speech takes an audio file only. Readiness says which route runs. Details: [the ElevenLabs guide](elevenlabs.md).
+
 ## How to use it in Nebula
 
 **Where the nodes appear.** Runway nodes live in the node palette under their media categories — the three video nodes (`runway-video`, `runway-aleph`, `runway-act-two`) under **video-gen**, `runway-image` under **image-gen**, `runway-upscale` under **transform**, and the three voice nodes (`runway-tts`, `runway-sts`, `runway-dubbing`) under **audio-gen**. Drag a node onto the canvas, wire inputs into its ports, set its params in the inspector, and run.

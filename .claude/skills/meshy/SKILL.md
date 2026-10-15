@@ -86,6 +86,18 @@ Deeper per-workflow guidance:
 - **`reference/animation-library.md`** — all 580+ `action_id` values for the animate endpoint
 - **`reference/handler-gaps.md`** — parameters the Meshy API supports that our current nebula nodes do NOT expose (actionable list for when to extend nodes)
 
+## Krea's Meshy 7 on your Meshy key (2026-10-14)
+
+`krea-3d-meshy-meshy-7` runs on Meshy's own API when `MESHY_API_KEY` is set
+(unless the node is set to the Krea plan), with `ai_model: "meshy-7"`. Meshy
+calls `meshy-7` "deprecated, superseded by `meshy-7.1` (same parameters, same
+cost)" but says it "keeps working unchanged", and it needs account
+entitlement. Text mode: Text to 3D preview, then a refine when
+`generate_texture` is on (20 + 10 credits). Image mode: Image to 3D for one
+image, Multi-Image to 3D for 2-4 (`should_texture` = `generate_texture`).
+`seed` is sent on text mode only (the image APIs document none); a prompt in
+image mode isn't sent. More than 4 images is refused (Meshy's limit).
+
 ## In the nebula_nodes context
 
 - Meshy CLI node ids: `meshy-text-to-3d`, `meshy-image-to-3d`, `meshy-multi-image-to-3d`, `meshy-remesh`, `meshy-retexture`, `meshy-rigging`, `meshy-animate`, `meshy-3d-print`, `meshy-text-to-image`, `meshy-image-to-image`.

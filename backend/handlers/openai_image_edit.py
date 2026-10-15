@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 
 from models.graph import GraphNode, PortValueDict
-from services.file_access import require_allowed_path
+from services.media_input import read_local_media
 from services.output import get_run_dir, portable_output_ref, save_base64_image
 from execution.missing_credential import MissingCredentialError
 from services.retired_nodes import GPT_IMAGE_1_SHUTDOWN, default_until
@@ -20,11 +20,15 @@ OPENAI_IMAGE_EDIT_URL = "https://api.openai.com/v1/images/edits"
 DEFAULT_MODEL = "gpt-image-2.5-sunburst"
 
 
+# "less than 50MB in size" (OpenAI images reference, as in handlers/openai_image_v2.py).
+MAX_IMAGE_BYTES = 50_000_000
+
+
 def _resolve_image_bytes(value: Any) -> bytes:
-    """Convert a filesystem path to raw bytes for multipart upload."""
+    """Convert a filesystem path to raw bytes for multipart upload (file policy, then the size cap)."""
     image_path = Path(str(value))
     if image_path.exists():
-        return require_allowed_path(image_path).read_bytes()
+        return read_local_media(image_path, label="Image input", max_bytes=MAX_IMAGE_BYTES)[1]
     raise ValueError(f"Image file not found: {value}")
 
 

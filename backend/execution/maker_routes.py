@@ -24,9 +24,10 @@ from __future__ import annotations
 
 import copy
 import json
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Any, Awaitable, Callable, Mapping
 
+from execution import maker_routes_elevenlabs
 from execution.missing_credential import MissingCredentialError
 from models.graph import GraphNode, PortValueDict
 from services import node_route
@@ -58,6 +59,19 @@ def route_node(node: GraphNode, allowed: set[str], extra: Mapping[str, Any] | No
     return node.model_copy(update={"params": params})
 
 
+def _blocked_reason(definition: Mapping[str, Any], block: node_route.DirectBlock, direct_key: str) -> str:
+    """Why a run can't use the saved maker key, for the missing-key error."""
+    if block.reason == node_route.BLOCKED:
+        return f"{block.param} is only supported on the {node_route.fallback_provider(definition) or 'copy'} route"
+    if block.reason == node_route.REQUIRES:
+        return f"this recipe can't run on {direct_key} because it needs {block.param} set"
+    if block.reason == node_route.RETIRED:
+        return f"this recipe can't run on {direct_key} because the maker retired this model on {block.on}"
+    if block.reason == node_route.SIZE:
+        return f"this recipe can't run on {direct_key} because the maker can't render its {block.param} exactly"
+    return f"this recipe can't run on {direct_key} because the maker doesn't take {block.detail}"
+
+
 def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | None = None) -> Handler:
     """The registry handler for a dual-route node (see the module docstring).
 
@@ -66,8 +80,18 @@ def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | Non
 
     async def _route(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str]) -> dict[str, Any]:
         definition = definition_for(node.definition_id)
-        route = node_route.select_route(definition, node.params, api_keys)
+        routed_params = node_route.with_wired_blockers(definition, node.params, node_route.filled_ports(inputs))
+        route = node_route.select_route(definition, routed_params, api_keys)
         if route.kind == node_route.UNSET:
+            block = node_route.direct_block(definition, routed_params)
+            set_direct = [k for k in node_route.direct_keys(definition) if str(api_keys.get(k) or "").strip()]
+            if block is not None and set_direct:
+                # The maker key is saved, but this run can only go to the copy
+                # (a Krea-only field, Runway TTS without an ElevenLabs voice_id):
+                # name the key that would run it, and why.
+                raise MissingCredentialError(
+                    f"{' or '.join(node_route.fallback_keys(definition))} is required: "
+                    f"{_blocked_reason(definition, block, set_direct[0])}")
             raise MissingCredentialError(f"{' or '.join(node_route.env_keys(definition))} is required")
         if route.kind == node_route.DIRECT:
             routed = route_node(node, node_route.route_param_keys(definition, node_route.DIRECT))
@@ -250,12 +274,47 @@ async def krea_google_nano_banana(node: GraphNode, inputs: dict[str, PortValueDi
 # (scripts/sync-krea-catalog.py DIRECT_ROUTES): (direct handler, translator for a model).
 KREA_TRANSLATIONS: dict[str, tuple[Handler, Callable[[str], Translate]]] = {
     "krea-nano-banana": (krea_google_nano_banana, krea_nano_banana_to_google),
+    **maker_routes_elevenlabs.KREA_TRANSLATIONS,
 }
+# Krea's Ideogram and Runway copies (execution/maker_routes_ideogram_runway.py).
+from execution.maker_routes_ideogram_runway import TRANSLATIONS as _IDEOGRAM_RUNWAY  # noqa: E402
+
+KREA_TRANSLATIONS.update(_IDEOGRAM_RUNWAY)
+
+from execution import maker_routes_openai  # noqa: E402  (stdlib + models only; no cycle)
+
+KREA_TRANSLATIONS["krea-openai-image"] = (
+    maker_routes_openai.krea_openai_image, maker_routes_openai.krea_openai_image_to_openai,
+)
+
+from execution import maker_routes_xai  # noqa: E402  (registers below; imports nothing from here at load)
+
+KREA_TRANSLATIONS.update({
+    "krea-xai-image": (maker_routes_xai.krea_xai_image, maker_routes_xai.krea_grok_image_to_xai),
+    "krea-xai-video": (maker_routes_xai.krea_xai_video, maker_routes_xai.krea_grok_video_to_xai),
+})
+
+from execution.maker_routes_minimax_meshy import TRANSLATIONS as _MINIMAX_MESHY  # noqa: E402
+
+KREA_TRANSLATIONS.update(_MINIMAX_MESHY)
+
+# Seedream on BytePlus ModelArk (execution/maker_routes_byteplus.py).
+from execution import maker_routes_byteplus as _byteplus  # noqa: E402
+
+KREA_TRANSLATIONS["krea-seedream"] = (_byteplus.krea_byteplus_seedream, _byteplus.krea_seedream_to_byteplus)
+# Seedance on BytePlus ModelArk (execution/maker_routes_byteplus_seedance.py).
+from execution import maker_routes_byteplus_seedance as _seedance  # noqa: E402
+
+KREA_TRANSLATIONS["krea-seedance"] = (_seedance.krea_byteplus_seedance, _seedance.krea_to_byteplus)
 
 
-def krea_router(definition_id: str, fallback: Handler) -> Handler | None:
+def krea_router(definition_id: str, fallback: Handler, emit: Any = None) -> Handler | None:
     """The dual-route handler for a generated Krea node with a maker route, or
-    None when it has none (it stays on the Krea gateway alone)."""
+    None when it has none (it stays on the Krea gateway alone). A direct
+    handler marked ``takes_emit`` (a long video job) gets the run's progress
+    ``emit``."""
+    from execution import maker_routes_google  # noqa: F401  (adds its translations)
+
     definition = _definitions().get(definition_id) or {}
     spec = definition.get("directRoute")
     if not isinstance(spec, Mapping) or not node_route.direct_keys(definition):
@@ -264,4 +323,7 @@ def krea_router(definition_id: str, fallback: Handler) -> Handler | None:
     if translation is None:
         raise ValueError(f"{definition_id}: unknown direct translation {spec.get('translation')!r}")
     direct, make_translate = translation
+    if emit is not None and getattr(direct, "takes_emit", False):
+        # A long maker job (video, 3D) reports progress like the Krea gateway does.
+        direct = partial(direct, emit=emit)
     return dual_route(direct=direct, fallback=fallback, translate=make_translate(str(spec.get("model"))))

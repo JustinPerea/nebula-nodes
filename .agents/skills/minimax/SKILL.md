@@ -15,7 +15,7 @@ description: MiniMax (Hailuo) video generation in Nebula — text-to-video, imag
 ## Universal rules (all MiniMax nodes)
 
 1. **Auth + Settings.** Header `Authorization: Bearer <MINIMAX_API_KEY>` plus `Content-Type: application/json`. Enter the key in Nebula **Settings → MiniMax** and save; it is persisted under `apiKeys.MINIMAX_API_KEY` in project-root `settings.json` and takes effect without a restart. Missing key → the node errors with `MINIMAX_API_KEY is required`.
-2. **Base URL.** `https://api.minimaxi.com` (the handler's `MINIMAX_API_BASE`). All three nodes POST to `https://api.minimaxi.com/v1/video_generation`. Note: the MiniMax *dashboard / docs* Global host is `api.minimax.io`, but Nebula's handler talks to the `api.minimaxi.com` host — do not "correct" it.
+2. **Base URL.** Mainland `https://api.minimaxi.com` first (`MINIMAX_API_BASE`), then Global `https://api.minimax.io` when Mainland rejects the key or answers 404 for the path (MiniMax keys only work on their own region's host). Polling and retrieval use the host that accepted the task.
 3. **Execution pattern: async-poll (3 steps).** All three nodes are `executionPattern: "async-poll"`:
    - **Submit** `POST /v1/video_generation` → returns `task_id`. Accepts HTTP `200/201/202`; anything else raises `MiniMax submit failed`.
    - **Poll** `GET /v1/query/video_generation?task_id=<id>` every **5 s**, up to **300 polls (~25 min)**. Poll must return HTTP `200`. The JSON `status` field drives the loop.
@@ -23,10 +23,32 @@ description: MiniMax (Hailuo) video generation in Nebula — text-to-video, imag
 4. **Status / error codes.** Poll `status` values: `Queueing` / `Processing` → keep polling; `Success` → fetch `file_id` then retrieve; `Fail` → raises `MiniMax task failed: <message>`. No `file_id` on Success, or no `download_url` on retrieve, also raises. After 300 polls without Success → `MiniMax task timed out`.
 5. **Input-URI rules (image ports).** `first_frame_image` (I2V) and `subject_reference` (S2V) accept an `http(s)://` URL, a `data:` URI, or a **local file path** — the handler's `_resolve_image_url` passes URLs/data-URIs through and converts local paths to a data URI via `image_to_data_uri`. A local path that doesn't exist raises `Image file not found`. Use JPG/PNG/WebP. The S2V image must contain a **human face** (it's sent as `subject_reference: [{"type": "character", ...}]`).
 6. **Key gotchas.**
-   - **The connected input selects the mode, not a dropdown.** The handler checks inputs in priority order: `subject_reference` present → **S2V**; else `first_frame_image` present → **I2V**; else → **T2V**. So if you wire a Character Image, duration/resolution are ignored (S2V doesn't send them).
+   - **The connected input selects the mode, not a dropdown.** The handler checks inputs in priority order: `subject_reference` present → **S2V**; else `last_frame_image` present → **first & last frame** (Hailuo 02 only; only the Krea Hailuo 02 copy sends it); else `first_frame_image` present → **I2V**; else → **T2V**. So if you wire a Character Image, duration/resolution are ignored (S2V doesn't send them).
    - **`prompt` is always required.** Empty prompt on any node raises `Prompt input is required` — including I2V and S2V, where the image alone is not enough.
    - **Duration/resolution constraints.** `duration` defaults to `6`, `resolution` to `768P`. The 10 s option is valid **only at 768P**; **1080P is 6 s only**. Don't pair `duration: 10` with `resolution: 1080P`.
    - **Long-running.** A clip normally takes a couple of minutes. Treat these nodes as slow poll nodes — wait on the progress bar, never assume instant output.
+
+## Krea's Hailuo / H3 copies on your MiniMax key (2026-10-14)
+
+With `MINIMAX_API_KEY` saved, `krea-video-minimax-hailuo-02`, `-hailuo-2-3`,
+`-hailuo-2-3-fast` and `-hailuo-3` run on MiniMax instead of Krea (unless the
+node is set to the Krea plan). See the Krea skill's "Maker routes (MiniMax and
+Meshy)" table for what keeps a run on Krea. Translation: `start_image` ->
+`first_frame_image`, `end_image` -> `last_frame_image` (Hailuo 02 only),
+`expand_prompt` -> `prompt_optimizer`, `768p` -> `768P`. H3 uses the V2 API
+(`backend/handlers/minimax_v2.py`): a `content` array with roles
+`first_frame` / `last_frame` / `reference_image` / `reference_video` /
+`reference_audio`, `resolution` 768P or 2K, `duration` 5-15, polled at
+`GET /v2/query/video_generation/{task_id}`; a cancelled queued task is
+deleted (MiniMax: "no charge").
+
+**Region.** MiniMax keys are tied to a region (Global `api.minimax.io`,
+Mainland `api.minimaxi.com`). The handler tries Mainland first (as Nebula
+always has), and if MiniMax rejects the key itself (HTTP 401, or codes
+1004 / 2049), or answers 404 for the path (MiniMax documents H3's /v2 on
+`api.minimax.io` and Mainland's `api.minimax.cn`, not `api.minimaxi.com`), it
+tries Global, then polls wherever the task was accepted. Neither answer creates a task.
+Prices shown are MiniMax Global's USD list prices.
 
 ## Pick the right node
 

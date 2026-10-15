@@ -351,6 +351,70 @@ async def test_shot_seed_override_wins_over_bundle_seed(monkeypatch) -> None:
     assert captured["seed"] == 777
 
 
+async def _bundle_seed_sent(monkeypatch, api_keys: dict[str, str], shot_extra: dict[str, Any] | None = None):
+    """Run a one-shot Seedream 4.5 scene with a Character bundle (seed 84) and
+    return the seed the base node got, and the route its params select."""
+    from services import node_route
+    from services.node_registry import NodeRegistry
+
+    captured: dict[str, Any] = {}
+
+    async def capture(node, inputs, keys):
+        captured["seed"] = node.params.get("seed")
+        definition = NodeRegistry().get_all()[node.definition_id]
+        routed = node_route.with_wired_blockers(definition, node.params, node_route.filled_ports(inputs))
+        captured["route"] = node_route.select_route(definition, routed, keys).kind
+        return {"image": {"type": "Image", "value": _write_base_image()}}
+
+    _patch_base(monkeypatch, capture)
+    scene = {
+        "version": 1,
+        "base": {"model": "seedream-4-5"},
+        "prompt": "a forest at dawn",
+        "aspectRatio": "16:9",
+        "shots": [{"id": "s1", "prompt": "wide shot", **(shot_extra or {})}],
+    }
+    await handle_cinema_scene(
+        _scene_node(scene),
+        inputs={"character": PortValueDict(type="Character", value=_bundle([_write_base_image()], seed=84))},
+        api_keys=api_keys,
+        emit=None,
+    )
+    return captured["seed"], captured["route"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("api_keys", [{"BYTEPLUS_API_KEY": "x"}, {"BYTEPLUS_API_KEY": "x", "FAL_KEY": "x"}])
+async def test_bundle_seed_never_moves_a_byteplus_shot_to_fal(monkeypatch, api_keys) -> None:
+    """With a BytePlus key, Seedream 4.5 runs on BytePlus, which takes no seed:
+    the bundle seed would send each shot to fal while the scene's price and
+    readiness (model_pricing.cinema_scene_base, no seed) quote BytePlus. The
+    shot skips the seed and runs where the estimate said."""
+    from services import model_pricing, node_route
+    from services.node_registry import NodeRegistry
+
+    seed, route = await _bundle_seed_sent(monkeypatch, api_keys)
+    assert seed is None and route == node_route.DIRECT
+    model, params, _ = model_pricing.cinema_scene_base({"scene": {
+        "base": {"model": "seedream-4-5"}, "aspectRatio": "16:9", "shots": [{"id": "s1"}]}})
+    assert node_route.select_route(NodeRegistry().get_all()[model], params, api_keys).kind == route
+
+
+@pytest.mark.asyncio
+async def test_bundle_seed_still_pins_a_fal_shot(monkeypatch) -> None:
+    seed, route = await _bundle_seed_sent(monkeypatch, {"FAL_KEY": "x"})
+    assert seed == 84 and route == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_variation_seed_is_kept_on_byteplus_keys(monkeypatch) -> None:
+    """The variations path's `_seedOverride` is an explicit request for a seeded
+    image; it is kept (and runs on the copy that takes a seed)."""
+    seed, _route = await _bundle_seed_sent(monkeypatch, {"BYTEPLUS_API_KEY": "x", "FAL_KEY": "x"},
+                                           {"_seedOverride": 777})
+    assert seed == 777
+
+
 @pytest.mark.asyncio
 async def test_character_bundle_exceeding_max_refs_raises(monkeypatch) -> None:
     """A bundle whose view count exceeds the base model's reference cap fails
