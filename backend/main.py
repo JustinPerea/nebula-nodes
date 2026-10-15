@@ -86,7 +86,7 @@ from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services.cli_graph import CLIGraph
-from services.retired_nodes import MERGED, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
+from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, now as project_now,
@@ -7920,10 +7920,10 @@ def _migrate_ingress(
     references of the folded nodes). Runs before staging, so validation sees
     the new definitions and ports; malformed items pass through for staging
     to refuse as before."""
-    if not any(isinstance(node, dict) and node.get("definitionId") in MERGED for node in raw_nodes):
+    if not any(isinstance(node, dict) and folded_entry(node.get("definitionId")) for node in raw_nodes):
         return raw_nodes, raw_edges, [], set()
     folded = {str(node.get(reference_key)) for node in raw_nodes
-              if isinstance(node, dict) and node.get("definitionId") in MERGED}
+              if isinstance(node, dict) and folded_entry(node.get("definitionId"))}
     nodes, edges, warnings = migrate_graph(
         [node for node in raw_nodes if isinstance(node, dict)],
         [edge for edge in raw_edges if isinstance(edge, dict)],
@@ -8396,7 +8396,10 @@ def _migrate_rf_graph(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) 
     new node (retired_nodes.migrate_graph), still in React Flow shape. Input
     nodes it adds take the next free ``<node>-<port>`` id; edges, a fresh
     ``migrated-<n>`` id."""
-    if not any(isinstance(node.get("data"), dict) and node["data"].get("definitionId") in MERGED for node in nodes):
+    if not all(isinstance(item, dict) for item in (*nodes, *edges)):
+        # Unvalidated project file: leave it for staging to refuse as before.
+        return nodes, edges, []
+    if not any(isinstance(node.get("data"), dict) and folded_entry(node["data"].get("definitionId")) for node in nodes):
         return nodes, edges, []
     flat: list[dict[str, Any]] = []
     for node in nodes:
@@ -8580,7 +8583,7 @@ def _snapshot_nodes(snapshot: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
             params = data.get("params")
             params = params if isinstance(params, dict) else {}
             definition_id = data.get("definitionId")
-            if definition_id in MERGED:
+            if folded_entry(definition_id):
                 # Saved before the fold: what it loads as (same provider and mode).
                 definition_id, params, _label = migrate_node(definition_id, params)
             nodes[node["id"]] = {"definitionId": definition_id, "params": params}

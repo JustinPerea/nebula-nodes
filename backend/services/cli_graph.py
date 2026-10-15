@@ -294,7 +294,7 @@ class CLIGraph:
         data = json.loads(source.read_text())
         validate_file_references(data)
         counter = data.get("counter", len(data["nodes"]))
-        taken = {str(n.get("id")) for n in data["nodes"]}
+        taken = {str(n.get("id")) for n in data["nodes"] if isinstance(n, dict)}
 
         def next_id(_hint: str) -> str:
             nonlocal counter
@@ -309,9 +309,9 @@ class CLIGraph:
         nodes, edges, warnings = migrate_graph(data["nodes"], data["edges"], new_id=next_id)
         for warning in warnings:
             print(f"[cli_graph] {warning}", flush=True)
-        edge_ids = {str(e.get("id")) for e in edges if e.get("id")}
+        edge_ids = {str(e.get("id")) for e in edges if isinstance(e, dict) and e.get("id")}
         for edge in edges if nodes is not data["nodes"] else ():
-            if not edge.get("id"):
+            if isinstance(edge, dict) and not edge.get("id"):
                 n = len(edge_ids) + 1
                 while f"e{n}" in edge_ids:
                     n += 1

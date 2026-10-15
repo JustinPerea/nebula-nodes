@@ -84,6 +84,7 @@ connection from one is dropped, and the load says which.
 """
 from __future__ import annotations
 
+import math
 from datetime import date
 from typing import Any, Callable
 
@@ -375,9 +376,15 @@ MERGED: dict[str, dict[str, Any]] = {
 }
 
 
+def folded_entry(definition_id: Any) -> dict[str, Any] | None:
+    """The ``MERGED`` entry for a folded definition id, else None. Saved
+    graphs arrive unvalidated, so anything that isn't a string is no id."""
+    return MERGED.get(definition_id) if isinstance(definition_id, str) else None
+
+
 def merged_into(definition_id: str) -> str:
     """The node a folded definition became, or the id itself."""
-    merged = MERGED.get(definition_id)
+    merged = folded_entry(definition_id)
     return merged["into"] if merged else definition_id
 
 
@@ -392,7 +399,7 @@ def migrate_node(
     takes the new node's own name (it is the same model, on the same
     provider). Values typed into a folded node's ports are dropped here;
     ``migrate_graph`` moves them to input nodes first."""
-    merged = MERGED.get(definition_id)
+    merged = folded_entry(definition_id)
     if merged is not None:
         custom = label if isinstance(label, str) and label.strip() and label.strip() != merged["displayName"] else None
         return merged["into"], merged["params"](dict(params or {})), custom
@@ -431,10 +438,15 @@ def migrate_graph(
       by default ``<ref>-<port>``. It goes 360 px to the left of the node,
       moved down past any positioned node it would cover (``_free_spot``).
 
-    Added nodes have no ``label``; added edges have no ``id``."""
-    if not any(node.get("definitionId") in MERGED for node in nodes):
+    Added nodes have no ``label``; added edges have no ``id``.
+
+    The graph is unvalidated (an import, a project file, the boot state), so
+    nothing here may raise on its shape: an item that isn't a dict, or a
+    handle that isn't a string, passes through untouched for staging to
+    refuse as it did before the fold."""
+    if not any(isinstance(node, dict) and folded_entry(node.get("definitionId")) for node in nodes):
         return nodes, edges, []
-    taken = {str(node.get(key)) for node in nodes}
+    taken = {str(node.get(key)) for node in nodes if isinstance(node, dict)}
 
     def fresh(hint: str) -> str:
         if new_id is not None:
@@ -448,11 +460,13 @@ def migrate_graph(
     folded: dict[str, dict[str, Any]] = {}
     names: dict[str, str] = {}
     for node in nodes:
+        if not isinstance(node, dict):
+            continue
         ref = str(node.get(key))
         names[ref] = node.get("label") if isinstance(node.get("label"), str) and node["label"].strip() else ref
-        if node.get("definitionId") in MERGED:
-            folded[ref] = MERGED[node["definitionId"]]
-            merged = folded[ref]
+        merged = folded_entry(node.get("definitionId"))
+        if merged is not None:
+            folded[ref] = merged
             if not (isinstance(node.get("label"), str) and node["label"].strip()):
                 names[ref] = merged["displayName"]
 
@@ -460,30 +474,34 @@ def migrate_graph(
     out_edges: list[dict[str, Any]] = []
     wired: set[tuple[str, str]] = set()
     for edge in edges:
+        if not isinstance(edge, dict):
+            out_edges.append(edge)
+            continue
         edge = dict(edge)
         source, target = str(edge.get("source")), str(edge.get("target"))
-        if source in folded and edge.get("sourceHandle") in folded[source]["outputs"]:
-            handle = folded[source]["outputs"][edge["sourceHandle"]]
+        source_handle, target_handle = edge.get("sourceHandle"), edge.get("targetHandle")
+        if source in folded and isinstance(source_handle, str) and source_handle in folded[source]["outputs"]:
+            handle = folded[source]["outputs"][source_handle]
             if handle is None:
                 warnings.append(
                     f"'{names[source]}' no longer has its Krea '{_OUTPUT_LABELS.get(edge['sourceHandle'], edge['sourceHandle'])}' "
                     f"output, so its connection to '{names.get(target, target)}' was removed.")
                 continue
             edge["sourceHandle"] = handle
-        if target in folded and edge.get("targetHandle") in folded[target]["inputs"]:
-            edge["targetHandle"] = folded[target]["inputs"][edge["targetHandle"]]
+        if target in folded and isinstance(target_handle, str) and target_handle in folded[target]["inputs"]:
+            edge["targetHandle"] = folded[target]["inputs"][target_handle]
         if target in folded:
             wired.add((target, str(edge.get("targetHandle"))))
         out_edges.append(edge)
 
-    occupied = [spot for spot in (_spot(node) for node in nodes) if spot is not None]
+    occupied = [spot for spot in (_spot(node) for node in nodes if isinstance(node, dict)) if spot is not None]
     out_nodes: list[dict[str, Any]] = []
     for node in nodes:
-        ref = str(node.get(key))
-        merged = folded.get(ref)
+        merged = folded.get(str(node.get(key))) if isinstance(node, dict) else None
         if merged is None:
             out_nodes.append(node)
             continue
+        ref = str(node.get(key))
         params = node.get("params") if isinstance(node.get("params"), dict) else {}
         definition_id, new_params, label = migrate_node(str(node["definitionId"]), params, node.get("label"))
         migrated = {**node, "definitionId": definition_id, "params": new_params}
@@ -494,7 +512,7 @@ def migrate_graph(
         if isinstance(node.get("outputs"), dict):
             migrated["outputs"] = {
                 merged["outputs"][handle]: value for handle, value in node["outputs"].items()
-                if merged["outputs"].get(handle)
+                if isinstance(handle, str) and merged["outputs"].get(handle)
             }
         out_nodes.append(migrated)
         position = _spot(node)
@@ -525,24 +543,26 @@ def _spot(node: dict[str, Any]) -> tuple[float, float] | None:
     if not isinstance(position, dict):
         return None
     try:
-        return float(position["x"]), float(position["y"])
-    except (KeyError, TypeError, ValueError):
+        x, y = float(position["x"]), float(position["y"])
+    except (KeyError, TypeError, ValueError, OverflowError):
         return None
+    return (x, y) if math.isfinite(x) and math.isfinite(y) else None
 
 
 def _free_spot(x: float, y: float, occupied: list[tuple[float, float]]) -> tuple[float, float]:
-    """(x, y), or the first spot below it that covers no positioned node."""
-    def covers(top: float) -> bool:
-        return any(abs(x - ox) < _NODE_W and abs(top - oy) < _NODE_H for ox, oy in occupied)
-
-    while covers(y):
-        y += _STEP
+    """(x, y), or the first spot below it, in ``_STEP`` steps, that covers no
+    positioned node. One pass over the nodes in its column, top to bottom: a
+    step loop never ends where ``y + _STEP == y`` (a saved y of 1e18)."""
+    start = y
+    for oy in sorted(oy for ox, oy in occupied if abs(x - ox) < _NODE_W):
+        if abs(y - oy) < _NODE_H:
+            y = start + math.ceil((oy + _NODE_H - start) / _STEP) * _STEP
     return x, y
 
 
 def retired_message(definition_id: str) -> str | None:
     """Why a definition is gone and what to use instead, for error messages."""
-    merged = MERGED.get(definition_id)
+    merged = folded_entry(definition_id)
     if merged is not None:
         return f"'{definition_id}' is now part of '{merged['into']}' (provider: Krea). Use '{merged['into']}' instead."
     retired = RETIRED.get(definition_id)

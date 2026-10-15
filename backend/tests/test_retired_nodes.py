@@ -306,6 +306,53 @@ def test_migrate_graph_leaves_a_graph_without_folded_nodes_alone():
     assert retired_nodes.migrate_graph(nodes, [], key="id") == (nodes, [], [])
 
 
+def test_migrate_graph_passes_a_malformed_graph_through_without_raising():
+    # Imports, project files and the boot state arrive unvalidated; staging
+    # refuses these as it did before the fold, so migration must not raise.
+    unhashable = [{"id": "a", "definitionId": ["x"]}]
+    assert retired_nodes.migrate_graph(unhashable, []) == (unhashable, [], [])
+    nodes = [{"id": "v", "definitionId": FLUX_VIDEO, "params": {}}, "not a node",
+             {"id": "p", "definitionId": "preview"}]
+    edges = [{"source": "v", "sourceHandle": ["video"], "target": "p", "targetHandle": "in"},
+             {"source": "p", "sourceHandle": "out", "target": "v", "targetHandle": {"x": 1}}, 7]
+    out_nodes, out_edges, warnings = retired_nodes.migrate_graph(nodes, edges)
+    assert out_nodes[0]["definitionId"] == "flux-3-video" and out_nodes[1] == "not a node"
+    assert out_edges == edges and warnings == []
+
+
+def test_migrate_graph_skips_a_position_it_cannot_place_by():
+    nodes = [{"id": "v", "definitionId": FLUX_VIDEO, "params": {"prompt": "a comet"},
+              "position": {"x": 10 ** 400, "y": float("nan")}}]
+    out_nodes, _, _ = retired_nodes.migrate_graph(nodes, [])
+    added = [node for node in out_nodes if node["definitionId"] == "text-input"]
+    assert len(added) == 1 and "position" not in added[0]
+
+
+def test_migrate_graph_places_by_a_huge_coordinate_without_looping():
+    # At y = 1e18, y + 40 == y: a step-by-step search for a free spot never ends.
+    import threading
+
+    nodes = [
+        {"id": "t", "definitionId": "text-input", "params": {}, "position": {"x": -360, "y": 1e18}},
+        {"id": "v", "definitionId": FLUX_VIDEO, "params": {"prompt": "a comet"}, "position": {"x": 0, "y": 1e18}},
+    ]
+    result: list = []
+    worker = threading.Thread(target=lambda: result.append(retired_nodes.migrate_graph(nodes, [])), daemon=True)
+    worker.start()
+    worker.join(5)
+    assert not worker.is_alive(), "migrate_graph didn't return"
+    added = next(node for node in result[0][0] if node["id"] == "v-prompt")
+    assert added["position"]["y"] >= 1e18 + 400
+
+
+def test_an_import_with_a_malformed_node_is_refused_not_a_server_error(app_client):
+    _main, client = app_client
+    response = client.post("/api/graph/import", json={"nodes": [
+        {"id": "a", "definitionId": ["krea-video-black-forest-labs-flux-3-video"], "params": {}},
+        {"id": "b", "definitionId": FLUX_VIDEO, "params": {}}], "edges": []})
+    assert 400 <= response.status_code < 500, response.text
+
+
 def test_a_saved_state_file_loads_the_folded_nodes_with_fresh_ids(tmp_path):
     import json
 
