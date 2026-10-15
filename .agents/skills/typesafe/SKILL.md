@@ -75,7 +75,7 @@ TypeSafe says image input and Box aren't production-ready: format, limits and ac
 
 ## Box
 
-A Box answer always contains a box, even when the target isn't there, so the node asks "is it there?" in the same request. Read `found` first: `box` is JSON and `crop` / `mask` / `annotated` exist only when it is `true`; on `false` or `unsure` there is no box at all, and the nodes wired to `crop`, `mask` or `annotated` are skipped (they're gate ports, like Decide's). One target per node, named plainly (`the red mug`, `the logo on the shirt`). Small targets in big images can be missed: crop to the region first. `pad` (default 0.05 of the image per side) grows the crop and mask, not the `box` output. The `mask` is white on black at the original size: white marks the region, the convention FLUX Fill uses. Ideogram edits the black area instead, so it needs the inverse.
+A Box answer always contains a box, even when the target isn't there, so the node asks "is it there?" in the same request. Read `found` first: `box` is JSON and `crop` / `mask` / `annotated` exist only when it is `true`; on `false` or `unsure` there is no box at all, and the nodes wired to `crop`, `mask` or `annotated` are skipped (they're gate ports, like Decide's). One target per node, named plainly (`the red mug`, `the logo on the shirt`). Small targets in big images can be missed: crop to the region first. `pad` (default 0.05 of the image per side) grows the crop and mask, not the `box` output. The `mask` is white on black at the original size: white marks the region, the convention FLUX Fill uses. GPT Image edit nodes convert it themselves (OpenAI edits where a mask is transparent). Ideogram edits the black area instead, so it needs the inverse.
 
 ## Keys and cost
 

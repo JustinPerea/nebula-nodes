@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 import httpx
 
 from models.graph import GraphNode, PortValueDict
 from models.events import ExecutionEvent, ProgressEvent
+from services.edit_masks import fit_mask, image_size
 from services.file_access import require_allowed_path
 from services.cancellation import schedule_detached_cancel
 from services.output import get_run_dir, save_base64_image
@@ -65,6 +68,31 @@ def _to_fal_url(value: str) -> str:
     mime = mime_map.get(suffix, "application/octet-stream")
     b64 = base64.b64encode(require_allowed_path(p).read_bytes()).decode()
     return f"data:{mime};base64,{b64}"
+
+
+def _is_local_file(value: str) -> bool:
+    if value.startswith(("http://", "https://", "data:")):
+        return False
+    try:
+        return Path(value).is_file()
+    except (OSError, ValueError):
+        return False
+
+
+def _fal_mask_url(mask: str, image: str | None) -> str:
+    """The mask as _to_fal_url sends it, resized to the image's size first.
+
+    FLUX Fill and Ideogram edits need the mask at the image's exact size
+    (Black Forest Labs: black areas are kept and white areas inpainted).
+    Nebula's masks already match when they come from Mask Painter or Jev Box
+    on the same image; this covers one made for another size. Only local
+    files are measured, and the polarity is never changed.
+    """
+    if image and _is_local_file(mask) and _is_local_file(image):
+        fitted = fit_mask(require_allowed_path(mask).read_bytes(), image_size(image))
+        if fitted is not None:
+            return "data:image/png;base64," + base64.b64encode(fitted).decode("ascii")
+    return _to_fal_url(mask)
 
 
 def _build_fal_stream_body(node: GraphNode, inputs: dict[str, PortValueDict]) -> dict[str, Any]:
@@ -192,7 +220,8 @@ async def handle_fal_universal(
     # Mask input (flux-pro/v1/fill, ideogram/v3/edit inpainting) → mask_url
     mask_input = inputs.get("mask")
     if mask_input and mask_input.value:
-        fal_input["mask_url"] = _to_fal_url(str(mask_input.value))
+        fal_input["mask_url"] = _fal_mask_url(
+            str(mask_input.value), str(image_input.value) if image_input and image_input.value else None)
 
     # Character reference images (fal-ai/ideogram/character) → reference_image_urls
     reference_images_input = inputs.get("reference_images")

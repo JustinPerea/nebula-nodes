@@ -157,7 +157,7 @@ Every request pairs the Box question with a yes/no "is it there?" question, beca
 | `found` | Text | always | `true`, `false` or `unsure`, from the presence question |
 | `box` | Text | always | JSON below when `found` is `true`; otherwise the text `null` |
 | `crop` | Image | `found` is `true` | The padded box cut from the original image |
-| `mask` | Mask | `found` is `true` | White rectangle (the padded box) on black, original image size |
+| `mask` | Mask | `found` is `true` | White rectangle (the padded box) on black, original image size. FLUX Fill reads it as is; the OpenAI edit nodes convert it to their transparent-means-edit form; Ideogram edits black, so invert it there |
 | `annotated` | Image | `found` is `true` | The original with the box drawn and labelled |
 | `report` | Text | always | report text |
 

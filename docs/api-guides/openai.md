@@ -41,7 +41,7 @@
 1. **Illustrated quote card.** `Text (your quote)` → `gpt-image-2-generate` (size `1024x1536`, quality `high`) → preview. Iterate at quality `low` first to save cost, then bump to `high` for the final.
 2. **Narrated image description (chained media).** `Text (image brief)` → `gpt-image-1-generate` → feed the `image` output into `gpt-4o-chat` (with a `messages` prompt like "Write a 2-sentence caption") → take the `text` output into `openai-tts` (voice `coral`) to get a spoken caption. Three OpenAI nodes, one key.
 3. **Subtitle a voiceover.** `Audio` → `openai-stt` (model `gpt-4o-transcribe`, `response_format` `srt`) → save the SRT. Swap to `openai-translate` instead if the audio is in another language and you want English subtitles.
-4. **Masked inpaint.** `Image` + `Mask` + `Text ("replace the sky with aurora")` → `gpt-image-2-edit`. The prompt must describe the **whole** desired image, not just the masked region; the mask marks where edits are allowed and applies to the first image.
+4. **Masked inpaint.** `Image` + `Mask` + `Text ("replace the sky with aurora")` → `gpt-image-2-edit`. The prompt must describe the **whole** desired image, not just the masked region; the mask marks where edits are allowed and applies to the first image. OpenAI edits only where the mask is fully transparent; Nebula's masks (Mask Painter, Jev Box) are white-on-black, so the edit nodes convert a mask with no transparency (white becomes transparent, black opaque), resize it to the first image, and send it as PNG. A mask that already has transparency is sent unchanged (`backend/services/edit_masks.py`).
 
 ## API coverage — what Nebula uses vs. what OpenAI offers
 
