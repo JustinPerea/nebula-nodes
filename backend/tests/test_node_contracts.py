@@ -215,8 +215,35 @@ def test_registry_definitions_have_valid_contract_shape(definitions: dict[str, d
         errors.extend(_port_errors(node_id, "outputPorts", definition.get("outputPorts")))
         for group in PARAM_GROUPS:
             errors.extend(_param_errors(node_id, group, definition.get(group)))
+        for index, route in enumerate(definition.get("routes") or []):
+            errors.extend(_param_errors(node_id, f"routes[{index}].params", (route or {}).get("params")))
 
     assert errors == []
+
+
+def _route_fixture_definitions() -> dict[str, dict[str, Any]]:
+    path = Path(__file__).parent / "fixtures" / "route_cases.json"
+    return json.loads(path.read_text())["definitions"]
+
+
+def test_route_table_definitions_follow_the_routes_contract(definitions: dict[str, dict[str, Any]]) -> None:
+    """Every route-table node, in the registry and the shared route fixtures,
+    keeps the readers that only know keys right (services/node_route.py
+    routes_problems; scripts/check-node-contracts.mjs validateRoutes is the
+    same check). Its route params also follow the param contract."""
+    from services.node_route import routes_problems
+
+    fixtures = _route_fixture_definitions()
+    assert fixtures, "route_cases.json keeps inline route-table nodes"
+    problems = [problem for definition in [*definitions.values(), *fixtures.values()]
+                for problem in routes_problems(definition)]
+    for node_id, definition in fixtures.items():
+        for group in ("params", "sharedParams"):
+            problems.extend(_param_errors(node_id, group, definition.get(group)))
+        for index, route in enumerate(definition["routes"]):
+            problems.extend(_param_errors(node_id, f"routes[{index}].params", route.get("params")))
+        problems.extend(_port_errors(node_id, "inputPorts", definition.get("inputPorts")))
+    assert problems == []
 
 
 @pytest.mark.asyncio

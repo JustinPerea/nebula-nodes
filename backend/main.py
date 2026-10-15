@@ -6436,12 +6436,7 @@ def _valid_param_keys(definition_id: str) -> set[str] | None:
         "nous-portal-universal",
     }:
         return None
-    keys: set[str] = set()
-    for source_key in ("params", "sharedParams", "falParams", "directParams"):
-        for p in defn.get(source_key, []) or []:
-            if isinstance(p, dict) and p.get("key"):
-                keys.add(p["key"])
-    return keys
+    return {str(p["key"]) for p in node_route.all_param_definitions(defn)}
 
 
 def _to_bool(v: Any) -> bool:
@@ -6491,11 +6486,10 @@ def _coerce_params(definition_id: str, params: dict[str, Any]) -> dict[str, Any]
     defn = node_registry.get(definition_id)
     if not defn:
         return dict(params)
-    param_specs: dict[str, tuple[str, bool]] = {}
-    for source_key in ("params", "sharedParams", "falParams", "directParams"):
-        for p in defn.get(source_key, []) or []:
-            if isinstance(p, dict) and p.get("key") and p.get("type"):
-                param_specs[p["key"]] = (p["type"], bool(p.get("required")))
+    param_specs: dict[str, tuple[str, bool]] = {
+        str(p["key"]): (p["type"], bool(p.get("required")))
+        for p in node_route.all_param_definitions(defn) if p.get("type")
+    }
     result: dict[str, Any] = {}
     for k, v in params.items():
         if k.startswith("_") or v is None:
@@ -6930,9 +6924,8 @@ async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
         definition = node_registry.get("veo-3")
         if not definition:
             raise HTTPException(status_code=400, detail="The Veo motion node is unavailable")
-        param_sources = ([*definition["sharedParams"], *definition.get("falParams", []), *definition.get("directParams", [])]
-                         if "sharedParams" in definition else definition.get("params", []))
-        defaults = {param["key"]: copy.deepcopy(param["default"]) for param in param_sources if "default" in param}
+        defaults = {param["key"]: copy.deepcopy(param["default"])
+                    for param in node_route.all_param_definitions(definition) if "default" in param}
         _validate_params("veo-3", defaults)
         defaults = _coerce_params("veo-3", defaults)
         try:

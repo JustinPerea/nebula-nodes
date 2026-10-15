@@ -78,6 +78,7 @@ import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore } from './cinemaMotionStore';
 import { nodeKeyStatus, withNewKreaMode } from '../lib/kreaConnection';
+import { allParamDefinitions } from '../lib/directRoute';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
 import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
@@ -205,22 +206,19 @@ function restoreBatchPreview(node: Node<NodeData>, history: RunRecord[]): Node<N
     batchVariants: sanitizeVariantScopes(record.batchVariants?.[node.id], outputs.length) } };
 }
 
+/** Every route's defaults (lib/directRoute.ts allParamDefinitions): a
+ * route-table node starts on `_provider: 'auto'` and keeps each route's
+ * values, so a switch keeps them too. */
 function buildDefaultParams(def: ModelNodeDefinition): Record<string, unknown> {
   const defaults: Record<string, unknown> = {};
-  const sources = def.sharedParams
-    ? [...def.sharedParams, ...(def.falParams ?? []), ...(def.directParams ?? [])]
-    : def.params;
-  for (const p of sources) {
+  for (const p of allParamDefinitions(def)) {
     if (p.default !== undefined) defaults[p.key] = p.default;
   }
   return defaults;
 }
 
 function defHasParam(def: ModelNodeDefinition, key: string): boolean {
-  const sources = def.sharedParams
-    ? [...def.sharedParams, ...(def.falParams ?? []), ...(def.directParams ?? [])]
-    : def.params;
-  return sources.some((p) => p.key === key);
+  return allParamDefinitions(def).some((p) => p.key === key);
 }
 
 function definitionHasImageAndMaskPorts(definitionId: string): boolean {

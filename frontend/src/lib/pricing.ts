@@ -1,4 +1,5 @@
 import type { ModelNodeDefinition } from '../types';
+import { allParamDefinitions } from './directRoute';
 
 /** One curated price entry from backend/data/model_pricing.json. The format
  * and its rules live in backend/services/model_pricing.py; this file mirrors
@@ -54,10 +55,8 @@ function asMatchValue(value: unknown): string {
   return String(value);
 }
 
-function definitionParams(definition: Partial<ModelNodeDefinition>) {
-  const record = definition as Record<string, unknown>;
-  return ['params', 'sharedParams', 'directParams', 'falParams'].flatMap((key) =>
-    Array.isArray(record[key]) ? (record[key] as Array<{ key?: string; default?: unknown }>) : []);
+function definitionParams(definition: Partial<ModelNodeDefinition>): Array<{ key?: string; default?: unknown }> {
+  return allParamDefinitions(definition as ModelNodeDefinition);
 }
 
 /** Node params over the definition's defaults over the entry's handler defaults. */

@@ -49,11 +49,9 @@ def provider_via(definition: Mapping[str, Any]) -> Mapping[str, Any] | None:
 
 
 def _param_default(definition: Mapping[str, Any], key: str) -> Any:
-    for group in ("params", "sharedParams", "directParams", "falParams"):
-        for param in definition.get(group) or []:
-            if isinstance(param, Mapping) and param.get("key") == key:
-                return param.get("default")
-    return None
+    from services.node_route import param_definition
+    param = param_definition(definition, key)
+    return param.get("default") if param is not None else None
 
 
 def param_calls_provider(definition: Mapping[str, Any], params: Mapping[str, Any] | None) -> bool:

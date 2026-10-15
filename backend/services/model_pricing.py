@@ -97,12 +97,9 @@ def _price_bounds(price: Any) -> tuple[float, float] | None:
 
 
 def _definition_params(definition: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    params: list[Mapping[str, Any]] = []
-    for key in ("params", "sharedParams", "directParams", "falParams"):
-        value = definition.get(key)
-        if isinstance(value, list):
-            params.extend(p for p in value if isinstance(p, Mapping))
-    return params
+    from services import node_route
+
+    return node_route.all_param_definitions(definition)
 
 
 def route_providers(definition: Mapping[str, Any]) -> set[str]:
