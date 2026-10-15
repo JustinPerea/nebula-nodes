@@ -128,6 +128,8 @@ def test_real_table_prices_veo_first_last_frame_on_vertex():
     )
     assert silent_4k["low"] == pytest.approx(3.2), "video only at 4K is $0.40/s"
     assert model_pricing.estimate_node(entry, flf, {}, "fal") is None
+
+
 def test_run_multipliers_follow_the_nearest_batch_or_iterator():
     nodes = [
         {"id": "b", "definitionId": "batch", "params": {"items_text": "one\n\ntwo\nthree"}},

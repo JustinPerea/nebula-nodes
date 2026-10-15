@@ -377,6 +377,7 @@ def estimate_node(
 # These mirror frontend/src/lib/runScope.ts and lib/directRoute.selectRoute.
 
 from services.node_route import KEY_PROVIDERS as CREDENTIAL_PROVIDERS  # noqa: E402  (kept for callers)
+
 FANOUT_IDS = frozenset({"batch", "iterator-image", "iterator-text"})
 
 
