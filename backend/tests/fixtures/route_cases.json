@@ -7665,6 +7665,545 @@
         "creativity",
         "upscale_factor"
       ]
+    },
+    {
+      "name": "flux-2-pro: a node saved before PR 4 (no _provider) with only FAL_KEY keeps running on fal",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "pro",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "enable_safety_checker",
+        "guidance_scale",
+        "image_size",
+        "model",
+        "num_inference_steps",
+        "output_format",
+        "safety_tolerance",
+        "seed"
+      ],
+      "shownRoute": "fal",
+      "routeParams": [
+        {
+          "key": "model",
+          "options": [
+            "pro",
+            "max",
+            "flash",
+            "flex",
+            "klein-9b",
+            "klein-4b"
+          ]
+        },
+        {
+          "key": "image_size",
+          "options": [
+            "square_hd",
+            "square",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        {
+          "key": "output_format",
+          "options": [
+            "jpeg",
+            "png"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "key": "seed"
+        },
+        {
+          "key": "num_inference_steps",
+          "min": 2,
+          "max": 50
+        },
+        {
+          "key": "guidance_scale",
+          "min": 1.5,
+          "max": 10
+        },
+        {
+          "key": "enable_safety_checker"
+        }
+      ]
+    },
+    {
+      "name": "flux-2-pro: the same saved node goes to bfl once BFL_API_KEY is added (Auto = maker first)",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "pro",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "guidance_scale",
+        "image_size",
+        "model",
+        "num_inference_steps",
+        "output_format",
+        "safety_tolerance",
+        "seed"
+      ],
+      "shownRoute": "bfl",
+      "routeParams": [
+        {
+          "key": "model",
+          "options": [
+            "pro",
+            "max",
+            "flex",
+            "klein-9b",
+            "klein-4b"
+          ]
+        },
+        {
+          "key": "image_size",
+          "options": [
+            "square_hd",
+            "square",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        {
+          "key": "output_format",
+          "options": [
+            "jpeg",
+            "png"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "key": "seed"
+        },
+        {
+          "key": "num_inference_steps",
+          "min": 1,
+          "max": 50
+        },
+        {
+          "key": "guidance_scale",
+          "min": 1.5,
+          "max": 10
+        }
+      ]
+    },
+    {
+      "name": "flux-2-pro: with no key Auto names both keys and shows BFL's options",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "pro",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": null,
+        "block": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY"
+        ]
+      },
+      "unavailable": {
+        "routeId": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY"
+        ],
+        "block": null,
+        "alternatives": [],
+        "message": "FLUX.2 needs BFL_API_KEY or FAL_KEY in Settings > Providers."
+      },
+      "paramKeys": [
+        "guidance_scale",
+        "image_size",
+        "model",
+        "num_inference_steps",
+        "output_format",
+        "safety_tolerance",
+        "seed"
+      ],
+      "shownRoute": "bfl",
+      "routeParams": [
+        {
+          "key": "model",
+          "options": [
+            "pro",
+            "max",
+            "flex",
+            "klein-9b",
+            "klein-4b"
+          ]
+        },
+        {
+          "key": "image_size",
+          "options": [
+            "square_hd",
+            "square",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        {
+          "key": "output_format",
+          "options": [
+            "jpeg",
+            "png"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "key": "seed"
+        },
+        {
+          "key": "num_inference_steps",
+          "min": 1,
+          "max": 50
+        },
+        {
+          "key": "guidance_scale",
+          "min": 1.5,
+          "max": 10
+        }
+      ]
+    },
+    {
+      "name": "flux-2-pro: a saved Flash node with BFL_API_KEY added stops and offers fal",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "flash",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": "bfl",
+        "block": {
+          "reason": "unsupported",
+          "param": "model",
+          "detail": "model flash"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "bfl",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "model",
+          "detail": "model flash"
+        },
+        "alternatives": [
+          "fal"
+        ],
+        "message": "FLUX.2 can't run on Black Forest Labs: it doesn't take model flash. Change that setting, or switch provider. fal.ai can take it."
+      },
+      "paramKeys": [
+        "guidance_scale",
+        "image_size",
+        "model",
+        "num_inference_steps",
+        "output_format",
+        "safety_tolerance",
+        "seed"
+      ]
+    },
+    {
+      "name": "flux-2-pro: a saved Flash node with only FAL_KEY runs on fal",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "flash",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "enable_safety_checker",
+        "guidance_scale",
+        "image_size",
+        "model",
+        "num_inference_steps",
+        "output_format",
+        "safety_tolerance",
+        "seed"
+      ]
+    },
+    {
+      "name": "flux-2-pro: the safety checker saved off stops on bfl and offers fal",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "pro",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": false
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": "bfl",
+        "block": {
+          "reason": "unsupported",
+          "param": "enable_safety_checker",
+          "detail": "enable_safety_checker false"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "bfl",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "enable_safety_checker",
+          "detail": "enable_safety_checker false"
+        },
+        "alternatives": [
+          "fal"
+        ],
+        "message": "FLUX.2 can't run on Black Forest Labs: it doesn't take enable_safety_checker false. Change that setting, or switch provider. fal.ai can take it."
+      },
+      "paramKeys": [
+        "guidance_scale",
+        "image_size",
+        "model",
+        "num_inference_steps",
+        "output_format",
+        "safety_tolerance",
+        "seed"
+      ]
+    },
+    {
+      "name": "flux-2-pro: Klein on fal stops at a safety tolerance other than 2 and offers bfl",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "klein-4b",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "3",
+        "enable_safety_checker": true,
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": "fal",
+        "block": {
+          "reason": "unsupported",
+          "param": "model",
+          "detail": "a safety tolerance other than 2 on Klein"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "fal",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "model",
+          "detail": "a safety tolerance other than 2 on Klein"
+        },
+        "alternatives": [
+          "bfl"
+        ],
+        "message": "FLUX.2 can't run on fal.ai: it doesn't take a safety tolerance other than 2 on Klein. Change that setting, or switch provider. Black Forest Labs can take it."
+      },
+      "paramKeys": [
+        "enable_safety_checker",
+        "guidance_scale",
+        "image_size",
+        "model",
+        "num_inference_steps",
+        "output_format",
+        "safety_tolerance",
+        "seed"
+      ]
+    },
+    {
+      "name": "flux-2-pro: Flex steps on bfl run there",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "flex",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true,
+        "num_inference_steps": 30,
+        "_provider": "bfl"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "guidance_scale",
+        "image_size",
+        "model",
+        "num_inference_steps",
+        "output_format",
+        "safety_tolerance",
+        "seed"
+      ]
+    },
+    {
+      "name": "flux-2-pro: steps on Pro stop every route",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "pro",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true,
+        "num_inference_steps": 30
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": "bfl",
+        "block": {
+          "reason": "unsupported",
+          "param": "model",
+          "detail": "steps on a model other than Flex"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "bfl",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "model",
+          "detail": "steps on a model other than Flex"
+        },
+        "alternatives": [],
+        "message": "FLUX.2 can't run on Black Forest Labs: it doesn't take steps on a model other than Flex. Change that setting, or switch provider."
+      },
+      "paramKeys": [
+        "guidance_scale",
+        "image_size",
+        "model",
+        "num_inference_steps",
+        "output_format",
+        "safety_tolerance",
+        "seed"
+      ]
     }
   ]
 }

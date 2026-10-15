@@ -605,22 +605,355 @@
   "flux-2-pro": {
    "routes": [
     {
+     "id": "bfl",
+     "provider": "bfl",
+     "maker": true,
+     "keys": [
+      "BFL_API_KEY"
+     ],
+     "handler": "bfl",
+     "paramKeys": [],
+     "rules": {
+      "rejects": {
+       "model": [
+        "flash"
+       ],
+       "enable_safety_checker": [
+        false
+       ]
+      },
+      "rejectsWhen": [
+       {
+        "match": {
+         "model": "pro",
+         "num_inference_steps": "(set)"
+        },
+        "label": "steps on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "pro",
+         "guidance_scale": "(set)"
+        },
+        "label": "guidance on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "max",
+         "num_inference_steps": "(set)"
+        },
+        "label": "steps on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "max",
+         "guidance_scale": "(set)"
+        },
+        "label": "guidance on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "klein-9b",
+         "num_inference_steps": "(set)"
+        },
+        "label": "steps on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "klein-9b",
+         "guidance_scale": "(set)"
+        },
+        "label": "guidance on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "klein-4b",
+         "num_inference_steps": "(set)"
+        },
+        "label": "steps on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "klein-4b",
+         "guidance_scale": "(set)"
+        },
+        "label": "guidance on a model other than Flex"
+       }
+      ]
+     }
+    },
+    {
      "id": "fal",
      "provider": "fal",
      "keys": [
       "FAL_KEY"
      ],
-     "paramKeys": []
+     "handler": "fal",
+     "paramKeys": [
+      "enable_safety_checker"
+     ],
+     "rules": {
+      "accepts": {
+       "num_inference_steps": {
+        "min": 2,
+        "max": 50,
+        "integer": true
+       }
+      },
+      "rejectsWhen": [
+       {
+        "match": {
+         "model": "pro",
+         "num_inference_steps": "(set)"
+        },
+        "label": "steps on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "pro",
+         "guidance_scale": "(set)"
+        },
+        "label": "guidance on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "max",
+         "num_inference_steps": "(set)"
+        },
+        "label": "steps on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "max",
+         "guidance_scale": "(set)"
+        },
+        "label": "guidance on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "flash",
+         "num_inference_steps": "(set)"
+        },
+        "label": "steps on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "flash",
+         "guidance_scale": "(set)"
+        },
+        "label": "guidance on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "klein-9b",
+         "num_inference_steps": "(set)"
+        },
+        "label": "steps on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "klein-9b",
+         "guidance_scale": "(set)"
+        },
+        "label": "guidance on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "klein-4b",
+         "num_inference_steps": "(set)"
+        },
+        "label": "steps on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "klein-4b",
+         "guidance_scale": "(set)"
+        },
+        "label": "guidance on a model other than Flex"
+       },
+       {
+        "match": {
+         "model": "klein-9b",
+         "safety_tolerance": "1"
+        },
+        "label": "a safety tolerance other than 2 on Klein"
+       },
+       {
+        "match": {
+         "model": "klein-9b",
+         "safety_tolerance": "3"
+        },
+        "label": "a safety tolerance other than 2 on Klein"
+       },
+       {
+        "match": {
+         "model": "klein-9b",
+         "safety_tolerance": "4"
+        },
+        "label": "a safety tolerance other than 2 on Klein"
+       },
+       {
+        "match": {
+         "model": "klein-9b",
+         "safety_tolerance": "5"
+        },
+        "label": "a safety tolerance other than 2 on Klein"
+       },
+       {
+        "match": {
+         "model": "klein-4b",
+         "safety_tolerance": "1"
+        },
+        "label": "a safety tolerance other than 2 on Klein"
+       },
+       {
+        "match": {
+         "model": "klein-4b",
+         "safety_tolerance": "3"
+        },
+        "label": "a safety tolerance other than 2 on Klein"
+       },
+       {
+        "match": {
+         "model": "klein-4b",
+         "safety_tolerance": "4"
+        },
+        "label": "a safety tolerance other than 2 on Klein"
+       },
+       {
+        "match": {
+         "model": "klein-4b",
+         "safety_tolerance": "5"
+        },
+        "label": "a safety tolerance other than 2 on Klein"
+       }
+      ]
+     }
     }
    ],
    "allParamKeys": [
+    "_provider",
     "model",
     "image_size",
     "output_format",
     "safety_tolerance",
-    "enable_safety_checker",
-    "seed"
-   ]
+    "seed",
+    "num_inference_steps",
+    "guidance_scale",
+    "enable_safety_checker"
+   ],
+   "routeParams": {
+    "bfl": [
+     {
+      "key": "model",
+      "options": [
+       "pro",
+       "max",
+       "flex",
+       "klein-9b",
+       "klein-4b"
+      ]
+     },
+     {
+      "key": "image_size",
+      "options": [
+       "square_hd",
+       "square",
+       "portrait_4_3",
+       "portrait_16_9",
+       "landscape_4_3",
+       "landscape_16_9"
+      ]
+     },
+     {
+      "key": "output_format",
+      "options": [
+       "jpeg",
+       "png"
+      ]
+     },
+     {
+      "key": "safety_tolerance",
+      "options": [
+       "1",
+       "2",
+       "3",
+       "4",
+       "5"
+      ]
+     },
+     {
+      "key": "seed"
+     },
+     {
+      "key": "num_inference_steps",
+      "min": 1,
+      "max": 50
+     },
+     {
+      "key": "guidance_scale",
+      "min": 1.5,
+      "max": 10
+     }
+    ],
+    "fal": [
+     {
+      "key": "model",
+      "options": [
+       "pro",
+       "max",
+       "flash",
+       "flex",
+       "klein-9b",
+       "klein-4b"
+      ]
+     },
+     {
+      "key": "image_size",
+      "options": [
+       "square_hd",
+       "square",
+       "portrait_4_3",
+       "portrait_16_9",
+       "landscape_4_3",
+       "landscape_16_9"
+      ]
+     },
+     {
+      "key": "output_format",
+      "options": [
+       "jpeg",
+       "png"
+      ]
+     },
+     {
+      "key": "safety_tolerance",
+      "options": [
+       "1",
+       "2",
+       "3",
+       "4",
+       "5"
+      ]
+     },
+     {
+      "key": "seed"
+     },
+     {
+      "key": "num_inference_steps",
+      "min": 2,
+      "max": 50
+     },
+     {
+      "key": "guidance_scale",
+      "min": 1.5,
+      "max": 10
+     },
+     {
+      "key": "enable_safety_checker"
+     }
+    ]
+   }
   },
   "flux-3-image": {
    "routes": [

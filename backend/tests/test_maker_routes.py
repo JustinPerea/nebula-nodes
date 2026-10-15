@@ -366,6 +366,8 @@ ROUTE_FIXTURES = json.loads((Path(__file__).parent / "fixtures" / "route_cases.j
 MULTI_ROUTED: set[str] = {
     "flux-3-image", "flux-3-image-klein", "flux-3-image-klein-base", "flux-3-video", "flux-video-edit",
     "flux-video-upscale", "krea-3",
+    # PR 4: FLUX.2 (BFL first, then the fal route it always ran on).
+    "flux-2-pro",
 }
 
 

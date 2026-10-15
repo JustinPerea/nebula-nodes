@@ -35,6 +35,138 @@
         }
       }
     },
+    "flux-2-pro": {
+      "routes": {
+        "bfl": {
+          "currency": "usd",
+          "per": "image",
+          "priceParams": [
+            "model"
+          ],
+          "rows": [
+            {
+              "match": {
+                "model": "pro"
+              },
+              "price": 0.03
+            },
+            {
+              "match": {
+                "model": "max"
+              },
+              "price": 0.07
+            },
+            {
+              "match": {
+                "model": "flex"
+              },
+              "price": 0.05
+            },
+            {
+              "match": {
+                "model": "klein-9b"
+              },
+              "price": 0.015
+            },
+            {
+              "match": {
+                "model": "klein-4b"
+              },
+              "price": 0.014
+            }
+          ],
+          "notes": "BFL bills FLUX.2 by megapixel: a flat first megapixel, then mpPrice per extra output megapixel (rounded up) and inputMpPrice per input megapixel (docs.bfl.ai/quick_start/pricing: \"The first megapixel costs a flat rate, then each additional MP adds to the total\"; its calculator adds (ceil(outputMP) - 1) x mpPrice). A megapixel is 1,048,576 px (1024 x 1024). Every size preset is at most 1024 x 1024 and the node takes no input image, so every run is the first-megapixel price and image_size never changes it. Cards in credits (1 credit = $0.01), first / extra / input: pro 3 / 1.5 / 1.5, max 7 / 3 / 3, flex 5 / 5 / 5, klein-9b 1.5 / 0.2 / 0.2, klein-4b 1.4 / 0.1 / 0.1. No Flash row: BFL has no /v1/flux-2-flash (the route rejects it).",
+          "sources": [
+            {
+              "url": "https://bfl.ai/pricing",
+              "quote": "pricingCards (the CMS data bfl.ai/pricing and docs.bfl.ai render): FLUX.2 [pro] /v1/flux-2-pro firstMpPrice 3, mpPrice 1.5, inputMpPrice 1.5, priceUnit 0.03; FLUX.2 [max] 7 / 3 / 3, 0.07; FLUX.2 [flex] 5 / 5 / 5, 0.05; FLUX.2 [klein] 9B 1.5 / 0.2 / 0.2, 0.015; FLUX.2 [klein] 4B 1.4 / 0.1 / 0.1, 0.014"
+            },
+            {
+              "url": "https://docs.bfl.ai/quick_start/pricing",
+              "quote": "FLUX.2 uses **megapixel-based pricing** — cost scales with output resolution. ... 1 credit equals $0.01 USD."
+            }
+          ],
+          "checked": "2026-10-15"
+        },
+        "fal": {
+          "currency": "usd",
+          "per": "image",
+          "provider": "fal",
+          "priceParams": [
+            "model"
+          ],
+          "rows": [
+            {
+              "match": {
+                "model": "pro"
+              },
+              "price": 0.03
+            },
+            {
+              "match": {
+                "model": "max"
+              },
+              "price": 0.07
+            },
+            {
+              "match": {
+                "model": "flex"
+              },
+              "price": 0.05
+            },
+            {
+              "match": {
+                "model": "flash"
+              },
+              "price": 0.005,
+              "unconfirmed": true
+            },
+            {
+              "match": {
+                "model": "klein-9b"
+              },
+              "price": 0.011,
+              "unconfirmed": true
+            },
+            {
+              "match": {
+                "model": "klein-4b"
+              },
+              "price": 0.009,
+              "unconfirmed": true
+            }
+          ],
+          "notes": "Pro, Max and Flex are BFL's API resold on fal (endpointBilling is_partner_api), billed per megapixel rounded up, and fal's own examples put 1024 x 1024 at one megapixel, so every preset (at most 1024 x 1024) is the first-megapixel price. Flash and Klein run on fal's own servers (provider_type fal), billed per megapixel of input and output with no rounding stated, so a preset under 1 MP may bill pro rata (landscape_4_3 is 0.75 MP): the 1 MP price is an upper bound, marked unconfirmed on those rows. Klein's own endpointBilling says $0.006 (9B) and $0.005 (4B) per megapixel, while the price text on the same pages reads $0.011 and $0.009 and may describe the Klein edit and Base cards listed there; the higher is kept. Flash's page states no price text; its endpointBilling is $0.005.",
+          "sources": [
+            {
+              "url": "https://fal.ai/models/fal-ai/flux-2-pro",
+              "quote": "Your request will cost **$0.03** for the first megapixel of output, plus **$0.015** per extra megapixel of input and output, rounded up to the nearest megapixel. For example, a **1024x1024** image will cost **$0.03**"
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/flux-2-max",
+              "quote": "The first processed megapixel will cost **$0.07**. Each additional megapixel will cost **0.03**"
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/flux-2-flex",
+              "quote": "Your request will cost **$0.05** per megapixel on both input and output side, rounded up to the nearest megapixel. For example, a **1024x1024** image will cost **$0.05**"
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/flux-2/flash",
+              "quote": "endpointBilling: {\"endpoint\":\"fal-ai/flux-2/flash\",\"billing_unit\":\"megapixels\",\"price\":0.005,\"provider_type\":\"fal\"}"
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/flux-2/klein/9b",
+              "quote": "Requests cost **$0.011** per megapixel of input and output. (endpointBilling: {\"endpoint\":\"fal-ai/flux-2/klein/9b\",\"billing_unit\":\"megapixels\",\"price\":0.006})"
+            },
+            {
+              "url": "https://fal.ai/models/fal-ai/flux-2/klein/4b",
+              "quote": "Requests cost **$0.009** per megapixel of input and output. (endpointBilling: {\"endpoint\":\"fal-ai/flux-2/klein/4b\",\"billing_unit\":\"megapixels\",\"price\":0.005})"
+            }
+          ],
+          "checked": "2026-10-15"
+        }
+      }
+    },
     "flux-3-image": {
       "routes": {
         "bfl": {
