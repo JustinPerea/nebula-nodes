@@ -18,7 +18,7 @@ sequenceDiagram
   D-->>N: image or video bytes, saved to the run folder at once
 ```
 
-**Status (2026-10-15):** the key and the client are in. No node uses BFL yet: the FLUX 3 nodes, with BFL as their maker route and a provider switcher, come in the next PRs of the routing series. Until then, a saved BFL key shows in Settings and its health check runs, but no run bills it.
+**Status (2026-10-15, routing series PR 3):** BFL is the maker route of FLUX 3 Image, FLUX 3 Image Klein, FLUX 3 Video, FLUX Video Edit and FLUX Video Upscale (`flux-3-image`, `flux-3-image-klein`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale`). Under Auto a run goes to BFL whenever `BFL_API_KEY` is set (and stops, offering the routes that can, when BFL can't take the settings); the provider switcher picks another route. `draft_enhance` isn't offered yet. See `docs/PROVIDER-ROUTES.md`.
 
 ## Setup
 
