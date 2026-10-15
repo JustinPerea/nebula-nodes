@@ -29,13 +29,30 @@ interface JevResultViewProps {
   fieldText?: string | null;
 }
 
+// The report cuts each field to this many characters, the last one an
+// ellipsis (_one_line in backend/services/jev_outputs.py).
+const REPORT_FIELD_LIMIT = 300;
+const REPORT_ELLIPSIS = '…';
+
+// Handlers collapse runs of whitespace before asking, so compare the same way.
+const collapsed = (text: string) => text.split(/\s+/).filter(Boolean).join(' ');
+
+/** True when the report's copy of a question is the field's text, allowing for
+ * the report cutting a long one short. A cut copy only shows the first 299
+ * characters, so an edit past that point can't be told apart from no edit. */
+function sameQuestion(asked: string, fieldText: string): boolean {
+  const reported = collapsed(asked);
+  const field = collapsed(fieldText);
+  if (reported === field) return true;
+  if (!reported.endsWith(REPORT_ELLIPSIS) || field.length <= REPORT_FIELD_LIMIT) return false;
+  return field.startsWith(collapsed(reported.slice(0, -REPORT_ELLIPSIS.length)));
+}
+
 /** What the result line should say, given the field above it. Null hides it. */
 function echoedText(asked: string | null, fieldText: string | null | undefined): { text: string; earlier: boolean } | null {
   if (!asked) return null;
   if (fieldText === undefined) return { text: asked, earlier: false };
-  // Handlers collapse runs of whitespace before asking, so compare the same way.
-  const same = (text: string) => text.split(/\s+/).filter(Boolean).join(' ');
-  return same(asked) === same(fieldText ?? '') ? null : { text: asked, earlier: true };
+  return sameQuestion(asked, fieldText ?? '') ? null : { text: asked, earlier: true };
 }
 
 type Tone = JevVerdictLabel['tone'] | 'none';

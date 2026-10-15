@@ -441,6 +441,88 @@
         },
         "branch": "pass"
       }
+    },
+    {
+      "name": "yes/no with a question longer than the report line",
+      "params": {
+        "question": "Judge this product photo against the full brief before it goes to the catalog.\n\nIs the product the only object in frame, centred, lit evenly from the front with no hard shadows, shown on a plain white seamless background with no visible horizon line, props, hands, packaging, price tags, watermarks or text overlays, and is the whole product in focus from the front edge to the back edge with nothing cropped at the borders?"
+      },
+      "context": "Studio shot of a white ceramic mug on a seamless white backdrop.",
+      "response": {
+        "model": "jev-1.14.0",
+        "answers": {
+          "decide": {
+            "type": "noul",
+            "noul": 0.93
+          }
+        },
+        "usage": {
+          "input_tokens": 312,
+          "output_tokens": 20
+        }
+      },
+      "outputs": {
+        "answer": {
+          "type": "Text",
+          "value": "yes"
+        },
+        "pass": {
+          "type": "Text",
+          "value": "true"
+        },
+        "probability": {
+          "type": "Text",
+          "value": "0.93"
+        },
+        "confidence": {
+          "type": "Text",
+          "value": "0.86"
+        },
+        "probabilities": {
+          "type": "Text",
+          "value": "{\"yes\": 0.93, \"no\": 0.07}"
+        },
+        "report": {
+          "type": "Text",
+          "value": "Jev Decide (yes/no)\nQuestion: Judge this product photo against the full brief before it goes to the catalog. Is the product the only object in frame, centred, lit evenly from the front with no hard shadows, shown on a plain white seamless background with no visible horizon line, props, hands, packaging, price tags, watermarks o…\nAnswer: yes\nPass: true\nProbability: 0.93\nConfidence: 0.86\nModel: jev-1.14.0\nInput tokens: 312"
+        },
+        "on_pass": {
+          "type": "Text",
+          "value": "true"
+        },
+        "on_fail": {
+          "type": "Any",
+          "value": null,
+          "withheld": "Jev Decide passed (answered yes, 0.93)"
+        }
+      },
+      "parsed": {
+        "kind": "decide",
+        "answer": "yes",
+        "pass": "true",
+        "probability": 0.93,
+        "confidence": 0.86,
+        "probabilities": {
+          "yes": 0.93,
+          "no": 0.07
+        },
+        "report": {
+          "title": "Jev Decide (yes/no)",
+          "fields": {
+            "Question": "Judge this product photo against the full brief before it goes to the catalog. Is the product the only object in frame, centred, lit evenly from the front with no hard shadows, shown on a plain white seamless background with no visible horizon line, props, hands, packaging, price tags, watermarks o…",
+            "Answer": "yes",
+            "Pass": "true",
+            "Probability": "0.93",
+            "Confidence": "0.86",
+            "Model": "jev-1.14.0",
+            "Input tokens": "312"
+          },
+          "notes": [],
+          "model": "jev-1.14.0",
+          "inputTokens": 312
+        },
+        "branch": "pass"
+      }
     }
   ],
   "pickBest": [

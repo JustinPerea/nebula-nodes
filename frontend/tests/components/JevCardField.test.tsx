@@ -124,6 +124,30 @@ describe('Jev result under the card field', () => {
     expect(screen.queryByTestId('jev-asked')).not.toBeInTheDocument();
   });
 
+  it('does not mark a long question the report cut short as an earlier one', () => {
+    const s = sample(fixture.decide, 'longer than the report line');
+    const question = String(s.params?.question);
+    expect(question.length).toBeGreaterThan(300);
+    // The fixture comes from the real handler, so its report really is cut.
+    expect(String(s.outputs.report.value)).toMatch(/^Question: .{299}…$/m);
+    renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
+    expect(screen.getByTestId('jev-result')).toBeInTheDocument();
+    expect(screen.getByLabelText('Question')).toHaveValue(question);
+    expect(screen.queryByTestId('jev-asked')).not.toBeInTheDocument();
+  });
+
+  it('still marks a long question as earlier once its start is edited', () => {
+    const s = sample(fixture.decide, 'longer than the report line');
+    renderLive(node('j1', JEV_DECIDE, s.params, s.outputs, 'complete'));
+    const edited = `Check this catalog shot. ${String(s.params?.question)}`;
+    fireEvent.change(screen.getByLabelText('Question'), { target: { value: edited } });
+    expect(screen.getByTestId('jev-asked')).toHaveTextContent(/^Asked Judge this product photo against the full brief/);
+    cleanup();
+    // Trimmed to its first 120 characters, it is a different question too.
+    renderLive(node('j2', JEV_DECIDE, { question: String(s.params?.question).slice(0, 120) }, s.outputs, 'complete'));
+    expect(screen.getByTestId('jev-asked')).toHaveTextContent(/^Asked Judge this product photo/);
+  });
+
   it('treats a blank Pick Best question as its default, which is what it asked', () => {
     const s = sample(fixture.pickBest, 'a clear winner');
     renderLive(node('p1', JEV_PICK_BEST, { question: '' }, s.outputs, 'complete'));
