@@ -5,6 +5,7 @@ import type { CreateDraftSeed } from '../store/createDraftStore';
 import { backendAssetUrlSync } from './backend';
 import { isCreateModel } from './createModels';
 import { isRecipeParam } from './billingParams';
+import { allParamDefinitions } from './directRoute';
 import { kreaModeFor, supportsKreaAccount } from './kreaConnection';
 import type { RunRecord, RunSnapshotNode } from './runHistory';
 
@@ -64,8 +65,7 @@ function authorParams(params: Record<string, unknown>, definition?: ModelNodeDef
 function modelName(definitionId: string, params: Record<string, unknown>): string {
   const definition = NODE_DEFINITIONS[definitionId];
   if (!definition) return definitionId;
-  const selected = [...definition.params, ...(definition.sharedParams ?? []),
-    ...(definition.directParams ?? []), ...(definition.falParams ?? [])]
+  const selected = allParamDefinitions(definition)
     .find((param) => param.key === 'model')?.options?.find((option) => option.value === params.model)?.label;
   return selected && selected !== definition.displayName
     ? `${definition.displayName} · ${selected}` : definition.displayName;
