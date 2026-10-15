@@ -379,6 +379,23 @@ async def run_replicate_model(node: GraphNode, inputs: dict[str, PortValueDict],
 
 
 # -- OpenRouter images and videos (handlers/openrouter_media.py) ---------------
+# /images input_references take "base64 data URLs or HTTP(S) URLs" (OpenAPI
+# ImageGenerationRequest). /videos frame_images say nothing about data URLs:
+# openrouter.ai/docs/features/multimodal/video-generation.md and
+# openrouter.ai/openapi.json FrameImage (both read 2026-10-15) only show
+# https URLs. So a video frame goes only as a public http(s) URL.
+
+
+def public_frame_url(value: Any, where: str) -> str:
+    """A video frame as OpenRouter is documented to take it: an http(s) URL.
+    A local output or a data: URI stops before any request."""
+    from services.output import local_media_ref
+
+    ref = local_media_ref(str(value))
+    if not ref.startswith(("http://", "https://")):
+        raise ValueError(f"{where} takes frame images only as public http(s) URLs, not a Nebula output or an "
+                         "inline image. Choose another provider for it, or wire an image from a public URL.")
+    return ref
 
 
 async def run_openrouter_images(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str], *,
@@ -419,7 +436,7 @@ async def run_openrouter_videos(node: GraphNode, inputs: dict[str, PortValueDict
     for port, frame_type in (("start_image", "first_frame"), ("end_image", "last_frame")):
         value = one_value(inputs, port, where)
         if value is not None:
-            frames.append({**media.image_url(media_url(value)), "frame_type": frame_type})
+            frames.append({**media.image_url(public_frame_url(value, where)), "frame_type": frame_type})
     if frames:
         body["frame_images"] = frames
     path = await media.generate_video(media.api_key(api_keys), body, node_id=node.id, emit=emit)

@@ -512,6 +512,17 @@ async def test_openrouter_videos_failures_and_unsupported_inputs(monkeypatch):
     assert len(hosts.requests) == before
 
 
+@pytest.mark.asyncio
+async def test_openrouter_videos_refuse_frames_that_arent_public_urls(monkeypatch, local_png):
+    # OpenRouter's video docs and OpenAPI show frame_images only as https
+    # URLs; a local output (sent as a data URI elsewhere) stops before billing.
+    hosts = FakeHosts(monkeypatch, [])
+    for frame in (local_png, "data:image/png;base64,iVBORw0KGgo=", "/api/outputs/route-client-inputs/frame.png"):
+        with pytest.raises(ValueError, match="only as public http"):
+            await run("openrouter-videos", "clients-video", "openrouter", {}, ports(prompt="p", start_image=frame))
+    assert not hosts.requests
+
+
 # -- Krea catalog ---------------------------------------------------------------
 
 KREA = r"https://api\.krea\.ai"

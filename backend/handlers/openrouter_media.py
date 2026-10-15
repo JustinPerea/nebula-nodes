@@ -24,7 +24,9 @@ the Python SDK's VideoGeneration reference
 - Videos: the body takes ``model``, ``prompt``, ``duration``,
   ``resolution``, ``aspect_ratio``, ``size``, ``frame_images`` (entries
   ``{type: "image_url", image_url: {url}, frame_type: "first_frame" |
-  "last_frame"}``), ``input_references``, ``generate_audio``, ``seed`` and
+  "last_frame"}``; only https URLs are shown, and unlike ``/images`` no
+  data URL is mentioned, so route_clients.py sends frames only as public
+  http(s) URLs), ``input_references``, ``generate_audio``, ``seed`` and
   ``provider``. Submit answers 202 ``{id, polling_url, status}``; poll
   ``GET /api/v1/videos/{id}`` until ``completed``, then download
   ``unsigned_urls[0]`` "with your API key in the Authorization header".
