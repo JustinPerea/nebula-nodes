@@ -67,6 +67,30 @@ A route-table node keeps its usual fields (`apiProvider` is the maker, `envKeyNa
 - The cache key names the route that ran: `direct:bfl`, `fallback:replicate`, `plan:krea`, so a result from one provider never replays as another's.
 - The handler gets only the route's own settings, renamed and value-mapped (`translate_params`). A Krea route also gets `_kreaAuth` for how this run bills.
 
+## Route clients
+
+`backend/execution/route_clients.py` `ROUTE_CLIENTS` has one client per `handler`. The router hands each one the route's own params, already renamed and value-mapped, the run's inputs and keys, the route spec, and the `endpoint` it picked from `endpointWhen`. It picks the endpoint from our names and the wired ports, before translation. The client does the structural part a table can't say:
+
+| `handler` | Calls | Wired media | Notes |
+|---|---|---|---|
+| `bfl` | `handlers/bfl.py` `run_task` on the route's path (`/v1/flux-3-image` and so on) | `images` → `images`; a video's `start_image` + `keyframes` + `end_image` → `keyframes` (`mode: i2v`), `start_video` → `start_video` (`mode: v2v`), nothing → `mode: t2v`; video edit `video`, upscale `input_video` | URLs pass through, local outputs go as data URIs. No cancel (BFL has none). |
+| `fal` | `handle_fal_universal` on the endpoint id | by the endpoint's last segment: `edit-image` `image_urls`, `image-to-video` `image_url`, `first-last-frame-to-video` `start_image_url`/`end_image_url`, `keyframes-to-video` `keyframes[{image_url, frame_index}]` (spread evenly over `duration` × 24 frames), `extend-video`/`edit-video` `video_url` | fal forwards every param, so its copy holds only the route's params, the media fields and `endpoint_id`. Cancel: fal's queue cancel. |
+| `replicate-model` | `handlers/replicate_model.py` `run_model`: `POST /v1/models/{owner}/{name}/predictions` | `images` (and a video's frames, in order) → `images`, `start_video` → `start_video` | Local files go up through `POST /v1/files` first. The output is saved as the node's port type, fetched with the token only from `replicate.delivery`. Cancel: `POST /v1/predictions/{id}/cancel`. |
+| `openrouter-images` | `handlers/openrouter_media.py`: `POST /api/v1/images` | `images` → `input_references` | Params outside the documented request fields go under `provider.options[<owner slug>]` (FLUX: `safety_tolerance`). Saves `data[0].b64_json`. |
+| `openrouter-videos` | `POST /api/v1/videos`, poll `GET /api/v1/videos/{id}`, download `unsigned_urls[0]` | `start_image`/`end_image` → `frame_images` (`first_frame`/`last_frame`) | A source video isn't sent: its request shape isn't documented. No cancel (OpenRouter has none for video). |
+| `krea` | `handlers/krea_gateway.py` `handle_krea_catalog`: the catalog model the `endpoint` names (a catalog key, or the `/generate/...` path one entry serves) | by name: Krea's request fields are its port ids | Bills by the `_kreaAuth` the router sets. The plan runs through the same account path as every Krea node. |
+
+- **Nothing is dropped.** A wired input the chosen endpoint can't take stops the run before any request, and so does a recipe the provider can't express (a video and images together, an end image with nothing before it). Each error says what to disconnect or that another provider would take it.
+- **Output.** The result lands on the node's own output port, typed by that port.
+- **Request shapes are pinned.** `backend/tests/fixtures/provider_schemas/` holds each provider's request schema, copied from its docs on 2026-10-15 (OpenRouter's is hand-written from its parameter tables; it publishes none). `tests/test_route_clients.py` checks every body against them with unknown fields refused. It also runs each client end to end through `multi_route` on the fixture nodes in `fixtures/route_client_definitions.json`.
+
+### Adding a client, or a provider path
+
+1. Read the provider's own schema or docs. Copy the request schema into `tests/fixtures/provider_schemas/` with its source URL and date.
+2. A new path on an existing client (a BFL path, a fal endpoint segment) is a row in that client's table in `route_clients.py`. A client with no shape for a path refuses it, so this step can't be skipped by accident.
+3. A new client is a `run(node, inputs, api_keys, *, route, emit, endpoint)` in `ROUTE_CLIENTS`, keyed by a name in `node_route.ROUTE_HANDLERS`, `check-node-contracts.mjs` `ROUTE_HANDLERS` and the TS `RouteHandler` type. Put the HTTP calls in a `handlers/` module and keep the structural step in `route_clients.py`.
+4. Test it with `httpx.MockTransport`: the request against the schema, the output, errors, and cancel where the provider has one. Add a case to the end-to-end test.
+
 ## Prices
 
 A route-table node's price entry keys each route by its `pricing` key (default its id):
@@ -84,7 +108,7 @@ A route-table node's price entry keys each route by its `pricing` key (default i
 ## Adding a route-table node
 
 1. Write the node in `frontend/src/constants/nodeDefinitions.ts` and the same entry in `backend/data/node_definitions.json`. `scripts/export-node-defs.ts` writes the JSON from the TS, but the two already differ in a few labels, so check its diff before keeping it.
-2. Each route's `handler` needs a client in `route_clients.ROUTE_CLIENTS`. A route without one fails with "can't run on X in this version of Nebula yet".
+2. Each route's `handler` names a client in `route_clients.ROUTE_CLIENTS` (see Route clients). Its endpoint must be a path that client has a request shape for. If not, add the shape first.
 3. Price it per route in `backend/data/model_pricing.json`, with sources.
 4. Regenerate: `backend/.venv/bin/python scripts/generate-route-tables.py` and `node scripts/generate-model-reference.mjs`.
 5. Run `node scripts/check-node-contracts.mjs`.
@@ -94,4 +118,5 @@ A route-table node's price entry keys each route by its `pricing` key (default i
 - `backend/tests/fixtures/route_cases.json`: shared Python/TS cases. The first 147 are the legacy rule, unchanged; the `definitions` block holds three fixture route tables and the cases that run on them.
 - `backend/tests/fixtures/route_tables.json`: every node's computed routes and param list, pinned (`scripts/generate-route-tables.py --check`).
 - `backend/tests/fixtures/pricing_cases.json`: the `table` node, a five-route fixture, with `runCases` and `routeEstimateCases`.
+- `test_route_clients.py` with `fixtures/route_client_definitions.json` and `fixtures/provider_schemas/`: the six clients.
 - `test_node_route.py`, `test_maker_routes.py`, `test_route_preflight.py`, `test_billing_choice.py`, `test_route_agent_surfaces.py`; `directRoute.test.ts`, `routeTables.test.ts`, `pricing.test.ts`, `runScope.test.ts`, `billingParams.test.ts`.

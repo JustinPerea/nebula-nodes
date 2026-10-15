@@ -1,5 +1,29 @@
 # Implementation Notes
 
+## 2026-10-15 — Provider routes, PR 2: the route clients
+
+Branch `switcher-clients` (the clients lane of PR 2; the switcher UI and per-route options are the other lane). `ROUTE_CLIENTS` now has all six handler kinds. There are still no production route-table nodes, so nothing a person runs changes until PR 3. Guide: `docs/PROVIDER-ROUTES.md`, "Route clients".
+
+Decisions the brief didn't make:
+- **The router resolves the endpoint, not the client.** `multi_route` calls `route_endpoint` on the routed values (our names, wired ports marked) and passes `endpoint=` to the client. The client only sees translated params, so a `when` on a renamed or value-mapped param couldn't match there. This is one line in `maker_routes.py`. It is pinned by `test_multi_route_tells_the_client_the_endpoint_for_its_wired_ports`.
+- **Port names are fixed by the clients, not declared per route.** Adding a port-mapping field to `RouteSpec` would have touched `node_route.py`, the TS type and the contract script. The UI lane owns those. The clients use DESIGN section 7's port ids (`prompt`, `images`, `start_image`, `keyframes`, `end_image`, `start_video`, `video`). A wired port the endpoint can't take is refused before any request, never dropped.
+- **Each client keeps a per-path table and refuses paths it doesn't know.** That covers BFL paths and fal endpoint segments (with `/draft` stripped). FLUX.2 on BFL (PR 4), Krea 3 on fal and fal's `flux-video-upscale` (PR 3) each need a row, pinned to a copied schema, before they can run.
+- **Frames.** A video node's images are `start_image`, then `keyframes`, then `end_image`, in that order. That is BFL's `keyframes` list and Replicate's `images` list ("one starts, two start and end"). An end image with nothing before it is refused, since the provider would open the clip with it. On fal, `keyframes-to-video` spreads them evenly over `duration × 24` frames. That is BFL's own spacing for plain images, and fal needs a set integer duration for it.
+- **Media.** BFL, fal and OpenRouter get local outputs as data URIs. BFL's docs send `data:image/png;base64,...` themselves, and fal_universal already does this. Replicate uploads local files through `POST /v1/files` and sends `urls.get`. The HTTP reference limits data URLs to 256 KB. The files endpoint is in Replicate's OpenAPI, and passing `urls.get` as an input is what Replicate's own JS client does (opensrc replicate-javascript 1.4.0, `lib/util.js`). The HTTP reference page doesn't document it.
+- **Krea endpoint.** A route's `endpoint` is a catalog key or the `/generate/...` path that exactly one catalog entry serves. That's two spellings, but the path is what Krea's docs and the PR 1 fixture use. `handle_krea_catalog` requires `_kreaAuth` from the router and refuses to guess.
+- **OpenRouter passthrough slug = the model's owner prefix** (`black-forest-labs`). FLUX is served only by that provider. A model served under another slug needs its own mapping (`provider_slug`).
+- **Replicate output download.** Replicate says output files need the `Authorization` header and are "served from replicate.delivery and its subdomains". The token goes only to an https `*.replicate.delivery` host, and any other output host gets no header. The universal Replicate handler leaves outputs to the engine, which downloads them without a header.
+
+Left out, because the shape couldn't be verified:
+- **OpenRouter video from a source video** (continuation, FLUX Video Edit/Upscale). The SDK reference lists `previous_job_id` (an OpenRouter job) and video entries in `input_references` with no documented shape. A wired `start_video`/`video` is refused with a message.
+- **No cancel** on BFL or on OpenRouter video jobs. Neither documents one, so a stopped run only stops polling.
+- **BFL `draft_enhance`.** A draft's cache bundle isn't a Nebula port yet.
+
+Tradeoffs and surprises:
+- **Billed cost is logged, not recorded.** BFL's settled credits, OpenRouter's `usage.cost` and Replicate's `predict_time` go to the log, the same as PR 1's BFL client. There is still no per-run actual-cost record.
+- **Test transport.** Patching `httpx.AsyncClient` with a function, as test_bfl.py does, breaks any module imported afterwards that uses `httpx.AsyncClient | None` in an annotation (`mcp`, pulled in by `sync_runner`). The new tests patch in a subclass instead.
+- **Provider schemas are copied, not fetched.** `tests/fixtures/provider_schemas/{bfl,fal,replicate}.json` were extracted from the 2026-10-15 dumps with `$ref`s inlined. `openrouter.json` is hand-written from the docs' parameter tables, because OpenRouter publishes no JSON schema for these bodies.
+
 ## 2026-10-15 — PR 1 review fixes
 
 ### Review follow-up
