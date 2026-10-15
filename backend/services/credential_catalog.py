@@ -21,6 +21,7 @@ from __future__ import annotations
 
 CREDENTIAL_PROVIDERS: frozenset[str] = frozenset({
     "ANTHROPIC_API_KEY",
+    "BFL_API_KEY",
     "BYTEPLUS_API_KEY",
     "ELEVENLABS_API_KEY",
     "FAL_KEY",
