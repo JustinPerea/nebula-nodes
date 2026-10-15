@@ -13803,44 +13803,29 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         params: [{ key: 'draft', label: 'Draft (fast preview)', type: 'boolean', required: false, default: false }],
         rules: {
           rejectsWhen: [
-            { match: { draft: true, resolution: 'fhd' }, label: 'Drafts render at hd only' },
-            { match: { draft: true, resolution: 'qhd' }, label: 'Drafts render at hd only' },
-            { match: { draft: true, resolution: 'uhd' }, label: 'Drafts render at hd only' },
-            {
-              match: { start_video: '(set)', duration: 16 },
-              label: 'Video continuation runs 5-15 s on Black Forest Labs',
-            },
-            {
-              match: { start_video: '(set)', duration: 17 },
-              label: 'Video continuation runs 5-15 s on Black Forest Labs',
-            },
-            {
-              match: { start_video: '(set)', duration: 18 },
-              label: 'Video continuation runs 5-15 s on Black Forest Labs',
-            },
-            {
-              match: { start_video: '(set)', duration: 19 },
-              label: 'Video continuation runs 5-15 s on Black Forest Labs',
-            },
-            {
-              match: { start_video: '(set)', duration: 20 },
-              label: 'Video continuation runs 5-15 s on Black Forest Labs',
-            },
+            { match: { draft: true, resolution: 'fhd' }, label: 'a draft above hd' },
+            { match: { draft: true, resolution: 'qhd' }, label: 'a draft above hd' },
+            { match: { draft: true, resolution: 'uhd' }, label: 'a draft above hd' },
+            { match: { start_video: '(set)', duration: 16 }, label: 'a video continuation longer than 15 s' },
+            { match: { start_video: '(set)', duration: 17 }, label: 'a video continuation longer than 15 s' },
+            { match: { start_video: '(set)', duration: 18 }, label: 'a video continuation longer than 15 s' },
+            { match: { start_video: '(set)', duration: 19 }, label: 'a video continuation longer than 15 s' },
+            { match: { start_video: '(set)', duration: 20 }, label: 'a video continuation longer than 15 s' },
             {
               match: { start_video: '(set)', start_image: '(set)' },
-              label: 'Continue a video or animate images, not both',
+              label: 'a start video together with images',
             },
             {
               match: { start_video: '(set)', keyframes: '(set)' },
-              label: 'Continue a video or animate images, not both',
+              label: 'a start video together with images',
             },
             {
               match: { start_video: '(set)', end_image: '(set)' },
-              label: 'Continue a video or animate images, not both',
+              label: 'a start video together with images',
             },
             {
               match: { end_image: '(set)', start_image: '(unset)', keyframes: '(unset)' },
-              label: 'An end image needs a start image or keyframes before it',
+              label: 'an end image without a start image or keyframes',
             },
           ],
           ports: { keyframes: { max: 10 } },
@@ -13880,24 +13865,24 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         rules: {
           accepts: { aspect_ratio: { values: ['auto', '21:9', '2:1', '16:9', '4:3', '1:1', '3:4', '9:16'] } },
           rejectsWhen: [
-            { match: { draft: true, resolution: 'fhd' }, label: 'Drafts render at hd only' },
-            { match: { draft: true, resolution: 'qhd' }, label: 'Drafts render at hd only' },
-            { match: { draft: true, resolution: 'uhd' }, label: 'Drafts render at hd only' },
+            { match: { draft: true, resolution: 'fhd' }, label: 'a draft above hd' },
+            { match: { draft: true, resolution: 'qhd' }, label: 'a draft above hd' },
+            { match: { draft: true, resolution: 'uhd' }, label: 'a draft above hd' },
             {
               match: { start_video: '(set)', start_image: '(set)' },
-              label: 'Continue a video or animate images, not both',
+              label: 'a start video together with images',
             },
             {
               match: { start_video: '(set)', keyframes: '(set)' },
-              label: 'Continue a video or animate images, not both',
+              label: 'a start video together with images',
             },
             {
               match: { start_video: '(set)', end_image: '(set)' },
-              label: 'Continue a video or animate images, not both',
+              label: 'a start video together with images',
             },
             {
               match: { end_image: '(set)', start_image: '(unset)', keyframes: '(unset)' },
-              label: 'An end image needs a start image or keyframes before it',
+              label: 'an end image without a start image or keyframes',
             },
           ],
           ports: { keyframes: { max: 10 } },
@@ -13934,22 +13919,22 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         rules: {
           accepts: { aspect_ratio: { values: ['auto', '21:9', '2:1', '16:9', '4:3', '1:1', '3:4', '9:16'] } },
           rejectsWhen: [
-            { match: { draft: true, resolution: 'fhd' }, label: 'Drafts are 720p on Replicate' },
+            { match: { draft: true, resolution: 'fhd' }, label: 'a draft above hd' },
             {
               match: { start_video: '(set)', start_image: '(set)' },
-              label: 'Continue a video or animate images, not both',
+              label: 'a start video together with images',
             },
             {
               match: { start_video: '(set)', keyframes: '(set)' },
-              label: 'Continue a video or animate images, not both',
+              label: 'a start video together with images',
             },
             {
               match: { start_video: '(set)', end_image: '(set)' },
-              label: 'Continue a video or animate images, not both',
+              label: 'a start video together with images',
             },
             {
               match: { end_image: '(set)', start_image: '(unset)', keyframes: '(unset)' },
-              label: 'An end image needs a start image or keyframes before it',
+              label: 'an end image without a start image or keyframes',
             },
           ],
           ports: { keyframes: { max: 10 } },
@@ -13968,7 +13953,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           rejectsWhen: [
             {
               match: { end_image: '(set)', start_image: '(unset)', keyframes: '(unset)' },
-              label: 'An end image needs a start image or keyframes before it',
+              label: 'an end image without a start image or keyframes',
             },
           ],
           ports: { keyframes: { max: 0 }, start_video: { max: 0 } },
@@ -13989,7 +13974,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           rejectsWhen: [
             {
               match: { end_image: '(set)', start_image: '(unset)', keyframes: '(unset)' },
-              label: 'An end image needs a start image or keyframes before it',
+              label: 'an end image without a start image or keyframes',
             },
           ],
           ports: { keyframes: { max: 0 } },
