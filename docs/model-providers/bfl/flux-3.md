@@ -108,3 +108,17 @@ Auto order is left to right. A dash means no route, for the reason in "Left out"
 - `safety_tolerance` max 4 on Klein specifically.
 - OpenRouter seed support on Klein (`/images` record vs chat record).
 - The default `1k` on Klein (and `square_hd` on Klein Base) resizes edits; a "keep size" option would need a `valueMap` value that omits the field.
+
+## Live runs on BFL (2026-10-15)
+
+These were real, billed runs on Black Forest Labs' API through Nebula's FLUX 3 nodes (`_provider: bfl`). BFL billed 44.86 credits ($0.449) in all, which matches the BFL price rows above:
+
+| Node | Settings | Output | Billed |
+|---|---|---|---|
+| FLUX 3 Image Klein | 768sq | 768×768 JPEG | $0.008 |
+| FLUX 3 Image | 768sq, aspect auto | 1024×576 PNG | $0.041 |
+| FLUX 3 Video | text-to-video draft, hd, 5 s | 1280×704, 5.04 s, with audio | $0.30 |
+| FLUX Video Edit | 2 s 480×270 clip | 480×256, 2.04 s | $0.06 (inferred) |
+| FLUX Video Upscale | same clip, precise, 1.5× | 720×404, 2.04 s | $0.0396 (inferred) |
+
+"Inferred": Edit and Upscale were billed late and together, as 9.96 credits. That total fits 2 s × $0.03 for the edit plus 0.2774 MP × 2.04 s × $0.07 for the upscale. So BFL counts a megapixel as 1,048,576 pixels, and the upscale is billed on the output frame size and duration. The fal, Replicate, OpenRouter and Krea routes haven't been run live yet.

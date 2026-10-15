@@ -36,6 +36,36 @@ Six review findings; five distinct (the two Krea 3 price findings are one). Each
 - Screenshots (isolated backend :8145, Vite :5265, placeholder keys, no run): `pr3-shots/fixed-krea3-inspector.png` (Krea $0.03, fal $0.10*), `fixed-flux3-video-frames.png` (12 frames stop every route), `fixed-flux3-video-draft-snap.png` (the card note after the Krea click). `pr3-live-plan.md` rows 8 and 9 updated.
 - Gate after the fixes: backend 243/243 files green (run per file); frontend 222 files / 2,761 tests, `tsc -b`, lint; `check-node-contracts`, `sync-krea-catalog --check`, `generate-route-tables --check`, `generate-model-reference --check` all pass.
 
+### Security follow-up: a malformed saved graph hung or crashed the migration (PR 3, 2026-10-15)
+
+A background security review flagged a denial-of-service in `retired_nodes.py`. `migrate_graph` runs on unvalidated graphs (imports, project files, the boot state file), before staging can refuse anything. Probes confirmed four problems:
+
+- **It hung.** `_free_spot` searched for a free spot by adding 40 px to y. With a saved y of 1e18 next to another node, `y + 40 == y`, so the loop never returned. It now makes one pass over the nodes in its column, top to bottom, and lands on the same 40 px grid as before. There is no open-ended loop.
+- **A position too big for a float raised OverflowError, and NaN or inf wasn't refused.** `_spot` now catches OverflowError and accepts finite numbers only. Otherwise the added input node is placed without a position, as it is when the node has no position.
+- **A list or dict as `definitionId` or as an edge handle raised TypeError (unhashable) in the `MERGED` lookups.** This happened in `migrate_graph` and in main.py's `_migrate_ingress`, `_migrate_rf_graph` and `_snapshot_nodes`. A new `folded_entry()` checks the type before every lookup. Handles are looked up only when they are strings. Such an import now gets staging's 4xx instead of a 500.
+- **A node or edge that isn't a dict** now passes through untouched for staging to refuse. `_migrate_rf_graph` leaves a project file with one alone, and `CLIGraph.load` skips non-dict edges when it numbers new edges.
+
+Why it mattered: the boot path catches a load error and starts with an empty graph, and the next save would then overwrite the saved state file. Four tests in `test_retired_nodes.py` cover these cases (one waits on a thread so a regression fails instead of hanging). Each one fails on the code before 82d9176f.
+
+### Live runs on BFL (PR 3, 2026-10-15)
+
+These used Justin's BFL key, loaded from `~/.config/bfl/bfl.env` and never printed. Each run went through the registry's `multi_route` handler with `_provider: bfl`, in an isolated temp env with only `BFL_API_KEY` set, so nothing else could bill. Rows 1, 4, 10, 13 and 15 of the live plan:
+
+| Node | Settings | Output | Time |
+|---|---|---|---|
+| FLUX 3 Image Klein | 768sq | 768×768 JPEG | 5 s |
+| FLUX 3 Image | 768sq, aspect auto | 1024×576 PNG (BFL chose the frame) | 18 s |
+| FLUX 3 Video | t2v, draft, hd, 5 s | 1280×704, 5.04 s, with an audio track | 25 s |
+| FLUX Video Edit | 2 s 480×270 local clip (sent as a data URI) | 480×256, 2.04 s | 30 s |
+| FLUX Video Upscale | the same clip, precise, 1.5× | 720×404, 2.04 s | 36 s |
+
+What BFL billed, from `GET /v1/credits` before and after (1 credit = $0.01): 44.86 credits ($0.449) in all.
+- The two images plus the draft came to exactly 34.9 credits, which is $0.008 + $0.041 + 5 × $0.06, our price rows.
+- The edit and the upscale showed up later, together 9.96 credits. That fits a $0.06 edit (2 s × $0.03) plus a $0.0396 upscale: 720×404 px, divided by 1,048,576 for megapixels, × 2.04 s × $0.07. So BFL counts a megapixel as 1,048,576 pixels, as our Upscale price assumes.
+- Charges post with a delay, so credits read right after a run can be stale.
+
+Not run yet: the fal, Replicate, OpenRouter and Krea routes (their keys aren't saved for an isolated run), the Krea plan rows, keyframes and v2v.
+
 ## 2026-10-15 — Provider routes, PR 3: the FLUX 3 and Krea 3 nodes
 
 Branch `flux3-lane-nodes` (from `provider-switcher`). Seven route-table nodes ship: `flux-3-image`, `flux-3-image-klein`, `flux-3-image-klein-base`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale`, `krea-3`. The three generated Krea FLUX nodes fold into them. Guide: `docs/PROVIDER-ROUTES.md`, "The nodes". No paid call was made: every request is checked against a mocked transport and the providers' schemas.
