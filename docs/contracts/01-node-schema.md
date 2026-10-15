@@ -128,6 +128,8 @@ Resolved inputs map port id → `PortValueDict`:
 
 Multi ports (`multiple: true`) resolve to `value` as a **list** when multiple edges connect.
 
+Nebula's own files reach a handler as absolute paths. Upstream nodes may emit them as `/api/outputs/<rel>` refs (Jev Box, the QC nodes, chat uploads, saved projects), and a browser may hand over a loopback URL to that route; the engine maps both to the file's path before the handler runs (`execution/engine.py` `_local_media_inputs`, using `services/output.py` `local_media_ref`), keeping the containment and allowed-path checks. `Text` and spatial values are passed exactly as they arrive, and so is everything going into the built-in pass-through nodes (reroute, router, preview, array builder and selector, image compare, combine text), so they hand a ref on as a ref. Other URLs and data URIs are unchanged.
+
 ### Handler output shape
 
 Return map port id → `PortValueDict`:
@@ -231,3 +233,4 @@ Full vertical slices (registry + handler + events):
 |------|--------|
 | 2026-07-01 | Initial node schema |
 | 2026-10-14 | Gate ports (`conditional: true`) and the skip rule |
+| 2026-10-14 | `/api/outputs` refs and loopback URLs reach handlers as file paths |

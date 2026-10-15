@@ -31,6 +31,7 @@ from services.output import (
     create_run_dir,
     execution_run_dir,
     get_run_dir,
+    local_media_ref,
     materialize_media_value,
     portable_output_ref,
     resolve_output_ref,
@@ -247,6 +248,46 @@ async def _rebind_cached_output_artifacts(
         raise _CachedArtifactInvalidError(
             "cached spatial output no longer satisfies its contract"
         ) from exc
+
+
+# Input types passed to handlers exactly as they arrive. A Text value is
+# never rewritten into a local path (it may be a prompt bound for a
+# provider), and spatial values carry portable /api/outputs refs by contract.
+_VERBATIM_INPUT_TYPES = frozenset({"Text", *SPATIAL_VALUE_MODELS})
+
+
+# Built-in nodes that hand their inputs on unchanged. They keep each value's
+# spelling (a portable /api/outputs ref stays one); the node that finally
+# reads the file gets the path.
+_PASSTHROUGH_NODE_IDS = frozenset({
+    "array-builder", "array-selector", "image-compare", "preview", "router", "reroute", "combine-text",
+})
+
+
+def _local_media_inputs(inputs: dict[str, PortValueDict]) -> dict[str, PortValueDict]:
+    """Hand every handler file paths for Nebula's own media.
+
+    Upstream nodes emit their files either as absolute paths or as
+    /api/outputs refs (Jev Box, QC, chat uploads, saved projects), and a
+    browser may hand over a loopback URL to that route. Many handlers open
+    an image or mask input as a plain path, so a ref failed there with
+    "No such file or directory: '/api/outputs/...'". Mapping refs here, once,
+    fixes every handler; services.output.local_media_ref keeps the
+    containment and allowed-path checks.
+    """
+    mapped: dict[str, PortValueDict] = {}
+    for port_id, port in inputs.items():
+        value = port.value
+        if port.type in _VERBATIM_INPUT_TYPES:
+            new_value = value
+        elif isinstance(value, str):
+            new_value = local_media_ref(value)
+        elif isinstance(value, list):
+            new_value = [local_media_ref(item) if isinstance(item, str) else item for item in value]
+        else:
+            new_value = value
+        mapped[port_id] = port if new_value == value else PortValueDict(type=port.type, value=new_value)
+    return mapped
 
 
 def _image_input_output(params: dict) -> dict:
@@ -1086,6 +1127,8 @@ async def _execute_graph(
         try:
             validate_file_references(node.params)
             validate_file_references({key: port.value for key, port in resolved_inputs.items()})
+            if node.definition_id not in _PASSTHROUGH_NODE_IDS:
+                resolved_inputs = _local_media_inputs(resolved_inputs)
             if (
                 definition_metadata.get("apiProvider") == "worldlabs"
                 or (

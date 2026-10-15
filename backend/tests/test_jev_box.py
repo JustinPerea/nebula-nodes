@@ -344,7 +344,11 @@ async def test_an_inpaint_fed_the_mask_runs_only_when_the_target_was_found(monke
                         run_id="jev-box-gate")
     skipped = [event for event in events if event.type == "skipped"]
     if inpaint_runs:
-        assert len(inpainted) == 1 and inpainted[0]["mask"].startswith("/api/outputs/") and not skipped
+        assert len(inpainted) == 1 and not skipped
+        # The engine hands the edit node Box's mask as a file path, not the ref.
+        mask = Path(inpainted[0]["mask"])
+        assert mask.is_file() and mask.name.startswith("jev-box-mask-")
+        assert mask.resolve().is_relative_to(OUTPUT_ROOT.resolve())
     else:
         assert inpainted == []
         assert [(event.node_id, event.gate_node_id) for event in skipped] == [("edit", "bx1")]

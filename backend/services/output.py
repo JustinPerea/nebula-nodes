@@ -395,6 +395,45 @@ def resolve_output_ref(value: str) -> str:
     return str(candidate)
 
 
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def is_local_output_url(value: str) -> bool:
+    """An http(s) URL to this machine's own /api/outputs route."""
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        return False
+    return (parts.scheme in {"http", "https"} and (parts.hostname or "").lower() in _LOOPBACK_HOSTS
+            and parts.path.startswith("/api/outputs/"))
+
+
+def local_media_ref(value: str) -> str:
+    """Turn a reference to one of Nebula's own outputs into its file path.
+
+    Node outputs reach the next node in two spellings: an absolute path
+    (most handlers) or a served ``/api/outputs/<rel>`` reference (Jev Box,
+    the QC nodes, chat uploads, saved projects). A loopback URL to that
+    route (``http://127.0.0.1:8000/api/outputs/...``) is the same file.
+    Handlers that open their input as a file only understand the first, so
+    this maps the other two to it. Its query and fragment are ignored: they
+    don't change which file is served.
+
+    Raises ValueError for a reference that escapes OUTPUT_ROOT, and runs the
+    result through the allowed-path policy. Anything else (absolute paths,
+    other URLs, data: URIs, text) comes back unchanged.
+    """
+    if not isinstance(value, str):
+        return value
+    ref = urlsplit(value).path if is_local_output_url(value) else value
+    if not ref.startswith("/api/outputs/"):
+        return value
+    resolved = resolve_output_ref(ref)
+    if resolved == ref:
+        raise ValueError("A media reference escapes Nebula's output directory, so it wasn't read")
+    return str(require_allowed_path(resolved))
+
+
 def portable_output_ref(value: str, *, require_file: bool = False) -> str:
     """Canonicalize a contained output path to a strict portable asset URI.
 

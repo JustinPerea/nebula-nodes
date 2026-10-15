@@ -35,7 +35,6 @@ from email.utils import parsedate_to_datetime
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
-from urllib.parse import urlsplit
 
 import httpx
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -206,22 +205,12 @@ def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
     return max(low, min(high, value))
 
 
-def _is_local_output_url(value: str) -> bool:
-    """An http(s) URL to this backend's own /api/outputs route."""
-    try:
-        parts = urlsplit(value)
-    except ValueError:
-        return False
-    host = (parts.hostname or "").lower()
-    return host in {"localhost", "127.0.0.1", "::1"} and parts.path.startswith("/api/outputs/")
-
-
 async def load_image_source(value: str, *, label: str = "Image") -> bytes:
     """Read one graph image value into bytes, using Nebula's existing policies.
 
     - data: URIs are decoded in memory.
     - /api/outputs/<rel> (or a localhost URL to it) maps to the file under
-      OUTPUT_ROOT via resolve_output_ref.
+      OUTPUT_ROOT via services.output.local_media_ref.
     - Other http(s) URLs go through services.public_url.fetch_public_media,
       which only fetches public https hosts (no SSRF to this machine or a
       private network).
@@ -229,9 +218,9 @@ async def load_image_source(value: str, *, label: str = "Image") -> bytes:
       services.image_input.load_local_image (protected paths, existence,
       supported suffix).
     """
-    from services.file_access import require_allowed_path
+    from services.file_access import ProtectedPathError, require_allowed_path
     from services.image_input import load_local_image
-    from services.output import resolve_output_ref
+    from services.output import is_local_output_url, local_media_ref
     from services.public_url import fetch_public_media
 
     raw = str(value or "").strip()
@@ -247,8 +236,13 @@ async def load_image_source(value: str, *, label: str = "Image") -> bytes:
             return base64.b64decode(payload, validate=False)
         except (ValueError, TypeError) as exc:
             raise ValueError(f"{label} has invalid base64 data") from exc
-    if raw.startswith(("http://", "https://")) and _is_local_output_url(raw):
-        raw = urlsplit(raw).path
+    if raw.startswith("/api/outputs/") or is_local_output_url(raw):
+        try:
+            raw = local_media_ref(raw)
+        except ProtectedPathError:
+            raise
+        except ValueError:
+            raise ValueError(f"{label} reference escapes Nebula's output directory") from None
     too_big = ValueError(f"{label} is larger than {MAX_SOURCE_BYTES // (1024 * 1024)} MiB")
     if raw.startswith(("http://", "https://")):
         try:
@@ -258,12 +252,9 @@ async def load_image_source(value: str, *, label: str = "Image") -> bytes:
         except asyncio.TimeoutError:
             raise ValueError(f"{label} took longer than {URL_FETCH_DEADLINE:.0f} s to download") from None
         return content
-    local = resolve_output_ref(raw)
-    if raw.startswith("/api/outputs/") and local == raw:
-        raise ValueError(f"{label} reference escapes Nebula's output directory")
     # The allowed-path policy runs before anything about the file is looked
     # at, so a protected path can't even be sized.
-    path = require_allowed_path(local)
+    path = require_allowed_path(raw)
     try:
         size = path.stat().st_size
     except OSError:
