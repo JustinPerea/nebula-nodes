@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import ssl
 
 import pytest
 
@@ -131,6 +132,19 @@ class TestEnhancePromptFallthrough:
         )
         result = asyncio.run(enhance_prompt("a cat", api_keys, client=client))
         assert result == {"enhanced": "enhanced cat", "provider": "anthropic"}
+
+    def test_falls_through_on_a_tls_error_mid_response(self) -> None:
+        # A raw ssl.SSLError (not an httpx error) must not skip the fallback.
+        class _TLSBreaks(_FakeClient):
+            async def post(self, url: str, headers=None, json=None) -> _FakeResp:  # noqa: A002
+                if "api.openai.com" in url:
+                    raise ssl.SSLError(1, "[SSL: SSLV3_ALERT_BAD_RECORD_MAC] bad record mac (_ssl.c:2559)")
+                return await super().post(url, headers=headers, json=json)
+
+        api_keys = {"OPENAI_API_KEY": "k", "ANTHROPIC_API_KEY": "k"}
+        client = _TLSBreaks({"api.anthropic.com": (200, {"content": [{"type": "text", "text": "ok"}]})})
+        result = asyncio.run(enhance_prompt("a cat", api_keys, client=client))
+        assert result == {"enhanced": "ok", "provider": "anthropic"}
 
     def test_raises_when_all_providers_fail(self) -> None:
         api_keys = {"OPENAI_API_KEY": "bad", "ANTHROPIC_API_KEY": "bad"}

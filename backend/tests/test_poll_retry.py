@@ -12,6 +12,7 @@ the transport raises (a dropped connection or a timeout).
 from __future__ import annotations
 
 import asyncio
+import ssl
 from typing import Any, Callable
 from unittest.mock import AsyncMock
 
@@ -90,6 +91,12 @@ def _dropped() -> httpx.ConnectError:
     return httpx.ConnectError("connection reset")
 
 
+def _bad_record_mac() -> ssl.SSLError:
+    # A TLS error mid-response reaches the poller raw, not as an httpx error
+    # (services/http_errors.py). Seen live 2026-10-15.
+    return ssl.SSLError(1, "[SSL: SSLV3_ALERT_BAD_RECORD_MAC] ssl/tls alert bad record mac (_ssl.c:2559)")
+
+
 # -- the helper ------------------------------------------------------------------
 
 class _Sender:
@@ -110,6 +117,18 @@ async def test_a_5xx_or_a_dropped_connection_is_retried_with_backoff(fast_sleep)
     result = await poll_request(send)
     assert result.status_code == 200 and send.calls == 4
     assert fast_sleep == list(poll_retry.POLL_RETRY_DELAYS[:3])
+
+
+def test_a_raw_tls_error_is_transient():
+    assert is_transient(_bad_record_mac())
+
+
+@pytest.mark.asyncio
+async def test_a_tls_error_mid_response_is_retried(fast_sleep):
+    send = _Sender(_bad_record_mac(), httpx.Response(200, json={"ok": 1}))
+    result = await poll_request(send)
+    assert result.status_code == 200 and send.calls == 2
+    assert fast_sleep == list(poll_retry.POLL_RETRY_DELAYS[:1])
 
 
 @pytest.mark.asyncio
@@ -265,8 +284,9 @@ async def test_byteplus_rides_out_a_transient_poll_error(monkeypatch):
 @pytest.mark.parametrize("polls,error,attempts", [
     ([(503, {"error": {"code": "ServiceUnavailable", "message": "x"}})], byteplus.BytePlusError, 5),
     ([_dropped()], httpx.ConnectError, 5),
+    ([_bad_record_mac()], ssl.SSLError, 5),
     ([(400, {"error": {"code": "InvalidParameter", "message": "x"}})], byteplus.BytePlusError, 1),
-], ids=["5xx-persists", "network-persists", "4xx"])
+], ids=["5xx-persists", "network-persists", "tls-error-persists", "4xx"])
 async def test_byteplus_deletes_the_task_when_polling_gives_up(monkeypatch, polls, error, attempts):
     assert len(poll_retry.POLL_RETRY_DELAYS) + 1 == 5
     maker = _modelark(monkeypatch, *polls)
@@ -275,6 +295,14 @@ async def test_byteplus_deletes_the_task_when_polling_gives_up(monkeypatch, poll
     await _drain_cancels()
     assert maker.polls() == attempts
     assert maker.calls("DELETE", "/contents/generations/tasks/cgt-1") == 1
+
+
+@pytest.mark.asyncio
+async def test_byteplus_rides_out_a_tls_error_mid_poll(monkeypatch):
+    maker = _modelark(monkeypatch, _bad_record_mac(), (200, {"status": "succeeded"}))
+    task = await byteplus.run_video_task("fixture", {"model": "seedance"})
+    await _drain_cancels()
+    assert task["status"] == "succeeded" and maker.polls() == 2 and maker.calls("DELETE") == 0
 
 
 @pytest.mark.asyncio
