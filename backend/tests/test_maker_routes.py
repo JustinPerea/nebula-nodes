@@ -469,6 +469,19 @@ async def test_rename_sends_a_route_prefixed_param_under_the_providers_name(rout
 
 
 @pytest.mark.asyncio
+async def test_multi_route_tells_the_client_the_endpoint_for_its_wired_ports(route_fixtures):
+    clients = _clients(*IMAGE_ROUTES)
+    node = GraphNode(id="n", definitionId="routes-image", params={**IMAGE_DEFAULTS, "_provider": "fal"})
+    router = maker_routes.multi_route(clients)
+    await router(node, PROMPT, {"FAL_KEY": "f"})
+    assert clients["fal"].await_args.kwargs["endpoint"] == "blackforestlabs/flux-3/text-to-image"
+    wired = {**PROMPT, "images": PortValueDict(type="Image", value=["a.png"])}
+    await router(node, wired, {"FAL_KEY": "f"})
+    # endpointWhen reads our names and the wired ports, before translation.
+    assert clients["fal"].await_args.kwargs["endpoint"] == "blackforestlabs/flux-3/edit-image"
+
+
+@pytest.mark.asyncio
 async def test_register_route_nodes_builds_a_router_from_the_route_clients(route_fixtures, monkeypatch):
     from execution import route_clients
 
