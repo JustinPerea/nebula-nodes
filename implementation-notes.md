@@ -1,5 +1,42 @@
 # Implementation Notes
 
+## 2026-10-15 — Provider routes, PR 1 of 4: the routing core and the BFL key
+
+Branch `provider-routes-core`. One node per model, all provider routes in that node, a saved `_provider` choice. No new model nodes and no switcher UI yet (PRs 2-4). Plain-language guide: `docs/PROVIDER-ROUTES.md`.
+
+**Proof the old nodes didn't move.** Before changing callers, a scratch copy of HEAD's `node_route.py` was run side by side with the new one over every legacy node: `select_route`, `cache_tag`, `with_wired_blockers`, `direct_block`, `route_param_keys`, `uses_krea_plan` and `krea_auth_param`, across param values, key sets and dates. 50,082,264 comparisons, 0 differences. The 147 existing route cases pass unchanged (they now compare only kind/provider/key, since `Route` grew three optional fields).
+
+Decisions the design didn't make:
+- **`route_unavailable` returns camelCase** (`routeId`, `missing`, `block`, `alternatives`, `message`), not the design's snake_case, so the Python dict, the TS object and `route_cases.json` are the same JSON. The message wording is mirrored exactly in TS and pinned by the shared cases.
+- **Wired-port counts ride in params** under a reserved key, `"(wired ports)"` (`PORT_COUNTS`), which `with_wired_blockers` adds only for route-table nodes with a `ports` rule. That kept every rule reader on one `(definition, params)` signature. Legacy params never get the key.
+- **A legacy node's computed maker spec carries all of today's rules**, including `requires` (DIRECT_REQUIRES) and `retires` (DIRECT_RETIRES), so `route_block` on it equals `direct_block` (tested over the registry).
+- **A `valueMap` implies `accepts`** for its keys: a route that maps `resolution` only knows those values, so another value blocks rather than reaching the provider untranslated.
+- **`endpointWhen` keys count as wired-rule params**, so `{"images": "(set)"}` picks the edit endpoint when images arrive by wire.
+- **Plan-only routes** (`plan: "only"`): Auto skips them; chosen explicitly they run on the plan.
+- **Unknown `_provider` id** blocks with a new `unknown-provider` reason rather than falling back to Auto.
+- **`withNewKreaMode`** seeds the global Krea mode only on `apiProvider: krea` nodes; other route-table nodes start on `api-token`.
+- **Price entries for route-table nodes are keyed by the route's `pricing` key (default its id)**, so two routes on one provider can each have a price. `estimate_node` now skips the inner `provider` check for an entry picked out of `routes` (validation ties it to that route's provider instead). For legacy entries the two checks were already identical, so nothing changes there.
+- **Estimates count edges per port**: new `model_pricing.wired_counts` (main and agent_spend use it; `wired_ports` stays) and TS `wiredPorts` returns port -> count, so a `ports` rule sees the same numbers in the estimate as in the preflight.
+- **`RunCost.unavailable`** (TS) and `estimate_run(...)["unavailable"]` (Python) carry the reason by node. Those nodes are also in `unpriced`; the run summary lists them as "Can't run on the chosen provider" instead of "No list price".
+- **`instance_access(definition, params, configured_keys, krea_signed_in=False, definitions=None)`**: the design's signature plus the two inputs `node_access` already takes. `keys_needed` for an explicit route returns a stand-in with that route's keys; a Krea route's stand-in carries the billing params so `krea_modes` still sees the plan.
+- **Billing guard**: `_billing_choice` returns `(provider choice, Krea mode)`. A provider switch is refused with its own message (`PROVIDER_CHOICE_REFUSAL`); when one edit switches both, the provider message wins. `_refuse_agent_krea_billing_in_run` / `_in_project` were renamed to `_refuse_agent_billing_in_run` / `_in_project` too.
+- **`_check_provider`** runs where `_check_krea_auth` does (graph apply, proposals) and also on single-node create and `PUT /api/graph/node`. Not on whole-graph replace or cluster add: a saved project with a stale route id would then fail to load, and the run already stops with a clear message.
+- **`cost_for`** takes optional `api_keys`. With keys it names the route the run would take (and `unavailable` when none can); without keys (the proposal view) it names the explicit route's provider, or the maker's under Auto.
+- **describe_node** keeps every legacy field as it was; route-table nodes skip `route`/`fallback`/`paramsDirect`/`paramsFallback` (`fallback_provider` would otherwise read their `directKeyName`). Each route row also has `name` (provider label) and `maker`/`plan`/`note` when set.
+- **`nebula info`** lists `all_param_definitions` for route-table nodes (shared + every route's own); legacy output is unchanged.
+- **`multi_route`** with no client registered for a route's handler fails with "can't run on X in this version of Nebula yet". `ROUTE_CLIENTS` is empty in PR 1; tests stub clients.
+- **The pricing fixture node is `table`**, not `routed`: `pricing_cases.json` already had a `routed` fixture.
+
+Deviations and things skipped:
+- **ideogram's `rendering_speed`** is the one param that differs between `directParams` and `falParams` (options and default). `all_param_definitions` lets the direct copy win; `model_pricing._definition_params` used to be last-wins (fal). No ideogram node is priced, so nothing changes today.
+- **No hosted-credit contract rule.** The design's "hosted credit only on maker routes" check has nothing to check: the repo has no hosted-credit code yet.
+
+Tradeoffs and surprises:
+- **TS circular import**: `kreaConnection.ts` imports from `directRoute.ts`, which already imported from it. Both uses are inside functions, so module load order doesn't matter; accepted rather than moving `kreaAuthParam`.
+- **Preflight counts edges, the router counts filled values.** A wire from a source a gate skips counts in the preflight but not at run time, so a `ports` limit could refuse a run that would have fit. Rare, and it errs toward not spending.
+- **The node's own run status (`nodeWiredPorts`) is still a set of ports**, not counts, so it can't show a `ports` block. It feeds the switcher UI, which is PR 3.
+- `route_tables.json` is about 121 KB. It pins `routes_of` and the param list for every node so the TS twin can't drift.
+
 ## 2026-10-13 — Connect your agent (PR 3 of 3, and BYO-agent Phase 0)
 
 Settings > Preferences > Agent spending > **Connect your agent** and `nebula mcp connect|disconnect <client>`. Config text lives in one place, `backend/services/agent_connect.py`, used by both.
