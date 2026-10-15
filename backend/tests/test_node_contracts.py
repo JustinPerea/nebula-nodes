@@ -302,6 +302,20 @@ def test_keys_ahead_of_nodes_are_not_used_by_a_node_yet(definitions: dict[str, d
     assert KEYS_AHEAD_OF_NODES.isdisjoint(_registry_api_keys(definitions))
 
 
+def test_every_billing_key_settings_stores_names_its_provider() -> None:
+    # Settings (credential_catalog) and routing (KEY_PROVIDERS, mirrored in
+    # directRoute.ts and pinned by route_tables.json) list keys separately, so
+    # a key added to one alone would be stored but bill no one, or the reverse.
+    # KREA_USAGE_KEY only reads Krea's usage numbers; no run spends it.
+    from services.credential_catalog import CREDENTIAL_PROVIDERS
+    from services.node_route import KEY_PROVIDERS
+
+    assert set(KEY_PROVIDERS) == CREDENTIAL_PROVIDERS - {"KREA_USAGE_KEY"}
+    snapshot = json.loads((REPO_ROOT / "backend" / "tests" / "fixtures" / "route_tables.json").read_text())
+    assert snapshot["keyProviders"] == KEY_PROVIDERS
+    assert KEY_PROVIDERS["BFL_API_KEY"] == "bfl"
+
+
 def test_settings_example_covers_all_registry_api_keys(definitions: dict[str, dict[str, Any]]) -> None:
     settings_example = json.loads((REPO_ROOT / "settings.example.json").read_text())
     example_keys = set(settings_example.get("apiKeys", {}))
