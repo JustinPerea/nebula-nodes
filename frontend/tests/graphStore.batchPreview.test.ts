@@ -85,6 +85,19 @@ describe('Batch preview ownership through real graph store paths', () => {
     expect(boundary.execute).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the run notes an executed event carries until the next run starts', async () => {
+    await store.getState().executeClusterConcurrent(['preview']);
+    const runId = store.getState().activeRuns[0].id;
+    const note = 'Ideogram made 1312x736, the closest it could get to your 1000x560.';
+    store.getState().handleExecutionEvent({ type: 'executing', nodeId: 'preview', runId });
+    store.getState().handleExecutionEvent({ type: 'executed', nodeId: 'preview', runId, outputs: output('red'), notes: [note] });
+    expect(live().runNotes).toEqual([note]);
+    store.getState().handleExecutionEvent({ type: 'executing', nodeId: 'preview', runId });
+    expect(live().runNotes).toBeUndefined();
+    store.getState().handleExecutionEvent({ type: 'executed', nodeId: 'preview', runId, outputs: output('red'), notes: null });
+    expect(live().runNotes).toBeUndefined();
+  });
+
   it('rehydrates only the matching latest saved scalar result and labels after module reload', async () => {
     await boot([saved('new', ['green', 'blue']), saved('old')]);
     expect(live().batchRunId).toBe('new');

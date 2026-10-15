@@ -66,6 +66,32 @@ All direct endpoints are **synchronous multipart/form-data** POSTs with an
 `Api-Key` header. Result URLs are **ephemeral** — the handler downloads them
 into the run dir immediately.
 
+Image inputs are read by Nebula and uploaded (`handlers/ideogram._load_binary`,
+through `services/media_input.load_media`): an `/api/outputs/` ref or a
+loopback URL to one is its saved file; any other URL is fetched only from a
+public **https** host, with every redirect re-checked and no credentials (a
+private, loopback or `http://` URL is refused); a local path must pass the file
+policy. Each input is capped at Ideogram's 25 MB ("max size 25MB", edit-v3
+reference, read 2026-10-14) before it is read.
+
+### Krea copies on your Ideogram key (2026-10-14)
+
+Three Krea copies of Ideogram's models also run on Ideogram's own API when
+`IDEOGRAM_API_KEY` is saved. A node set to your Krea plan stays on the plan;
+otherwise your Ideogram key wins and Ideogram bills the run; with no Ideogram
+key, your Krea API token runs it.
+
+| Krea node | Ideogram endpoint | What changes on Ideogram |
+|---|---|---|
+| `krea-image-ideogram-ideogram-4-5-precise` | POST `/v2/image/precise-edit/ideogram-4-5` | Nothing: image, mask, up to 4 references (3 with a mask), quality, seed. US $0.008 / $0.03 / $0.06 / $0.22 per image by quality. |
+| `krea-image-ideogram-ideogram-3` | POST `/v1/ideogram-v3/generate` | `rendering_speed` DEFAULT; width/height go as `resolution`, the nearest of Ideogram 3's 69 sizes (`backend/services/maker_sizes.py`), so 1024x1024 or 1280x768 come out exact; `aspect_ratio` is never sent with it. The Inspector notes a size that changes, and the run's notes give the size Ideogram made. One character reference. Krea `style_images` (each with a strength) keep the run on Krea. US $0.06, or $0.15 with a character reference. |
+| `krea-image-ideogram-ideogram-2-turbo` | POST `/v2/image/generate/ideogram-2a` (JSON, `rendering_speed: turbo`) | width/height go as the nearest of the 15 aspect ratios; 2a takes a shape, not a size, and picks the pixels. The Inspector notes a shape that changes, and the run's notes give the size Ideogram made. US $0.025 per image. |
+
+Not routed: `krea-image-ideogram-ideogram-4-5`. Ideogram's 4.5 generate page
+says an exact size without source images "must be one of the supported 1K/2K
+presets" but names only three of them, so Krea's aspect ratios can't be mapped
+to sizes Ideogram confirms. Handlers: `backend/execution/maker_routes_ideogram_runway.py`.
+
 ## Param dialects (direct vs FAL)
 
 | Concept | Direct | FAL |
@@ -136,3 +162,5 @@ structured-input param), dataset management beyond the training node
 - https://fal.ai/models/ideogram/v4/api (+ current V3 edit/remix/reframe/replace-background/character/upscale schemas) — re-fetched 2026-07-23
 - https://ideogram.ai/news/ideogram-4.0 — 4.0 release announcement (2026-06-03)
 - backend/handlers/ideogram.py — the direct-route implementation these docs describe
+- https://developer.ideogram.ai/v2/llms.txt (v2 reference: generate/ideogram-2a, precise-edit/ideogram-4-5, generate/ideogram-4-5) and https://developer.ideogram.ai/v1/api-reference/generate-images/generate-v3.md — read 2026-10-14 for the Krea routes
+- https://ideogram.ai/pricing/?pricing_tab=api — API prices, rendered 2026-10-14

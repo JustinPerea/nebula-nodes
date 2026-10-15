@@ -12,6 +12,7 @@ from execution.stream_runner import StreamConfig, stream_execute
 from uuid import uuid4
 
 from services.image_input import load_local_image
+from services.retired_nodes import GEMINI_TTS_PREVIEWS_SHUTDOWN, default_until
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
 
@@ -138,6 +139,10 @@ async def handle_gemini_chat(
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 INTERACTIONS_IMAGE_MODELS = {"gemini-nano-banana-2.1"}
 _INTERACTION_SIZES = {"gemini-nano-banana-2.1": {"1K", "2K", "4K"}}
+# "Gemini Nano Banana 2.1 | minimal, medium, high | medium", sent as
+# generation_config.thinking_level (image-generation guide, checked 2026-10-14).
+# Only the Krea copy sends it (execution/maker_routes_google.py).
+_INTERACTION_THINKING = {"gemini-nano-banana-2.1": {"minimal", "medium", "high"}}
 _INTERACTION_ASPECTS = {
     "1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9",
 }
@@ -203,6 +208,9 @@ async def _nano_banana_interaction(
             "response_format": response_format,
             "store": False,
         }
+        thinking = str(node.params.get("thinkingLevel") or "").lower()
+        if thinking in _INTERACTION_THINKING.get(model, set()):
+            body["generation_config"] = {"thinking_level": thinking}
         response = await client.post(
             INTERACTIONS_URL, json=body,
             headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
@@ -291,6 +299,16 @@ async def handle_nano_banana(
         if image_size:
             image_config["imageSize"] = image_size
         body["generationConfig"]["imageConfig"] = image_config
+
+    # Optional controls the fal/Krea copies route here (execution/maker_routes.py).
+    # https://ai.google.dev/api/generate-content: generationConfig.thinkingConfig
+    # .thinkingLevel is an enum (MINIMAL ... HIGH); Tool.googleSearch is an
+    # object (web search when searchTypes is unset). Checked 2026-10-14.
+    thinking = str(node.params.get("thinkingLevel") or "").lower()
+    if thinking in {"minimal", "high"}:
+        body["generationConfig"]["thinkingConfig"] = {"thinkingLevel": thinking.upper()}
+    if node.params.get("googleSearch") is True:
+        body["tools"] = [{"googleSearch": {}}]
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -410,6 +428,33 @@ async def handle_lyria3(
     return result
 
 
+GEMINI_TTS_DEFAULT_MODEL = "gemini-3.8-flash-tts"
+
+
+def _write_tts_wav(file_path: Path, audio_bytes: bytes, mime_type: str) -> None:
+    """Save TTS audio as a .wav file.
+
+    Gemini 3.8 TTS returns a complete WAV file (RIFF header) on unary requests;
+    3.1 and 2.5 TTS returned headerless 16-bit PCM (``audio/L16``, 24 kHz, mono)
+    (https://ai.google.dev/gemini-api/docs/speech-generation, checked 2026-10-14).
+    A WAV is written as is; raw PCM gets a header, at the rate the mime type names."""
+    if audio_bytes[:4] == b"RIFF" or "wav" in mime_type.lower():
+        file_path.write_bytes(audio_bytes)
+        return
+    import wave
+
+    rate = 24000
+    for field in mime_type.split(";"):
+        key, _, value = field.strip().partition("=")
+        if key == "rate" and value.isdigit():
+            rate = int(value)
+    with wave.open(str(file_path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(rate)
+        wf.writeframes(audio_bytes)
+
+
 async def handle_gemini_tts(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
@@ -423,7 +468,9 @@ async def handle_gemini_tts(
     if not api_key:
         raise MissingCredentialError("GOOGLE_API_KEY is required")
 
-    model = node.params.get("model", "gemini-2.5-flash-preview-tts")
+    # A node with no stored model keeps 2.5 Flash until the previews shut down.
+    model = node.params.get("model") or default_until(
+        GEMINI_TTS_PREVIEWS_SHUTDOWN, "gemini-2.5-flash-preview-tts", GEMINI_TTS_DEFAULT_MODEL)
     voice_name = node.params.get("voiceName", "Kore")
 
     body: dict[str, Any] = {
@@ -459,19 +506,10 @@ async def handle_gemini_tts(
             b64_audio = part["inlineData"]["data"]
             audio_bytes = base64.b64decode(b64_audio)
 
-            # TTS returns raw PCM (24kHz, 16-bit, mono) — wrap in WAV
-            import wave
-            import io
-
             run_dir = get_run_dir()
             filename = f"{uuid4().hex[:12]}.wav"
             file_path = run_dir / filename
-
-            with wave.open(str(file_path), "wb") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(24000)
-                wf.writeframes(audio_bytes)
+            _write_tts_wav(file_path, audio_bytes, part["inlineData"].get("mimeType", ""))
 
             return {
                 "audio": {

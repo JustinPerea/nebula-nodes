@@ -25,7 +25,7 @@ Cinema checks the combined Character, shot and Reference Set image list before s
 
 Camera Rig provides prompt guidance, so the generated composition depends on the model's interpretation. Current reference adapters have no native identity-strength control. Character consistency/override and Identity Edit strength remain saved for compatibility, but their controls are unavailable. Identity Edit also retains its legacy Mask port for saved connections and rejects a connected mask before submission because its current endpoint has no mask input. Seedream 5.0 Lite does not support a seed; saved seed values are preserved but omitted from its request.
 
-Cinema translates Seedream's aspect ratio into its actual `image_size` field. A valid explicit `scene.base.params.image_size` in a saved recipe takes precedence.
+Cinema translates Seedream's aspect ratio into its actual `image_size` field. A valid explicit `scene.base.params.image_size` in a saved recipe takes precedence. With a BytePlus key (`BYTEPLUS_API_KEY`) saved, the Seedream base runs on BytePlus ModelArk instead of fal: the computed size is sent as `WxH` (2.39:1 is still 4096x1714), references go in ModelArk's `image` field, and a size outside ModelArk's 2560x1440 to 4096x4096 pixel range, or a saved seed, keeps the scene on fal (see `docs/api-guides/byteplus.md`).
 
 Put prompts and references in Cinema's scene/shot fields and connected inputs. Saved `scene.base.params.prompt`, `image_url` or `image_urls` fields produce an error before submission because they would overwrite Cinema's validated inputs; the saved recipe remains intact.
 

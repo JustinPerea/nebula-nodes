@@ -83,9 +83,9 @@ from services.settings import (
 )
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
-from services import agent_connect, agent_spend, backend_address, app_tokens, model_pricing, node_readiness, output_preview
+from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services.cli_graph import CLIGraph
-from services.retired_nodes import migrate_node, retired_message
+from services.retired_nodes import migrate_node, migrate_param_update, migrate_params, retired_message
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, now as project_now,
@@ -1669,12 +1669,12 @@ def _normalize_execute_nodes(nodes: list[GraphNode]) -> list[GraphNode]:
     """Normalize request-scoped nodes before validation/execution."""
     normalized: list[GraphNode] = []
     for node in nodes:
+        # A canvas opened before a shutdown date and run after it still holds
+        # the retired value; send the replacement (services/retired_nodes.py).
+        params = migrate_params(node.definition_id, node.params)
         if node.definition_id == "image-input":
-            normalized.append(
-                node.model_copy(update={"params": _normalize_image_input_params(node.params)})
-            )
-        else:
-            normalized.append(node)
+            params = _normalize_image_input_params(params)
+        normalized.append(node if params == node.params else node.model_copy(update={"params": params}))
     return normalized
 
 
@@ -3439,13 +3439,29 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
         result["description"] = definition["description"]
     shown = lambda key: [_brief_param(param) for param in definition.get(key) or []  # noqa: E731
                          if not str(param.get("key", "")).startswith("_") and not param.get("hidden")]
-    result["params"] = shown("params") + shown("sharedParams")
-    if definition.get("directParams") or definition.get("falParams"):
-        # Dual-route nodes take different extra params on each route.
-        direct = node_readiness._keys(definition.get("directKeyName"))
-        result["route"] = "direct" if any(k in keys for k in direct) else "fal" if access else None
+    # A dual-route node lists its shared params here and each route's own
+    # below (a generated Krea copy keeps its full Krea list in `params` too).
+    result["params"] = shown("sharedParams") if "sharedParams" in definition else shown("params")
+    fallback = node_route.fallback_provider(definition)
+    if fallback:
+        # Which route a run takes here at defaults (services/node_route.py):
+        # "direct" (the maker's API with your key), the fallback copy ("fal",
+        # "krea", or "runway" for the ElevenLabs models Runway resells), or
+        # None when none of its keys are set. A node whose
+        # _kreaAuth is "mcp" bills the Krea plan whatever keys are set.
+        route = node_route.select_route(definition, {}, settings.get("apiKeys") or {})
+        result["route"] = ("direct" if route.kind == node_route.DIRECT
+                           else fallback if route.kind == node_route.FALLBACK else None)
+        result["routeProvider"] = route.provider if result["route"] else None
+        result["fallback"] = fallback
         result["paramsDirect"] = shown("directParams")
-        result["paramsFal"] = shown("falParams")
+        result["paramsFallback"] = shown("falParams")
+        size_note = maker_sizes.rule_note(definition)
+        if size_note:
+            # A maker that takes a fixed size list (Ideogram 3, Ideogram 2a,
+            # Runway Gen-4 Image): width/height round on its route; Seedance
+            # 2.5 on BytePlus keeps a start image's shape.
+            result["sizeNote"] = size_note
     if access is None:
         result["missing"] = node_readiness.missing(definition, krea_signed_in, definitions)
     options = node_readiness.detail(definition, keys, krea_signed_in, definitions)
@@ -3487,18 +3503,24 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
             else:
                 result["priceNote"] = "No list price; agent runs of it must be proposed (propose_change)."
         else:
-            estimate = model_pricing.estimate_node(
-                entry, definition, {}, model_pricing.route_provider(definition, settings.get("apiKeys") or {}))
-            rows = [{**row.get("match", {}), "usd": row.get("price")} for row in entry.get("rows") or []]
+            provider = model_pricing.route_provider(definition, settings.get("apiKeys") or {})
+            estimate = model_pricing.estimate_node(entry, definition, {}, provider)
+
+            def price_table(priced: Mapping[str, Any]) -> dict[str, Any]:
+                rows = [{**row.get("match", {}), "usd": row.get("price")} for row in priced.get("rows") or []]
+                return {"per": priced.get("per"), "dependsOn": priced.get("priceParams") or [], "rows": rows[:40]}
+
+            routed = model_pricing.entry_for_route(entry, provider)
             result["price"] = {
-                "per": entry.get("per"),
-                "dependsOn": entry.get("priceParams") or [],
+                **price_table(routed or entry),
                 "atDefaultsUsd": ([round(estimate["low"], 4), round(estimate["high"], 4)]
                                   if estimate and estimate.get("currency") == "usd" else None),
-                "rows": rows[:40],
             }
-            if entry.get("price") is not None and not rows:
-                result["price"]["usd"] = entry.get("price")
+            if isinstance(entry.get("routes"), Mapping):
+                # Each route's own price; the run bills the route it takes.
+                result["price"]["billedBy"] = provider if routed else None
+                result["price"]["routes"] = {name: price_table(priced)
+                                             for name, priced in entry["routes"].items()}
     return result
 
 
@@ -3986,7 +4008,8 @@ def _stage_proposal(
         if uses_durable_recovery(definition_id, provider="worldlabs"):
             raise HTTPException(status_code=400, detail=f"World Labs nodes can't be changed by {what}; add a new node instead")
         _validate_params(definition_id, change.params)
-        candidate.update_params(change.node_id, _coerce_params(definition_id, change.params))
+        candidate.update_params(change.node_id, migrate_param_update(
+            definition_id, node.get("params"), _coerce_params(definition_id, change.params)))
     raw_nodes = [
         {
             "tempId": node.ref,
@@ -6584,7 +6607,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=400, detail="params must be an object")
     position = body.get("position")
     _validate_params(definition_id, params)
-    params = _coerce_params(definition_id, params)
+    params = migrate_params(definition_id, _coerce_params(definition_id, params))
     _refuse_agent_krea_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
         _graph_worldlabs_recovery_checkpoints(
@@ -6681,7 +6704,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
             if not isinstance(connect_spec.get(key), str) or not connect_spec[key]:
                 raise HTTPException(status_code=400, detail=f"connect.{key} must be a non-empty string")
     _validate_params(definition_id, params)
-    params = _coerce_params(definition_id, params)
+    params = migrate_params(definition_id, _coerce_params(definition_id, params))
     _refuse_agent_krea_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
         _graph_worldlabs_recovery_checkpoints(
@@ -6932,7 +6955,8 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         if not isinstance(params, dict):
             raise HTTPException(status_code=400, detail="params must be an object")
         _validate_params(node.get("definitionId", ""), params)
-        params = _coerce_params(node.get("definitionId", ""), params)
+        params = migrate_param_update(node.get("definitionId", ""), params_before,
+                                      _coerce_params(node.get("definitionId", ""), params))
         _refuse_agent_krea_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
         _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
@@ -8824,6 +8848,8 @@ async def _execute_cli_run(
             await _emit_and_sync(event)
         elif isinstance(event, ExecutedEvent):
             results[event.node_id] = event.outputs
+            if event.notes:
+                outcome.setdefault("notes", {})[event.node_id] = list(event.notes)
             # Saved as each node finishes, so a stopped run keeps what it made.
             if event.node_id in cli_graph.nodes:
                 _sync_outputs_to_cli_graph(event.node_id, event.outputs)
@@ -8882,6 +8908,8 @@ async def _execute_cli_run(
     return {
         "results": results,
         "errors": errors,
+        # Per node, what each run said beside its outputs (the size a maker made).
+        **({"notes": outcome["notes"]} if outcome.get("notes") else {}),
         "duration": round(duration, 2),
         "nodesExecuted": len(results) + len(errors),
     }
@@ -8921,6 +8949,7 @@ async def _cli_run_response(run_id: str, wait: float | None, *, report_failure: 
     if task.cancelled():
         made = entry["outcome"]
         return {**head, "status": "cancelled", "results": made["results"], "errors": made["errors"],
+                **({"notes": made["notes"]} if made.get("notes") else {}),
                 "nodesExecuted": len(made["results"]) + len(made["errors"])}
     if report_failure and task.exception() is not None:
         return {**head, "status": "failed", "error": str(task.exception())}
@@ -9802,6 +9831,9 @@ async def output_meta(rel: str):
         "params": params if isinstance(params, dict) else {},
         "output_path": output_path,
         "timestamp": record.get("timestamp"),
+        # What the run said about this output (models/events.py add_run_note),
+        # e.g. the size a maker made when it couldn't make the one asked for.
+        "notes": [note for note in record.get("notes") or [] if isinstance(note, str)],
     }
 
 

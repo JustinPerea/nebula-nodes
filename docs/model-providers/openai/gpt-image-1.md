@@ -35,9 +35,9 @@ direct nodes via the `model` enum.
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `model` | `gpt-image-1`, `gpt-image-1.5`, `gpt-image-1-mini` | `gpt-image-1` | |
+| `model` | `gpt-image-1`, `gpt-image-1.5`, `gpt-image-1-mini`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst` | `gpt-image-2.5-flare` | gpt-image-1 shuts down 2026-10-23 (1.5 and 1-mini 2026-12-01); OpenAI names Sunburst or Flare as the replacement. Saved gpt-image-1 nodes move to Flare from 2026-10-23. |
 | `size` | `auto`, `1024x1024`, `1536x1024`, `1024x1536` | `auto` | Omitted when `auto` |
-| `quality` | `auto`, `low`, `medium`, `high` | `auto` | Omitted when `auto` |
+| `quality` | `auto`, `low`, `medium`, `high`, `xhigh`, `max` | `auto` | Omitted when `auto`; `xhigh`/`max` only on 2.5 |
 | `output_format` | `png`, `jpeg`, `webp` | `png` | Omitted when `png` (API default) |
 | `background` | `auto`, `transparent`, `opaque` | `auto` | Omitted when `auto` |
 
@@ -48,8 +48,8 @@ the node multiple times.
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `model` | `gpt-image-1`, `gpt-image-1.5`, `gpt-image-1-mini` | `gpt-image-1` | dall-e-2 removed 2026-06 |
-| `n` | 1–10 | 1 | Omitted when 1 |
+| `model` | same five as generate | `gpt-image-2.5-sunburst` | dall-e-2 removed 2026-06. Saved gpt-image-1 nodes move to Sunburst from 2026-10-23 (OpenAI: Sunburst "for workflows where editing precision matters most"). |
+| `n` | 1–10 | 1 | Omitted when 1. All returned images are kept: first on `image`, all on `images` (Array). |
 | `size` | `auto`, `1024x1024`, `1536x1024`, `1024x1536` | `auto` | |
 | `quality` | `auto`, `low`, `medium`, `high` | `auto` | |
 | `output_format` | `png`, `jpeg`, `webp` | `png` | |

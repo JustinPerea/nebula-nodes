@@ -18,6 +18,43 @@ Nano Banana 2.1 runs on the Gemini Interactions API (`POST /v1beta/interactions`
 
 Image size strings are uppercase `K`: `"1K"`, `"2K"`, `"4K"`. The 512-pixel option has no K suffix.
 
+## fal and Krea copies on this handler
+
+`nano-banana-fal`, `nano-banana-fal-edit` and four Krea copies
+(`krea-image-google-nano-banana-2`, `-pro`, `-flash-lite`,
+`krea-image-google-nano-banana`) run on `handle_nano_banana` when
+`GOOGLE_API_KEY` is set (`backend/execution/maker_routes.py`; a Krea copy set
+to the Krea plan stays on Krea). The translation from fal's params: model ->
+the Google id; `aspect_ratio: auto` omitted; `resolution` -> `imageSize`
+(Nano Banana 2 and Pro); `thinking_level` minimal/high ->
+`generationConfig.thinkingConfig.thinkingLevel` (Nano Banana 2 only);
+`enable_web_search` -> `tools: [{"googleSearch": {}}]` (Nano Banana 2 and
+Pro); `num_images` -> that many calls (the node shows the first, as on fal);
+`seed` and `output_format` are fal-only. Web search and high thinking have no
+list price on the Google route (grounding bills per search query), so those
+runs are unpriced. Wired image URLs go to Google as `fileData.fileUri`, so they
+must be public HTTPS (15 MB per file; ai.google.dev/gemini-api/docs/file-input-methods).
+
+The Google-route price is a range: the output image, up to the output plus 14
+reference images (Google's limit) at the model's input rate, since every call
+re-sends them ($0.0011 each on Pro). Nano Banana (2.5) and fal's
+`gemini-25-flash-image` leave Google on 2027-03-15, the earliest shutdown in
+Google's deprecations table (`node_route.DIRECT_RETIRES`): from that day those
+runs take the fal or Krea copy, and pricing, readiness and the cache key move
+with them. A Krea copy with an explicit `width`/`height` stays on Krea (Google
+can't render an exact size).
+
+Also on this handler (2026-10-14, `backend/execution/maker_routes_google.py`):
+`identity-edit` runs on `gemini-3.1-flash-image` with `GOOGLE_API_KEY`
+(resolution 1024/2048 -> `imageSize` 1K/2K; thinking low -> minimal,
+medium/high -> high; the Character bundle and mask refusal are shared with
+the fal route; a seed reaches fal only), and
+`krea-image-google-nano-banana-2-1` runs on `gemini-nano-banana-2.1` via the
+Interactions API, sending `thinking_level` as
+`generation_config.thinking_level` (Google: minimal / medium / high, default
+medium). Thinking tokens bill extra at $7.50 per 1M, so its Google estimate
+carries an open "thinking tokens" add-on.
+
 ## Core prompting principle
 
 > **Describe the scene in a narrative paragraph. Don't list keywords.**

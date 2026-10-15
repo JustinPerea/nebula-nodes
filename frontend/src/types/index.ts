@@ -139,22 +139,114 @@ export interface ModelNodeDefinition {
    *  before/after slider. Saving accepts these handles; edges never do. */
   displayOutputs?: PortDefinition[];
   params: ParamDefinition[];
-  /** Dual-param architecture for nodes with both FAL and direct API support.
-   *  When present, Inspector renders sharedParams + (falParams or directParams)
-   *  based on which API key is available. `params` is ignored when these are set. */
+  /** Dual-route nodes: a fal or Krea copy that also runs on its maker's API
+   *  with the person's key. Inspector and Create render sharedParams plus the
+   *  group of the route the run takes (lib/directRoute.ts selectRoute, the
+   *  backend's services/node_route.py): directParams on the maker key,
+   *  falParams on the fal or Krea copy (for a Krea node, its Krea-only
+   *  fields) and on the Krea plan. A Krea node keeps its full list in
+   *  `params` too; other dual-route nodes leave `params` empty. */
   sharedParams?: ParamDefinition[];
   falParams?: ParamDefinition[];
   directParams?: ParamDefinition[];
-  /** Which env key name selects the "direct" route (vs FAL). Used by Inspector
-   *  to decide which param set to show. e.g. 'MESHY_API_KEY' or 'GOOGLE_API_KEY'.
-   *  A list means any of them, tried in order (Veo: Vertex, then Gemini API). */
+  /** Which env key name selects the "direct" route (vs fal or Krea). e.g.
+   *  'MESHY_API_KEY' or 'GOOGLE_API_KEY'. A list means any of them, tried in
+   *  order (Veo: Vertex, then Gemini API). */
   directKeyName?: string | string[];
+  /** A dual-route node's maker-route rules (lib/directRoute.ts directBlock,
+   *  backend services/node_route.py direct_block, one rule set on both). A
+   *  generated Krea node (scripts/sync-krea-catalog.py DIRECT_ROUTES) names
+   *  the backend translation and the maker's model id; a fal node may carry
+   *  only the rules. What keeps a run on the copy:
+   *  - `blockedBy`: copy-only params the maker can't honor, set or wired;
+   *  - `accepts`: the values the maker takes for a param (any other blocks);
+   *  - `rejects`: values of a param the maker doesn't take;
+   *  - `rejectsWhen`: combinations it doesn't take ("(set)" = set or wired,
+   *    "(unset)" = neither);
+   *  - `size`: the maker's documented output size limits.
+   *  `snap` isn't a rule: a maker that takes a fixed size list gets the
+   *  nearest entry on its route (lib/makerSizes.ts). Nor is `startShape`:
+   *  a maker that keeps a start image's shape (lib/makerSizes.ts).
+   *  A rule never blocks a param's default. `setup: 'fallback'` points setup
+   *  at the copy's key when no key is set (BytePlus, which doesn't serve the
+   *  United States and needs each model activated, is not the key to suggest
+   *  first; lib/providerReadiness.ts). */
+  directRoute?: {
+    translation?: string; model?: string; blockedBy?: string[]; setup?: 'fallback';
+    accepts?: Record<string, DirectAcceptRule>;
+    rejects?: Record<string, ReadonlyArray<string | number | boolean>>;
+    rejectsWhen?: DirectRejectsWhenRule[];
+    size?: DirectSizeLimits;
+    snap?: DirectSizeSnap;
+    startShape?: DirectStartShape;
+  };
   docUrl?: string;
   /** A local (utility) node that still calls a provider. `utility` only means
    *  "no top-level key"; this says what the node really needs. Readiness, the
    *  missing-key badge, the run estimate and the agent surfaces all read it
    *  (lib/nodeKeys.ts, backend services/node_readiness.py). */
   providerVia?: ProviderVia;
+}
+
+/** The values a maker takes for one param (directRoute.accepts); any other
+ * saved or default value keeps the run on the copy. */
+export interface DirectAcceptRule {
+  values?: readonly (string | number | boolean)[];
+  min?: number;
+  max?: number;
+  integer?: boolean;
+}
+
+/** A combination of param values the maker doesn't take
+ * (directRoute.rejectsWhen): it blocks when every `match` entry holds, where
+ * "(set)" means saved non-empty or wired into its port and "(unset)" means
+ * neither. `label` says what it
+ * is in readiness ("1080p at 10 seconds"). */
+export interface DirectRejectsWhenRule {
+  match: Readonly<Record<string, string | number | boolean>>;
+  label: string;
+}
+
+/** A maker that takes a fixed size list on its direct route (backend
+ *  services/maker_sizes.py SNAPS, copied here by scripts/sync-krea-catalog.py).
+ *  `kind` 'size': the choices are exact pixel sizes (Ideogram 3, Runway Gen-4
+ *  Image); 'shape': aspect ratios, and the maker picks the pixels (Ideogram
+ *  2a). `sep` is how the maker spells a choice ("1312x736", "1360:768"), and
+ *  `field` the request field it goes in. */
+export interface DirectSizeSnap {
+  widthParam: string;
+  heightParam: string;
+  maker: string;
+  field: string;
+  kind: 'size' | 'shape';
+  sep: string;
+  choices: string[];
+}
+
+/** A maker that doesn't use the aspect ratio on a start-image run, and makes
+ *  the video in the start image's shape (Seedance 2.5 on BytePlus; backend
+ *  services/maker_sizes.py START_SHAPES, copied here by
+ *  scripts/sync-krea-catalog.py). */
+export interface DirectStartShape {
+  maker: string;
+  model: string;
+  ratioParam: string;
+  imageParam: string;
+}
+
+/** A maker's documented output size rules for its direct route
+ *  (backend services/node_route.py _size_block). `widthParam`/`heightParam`
+ *  name an explicit size (a Krea copy's width/height); `param` names a size
+ *  choice whose `unsupported` values, or a `{width, height}` outside the
+ *  limits, keep the run on the copy. */
+export interface DirectSizeLimits {
+  minPixels?: number;
+  maxPixels?: number;
+  maxAspect?: number;
+  widthParam?: string;
+  heightParam?: string;
+  param?: string;
+  unsupported?: string[];
 }
 
 /** How a utility node reaches a provider.
@@ -415,6 +507,10 @@ export interface NodeData {
   batchOutputs?: Array<Record<string, PortValue>>;
   batchVariants?: VariantScope[];
   batchRunId?: string;
+  /** What the last run said beside its outputs (the executed event's
+   *  notes), kept with the results like `outputs`, never part of the recipe; e.g. "Ideogram made 1312x736, the closest it could get
+   *  to your 1000x560." */
+  runNotes?: string[];
   outputFreshness?: PaperOutputFreshness;
   error?: string;
   /** Friendly classification of `error` (see backend error_classifier). `error`

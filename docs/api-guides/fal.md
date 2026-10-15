@@ -1,6 +1,8 @@
 # FAL (fal.ai) in Nebula Nodes
 
-> FAL is Nebula's all-purpose generation gateway: one API key unlocks dozens of top image, video, and 3D models — FLUX, Sora 2, Kling, Seedance, Luma, Wan, Recraft, Ideogram, Hunyuan3D, Meshy, GPT Image, and more — that you wire together on the canvas.
+> FAL is Nebula's all-purpose generation gateway: one API key unlocks dozens of top image, video, and 3D models — FLUX, Kling, Seedance, Luma, Wan, Recraft, Ideogram, Hunyuan3D, Meshy, GPT Image, and more — that you wire together on the canvas.
+
+> **Sora 2:** Retired 2026-10-14: OpenAI shut down the Sora 2 API on 2026-09-24 (no one-to-one replacement), and fal's endpoints ran on it. Saved `sora-2` / `sora-2-i2v` nodes load as `veo-3` on Veo 3.1 Fast (Sora 2 Pro → Veo 3.1), titled "Veo 3.1 Fast (was Sora 2)"; `grok-imagine-video` and `runway-video` are the other choices.
 
 ## What you can make
 
@@ -10,7 +12,7 @@ FAL is a *universal gateway* — a single provider that proxies many different d
 - **Vector art (SVG):** true scalable vector graphics from a text prompt with Recraft V4 SVG — logos, icons, flat illustrations.
 - **Image editing / reference images:** edit or remix existing images with FLUX Kontext, GPT Image 1.5 Edit, and GPT Image 2 Edit (feed one or more reference images + an instruction).
 - **Image editing — inpaint / outpaint (mask-based):** edit only the masked region of an image with FLUX Fill (Inpaint) — feed an image, a mask (white = the region to edit), and a prompt; inpaint to replace objects in a frame or outpaint to extend its borders, while unmasked regions stay untouched.
-- **Video — from text:** Sora 2 (sunsets 2026-09-24 — see the node table), Kling V3, Wan 2.6 T2V, Luma Ray 2, PixVerse V4.5, Seedance 2.0 (+ Fast).
+- **Video — from text:** Kling V3, Wan 2.6 T2V, Luma Ray 2, PixVerse V4.5, Seedance 2.0 (+ Fast).
 - **Video — from a still image:** animate a photo with Kling v2.1, Kling Omni 3, Luma Ray 2 I2V, Wan 2.6 I2V, LTX Video 2, LTX 2.3, Seedance V1.5 Pro, Seedance 2.0 I2V (+ Fast). Many support a start frame *and* an end frame.
 - **Video — from reference clips/images:** drive a new video off reference footage with Wan 2.6 R2V (up to 3 reference videos) and Seedance 2.0 R2V (reference image set).
 - **Video — modify existing video:** restyle/edit a clip you already have with Luma Ray 2 Flash Modify.
@@ -31,7 +33,6 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 | FLUX 1.1 Ultra | `flux-1-1-ultra` | image-gen | prompt, image | *(defaults only)* | High-end photoreal stills |
 | FAL | `fal-universal` | universal | prompt, image | `endpoint_id` | Power-user escape hatch: paste any `fal-ai/...` slug to reach a model Nebula has no dedicated node for |
 | Kling v2.1 | `kling-v2-1` | video-gen | image, prompt, tail_image | `duration`, `negative_prompt`, `cfg_scale` | Animate a photo (with optional end frame) |
-| Sora 2 (sunsets Sep '26) | `sora-2` | video-gen | prompt | `resolution`, `aspect_ratio`, `duration` | Text-to-video, OpenAI Sora 2. **Sunset warning:** OpenAI announced (2026-03-24) the Videos API + sora-2/sora-2-pro shut down 2026-09-24; the FAL endpoints proxy OpenAI, so this node dies then too |
 | FLUX Schnell | `flux-schnell` | image-gen | prompt | `image_size`, `num_inference_steps`, `guidance_scale`, `num_images`, `output_format`, `acceleration`, `enable_safety_checker`, `seed` | Fast, cheap image drafts |
 | Fast SDXL | `fast-sdxl` | image-gen | prompt | `image_size`, `num_images`, `num_inference_steps`, `guidance_scale`, `negative_prompt`, `expand_prompt`, `loras`, `embeddings`, `format`, `enable_safety_checker`, `safety_checker_version`, `seed` | SDXL with LoRA/embedding support |
 | Wan 2.6 T2V | `wan-2-6-t2v` | video-gen | prompt | `duration`, `resolution`, `aspect_ratio`, `negative_prompt`, `seed`, `generate_audio`, `enable_prompt_expansion`, `multi_shots`, `enable_safety_checker` | Text-to-video with optional audio |
@@ -50,10 +51,10 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 | Luma Ray 2 Flash Modify | `luma-ray2-flash-modify` | video-gen | video, prompt, image | `mode` | Restyle / modify an existing clip |
 | Wan 2.6 R2V | `wan-2-6-r2v` | video-gen | prompt, video1, video2, video3 | `duration`, `resolution`, `aspect_ratio`, `negative_prompt`, `seed`, `enable_prompt_expansion`, `multi_shots`, `enable_safety_checker` | Reference-to-video from up to 3 clips |
 | PixVerse V4.5 | `pixverse-v4-5` | video-gen | prompt, image | `duration`, `aspect_ratio`, `resolution`, `style`, `negative_prompt`, `seed` | Stylized text/image-to-video |
-| Seedance V1.5 Pro (I2V) | `seedance-v1-5` | video-gen | prompt, image, end_image | `duration`, `aspect_ratio`, `resolution`, `generate_audio`, `camera_fixed`, `seed` | High-quality image-to-video |
+| Seedance V1.5 Pro (I2V) | `seedance-v1-5` | video-gen | prompt, image, end_image | `duration`, `aspect_ratio`, `resolution`, `generate_audio`, `camera_fixed`, `seed` | High-quality image-to-video. Runs on BytePlus ModelArk when `BYTEPLUS_API_KEY` is saved ([byteplus.md](./byteplus.md)) |
 | Kling Omni 3 | `kling-o3` | video-gen | image, prompt, end_image | `duration`, `aspect_ratio`, `generate_audio`, `negative_prompt`, `cfg_scale`, `shot_type` | Image-to-video, newest Kling |
 | LTX 2.3 | `ltx-2-3` | video-gen | image, prompt, end_image, audio | `duration`, `resolution`, `aspect_ratio`, `fps`, `generate_audio` | Image-to-video; can take an audio track |
-| Seedance 2.0 Text-to-Video | `seedance-2-t2v` | video-gen | prompt | `aspect_ratio`, `duration`, `resolution`, `generate_audio`, `seed` | Text-to-video, ByteDance Seedance 2 |
+| Seedance 2.0 Text-to-Video | `seedance-2-t2v` | video-gen | prompt | `aspect_ratio`, `duration`, `resolution`, `generate_audio`, `seed` | Text-to-video, ByteDance Seedance 2. All five Seedance 2.0 nodes run on BytePlus ModelArk when `BYTEPLUS_API_KEY` is saved; a set `seed` keeps them on fal ([byteplus.md](./byteplus.md)) |
 | Seedance 2.0 I2V | `seedance-2-i2v` | video-gen | image, prompt, end_image | `aspect_ratio`, `duration`, `resolution`, `generate_audio`, `seed` | Image-to-video (start + end frame) |
 | Seedance 2.0 R2V | `seedance-2-r2v` | video-gen | prompt, images | `aspect_ratio`, `duration`, `resolution`, `generate_audio`, `seed` | Reference-to-video from an image set |
 | Seedance 2.0 Fast T2V | `seedance-2-fast-t2v` | video-gen | prompt | `aspect_ratio`, `duration`, `resolution`, `generate_audio`, `seed` | Faster/cheaper text-to-video |
@@ -68,7 +69,7 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 | SeedVR2 Upscale | `seedvr2-upscale` | transform | image | `upscale_mode`, `upscale_factor`, `target_resolution`, `noise_scale`, `output_format`, `seed` | Upscale an image (up to 4× / 4K) |
 | Clarity Upscaler | `clarity-upscaler` | transform | image | `prompt`, `upscale_factor`, `creativity`, `resemblance`, `num_inference_steps`, `seed` | Upscale + enhance an image with added realistic detail |
 | SeedVR2 Video Upscale | `seedvr-video-upscale` | transform | video | `upscale_mode`, `upscale_factor`, `target_resolution`, `noise_scale`, `output_quality`, `seed` | Upscale a video to up to 4K (temporally consistent) |
-| Seedream 4.5 | `seedream-4-5` | image-gen | prompt | `image_size`, `num_images`, `max_images`, `enable_safety_checker`, `seed` | ByteDance Seedream high-quality stills |
+| Seedream 4.5 | `seedream-4-5` | image-gen | prompt | `image_size`, `num_images`, `max_images`, `enable_safety_checker`, `seed` | ByteDance Seedream high-quality stills. Runs on BytePlus ModelArk instead when `BYTEPLUS_API_KEY` is saved and the recipe fits ([byteplus.md](./byteplus.md)); a set `seed` keeps it on fal |
 | Ideogram 4 | `ideogram-v4` | image-gen | prompt | `rendering_speed` (TURBO/BALANCED/QUALITY), `image_size`, `expansion_model` (magic-prompt expansion), `num_images`, `output_format`, `seed`, `enable_safety_checker` | Frontier text rendering / typography — Ideogram 4.0 (released 2026-06-03, open weights + hosted) |
 | Ideogram Edit (Inpaint) | `ideogram-edit` | image-gen | prompt, image, mask (**black = edit** — inverse of FLUX Fill), images (style refs) | `rendering_speed`, `expand_prompt`, `num_images`, `seed` | Change a specific masked region of an image (v3 endpoint — FAL hosts no v4 edit surface yet; added 2026-06-10). All seven Ideogram nodes are dual-route: direct api.ideogram.ai when IDEOGRAM_API_KEY is set — see [ideogram.md](ideogram.md) |
 | Ideogram Remix | `ideogram-remix` | image-gen | prompt, image, images (style refs) | `strength` (0–1, default 0.8), `image_size`, `style` (AUTO/GENERAL/REALISTIC/DESIGN), `negative_prompt`, `rendering_speed`, `expand_prompt`, `num_images`, `seed` | Re-generate an image under a new prompt while keeping its structure (added 2026-06-10) |
@@ -83,7 +84,7 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 
 ## How to use it in Nebula
 
-**Where the nodes appear.** Open the node palette on the canvas and browse by category. FAL nodes are spread across **Image**, **Video**, **3D**, and **Transform** groups — they look like any other model node (e.g. "Sora 2", "FLUX 1.1 Ultra", "Remove Background"). There is no separate "FAL" section; the gateway is invisible unless you reach for the catch-all **FAL** node (`fal-universal`), which lives under the **Universal** group and lets you type a raw `fal-ai/...` endpoint slug.
+**Where the nodes appear.** Open the node palette on the canvas and browse by category. FAL nodes are spread across **Image**, **Video**, **3D**, and **Transform** groups — they look like any other model node (e.g. "Kling V3", "FLUX 1.1 Ultra", "Remove Background"). There is no separate "FAL" section; the gateway is invisible unless you reach for the catch-all **FAL** node (`fal-universal`), which lives under the **Universal** group and lets you type a raw `fal-ai/...` endpoint slug.
 
 **API-key setup (one time).** All FAL nodes authenticate with a single key:
 
@@ -132,7 +133,7 @@ FAL is a gateway, so "the API surface" here means *capabilities* — auth, the c
 | **Image — background removal** | Yes | **full** | `remove-background` (`imageutils/rembg`). |
 | **Image — upscaling** | Yes | **partial** | Two image upscalers exposed: `seedvr2-upscale` (faithful) and `clarity-upscaler` (creative/added detail); FAL has more (ESRGAN, etc.). |
 | **Video — upscaling / restoration** | Yes | **partial** | `seedvr-video-upscale` (`fal-ai/seedvr/upscale/video`, ByteDance SeedVR2 — one-step, temporally-consistent upscale to up to 4K); FAL hosts other video upscalers/restorers that remain unwired. |
-| **Video — text-to-video** | Yes | **full** | Sora 2 (until its 2026-09-24 sunset), Kling V3, Wan 2.6, Luma Ray 2, PixVerse, Seedance 2.0 (+ Fast). |
+| **Video — text-to-video** | Yes | **full** | Kling V3, Wan 2.6, Luma Ray 2, PixVerse, Seedance 2.0 (+ Fast). |
 | **Video — image-to-video** | Yes | **full** | Kling v2.1/Omni 3, Luma Ray 2 I2V, Wan 2.6 I2V, LTX 2 / 2.3, Seedance V1.5 / 2.0. |
 | **Video — reference-to-video** | Yes | **full** | Wan 2.6 R2V, Seedance 2.0 R2V. |
 | **Video — video-to-video / modify** | Yes | **partial** | Only Luma Ray 2 Flash Modify; FAL has many v2v / video-edit models. |

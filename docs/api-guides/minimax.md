@@ -27,6 +27,24 @@ Notes grounded in the registry:
 - `duration` defaults to **6s** and `resolution` defaults to **768P**. The 10s option is only valid at 768P; 1080P is 6s only.
 - **S2V deliberately has no duration/resolution params** — the MiniMax S2V API doesn't accept them, and the node's character image only supports a human face (`type: character`).
 
+## Krea's Hailuo and H3 copies on your MiniMax key (2026-10-14)
+
+Four Krea nodes also run on MiniMax directly when your MiniMax key is saved: **Hailuo 02 (Krea)** (`krea-video-minimax-hailuo-02`, model `MiniMax-Hailuo-02`), **Hailuo 2.3 (Krea)** (`MiniMax-Hailuo-2.3`), **Hailuo 2.3 Fast (Krea)** (`MiniMax-Hailuo-2.3-Fast`, image-to-video only) and **MiniMax H3 (Krea)** (`MiniMax-H3`). A node set to your Krea plan stays on Krea; otherwise your MiniMax key wins and MiniMax bills the run. Prices (MiniMax pay-as-you-go list, checked 2026-10-14, [pricing](https://platform.minimax.io/docs/pricing/overview)):
+
+| Model | Price |
+|---|---|
+| Hailuo 02 | $0.10 (512P 6s), $0.15 (512P 10s), $0.28 (768P 6s), $0.56 (768P 10s), $0.49 (1080P 6s) |
+| Hailuo 2.3 | $0.28 (768P 6s), $0.56 (768P 10s), $0.49 (1080P 6s) |
+| Hailuo 2.3 Fast | $0.19 (768P 6s), $0.32 (768P 10s), $0.33 (1080P 6s) |
+| H3 | $0.08/s at 768P, $0.13/s at 2K; 5 reference images free, then $0.04 each; reference video billed per input second at the output rate |
+
+- Hailuo 02 is the only MiniMax model with **first-and-last-frame** video; its Krea copy sends `last_frame_image` when an end image is connected (MiniMax: no 512P in that mode).
+- **H3 uses MiniMax's V2 API** (`POST /v2/video_generation`, handler `backend/handlers/minimax_v2.py`). MiniMax: "To use MiniMax H3 or MiniMax H3 Max, please select the Pay-as-you-go API", and Video Packages don't cover H3 yet; M Plan Explore and Build include H3 on a Subscription Key. A refused key or balance error says this.
+- What keeps a run on Krea, and what is refused before any call, is in `docs/api-guides/krea.md` and the Krea skill.
+- **Local files on H3** go up as data URIs, within MiniMax's limits (video-generation-v2-create.md, read 2026-10-14): image 30 MB, video 50 MB, audio 15 MB each, and the whole request 64 MB. A file over its limit, or a set of files that would push the request past 64 MB once encoded, is refused before any call; use a public URL for large files, as MiniMax advises.
+
+**Regions.** A MiniMax key only works on its own region's host: Global `api.minimax.io` or Mainland `api.minimaxi.com` ([MiniMax MCP README](https://github.com/MiniMax-AI/MiniMax-MCP)). Nebula tries Mainland first, as it always has, and moves to Global when Mainland rejects the key or answers 404 for the path, so a Global key now works too. The 404 case matters for H3: MiniMax documents `/v2/video_generation` on `api.minimax.io` and, for Mainland, on `api.minimax.cn` ([Mainland V2 reference](https://platform.minimax.cn/docs/api-reference/video-generation-v2-create.md), read 2026-10-14), not on `api.minimaxi.com`. Neither answer creates a task, so neither is billed. The Settings key check still probes Mainland only (follow-up). Prices above are Global's USD list; a Mainland key bills Mainland's own rates.
+
 ## How to use it in Nebula
 
 **Where the nodes live.** Open the node palette/library and look under the **video-gen** category. Drag **MiniMax T2V**, **MiniMax I2V**, or **MiniMax S2V** onto the canvas. Each one is recognizable by its single blue **Video** output.
@@ -53,9 +71,10 @@ Notes grounded in the registry:
 | Text-to-video (`/v1/video_generation`, T2V) | Yes | **full** | `minimax-t2v`. Hailuo 2.3 / 2.3 Fast / 02 exposed. |
 | Image-to-video (first frame) | Yes | **full** | `minimax-i2v`. |
 | Subject-reference video (`S2V-01`) | Yes | **full** | `minimax-s2v`, character/face only. |
-| First-and-last-frame video (`last_frame_image`) | Yes | **none** | API supports a start+end frame mode; no Nebula node exposes `last_frame_image`. |
+| First-and-last-frame video (`last_frame_image`) | Yes | **partial** | Hailuo 02 (Krea) sends it on your MiniMax key; the `minimax-*` nodes don't expose it. |
 | `Hailuo-2.3-Fast` model | Yes | **full** | `MiniMax-Hailuo-2.3-Fast` joined the t2v/i2v model enums 2026-06-10. |
-| `prompt_optimizer` toggle | Yes | **none** | API auto-optimizes prompts; not surfaced as a node param. |
+| `prompt_optimizer` toggle | Yes | **partial** | The Krea Hailuo copies' `expand_prompt` maps to it on the MiniMax route; the `minimax-*` nodes don't expose it. |
+| Video generation V2 (`/v2/video_generation`, MiniMax H3) | Yes | **partial** | MiniMax H3 (Krea) on your MiniMax key. H3 Max isn't routed (which Krea node it is, is unconfirmed). |
 | Director/legacy video models (`T2V-01-Director`, `I2V-01-Director`, `I2V-01-live`) | Yes | **none** | Not in the Nebula model enums. |
 | Video Generation Agent (`/v1/.../video-agent`, templates) | Yes | **none** | Templated action clips (Diving, Climbing, etc.) — no node. |
 | Text-to-speech, sync (`/v1/t2a_v2`, speech-2.x / 02 / 01 HD & Turbo) | Yes | **none** | Entire audio modality is unused in Nebula. |

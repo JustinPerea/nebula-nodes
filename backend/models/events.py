@@ -23,6 +23,22 @@ def _current_variant() -> dict[str, Any] | None:
     return copy.deepcopy(execution_variant.get())
 
 
+# Plain-language notes about one invocation that a person or agent should
+# know, beside its outputs (never a port value): today, the size a maker
+# made when it couldn't make the one asked for
+# (execution/maker_routes_ideogram_runway.py). The engine gives each
+# invocation a fresh list and carries it on the executed event, in the cache
+# with the outputs, and in the run manifest (services/output.py).
+execution_notes: ContextVar[list[str] | None] = ContextVar("execution_notes", default=None)
+
+
+def add_run_note(text: str) -> None:
+    """Add a note to the invocation that is running (no-op outside one)."""
+    notes = execution_notes.get()
+    if notes is not None and text and text not in notes:
+        notes.append(text)
+
+
 class RunScopedEvent(BaseModel):
     """Execution event correlated to the request that produced it.
 
@@ -60,6 +76,8 @@ class ExecutedEvent(RunScopedEvent):
     batch_outputs: list[dict[str, Any]] | None = None
     variant: dict[str, Any] | None = Field(default_factory=_current_variant)
     batch_variants: list[dict[str, Any]] | None = None
+    # execution_notes for this invocation, when it has any.
+    notes: list[str] | None = None
 
 
 class ErrorEvent(RunScopedEvent):

@@ -252,13 +252,24 @@ def save_base64_image_named(
 
 
 async def save_video_from_url(url: str, run_dir: Path, extension: str = "mp4") -> Path:
+    """Download a provider's video result to the run dir.
+
+    The body streams to disk in chunks, so a large clip (Runway Ruby's 4K
+    ProRes, for one) is never held in memory whole. A failed download leaves
+    no partial file behind."""
     import httpx
     filename = f"{uuid4().hex[:12]}.{extension}"
     file_path = require_allowed_path(run_dir / filename)
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        file_path.write_bytes(response.content)
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream("GET", url) as response:
+                response.raise_for_status()
+                with file_path.open("wb") as handle:
+                    async for chunk in response.aiter_bytes():
+                        handle.write(chunk)
+    except BaseException:
+        file_path.unlink(missing_ok=True)
+        raise
     return await _validate_and_correct_extension(file_path)
 
 
@@ -454,9 +465,14 @@ def portable_output_ref(value: str, *, require_file: bool = False) -> str:
     return "/api/outputs/" + quote(relative.as_posix(), safe="/-._~")
 
 
-def image_to_data_uri(file_path: Path) -> str:
-    file_path = require_allowed_path(file_path)
-    image_bytes = file_path.read_bytes()
+def image_to_data_uri(file_path: Path, *, max_bytes: int | None = None) -> str:
+    """A local image as a data URI, after the file policy and a size cap
+    (the caller's provider limit, else services.image_input's default bound)."""
+    from services.image_input import DEFAULT_MAX_IMAGE_BYTES
+    from services.media_input import read_local_media
+
+    file_path, image_bytes = read_local_media(
+        file_path, label="Image input", max_bytes=max_bytes or DEFAULT_MAX_IMAGE_BYTES)
     b64 = base64.b64encode(image_bytes).decode("ascii")
     suffix = file_path.suffix.lstrip(".").lower()
     mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}

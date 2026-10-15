@@ -44,6 +44,8 @@ instead of calling the upstream provider directly. This doc records the
 | `gpt-image-1-5-edit` | `fal-ai/gpt-image-1.5/edit` | FAL async-poll | `async-poll` |
 | `seedream-4-5` | `fal-ai/bytedance/seedream/v4.5/text-to-image` | FAL async-poll | `async-poll` |
 
+Since 2026-10-14 the four GPT Image nodes above are dual-route: with `OPENAI_API_KEY` saved they run on OpenAI's own Images API instead of FAL (`backend/execution/maker_routes_openai.py`; route rule in `backend/services/node_route.py`). See `docs/api-guides/openai.md`.
+
 ---
 
 ## Key FAL vs OpenAI-Direct Differences

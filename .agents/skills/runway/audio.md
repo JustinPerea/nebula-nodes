@@ -2,6 +2,13 @@
 
 All three endpoints wrap ElevenLabs under the hood.
 
+**On the person's ElevenLabs key (2026-10-14).** The three nodes also run on ElevenLabs' own API when `ELEVENLABS_API_KEY` is saved (`backend/execution/maker_routes_elevenlabs.py`), billed by ElevenLabs:
+
+- `runway-dubbing` -> `POST /v1/dubbing`, same four settings renamed to snake_case. Runs on ElevenLabs whenever the key is set.
+- `runway-tts` -> `POST /v1/text-to-speech/{voice_id}` (`eleven_multilingual_v2`) and `runway-sts` -> `POST /v1/speech-to-speech/{voice_id}` (`eleven_multilingual_sts_v2`) **only when the recipe sets `voice_id`, an ElevenLabs voice ID**. Runway's presets (`voiceId`) have no documented ElevenLabs id, so a preset-only recipe stays on Runway. ElevenLabs STS takes the `audio` input only; a video-only run on that route is refused before any call.
+
+Params on these nodes are split by route: `voiceId` is Runway-only (`falParams`), `voice_id` is ElevenLabs-only (`directParams`), the rest is shared.
+
 ---
 
 ## `POST /v1/text_to_speech`

@@ -38,7 +38,7 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
           const hasEmptyOption = p.options?.some((o) => o.value === '');
           const value = String(params[p.key] ?? p.default ?? '');
           const unavailableChoice = value !== '' && !p.options?.some((o) => String(o.value) === value);
-          const storedLabel = resolveCreateParamDefinitions(def, apiKeys).find((param) => param.key === p.key)
+          const storedLabel = resolveCreateParamDefinitions(def, apiKeys, params).find((param) => param.key === p.key)
             ?.options?.find((o) => String(o.value) === value)?.label ?? 'Saved choice';
           return (
             <label key={p.key} className="param-pill" title={p.label}>

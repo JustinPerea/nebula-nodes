@@ -32,6 +32,31 @@ describe('deriveVisibleParams', () => {
     expect(withLegacy.some((p) => p.key === 'aspect_ratio')).toBe(true);
   });
 
+  it('offers each Runway video model only the durations and ratios it takes', () => {
+    const def = NODE_DEFINITIONS['runway-video'];
+    const values = (model: string, key: string) =>
+      deriveVisibleParams(def, { model }).find((p) => p.key === key)?.options?.map((o) => o.value);
+    expect(values('veo3.1', 'duration')).toEqual([4, 6, 8]);
+    expect(values('veo3.1', 'ratio')).toEqual(['1280:720', '720:1280', '1080:1920', '1920:1080']);
+    expect(values('seedance2_5', 'duration')).toEqual([...Array.from({ length: 27 }, (_, i) => i + 4), 'auto']);
+    expect(values('gen4.5', 'duration')).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    const happyhorse = deriveVisibleParams(def, { model: 'happyhorse_1_0' });
+    expect(happyhorse.some((p) => p.key === 'resolution')).toBe(true);
+    expect(happyhorse.some((p) => p.key === 'seed')).toBe(false);
+    expect(deriveVisibleParams(def, { model: 'gen4.5' }).some((p) => p.key === 'audio')).toBe(false);
+  });
+
+  it('offers each Runway image model only its own ratios', () => {
+    const def = NODE_DEFINITIONS['runway-image'];
+    const ratios = (model: string) =>
+      deriveVisibleParams(def, { model }).find((p) => p.key === 'ratio')?.options?.map((o) => o.value) ?? [];
+    expect(ratios('gpt_image_2')).not.toContain('1360:768');
+    expect(ratios('gpt_image_2')).toContain('auto');
+    expect(ratios('seedream5_pro')).toContain('auto_2k');
+    expect(ratios('gemini_2.5_flash')).toHaveLength(10);
+    expect(deriveVisibleParams(def, { model: 'seedream5_lite' }).some((p) => p.key === 'seed')).toBe(false);
+  });
+
   it('keeps FAL Nano Banana controls within each endpoint contract', () => {
     for (const id of ['nano-banana-fal', 'nano-banana-fal-edit'] as const) {
       const def = NODE_DEFINITIONS[id];
@@ -50,14 +75,14 @@ describe('deriveVisibleParams', () => {
   it('renders exactly one provider-specific control per key for Veo', () => {
     const def = NODE_DEFINITIONS['veo-3'];
 
-    const fal = deriveVisibleParams(def, { model: 'veo-3.1-generate-preview' });
+    const fal = deriveVisibleParams(def, { model: 'veo-3.1-generate-001' });
     expect(fal.filter((p) => p.key === 'seed')).toHaveLength(1);
     expect(fal.some((p) => p.key === 'safety_tolerance')).toBe(true);
     expect(fal.some((p) => p.key === 'model')).toBe(false);
 
     const direct = deriveVisibleParams(
       def,
-      { model: 'veo-3.1-generate-preview' },
+      { model: 'veo-3.1-generate-001' },
       { GOOGLE_API_KEY: 'configured' },
     );
     expect(direct.filter((p) => p.key === 'seed')).toHaveLength(1);

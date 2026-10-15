@@ -44,6 +44,7 @@ from services.port_contracts import (
 )
 from services.provider_capabilities import gemini_omni_capability_error
 from services.provider_operation_policy import bypasses_output_cache, operation_policy
+from services.retired_nodes import migrate_params
 from services.worldlabs_capabilities import worldlabs_capability_gate
 from execution.error_classifier import classify_error
 from models.events import (
@@ -54,6 +55,7 @@ from models.events import (
     ErrorEvent,
     ValidationErrorDetail,
     GraphCompleteEvent,
+    execution_notes,
     execution_run_id,
     execution_variant,
 )
@@ -405,11 +407,6 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
         "outputPorts": [{"id": "video"}],
         "envKeyName": "FAL_KEY",
     },
-    "sora-2": {
-        "inputPorts": [{"id": "prompt", "required": True}],
-        "outputPorts": [{"id": "video"}],
-        "envKeyName": "FAL_KEY",
-    },
     "nano-banana": {
         "inputPorts": [
             {"id": "prompt", "required": True},
@@ -507,6 +504,32 @@ def _registry_node_defs() -> dict[str, dict[str, Any]]:
 
 def _node_def_for(definition_id: str) -> dict[str, Any] | None:
     return _registry_node_defs().get(definition_id) or NODE_DEFS.get(definition_id)
+
+
+def _cache_route_tag(
+    node: GraphNode, definition: dict[str, Any] | None, api_keys: dict[str, str],
+    inputs: dict[str, PortValueDict] | None = None,
+) -> str | None:
+    """The route a multi-route node runs on, for its cache key (or that of a
+    cinema scene's base model, which the scene calls through the registry).
+    A Krea-only setting that arrives by wire keeps the run on the copy
+    (node_route.with_wired_blockers, as maker_routes.dual_route reads it), so
+    the tag names that route too."""
+    from services import node_route
+
+    definition = definition or {}
+    params: dict[str, Any] = node.params
+    if node.definition_id == "cinema-scene":
+        from services.model_pricing import cinema_scene_base
+        nested = cinema_scene_base(node.params)
+        base = _node_def_for(nested[0]) if nested else None
+        if not nested or not base:
+            return None
+        definition, params = base, nested[1]
+        tag = node_route.cache_tag(definition, params, api_keys)
+        return f"{nested[0]}={tag}" if tag else None
+    params = node_route.with_wired_blockers(definition, params, node_route.filled_ports(inputs))
+    return node_route.cache_tag(definition, params, api_keys)
 
 
 def _multiple_input_ports(definition_id: str) -> set[str]:
@@ -608,6 +631,8 @@ class _InvocationResult:
     outputs: dict[str, Any]
     params: dict[str, Any]
     context: InvocationContext
+    # models/events.py execution_notes: what the handler said about this run.
+    notes: tuple[str, ...] = ()
 
 
 def _batch_items(params: dict[str, Any]) -> list[str]:
@@ -849,6 +874,11 @@ NodeHandler = Callable[
 ]
 
 
+def _with_current_params(node: GraphNode) -> GraphNode:
+    params = migrate_params(node.definition_id, node.params)
+    return node if params == node.params else node.model_copy(update={"params": params})
+
+
 async def execute_graph(
     nodes: list[GraphNode],
     edges: list[GraphEdge],
@@ -866,6 +896,9 @@ async def execute_graph(
     event serialized from this async task, including child node tasks.
     """
 
+    # Every caller's nodes run with retired option values replaced, so a value
+    # saved before a shutdown date never reaches the provider after it.
+    nodes = [_with_current_params(node) for node in nodes]
     iterator_errors = _iterator_validation_errors(nodes, edges)
     if iterator_errors:
         raise ValueError(iterator_errors[0].message)
@@ -1011,7 +1044,7 @@ async def _execute_graph(
 
     async def record_outputs(
         nid: str, context: InvocationContext, node_outputs: dict[str, Any],
-        effective_params: dict[str, Any],
+        effective_params: dict[str, Any], notes: list[str] | None = None,
     ) -> None:
         snapshot = copy.deepcopy(node_outputs)
         typed = {key: PortValueDict(type=value.get("type", "Any"), value=value.get("value"))
@@ -1023,7 +1056,7 @@ async def _execute_graph(
             batch_variants.setdefault(nid, []).append(copy.deepcopy(scope))
         invocation_results.setdefault(nid, []).append(_InvocationResult(
             outputs=copy.deepcopy(snapshot), params=copy.deepcopy(effective_params),
-            context=context,
+            context=context, notes=tuple(notes or ()),
         ))
         await emit(ExecutedEvent(
             node_id=nid, outputs=snapshot,
@@ -1031,6 +1064,7 @@ async def _execute_graph(
             if context or node_map[nid].definition_id in _FANOUT_NODE_IDS else None,
             variant=scope,
             batch_variants=copy.deepcopy(batch_variants[nid]) if scope is not None else None,
+            notes=list(notes) if notes else None,
         ))
 
     async def run_invocation(
@@ -1077,6 +1111,11 @@ async def _execute_graph(
                 if uses_account(node, definition_metadata):
                     from services.krea_connector import connection_revision
                     cache_params["_kreaConnectionRevision"] = connection_revision()
+                # Which route this run takes (maker key, fal or Krea copy, Krea
+                # plan). Adding a maker key must not replay a fal/Krea result.
+                route_tag = _cache_route_tag(node, definition_metadata, api_keys, resolved_inputs)
+                if route_tag:
+                    cache_params["_route"] = route_tag
                 cache_key = ExecutionCache.get_key(
                     node.definition_id, cache_params, inputs_for_key, node_id=node.id,
                     batch_context=context if any(
@@ -1109,7 +1148,7 @@ async def _execute_graph(
                     else:
                         if rebound_cached_outputs != cached_outputs:
                             cache.set(cache_key, rebound_cached_outputs,
-                                      effective_params=effective_params)
+                                      effective_params=effective_params, notes=cache.get_notes(cache_key))
                         cached_outputs = rebound_cached_outputs
                         if node.definition_id == "cinema-scene":
                             # A cache hit is a produced runtime result too;
@@ -1138,9 +1177,11 @@ async def _execute_graph(
                                     runtime = {"status": "error", "error": "Cached shot produced no image"}
                                 node._cinema_produced_outputs[shot_id] = runtime
                         await _maybe_probe_video_output(node, cached_outputs)
-                        await record_outputs(nid, context, cached_outputs, effective_params)
+                        await record_outputs(nid, context, cached_outputs, effective_params,
+                                             cache.get_notes(cache_key))
                         return nid, True, 1
 
+            run_notes: list[str] = []
             if handler is None:
                 if node.definition_id == "text-input":
                     text_value = node.params.get("value", "")
@@ -1365,7 +1406,11 @@ async def _execute_graph(
                 # node only if its run got here (execution/provider_calls.py).
                 provider_calls.mark(execution_run_id.get(), nid)
                 handler_calls[nid] = handler_calls.get(nid, 0) + 1
-                node_outputs = await handler(node, resolved_inputs, api_keys)
+                notes_token = execution_notes.set(run_notes)
+                try:
+                    node_outputs = await handler(node, resolved_inputs, api_keys)
+                finally:
+                    execution_notes.reset(notes_token)
 
             validate_file_references(node_outputs)
             if handler is not None and materialize_provider_outputs:
@@ -1378,9 +1423,9 @@ async def _execute_graph(
             await _maybe_probe_video_output(node, node_outputs)
 
             if cache_enabled and cache is not None and cache_key is not None and handler is not None:
-                cache.set(cache_key, node_outputs, effective_params=node.params)
+                cache.set(cache_key, node_outputs, effective_params=node.params, notes=run_notes)
 
-            await record_outputs(nid, context, node_outputs, node.params)
+            await record_outputs(nid, context, node_outputs, node.params, run_notes)
             return nid, True, 1
 
         except Exception as exc:
@@ -1619,7 +1664,7 @@ def _collect_manifest_records(
     Files outside this run are never silently adopted or used to select a
     different manifest directory.
     """
-    files: list[tuple[str, Path, dict[str, Any], InvocationContext]] = []
+    files: list[tuple[str, Path, dict[str, Any], InvocationContext, tuple[str, ...]]] = []
     seen_files: set[tuple[str, Path]] = set()
     for nid in order:
         results = invocation_results.get(nid, []) if invocation_results is not None else []
@@ -1641,11 +1686,11 @@ def _collect_manifest_records(
                 if identity in seen_files:
                     continue
                 seen_files.add(identity)
-                files.append((nid, identity[1], result.params, result.context))
+                files.append((nid, identity[1], result.params, result.context, result.notes))
 
     records: list[dict[str, Any]] = []
     resolved_run_dir = run_dir.resolve()
-    for nid, path, params, context in files:
+    for nid, path, params, context, notes in files:
         try:
             rel = path.relative_to(resolved_run_dir).as_posix()
         except ValueError:
@@ -1671,6 +1716,7 @@ def _collect_manifest_records(
                 "params": copy.deepcopy(params),
                 "output_path": rel,
                 "timestamp": timestamp,
+                **({"notes": list(notes)} if notes else {}),
                 **({"batch_context": [{"iterator_node_id": iterator, "item_index": index}
                                       for iterator, index in context]} if context else {}),
             }

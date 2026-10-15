@@ -166,6 +166,58 @@
           "id": "multi_prompt"
         }
       ]
+    },
+    "routed": {
+      "id": "routed",
+      "apiProvider": "fal",
+      "envKeyName": [
+        "GOOGLE_API_KEY",
+        "FAL_KEY"
+      ],
+      "directKeyName": "GOOGLE_API_KEY",
+      "params": [],
+      "sharedParams": [
+        {
+          "key": "resolution",
+          "type": "enum",
+          "default": "1K",
+          "options": [
+            {
+              "value": "1K",
+              "label": "1K"
+            },
+            {
+              "value": "4K",
+              "label": "4K"
+            }
+          ]
+        },
+        {
+          "key": "num_images",
+          "type": "integer",
+          "default": 1
+        }
+      ],
+      "falParams": [
+        {
+          "key": "seed",
+          "type": "integer"
+        }
+      ],
+      "directParams": []
+    },
+    "lengthed": {
+      "id": "lengthed",
+      "apiProvider": "krea",
+      "envKeyName": "KREA_API_TOKEN",
+      "params": [
+        {
+          "key": "music_length_ms",
+          "type": "integer",
+          "min": 3000,
+          "max": 600000
+        }
+      ]
     }
   },
   "pricing": {
@@ -375,6 +427,104 @@
           }
         ],
         "checked": "2026-10-12"
+      },
+      "routed": {
+        "routes": {
+          "fal": {
+            "currency": "usd",
+            "per": "image",
+            "priceParams": [
+              "resolution"
+            ],
+            "rows": [
+              {
+                "match": {
+                  "resolution": "1K"
+                },
+                "price": 0.08
+              },
+              {
+                "match": {
+                  "resolution": "4K"
+                },
+                "price": 0.16
+              }
+            ],
+            "multiplyBy": [
+              "num_images"
+            ],
+            "sources": [
+              {
+                "url": "https://example.com/pricing",
+                "quote": "fixture"
+              }
+            ],
+            "checked": "2026-10-14"
+          },
+          "google": {
+            "currency": "usd",
+            "per": "image",
+            "priceParams": [
+              "resolution"
+            ],
+            "rows": [
+              {
+                "match": {
+                  "resolution": "1K"
+                },
+                "price": 0.067
+              },
+              {
+                "match": {
+                  "resolution": "4K"
+                },
+                "price": 0.151
+              }
+            ],
+            "multiplyBy": [
+              "num_images"
+            ],
+            "sources": [
+              {
+                "url": "https://example.com/pricing",
+                "quote": "fixture"
+              }
+            ],
+            "checked": "2026-10-14"
+          }
+        }
+      },
+      "lengthed": {
+        "currency": "usd",
+        "per": "request",
+        "priceParams": [
+          "music_length_ms"
+        ],
+        "multiplyBy": [
+          "music_length_ms"
+        ],
+        "rows": [
+          {
+            "match": {
+              "music_length_ms": ""
+            },
+            "price": [
+              0.0075,
+              1.5
+            ]
+          },
+          {
+            "match": {},
+            "price": 2.5e-06
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-14"
       }
     }
   },
@@ -675,6 +825,79 @@
         "currency": "usd",
         "low": 1.0,
         "high": 1.0
+      }
+    },
+    {
+      "name": "a routed entry prices the maker route",
+      "nodeId": "routed",
+      "params": {
+        "num_images": 2
+      },
+      "routeProvider": "google",
+      "expected": {
+        "currency": "usd",
+        "low": 0.134,
+        "high": 0.134
+      }
+    },
+    {
+      "name": "a routed entry prices the fal route with its own rows",
+      "nodeId": "routed",
+      "params": {
+        "resolution": "4K"
+      },
+      "routeProvider": "fal",
+      "expected": {
+        "currency": "usd",
+        "low": 0.16,
+        "high": 0.16
+      }
+    },
+    {
+      "name": "a routed entry without a route is unpriced",
+      "nodeId": "routed",
+      "params": {},
+      "expected": null
+    },
+    {
+      "name": "a route the entry doesn't price is unpriced",
+      "nodeId": "routed",
+      "params": {},
+      "routeProvider": "krea",
+      "expected": null
+    },
+    {
+      "name": "an unset length matches the empty-value row and prices its range unmultiplied",
+      "nodeId": "lengthed",
+      "params": {},
+      "expected": {
+        "currency": "usd",
+        "low": 0.0075,
+        "high": 1.5
+      }
+    },
+    {
+      "name": "a cleared length counts as unset",
+      "nodeId": "lengthed",
+      "params": {
+        "music_length_ms": ""
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.0075,
+        "high": 1.5
+      }
+    },
+    {
+      "name": "a set length multiplies the per-millisecond row",
+      "nodeId": "lengthed",
+      "params": {
+        "music_length_ms": 60000
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.15,
+        "high": 0.15
       }
     }
   ]

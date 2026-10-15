@@ -3196,6 +3196,1456 @@ Tradeoffs and surprises:
 - **Left for later:** the `nebula` CLI's own commands still read only `NEBULA_APP_TOKEN`, not the file. Connect
   only sets up the MCP server, so nothing needs it yet.
 
+## 2026-10-14 — Maker retirements (Veo previews, gpt-image-1, Sora 2, Meshy, Gemini TTS)
+
+Track: keep the existing direct maker routes working past the October–November 2026 shutdowns. Vendor pages
+were re-fetched on 2026-10-14 (Gemini API deprecations, Vertex Veo 3.1 model card and pricing, OpenAI
+deprecations/model pages/image guide, Meshy openapi.yaml and llms.txt, Gemini speech-generation and model pages).
+
+### Veo (veo-3, veo-3-flf)
+- **The node now stores the Vertex IDs** (`veo-3.1-generate-001`, `veo-3.1-fast-generate-001`,
+  `veo-3.1-lite-generate-001`), as enum values, default and `apiEndpoint`. Option order and labels are kept;
+  Lite's label now says it is a preview on Vertex. The Gemini API route translates back to the
+  `-preview` IDs (`GEMINI_API_MODELS` in veo.py) until 2026-10-22.
+- **Saved preview IDs migrate without a date gate.** It's a rename of the same model, and both routes accept
+  either spelling (`canonical_model`), so there was nothing to protect by waiting. The Veo 3.0/2.0 migration
+  now targets the `-001` IDs directly instead of the dying preview IDs.
+- **GOOGLE_API_KEY-only after 2026-10-22:** `handle_veo` raises `MissingCredentialError` naming
+  `GOOGLE_VERTEX_CREDENTIALS` before any request (reused `previews_retired`). Routing is unchanged: a user with
+  both GOOGLE_API_KEY and FAL_KEY still lands on the Google route and gets that message rather than falling
+  through to fal. I kept it that way because fal's Veo 3.1 is believed to run on the same previews (status
+  unverified) and changing `route_provider` would also need the frontend mirror changed. `with_vertex_hint`
+  still decorates fal failures.
+- Tests that exercise the Gemini API route now pin `previews_retired` to False, so they keep passing after
+  2026-10-22 (several would have broken on that date).
+- **veo-3-flf pricing added** (Vertex route, `provider: google`). The node stores duration as "4s", which
+  `multiplyBy` can't read, so the entry is `per: video` with one row per resolution × audio × duration.
+  Vertex lists Veo per "count"; read as per second like the existing veo-3 entry (unit label NOT CONFIRMED).
+- Not done: Vertex `generateAudio` is still always true on veo-3 (Vertex sells video-only at about half price),
+  and reference images on Vertex are still not exposed. Both are feature work, not retirement work.
+
+### OpenAI gpt-image-1 (gpt-image-1-generate, gpt-image-1-edit)
+- **Choice: Flare on generate, Sunburst on edit.** OpenAI's deprecations page names "`gpt-image-2.5-sunburst` or
+  `gpt-image-2.5-flare`" for gpt-image-1 (shutdown October 23, 2026). The guide says "Choose Sunburst for workflows
+  where editing precision matters most, and Flare for fast, high-quality everyday image generation", and the
+  Sunburst page calls it "Our most capable model for image generation and editing". So the generate node defaults to
+  Flare and the edit node to Sunburst, and saved `gpt-image-1` values migrate the same way from 2026-10-23
+  (date-gated `_model_after` in retired_nodes; until then they keep running on gpt-image-1). Same token prices
+  ($30/1M image output) for both.
+- Differences that mattered: 2.5 adds `xhigh`/`max` quality (added as options, visible only on the 2.5 models),
+  supports transparent backgrounds with png/webp (a jpeg + transparent request is now refused before the call on
+  all models), and the documented 1024²/1536×1024/1024×1536/auto sizes are all valid, so no size migration.
+  `input_fidelity` stays unexposed (the node never had it).
+- Both 2.5 options were appended after the existing three; labels on the old ones now carry their shutdown
+  dates (gpt-image-1.5 and gpt-image-1-mini end Dec 1, 2026; I did not migrate those yet — a later gate can reuse
+  `_model_after`). The node display names ("GPT Image 1", "GPT Image 1 Edit") are unchanged; renaming them is
+  Justin's call.
+- A saved node with no `model` key at all keeps gpt-image-1 until 2026-10-23 (review fix: the handler fallback is
+  `default_until(GPT_IMAGE_1_SHUTDOWN, ...)`), then runs the new default. I didn't pin those in the migration,
+  because migrate_node also runs on fresh agent proposals and would pin new nodes to a model that dies in 9 days.
+- **Count fix:** `handle_openai_image_edit` forwarded `n` but kept only `data[0]`. It now saves every returned
+  image; `image` is the first and a new `images` (Array) output port carries all of them as `/api/outputs/` refs
+  (the Krea gateway's convention). No pricing entry exists for these nodes; I didn't add one (2.5 is
+  token-priced and OpenAI's per-image calculator doesn't cover 2.5).
+
+### Sora 2 (sora-2, sora-2-i2v)
+- Retired with the Imagen pattern (`RETIRED` in retired_nodes): both definitions and their fal handlers (incl. the
+  Standard/Pro endpoint switch) are gone, so they're hidden for new graphs; saved nodes load as **`veo-3` on Veo
+  3.1 Fast**, titled "Veo 3.1 Fast (was Sora 2)" / "(was Sora 2 Image-to-Video)" unless the person renamed them.
+- Why Veo 3.1 Fast: OpenAI says "There is no one-to-one replacement API", so I picked the closest maker-direct
+  node. Veo does text- and first-frame-to-video with sound like Sora 2, its `prompt`/`image`/`video` ports match
+  so saved edges keep working, and Fast's $0.10/s at 720p equals Sora 2's listed $0.10/s. Sora 2 Pro maps to Veo
+  3.1 (Standard). Sora's 12/16/20 s become 8 s (Veo's max); `auto` aspect/resolution fall back to Veo's defaults.
+- The other choices are named where people see them: `retired_message` (API/agent/CLI create attempts) now
+  appends "(or 'grok-imagine-video' or 'runway-video')", and the docs say the same. The canvas only shows the
+  title; there's no per-node notice mechanism to hang a longer message on.
+- Tradeoff: a migrated node runs on Google, not fal, so it needs a Vertex key (or GOOGLE_API_KEY until
+  2026-10-22, or fal if fal's Veo still works). The alternative, keeping a dead Sora node that only errors,
+  would have needed a new "hidden definition" concept across ~25 frontend consumers.
+- Left alone: the fal catalog mirror files `.agents/skills/fal/skills/fal-ai__sora-2__*.md` (they describe fal's
+  catalog, not Nebula nodes), historical research docs, and `docs/flora-gap-matrix.md`'s history entries.
+
+### Meshy (meshy-text-to-3d, meshy-image-to-3d, meshy-multi-image-to-3d, meshy-retexture)
+
+- Meshy's openapi.yaml (2026-10-14) no longer lists `meshy-5` in any `ai_model` enum, so it's gone from all four
+  nodes and saved nodes move to `meshy-6` right away (not date-gated: it's already unavailable). Option order and
+  the `latest` default are unchanged; only the `latest` label moved to "Meshy 7.1" (Retexture: "Meshy 7", since
+  Retexture rejects 7.1).
+- `lowpoly` retires 2026-10-30. Kept the option (relabelled "Low Poly (retires Oct 30, 2026)") and appended
+  "Smart Topology (Meshy T2)". Date-gated migration from 10-30: lowpoly → smart-topology, quad → triangle, polycount
+  capped at 15,000 (smart topology's max). A lowpoly node with no saved polycount gets 15,000 explicitly, because
+  the node default (30,000) would otherwise fail. Tradeoff: lowpoly ignored polycount, so 15,000 isn't "what they
+  had", just the closest valid value; Meshy's own lower T2 default (4,000 per fal's page) isn't in Meshy's docs.
+- Didn't add `meshy-t2` as an ai_model option: Meshy says smart-topology "implies the meshy-t2 model family" and
+  meshy-t2 "requires model_type: smart-topology", so the direct handler sets it whenever smart-topology is picked.
+  That avoids an option that errors with every other mesh type. The handler also drops image_enhancement /
+  remove_lighting (not supported under smart topology; both default on in the node) and refuses quad or >15,000
+  faces with a message before spending credits. The text-to-3d refine omits ai_model so it inherits meshy-t2.
+- Surprise: with the default polycount 30,000, picking Smart Topology fails until Polycount is lowered. The error
+  says exactly that; I didn't silently clamp a value the person can see.
+- Not done at first, fixed after review: meshy-6-lite / meshy-7.1 options and seed forwarding (see "Review
+  fixes" below). Smart-topology on the fal image-to-3d route stays off (model_type is a direct-only param there). Meshy says
+  7/7.1/T2 need account entitlement while `latest` (the default) resolves to 7.1; couldn't verify what an
+  unentitled account gets without a real call.
+
+### Gemini TTS (gemini-tts)
+
+- Google shuts down all three TTS models the node offered (2.5 Flash, 2.5 Pro, 3.1 Flash previews) on 2026-11-17
+  and names "gemini-3.8-flash-tts or gemini-3.8-flash-lite-tts". Appended both 3.8 options after the existing three
+  (order kept), labelled the old three with the shutdown date, and moved the default (node + handler fallback)
+  from 2.5 Flash to **3.8 Flash TTS**. That default change is deliberate: a new node shouldn't start on a model
+  that dies in a month. A saved node with no stored `model` keeps 2.5 Flash until 2026-11-17 (review fix: the
+  handler fallback is date-gated; only the node-definition default moved now).
+- Date-gated migration from 11-17: 2.5 Flash and 2.5 Pro → 3.8 Flash (the fidelity model; Pro users wanted
+  quality), 3.1 Flash → 3.8 Flash-Lite (Google: "recommended replacement for gemini-3.1-flash-tts-preview").
+- Handler fix that has to ship before people pick 3.8: 3.8 returns a whole WAV file (RIFF header) on unary calls,
+  where 3.1/2.5 returned raw PCM. The old code always wrapped bytes in a new WAV header, which would have put a
+  44-byte header inside the audio. `_write_tts_wav` now writes RIFF / `wav`-mime bytes as is and only wraps raw
+  PCM, taking the rate from the mime type's `rate=`. Request body unchanged (same 30 prebuilt voices).
+- Not done: `speech_metadata.style` (3.8's way to give delivery direction; inline "Say cheerfully:" may now be
+  spoken). That's a new param, not a retirement fix. No pricing rows exist for gemini-tts, so none were added.
+
+### Review fixes (2026-10-14)
+
+- **Retired values are replaced at run time, not only on staging.** `migrate_params` (retired_nodes) now runs in
+  `_normalize_execute_nodes` (/api/execute, /api/execute-node and the other request paths that use it, before
+  validation and the spend gate), as a backstop in `execute_graph` (every caller, incl. /api/quick and CLI runs;
+  it copies the node, never mutates the caller's), in `estimate_node` (so a preview Veo ID is priced as the -001
+  it runs as), and on node create / node-and-connect / param update / proposal param changes. Before this, a
+  canvas opened on 10-22 and run on 10-23 would still have sent `gpt-image-1`.
+- **Partial updates** go through `migrate_param_update`: it migrates the merged params and returns the updated
+  keys plus any stored key the fix changed. Without it, a PUT of just `model_type: lowpoly` after 10-30 would
+  have overwritten a stored 5,000 polycount with 15,000.
+- **No-model fallbacks are date-gated** (`default_until`): gpt-image-1 until 10-23 on both GPT Image handlers,
+  2.5 Flash TTS until 11-17. Only the definition defaults (what a new canvas node stores) moved now. These nodes
+  have no pricing entries, so the estimate can't disagree with the run.
+- **Meshy options:** appended (order kept, default `latest`) `meshy-6-lite` and `meshy-7.1` on text / image /
+  multi-image-to-3d and `meshy-6-lite` and `meshy-7` on Retexture, per the per-endpoint enums in openapi.yaml
+  (Retexture's enum has no 7.1; llms.txt: "Retexture rejects meshy-7.1"). Labels say 7/7.1 need a Meshy
+  entitlement and Lite is 2K-only. `meshy-t2` stays handler-only. Handlers refuse Lite + HD Texture (4K) before
+  calling Meshy (llms.txt: "`meshy-6-lite` ... `2k` texture only"). Meshy says `meshy-7` is deprecated in favour
+  of 7.1 elsewhere, but it's Retexture's newest, so it's the explicit pin there.
+- **Seed:** moved from falParams to sharedParams on meshy-text-to-3d and forwarded on the direct preview
+  (TextTo3DRequest has `seed`; refine doesn't). ImageTo3DRequest and MultiImageTo3DRequest have no seed, so
+  image-to-3d keeps it fal-only.
+- **Smart Topology on the fal route:** `check_smart_topology` (split out of `_apply_smart_topology`) runs before
+  the text-to-3d fal fallback too; fal's schema has the same 15,000 cap and accepts smart-topology.
+- Noticed, not fixed (pre-existing on main): 14 definitions differ between nodeDefinitions.ts and
+  node_definitions.json (e.g. gemini-tts's 3.1 label says "Gemini 3.1 Flash TTS" in JSON and "3.1 Flash TTS" in
+  TS; veo-3's port `_note`s exist only in JSON).
+
+## 2026-10-14 — Runway nodes against Runway's current API (+ ByteDance models)
+
+Sources, all fetched 2026-10-14: `https://docs.dev.runwayml.com/openapi.json` (per-model request
+fields), `guides/models.md`, `guides/pricing.md`, `llms-full.txt` (changelog, inputs page) and
+`assets/uploads.md`. Mapping entry `runway-ideogram` (with the verifier's corrections) used as the
+starting point; every ID, enum and price below was re-read from those files.
+
+- **Per-model limits live in the handler.** `RUNWAY_VIDEO_MODELS` / `RUNWAY_IMAGE_MODELS` in
+  `backend/handlers/runway.py` hold each model's ratios (per endpoint), durations, prompt length,
+  and which optional fields it takes. The node definitions were generated from those tables, and
+  `tests/test_runway_models.py` checks the two agree both ways, so they can't drift.
+- **How the UI offers only valid values.** Duplicate param keys are a contract error, so there is
+  one `ratio` and one `duration` param, with `visibleWhen: {model: [...]}` on each option (the
+  Inspector and Create composer already filter options this way and mark a saved value
+  "unavailable for selected model"). `duration` changed from `integer` (2–10) to `enum` with
+  numeric values 2–30 plus `"auto"`, so saved numeric durations still match an option. Default
+  stays 5. The handler accepts `5`, `"5"` (CLI) and `"auto"`.
+  - Limit: `visibleWhen` sees params, not wires, so the ratio list is the union of the model's
+    image-to-video and text-to-video ratios. Gen-4.5 text-only at 4:3 is still offered and
+    fails in the handler with the valid list (before any billed call).
+  - No auto-reset: switching models leaves an invalid ratio/duration in place (shown as
+    unavailable), and the run errors clearly. I didn't add snapping, since that would change
+    values silently.
+- **HappyHorse image-to-video takes no `ratio`** (schema: `resolution` 720p/1080p, output follows
+  the image). New `resolution` param (default 720p, visible for HappyHorse only); the handler
+  sends it instead of `ratio` when an image is wired. HappyHorse has no `seed` either, so seed
+  isn't sent for it.
+- **Seed goes only to models whose schema has it.** On runway-image that's Gen-4 Image (+ Turbo)
+  only; GPT Image 2, both Gemini models and Seedream reject `seed`, and the handler used to send
+  it. The param is hidden for those models and a stale saved seed is dropped, not an error,
+  because the person can't see or clear a hidden param.
+- **Aleph 2.0 has no `references` field** (schema `additionalProperties: false`). The old handler
+  sent `references: [{type: image, uri}]`, which only `gen4_aleph` took. The reference image now
+  goes as `keyframes: [{uri, at: 0}]`, the shape Runway's own aleph2 example uses. Not tested
+  live; if Justin wants the keyframe elsewhere in the clip, it needs an `at` param.
+- **New `audio` param** (bool, default true, Veo 3.1 and Seedance). Runway's default is true, so
+  the default changes nothing; it matters for Veo's price (40 vs 20 credits/s).
+- **Seedream lives on runway-image, not a new node.** The mapping suggested a `runway-seedream`
+  node because runway-image had one ratio list. With per-option `visibleWhen`, runway-image can
+  carry per-model ratio lists, the handler and output are the same, and one node avoids a
+  duplicate in the palette. Added `grounding` (Seedream only). Not exposed: `outputCount` (the
+  node has one image output), `outputFormat` (the handler saves PNG), Lite's freeform sizes.
+- **Seedance 2.0 Mini / 2.5:** text and image-to-video only. Video-to-video skipped: runway-video
+  has no video input. Draft mode (`draft`, then `draftTaskId` to enhance) skipped: the node has
+  no way to carry a task id to a second run. Runway is a reseller here; under the "buy from the
+  model maker" rule this doesn't close the ByteDance maker route (still unconfirmed).
+- **Reference-count limits are now errors.** runway-image used to keep the first 3 references
+  silently. It now allows each model's maximum (3/3/14/16/3/10/14) and errors past it.
+  gen4_image_turbo requires one (schema `minItems: 1`).
+- **Prompt length** is clipped to each model's maximum (was 1000 for all), keeping the old
+  silent-clip behavior but at the right length (Seedance 3500, Seedance 2.5 15000, GPT Image 2
+  32000, etc.). Gen-4.5 image-to-video without a prompt now errors (schema requires
+  `promptText`).
+- **Retired values.** `gen3a_turbo` -> `gen4_turbo` (Runway names Gen-4.5 or Gen-4 Turbo; Gen-4
+  Turbo keeps the image-to-video shape and 2–10 s range, so saved image-to-video nodes keep
+  working; text-only ones get "requires an image input ... Nodes saved with the retired Gen-3a
+  Turbo now use Gen-4 Turbo"). `veo3` -> `veo3.1`, with duration rounded up to 4/6/8 like the
+  existing Veo 3.0 migration. `gen4_aleph` -> `aleph2`. All in `RETIRED_PARAMS`; not date-gated
+  because every shutdown is past. veo3's removal date isn't in the changelog (it was live
+  2026-07-10). The handlers also refuse the retired IDs directly, for paths that skip migration
+  (`POST /api/graph/node`).
+- **5MB data URI cap -> ephemeral uploads.** The schema caps every data URI at 5,242,880 chars;
+  the inputs guide lists 16MB for video/audio. I used the schema's 5MB (it validates the request,
+  and the task said 5MB). Local files whose *encoded* URI is over 5MB go through `POST
+  /v1/uploads` -> presigned multipart POST (no API key on the storage URL) -> `runway://` URI.
+  Applied to every Runway handler (aleph, act-two, sts, dubbing, image references, upscale), not
+  just aleph, since they all had the same inline-base64 code. 200MB max is checked before any
+  request. `http://` inputs still pass through unchanged (Runway wants HTTPS; out of scope).
+- **Pricing** (`model_pricing.json`): runway-video per second × duration, runway-image per image,
+  credits at $0.01 ("Credits can be purchased for $0.01 per credit"). Runway prices Seedance by
+  480p/720p/1080p/4K and the images by 720p/1080p or 1K/2K/4K, but never maps ratios to tiers;
+  I priced ratios by pixel size only where the tier is plain (e.g. 3840:2160 = 4K, 1024:1024 =
+  1K) and used `[low, high]` ranges otherwise (Gen-4 Image 1360:768, GPT Image 2's 2560px sizes,
+  HappyHorse when the resolution setting and ratio disagree). Minimum charges (Mini 64, 2.5 80)
+  equal the 4 s price, so they never bind. `duration: auto` is unpriced (billed at max, refunded).
+  runway-aleph stays unpriced: it bills per second of the input video, which isn't a param.
+- **Fingerprint fixture.** `test_reference_roles.py` fingerprints every baseline node; the three
+  Runway nodes changed on purpose, so their entries in `reference_roles_baseline_sha256.json` were
+  recomputed (same as the Veo retirement commit did).
+- **Not checked live.** No Runway call was made; all of this is schema comparison plus mocked
+  HTTP tests.
+
+### Review fixes (2026-10-14)
+
+- A saved `veo3` node with no `duration` key ran at the 5 s default, which Veo 3.1 rejects. The migration now treats a missing or empty duration as 5 and rounds it to 6, the same as an explicit 5 (and the same 5 to 6 intent as the Google Veo migration). The old test that expected `{"model": "veo3"}` to become `{"model": "veo3.1"}` with no duration was asserting the bug; it now expects `duration: 6`.
+- Added an image-to-video ratio rejection test (Veo 3.1 and Seedance 2.0 Fast at 1104:832). Checked it by disabling the `i2v_ratios` guard: the new test fails, the rest pass.
+
+## 2026-10-14 — Direct maker routes (Nano Banana on your Google key)
+
+fal and Krea copies of a model now run on the maker's own API when the person's maker key is set. Pilot: Nano
+Banana (`nano-banana-fal`, `nano-banana-fal-edit`, and the Krea copies `krea-image-google-nano-banana-2`, `-pro`,
+`-flash-lite`, `krea-image-google-nano-banana`) on `handle_nano_banana` with `GOOGLE_API_KEY`.
+
+- **One rule, one module.** `backend/services/node_route.py` `select_route` (stdlib only) decides the route for the
+  router, pricing and the spend gate (`model_pricing.route_provider`), `krea_account.uses_account`, describe_node
+  and the engine cache key. `frontend/src/lib/directRoute.ts` `selectRoute` is the same rule; both run the shared
+  `backend/tests/fixtures/route_cases.json` against the real catalog. Precedence: `_kreaAuth == "mcp"` (or an
+  account-only Krea node) -> Krea plan; else a trimmed, non-empty direct key -> maker; else the first fallback key;
+  else `unset` (named after the node's apiProvider). Ideogram Reframe still needs `resolution` for its direct
+  route (`DIRECT_REQUIRES`).
+- **Behavior change to know:** a saved Krea Nano Banana node on `api-token` now runs on Google (billed by Google)
+  once a Google key is saved. That's the requested precedence; the readiness line says so, and the Krea plan
+  choice still wins. The Krea skill documents how to keep Krea (remove the key or pick the plan).
+- **Krea definitions (approach A).** The generator (`scripts/sync-krea-catalog.py` `DIRECT_ROUTES`) keeps the full
+  Krea list in `params` (every older reader keeps working) and adds `sharedParams` (all but Krea-only fields, incl.
+  `_kreaAuth`), `falParams` (Krea-only `width`/`height`), `directParams: []`, `directKeyName`, `envKeyName:
+  [GOOGLE_API_KEY, KREA_API_TOKEN]` and `directRoute {translation, model}` (new TS field). `falParams` means "the
+  fallback route's own params" — Krea's here; the model reference labels it "Krea Parameters".
+- **fal definitions.** `params: []` + `sharedParams` (model, aspect_ratio, resolution, num_images, thinking_level,
+  enable_web_search) + `falParams` (output_format, seed) + `directParams: []`. No param changed, order and
+  defaults kept. `test_reference_roles.py` gets an approved dual-route split normalization
+  (`APPROVED_DUAL_ROUTE_SPLITS`) that rebuilds the baseline `params` in the original order and asserts the exact
+  new key fields, rather than a rehash, so a real param change still fails the fingerprint.
+- **Router.** `backend/execution/maker_routes.py` `dual_route` works on `model_copy` with each route's allowlist
+  (`node_route.route_param_keys`: sharedParams + that route's group), translates on the direct route, never
+  mutates the node, and with no key raises `MissingCredentialError` naming every key. Meshy text/image-to-3D moved
+  onto it: fal no longer receives Meshy-only `ai_model`, `hd_texture`, `remove_lighting`, `target_formats` (it used
+  to, and fal forwards every param). Ideogram keeps its own router (it already filtered); Veo keeps its own.
+- **Translation fal -> Gemini** mirrors the fal wrapper per model value: 'auto' aspect omitted (Google: matches the
+  input or 1:1); extreme ratios only on Nano Banana 2 (omitted on Pro, 1:1 on the others); resolution -> imageSize
+  on NB2/Pro (0.5K -> 512; the handler renders Pro's 512 at 1K like fal); thinking minimal/high on NB2 only ->
+  `thinkingConfig.thinkingLevel`; web search on NB2/Pro -> `tools: [{"googleSearch": {}}]`; `num_images` -> N
+  sequential calls, first image shown (fal also makes and bills N and shows the first). Dropped: seed,
+  output_format (the Gemini API documents no image seed). Krea -> Gemini: prompt/image_urls from port or param,
+  aspect_ratio, resolution -> imageSize on NB2/Pro only (Flash-Lite is 1K only).
+- **Pricing.** New per-route entry shape `{"routes": {provider: entry}}` (validate/estimate in model_pricing.py
+  and pricing.ts, shared cases added). Google prices from ai.google.dev/gemini-api/docs/pricing, checked
+  2026-10-14: 3.1 Flash Image $0.045/0.5K, $0.067/1K, $0.101/2K, $0.151/4K; 3 Pro Image $0.134 1K/2K, $0.24 4K;
+  3.1 Flash-Lite $0.0336; 2.5 Flash Image $0.039. Web search (grounding: 5,000 free/month then $14 per 1,000
+  search queries, each query billed) and high thinking (extra thinking tokens) are left **unpriced** on the Google
+  route rather than guessed: rows require `enable_web_search: false` and thinking ''/minimal.
+- **gemini-2.5-flash-image date conflict.** The deprecations table lists shutdown March 15, 2027 (release October
+  2, 2025); the pricing page banner says "will be shut down on October 2, 2026". Kept the route (the deprecations
+  table is the schedule, and the models page still lists it), but a 404 on that model appends Google's named
+  replacement (`gemini-3.1-flash-lite-image`). Live status not confirmed (no real calls).
+- **Reference images** go to Google as `fileData.fileUri` (existing handler behavior). Google documents public
+  HTTPS URLs up to 15 MB (file-input-methods page, fetched 2026-10-14); Krea refs that aren't public would fail.
+- **Cache key.** Multi-route nodes add `_route: "kind:provider"` (`node_route.cache_tag`; a cinema scene tags its
+  base model). Single-route keys are unchanged. Existing cached results for veo-3, ideogram, meshy and the new
+  nodes miss once after upgrade.
+- **Readiness.** Route-aware detail ("Runs on Google's own API with your Google key", "Runs on fal.ai with your FAL
+  key. Add a Google key to run on Google directly."). With nothing set, setup still points at the maker key (the
+  rule Veo and Meshy already used); the Cinema test row for `nano-banana-fal-edit` changed accordingly.
+- **describe_node.** Route-neutral: `paramsFal` renamed `paramsFallback`, plus `fallback` ("fal"/"krea") and
+  `routeProvider`; `route` is "direct", the fallback provider, or None. Price adds `billedBy` and per-route `routes`.
+  With no keys the price shown is the node's own copy (fal for the fal nodes). No test referenced `paramsFal`.
+- **Not done (scoped out):** `identity-edit` (fal-only wrapper with character bundles), `krea-image-google-nano-
+  banana-2-1` (Interactions API; would need thinking passthrough, and Krea's $0.03 vs Google's $0.0336 needs a
+  call), Krea's Veo/Omni copies, Krea direct-only extras (thinking/web search) — `directParams` is supported but
+  empty, and moving Ideogram onto `dual_route`.
+
+### 2026-10-14 — direct maker routes: review fixes
+
+- **2.5 Flash Image is now date-gated** (both reviewers' main finding). `node_route.DIRECT_RETIRES` (mirrored in
+  `directRoute.ts`) retires the Google route on **2027-03-15** for `nano-banana-fal`/`-edit` saved with
+  `model: nano-banana` or `gemini-25-flash-image`, and for `krea-image-google-nano-banana`. From that day
+  `select_route` picks the fal or Krea copy, so the router, pricing, the spend gate, readiness and the cache key
+  all move together. Date choice: Google's deprecations page says it is where "the announced earliest shutdown
+  dates are tracked" and lists March 15, 2027; the pricing page's "October 2, 2026" banner is already past, the
+  changelog has no shutdown entry, and the model page still lists `gemini-2.5-flash-image` as Stable. **If
+  Justin would rather trust the banner, change one constant on each side** (`_GEMINI_25_FLASH_IMAGE_SHUTDOWN`,
+  `GEMINI_25_FLASH_IMAGE_SHUTDOWN`); runs before the gate still get the 404 hint. I did not add a "fall back to
+  fal on a Google 404" path: it would bill fal for a run the spend gate priced on Google.
+- **Clock in tests.** `node_route._today()` is the one clock (tests monkeypatch it); TS reads `new Date()` (tests
+  use fake timers). `route_cases.json` gained `defaultToday` plus a per-case `today`, so 2.5 cases written now
+  don't flip in March 2027.
+- **Krea width/height keep a run on Krea.** New `directBlockedBy` in the sync overlay becomes
+  `directRoute.blockedBy` on the generated node; `direct_block`/`directBlock` treat a set (non-empty) `width` or
+  `height` as "stay on Krea". Chose this over converting width/height to the nearest Google aspect ratio: a saved
+  1920x1080 recipe stays exactly as authored, and the rule lives in route selection so pricing/readiness/cache
+  agree. The generator refuses a blocker that has a default (it would switch every new node off Google).
+  With only a Google key, such a recipe has no route and says why ("This recipe sets width, which only Krea
+  takes...").
+- **`direct_allowed` became `direct_block`** with a reason (`requires` / `blocked` / `retired`); readiness words
+  each one. `direct_allowed` stays as the boolean wrapper.
+- **Google-route prices are now ranges** for the nodes that take reference images (`nano-banana-fal-edit` and the
+  four Krea copies): low = output image, high = output + 14 reference images (Google's documented limit) at the
+  model's input rate, per call (so `num_images` multiplies it). Rates: Pro $0.0011/image (pricing footnote);
+  3.1 Flash 1,120 tokens x $0.50/1M and Flash-Lite 1,120 x $0.25/1M (Gemini 3 default image media resolution);
+  2.5 Flash up to 8 tiles x 258 tokens x $0.30/1M — the 8-tile bound (images up to about 21:9) is **my
+  derivation** from Google's rough tiling formula, not a Google figure. Prompt text input is still not counted
+  (noted). `nano-banana-fal` (text-only) is unchanged. The spend gate reads `high`, so it now covers a full
+  reference set.
+- **Ideogram Reframe opt-in.** New `paramDefinitionsForRun` (directRoute.ts): when the maker key is set but the
+  only thing stopping the direct route is a `DIRECT_REQUIRES` param, that param is appended to the shown group.
+  Inspector shows it unset ("Choose…"); Create seeds its default, as the pre-branch Create did via
+  `configuredDirectKey`, so a new reframe on an Ideogram key runs direct again.
+- **Meshy `texture_prompt` moved to sharedParams** (`meshy-image-to-3d`, JSON + TS): Meshy's API takes it
+  (max 800 chars; fal caps at 600), and the pre-branch direct handler forwarded it. Fingerprint approval:
+  `APPROVED_PARAM_GROUP_MOVES` in `test_reference_roles.py` moves it back to its baseline slot before hashing.
+  Corrected the meshy skill's "Max 600" for image-to-3d.
+- **Engine cache test.** `test_node_route.py` now runs `execute_graph` end to end: fal run, same keys hit the
+  cache, adding GOOGLE_API_KEY misses and calls the direct handler. Verified it fails with the `_route` tag
+  disabled.
+
+## 2026-10-14 — Direct maker routes, Google lane (identity-edit, Krea NB 2.1 / Veo 3.1 / Omni 1.1)
+
+Branch `direct-google`, on top of the Nano Banana pilot. New code lives in
+`backend/execution/maker_routes_google.py`; shared files got small additive
+hooks only.
+
+- **Routes built.** `identity-edit` -> `gemini-3.1-flash-image` (`GOOGLE_API_KEY`);
+  `krea-image-google-nano-banana-2-1` -> `gemini-nano-banana-2.1` (`GOOGLE_API_KEY`, Interactions API);
+  `krea-video-google-veo-3-1` / `-fast` / `-lite` -> `veo-3.1-generate-001` / `-fast-generate-001` /
+  `-lite-generate-001` on Vertex (`GOOGLE_VERTEX_CREDENTIALS` only);
+  `krea-video-google-gemini-omni-flash-1-1` -> `gemini-omni-1.1-flash` (`GOOGLE_API_KEY`).
+  Skipped as briefed: Krea Veo 2 / 3 / 3 Fast (retired 2026-06-30) and Omni Flash 1.0 (preview ends 2026-10-22).
+- **Veo copies are Vertex-only.** The Gemini API previews shut down 2026-10-22 (deprecations table), eight
+  days from now, and `handle_veo` already refuses key-only runs after that. Adding `GOOGLE_API_KEY` as a
+  second direct key would have needed a `DIRECT_RETIRES` entry that flips a week later, so I didn't add it.
+  A Gemini API key alone leaves these nodes on Krea.
+- **New route rule: `directRoute.blockedWhen`** (`node_route.UNSUPPORTED`, mirrored in `directRoute.ts`,
+  worded in readiness). It keeps a run on the copy when a *shared* param has a value the maker can't render.
+  First use: Veo 3.1 Fast at 4K. Vertex's model card says Fast outputs "720p, 1080p", but the Vertex pricing
+  page lists a Fast 4k price. That conflict is why the run stays on Krea instead of guessing. The generator
+  refuses a `directBlockedWhen` that would block the param's default.
+- **Port-dependent limits can't be route rules** (`select_route` sees params, not wires), so they are refused
+  in the direct handler before any request. Veo references need duration 8 ("reference image to video only
+  supports 8 seconds"). Veo references at 4K are refused because the references page and the API reference
+  say "4k (Veo 3.1 Preview models only)". Veo references with start/end frames are refused because no page
+  documents that combination. An end frame without a start frame is refused (Gemini API: lastFrame "Must be
+  used in combination with the image parameter"). For Omni, a start image plus references is refused, since
+  Google separates them only by `[# Sources ...]` tags in the prompt. **Tradeoff:** with a Vertex/Google key
+  saved, these combos fail instead of running on Krea. The person can pick the Krea plan or remove the key.
+- **Doc conflicts I followed the newer page on.** (1) referenceImages on GA ids: the older vertex-ai API
+  reference lists previews only; the Agent Platform model card and references page list
+  `veo-3.1-generate-001` and `-fast-generate-001`. (2) Lite frames: the model card says "Image Not supported"
+  and also "first and last frame Supported". `veo-3` already sends frames and lets Vertex decide, and the Krea
+  Lite route does the same. Neither one has been live-verified.
+- **generateAudio.** Vertex: "Required for Veo 3 models". Krea's Standard/Fast `generate_audio` (default false)
+  maps to it. Krea's Lite has no such field, and its price equals Google's *video-only* Lite rate ($0.03/s at
+  720p), so Lite sends `false`. Whether Krea's Lite output actually has sound is NOT CONFIRMED.
+- **Omni duration format.** The Gemini API's Interactions reference lists `response_format.duration` as an
+  optional string with no format. Vertex's page for the same Interactions API says "integers between 3 and 10,
+  followed by 's'", so the handler sends "8s". It's only sent when the node has a duration (the
+  `gemini-omni-flash` node has none, so it is unchanged). Also, `handle_gemini_omni` now accepts a list on
+  `video` (up to 3 reference clips); a single string still behaves as before.
+- **Nano Banana 2.1 thinking.** `_nano_banana_interaction` now sends `generation_config.thinking_level` when
+  `thinkingLevel` is minimal/medium/high (the image-generation page's REST example). Only the Krea copy sets it;
+  the `nano-banana` node has no thinking param yet (follow-up if wanted).
+- **identity-edit.** The bundle expansion and mask refusal moved from `sync_runner._identity_edit_handler`
+  into `maker_routes_google.identity_edit_request`, used by both routes. The definition was split with no
+  param changes (`params: []` + `sharedParams` [resolution, thinking_level, identity_strength]). The
+  fingerprint test approves it via `APPROVED_DUAL_ROUTE_SPLITS["identity-edit"]` (mutation-checked: changing
+  identity_strength's default still fails). **Surprise:** route filtering would drop a saved node `seed` (not a
+  declared param), which `test_bundle_seed_applied_when_node_seed_unset` relies on. The handler carries it to
+  the fal route only. Google has no image seed, so the bundle seed doesn't apply there.
+- **Progress for long direct jobs.** `krea_router(..., emit=)` now partials `emit` into a direct handler marked
+  `takes_emit` (Veo, Omni), so the Vertex poll reports progress. The one-line change in `sync_runner` passes
+  `emit=emit`. Other lanes editing that same line will conflict trivially.
+- **Pricing (all checked 2026-10-14 on Google's pages).**
+  - Veo: Vertex "per count" is read as per second (same reading as `veo-3`). Standard $0.40/$0.60 4k with
+    audio, $0.20/$0.40 video only; Fast $0.10/$0.12 with audio, $0.08/$0.10 video only; Lite $0.03/$0.05
+    video only. These equal Krea's own prices.
+  - Omni: $0.10136/s (5,792 tokens/s at 720p x $17.50/1M) x duration, with an open `plus` for input media and
+    thinking tokens. Google publishes no token counts for those.
+  - NB 2.1: $0.0336/$0.0504/$0.113 per 1K/2K/4K, plus up to 14 refs at 1,120 tokens x $1.50/1M. The 1,120 is
+    my reading: NB 2.1 is "an update to Nano Banana 2 (Gemini 3.1 Flash Image)", and the media-resolution page
+    gives 1,120 for Gemini 3 image inputs. The route also carries `plus: "thinking tokens"`, because 2.1
+    defaults to medium thinking and Google says thinking tokens are always billed.
+  - **Decision for Justin:** Google's NB 2.1 list price is *higher* than Krea's ($0.0336 vs $0.03 at 1K;
+    Krea's 2K is $0.0505, 4K $0.0755 vs Google's $0.113). The maker-key-wins precedence still sends the run to
+    Google. If you'd rather Krea win when it's cheaper, that's a precedence change, not a lane change.
+  - identity-edit's Google route: $0.067/$0.101 (1024/2048) + 14 input images at 1,120 x $0.50/1M. Thinking
+    medium/high is unpriced, the same rule as the pilot's Nano Banana 2. The fal route still has no curated
+    price (it had none before).
+  - The sync script's `direct_route_pricing` now skips the image reference math for models not in
+    `REFERENCE_IMAGE_COST`, so video routes use their own notes. `noteExtra` appends to the image note.
+- **Tests.** New `backend/tests/test_maker_routes_google.py` (transport mocked; 29 tests incl. real-catalog
+  prices), shared route cases (+8), TS directBlock/readiness cases. `test_krea_catalog` now allows a direct
+  route without a Krea price (Omni 1.1 has no `x-krea-pricing`) and Vertex source URLs. Mutation-checked:
+  the blockedWhen check (py and TS), the thinking passthrough, Omni duration, generateAudio mapping, the emit
+  partial, the 8-second refusal, the fal seed carry, and identity-edit's imageSize.
+- **NOT CONFIRMED (no live calls):** Lite frames on Vertex; GA referenceImages acceptance; the "8s" Omni
+  duration string on the Gemini API; whether Omni honors several video parts as references (Google also says
+  "Referencing or reasoning across multiple videos is not supported").
+
+### Google lane: review fixes (2026-10-14)
+
+An independent review of `direct-google`. I re-checked these against Google's own pages today: Vertex Veo
+pricing (the per-"count" rows, all six Standard/Fast/Lite figures match), the Vertex Veo 3.1 model card
+(Fast and Lite output "720p, 1080p", Lite "Use reference images Not supported", GA ids "Retirement date:
+November 17, 2026 or later"), the Vertex references page (GA ids listed, Omni duration "integers between 3
+and 10, followed by "s""), the Gemini API pricing page (NB 2.1 $0.0336/$0.0504/$0.113, input $1.50; Omni
+5,792 tokens/s at $17.50 per 1M; 3.1 Flash Image $0.067/$0.101), the image-generation thinking table
+("Gemini Nano Banana 2.1 | minimal, medium, high | medium"; "Gemini 3.1 Flash Image | minimal, high |
+minimal"), the Omni guide ("Video references support a maximum of 3 clips") and the deprecations table
+(no shutdown date for `gemini-nano-banana-2.1`, `gemini-3.1-flash-image` or `gemini-omni-1.1-flash`).
+
+- **Fixed: a direct video run could differ from what the estimate priced.** Pricing reads the saved value, or
+  the definition default if there isn't one (`model_pricing.effective_params`). The Veo and Omni translators
+  only sent values that were saved on the node, so an agent-made node with no saved `duration` was priced at
+  8 s, and Google then picked its own length. Omni has no documented default, so the bill could differ from
+  the estimate. Both translators now read aspect ratio, duration, resolution and audio through
+  `_run_values` (the same `effective_params`). The test is `test_unsaved_video_settings_run_what_the_estimate_priced`.
+  Mutation-checked: with the translators reading `node.params` again, it fails.
+- **Added route cases** to `route_cases.json`, run by both the Python and TS tests: NB 2.1 direct on a Google
+  key with its param set, NB 2.1 with an explicit width staying on Krea, and the Krea plan beating Vertex
+  credentials on Veo 3.1. Mutation-checked: dropping the `blockedBy` return in `direct_block` fails the width case.
+- **Refuted / left as is.** Veo "per count" read as per second: Krea's own per-request prices divide to the same
+  per-second figures (Lite 720p: $0.12 / 4 s = $0.03), so the reading holds. Fast 4K kept on Krea: the
+  conservative choice while the model card and pricing page disagree. Omni with up to 3 reference videos matches
+  Google's cap and Krea's schema (`reference_videos` maxItems 3).
+- **Open, for Justin.** Vertex lists the GA Veo 3.1 ids as retiring "November 17, 2026 or later". The pilot
+  gated Nano Banana 2.5 on its earliest shutdown date, but an "or later" retirement is not an announced
+  shutdown, so I added no `DIRECT_RETIRES` entry. If Vertex announces a firm date, add one on both sides.
+
+## 2026-10-14 — Direct maker routes, OpenAI lane (GPT Image's fal and Krea copies on your OpenAI key)
+
+With `OPENAI_API_KEY` saved, seven copies run on OpenAI's Images API: `gpt-image-1-5`/`-edit` (fal) ->
+`gpt-image-1.5`; `gpt-image-2-fal-generate`/`-edit` (fal) -> `gpt-image-2`; `krea-image-openai-gpt-image-2`,
+`-2-5-flare`, `-2-5-sunburst` -> `gpt-image-2`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`. Vendor pages
+read 2026-10-14 (as `.md` from developers.openai.com): model pages for all four ids, the deprecations table, the
+image-generation guide, the pricing page and the Images API reference.
+
+- **New module** `backend/execution/maker_routes_openai.py` (translators, body builder, direct handlers). Shared
+  files got registration lines only: `maker_routes.KREA_TRANSLATIONS["krea-openai-image"]`, four `dual_route`
+  registrations in `sync_runner.py`, three `DIRECT_ROUTES` entries in the sync overlay.
+- **Requests reuse the existing direct handlers** (`handlers/openai_image_v2.py`: streamed generations, multipart
+  `image[]` edits) with a per-model `build_body`. Two small changes there: the edit form now forwards
+  `input_fidelity` (only gpt-image-1.5 sends it; the reference says "For `gpt-image-2`, omit this parameter"), and
+  `MAX_EDIT_IMAGES` went from 10 to 16 ("For GPT image models, you can provide up to 16 images."). This also lifts
+  the cap on the existing `gpt-image-2-edit`/`-2-5-edit` nodes; docs updated.
+- **fal nodes: no param split.** Every fal param has an OpenAI field, so `params` stays exactly as it was and the
+  nodes only gain `envKeyName: ["OPENAI_API_KEY", "FAL_KEY"]` + `directKeyName` (the `veo-3-flf` shape).
+  Fingerprint approval `APPROVED_DIRECT_KEY_ADDITIONS` normalizes only those two fields; params are still hashed.
+- **New route rule piece: `DIRECT_BLOCKED_VALUES`** (node_route.py, mirrored in directRoute.ts). fal's
+  gpt-image-2 presets Square (512x512), Portrait 16:9 (576x1024) and Landscape 16:9 (1024x576) are under OpenAI's
+  655,360-pixel minimum. Rather than silently enlarge them, those *values* keep the run on fal (reason `blocked`,
+  own readiness line: "This recipe's image_size has no OpenAI equivalent..."). `directBlockedBy` couldn't do it:
+  it blocks on "is set", and `image_size` has a default. The other presets map to the size their label names
+  (Square HD 1024x1024, 4:3 768x1024 / 1024x768). The pixel sizes of fal's presets for gpt-image-2 are the node
+  labels' claim; fal's schema doesn't document them (NOT CONFIRMED with fal).
+- **gpt-image-1.5 retires Dec 1, 2026** ("Dec 1, 2026 | `gpt-image-1.5` | `gpt-image-2.5-sunburst` or
+  `gpt-image-2.5-flare`"): `DIRECT_RETIRES` on both sides; from that day the run goes back to fal. fal's
+  `fal-ai/gpt-image-1.5` presumably proxies OpenAI and will stop too; whether to migrate these nodes to 2.5 is
+  Justin's call (not done).
+- **Krea sizes.** Krea documents `resolution` only as "Resolution scale. One of: 1K, 2K, 4K", not pixels, so the
+  table `KREA_OPENAI_SIZES` is mine: exact ratio, edges multiples of 16, within OpenAI's limits; 1K = OpenAI's
+  standard size where one exists (1024x1024, 1536x1024, 1024x1536, also what Krea's ChatGPT Image page lists),
+  else a 1,024 long edge raised to the pixel minimum (16:9 -> 1280x720); 2K = 2,048 long edge; 4K = OpenAI's
+  largest (3840 edge or the 8,294,400-pixel cap, 2880x2880 square). 4K is "experimental" per OpenAI. Krea's own
+  rendered pixels may differ. On GPT Image 2 (both optional) one set alone means 1:1 / 1K; neither = OpenAI auto.
+  GPT Image 2's free-number `width`/`height` are kreaOnly + `directBlockedBy` (as Nano Banana) rather than
+  "exact when valid": a conditional block would have needed more shared code in both route modules; follow-up.
+- **References.** Krea `image_urls` and fal `images` values are made local for the multipart edit: `/api/outputs/`
+  refs resolve, public https URLs are fetched through `services.public_url.fetch_public_media` (SSRF-checked,
+  no credentials, 50 MB cap from the guide's "less than 50MB"), data URIs are written into the run dir.
+- **Count.** `num_images` -> that many streamed calls, first image on `image` (fal shows the first too and bills
+  each). The existing code says OpenAI rejects `n>1` with `stream=true`; today's reference doesn't say either way
+  (NOT CONFIRMED), so I kept streaming and looped rather than sending `n`.
+- **Pricing.** gpt-image-1.5 OpenAI route: OpenAI's per-image table (model page; low $0.009/$0.013, medium
+  $0.034/$0.05, high $0.133/$0.2), times Count; edit 'auto' size = range across the three sizes; reference input
+  tokens are `plus: input images`. **Unpriced on purpose:** gpt-image-2 copies (OpenAI's per-image table covers
+  only 1024x1024/1024x1536/1536x1024; the fal default 1024x768 and Krea's unset size aren't in it, and the
+  `pricing.test.ts` invariant requires every entry to price at defaults, so I didn't add a partial entry) and the
+  2.5 copies (model pages: "The GPT Image 2 calculator does not estimate GPT Image 2.5 token consumption"). No fal
+  route price exists for these fal nodes either (unchanged).
+- **Flag for Justin (not changed, not my nodes):** the existing `gpt-image-2-5-generate`/`-edit` price rows were
+  computed "per OpenAI's image-cost calculator"; today's 2.5 model pages say that calculator doesn't estimate 2.5.
+  Those rows look unsupported by the current docs.
+- **Transparency.** Forwarded on gpt-image-1.5 (OpenAI: "Transparent backgrounds are available for supported GPT
+  Image models"; 1.5 isn't named explicitly, so NOT CONFIRMED; a refusal is a 400 before billing). A transparent
+  JPEG is refused locally before any request or download.
+- **Behavior changes to know:** a saved Krea GPT Image 2 / 2.5 node on `api-token` now runs on OpenAI (billed by
+  OpenAI) once an OpenAI key is saved; with no keys, setup points at the OpenAI key (the Nano Banana rule). The
+  Krea plan choice still wins. In the Node Library and model picker the provider filter now lists GPT Image 2
+  (Krea) under OpenAI too; tests that used it as a "Krea-only" example now use `krea-image-openai-gpt-image`.
+- **Skipped:** `sora-2`, `sora-2-i2v` (retired; "There is no one-to-one replacement API"),
+  `krea-image-openai-gpt-image` (Krea: "Original ChatGPT image model"; the OpenAI id isn't named, likely
+  gpt-image-1, which shuts down 2026-10-23).
+- **Tests:** `test_maker_routes_openai.py` (respx for OpenAI, mocks for fal/Krea; 18 tests) plus shared route cases
+  and readiness/directRoute cases. Mutation-checked: disabling the value block, the 1.5 retirement, the
+  input_fidelity form field, the preset map, the Count loop and the URL download each fails a test.
+- **Docs:** someone else's edit to `docs/api-guides/openai.md` (a section on these copies, 10 -> 16 refs) appeared
+  in this worktree while I worked; it matched the code, so I kept it instead of adding my own section.
+
+### Review fixes (OpenAI lane, 2026-10-14)
+
+Independent review of `direct-openai` against `direct-maker-routes`. Re-read OpenAI's own pages today (gpt-image-1.5,
+gpt-image-2 and gpt-image-2.5-flare model pages, the deprecations table, the Images API reference, the image
+generation guide's "Calculating costs"): the model ids, both endpoints, the 1.5 per-image table, the Dec 1, 2026
+shutdown, "up to 16 images", the pixel/edge/multiple-of-16 rules, "For `gpt-image-2`, omit this parameter", the
+100-token partial-image charge and "The GPT Image 2 calculator does not estimate GPT Image 2.5 token consumption"
+all match what the lane cites.
+
+- **Count overwrote the images it paid for (fixed).** Both OpenAI handlers save each call's result as
+  `<node id>_final.<ext>` in the run dir, so with `num_images` > 1 every call replaced the previous file: OpenAI
+  billed N images, one survived, and `image` (promised as the first) held the last. `openai_image_direct` now
+  renames each call's file to `<node id>_final_<n>` when Count > 1; `image` is the first. Test
+  `test_count_keeps_every_paid_image_and_shows_the_first` (two distinct images through respx); it failed before
+  the fix.
+- **Shared route cases gaps (added).** Only one blocked preset per node was in `route_cases.json`, so a frontend
+  list that dropped `square` or `portrait_16_9` would pass. Added cases for Portrait 16:9, Square, Square HD
+  (direct), GPT Image 1.5 Edit with only the fal key, Krea GPT Image 2 with only the Krea token, and the Krea plan
+  beating the OpenAI key on GPT Image 2. Mutation: trimming `GPT_IMAGE_2_FAL_UNSIZED` in `directRoute.ts` to one
+  value fails three shared cases.
+- **Docs duplicated (fixed).** `docs/api-guides/krea.md` had two "GPT Image on your OpenAI key" paragraphs (the
+  concurrent edit plus the lane's); `.agents/skills/krea/SKILL.md` had the same text twice (paragraph and a
+  `###` section); both gpt-image-2 skill mirrors had a paragraph and a section saying the same. Each now says it
+  once, with the details merged.
+- **Checked, not a problem:** precedence (Krea plan > OpenAI key > fal/Krea key) and the block order are the same in
+  `node_route.py` and `directRoute.ts`; params reach only their route (the fal nodes are unsplit and every param
+  has an OpenAI field; Krea `width`/`height` are falParams and block); the fingerprint approval only normalizes
+  `envKeyName`/`directKeyName` (changing a `gpt-image-1-5` default still fails `test_reference_roles.py`); the 1.5
+  prices match OpenAI's table and the spend gate's high bound (edit `auto` = $0.133-$0.2 x Count + input images);
+  every `KREA_OPENAI_SIZES` entry is within OpenAI's limits; no API keys or live calls in tests.
+- **Left as is (pre-existing, outside the lane):** the repo's claim that OpenAI rejects `n>1` with `stream=true`
+  (handler comment, OpenAI skill) is still not in today's reference either way, so NOT CONFIRMED; the lane's
+  loop-of-calls design doesn't depend on it.
+
+## 2026-10-14 — Direct maker routes: xAI (Grok Imagine on your xAI key)
+
+Six fal/Krea Grok copies now run on xAI's own API when `XAI_API_KEY` is saved (same precedence as Nano
+Banana: Krea plan, else maker key, else fal key / Krea token). Vendor facts come from docs.x.ai pages fetched
+2026-10-14 (images/videos REST references, generation/editing guides, model pages, rendered pricing table).
+
+- **Nodes.** `grok-imagine-image` and `-edit` (fal) -> `grok-imagine-image` (fal's own prices match xAI's 1.0
+  rates and fal's edit takes max 3 images, so its upstream is 1.0). `krea-image-xai-grok-imagine-2` / `-2-edit`
+  -> `grok-imagine-image-2.0`. `krea-video-xai-grok-video` -> `grok-imagine-video`; `-1-5` ->
+  `grok-imagine-video-1.5`. None skipped.
+- **New modules.** `backend/handlers/xai_image.py` (generations/edits JSON, `{url}` image objects, data URLs for
+  local files, saves all `n` images) and `backend/execution/maker_routes_xai.py` (fal + Krea translators).
+  `grok_video.py` was refactored into a shared `run_xai_video`; the grok-imagine-video node's start image is
+  now sent as xAI's documented `{"url": ...}` object instead of a bare string (NOT CONFIRMED whether xAI
+  accepted the bare string before; the reference documents only the object).
+- **Wired blockers (shared rule change).** A Krea-only field can arrive on a port, not just as a saved param
+  (Grok 2.0's `style_images`). Added `node_route.with_wired_blockers` / `directRoute.ts withWiredBlockers`
+  (marker `WIRED`) and used them in the router (`dual_route`), `model_pricing.estimate_run` and `runScope.ts`.
+  Readiness and describe_node still read params only, so a wired blocker shows "runs on xAI" there (cosmetic).
+- **`start_video` stays on Krea on both video copies.** Krea's OpenAPI gives `start_video` no description and
+  uses it on Veo 2, Seedance and Flux too, so "extend this clip" is a guess; xAI's extensions endpoint also only
+  takes `grok-imagine-video`. Made it Krea-only + `directBlockedBy` rather than mapping it to
+  `/v1/videos/extensions`. The xAI route uses generations or edits only; the translator raises if a
+  start_video ever reaches it.
+- **Param handling.** fal `output_format` is fal-only (xAI has no output-format field; it returns `mime_type`).
+  Krea video: unset duration/resolution send the Krea defaults (6 s / 720p), not xAI's (8 s / 480p); non-integer
+  durations are refused on the xAI route; combinations xAI doesn't document (edit + frames/refs, start image +
+  refs) are refused rather than dropping an input. References capped at 7 and at most 10 s.
+- **Pricing (xAI's rendered pricing table, not the .md copy which lists only the lowest tier).** Image 1.0
+  $0.02 per output (+$0.002 per edit input); 2.0 by resolution x quality ($0.04-$0.08) +$0.01 per input; video
+  per second by resolution ($0.05/$0.07 grok-imagine-video; $0.08/$0.14/$0.25 for 1.5) plus input images. Edit
+  and video prices are ranges up to the most inputs the route can send. Video edits are unpriced (billed by
+  source length). Unknown whether edit inputs bill per request or per output when n>1, so the fal-edit xAI price
+  is a range [$0.02, $0.03] per output.
+- **krea_router emit.** Direct handlers flagged `takes_emit` get the engine's emit so video progress still shows
+  on the xAI route.
+- **Approvals.** `APPROVED_DUAL_ROUTE_SPLITS` gained both fal Grok nodes; Krea definitions and pricing were
+  regenerated by `scripts/sync-krea-catalog.py` (overlay `XAI_DIRECT_ROUTES`), not hand-edited.
+- **Followups.** `.claude/skills/krea/SKILL.md` is an older copy without the maker-routes section; the
+  grok-imagine-video node could gain 1.5/1.5-lite and 1.5's references/last frame/keyframes; xAI video extension
+  would need its own node if wanted.
+
+### Review fixes (xAI lane, 2026-10-14)
+
+Independent review of `direct-xai`. Spot-checked against docs.x.ai today: the images and videos REST
+references (aspect-ratio enums, `{url}` image objects, `images` for multi-source edits, `b64_json` +
+`mime_type`, duration "Range: [1, 15]", edits accept "a base64-encoded data URL"), the rendered pricing table
+(every Imagine price in `model_pricing.json` matches), the image generation guide (`n` 1-10, quality
+low/medium/auto on 2.0 only, `1k` default), the video overview (7 refs / 10 s on grok-imagine-video, 1080p and
+no editing on 1.5) and the model pages (ids and aliases; no shutdown dates, so no DIRECT_RETIRES entry).
+
+- **Fixed: the fal edit node could bill a generation.** `handle_xai_image` picks `/v1/images/edits` only when
+  sources arrive, so `grok-imagine-image-edit` on an xAI key with nothing wired ran text-to-image and billed it
+  (fal refuses). `fal_grok_image_to_xai` now refuses an edit with no source.
+- **Fixed: the cache tag ignored wired blockers.** The router kept a wired `start_video`/`style_images` run on
+  Krea, but `engine._cache_route_tag` read saved params only and filed the Krea result under `direct:xai`, so
+  removing the xAI key re-ran (and re-billed) the same Krea job. `node_route.filled_ports` now gives the router
+  and the cache tag the same wired set.
+- **Fixed: misleading missing-key error.** With only the xAI key saved and a wired blocker, the run asked for
+  "XAI_API_KEY or KREA_API_TOKEN". It now says the Krea token is needed and names the Krea-only field.
+- **Added route cases** for `krea-image-xai-grok-imagine-2-edit` (direct, plan) and the fal edit's xAI route
+  (no `output_format`).
+- **Refuted / kept:** fal `output_format` dropped on xAI (has a default, so it can't be a blocker; same as Nano
+  Banana); the xAI price ranges (high bound covers the most sources each route sends); start image + references
+  refused (xAI doesn't document combining them; refusing bills nothing).
+- **Left open (needs a shared value-based blocker rule):** a fractional Krea duration (6.5 s) or a start image
+  plus references worked on Krea but errors once an xAI key is saved, instead of staying on Krea. Readiness,
+  describe_node and the engine preflight still don't see wired blockers.
+
+## 2026-10-14 — Direct maker routes: Ideogram and Runway (Krea copies)
+
+Six generated Krea nodes now run on the maker's API with the maker's key (Krea plan, then maker key, then
+`KREA_API_TOKEN`, all via `node_route.select_route`). Handlers: `backend/execution/maker_routes_ideogram_runway.py`
+(registered with one `KREA_TRANSLATIONS.update` line); overlay: `IDEOGRAM_RUNWAY_DIRECT_ROUTES` in
+`scripts/sync-krea-catalog.py`, spread into `DIRECT_ROUTES`. No sync_runner change: `krea_router` already wraps every
+generated node that has a `directRoute`.
+
+- **Done:** `krea-image-ideogram-ideogram-4-5-precise` -> `/v2/image/precise-edit/ideogram-4-5`;
+  `-ideogram-3` -> `/v1/ideogram-v3/generate`; `-ideogram-2-turbo` -> `/v2/image/generate/ideogram-2a` (turbo);
+  `krea-image-runway-gen-4-image` -> `gen4_image`; `krea-video-runway-gen-4-5` -> `gen4.5` (through
+  `handle_runway_video`); `krea-enhance-runway-ruby` -> `ruby` on `/v1/video_to_hdr`.
+- **Skipped `krea-image-ideogram-ideogram-4-5` (generate).** Ideogram's page: without source images "an exact size
+  must be one of the supported 1K/2K presets (for example 1024x1024, 2048x2048 or 1440x2880)", and no page lists
+  the presets (the v2 OpenAPI URL serves HTML; Ideogram's docs search says they aren't listed). Krea's 8
+  `aspect_ratio` values can't be mapped to confirmed sizes, so it stays Krea-only. Unblock: confirm the presets
+  (Ideogram support, or a `dry_run=true` request on Justin's key, which validates and prices without billing).
+- **Skipped `krea-video-runway-gen-4-video`** as instructed (upstream not confirmed; Krea runs it text-only,
+  which `gen4_turbo` can't do).
+- **One read of a recipe.** Each direct handler first builds the body Krea's gateway would send
+  (`krea_gateway._request_body`: params, wired ports over them, JSON params decoded), then maps it. Missing values
+  get Krea's schema defaults (width/height 1024, quality high, duration 5, output_format hdr10).
+- **width/height snap** (Ideogram 3, 2a, gen4_image) to the maker's nearest shape, then nearest pixel count. They
+  can't be `directBlockedBy` (they default to 1024 and the generator refuses defaulted blockers), and the makers
+  only take fixed shapes, so Krea must snap too. Defaults map exactly (1x1, 1024:1024).
+- **Ideogram 3 uses v1, not v2.** The v2 ideogram-3 page lists no values for `resolution`/`aspect_ratio`/
+  `rendering_speed`; the v1 page (and Nebula's own `ideogram-character`) shows them, takes the character reference
+  in the same call, and Ideogram's pricing tab says "Every Ideogram 4.0 and 3.0 model endpoint bills the model
+  rate above" (corrected in review: the "Still available at these prices" line heads the older 2.0/2a/1.0 models,
+  not v1 endpoints). Speed is fixed at DEFAULT (Krea exposes none). One character reference max ("currently only supports 1").
+- **Krea `style_images` keep Ideogram 3 on Krea** (`kreaOnly` + `directBlockedBy`): each carries a `strength`
+  Ideogram has no field for. Wired style images can't be seen by route selection, so the direct handler refuses
+  them with a message instead of dropping the strengths. Follow-up: a value/port-aware blocker would let these
+  (and gen4.5's 672:1584) fall back to Krea instead of erroring.
+- **Gen-4.5:** duration rounds to whole seconds (Runway: "Must be an integer from 2 to 10"); prices are rows per
+  whole second, so a fractional duration shows unpriced. Krea's 672:1584 and non-1280:720/720:1280 text-to-video
+  ratios fail before submit (existing `handle_runway_video` checks).
+- **Gen-4 Image:** Krea's `reference_images` `[{url, tag}]` -> `referenceImages [{uri, tag}]` (tags kept so
+  `@tag` prompts still work); own submit in the new module rather than changing `handle_runway_image`.
+- **Ruby:** local videos go as a data URI under 5MB, else `/v1/uploads` (Runway's schema: data URIs "up to 5MB").
+  `proresProfile` only with `hdr_prores`; .mov for ProRes. Unpriced on both routes ("20 credits per second; 40
+  credits per second when the source is larger than 4 megapixels" depends on the source).
+- **Prices** (read 2026-10-14): Ideogram's API pricing tab rendered in Playwright this time ("Current prices
+  loaded") — Precise Edit $0.008/$0.03/$0.06/$0.22; 3.0 Default $0.06, with Character Reference $0.15 (shown as
+  the range [0.06, 0.15]); 2a Turbo $0.025. Runway guides/pricing.md: gen4_image 5/8 credits (range
+  [$0.05, $0.08]; Runway doesn't say which ratios are 720p vs 1080p), gen4.5 12 credits/s, $0.01 per credit.
+  Krea-2-Turbo = 2a Turbo is backed by Krea's "Ideogram 2.0A Turbo" label and its identical $0.025.
+- **Generator changes (shared, small):** `direct_route_pricing` passes non-Google entries through as written, and a
+  `pricing: None` route is allowed; a dual-route node with only a Krea price still gets a `routes` entry.
+  `test_direct_route_models_price_both_routes` and the audio-note test now handle maker-only and Krea-less routes.
+- **Behavior change:** a saved Krea node of these six on `api-token` runs on Ideogram/Runway once that key is saved
+  (same as the Nano Banana pilot).
+
+### Ideogram and Runway: review fixes (2026-10-14)
+
+Independent review of `direct-ideogram-runway`. Precedence, param splits, prices and the vendor facts held up;
+three things were fixed.
+
+- **Shared route cases didn't cover the new nodes.** `backend/tests/fixtures/route_cases.json` (run by both
+  `test_node_route.py` and `frontend/tests/lib/directRoute.test.ts`) had no case for any of the six. Added nine:
+  the maker key winning on Ideogram 3, Precise and Gen-4.5 (with each route's `paramKeys`, so `style_images` is
+  shown never to reach Ideogram), the Krea plan winning over an Ideogram and a Runway key, Krea style images
+  keeping Ideogram 3 on Krea (and leaving it unset with only an Ideogram key), Gen-4 Image on Krea without a
+  Runway key, and Krea's Gen-4 video copy staying single-route. Mutation-checked on both sides: with `blockedBy`
+  ignored in `node_route.direct_block` / `directRoute.ts directBlock`, the two style-image cases fail.
+- **A Gen-4.5 test could reach Runway.** `test_gen4_5_refuses_shapes_runway_lacks_before_submitting` patched
+  `execution.async_poll_runner.async_poll_execute`, but `handlers/runway.py` imports that name at load, so the
+  patch never applied. With the ratio checks removed, the test sent a real POST to api.dev.runwayml.com (fixture
+  key, so no charge) and `submit.assert_not_called()` passed vacuously. It now patches
+  `handlers.runway.async_poll_execute` with a mock that raises if called and runs under `respx.mock`, so nothing
+  can leave the machine. Mutation-checked: removing either the image-to-video or the text-to-video ratio check
+  now fails on the submit.
+- **Two unsupported claims corrected.** The Precise Edit docstring said Krea's mask convention matches
+  Ideogram's; Krea's catalog doesn't say, so it's marked NOT CONFIRMED (the mask goes as given, as Nebula's own
+  `ideogram-edit` does). The v1 "Still available" quote is fixed above.
+- **Confirmed in review (vendor pages read 2026-10-14):** Ideogram pricing tab, rendered: Precise Edit
+  $0.008/$0.03/$0.06/$0.22 at both 1K and 2K, 3.0 Default $0.06 and with Character Reference $0.15, 2a Turbo
+  $0.025. Ideogram v1 generate-v3 page: `RenderingSpeed` FLASH/TURBO/DEFAULT/QUALITY with default DEFAULT (the
+  builder's NOT CONFIRMED item is now confirmed) and the same 15 aspect ratios. v2 ideogram-2a page: JSON, the
+  15 ratios plus `auto`, "Omitting the field is not `auto`: it uses `1x1`". v2 precise-edit page: "Black marks
+  the area to edit and white the area to keep", reference images max 4, three with a mask. Runway openapi.json:
+  `/v1/video_to_hdr` (`ruby`, `videoUri` "Must be 30 seconds or shorter", `proresProfile` "Only valid when
+  `outputFormat` is `hdr_prores`"), gen4.5 image-to-video ratios without 672:1584, text-to-video only
+  1280:720/720:1280, duration "an integer from 2 to 10", gen4_image ratios and the reference `tag` pattern Krea
+  also uses. Runway pricing.md: gen4.5 "12 credits per second", gen4_image "5 credits per 720p image, or 8
+  credits per 1080p image", "$0.01 per credit". Ideogram 4.5 generate still names only three size presets, so
+  that skip stands.
+- **Left as is (open items):** Gen-4.5 runs whose ratio Runway lacks (672:1584, or a non-landscape/portrait
+  ratio without a start image) and wired Ideogram 3 style images fail on the maker route instead of falling back
+  to Krea; fixing that needs a value- and port-aware blocker in the shared route code. Gen-4.5 prompts over
+  1,000 characters are cut to 1,000 by the existing `handle_runway_video`, where Gen-4 Image refuses them. Krea's
+  Gen-4 Image schema requires a reference image, as Runway's `gen4_image_turbo` does; the label and Krea's
+  missing price don't settle which model Krea runs, so the direct route follows Krea's "Gen-4 Image" label and
+  prices `gen4_image`. Ruby downloads its output with the shared `save_video_from_url`, which reads the whole
+  file into memory; a long 4K ProRes 4444 clip could be large.
+
+## 2026-10-14 — Direct maker routes: MiniMax and Meshy
+
+Five Krea copies now run on the maker's own API when that key is saved (route rule unchanged: Krea plan
+connection > maker key > Krea key). Translations live in `backend/execution/maker_routes_minimax_meshy.py`,
+the H3 handler in `backend/handlers/minimax_v2.py`, and the overlay in `scripts/sync-krea-catalog.py`
+(`MINIMAX_MESHY_ROUTES`). Vendor facts were read 2026-10-14 from platform.minimax.io/docs, docs.meshy.ai
+(openapi.yaml, pricing, changelog) and meshy.ai/pricing. Each fact is quoted in the module docstrings.
+
+| Node | Maker model | Endpoint |
+|---|---|---|
+| krea-video-minimax-hailuo-02 | MiniMax-Hailuo-02 | POST /v1/video_generation (T2V, I2V, FL2V) |
+| krea-video-minimax-hailuo-2-3 | MiniMax-Hailuo-2.3 | /v1/video_generation (T2V, I2V) |
+| krea-video-minimax-hailuo-2-3-fast | MiniMax-Hailuo-2.3-Fast | /v1/video_generation (I2V only) |
+| krea-video-minimax-hailuo-3 | MiniMax-H3 | POST /v2/video_generation |
+| krea-3d-meshy-meshy-7 | meshy-7 | /v2/text-to-3d, /v1/image-to-3d, /v1/multi-image-to-3d |
+
+Decisions:
+- **New `directRoute.unsupported` rule** (node_route.py, directRoute.ts, providerReadiness.ts). blockedBy only
+  fires when a param is set. MiniMax rejects some values outright: Hailuo takes 6 or 10 seconds, and 1080P
+  only at 6. A rule is `{param, allowed, label}` or `{match, label}` and is read against the effective value,
+  defaults included. A blocked run stays on Krea, and readiness says "MiniMax's own API doesn't take <label>,
+  so it runs on Krea." `DirectBlock` gained an optional 4th field, `detail`.
+- **Wired-port cases are refused in translation, before any call.** Route selection only sees params, not
+  wired ports. Those cases are an end image on 2.3, no start image on 2.3 Fast, and 512P without a start image
+  or with an end image. I didn't add a run-time fallback to Krea because the spend gate and the price shown
+  were computed for the MiniMax route. Each error says how to run it on Krea instead.
+- **Hailuo 2.3 / 2.3 Fast `end_image`** is kreaOnly and in directBlockedBy, because MiniMax's FL2V is Hailuo 02 only.
+- **MiniMax region fallback.** `handlers/minimax.py` `submit_task` tries Mainland (api.minimaxi.com, the
+  existing default) first, then Global (api.minimax.io) on a key rejection (HTTP 401, base_resp 1004/2049, or a
+  V2 message ending "(1004)"). Keys are region-bound, so trying the other host never bills a different account.
+  Prices are Global USD list prices. A Mainland key bills Mainland rates, which aren't priced here.
+- **FL2V branch** added to `handle_minimax_video` on the `last_frame_image` input (the first frame is optional).
+  `prompt_optimizer` is sent when the param is a bool. `_resolve_image_url` resolves /api/outputs refs first.
+- **H3.** There's a direct-only `resolution` param, defaulting to 2K: Krea's $0.65 for 5 s equals 5 x $0.13,
+  MiniMax's 2K rate. `reference_video_seconds` has no V2 field, so it is kreaOnly and in directBlockedBy. The
+  price is a range: low = duration x rate, high = that + 4 extra reference images x $0.04 + 15 s of reference
+  video at the rate. A 401/402/403 error adds MiniMax's plan rule: pay-as-you-go or an M Plan Explore/Build
+  Subscription Key; Video Packages don't cover H3. Cancelling a queued task sends DELETE /v2/video_generation/{id}
+  ("no charge").
+- **Meshy sends `meshy-7`, not 7.1.** The node is named Meshy 7, and Meshy says it "keeps working unchanged" at
+  7.1's price. Sending 7.1 would silently swap the model. Seed is sent in text mode only (the only endpoint that
+  documents it). A prompt in image mode is dropped, since what Krea does with it is undocumented. More than 4
+  images is refused. A 401/402/403 error quotes "require[s] account entitlement" and the Pro-and-above API rule.
+  Meshy 7 is unpriced on both routes: Meshy lists credits but no USD per API credit, and Krea lists no price.
+- **Hailuo prices** come from MiniMax Global pay-as-you-go ("Legacy Models"): 02 512P 6s $0.10 / 10s $0.15,
+  768P 6s $0.28 / 10s $0.56, 1080P 6s $0.49; 2.3 768P $0.28 / $0.56, 1080P $0.49; 2.3 Fast 768P $0.19 / $0.32,
+  1080P $0.33. (Krea's own 02 768p/6s is $0.27.)
+- **`emit` reaches the direct handlers.** `krea_router(definition_id, fallback, emit)` binds it when the handler
+  sets `takes_emit`, so progress shows. sync_runner passes it.
+- `direct_route_pricing` in the generator returns None for a route without a "pricing" key and passes
+  non-Google pricing through unchanged.
+
+Skipped:
+- `krea-video-minimax-hailuo`: Krea doesn't say which upstream model it is.
+- `krea-video-minimax-h3-max` and `krea-video-minimax-h3-max-turbo`: MiniMax calls H3-Max the "fast generation variant",
+  so which Krea copy is which MiniMax model is ambiguous. Needs Justin's call.
+- `krea-video-minimax-h3-max-camera-controls`: no maker route.
+
+NOT CONFIRMED (no live calls were made):
+- whether /v2 exists on the Mainland host;
+- the exact error a Video Package key gets on H3;
+- Meshy's entitlement error code;
+- what Krea does with a prompt in Meshy image mode;
+- Meshy's USD per credit;
+- whether Krea's 1080p/10 s Hailuo runs are actually 6 s.
+
+Follow-ups:
+- The Settings MiniMax key check (services/settings.py) only probes api.minimaxi.com, so a Global key may show
+  as rejected even though runs work.
+- `minimax-t2v` offers MiniMax-Hailuo-2.3-Fast, which MiniMax's T2V API doesn't accept. This bug predates the branch.
+- `meshy-text-to-3d` / `meshy-image-to-3d` still list `meshy-5`, and "lowpoly" retires 2026-10-30.
+
+Incident: the session scratchpad is shared between lanes, and this lane's mutation backups at first used
+the same `mut/bak` path as the ElevenLabs lane. Files crossed between worktrees. The content was rebuilt and
+checked against a recovered copy. Mutation backups now live in `scratchpad/minimax-meshy-mut/`, one per mutation.
+
+### Review fixes (MiniMax and Meshy, 2026-10-14)
+
+An independent review re-read MiniMax's pricing, V2 create/query/delete, T2V, I2V, FL2V and error-code pages,
+Meshy's openapi.yaml and the MiniMax MCP README on 2026-10-14. The model IDs, endpoints, limits and every
+Hailuo and H3 price in the overlay match those pages.
+
+- **Region fallback now also moves on a 404.** MiniMax's Mainland reference documents `/v2/video_generation`
+  on `api.minimax.cn` (platform.minimax.cn/docs/api-reference/video-generation-v2-create.md), and its Global
+  reference on `api.minimax.io`. Neither puts it on `api.minimaxi.com`, which Nebula tries first. Before this
+  fix, a 404 there was returned as is, so a Global key could never reach Global for H3. `submit_task` now
+  tries the next host on a 404 as well as on a rejected key. A 404 creates no task, so it never bills. Test:
+  `test_h3_runs_on_global_when_the_mainland_host_has_no_v2_route` (mutation-checked).
+- **Meshy 7 now resolves saved `/api/outputs/...` refs.** The Krea route resolves them, but the Meshy handlers
+  only read plain local paths. A saved graph's `image_urls` JSON therefore failed on the Meshy route with
+  "Image file not found". The translation now resolves them first, and the handlers send the files as data
+  URIs, behind `require_allowed_path`. Test: `test_meshy_7_sends_saved_output_refs_as_data_uris`, which failed
+  before the fix.
+- Checked and refuted: route precedence and its frontend/backend mirror, per-route param filtering,
+  `unsupported` rule parity (Python `_match_value` and TS `matchValue` agree on 6 / 6.0 / "6"), the H3 high
+  bound (9 reference images with 5 free, plus 15 s of reference video at the output rate, with audio free,
+  which is MiniMax's maximum billable input), emit binding, cancel, and output ports.
+- Left as is (judgment, recorded): in Meshy image mode a set `prompt` or `seed` is dropped rather than
+  blocking the direct route. Meshy's image endpoints have no seed, and what Krea does with a prompt there is
+  undocumented. A route rule can't express "prompt set and input_mode image", and a prompt can arrive on a
+  wire. The price is the same either way (unpriced).
+- Still open: a Mainland key bills Mainland rates, but the spend gate shows Global USD, because the key's region
+  isn't known before the run.
+
+## 2026-10-14 — Direct ElevenLabs routes (fal, Krea and Runway copies on your ElevenLabs key)
+
+Eight nodes now run on ElevenLabs' own API when `ELEVENLABS_API_KEY` is saved, on the Nano Banana pattern
+(`select_route`, `dual_route`, route-split params, per-route pricing). Lane code is in
+`backend/execution/maker_routes_elevenlabs.py`; shared files only got registration lines.
+
+- **Nodes.** `elevenlabs-music` (fal) and Krea `krea-audio-elevenlabs-music` / `-music-v2` / `-music-v2-5` ->
+  `POST /v1/music` with `music_v1` / `music_v2` / `music_v2_5`. `krea-audio-elevenlabs-tts` ->
+  `POST /v1/text-to-speech/{voice_id}`. `runway-tts`, `runway-sts`, `runway-dubbing` -> TTS
+  (`eleven_multilingual_v2`), speech-to-speech (`eleven_multilingual_sts_v2`) and `POST /v1/dubbing`.
+- **Runway voices are not mapped.** Runway's docs call them "Runway preset voices" and give no ElevenLabs
+  voice ids, so I didn't map any. Instead `runway-tts` / `runway-sts` get a direct-only `voice_id` (no
+  default), and `node_route.DIRECT_REQUIRES` (both sides) keeps a run on Runway until it's set. That reuses
+  the Ideogram Reframe opt-in: with the ElevenLabs key saved, the Inspector shows "ElevenLabs voice ID".
+  `voiceId` (Runway presets, default Maya) moved to `falParams`. A saved Runway recipe never silently
+  changes voice.
+- **Fallback provider is Runway for three nodes.** `fallback_provider` already reads `KEY_PROVIDERS`
+  (RUNWAY_API_KEY -> runway), so it needed no logic change. I fixed the "fal or krea" comments, the model
+  reference's `FALLBACK_KEY_PROVIDERS` ("Runway Parameters"), and the test that pinned `{"fal", "krea"}`.
+  Readiness text: "Runs on Runway with your Runway key. Add an ElevenLabs key to run on ElevenLabs directly."
+  (I also fixed the a/an article.) The requires note became generic: "This recipe sets no ElevenLabs
+  voice_id, so it uses Runway. Set it to run on ElevenLabs." Ideogram gets the same wording.
+- **Clearer no-route error (shared `dual_route`, small).** When the maker key is set but `direct_block`
+  stops the run and no fallback key exists, the MissingCredentialError now names the fallback key and the
+  reason ("RUNWAY_API_KEY is required: this recipe can't run on ELEVENLABS_API_KEY because it needs voice_id
+  set"). The old message only listed every key.
+- **TTS voice settings.** `handle_elevenlabs_tts` gains `voice_settings: bool = True`. The Krea and Runway
+  copies pass False, so no `voice_settings` are sent and the voice's stored settings apply. The API reference
+  says voice settings override "stored settings for the given voice"; Krea and Runway expose none. The
+  first-party `elevenlabs-tts` is unchanged (test pins it).
+- **Music handler (new).** `handle_elevenlabs_music` in `handlers/elevenlabs.py` sends prompt, `model_id`,
+  `music_length_ms` (validated 3000-600000), and `force_instrumental` only when true. No `output_format`
+  (auto = mp3), saved as .mp3, read timeout 600 s. `elevenlabs-music` gained a direct-only `model_id`
+  (default `music_v1`, ElevenLabs' own default); fal never receives it. Unset settings take the definition
+  default (30000 ms), the same value pricing reads.
+- **STS video.** ElevenLabs speech-to-speech documents an `audio` file only. A Runway STS run with only the
+  video input wired is refused on the ElevenLabs route before any call. I didn't build local audio
+  extraction (ffmpeg); that's a follow-up if wanted.
+- **Runway TTS text length.** Runway's handler cuts text at 1,000 characters; the ElevenLabs route sends all
+  of it (Multilingual v2 takes 10,000). It bills per character, so a long script costs more there.
+- **Dubbing.** Runway's four settings map one-to-one onto the `POST /v1/dubbing` fields (`target_lang`,
+  `num_speakers`, `drop_background_audio`, `disable_voice_cloning`). All 28 Runway languages are in
+  ElevenLabs' Dubbing v1 list (a test pins this). ElevenLabs files `/v1/dubbing` under "Legacy" in its API
+  reference, with no deprecation notice or shutdown date, so there's no DIRECT_RETIRES entry. The newer
+  `POST /v1/dubbing/project` (default `dubbing_v2`, $2.20/min) has none of these four settings and delivers
+  output by webhook, so it isn't a fit. **NOT CONFIRMED:** which ElevenLabs dubbing version Runway's
+  `eleven_voice_dubbing` uses. Runway's announcement says "29 languages", which matches ElevenLabs' "Dubbing
+  v1 ... 29 languages supported", so it's probably v1.
+- **Pricing (ElevenLabs pages, 2026-10-14).** Only music is priced: "Music Generation $0.15 Price per
+  minute" (pricing/api) gives $0.0000025 per ms of `music_length_ms`, with `multiplyBy`. A Krea music recipe
+  with no length lets "the model ... choose a length", so a row matching the empty value prices the
+  documented 3000-600000 ms range ($0.0075-$1.50). The pricing page also says "5 minute duration limit", so
+  the $1.50 high end is conservative. A shared pricing case pins that empty-value matching on both sides.
+  TTS ($0.08 / 1K chars), Voice Changer ($0.12/min of input) and Dubbing ($0.33/$0.50 per min) bill by text
+  length or input duration, which params don't give, so they're unpriced. The fal route of
+  `elevenlabs-music` stays unpriced as before (I didn't check fal's price).
+- **Generator.** `scripts/sync-krea-catalog.py` adds the four ElevenLabs `DIRECT_ROUTES` (kreaOnly empty,
+  no blockers). `direct_route_pricing` returns a complete maker entry as is when the model isn't a Google
+  image model, and returns None when `pricing` is None (TTS). `test_krea_catalog` now expects a route set
+  that depends on what's priced: these Krea audio models have no Krea price, so music has only an
+  `elevenlabs` route and TTS has no entry.
+- **Fingerprints.** `APPROVED_DUAL_ROUTE_SPLITS` covers the four non-Krea nodes. A split can now pin exact
+  `directParams` (voice_id, model_id) instead of assuming `[]`, so editing them fails the test (checked
+  by mutation).
+- **Verified facts (fetched 2026-10-14).** ElevenLabs compose / TTS convert / STS convert / legacy dubbing
+  create reference pages, models page (`eleven_multilingual_sts_v2`, `music_v1/v2/v2_5`; `music_v1`
+  "Outclassed", not deprecated), dubbing language list, pricing/api. Krea's OpenAPI (`voice_id` "ElevenLabs
+  voice ID. Available voices: Bella (hpp4J3VqNfWAUOO0d1Us)..."). Runway llms-full.txt (model ids, preset
+  voices, dubbing launch). **NOT CONFIRMED:** that every ElevenLabs account can use Krea's listed default
+  voice ids (no real calls were made); live behavior of any request.
+- **Incident:** my mutation-check backups used a shared scratchpad path (`scratchpad/mut/bak`) that another
+  lane also used. One restore wrote that lane's MiniMax file over `maker_routes_elevenlabs.py`. I rewrote
+  mine from my original content, re-ran every check, used a lane-unique temp dir from then on, and told the
+  coordinator. Its clobbered copy is saved at `scratchpad/clobbered-by-minimax-in-elevenlabs-worktree.py`.
+  After that, the `elevenlabs-music` price in `model_pricing.json` turned up as `2.6e-06`. None of my
+  mutations wrote that value, so another process probably mutated this worktree. I set it back to
+  `2.5e-06` (the catalog `--check` agrees) and re-ran every check.
+
+### Review fixes (2026-10-14, ElevenLabs lane)
+
+An independent review of `direct-elevenlabs` against the ElevenLabs, Krea and Runway pages (fetched
+2026-10-14: pricing/api, music compose, TTS convert, STS convert, legacy dubbing create, models, the Dubbing
+v1 language list, Krea's openapi.json, Runway's llms-full.txt). Model ids, endpoints, field names, the
+3000-600000 ms range, the $0.15/min Music price and the 28 Runway dubbing languages all matched.
+
+- **voice_id path injection (fixed).** The voice id is interpolated into `POST /v1/text-to-speech/{voice_id}`
+  and `/v1/speech-to-speech/{voice_id}`, and httpx resolves dot segments: a `voice_id` of `../../music`
+  became `https://api.elevenlabs.io/music`, and `a/../../../v1/voices/add` became `/v1/voices/add`, on the
+  person's key. Before this lane the Krea TTS `voice_id` only went into Krea's JSON body; now it and the new
+  Runway `voice_id` are free text in an ElevenLabs URL. `handlers/elevenlabs.py _voice_id` now refuses
+  anything but letters, digits, `_` and `-` before any call. It sits in the handler (not the translators)
+  so first-party `elevenlabs-tts` / `elevenlabs-sts` get the same check; a real ElevenLabs id always
+  passes. Test: 16 cases (4 bad ids x Krea TTS, Runway TTS, Runway STS, first-party TTS); all fail with the
+  check disabled.
+- **Route cases (added).** `route_cases.json` lacked Krea TTS on the API token, Krea music without the
+  ElevenLabs key, a cleared Runway `voice_id`, Runway STS on ElevenLabs (with its param split) and Runway
+  dubbing on Runway. Added; removing `runway-tts` from the frontend `DIRECT_REQUIRES` fails them.
+- **Source URL.** The dubbing language list was cited as a relative path; it now names
+  https://elevenlabs.io/docs/help-center/product/dubbing/which-languages-are-supported-in-dubbing.
+- **Checked and left as is.** A whitespace-only `voice_id` counts as set in `direct_block` (both sides), so
+  the run picks ElevenLabs and the translator refuses it before any call; no money moves, and changing the
+  shared rule would touch Ideogram too. A Runway STS run with only video wired and a `voice_id` set is
+  refused on the ElevenLabs route rather than sent to Runway (documented; ffmpeg extraction is the
+  follow-up). The legacy dubbing page gives no `watermark` default; the route stays unpriced either way.
+
+## 2026-10-14 — BytePlus ModelArk provider + Seedream direct routes
+
+Step 1 of 2 on `byteplus-provider` (Seedance video is step 2). Vendor facts were read from docs.byteplus.com
+on 2026-10-14 and are quoted in `backend/handlers/byteplus.py`, `backend/execution/maker_routes_byteplus.py`
+and `docs/api-guides/byteplus.md`. No live calls, keys or paid runs; tests use a fake ModelArk (httpx.MockTransport).
+
+- **Provider id reuses `bytedance`.** `KEY_PROVIDERS["BYTEPLUS_API_KEY"] = "bytedance"` (the APIProvider that already
+  existed) instead of a new `byteplus` id, so fewer shared enums change. User-facing text says "BytePlus" through the
+  key label. Key name `BYTEPLUS_API_KEY`, distinct from Volcengine's `ARK_API_KEY`.
+- **Asia Pacific only.** Base URL `https://ark.ap-southeast.bytepluses.com/api/v3`; keys and activation are per region.
+  No region setting (follow-up). EU Seedream support is NOT CONFIRMED: the model list and region-availability disagree.
+- **US terms are shown, not enforced.** The Settings row's new `caveat` quotes the Service Specific Terms ("not
+  available in the United States") and the activation step. Nebula doesn't geo-check anything.
+- **`directRoute.setup: 'fallback'`** (new, additive): with no key saved, readiness points first-time setup at the fal or
+  Krea key, not BytePlus, so a US user isn't sent to a service they can't use.
+- **New shared `size` block reason** (`node_route.py` `_size_block`/`size_fits`, mirrored in `directRoute.ts`).
+  `directRoute.size` names a size param (or width/height pair) plus min/max pixels and max aspect; a value outside them
+  keeps the run on the copy, worded in readiness. Chose "block" over "nearest valid size" because the rules say never
+  change a recipe to fit.
+- **fal shaped presets map to ModelArk's 2K-table size for that aspect** (square_hd 2048x2048, 4:3 2304x1728,
+  16:9 2848x1600, and portraits). fal doesn't publish its presets' pixel sizes, so the aspect is exact but the pixel
+  count may differ from what fal renders. `square` (512x512) stays on fal. If Justin prefers the strict reading,
+  add every shaped preset to `size.unsupported`.
+- **`auto_*` → tiers 2K/3K/4K.** `auto_3K` on model 4.5 stays on fal (4.5 has no 3K tier).
+- **num_images = N separate requests; max_images > 1 = `sequential_image_generation: auto`.** Matches fal's own
+  definitions ("separate model generations" / "up to max_images"). The price is per generated image, so the estimate
+  is a range from 1 to max_images, times num_images. The port shows the first image; every image is saved.
+- **seed.** fal `seed` is a blocker (ModelArk has none). It also blocks for model 5.0-lite, where fal itself omits it;
+  a minor edge case. Krea's `seed` has a default (1337), so it can't be a blocker; it's kreaOnly and dropped on direct.
+- **Krea `style_images` is a blocker** (per-image `strength` has no ModelArk field), so the Krea direct route is
+  text-to-image only; a wired one raises if it ever reaches the translator.
+- **Seedream 5 Pro priced as [0.045, 0.09]** because price rows can't read width x height (the price changes at 2.61 MP).
+  Its Krea price stays unmapped, so only the `bytedance` route is priced.
+- **Key never probed.** BytePlus documents no free read-only check, so `PROVIDER_CHECKS["BytePlus"]` has no URL and
+  the key stays `configured_unverified`.
+- **`QuotaExceeded` is still classified as rate_limit (retryable)** by the shared error classifier, although BytePlus
+  also uses it for an exhausted free trial. The message explains both meanings; changing the classifier was out of scope.
+- **Step 2 hooks.** `handlers/byteplus.request()` is generic (method, path, json) for
+  `POST /contents/generations/tasks` and `GET`/`DELETE /contents/generations/tasks/{id}`; `explain()` already covers
+  Seedance's USD 30 activation rule.
+- **Sync generator** (`scripts/sync-krea-catalog.py`): the overlay now emits `directRoute.size` and `setup`, validates
+  that size param names are shared fields, and `direct_route_pricing` passes a non-Google overlay price through as-is.
+- **Desktop tests** pinned 18 providers; now 19. `sidecar.test.mjs` needs `ws`, which the worktree's `desktop/` has
+  no `node_modules` for; it passed with a temporary symlink to the main checkout's, removed afterwards.
+- **Not mirrored to `.claude/skills/`**: that tree is already a stale copy of `.agents/skills/` (fal and krea differ),
+  and nothing syncs it.
+
+## 2026-10-14 — BytePlus Seedance direct routes
+
+Step 2 of the BytePlus lane. Seven fal Seedance nodes (`seedance-2-t2v`, `-2-i2v`, `-2-r2v`, `-2-fast-t2v`,
+`-2-fast-i2v`, `seedance-v1-5` for both its 1.5 and 1.0 choices, `seedance-1-0-t2v`) and six Krea copies
+(`krea-video-bytedance-seedance-1-0-pro`, `-1-0-pro-fast`, `-2`, `-2-fast`, `-2-mini`, `-2-5`) gained a direct route
+on ModelArk video tasks. `runway-video`'s Seedance options were left alone (Runway is a reseller). No live calls.
+
+- **New route reason `value` (`directRoute.accepts`).** Krea's `upscale`, `enhance_prompt` and `draft` default to
+  `False`, so they can't be `blockedBy` blockers (blockers can't have defaults); Krea offers a 9:21 ratio BytePlus
+  lacks; Krea durations are floats. `accepts` lists the values (or integer min/max) the direct route takes; any
+  other value keeps the run on the copy, worded in readiness ("doesn't take this recipe's X setting"). Added to
+  `services/node_route.py`, mirrored in `frontend/src/lib/directRoute.ts`, emitted by the sync script's overlay
+  (`directAccepts`), which checks that the keys are Krea fields and the defaults are accepted.
+- **Seed on 2.x stays on the copy.** BytePlus lists `seed`/`camera_fixed` for "Seedance 1.5 pro, 1.0 pro, 1.0 pro
+  fast" only. So `seed` is a fal-only blocker on the five 2.0 fal nodes and a Krea-only blocker on the 2.x copies,
+  and the translator never sends a seed to 2.x. On 1.x (`seedance-v1-5`) seed and camera_fixed are shared.
+- **Inputs a route check can't see raise instead of falling back.** `select_route` reads params, not wired ports, so
+  a wired `start_video`/`effects`, references on 1.0, frames mixed with references ("cannot be mixed"), too many
+  references, audio-only input on 2.0, and a local reference video (the API takes "Video URL or asset ID" only) raise
+  a clear error before any request. Same precedent as Seedream's wired `style_images`.
+- **Seedance 2.5 frame runs send ratio `adaptive`**, the only value BytePlus takes for them. How Krea treats the
+  recipe's ratio there isn't known.
+- **Task lifetime.** Every task sends `execution_expires_after: 3600` (allowed 3600–259200) and `watermark: false`.
+  Polling every 5 s, giving up after 3900 s with a DELETE. DELETE only cancels a queued task; a running one finishes
+  and is billed if it succeeds. The `video_url` (24 h) is saved as soon as the task succeeds.
+- **`krea_router` gained an optional `emit`** passed to handlers marked `takes_emit`, so Krea Seedance runs report
+  progress. Progress is a heuristic; BytePlus reports no percentage.
+- **Prices from the token formula** (model-pricing), per video, using the API's size table at 24 fps. Each row is a
+  range over the documented ratio sizes; fal `auto` duration spans the model's range; runs with reference videos are
+  unpriced (different rate plus a minimum). The adaptive-ratio assumption is that output keeps the tier's pixel count
+  (NOT CONFIRMED). The fal route stays unpriced, as before. `usage.completion_tokens` is only logged; recording actual
+  cost is a follow-up.
+- **No DIRECT_RETIRES entry for Seedance 1.5 pro**: the model list says "Retiring" with no date.
+- **Dropped on direct:** `generate_audio` on 1.0 (silent model), `enable_safety_checker` on `seedance-1-0-t2v`
+  (fal-only, like Seedream).
+- **NOT CONFIRMED:** seed on 2.x; the `mp3` token in `data:audio/mp3;base64,` (docs: `data:audio/<audio format>`);
+  the exact HTTP error envelope; adaptive output size; live behavior.
+- **Tests touched in shared suites:** `test_krea_catalog.py` (`krea_priced` also needs a `pricing` block; the Krea
+  Seedance 1.0 Pro entry has none), `test_maker_routes.py` (13 more maker-routed nodes), `test_reference_roles.py`
+  (approvals for the seven fal splits), `route_cases.json` (12 cases).
+
+### BytePlus lane: review fixes (2026-10-14)
+
+An independent review of the whole lane (`direct-maker-routes...byteplus-provider`). Vendor pages were re-read
+today from docs.byteplus.com (model-pricing, image-generation-api, create-video-generation-task-api, model-list,
+base-url-and-authentication). They're a JS app, so the MDContent markdown was pulled from each page's
+`_ROUTER_DATA`. Every price, size window, ratio list, duration range and model id the lane relies on matched. The
+pricing page's own worked examples (Seedance 2.0 4K 0.78/s, 2.5 480p 0.514 per 5 s video, 1.5 pro 0.12, 1.0 pro
+token counts) reproduce from the token formula and size tables.
+
+Fixed (each with a test that fails when the fix is reverted):
+
+- **An unsaved Seedance setting read BytePlus's default, not the node's.** `fal_to_byteplus` filled a missing
+  `duration` with `-1` and a missing `aspect_ratio` with `adaptive`. A node added by the CLI or an agent can save only
+  some params, and the price (`model_pricing.effective_params`) reads the definition defaults. So `seedance-v1-5`
+  saved with only `model` was quoted for 5 s but asked BytePlus for `-1`, which lets 1.5 pro run up to 12 s (2.4x the
+  spend gate's high bound). On `seedance-1-0-t2v` it sent `-1` (1.0 takes `[2, 12]` only) and `adaptive` (1.0
+  text-to-video "Does not support `adaptive`"), a refused request. Both translators now read a missing setting from
+  the node definition (`_setting`). The new test checks the request and that the estimate's high bound covers it.
+- **Seedream sent `sequential_image_generation: disabled` on every single-image request**, including Krea's Seedream
+  5.0 pro, which doesn't take the field ("Single image generation: **sequential_image_generation** is not
+  supported"; its supported models are 5.0 lite, 4.5 and 4.0). `disabled` is the default, so the field now goes only
+  with a batch (`max_images` > 1, fal 4.5 / 5.0 lite).
+- **fal's safety checker switched off was dropped silently.** `enable_safety_checker` defaults to true, so it can't
+  be a blocker, but ModelArk always runs its own content filter and can't honor `false`. `seedream-4-5` and
+  `seedance-1-0-t2v` gain `directRoute.accepts: {enable_safety_checker: {values: [true]}}`, so a recipe that turned
+  it off stays on fal (readiness: "BytePlus doesn't take this recipe's enable_safety_checker setting"). Approvals in
+  `test_reference_roles.py` name the exact rule; three route cases cover both nodes.
+- The BytePlus Settings row said "Seedream on ByteDance's own API" after Seedance landed; it now names both.
+
+Refuted or left as the builder decided:
+
+- Krea Seedream's `seed` stays dropped on BytePlus. Krea's spec ships a random example seed as the default and the
+  graph saves defaults, so a set seed can't be told from the default, and an `accepts` pin to 1337 would break on the
+  next spec refresh.
+- Route precedence (Krea plan, then maker key, then copy) matches on both sides and is covered by
+  `route_cases.json`; size and accepts rules were mutation-checked on both sides.
+- 2.0 4K at 4.0 per million tokens looks low but is BytePlus's figure, and its 4K example (0.78 USD/s) confirms it.
+
+Open (not fixed here):
+
+- A transient error on a Seedance poll (`GET` 5xx or network) fails the run while the task keeps running and is
+  billed. The shared `async_poll_runner` behaves the same for other providers; a retry belongs there too.
+- A Cinema scene with a Character bundle injects a seed per shot, which keeps that shot on fal. The scene's price is
+  read from the base params, which have no seed, so with a BytePlus key it's quoted at the BytePlus price while the
+  shot bills fal (unpriced). With only a BytePlus key the shot fails with a missing FAL_KEY.
+
+## 2026-10-14 — Direct maker routes, round 2: integrate the seven lanes (stage 1)
+
+Branch `direct-makers-round2` (from `direct-maker-routes` @ f3fc3447). The seven lane branches merged with
+`--no-ff`, in this order, each followed by `sync-krea-catalog.py` (108 Krea models, 63 priced), the model reference
+check and that lane's tests:
+
+| Merge | Lane | What the merge needed |
+| --- | --- | --- |
+| 1a95441d | direct-google | clean |
+| f20379a2 | direct-openai | `MAKER_ROUTED` / `APPROVED_DUAL_ROUTE_SPLITS`, route and pricing cases combined |
+| a24e1091 | direct-xai | same shared lists; xAI's generalized wired-blocker helper kept |
+| a318953d | direct-ideogram-runway | a wired Ideogram 3 `style_images` now stays on Krea through the shared wired blockers (it used to fail in the translator); the translator guard is still unit-checked. Unpriced makers' Krea entries carry `routes: {krea}`; `test_direct_route_models_price_both_routes` generalized to that |
+| 45905fa4 | direct-minimax-meshy | a wired `end_image` on Hailuo 2.3 now stays on Krea (`test_a_wired_end_image_keeps_hailuo_2_3_on_krea`) instead of being refused |
+| d62baf16 | direct-elevenlabs | new `maker_routes._blocked_reason`: the missing-key error says why the saved maker key can't take this run |
+| e5ad83ae | byteplus-provider | wired `style_images` (Seedream) and `start_video` / `reference_images` (Seedance 1.0 Pro) stay on Krea; with only the BytePlus key the run says `KREA_API_TOKEN is required: <port> ...` |
+
+Security follow-up #3 (backup collision between the ElevenLabs and MiniMax lanes) checked: both route modules match
+their lane branches exactly, `handlers/elevenlabs.py` has no MiniMax content, and no lane module imports another.
+
+### One rule set for "the maker can't take this run"
+
+The lanes had grown five mechanisms for the same idea: `blockedBy`, `accepts` (BytePlus, reason `value`),
+`blockedWhen` (Google, reason `unsupported`), `unsupported` rules with `allowed`/`match` (MiniMax) and a
+`DIRECT_BLOCKED_VALUES` constant keyed by node id (OpenAI, reason `blocked`). They're now one documented set on the
+definition's `directRoute`, read the same way by `services/node_route.py direct_block` and
+`frontend/src/lib/directRoute.ts directBlock`, checked in this order:
+
+| Rule | Shape | Reason | Example |
+| --- | --- | --- | --- |
+| (DIRECT_REQUIRES) | node id -> param | `requires` | Ideogram Reframe needs `resolution` |
+| `blockedBy` | `[param]`, set or wired | `blocked` | Krea's `width`/`height`, `style_images`, `start_video`, Seedance 2 `effects` |
+| `accepts` | `{param: {values?, min?, max?, integer?}}` | `unsupported` | MiniMax 02 `duration` 6 or 10; Seedance ratios and whole seconds; xAI 1-15 whole seconds |
+| `rejects` | `{param: [values]}` | `unsupported` | Veo 3.1 Fast `resolution` 4K; GPT Image 2's fal `square` / 16:9 presets |
+| `rejectsWhen` | `[{match: {param: value or "(set)"}, label}]` | `unsupported` | MiniMax 1080p at 10 s; xAI start image with references |
+| `size` | BytePlus's limits, as built | `size` | Seedream pixel window |
+| (DIRECT_RETIRES) | node id -> date | `retired` | gemini-2.5-flash-image from 2027-03-15 |
+
+- Values compare through one spelling, `match_value` / `matchValue` (6 == 6.0 == "6", true == "true", 0 is not
+  false). Before this, Python used `in` (6 == 6.0, but True == 1) while TS used `includes` (6 !== "6"); the two sides
+  could disagree on a saved string duration.
+- `"(set)"` means saved non-empty or wired. `wired_rule_params` / `wiredRuleParams` (generalized from the xAI lane's
+  helper) is the set of params a rule reads as set: `blockedBy` plus every `"(set)"` entry. The router
+  (`filled_ports`), the engine's cache key (`filled_ports`) and the run estimate (ports with an edge) all add a WIRED
+  marker for those through `with_wired_blockers` before asking `select_route`.
+- Every value rule has one reason, `unsupported`, with `detail` naming the param and value ("resolution 4K") or the
+  rule's label ("1080p at 10 seconds"). Readiness: "MiniMax's own API doesn't take duration 8, so it runs on Krea.
+  Change duration to run on MiniMax." The missing-key error: "KREA_API_TOKEN is required: this recipe can't run on
+  MINIMAX_API_KEY because the maker doesn't take duration 8". `size` gets its own error line ("can't render its
+  image_size exactly").
+- Generated Krea entries take the rules from the overlay (`directBlockedBy`, `directAccepts`, `directRejects`,
+  `directRejectsWhen`, `directSize`); `_route_rules` in `sync-krea-catalog.py` imports `node_route.py` and refuses an
+  overlay whose rule names a field Krea doesn't take or refuses a default. Hand-written fal nodes carry the rules in
+  `nodeDefinitions.ts` / `node_definitions.json`: GPT Image 2's fal presets moved from the constant into
+  `directRoute.rejects` on both nodes (fingerprint approval in `test_reference_roles.py`).
+- Removed: `DIRECT_BLOCKED_VALUES`, the `value` reason, `blockedWhen`, the `unsupported` rule list and its
+  `UnsupportedRule` type, `unsupportedParam`. No aliases.
+- Tests: `route_cases.json` gained optional `wired` (ports with a value) and `block` (the expected
+  `direct_block`); both sides apply them. Cases now cover requires, blockedBy saved and wired, accepts, rejects,
+  rejectsWhen by value and by `"(set)"` with a wired port, size and retired. New
+  `test_no_direct_route_rule_blocks_a_new_nodes_defaults` checks every dual-route node at its defaults (only
+  `requires` may block) and that each rule names a real param or port. Mutation-checked: `"(set)"` read as a literal,
+  `wired_rule_params` without `rejectsWhen`, `match_value` without the 6.0 -> 6 step, `rejects` ignored (Python and
+  TS), and a default added to a `rejects` list each fail tests.
+
+Decisions beyond the mechanical conversion:
+
+- **xAI video** (closes the xAI reviewer's first open item): `krea-video-xai-grok-video` gains
+  `accepts: {duration: {integer, min 1, max 15}}` (xAI: duration "Range: [1, 15]", checked by the lane reviewer
+  today) and three `rejectsWhen` rules for what xAI doesn't document on one request: an edit video with a start
+  image, an edit video with references, a start image with references. Grok Imagine 1.5 gets the duration rule.
+  These runs used to be refused on the xAI route; now they stay on Krea, saved or wired. The translator keeps its
+  guards and tests call it directly.
+- **Wired blockers fall back instead of failing**: Ideogram 3 `style_images`, Hailuo 2.3 `end_image`, Seedream
+  `style_images`, Seedance 1.0 Pro `start_video` / `reference_images` and Seedance 2 `effects` wired into a port
+  now run on Krea (or name the Krea token) instead of being refused by the maker translator. The Seedance `effects`
+  refusal case was passing for the wrong reason (`MissingCredentialError` is a `ValueError` whose message contains
+  "effects"); it moved into the wired-Krea-only test. An audit that made the blocked-key branch raise a different
+  error found no other test passing that way.
+- **OpenAI's only-key error** (OpenAI reviewer's open item): with only an OpenAI key, a fal-only preset used to
+  say "OPENAI_API_KEY or FAL_KEY is required". It now says "FAL_KEY is required: this recipe can't run on
+  OPENAI_API_KEY because the maker doesn't take image_size square"
+  (`test_a_fal_size_with_only_the_openai_key_says_why`).
+- Rules that need an input to be *absent* (Hailuo 2.3 Fast without a start image, 512P without one, H3
+  text-to-video without a ratio, xAI references over 10 s) aren't route rules; the translators still refuse them
+  before any request.
+
+Still open:
+
+- Frontend readiness and `describe_node` read saved params only, so a wired blocker still shows "runs on <maker>"
+  there (the run, the estimate and the cache key are right). Cosmetic; the readiness side would need the canvas
+  edges.
+- Gen-4.5's 672:1584 ratio (ideogram-runway open item) could now be one `directRejects` entry in the overlay; not
+  added here because it needs Runway's current ratio list re-read first.
+- Security follow-ups #1, #2, #4, #5 (Ideogram SSRF, URL-download sweep, MiniMax media size cap, ElevenLabs
+  `voice_id` path quoting) are for the next stage.
+
+### Round 2 stage 2: security (SSRF, local reads, URL injection)
+
+Fixes the background review's follow-ups #1, #2, #4 and #5 at the shared code, then sweeps every reader and
+fetcher the branch adds or touches.
+
+- **One reader for uploads, `services/media_input.py`.** `load_media(value, label, max_bytes)` is the single path
+  for a media value the backend itself reads: a data URI is decoded (refused before decoding when it can't fit);
+  an owned output (`/api/outputs/...`, or a loopback URL to one: `127.0.0.1`, `127.1`, `[::1]`, `*.localhost`) is
+  its file under OUTPUT_ROOT; any other URL goes through `public_url.fetch_public_media` (public https only, every
+  redirect hop DNS-checked, no credentials, byte cap); a local path goes through `read_local_media`
+  (`require_allowed_path`, `is_file`, a `stat` size check before any byte, then a read bounded to `max_bytes + 1`
+  in case the file grew). An `/api/outputs/` ref that escapes the outputs folder is now an error instead of being
+  treated as a plain path.
+- **#1 SSRF, Ideogram.** `handlers/ideogram._load_binary` is now `load_media` with Ideogram's 25 MB cap ("max size
+  25MB", edit-v3 reference, read today). This covers the Krea copies (`maker_routes_ideogram_runway`) and the
+  first-party Ideogram nodes. Behavior change: first-party Ideogram nodes no longer fetch `http://` URLs or any
+  private/loopback host; a public https URL, an owned output, a data URI or a local file still work.
+  `media_ref` now uses the same loopback test as the reader (it was a three-name set).
+- **#2 sweep, server-side fetches of param/port URLs.** In the branch's code only two other places fetch a
+  param URL themselves: OpenAI references (`maker_routes_openai.local_images`, already `fetch_public_media`; now
+  also resolves loopback owned outputs and caps data URIs at 50 MB) and Gemini Omni / Veo (already public-only).
+  Runway, MiniMax, BytePlus, xAI, Meshy and Google `generateContent`/Interactions pass https URLs to the maker,
+  which fetches them; that isn't a fetch from this machine. **Provider result downloads were left as the repo's
+  convention has them** (plain GET of the maker's own result URL, as Runway, Meshy, MiniMax, Veo and Ideogram
+  results already do); the public fetcher is used where the URL can be chosen by someone else (Krea answers,
+  inputs). One exception, below: the ElevenLabs dubbing redirect.
+- **#4 and #3 of the brief, local reads with caps** (every cap is the maker's documented limit where one exists,
+  read today; otherwise Nebula's own bound, said so in the code):
+  - MiniMax H3 `media_url`: image 30 MB, video 50 MB, audio 15 MB, and the whole request 64 MB once encoded
+    (video-generation-v2-create.md). Owned output URLs on loopback become data URIs (MiniMax can't fetch them).
+  - BytePlus Seedance: image 30 MB, audio 15 MB, request 64 MB (create-video-generation-task-api); Seedream
+    references 30 MB (ModelArk/1541523). The BytePlus docs are a JS app; the quotes were read from the page's
+    embedded document JSON with curl, since WebFetch and Firecrawl returned only the shell.
+  - Meshy images 20 MB ("Maximum file size: 20 MB", docs.meshy.ai image-to-3d) via `image_to_data_uri(max_bytes=)`.
+  - OpenAI edits 50 MB (`openai_image_v2` edit, `openai_image_edit`), the guide figure the OpenAI lane already
+    cited.
+  - xAI: no byte limit documented for image or video input (checked the images and videos REST references), so
+    images use the shared default and local `.mp4` clips a 100 MB Nebula bound.
+  - Gemini Omni (100 MB) and Veo (frames 20 MB, clips 100 MB) local reads now use the caps they already applied
+    to URLs.
+  - Shared helpers got a default bound so no caller reads an unbounded file: `load_local_image` and
+    `image_to_data_uri` take `max_bytes` (default 100 MB, `image_input.DEFAULT_MAX_IMAGE_BYTES`). No vision or
+    image API takes a larger image, so this only stops a wrong path to a huge file.
+  - ElevenLabs speech-to-speech reads at most 250 MB (Nebula's bound; ElevenLabs gives "Maximum segment length:
+    5 minutes", no byte limit). Dubbing now streams its file from disk to ElevenLabs instead of reading it, with
+    ElevenLabs' "3 GB per source file via the API". Isolation and STT were not changed (not routed by this branch).
+- **#5 and URL path/query injection.**
+  - ElevenLabs `voice_id` is now letters and digits only (`[A-Za-z0-9]{1,64}`; the lane allowed `_` and `-`,
+    ElevenLabs' ids are like `JBFqnCBsd6RMkjVDRZzb`) and is `quote(..., safe="")`-escaped. `output_format` was
+    appended to the query unescaped from a saved param; it must now look like `codec_sample_rate[_bitrate]` and
+    is escaped. Dubbing ids and `target_lang` are escaped in the poll and download paths. Test fixtures that used
+    `voice-test` now use `voiceTest`.
+  - Provider task ids escaped as one path segment: the shared `async_poll_runner` (Runway, Replicate), BytePlus
+    tasks, MiniMax H3 query/cancel, MiniMax file retrieve, xAI video polls, Meshy polls, Ideogram dataset/model ids.
+- **#5 credentials and memory.**
+  - The ElevenLabs dubbing download used `follow_redirects=True` with `xi-api-key`. httpx strips only
+    `Authorization` on a cross-origin redirect (checked in the installed httpx `_redirect_headers`), so a custom
+    key header would follow a redirect to another host. A redirect within `api.elevenlabs.io` keeps the key; one
+    elsewhere is fetched without it through the public fetcher (1 GB bound).
+  - `services/output.save_video_from_url` streams to disk in chunks (Runway Ruby's 4K ProRes was read whole into
+    memory) and removes a partial file when the download fails. The shared test mock gained `client.stream`.
+  - No API key appears in a URL, log line or error message in the swept code (grep of every touched module).
+- **Tests:** `tests/test_media_input_security.py` (44): private IP, `127.1`, `0.0.0.0`, `[::1]`, metadata IP, DNS to
+  a private address, http scheme, redirect to private, no credentials on public fetch, remote/local/data caps
+  (base64 and percent-encoded), a file that grows after the check, owned outputs local (ref and loopback URLs),
+  escaping refs, the Krea Ideogram route refusing before Ideogram, file policy before bytes on the new readers,
+  MiniMax per-kind and request caps, BytePlus caps and loopback videos, xAI/OpenAI/Google caps, voice_id traversal
+  (`../../music`, `a/b`, `%2F`, `?`, `-`, `_`, space), output_format injection, dubbing redirect without the key,
+  task-id escaping, streamed video download and no partial file. **Mutation-checked:** 28 mutations, one per
+  behavior (each check removed, loosened or reverted to the old code); every one made a test fail. Five survived
+  the first pass because two layers covered the same behavior (stat check plus bounded read, pre/post decode
+  checks, an error before any partial file existed); tests were added for each layer until all failed.
+
+- `test_node_readiness.py` pins the direct imports of `services.output` (the paid-API walk stops there). It now
+  also imports `services.image_input` and `services.media_input`; neither calls a provider (media_input's only
+  network use is the credential-free public https fetch), so the pin was updated with that reason.
+
+Not done / for Justin:
+
+- Veo and Gemini Omni downloads of Google result files send `x-goog-api-key` with `follow_redirects=True`, the
+  same httpx header behavior as the dubbing fix. The redirect target is Google's own storage, and changing it
+  can't be checked without a live run, so it is flagged, not changed.
+- Runway's ephemeral upload POSTs the file to the `uploadUrl` Runway returns (no key sent); trusted as Runway's.
+- xAI and the Interactions API document no input byte limit; the bounds there are Nebula's.
+
+### Round 2 stage 3: follow-ups from the lane reviews
+
+**1. Poll errors no longer abandon a billed task.** New `backend/execution/poll_retry.py`, used by every async
+video poller on the branch:
+
+- `poll_request(send)` retries a transport error (connect/read/write failure, timeout, protocol error) or an HTTP
+  5xx after 2, 4, 8 and 16 s (`POLL_RETRY_DELAYS`, 30 s in all). A 4xx is never retried, 429 included: the brief
+  said so, and it is the maker's answer, not an outage. A 5xx that outlasts the retries is returned, so each
+  handler's own "poll failed (503): ..." message still reports it; a transport error is re-raised.
+- `UpstreamTask(cancel, schedule)` wraps each poll loop. If the loop exits with any exception before the maker
+  reported a terminal state (a cancelled run, a poll error after the retries, a 4xx, the poll limit), it schedules
+  the maker's cancel on a detached task. A task that succeeded or failed on its own isn't cancelled. `schedule` is
+  passed in so each handler's module-level `schedule_detached_cancel` stays the patch point its tests use.
+- Wired into: `execution/async_poll_runner.poll_until_terminal` (Runway incl. Ruby and the Krea Gen-4.5 route,
+  Replicate), `handlers/byteplus.run_video_task` (DELETE; replaces its own timeout cancel), `handlers/minimax_v2`
+  (DELETE), `handlers/grok_video.run_xai_video` (retry only: xAI documents no cancel), `handlers/veo` on the
+  Gemini API and on Vertex (`:cancel`), `handlers/gemini_omni` (interaction poll with `/cancel`, file-activation
+  poll with retry only). They were separate loops with the same weakness, so the fix is a shared helper rather
+  than one shared loop.
+- Not changed: Meshy (3D, not video; its DELETE removes the task and Meshy doesn't say whether that stops a running
+  one) and Hailuo v1 (`handlers/minimax.py`, not added on this branch).
+- Tests: `tests/test_poll_retry.py` (29): the helper (5xx/network retried, 4xx incl. 429 not, bounded, other errors
+  and cancellation not retried, BytePlusError 5xx only), the guard, and per poller a transient-then-success run and a
+  give-up run that cancels (runner: 4xx, persistent 5xx, persistent network, poll limit; BytePlus: same plus a task
+  that failed on its own isn't DELETEd). Mutation-checked: no retry on responses, no retry on exceptions, 4xx
+  treated as transient, guard never cancels, guard cancels after a terminal state, and in each of the seven call
+  sites the retry or the cancel removed; every one fails a test. One equivalent mutant: not marking `finished` on
+  BytePlus success survives because the success path returns without an exception.
+
+**2. Runs the maker refuses stay on the copy.**
+
+- New rejectsWhen value `"(unset)"` (`node_route.NOT_SET`, `directRoute.ts NOT_SET`): the param is neither saved
+  (non-blank) nor wired. `wired_rule_params` / `wiredRuleParams` now include `"(unset)"` entries so a wired port
+  isn't read as unset. `sync-krea-catalog.py _route_rules` refuses an `"(unset)"` rule whose field has no default
+  only if the whole rule matches the defaults, as before.
+- Runway Gen-4.5 (Krea copy): `directRejects {aspect_ratio: [672:1584]}` and four `directRejectsWhen` rules,
+  `{aspect_ratio: R, start_image: "(unset)"}` for 1104:832, 832:1104, 960:960, 1584:672 ("text-to-video at R").
+  Vendor check today: Runway's official SDK (sdk-python `image_to_video_create_params.py`, gen4.5) lists ratio
+  `"1280:720", "720:1280", "1104:832", "960:960", "832:1104", "1584:672"` and text-to-video `"1280:720",
+  "720:1280"`. **Conflict:** Runway's guide (llms-full.txt, "Aspect ratios and auto-cropping") says "Gen-4.5
+  Image-to-Video supports ... Portrait `720:1280` `832:1104` `672:1584`". The request schema decides what the API
+  validates, so 672:1584 stays on Krea; if Runway adds it to the schema, drop the `directRejects` entry and add the
+  ratio to `_GEN4_VIDEO_RATIOS` in `handlers/runway.py`.
+- xAI (fractional duration; start image plus references) and Ideogram 3 wired style images were already rules after
+  stage 1. Added cases for what wasn't covered: saved start image + saved references, both wired, Grok 1.5 at
+  6.5 s, 6.5 s with only the xAI key (no route), wired style images with only the Ideogram key.
+
+**3. ElevenLabs.**
+
+- Blank means unset, in the shared value check on both sides: `_has_value` / `hasValue` treat a whitespace-only
+  string as unset, and `DIRECT_REQUIRES` now goes through it (it used plain truthiness, which counted `"  "` as
+  set). This also covers Ideogram Reframe's `resolution` (the reviewer's worry): a blank resolution now falls to the
+  fal copy (or names FAL_KEY) instead of reaching the Ideogram translator and failing there. No other lane's tests
+  changed. `_effective` already fell back to the default for a blank value, and now does for whitespace too.
+- Runway STS with only the video wired now stays on Runway: `runway-sts` gets `directRoute.rejectsWhen [{video:
+  "(set)", audio: "(unset)"}]` ("a video input without an audio input"). ElevenLabs' speech-to-speech body
+  (api-reference/speech-to-speech/convert, read today) has one file field, `audio`, "The audio file which holds the
+  content and emotion that will control the generated speech"; no video. With only the ElevenLabs key the run
+  names `RUNWAY_API_KEY` and the reason. The translator keeps its refusal as a guard (unit-tested). Fingerprint
+  approval added in `test_reference_roles.py`.
+
+**4. Cinema scene with a Character bundle on BytePlus.** Chose to keep the shots on BytePlus: the handler no
+longer injects the bundle seed when the base would run on the maker's direct route without it and a seed would
+move it to the copy (`_seed_leaves_maker_route`, which asks `select_route` with the shot's own params and inputs).
+Why this rather than pricing the fal route: the estimate (`cinema_scene_base`, no seed) then matches what runs; a
+person with only a BytePlus key gets images instead of "FAL_KEY is required" on every shot; and BytePlus documents
+no seed for Seedream 4.5, so the seed could not have been honored there anyway. Identity still comes from the
+bundle's trait string and reference views. With a fal key only, the seed is injected as before. The variations
+path's explicit `_seedOverride` is still applied (it is an explicit seeded request); such a shot runs on fal, and
+with only a BytePlus key it still needs FAL_KEY. Tests in `test_cinema_scene.py`, mutation-checked.
+
+**5. Skill mirrors.** `.claude/skills/krea/SKILL.md` is not a mirror of `.agents/skills/krea/SKILL.md`: on main
+they were already different documents (the `.claude` one is the older Krea 2 skill), as are fal, gemini,
+gpt-image-2, ideogram, meshy, openai and runway. The one section they share, "Maker routes (MiniMax and Meshy)",
+had drifted: the `.claude` copy lacked the ElevenLabs subsection. It now matches, plus a pointer to the `.agents`
+skill for the other maker routes.
+
+Docs updated: `docs/api-guides/runway.md`, `docs/api-guides/elevenlabs.md`, `docs/api-guides/byteplus.md`,
+`.agents/skills/krea/SKILL.md`, `.agents/skills/byteplus/SKILL.md`.
+
+### Round 2 stage 4: final review
+
+Independent pass over `git diff direct-maker-routes...HEAD`. What was checked, what changed, what was left.
+
+**Checked, no change needed**
+
+- Every lane's routes survived the merge. A script compared each lane branch's dual-route nodes with HEAD in
+  `node_definitions.json` and `nodeDefinitions.ts` (directKeyName, envKeyName order `[maker, copy]`, translation,
+  model, param groups, ports): 72 dual-route nodes on HEAD, none lost, none unclaimed, JSON and TS identical. The
+  only differences from the lane branches are stage 1/3's rule conversions.
+- Python and TS route rules agree. A generated property test (10,800 random cases over every dual-route node:
+  saved values incl. blank strings, `"[]"`, numeric strings, `_kreaAuth`, wired ports, key sets incl. blank keys)
+  gave identical `select_route`, `direct_block` and `with_wired_blockers` results on both sides. A mutant TS
+  `hasValue` without the trim was caught. The temporary test file was deleted; `route_cases.json` stays the
+  checked-in contract.
+- Approvals in `test_reference_roles.py` are exact values (`_remove_approved_fields` asserts equality), not broad.
+  No new backend test is assertion-free (AST scan of the branch's new tests).
+- Security fixes from stage 2 still hold: encoded traversal (`%2e%2e`, `..%2f`) and `[::1]` refused in
+  `media_input`; ElevenLabs `voice_id` validated and quoted on every route; Runway Ruby local reads capped and
+  path-checked.
+- Prices spot-checked live today against the makers' own pages: xAI (image, image-2.0, video, video-1.5, input
+  image/video surcharges), MiniMax (Hailuo-02, 2.3, 2.3-Fast, H3), Runway (Gen-4.5 12 credits/s, gen4_image 5/8,
+  Ruby 20/40, $0.01/credit), ElevenLabs Music ($0.15/min), Vertex Veo 3.1 / Fast / Lite, BytePlus (Seedream 4.5
+  $0.04, 5.0 lite $0.035, 4.0 $0.03, Seedance 2.0 rate). All match. Ideogram's pricing page renders prices with
+  JavaScript only, so Ideogram was **not** re-verified this stage. High bounds include per-input surcharges, and a
+  wired priced param leaves the node unpriced, so the spend gate reads the high bound.
+- Translator refusals for limits of the model itself (Hailuo 2.3 Fast with no start image, 512P, Veo references at
+  4/6 s or 4K or with frames, Seedance end frame without a start frame, Seedance 2.0 audio-only references, xAI
+  reference-to-video over 10 s) were left as refusals, not turned into route rules: the copy runs the same maker
+  model, so moving the run there would fail there too, and refusing before any request costs nothing.
+- Ideogram 3 / 2a and Runway gen4 image snap a free width/height to the nearest supported ratio. Not a regression
+  (the makers only take fixed shapes, and Krea has to do the same), but it is a silent change; listed for Justin.
+
+**Fixed**
+
+1. *Wired ports on the canvas.* The run-status line under a node and the Inspector's route-specific params read
+   saved params only, so a wired blocker (for example Grok Video 1.5's `start_video`, Seedream 4's style images)
+   showed "xAI" or "Seed" while the run went to Krea. New `nodeWiredPorts(nodeId, edges)` in `lib/runScope.ts`;
+   `NodeRunStatus` takes `nodeId`, subscribes to the edges and passes `withWiredBlockers` params to
+   `runRouteProvider`; `ModelNode` and `DynamicNode` pass it; `Inspector` does the same for
+   `paramDefinitionsForRun`. Library, Create and connection-popup badges have no wires, and backend
+   `describe_node` is catalog-level, so they stay as they are. Two tests, both fail with the change reverted.
+2. *Grok Imagine (fal copies) silently returned JPEG for a PNG or WebP request.* xAI's image REST reference has no
+   format field ("image/jpeg unless the requested quality produces PNG"), and the translator dropped
+   `output_format`. `grok-imagine-image` and `grok-imagine-image-edit` get `directRoute.accepts {output_format:
+   [jpeg]}`, so PNG/WebP stays on fal (or names FAL_KEY with only the xAI key). The old xAI test asserted the
+   drop; it now uses jpeg, and a new parametrized test covers png/webp. Fingerprint approvals added.
+3. *Krea Seedream copies silently dropped a seed.* BytePlus documents no seed for Seedream 4.0 / 4.5 / 5.0, and
+   the translator ignored it. `sync-krea-catalog.py _byteplus_route` now emits `directAccepts {seed: [1337]}`
+   (Krea's default, `KREA_SEEDREAM_DEFAULT_SEED`; the generator refuses if Krea's default changes), so any other
+   seed keeps the run on Krea, where it is honored. Regenerated.
+4. `route_cases.json`: five cases for the two new rules (fallback with block detail, direct, only-maker-key unset,
+   `1337.0` counts as the default). Mutation-checked on both sides.
+5. `docs/api-guides/README.md` provider rows for BytePlus, ElevenLabs and xAI were stale (node counts and
+   coverage); refreshed. Also updated: `docs/api-guides/xai.md`, `docs/api-guides/byteplus.md`, the xAI and
+   BytePlus skills (`.agents` and `.claude` for xAI).
+
+**Left open**
+
+- Older nodes outside this diff (for example `nano-banana-fal` seed/output_format, `veo-3` negative_prompt/seed,
+  Meshy texture_prompt in image mode) still drop copy-only params on the maker route. Same class as fixes 2 and 3;
+  not changed here because they predate the branch and each needs its own vendor check.
+- A saved `"[]"` string counts as set for a `"(set)"` rule on both sides (consistent, but a cleared list saved as
+  that string would keep a run on the copy).
+- Carried from earlier stages: Veo / Omni result downloads send `x-goog-api-key` with `follow_redirects=True`;
+  Gen-4.5 672:1584 schema-vs-guide conflict; no live BytePlus smoke test (US, region, activation); Veo 3.1 GA
+  retire dates; NB 2.1 costs more on Google than on Krea; OpenAI 2.5 price rows; MiniMax Mainland host; Cinema
+  `_seedOverride` variations still need FAL_KEY with only a BytePlus key. No live provider calls were made.
+
+## Round 2: maker size notes (2026-10-14)
+
+Two approved changes: Ideogram 3's maker route sends the nearest exact `resolution`, and no maker route
+changes a requested size without saying so.
+
+**Audit: which maker routes change a size or shape** (every `backend/execution/maker_routes*.py` translator)
+
+| Route | Before | Now |
+| --- | --- | --- |
+| Krea Ideogram 3 (`krea-ideogram-3`) | width/height -> nearest of 15 `aspect_ratio`s | nearest of Ideogram 3's 69 `resolution`s, sent alone (never with aspect_ratio); note when it differs |
+| Krea Ideogram 2a Turbo (`krea-ideogram-2a`) | nearest aspect ratio, silent | same ratio rule; note when the shape differs; run note gives the pixels Ideogram picked |
+| Krea Runway Gen-4 Image (`krea-runway-gen4-image`) | nearest gen4_image ratio, silent | same rule; note when the size differs; run note gives the size made |
+| Krea Seedance 2.5 (`krea-seedance`, model `dreamina-seedance-2-5-260628`), start-image runs | `aspect_ratio` replaced by `adaptive`, silent (found by the verify lane) | same request (BytePlus: frame runs "only support adaptive"); note under Aspect ratio before the run, run note after, agent note via `rule_note` |
+| All others | | no snapping found: OpenAI (fal presets map exactly or stay on fal; Krea aspect x resolution is a table, the ratio kept exactly), xAI image/video (values pass as is), Google (Nano Banana width/height keep runs on Krea; Veo/Omni pass ratios), BytePlus Seedream (exact WxH or stays on the copy; fal shaped presets keep the shape), Seedance 1.x/2.x and MiniMax (ratios pass or the run stays on the copy), Runway Gen-4.5 (ratio checked, never snapped), Ideogram native nodes (take Ideogram's own `resolution`) |
+
+**Decisions**
+
+- One list place per side. `backend/services/maker_sizes.py` (stdlib) owns the three lists and the rule;
+  `handlers/ideogram.py` and `handlers/runway.py` now import their lists from it. `sync-krea-catalog.py`
+  copies each into the node's `directRoute.snap`, so the frontend (`frontend/src/lib/makerSizes.ts`) reads the
+  same values from the catalog. `backend/tests/fixtures/maker_size_cases.json` is read by both test suites.
+- The rule is the old one (closest shape, then closest pixel count), with an explicit tolerance loop instead of
+  `round(..., 9)` so Python and TS tie-break the same way. An exact entry always wins, so 1024x1024 and 1280x768
+  reach Ideogram 3 unchanged.
+- Ideogram 2a takes a shape, not a size, and its docs give no pixels per ratio. The Inspector notes only a
+  changed shape (1600x900 -> 16:9 says nothing before the run); the run note then reports the pixels it made.
+- After a run: the repo had no per-run note field. The closest existing mechanisms were the executed event's
+  metadata beside outputs (`variant`, via a ContextVar) and the run manifest (`/api/outputs/<rel>/meta`). Both
+  were extended rather than adding a parallel channel: `models/events.py` `execution_notes` + `add_run_note`,
+  `ExecutedEvent.notes`, cache entries keep notes for replays, manifest records and `/meta` carry `notes`,
+  CLI/MCP run results carry `notes`, and the Inspector shows "Last run" notes (`NodeData.runNotes`, saved
+  with results, cleared when the next run starts). Output ports were not used: an undeclared output handle
+  fails graph import.
+- The made size is read from the saved file with Pillow (truth for all three makers; Runway returns no size).
+  An unreadable file records nothing rather than a guess.
+- Krea/fal copy runs never get a note: how the copy sizes isn't known.
+- Agents: `describe_node` adds `sizeNote`; `nebula info` prints a SIZE line.
+
+**Left open**
+
+- Ideogram 2a at an exact shape shows no pre-run note even though Ideogram picks the pixels (2048x2048 -> 1x1).
+  Showing one would add noise to the default 1024x1024; the run note covers it.
+- Gen-4.5's fractional duration is still rounded to whole seconds on the Runway route (a duration, not a size;
+  outside this change).
+
+**Verify lane (2026-10-14)**
+
+- Re-read the makers' pages: Ideogram 3's request `resolution` is typed `ResolutionV3` on the v1 generate-v3
+  page (the same 69 values, same order, as `IDEOGRAM_V3_RESOLUTIONS`); the 2a page's `aspect_ratio` enum is the
+  15 values plus `auto`, and 2a has no request `resolution` field; Runway's API reference lists the same 16
+  `gen4_image` ratios in the same order. Field names match (`resolution`, `aspect_ratio`, `ratio`).
+- Missed route: Seedance 2.5 on BytePlus replaces the node's aspect ratio with `adaptive` on a start-image run.
+  That changes the requested shape without a fixed list, so it got its own rule, `START_SHAPES` in
+  `services/maker_sizes.py`, copied to `directRoute.startShape` by `sync-krea-catalog.py` and read by
+  `lib/makerSizes.ts`. The translator adds the run note at request time (a video's pixel size isn't read back).
+  The shared fixture gained `startShapeCases`.
+- Fixture cases added where the width matches but the height doesn't (1024x1000, 1080x1100) and for decimal
+  sizes; a mutation that compared only the width passed every earlier case.
+- Python/TS parity: 9,400 random and edge requests (integers, two-decimal floats, scaled and swapped list
+  entries) gave the same value and note on both sides. The temp test was deleted.
+- Not changed: the rule is shape first, so 1920x1100 on Runway goes to 1360x768 rather than 1920x1080, a much
+  smaller image for a closer shape. That's the old rule, and the note now says it out loud.
+
 ## Image Compare autosave fix (2026-10-14)
 
 - **Root cause:** the engine writes every result into the node's `outputs`, the frontend saves those outputs with

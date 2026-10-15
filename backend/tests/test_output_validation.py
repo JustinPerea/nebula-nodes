@@ -83,12 +83,23 @@ def _make_audio_only_mp4(path: Path) -> Path:
 
 
 def _mock_http_download(payload: bytes):
-    """Patch httpx.AsyncClient so save_*_from_url downloads *payload*."""
+    """Patch httpx.AsyncClient so save_*_from_url downloads *payload*
+    (``client.get`` for meshes, ``client.stream`` for videos)."""
     mock_client = AsyncMock()
     mock_response = MagicMock()
     mock_response.content = payload
     mock_response.raise_for_status = MagicMock()
+
+    async def aiter_bytes():
+        for start in range(0, len(payload), 7):
+            yield payload[start:start + 7]
+
+    mock_response.aiter_bytes = aiter_bytes
+    stream = MagicMock()
+    stream.__aenter__ = AsyncMock(return_value=mock_response)
+    stream.__aexit__ = AsyncMock(return_value=False)
     mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.stream = MagicMock(return_value=stream)
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=False)
     return patch("httpx.AsyncClient", return_value=mock_client)

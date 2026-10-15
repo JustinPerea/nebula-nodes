@@ -67,12 +67,8 @@ NANO_BANANA_FAL_MODEL_ENDPOINTS: dict[str, str] = {
     "gemini-3-pro-image": "fal-ai/gemini-3-pro-image-preview",
 }
 
-# identity-edit exposes UI-friendly enums; fal-ai/nano-banana-2/edit speaks its
-# own dialect (resolution 1K/2K/4K, thinking_level minimal/high — verified
-# against fal.ai/models/fal-ai/nano-banana-2/edit). medium has no endpoint
-# equivalent and rounds up to high (some reasoning, not none).
-IDENTITY_EDIT_RESOLUTION_MAP: dict[str, str] = {"1024": "1K", "2048": "2K"}
-IDENTITY_EDIT_THINKING_MAP: dict[str, str] = {"low": "minimal", "medium": "high", "high": "high"}
+# identity-edit's UI enums -> fal's and Google's dialect live with its routes
+# (execution/maker_routes_google.py IDENTITY_EDIT_*_MAP).
 
 HUNYUAN3D_PROMPT_MAX_CHARS = 1024
 
@@ -333,9 +329,14 @@ def get_handler_registry(
     ],
 ]:
     registry = dict(SYNC_HANDLERS)
+    from execution import maker_routes, maker_routes_google
     from handlers.krea_gateway import catalog_models, handle_krea_gateway
     for definition_id in catalog_models():
-        registry[definition_id] = partial(handle_krea_gateway, emit=emit)
+        # Krea copies with a maker route (scripts/sync-krea-catalog.py
+        # DIRECT_ROUTES) run on the maker's API when its key is set, unless
+        # the node bills the Krea plan; otherwise the Krea gateway.
+        gateway = partial(handle_krea_gateway, emit=emit)
+        registry[definition_id] = maker_routes.krea_router(definition_id, gateway, emit=emit) or gateway
     from handlers.krea import (
         handle_krea_library_manage, handle_krea_moodboard_create, handle_krea_moodboard_search,
     )
@@ -488,21 +489,6 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/kling-video/v2.1/pro/image-to-video")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
-        async def _sora2_handler(
-            node: GraphNode,
-            inputs: dict[str, PortValueDict],
-            api_keys: dict[str, str],
-        ) -> dict[str, Any]:
-            # Route to Standard or Pro endpoint based on `model` param.
-            # Pop `model` so FAL doesn't receive an unknown value (FAL's inner model key uses different values).
-            tier = node.params.get("model", "standard")
-            if str(tier).lower() == "pro":
-                endpoint_id = "fal-ai/sora-2/text-to-video/pro"
-            else:
-                endpoint_id = "fal-ai/sora-2/text-to-video"
-            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
-            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
-
         async def _veo3_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -653,29 +639,37 @@ def get_handler_registry(
             routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=internal_params)
             return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
 
-        async def _meshy_text_to_3d_handler(
-            node: GraphNode,
-            inputs: dict[str, PortValueDict],
-            api_keys: dict[str, str],
-        ) -> dict[str, Any]:
-            # Prefer direct Meshy API, fall back to FAL
-            if api_keys.get("MESHY_API_KEY"):
-                from handlers.meshy import handle_meshy_text_to_3d
-                return await handle_meshy_text_to_3d(node, inputs, api_keys, emit=emit)
-            node.params.setdefault("endpoint_id", "fal-ai/meshy/v6/text-to-3d")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+        def _fal_endpoint(endpoint_id: str):
+            """A fallback that sends the route-filtered copy to one fal endpoint."""
+            async def _run(node, inputs, api_keys):
+                return await handle_fal_universal(
+                    _fal_wrapper_node(node, endpoint_id), inputs, api_keys, emit=emit)
+            return _run
 
-        async def _meshy_image_to_3d_handler(
-            node: GraphNode,
-            inputs: dict[str, PortValueDict],
-            api_keys: dict[str, str],
-        ) -> dict[str, Any]:
-            # Prefer direct Meshy API, fall back to FAL
-            if api_keys.get("MESHY_API_KEY"):
-                from handlers.meshy import handle_meshy_image_to_3d
-                return await handle_meshy_image_to_3d(node, inputs, api_keys, emit=emit)
-            node.params.setdefault("endpoint_id", "fal-ai/meshy/v6/image-to-3d")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
+        async def _meshy_text_to_3d_fal(node, inputs, api_keys):
+            # fal takes smart-topology too, with Meshy's limits; refuse before it bills.
+            from handlers.meshy import check_smart_topology
+            check_smart_topology(node.params)
+            return await handle_fal_universal(
+                _fal_wrapper_node(node, "fal-ai/meshy/v6/text-to-3d"), inputs, api_keys, emit=emit)
+
+        # Prefer the direct Meshy API, fall back to fal. The router drops each
+        # route's foreign params (fal used to receive ai_model, hd_texture,
+        # remove_lighting and target_formats) and never mutates the node.
+        async def _meshy_text_to_3d_direct(node, inputs, api_keys):
+            from handlers.meshy import handle_meshy_text_to_3d
+            return await handle_meshy_text_to_3d(node, inputs, api_keys, emit=emit)
+
+        async def _meshy_image_to_3d_direct(node, inputs, api_keys):
+            from handlers.meshy import handle_meshy_image_to_3d
+            return await handle_meshy_image_to_3d(node, inputs, api_keys, emit=emit)
+
+        _meshy_text_to_3d_handler = maker_routes.dual_route(
+            direct=_meshy_text_to_3d_direct, fallback=_meshy_text_to_3d_fal,
+        )
+        _meshy_image_to_3d_handler = maker_routes.dual_route(
+            direct=_meshy_image_to_3d_direct, fallback=_fal_endpoint("fal-ai/meshy/v6/image-to-3d"),
+        )
 
         async def _meshy_multi_image_to_3d_handler(
             node: GraphNode,
@@ -1038,7 +1032,6 @@ def get_handler_registry(
         registry["nous-portal-universal"] = _nous_portal_handler
         registry["flux-1-1-ultra"] = _flux_ultra_handler
         registry["kling-v2-1"] = _kling_handler
-        registry["sora-2"] = _sora2_handler
         registry["veo-3"] = _veo3_handler
         registry["gemini-omni-flash"] = _gemini_omni_flash_handler
         registry["flux-schnell"] = _flux_schnell_handler
@@ -1226,8 +1219,15 @@ def get_handler_registry(
         registry["kling-o3-ref"] = _kling_o3_ref_handler
         registry["kling-motion"] = _kling_motion_handler
         registry["topaz-video-upscale"] = _topaz_video_upscale_handler
-        registry["grok-imagine-image"] = _grok_imagine_image_handler
-        registry["grok-imagine-image-edit"] = _grok_imagine_image_edit_handler
+        # Grok Imagine's fal copies run on xAI's own API when XAI_API_KEY is
+        # set (execution/maker_routes_xai.py translates fal's params), else on fal.
+        from execution import maker_routes_xai
+        for _grok_id, _grok_fal in (("grok-imagine-image", _grok_imagine_image_handler),
+                                    ("grok-imagine-image-edit", _grok_imagine_image_edit_handler)):
+            registry[_grok_id] = maker_routes.dual_route(
+                direct=maker_routes_xai.xai_image_for_fal, fallback=_grok_fal,
+                translate=maker_routes_xai.fal_grok_image_to_xai,
+            )
         registry["veo-3-flf"] = _veo3_flf_handler
         registry["ltx-2-3"] = _ltx_23_handler
         registry["grok-imagine-video"] = _grok_video_handler
@@ -1355,14 +1355,6 @@ def get_handler_registry(
                 routed_inputs.pop("images", None)
             return await handle_fal_universal(routed_node, routed_inputs, api_keys, emit=emit)
 
-        async def _sora2_i2v_handler(
-            node: GraphNode,
-            inputs: dict[str, PortValueDict],
-            api_keys: dict[str, str],
-        ) -> dict[str, Any]:
-            node.params.setdefault("endpoint_id", "fal-ai/sora-2/image-to-video")
-            return await handle_fal_universal(node, inputs, api_keys, emit=emit)
-
         async def _esrgan_upscale_handler(
             node: GraphNode,
             inputs: dict[str, PortValueDict],
@@ -1415,88 +1407,54 @@ def get_handler_registry(
             node.params.setdefault("endpoint_id", "fal-ai/ltx-2.3/text-to-video/fast")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
 
-        async def _nano_banana_fal_handler(node, inputs, api_keys):
-            routed_node = _nano_banana_fal_node(node, edit=False)
-            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+        def _nano_banana_on_fal(*, edit: bool):
+            async def _run(node, inputs, api_keys):
+                routed_node = _nano_banana_fal_node(node, edit=edit)
+                return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+            return _run
 
-        async def _nano_banana_fal_edit_handler(node, inputs, api_keys):
-            routed_node = _nano_banana_fal_node(node, edit=True)
-            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
+        # Nano Banana's fal copies run on the Gemini API when GOOGLE_API_KEY is
+        # set (execution/maker_routes.py translates fal's params), else on fal.
+        _nano_banana_fal_handler = maker_routes.dual_route(
+            direct=maker_routes.google_nano_banana, fallback=_nano_banana_on_fal(edit=False),
+            translate=maker_routes.nano_banana_fal_to_google,
+        )
+        _nano_banana_fal_edit_handler = maker_routes.dual_route(
+            direct=maker_routes.google_nano_banana, fallback=_nano_banana_on_fal(edit=True),
+            translate=maker_routes.nano_banana_fal_to_google,
+        )
 
-        async def _identity_edit_handler(node, inputs, api_keys):
+        async def _identity_edit_on_fal(node, inputs, api_keys):
             # identity-edit = nano-banana-2/edit + optional Character-bundle
-            # identity preservation. With a Character wired in, the verbatim
-            # trait string leads the prompt and the bundle's reference views are
-            # injected as additional images behind the base (edit-target) image.
-            # Without one, this is a standard nano-banana edit.
-            from cinema.identity import expand_character, max_refs_for
-
-            image_input = inputs.get("image")
-            base_image = str(image_input.value).strip() if image_input and image_input.value else ""
-            if not base_image:
-                raise ValueError("identity-edit requires a base image on the 'image' port")
-
-            mask_input = inputs.get("mask")
-            if mask_input and mask_input.value:
-                # Retain old graph ports/edges, but never bill an unsupported
-                # masked edit or quietly generate a different, unmasked image.
-                raise ValueError(
-                    "Identity Edit does not support masks on the Nano Banana 2 endpoint; "
-                    "disconnect Mask before running this node"
-                )
-
-            prompt_input = inputs.get("prompt")
-            base_prompt = str(prompt_input.value) if prompt_input and prompt_input.value else ""
-
-            character_input = inputs.get("character")
-            bundle = character_input.value if character_input and character_input.value else None
-
-            params = dict(node.params)
-            # The exact nano-banana-2/edit schema has no native identity
-            # adherence field. Keep saved strength metadata on the source node,
-            # but never translate it into an invented provider parameter.
-            # Also strip input_fidelity from older saved recipes: that field is
-            # supported by other image-edit APIs, not this endpoint.
-            params.pop("identity_strength", None)
-            params.pop("input_fidelity", None)
-
+            # identity preservation (maker_routes_google.identity_edit_request
+            # folds the bundle and refuses masks, the same on both routes).
             # handle_fal_universal maps the multi-image `images` port to the
-            # endpoint's required `image_urls`; the singular `image` port would
-            # emit `image_url`, which nano-banana-2/edit does not accept. The
-            # `character` port is consumed here, never forwarded.
-            routed_inputs = dict(inputs)
-            routed_inputs.pop("image", None)
-            routed_inputs.pop("character", None)
-
-            if bundle:
-                expanded = expand_character(
-                    bundle,
-                    base_prompt,
-                    [base_image],
-                    model_max_refs=max_refs_for("nano-banana-fal-edit"),
-                )
-                # expand_character appends override_refs last — move the edit
-                # target back to the front, identity refs (stored order) after.
-                image_urls = [base_image] + list(expanded["image_urls"])[:-1]
-                routed_inputs["prompt"] = PortValueDict(type="Text", value=expanded["prompt"])
-
-                if expanded.get("seed") is not None and not params.get("seed"):
-                    params["seed"] = expanded["seed"]
-            else:
-                image_urls = [base_image]
-
-            routed_inputs["images"] = PortValueDict(type="Image", value=image_urls)
-
-            resolution = str(params.get("resolution") or "")
-            if resolution in IDENTITY_EDIT_RESOLUTION_MAP:
-                params["resolution"] = IDENTITY_EDIT_RESOLUTION_MAP[resolution]
-            thinking = str(params.get("thinking_level") or "")
-            if thinking in IDENTITY_EDIT_THINKING_MAP:
-                params["thinking_level"] = IDENTITY_EDIT_THINKING_MAP[thinking]
-
+            # endpoint's required `image_urls`.
+            params, routed_inputs = maker_routes_google.identity_edit_request(node, inputs)
             params["endpoint_id"] = "fal-ai/nano-banana-2/edit"
             routed_node = node.model_copy(update={"params": params})
             return await handle_fal_universal(routed_node, routed_inputs, api_keys, emit=emit)
+
+        # On the Gemini API (gemini-3.1-flash-image, the model fal's endpoint
+        # runs) when GOOGLE_API_KEY is set, else on fal. A node `seed` isn't a
+        # declared param (route filtering would drop it), but a saved one has
+        # always beaten the Character bundle's seed on fal, so it is carried
+        # to the fal route only; the Gemini API documents no image seed.
+        async def _identity_edit_handler(node, inputs, api_keys):
+            seed = node.params.get("seed")
+
+            async def _on_fal(routed, routed_inputs, keys):
+                if seed not in (None, ""):
+                    routed = routed.model_copy(update={"params": {**routed.params, "seed": seed}})
+                return await _identity_edit_on_fal(routed, routed_inputs, keys)
+
+            route = maker_routes.dual_route(
+                direct=maker_routes_google.google_identity_edit, fallback=_on_fal,
+                translate=maker_routes_google.identity_edit_to_google,
+            )
+            return await route(node, inputs, api_keys)
+
+        _identity_edit_handler.dual_route = True  # type: ignore[attr-defined]
 
         # Ideogram dual-route nodes: direct api.ideogram.ai when IDEOGRAM_API_KEY is
         # set, else FAL. Editing suite rides v3 on FAL (no v4 edit surfaces hosted
@@ -1588,8 +1546,16 @@ def get_handler_registry(
         registry["seedance-2-fast-i2v"] = _seedance2_fast_i2v_handler
         registry["flux-kontext"] = _flux_kontext_handler
         registry["flux-2-pro"] = _flux2_pro_handler
-        registry["gpt-image-1-5"] = _gpt_image_15_handler
-        registry["gpt-image-1-5-edit"] = _gpt_image_15_edit_handler
+        # GPT Image's fal copies run on OpenAI's Images API when OPENAI_API_KEY
+        # is set (execution/maker_routes_openai.py), else on fal.
+        from execution import maker_routes_openai
+        _openai_direct = maker_routes_openai.fal_direct(emit=emit)
+        registry["gpt-image-1-5"] = maker_routes.dual_route(
+            direct=_openai_direct, fallback=_gpt_image_15_handler,
+            translate=maker_routes_openai.fal_gpt_image_to_openai(maker_routes_openai.GPT_IMAGE_15))
+        registry["gpt-image-1-5-edit"] = maker_routes.dual_route(
+            direct=_openai_direct, fallback=_gpt_image_15_edit_handler,
+            translate=maker_routes_openai.fal_gpt_image_to_openai(maker_routes_openai.GPT_IMAGE_15))
         async def _gpt_image_2_fal_generate_handler(node, inputs, api_keys):
             node.params.setdefault("endpoint_id", "openai/gpt-image-2")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
@@ -1602,22 +1568,44 @@ def get_handler_registry(
         registry["gpt-image-2-edit"] = _openai_image_2_edit_handler
         registry["gpt-image-2-5-generate"] = _openai_image_25_generate_handler
         registry["gpt-image-2-5-edit"] = _openai_image_25_edit_handler
-        registry["gpt-image-2-fal-generate"] = _gpt_image_2_fal_generate_handler
-        registry["gpt-image-2-fal-edit"] = _gpt_image_2_fal_edit_handler
+        registry["gpt-image-2-fal-generate"] = maker_routes.dual_route(
+            direct=_openai_direct, fallback=_gpt_image_2_fal_generate_handler,
+            translate=maker_routes_openai.fal_gpt_image_to_openai(maker_routes_openai.GPT_IMAGE_2))
+        registry["gpt-image-2-fal-edit"] = maker_routes.dual_route(
+            direct=_openai_direct, fallback=_gpt_image_2_fal_edit_handler,
+            translate=maker_routes_openai.fal_gpt_image_to_openai(maker_routes_openai.GPT_IMAGE_2))
         registry["seedvr2-upscale"] = _seedvr2_upscale_handler
         registry["clarity-upscaler"] = _clarity_upscaler_handler
         registry["seedvr-video-upscale"] = _seedvr_video_upscale_handler
-        registry["seedream-4-5"] = _seedream45_handler
-        registry["sora-2-i2v"] = _sora2_i2v_handler
+        # Seedream 4.5 / 5.0 Lite on BytePlus ModelArk with BYTEPLUS_API_KEY,
+        # else on fal (execution/maker_routes_byteplus.py).
+        from execution import maker_routes_byteplus
+        registry["seedream-4-5"] = maker_routes.dual_route(
+            direct=maker_routes_byteplus.byteplus_seedream, fallback=_seedream45_handler,
+            translate=maker_routes_byteplus.seedream_fal_to_byteplus,
+        )
         registry["esrgan-upscale"] = _esrgan_upscale_handler
         registry["recraft-crisp-upscale"] = _recraft_crisp_upscale_handler
         registry["pika-i2v"] = _pika_i2v_handler
         registry["hunyuan-video"] = _hunyuan_video_handler
         registry["elevenlabs-music"] = _elevenlabs_music_handler
+        # ElevenLabs Music (fal) and Runway's ElevenLabs TTS/STS/dubbing run on
+        # ElevenLabs' own API with the person's key (maker_routes_elevenlabs).
+        from execution import maker_routes_elevenlabs
+        maker_routes_elevenlabs.register(registry, emit)
         registry["wan-animate-move"] = _wan_animate_move_handler
         registry["wan-animate-replace"] = _wan_animate_replace_handler
         registry["kling-video-to-audio"] = _kling_video_to_audio_handler
         registry["seedance-1-0-t2v"] = _seedance_1_0_t2v_handler
+        # Seedance on BytePlus ModelArk with BYTEPLUS_API_KEY, else on fal
+        # (execution/maker_routes_byteplus_seedance.py).
+        from execution import maker_routes_byteplus_seedance as _seedance_routes
+        for _seedance_id in ("seedance-2-t2v", "seedance-2-i2v", "seedance-2-r2v", "seedance-2-fast-t2v",
+                             "seedance-2-fast-i2v", "seedance-v1-5", "seedance-1-0-t2v"):
+            registry[_seedance_id] = maker_routes.dual_route(
+                direct=partial(_seedance_routes.byteplus_seedance, emit=emit), fallback=registry[_seedance_id],
+                translate=_seedance_routes.fal_to_byteplus,
+            )
         registry["ltx-audio-to-video"] = _ltx_audio_to_video_handler
         registry["video-understanding"] = _video_understanding_handler
         registry["ltx-2-3-fast-t2v"] = _ltx_2_3_fast_t2v_handler

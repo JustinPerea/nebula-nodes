@@ -285,6 +285,30 @@ def _build_base_node(
     return base_node, inputs
 
 
+def _seed_leaves_maker_route(
+    base_model: str, aspect_ratio: str, extra_params: dict[str, Any], image_urls: list[str],
+    api_keys: dict[str, str],
+) -> bool:
+    """True when the base runs on the maker's own API (the direct route) with
+    ``extra_params`` but a ``seed`` would send it to the fal or Krea copy."""
+    from execution.maker_routes import definition_for
+    from services import node_route
+
+    try:
+        definition = definition_for(base_model)
+    except ValueError:
+        return False
+    if not node_route.direct_keys(definition):
+        return False
+    def route(params: dict[str, Any]) -> str:
+        # The same inputs the shot sends, read as the dual-route handler reads them.
+        base, inputs = _build_base_node(base_model, "prompt", image_urls, aspect_ratio, params, "route")
+        routed = node_route.with_wired_blockers(definition, base.params, node_route.filled_ports(inputs))
+        return node_route.select_route(definition, routed, api_keys).kind
+
+    return route(dict(extra_params)) == node_route.DIRECT and route({**extra_params, "seed": 0}) != node_route.DIRECT
+
+
 def _extract_image_url(base_outputs: dict[str, Any]) -> str:
     """Pull the image value from a base handler's output dict."""
     image_port = base_outputs.get("image")
@@ -440,8 +464,18 @@ async def handle_cinema_scene(
 
             # Inject the bundle's seed for deterministic identity — ONLY when a
             # bundle is present, so the existing seedless behaviour is untouched.
+            #
+            # Not on a maker route that takes no seed: when the base would run
+            # on the maker's own API without the seed (Seedream 4.5 on the
+            # person's BYTEPLUS_API_KEY: BytePlus documents no seed for it, so
+            # the fal copy's seed is a blocker), the bundle seed would move
+            # every shot to fal. The scene's price and readiness (model_pricing
+            # cinema_scene_base) read the base params without it, so the shot
+            # stays on the route they quoted; identity still comes from the
+            # bundle's traits and reference views.
             shot_extra_params = dict(base_extra_params)
-            if expanded["seed"] is not None:
+            if expanded["seed"] is not None and not _seed_leaves_maker_route(
+                    base_model, aspect_ratio, shot_extra_params, image_urls, api_keys):
                 shot_extra_params["seed"] = expanded["seed"]
 
             # An explicit per-shot seed override (set by the variations path in

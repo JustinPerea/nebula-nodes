@@ -74,13 +74,33 @@ const PROVIDER_LABELS = {
 
 const PARAM_GROUPS = ['params', 'sharedParams', 'falParams', 'directParams'];
 
-// Param group display names for dual/triple-param nodes
+// Param group display names for dual/triple-param nodes. `falParams` holds
+// the fallback route's own params, which is fal for most dual-route nodes and
+// Krea for a Krea node whose maker also sells the model
+// (scripts/sync-krea-catalog.py DIRECT_ROUTES); its label names that provider.
 const PARAM_GROUP_LABELS = {
   params: 'Parameters',
   sharedParams: 'Shared Parameters',
   falParams: 'FAL Parameters',
   directParams: 'Direct Parameters',
 };
+
+// Which provider a fallback key bills (backend/services/node_route.py KEY_PROVIDERS).
+const FALLBACK_KEY_PROVIDERS = {
+  FAL_KEY: 'fal', KREA_API_TOKEN: 'krea', REPLICATE_API_TOKEN: 'replicate', RUNWAY_API_KEY: 'runway',
+};
+
+function keyList(value) {
+  return (Array.isArray(value) ? value : [value]).filter((key) => typeof key === 'string' && key);
+}
+
+function paramGroupLabel(node, group) {
+  if (group !== 'falParams') return PARAM_GROUP_LABELS[group] ?? group;
+  const direct = keyList(node.directKeyName);
+  const fallbackKey = keyList(node.envKeyName).find((key) => !direct.includes(key));
+  const provider = FALLBACK_KEY_PROVIDERS[fallbackKey] ?? 'fal';
+  return `${PROVIDER_LABELS[provider] ?? provider} Parameters`;
+}
 
 /**
  * Escape pipe characters and strip newlines in Markdown table cells.
@@ -178,7 +198,12 @@ function formatPorts(ports) {
  * Build all groups that have non-empty params for a node.
  */
 function getPopulatedParamGroups(node) {
-  return PARAM_GROUPS.filter((g) => Array.isArray(node[g]) && node[g].length > 0);
+  // A dual-route Krea node keeps the full list in `params` too (for the
+  // readers that predate routes); the route groups already show every param.
+  const groups = Array.isArray(node.sharedParams) && node.sharedParams.length > 0
+    ? PARAM_GROUPS.filter((g) => g !== 'params')
+    : PARAM_GROUPS;
+  return groups.filter((g) => Array.isArray(node[g]) && node[g].length > 0);
 }
 
 /**
@@ -269,7 +294,7 @@ async function generate() {
         for (const group of populatedGroups) {
           const table = renderParamTable(node[group]);
           if (!table) continue;
-          lines.push(`**${PARAM_GROUP_LABELS[group] ?? group}**`);
+          lines.push(`**${paramGroupLabel(node, group)}**`);
           lines.push('');
           lines.push(table);
           lines.push('');
