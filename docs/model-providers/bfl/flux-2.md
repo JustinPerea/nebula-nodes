@@ -95,3 +95,14 @@ The saved names are fal's (saved graphs carry them). The BFL route translates:
 - That fal's resold Pro, Max and Flex render presets at fal's documented sizes (the size table is written for fal's own models).
 - fal Flash and Klein rounding below 1 MP, and Klein's two price figures. A billed run would settle each.
 - BFL's FLUX.2 safety cap of 5 is from the errors page; the OpenAPI types it 0-7, set per organization.
+
+## Live runs on BFL (2026-10-15)
+
+Two real runs through the registry's `multi_route` handler with `_provider: bfl`, as a saved node would run, on an isolated backend given only `BFL_API_KEY`. Prompt: "A red paper boat on a still pond, overhead light".
+
+| `model` | Request sent | Result | Time | Billed |
+|---|---|---|---|---|
+| klein-4b | `/v1/flux-2-klein-4b` `{width 1024, height 768, output_format "jpeg", safety_tolerance 2, prompt}` | 1024×768 JPEG | 4.2 s | 1.4 credits ($0.014) |
+| pro (all defaults) | `/v1/flux-2-pro`, the same body | 1024×768 JPEG | 9.3 s | 3.0 credits ($0.03) |
+
+The balance went from 955.1387 to 950.7387 credits, 4.40 in all, which matches the price rows exactly. So BFL bills a 0.75 MP output at the flat first-megapixel price, as the pricing data says. The fal route hasn't been run live yet.

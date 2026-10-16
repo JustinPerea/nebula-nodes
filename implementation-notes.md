@@ -32,6 +32,10 @@ Tradeoffs and surprises:
 - Live check (isolated backend :8146, Vite :5266, placeholder keys, no run started; `flux3/pr4-shots/`): library "FLUX.2 · BFL · fal"; card "Auto · BFL" at $0.03; on BFL the model list has no Flash and no Safety Checker; on fal Flash shows $0.005* and the BFL row "Doesn't take flash"; clicking BFL from fal Flash with the checker off lands on Flex at $0.05 with both notes on the card. Seen and left alone: the stop line names the raw value ("flash isn't on Black Forest Labs"), as PR 3's do; number fields don't render `placeholder`, so "Provider default" for Flex steps/guidance isn't shown (existing Inspector behaviour).
 - Left out: image inputs/editing, preview endpoints, prompt upsampling, `safety_tolerance` 0, exact sizes, Flash/Klein steps on fal, finetunes, FLUX.2 [dev] and Klein Base, other providers.
 
+### Live runs on BFL (PR 4, 2026-10-15)
+
+Two real BFL calls on an isolated backend (only `BFL_API_KEY`, `_provider: bfl`, through `multi_route`): Klein 4B and the all-defaults Pro, each sent `{width 1024, height 768, output_format jpeg, safety_tolerance 2}` and returned a 1024×768 JPEG (4.2 s and 9.3 s). BFL billed 1.4 + 3.0 = 4.40 credits ($0.044), matching the price rows, so the flat first megapixel applies to output under 1 MP. Recorded in `docs/model-providers/bfl/flux-2.md`. Live spend across PR 3 and PR 4: 49.26 credits ($0.493) of the $1.50 Justin approved. The fal route hasn't been run live.
+
 ### Review follow-up (PR 4, 2026-10-15)
 
 Four findings, each confirmed on HEAD first (a reproduction, then a test that failed on the old definition: 16 of the new `test_flux2_nodes.py` cases fail with the pre-fix definition and clients).
