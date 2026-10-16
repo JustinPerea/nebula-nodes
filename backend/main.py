@@ -3420,8 +3420,9 @@ PROVIDER_CHOICE_NOTE = (
     "routes could. Each route's params list what that provider offers, as the card shows it "
     "there: a setting it doesn't offer is absent (`hides` names it) or has `onlyWhen`. That "
     "route never receives it, and a saved non-default value of it stops the run when another "
-    "route would use it; the stop's `fixes` ([{param, value}], null = clear) are ordinary param "
-    "edits that let it run where it is. Which route runs decides whose key pays, so it's the "
+    "route would use it. The fix that lets it run where it is comes as `fixes` ([{param, value}], "
+    "null = clear: ordinary param edits) on a propose_change cost entry; a run error or the estimate "
+    "says the same fix in its message. Which route runs decides whose key pays, so it's the "
     "person's call: propose a _provider change with propose_change; direct edits of _provider "
     "are refused."
 )

@@ -356,9 +356,11 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     provider (values cut, ranges narrowed, `onlyWhen`; a setting it doesn't
     offer is absent and named in `hides`), `price`, `priceUnconfirmed`,
     `note` and `block`. A route never receives a setting it doesn't offer;
-    a saved non-default value of one stops the run, and the stop's `fixes`
-    ([{param, value}], null = clear) are plain param edits. A `_provider`
-    change is the person's call: propose it, don't edit it.
+    a saved non-default value of one stops the run when another route
+    would use it. The fix for such a stop comes as `fixes` ([{param, value}],
+    null = clear: plain param edits) on a propose_change cost entry; a run
+    error or the estimate gives the same fix as a sentence in its message.
+    A `_provider` change is the person's call: propose it, don't edit it.
     Dual-route nodes (a fal or Krea copy that also runs on the model maker's
     API with your key) also list `paramsDirect` / `paramsFallback`; `route`
     says which one this machine uses ("direct", or the `fallback` provider,

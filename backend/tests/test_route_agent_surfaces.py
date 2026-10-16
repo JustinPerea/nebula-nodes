@@ -264,3 +264,59 @@ def test_nebula_info_names_what_each_route_hides():
     assert "Safety only with Model FLUX.2 [pro], FLUX.2 [max] or FLUX.2 [flex]" in flux2
     video = format_node_detail(REGISTRY["flux-3-video"])
     assert video.count("Resolution only with Draft (fast preview) off") == 3
+
+
+REPO = Path(__file__).resolve().parents[2]
+# Skills whose .agents and .claude copies were identical when PR 5 started;
+# an edit to one must reach the other (Claude Code reads .claude/skills).
+MIRRORED_SKILLS = ("anthropic", "bfl", "elevenlabs", "higgsfield", "minimax", "nebula-nodes-visuals", "nous",
+                   "openrouter", "quiver", "replicate", "xai")
+
+
+def test_mirrored_skill_copies_stay_identical():
+    for name in MIRRORED_SKILLS:
+        agents = (REPO / ".agents" / "skills" / name / "SKILL.md").read_text()
+        claude = (REPO / ".claude" / "skills" / name / "SKILL.md").read_text()
+        assert agents == claude, f"{name}: .agents and .claude SKILL.md differ"
+
+
+def test_where_agents_get_fixes_is_what_the_code_returns(real_nodes):
+    """A route stop's structured `fixes` reach an agent only on a proposal's
+    cost entry (canvas_proposals.cost_for); describe_node's block and run
+    errors carry no `fixes` field. The tool description, the provider note
+    and the docs say so, and the documented shape is the code's."""
+    import mcp_server
+
+    definition = REGISTRY["flux-3-image-klein"]
+    assert set(main.node_route.hidden_fix(definition, "seed")) == {"param", "value"}
+    routes = real_nodes.get("/api/agent/nodes/flux-3-image-klein").json()["routes"]
+    assert all("fixes" not in (route.get("block") or {}) for route in routes)
+    for text in (mcp_server.describe_node.__doc__ or "", main.PROVIDER_CHOICE_NOTE,
+                 (REPO / "docs" / "MCP-SETUP.md").read_text()):
+        flat = " ".join(text.split())
+        assert "propose_change` cost entry" in flat or "propose_change cost entry" in flat, flat[:300]
+    routes_doc = (REPO / "docs" / "PROVIDER-ROUTES.md").read_text()
+    assert "[{param, value}]" in routes_doc and "{param, value, label}" not in routes_doc
+
+
+def test_route_docs_describe_pr5_behaviour():
+    """Docs that state a PR 5 behaviour match what the router does."""
+    keys = {"BFL_API_KEY": "k", "FAL_KEY": "k", "REPLICATE_API_TOKEN": "k", "KREA_API_TOKEN": "k"}
+    route = main.node_route.select_route
+    # A FLUX 3 Video draft at Full HD runs on Replicate (Resolution is hidden).
+    assert route(REGISTRY["flux-3-video"], {"_provider": "replicate", "draft": True, "resolution": "fhd"},
+                 keys).route_id == "replicate"
+    for copy in (".agents", ".claude"):
+        skill = (REPO / copy / "skills" / "replicate" / "SKILL.md").read_text()
+        assert "a draft at `fhd`) stops" not in skill and "720p draft" in skill, copy
+    # FLUX.2 Flash on fal no longer sends safety_tolerance: the one approved legacy delta.
+    flux2_row = next(line for line in (REPO / "docs" / "PROVIDER-ROUTES.md").read_text().splitlines()
+                     if line.startswith("| `flux-2-pro`"))
+    assert "APPROVED_LEGACY_DELTA" in flux2_row
+    # Krea 3: high thinking on fal stops; Jam under Auto stops on Krea.
+    krea3 = REGISTRY["krea-3"]
+    assert route(krea3, {"_provider": "fal", "thinking_mode": "high"}, keys).kind == main.node_route.UNSET
+    assert route(krea3, {"model": "jam"}, keys).kind == main.node_route.UNSET
+    for doc in (REPO / "docs" / "model-providers" / "krea" / "krea-3.md", REPO / ".agents" / "skills" / "krea" / "SKILL.md"):
+        text = doc.read_text()
+        assert "Hidden settings" in text and "Model Jam (speed)" in text, doc

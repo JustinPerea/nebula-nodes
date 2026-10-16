@@ -54,6 +54,14 @@ Only `seed` is shared (no default; both routes take it). fal's `krea/v3` has no 
 
 fal's schema changed since the first research dumps: edit gained `reasoning_level: high` (bills 5 MP more), and `auto` is now about 2048x2048, not 1024x1024.
 
+## Hidden settings (PR 5, 2026-10-16)
+
+Each route shows only its own settings, and a run never sends a setting its route hides (`docs/PROVIDER-ROUTES.md`, Hidden settings):
+
+- **Negative prompt is Berry only.** On fal, `negative_prompt` shows and is sent only with `model: berry`. A negative prompt typed under Berry stays saved but isn't sent once the model is Jam, and the run doesn't stop.
+- **One route's own setting stops the other route.** Krea's `thinking_mode`, `resolution`, `aspect_ratio` and `regional_edit` aren't on fal (`regional_edit` counts only with a reference image wired, since Krea refuses it without one), and fal's `model`, `reasoning_level`, `image_size`, `negative_prompt` and `output_format` aren't on Krea. A non-default value of one of them, reached on the other route without a click (a key change, an import, Auto), stops the run there with a one-click reset ("Set Model back to Berry (quality)") next to the switch. A click on a provider row resets it instead, with a note. Example: Model Jam saved under Auto with a Krea token stops on Krea ("it doesn't offer Model Jam (speed)").
+- **High thinking on fal stops and has no price.** `thinking_mode: high` saved with the provider on fal stops ("Set Thinking mode back to Fast, or switch provider. Krea can take it."), whatever fal's own settings are, and the estimate leaves it unpriced.
+
 ## Prices
 
 - **Krea** (docs pricing table; the OpenAPI has no `x-krea-pricing`): base $0.03 at 1K, $0.06 at 2K; +$0.02 for `high` thinking; each reference +$0.02 (1K reference) or +$0.07 (2K reference), by the reference's own size. With nothing wired to Images the run costs the base price exactly ($0.03 at 1K, $0.06 at 2K). With references wired, their size isn't known before the run, so the price is a range, as for Gemini: $0.03 to $0.59 at 1K, $0.06 to $0.62 at 2K (the `(references)` price variable, read from the wired ports). This is the API balance's price; plan runs bill workspace compute and are unpriced.

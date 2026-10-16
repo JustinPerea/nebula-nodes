@@ -40,8 +40,10 @@ The server exposes these tools for building and running (see
   (values cut, ranges narrowed, `onlyWhen`; a setting the provider doesn't
   offer is absent and named in `hides`), `price`, `priceUnconfirmed`, `note`
   and `block`. A saved value of a setting the route doesn't offer stops the
-  run when another route would use it; the stop's `fixes` are plain param
-  edits. `_provider` changes go through `propose_change`. See
+  run when another route would use it. The fix comes as `fixes` (plain param
+  edits) on a `propose_change` cost entry; a run error or the estimate gives
+  it as a sentence in its message. `_provider` changes go through
+  `propose_change`. See
   [Provider routes](PROVIDER-ROUTES.md#hidden-settings-paramvisiblewhen).
 - `edit_canvas`: adds nodes, wires, param changes, renames and moves in one
   call, all or nothing. Same shape as `propose_change`.
