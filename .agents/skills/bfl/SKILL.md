@@ -1,6 +1,6 @@
 ---
 name: bfl
-description: Black Forest Labs (BFL) in Nebula — the FLUX 3 nodes (flux-3-image, flux-3-image-klein, flux-3-image-klein-base, flux-3-video, flux-video-edit, flux-video-upscale) and FLUX.2 (flux-2-pro: Pro, Max, Flex, Klein 9B and 4B, plus fal's Flash), each one node with a provider switcher whose maker route is BFL's own API (api.bfl.ai, BFL_API_KEY) and whose other routes are fal, Replicate, OpenRouter and Krea. Activate when the user asks about FLUX 3, FLUX.2, Klein, FLUX video, video edit or upscale, BFL, BFL_API_KEY, a BFL error or moderation status, which provider a FLUX 3 node runs on, or why a FLUX 3 run stopped and offered another provider. Sourced from api.bfl.ai/openapi.json, docs.bfl.ai and bfl.ai/pricing (fetched 2026-10-15); user guide at docs/api-guides/bfl.md, routes at docs/PROVIDER-ROUTES.md.
+description: Black Forest Labs (BFL) in Nebula — the FLUX 3 nodes (flux-3-image, flux-3-image-klein, flux-3-image-klein-base, flux-3-video, flux-video-edit, flux-video-upscale) and FLUX.2 (flux-2-pro: FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B, plus fal's FLUX 2 Flash), each one node with a provider switcher whose maker route is BFL's own API (api.bfl.ai, BFL_API_KEY) and whose other routes are fal, Replicate, OpenRouter and Krea. Activate when the user asks about FLUX 3, FLUX.2, Klein, FLUX video, video edit or upscale, BFL, BFL_API_KEY, a BFL error or moderation status, which provider a FLUX 3 node runs on, or why a FLUX 3 run stopped and offered another provider. Sourced from api.bfl.ai/openapi.json, docs.bfl.ai and bfl.ai/pricing (fetched 2026-10-15); user guide at docs/api-guides/bfl.md, routes at docs/PROVIDER-ROUTES.md.
 ---
 
 # Black Forest Labs (FLUX 3 and FLUX.2)
@@ -84,7 +84,7 @@ Drafts render at `hd` only (BFL: "sending `draft: true` with any other resolutio
 
 One node for the FLUX.2 family; `model` picks the endpoint and is never sent. Its id stays `flux-2-pro` because saved graphs use it, and its param names are fal's (the route it ran on before).
 
-Shared: `model` (`pro` default, `max`, `flash`, `flex`, `klein-9b`, `klein-4b`), `image_size` (fal's six presets, default `landscape_4_3`), `output_format` jpeg or png, `safety_tolerance` `"1"`-`"5"` (default `"2"`), `seed`, and on Flex only `num_inference_steps` and `guidance_scale` (1.5-10).
+Shared: `model` (`pro` default, `max`, `flash`, `flex`, `klein-9b`, `klein-4b`; labelled with the providers' own names, "FLUX.2 [pro]", "FLUX.2 [max]", "FLUX 2 Flash" (fal's name; BFL has no Flash), "FLUX.2 [flex]", "FLUX.2 [klein] 9B", "FLUX.2 [klein] 4B"), `image_size` (fal's six presets, default `landscape_4_3`), `output_format` jpeg or png, `safety_tolerance` `"1"`-`"5"` (default `"2"`), `seed`, and on Flex only `num_inference_steps` and `guidance_scale` (1.5-10).
 
 | Route | Differs |
 |---|---|
@@ -93,7 +93,7 @@ Shared: `model` (`pro` default, `max`, `flash`, `flex`, `klein-9b`, `klein-4b`),
 
 - Steps and guidance show on Flex only. A value left from Flex is hidden on the other models and isn't sent on either route.
 - `model` must be one of the six lowercase values. Each route lists the models it serves (`accepts`), so any other value (`"MAX"`, `"Flash"`) stops the run with no route to offer; it never runs Pro.
-- Clicking Black Forest Labs on a Flash node moves it to Flex and resets a switched-off safety checker, with a note on the card.
+- Clicking Black Forest Labs on a Flash node moves it to Flex and resets a switched-off safety checker, with a note on the card ("FLUX 2 Flash isn't on Black Forest Labs: set to FLUX.2 [flex]").
 - fal Flash still receives `safety_tolerance` (not in its schema), exactly as the fal-only node sent it, so saved graphs make the same request.
 - No image input or editing, no prompt upsampling switch, no exact pixel sizes. Detail and sources: `docs/model-providers/bfl/flux-2.md`.
 

@@ -40,7 +40,7 @@ run by the `fal` route client in `backend/execution/route_clients.py`: see
 | `flux-schnell` | FLUX Schnell | `fal-ai/flux/schnell` | T2I | `sync` |
 | `fast-sdxl` | Fast SDXL | `fal-ai/fast-sdxl` | T2I | `sync` |
 | `flux-kontext` | FLUX Kontext | `fal-ai/flux-pro/kontext` | I2I edit | `async-poll` |
-| `flux-2-pro` | FLUX 2 Pro | `fal-ai/flux-2-pro` | T2I | `async-poll` |
+| `flux-2-pro` | FLUX.2 (was "FLUX 2 Pro"; route-table node since PR 4) | `fal-ai/flux-2-pro` and five more by `model` | T2I | `async-poll` |
 
 ---
 

@@ -30,12 +30,12 @@ sequenceDiagram
 | FLUX 3 Video (`flux-3-video`) | Black Forest Labs, fal, Replicate, OpenRouter, Krea |
 | FLUX Video Edit (`flux-video-edit`) | Black Forest Labs, fal, Krea |
 | FLUX Video Upscale (`flux-video-upscale`) | Black Forest Labs, fal, Replicate, Krea |
-| FLUX.2 (`flux-2-pro`): Pro, Max, Flex, Klein 9B, Klein 4B, and fal's Flash | Black Forest Labs (no Flash), fal |
+| FLUX.2 (`flux-2-pro`): FLUX.2 [pro], [max], [flex], [klein] 9B, [klein] 4B, and fal's FLUX 2 Flash | Black Forest Labs (no FLUX 2 Flash), fal |
 
 - **Auto** runs on the first provider in that order whose key you've saved. If a setting doesn't fit that provider (1.5k on fal, 4K video on Replicate), the run stops before anything is billed and the switcher offers the providers that take it. Auto never moves you to another provider by itself.
 - **Each provider shows its own options.** Pick a provider and the Inspector lists only the values it takes; a value it doesn't take is moved to the closest one, with a note on the card.
 - **Krea's old FLUX nodes** (Flux 3 Video, Flux Video Edit, Flux Video Upscale) open as these nodes set to Krea, with the same Krea billing choice.
-- **FLUX.2 picks its model in the node** (`model`: Pro by default). Flash is fal's own model, so FLUX.2 Flash runs only on fal; picking Black Forest Labs on a Flash node moves it to Flex, with a note. Steps and guidance are Flex settings.
+- **FLUX.2 picks its model in the node** (`model`: FLUX.2 [pro] by default). FLUX 2 Flash is fal's own model (fal's name for it), so it runs only on fal; picking Black Forest Labs on a Flash node moves it to FLUX.2 [flex], with a note ("FLUX 2 Flash isn't on Black Forest Labs: set to FLUX.2 [flex]"). Steps and guidance are Flex settings.
 - What each provider takes, per node, with sources: `docs/model-providers/bfl/flux-3.md` and `flux-2.md`. How routes work: [provider routes](../PROVIDER-ROUTES.md).
 
 ## Setup
@@ -63,7 +63,7 @@ From BFL's OpenAPI (https://api.bfl.ai/openapi.json, read 2026-10-15). The reque
 | FLUX 3 Video (`mode` t2v, i2v, v2v, draft_enhance) | `POST /v1/flux-3-video` | mp4 with audio |
 | FLUX Video Edit [fast] | `POST /v1/flux-tools/video-edit-v1` | mp4 |
 | FLUX Video Upscale | `POST /v1/flux-tools/video-upscale-v1` | mp4 |
-| FLUX.2 [pro] / [max] / [flex] / [klein 9B] / [klein 4B] | `POST /v1/flux-2-pro`, `-max`, `-flex`, `-klein-9b`, `-klein-4b` | image |
+| FLUX.2 [pro] / [max] / [flex] / [klein] 9B / [klein] 4B | `POST /v1/flux-2-pro`, `-max`, `-flex`, `-klein-9b`, `-klein-4b` | image |
 
 The base is always `https://api.bfl.ai`, BFL's global endpoint. BFL also runs `api.eu.bfl.ai` and `api.us.bfl.ai`, and its global endpoint may hand back a polling URL on either.
 

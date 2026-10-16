@@ -7323,7 +7323,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'flux-2-pro': {
     id: 'flux-2-pro',
     displayName: 'FLUX.2',
-    description: "Black Forest Labs' FLUX.2 family (Pro, Max, Flex, Klein 9B and 4B, plus fal's Flash): text to image. Runs on BFL or fal.ai.",
+    description: "Black Forest Labs' FLUX.2 family (FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B, plus fal's FLUX 2 Flash): text to image. Runs on BFL or fal.ai.",
     category: 'image-gen',
     apiProvider: 'bfl',
     apiEndpoint: '/v1/flux-2-pro',
@@ -7359,12 +7359,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'pro',
         options: [
-          { label: 'FLUX 2 Pro', value: 'pro' },
-          { label: 'FLUX 2 Max', value: 'max' },
+          { label: 'FLUX.2 [pro]', value: 'pro' },
+          { label: 'FLUX.2 [max]', value: 'max' },
           { label: 'FLUX 2 Flash', value: 'flash' },
-          { label: 'FLUX 2 Flex', value: 'flex' },
-          { label: 'FLUX 2 Klein 9B', value: 'klein-9b' },
-          { label: 'FLUX 2 Klein 4B', value: 'klein-4b' },
+          { label: 'FLUX.2 [flex]', value: 'flex' },
+          { label: 'FLUX.2 [klein] 9B', value: 'klein-9b' },
+          { label: 'FLUX.2 [klein] 4B', value: 'klein-4b' },
         ],
       },
       {
@@ -7467,7 +7467,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           accepts: { model: { values: ['pro', 'max', 'flex', 'klein-9b', 'klein-4b'] } },
           rejects: { enable_safety_checker: [false] },
         },
-        note: 'BFL has no Flash and no safety-checker switch.',
+        note: 'BFL has no FLUX 2 Flash and no safety-checker switch.',
       },
       {
         id: 'fal',

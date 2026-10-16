@@ -89,14 +89,14 @@ Nodes: 307 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `bfl` | BFL | BFL_API_KEY | `/v1/flux-2-pro` | maker; BFL has no Flash and no safety-checker switch. |
+| `bfl` | BFL | BFL_API_KEY | `/v1/flux-2-pro` | maker; BFL has no FLUX 2 Flash and no safety-checker switch. |
 | `fal` | FAL | FAL_KEY | `fal-ai/flux-2-pro` | — |
 
 **Shared Parameters**
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | pro | FLUX 2 Pro, FLUX 2 Max, FLUX 2 Flash, FLUX 2 Flex, FLUX 2 Klein 9B, FLUX 2 Klein 4B |
+| Model | enum | pro | FLUX.2 [pro], FLUX.2 [max], FLUX 2 Flash, FLUX.2 [flex], FLUX.2 [klein] 9B, FLUX.2 [klein] 4B |
 | Size | enum | landscape_4_3 | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
 | Format | enum | jpeg | JPEG, PNG |
 | Safety | enum | 2 | 1 (Strict), 2, 3, 4, 5 (Permissive) |

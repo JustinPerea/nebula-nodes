@@ -2219,7 +2219,7 @@
       }
     },
     {
-      "name": "FLUX.2 Flash: fal only, at an unconfirmed upper bound",
+      "name": "FLUX 2 Flash: fal only, at an unconfirmed upper bound",
       "nodeId": "flux-2-pro",
       "params": {
         "model": "flash",
@@ -2239,7 +2239,7 @@
       }
     },
     {
-      "name": "FLUX.2 Klein 4B: BFL's card, fal's unconfirmed upper bound",
+      "name": "FLUX.2 [klein] 4B: BFL's card, fal's unconfirmed upper bound",
       "nodeId": "flux-2-pro",
       "params": {
         "model": "klein-4b",
@@ -2259,7 +2259,7 @@
       }
     },
     {
-      "name": "FLUX.2 Flex with steps set prices on both routes",
+      "name": "FLUX.2 [flex] with steps set prices on both routes",
       "nodeId": "flux-2-pro",
       "params": {
         "model": "flex",

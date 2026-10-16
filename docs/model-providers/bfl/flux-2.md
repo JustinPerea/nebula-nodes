@@ -5,7 +5,7 @@ project: nebula_nodes
 provider: bfl
 model: flux-2 (flux-2-pro)
 status: active
-verified: 2026-10-15
+verified: 2026-10-16
 stale_after_days: 30
 ---
 
@@ -35,14 +35,23 @@ flowchart LR
 
 ## The models on each host
 
-| `model` | BFL | fal |
-|---|---|---|
-| `pro` (default) | `/v1/flux-2-pro` | `fal-ai/flux-2-pro` (BFL's API resold) |
-| `max` | `/v1/flux-2-max` | `fal-ai/flux-2-max` (resold) |
-| `flash` | none: the route stops ("doesn't take model flash") | `fal-ai/flux-2/flash` (fal's own) |
-| `flex` | `/v1/flux-2-flex` | `fal-ai/flux-2-flex` (resold) |
-| `klein-9b` | `/v1/flux-2-klein-9b` | `fal-ai/flux-2/klein/9b` (fal-hosted weights) |
-| `klein-4b` | `/v1/flux-2-klein-4b` | `fal-ai/flux-2/klein/4b` (fal-hosted weights) |
+| `model` | Label in the node | BFL | fal |
+|---|---|---|---|
+| `pro` (default) | FLUX.2 [pro] | `/v1/flux-2-pro` | `fal-ai/flux-2-pro` (BFL's API resold) |
+| `max` | FLUX.2 [max] | `/v1/flux-2-max` | `fal-ai/flux-2-max` (resold) |
+| `flash` | FLUX 2 Flash | none: the route stops ("doesn't take model flash") | `fal-ai/flux-2/flash` (fal's own) |
+| `flex` | FLUX.2 [flex] | `/v1/flux-2-flex` | `fal-ai/flux-2-flex` (resold) |
+| `klein-9b` | FLUX.2 [klein] 9B | `/v1/flux-2-klein-9b` | `fal-ai/flux-2/klein/9b` (fal-hosted weights) |
+| `klein-4b` | FLUX.2 [klein] 4B | `/v1/flux-2-klein-4b` | `fal-ai/flux-2/klein/4b` (fal-hosted weights) |
+
+### Names (checked 2026-10-16)
+
+Justin, 2026-10-16: "Let's match the provider every time." Each label is the provider's own spelling: BFL's (the maker) for the five models BFL serves, and fal's for Flash, which only fal offers. The values stay `pro`, `max`, `flash`, `flex`, `klein-9b`, `klein-4b`, since saved graphs use them.
+
+- Node name "FLUX.2": the family page, `<title>FLUX.2 - Next Generation Image Generation | Black Forest Labs` (https://bfl.ai/models/flux-2).
+- "FLUX.2 [pro]", "FLUX.2 [max]", "FLUX.2 [flex]", "FLUX.2 [klein] 9B", "FLUX.2 [klein] 4B": the operation summaries in https://api.bfl.ai/openapi.json ("Generate or edit an image with FLUX.2 [pro]", "... FLUX.2 [max]", "... FLUX.2 [flex]", "... FLUX.2 [klein] 9B", "... FLUX.2 [klein] 4B"), the pricing card titles on https://bfl.ai/pricing, and the rows on https://docs.bfl.ai/quick_start/pricing (`| FLUX.2 \[pro] |` in the page source, where `\[` is only Markdown escaping). The variant is lowercase in brackets, and the size follows the bracket after a space. BFL's Title Case nav tiles ("FLUX.2 Max", "FLUX.2 Klein") are family links, not model names.
+- "FLUX 2 Flash": fal's page `<title>FLUX 2 Flash (Text to Image) API on fal</title>` and the heading "# FLUX 2 Flash" in https://fal.ai/models/fal-ai/flux-2/flash/llms.txt. BFL lists no Flash model (none in its OpenAPI, docs or pricing); fal says it runs "FLUX.2 [dev]". "FLUX.2 [flash]" appears nowhere, so it isn't used.
+- The switcher's snap note is built from these labels: "FLUX 2 Flash isn't on Black Forest Labs: set to FLUX.2 [flex]".
 
 ## What each route sends
 

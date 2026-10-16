@@ -307,7 +307,7 @@ _FLUX2_ROUTES = [
                   "image_size": {preset: {"width": w, "height": h} for preset, (w, h) in _FLUX2_SIZES.items()}},
      "rules": {"accepts": {"model": {"values": _FLUX2_BFL_MODELS}},
                "rejects": {"enable_safety_checker": [False]}},
-     "note": "BFL has no Flash and no safety-checker switch."},
+     "note": "BFL has no FLUX 2 Flash and no safety-checker switch."},
     {"id": "fal", "provider": "fal", "keys": ["FAL_KEY"], "handler": "fal", "endpoint": "fal-ai/flux-2-pro",
      "endpointWhen": [{"when": {"model": model}, "endpoint": endpoint} for model, endpoint in (
          ("max", "fal-ai/flux-2-max"), ("flash", "fal-ai/flux-2/flash"), ("flex", "fal-ai/flux-2-flex"),
@@ -327,8 +327,8 @@ APPROVED_ROUTE_TABLE_CONVERSIONS = {
                 "apiEndpoint": ("fal-ai/flux-2-pro", "/v1/flux-2-pro"),
                 "envKeyName": ("FAL_KEY", ["BFL_API_KEY", "FAL_KEY"])},
         "added": {"directKeyName": ["BFL_API_KEY"],
-                  "description": "Black Forest Labs' FLUX.2 family (Pro, Max, Flex, Klein 9B and 4B, plus fal's "
-                                 "Flash): text to image. Runs on BFL or fal.ai.",
+                  "description": "Black Forest Labs' FLUX.2 family (FLUX.2 [pro], [max], [flex], [klein] 9B and "
+                                 "[klein] 4B, plus fal's FLUX 2 Flash): text to image. Runs on BFL or fal.ai.",
                   "routes": _FLUX2_ROUTES,
                   "params": [{"key": "_provider", "label": "Provider", "type": "enum", "required": False,
                               "default": "auto", "options": [{"label": v, "value": v} for v in ("auto", "bfl", "fal")],
@@ -341,6 +341,14 @@ APPROVED_ROUTE_TABLE_CONVERSIONS = {
         ],
         "routeParams": {"fal": ["enable_safety_checker"]},
         "order": ["model", "image_size", "output_format", "safety_tolerance", "enable_safety_checker", "seed"],
+        # Provider names (2026-10-16). Justin: "Let's match the provider every
+        # time." The baseline options are relabelled to the maker's spelling
+        # (BFL's OpenAPI summaries and pricing cards: "FLUX.2 [pro]",
+        # "FLUX.2 [max]"); Flash keeps fal's own name, "FLUX 2 Flash", since
+        # only fal serves it. Exact {value: (baseline label, current label)};
+        # values never change, and any other label still fails.
+        "optionLabels": {"model": {"pro": ("FLUX 2 Pro", "FLUX.2 [pro]"), "max": ("FLUX 2 Max", "FLUX.2 [max]"),
+                                   "flash": ("FLUX 2 Flash", "FLUX 2 Flash")}},
     },
 }
 APPROVED_LEADING_PARAM_ADDITIONS = {
@@ -349,8 +357,11 @@ APPROVED_LEADING_PARAM_ADDITIONS = {
     "krea-style-train": _KREA_AUTH_PARAM,
 }
 APPROVED_APPENDED_OPTIONS = {
-    "flux-2-pro": {"model": [{"label": "FLUX 2 Flex", "value": "flex"}, {"label": "FLUX 2 Klein 9B", "value": "klein-9b"},
-                             {"label": "FLUX 2 Klein 4B", "value": "klein-4b"}]},
+    # Labels are BFL's own names (Justin, 2026-10-16: "Let's match the
+    # provider every time."), from api.bfl.ai/openapi.json and bfl.ai/pricing.
+    "flux-2-pro": {"model": [{"label": "FLUX.2 [flex]", "value": "flex"},
+                             {"label": "FLUX.2 [klein] 9B", "value": "klein-9b"},
+                             {"label": "FLUX.2 [klein] 4B", "value": "klein-4b"}]},
     "krea-style-train": {"model": [
         {"label": "Krea 2", "value": "k2"}, {"label": "Krea 2 Large", "value": "k2-large"},
         {"label": "Krea 1 (Krea account)", "value": "k1"},
@@ -481,6 +492,15 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
         assert sorted(by_key) == sorted(conversion["order"]) and len(by_key) == len(shared) - len(added) + len(moved), (
             f"unapproved route table conversion: {node_id}")
         normalized["params"] = [by_key[key] for key in conversion["order"]]
+        for param_key, labels in conversion.get("optionLabels", {}).items():
+            options = _sole_entry(normalized["params"], "key", param_key)["options"]
+            baseline_options = options[:len(labels)]
+            assert [option["value"] for option in baseline_options] == list(labels), (
+                f"unapproved options: {node_id}.{param_key}")
+            for option in baseline_options:
+                baseline_label, current_label = labels[option["value"]]
+                assert option["label"] == current_label, f"unapproved label: {node_id}.{param_key}.{option['value']}"
+                option["label"] = baseline_label
     added_ports = APPROVED_INPUT_PORT_ADDITIONS.get(node_id, [])
     if added_ports:
         assert normalized["inputPorts"][-len(added_ports):] == added_ports, (
@@ -748,6 +768,16 @@ def test_seedream_route_split_still_fingerprints_every_param(definitions, change
     lambda node: node["sharedParams"][-1].update(max=20),
     lambda node: _sole_entry(node["sharedParams"], "key", "model")["options"].pop(),
     lambda node: node.update(displayName="FLUX 2"),
+    lambda node: _sole_entry(_sole_entry(node["sharedParams"], "key", "model")["options"], "value", "pro").update(
+        label="FLUX.2 Pro"),
+    lambda node: _sole_entry(_sole_entry(node["sharedParams"], "key", "model")["options"], "value", "max").update(
+        label="FLUX 2 Max"),
+    lambda node: _sole_entry(_sole_entry(node["sharedParams"], "key", "model")["options"], "value", "flash").update(
+        label="FLUX.2 [flash]"),
+    lambda node: _sole_entry(_sole_entry(node["sharedParams"], "key", "model")["options"], "value", "klein-9b").update(
+        label="FLUX.2 Klein 9B"),
+    lambda node: _sole_entry(_sole_entry(node["sharedParams"], "key", "model")["options"], "value", "pro").update(
+        value="pro-v1"),
 ])
 def test_flux2_route_table_conversion_still_fingerprints_every_param(definitions, change):
     """The approved PR 4 conversion rebuilds the baseline params from

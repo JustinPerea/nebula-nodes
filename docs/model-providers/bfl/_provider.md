@@ -45,7 +45,7 @@ Written in our own words from BFL's OpenAPI and docs (fetched 2026-10-15).
 |---|---|---|
 | `flux-3-image`, `flux-3-image-klein`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale` (BFL is the maker route, first in Auto order) | `route_clients.run_bfl` → `backend/handlers/bfl.py` (`run_task`) | route-table nodes, 2026-10-15; per-host detail in `flux-3.md` |
 | `flux-3-image-klein-base` | fal only | BFL's API doesn't serve Klein Base |
-| `flux-2-pro` FLUX.2 (Pro, Max, Flex, Klein 9B and 4B; BFL is the maker route, then fal) | `route_clients.run_bfl` (`BFL_FLUX2_PATHS`) → `handlers/bfl.py` | route-table node, PR 4 (2026-10-15); per-host detail in `flux-2.md` |
+| `flux-2-pro` FLUX.2 (FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B, plus fal's FLUX 2 Flash; BFL is the maker route, then fal) | `route_clients.run_bfl` (`BFL_FLUX2_PATHS`) → `handlers/bfl.py` | route-table node, PR 4 (2026-10-15); per-host detail in `flux-2.md` |
 
 ## Known gaps and re-checks
 

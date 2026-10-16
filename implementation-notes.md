@@ -1,5 +1,26 @@
 # Implementation Notes
 
+## 2026-10-16 — PR 4 FLUX.2 option labels match the provider (flux-2-bfl)
+
+Justin, 2026-10-16, asked whether the FLUX.2 labels should stay "FLUX 2 Pro / Max / ..." or follow BFL's "FLUX.2 [pro]": "Let's match the provider every time." `flux-3-nodes` (the PR 3 name pass, 758eaf08) was merged in first with a merge commit; the only conflict, this file, keeps both sections.
+
+Labels (values unchanged: `pro`, `max`, `flash`, `flex`, `klein-9b`, `klein-4b`):
+
+- BFL's names for the five BFL serves: "FLUX.2 [pro]", "FLUX.2 [max]", "FLUX.2 [flex]", "FLUX.2 [klein] 9B", "FLUX.2 [klein] 4B". Source: the operation summaries in https://api.bfl.ai/openapi.json ("Generate or edit an image with FLUX.2 [pro]", and so on), the bfl.ai/pricing card titles and the docs.bfl.ai pricing rows, all of which agree. BFL's Title Case nav tiles ("FLUX.2 Max", "FLUX.2 Klein") are family links and lose to these.
+- fal's name for Flash, which only fal serves: "FLUX 2 Flash" (unchanged). fal's page `<title>FLUX 2 Flash (Text to Image) API on fal</title>` and llms.txt "# FLUX 2 Flash". BFL has no Flash; "FLUX.2 [flash]" appears nowhere, so it wasn't invented.
+- The node displayName "FLUX.2" stays: BFL's family page title is "FLUX.2 - Next Generation Image Generation | Black Forest Labs" (bfl.ai/models/flux-2).
+
+Changed with them: the node description (both twins) now names the models the same way; the BFL route note says "BFL has no FLUX 2 Flash and no safety-checker switch."; the switcher's snap note is built from labels, so it now reads "FLUX 2 Flash isn't on Black Forest Labs: set to FLUX.2 [flex]" (`switch_cases.json` updated, both languages read it). Docs and skills: `docs/model-providers/bfl/flux-2.md` (a label column and a "Names" section with URLs and quotes), `_provider.md`, `docs/model-providers/fal/flux.md` (its node table still said "FLUX 2 Pro"), `docs/api-guides/bfl.md` (also fixed "[klein 9B]" to "[klein] 9B"), `docs/api-guides/fal.md`, `PROVIDER-ROUTES.md`, `flora-gap-audit.md`, both copies of the BFL and fal skills.
+
+Decisions not in the spec:
+
+- **`test_reference_roles.py`:** no approved-option-label mechanism existed, so `APPROVED_ROUTE_TABLE_CONVERSIONS["flux-2-pro"]` gained `optionLabels`, an exact `{value: (baseline label, current label)}` map for the three baseline options, applied after the params are rebuilt and before fingerprinting. It asserts the leading options' values are exactly those three, in order, and each current label exactly. Flash maps to itself so its label is pinned too. `APPROVED_APPENDED_OPTIONS["flux-2-pro"]` carries the three new labels exactly. The drift test gained five cases: a different label on pro, max, flash and klein-9b, and a changed value, all still fail. The baseline wasn't regenerated. Covered by Justin's approval above.
+- **fal's catalog copies in the skills** (`skills/fal/by_category.json`, `categories/text-to-image.md`, `skills/fal-ai__flux-2__flash.md`, both copies) said "FLUX.2 Flash"; fal's own name is "FLUX 2 Flash", so those were changed too. Other models' catalog cards that mention "Flux 2 Flex" or "Flux 2 Max" in passing were left: they are imported fal catalog prose about other models, not Nebula labels.
+- **Left alone:** prose shorthand such as "Flex-only steps" or "on Flex" where it names the `flex` value, not the model; dated snapshots (`docs/research-2026-*`, `docs/ipad-conversion/`, the 2026-08-18 verification matrix, `flora-gap-matrix.md`); the dated Running Log row in `flora-gap-audit.md`; test case names other than the three FLUX.2 pricing cases, which now use the new names.
+- **Not changed (not decided):** the Safety select on fal's Klein.
+
+Live check (isolated backend :8148, Vite :5268, temp HOME and NEBULA_* dirs, placeholder keys, no run started; `flux3/pr4-shots/names-*.png`): library entry "FLUX.2 · BFL · fal"; on BFL the model list shows the five BFL names and no Flash; on fal it shows all six, with "FLUX 2 Flash" third; picking Flash on fal, then BFL, lands on "FLUX.2 [flex]" with the card note "FLUX 2 Flash isn't on Black Forest Labs: set to FLUX.2 [flex]". The native select was expanded in place (`size`) and the Inspector's height cap lifted for the shots.
+
 ## 2026-10-16 — PR 3 model names match the provider (flux-3-nodes)
 
 Justin, 2026-10-16: "Let's match the provider every time." Every model name a person sees uses the provider's own spelling: the maker's (BFL, Krea) for a model several hosts carry, the only host's for a one-host model. Ids, param keys and values, endpoints and prices are unchanged.
