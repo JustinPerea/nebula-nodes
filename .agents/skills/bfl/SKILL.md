@@ -91,7 +91,8 @@ Shared: `model` (`pro` default, `max`, `flash`, `flex`, `klein-9b`, `klein-4b`),
 | bfl | no `flash` (the run stops and offers fal); the preset is sent as `width`/`height` (`square_hd` 1024×1024 ... `landscape_16_9` 1024×576); steps 1-50 |
 | fal | also `enable_safety_checker` (default on); steps 2-50; Klein takes no `safety_tolerance`, so only the default `"2"` runs there |
 
-- Steps or guidance on a model other than Flex stop the run on either route.
+- Steps and guidance show on Flex only. A value left from Flex is hidden on the other models and isn't sent on either route.
+- `model` must be one of the six lowercase values. Each route lists the models it serves (`accepts`), so any other value (`"MAX"`, `"Flash"`) stops the run with no route to offer; it never runs Pro.
 - Clicking Black Forest Labs on a Flash node moves it to Flex and resets a switched-off safety checker, with a note on the card.
 - fal Flash still receives `safety_tolerance` (not in its schema), exactly as the fal-only node sent it, so saved graphs make the same request.
 - No image input or editing, no prompt upsampling switch, no exact pixel sizes. Detail and sources: `docs/model-providers/bfl/flux-2.md`.

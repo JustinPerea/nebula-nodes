@@ -62,7 +62,8 @@ The saved names are fal's (saved graphs carry them). The BFL route translates:
 | `guidance_scale` (Flex) | 1.5-10 (default 5) | 1.5-10 (default 3.5) |
 | `enable_safety_checker` | no field: saved off, the run stops and offers fal | fal's own param (default on) |
 
-- Steps or guidance set on any model but Flex stop the run on both routes.
+- Steps and guidance show on Flex only (`visibleWhen`). A value left from Flex is hidden on the other models and isn't sent on either route (BFL: only `Flux2FlexInputs` has `steps`/`guidance`; fal: `FAL_ENDPOINT_DROPS`).
+- Each route's `accepts` lists exactly its models (BFL five, fal six). Any other saved `model` (a case variant such as `"MAX"` or `"Flash"`, or a typo) stops the run on both routes before billing, so it never falls through to Pro.
 - **Flash keeps `safety_tolerance`.** `Flux2FlashInput` has no such field, but the fal-only handler sent it on every Flash run, and the fal route keeps saved graphs' requests exactly as they were (`tests/test_flux2_nodes.py` replays all 6,048 saved combinations against the old handler's captured requests).
 
 ## Prices (per image; every preset is at most 1 MP and the node takes no image input)

@@ -60,7 +60,6 @@ All 52 nodes below carry `apiProvider: "fal"` in `backend/data/node_definitions.
 | Nebula node id | Display name | Category | FAL endpoint | Key inputs → ports | Per-model file |
 |---|---|---|---|---|---|
 | `flux-1-1-ultra` | FLUX 1.1 Ultra | image | `fal-ai/flux-pro/v1.1-ultra` | prompt, image | [`skills/fal-ai__flux-pro__v1.1-ultra.md`](skills/fal-ai__flux-pro__v1.1-ultra.md) |
-| `flux-2-pro` | FLUX 2 Pro | image | `fal-ai/flux-2-pro` | prompt | [`skills/fal-ai__flux-2-pro.md`](skills/fal-ai__flux-2-pro.md) |
 | `flux-schnell` | FLUX Schnell | image | `fal-ai/flux/schnell` | prompt | [`skills/fal-ai__flux__schnell.md`](skills/fal-ai__flux__schnell.md) |
 | `fast-sdxl` | Fast SDXL | image | `fal-ai/fast-sdxl` | prompt | [`skills/fal-ai__fast-sdxl.md`](skills/fal-ai__fast-sdxl.md) |
 | `flux-kontext` | FLUX Kontext | image (edit) | `fal-ai/flux-pro/kontext` | prompt, image | [`skills/fal-ai__flux-pro__kontext.md`](skills/fal-ai__flux-pro__kontext.md) |
@@ -113,9 +112,9 @@ All 52 nodes below carry `apiProvider: "fal"` in `backend/data/node_definitions.
 
 > The bundle ships **169 per-model spec files** under `skills/` and **16 category overviews** under `categories/` covering the full FAL catalog (including audio, LLM, vision, and training models that Nebula does **not** wrap). Those extra files are reference material for the `fal-universal` escape hatch, not 169 Nebula nodes. The authoritative Nebula roster is the **52 ids above**.
 
-### fal as a route on the FLUX 3 and Krea 3 nodes (2026-10-15)
+### fal as a route on the FLUX 3, Krea 3 and FLUX.2 nodes (2026-10-15)
 
-`flux-3-image`, `flux-3-image-klein-base`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale` and `krea-3` are route-table nodes: one node per model with a provider switcher (`_provider`, `docs/PROVIDER-ROUTES.md`), where fal is one route (the only one on Klein Base). They run through the `fal` route client in `backend/execution/route_clients.py`, not a `sync_runner.py` wrapper. Endpoints and what fal takes on each: the "fal as a route" section of `.agents/skills/fal/SKILL.md`, and the `bfl` and `krea` skills.
+`flux-3-image`, `flux-3-image-klein-base`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale`, `krea-3` and `flux-2-pro` (FLUX.2, `apiProvider: "bfl"` since PR 4) are route-table nodes: one node per model with a provider switcher (`_provider`, `docs/PROVIDER-ROUTES.md`), where fal is one route (the only one on Klein Base). They run through the `fal` route client in `backend/execution/route_clients.py`, not a `sync_runner.py` wrapper. Endpoints and what fal takes on each: the "fal as a route" section of `.agents/skills/fal/SKILL.md`, and the `bfl` and `krea` skills.
 
 ## Param reference
 
@@ -124,7 +123,7 @@ Types, defaults, ranges, and enums below come straight from `backend/data/node_d
 **Image — text-to-image**
 
 - `flux-1-1-ultra` — in: `prompt*`, `image`. out: `image`. Params: *(none — defaults only).*
-- `flux-2-pro` — in: `prompt*`. out: `image`. Params: `image_size` enum [square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3 (default), landscape_16_9]; `output_format` enum [jpeg (default), png]; `safety_tolerance` enum 1–5 (default 2); `enable_safety_checker` bool (default true); `seed` int.
+- `flux-2-pro` (FLUX.2, route-table node: BFL first, then fal) — in: `prompt*`. out: `image`. Shared params: `model` enum [pro (default), max, flash (fal only), flex, klein-9b, klein-4b] (picks the endpoint, never sent); `image_size` enum [square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3 (default), landscape_16_9]; `output_format` enum [jpeg (default), png]; `safety_tolerance` enum 1–5 (default 2; fal's Klein runs only 2); `seed` int; on Flex only `num_inference_steps` int (BFL 1–50, fal 2–50) and `guidance_scale` float 1.5–10. fal route only: `enable_safety_checker` bool (default true). `_provider` (auto, bfl, fal) picks the route; see the `bfl` skill.
 - `flux-schnell` — in: `prompt*`. out: `image`. Params: `image_size` enum (default landscape_4_3); `num_inference_steps` int 1–4 (default 4); `guidance_scale` float 1–5 (default 3.5); `num_images` int 1–4 (default 1); `output_format` enum [jpeg (default), png, webp]; `acceleration` enum [none (default), regular, high]; `enable_safety_checker` bool (default true); `seed` int 0–2147483647.
 - `fast-sdxl` — in: `prompt*`. out: `image`. Params: `image_size` enum (default square_hd); `num_images` int 1–4 (default 1); `num_inference_steps` int 1–50 (default 25); `guidance_scale` float 1–20 (default 7.5); `negative_prompt` str; `expand_prompt` bool (default false); `loras` textarea (**JSON array string**); `embeddings` textarea (**JSON array string**); `format` enum [jpeg (default), png]; `enable_safety_checker` bool (default true); `safety_checker_version` enum [v1 (default), v2]; `seed` int 0–4294967295.
 - `gpt-image-1-5` — in: `prompt*`. out: `image`. Params: `image_size` enum [1024x1024 (default), 1536x1024, 1024x1536]; `quality` enum [low, medium, high (default)]; `background` enum [auto (default), transparent, opaque]; `num_images` int 1–4 (default 1); `output_format` enum [png (default), jpeg, webp].
