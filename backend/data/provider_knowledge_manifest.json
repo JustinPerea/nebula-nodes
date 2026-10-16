@@ -257,6 +257,7 @@
     "docs/fal-model-schemas.md",
     "docs/model-providers/anthropic/claude-chat.md",
     "docs/model-providers/bfl/_provider.md",
+    "docs/model-providers/bfl/flux-2.md",
     "docs/model-providers/bfl/flux-3.md",
     "docs/model-providers/elevenlabs/elevenlabs.md",
     "docs/model-providers/fal/fal-universal.md",

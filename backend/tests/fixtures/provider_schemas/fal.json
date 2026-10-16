@@ -2488,7 +2488,773 @@
     }
    },
    "type": "object"
+  },
+  "fal-ai/flux-2-pro": {
+   "x-fal-order-properties": [
+    "prompt",
+    "image_size",
+    "seed",
+    "safety_tolerance",
+    "enable_safety_checker",
+    "output_format",
+    "sync_mode"
+   ],
+   "properties": {
+    "output_format": {
+     "type": "string",
+     "enum": [
+      "jpeg",
+      "png"
+     ],
+     "default": "jpeg",
+     "description": "The format of the generated image.",
+     "title": "Output Format"
+    },
+    "prompt": {
+     "type": "string",
+     "examples": [
+      "An intense close-up of knight's visor reflecting battle, sword raised, flames in background, chiaroscuro helmet shadows, hyper-detailed armor, square medieval, cinematic lighting"
+     ],
+     "description": "The prompt to generate an image from.",
+     "title": "Prompt"
+    },
+    "sync_mode": {
+     "type": "boolean",
+     "default": false,
+     "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history.",
+     "title": "Sync Mode"
+    },
+    "safety_tolerance": {
+     "description": "The safety tolerance level for the generated image. 1 being the most strict and 5 being the most permissive.",
+     "type": "string",
+     "enum": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+     ],
+     "default": "2",
+     "title": "Safety Tolerance"
+    },
+    "image_size": {
+     "x-fal": {
+      "max_area": 4194304,
+      "multiple_of": 16,
+      "min_width": 256,
+      "min_height": 256,
+      "max_height": 2560,
+      "max_width": 2560
+     },
+     "description": "The size of the generated image.",
+     "anyOf": [
+      {
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "properties": {
+        "height": {
+         "exclusiveMinimum": 0,
+         "type": "integer",
+         "maximum": 14142,
+         "default": 512,
+         "description": "The height of the generated image.",
+         "title": "Height"
+        },
+        "width": {
+         "exclusiveMinimum": 0,
+         "type": "integer",
+         "maximum": 14142,
+         "default": 512,
+         "description": "The width of the generated image.",
+         "title": "Width"
+        }
+       },
+       "type": "object",
+       "title": "ImageSize"
+      },
+      {
+       "type": "string",
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ]
+      }
+     ],
+     "default": "landscape_4_3",
+     "title": "Image Size"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The seed to use for the generation.",
+     "title": "Seed"
+    },
+    "enable_safety_checker": {
+     "type": "boolean",
+     "default": true,
+     "description": "Whether to enable the safety checker. Disabling it requires account authorization; unauthorized requests are always checked.",
+     "title": "Enable Safety Checker"
+    }
+   },
+   "type": "object",
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux2ProTextToImageInput"
+  },
+  "fal-ai/flux-2-max": {
+   "title": "Flux2MaxTextToImageInput",
+   "x-fal-order-properties": [
+    "prompt",
+    "image_size",
+    "seed",
+    "safety_tolerance",
+    "enable_safety_checker",
+    "output_format",
+    "sync_mode"
+   ],
+   "required": [
+    "prompt"
+   ],
+   "properties": {
+    "image_size": {
+     "title": "Image Size",
+     "default": "landscape_4_3",
+     "x-fal": {
+      "max_area": 4194304,
+      "min_width": 256,
+      "multiple_of": 16,
+      "min_height": 256,
+      "max_height": 2560,
+      "max_width": 2560
+     },
+     "description": "The size of the generated image.",
+     "anyOf": [
+      {
+       "title": "ImageSize",
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "properties": {
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "description": "The height of the generated image.",
+         "maximum": 14142,
+         "type": "integer",
+         "exclusiveMinimum": 0
+        },
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "description": "The width of the generated image.",
+         "maximum": 14142,
+         "type": "integer",
+         "exclusiveMinimum": 0
+        }
+       },
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ],
+       "type": "string"
+      }
+     ]
+    },
+    "prompt": {
+     "title": "Prompt",
+     "examples": [
+      "A lavish, baroque-style image of a powerful sorceress in her arcane study. She is dressed in robes of deep emerald velvet embroidered with gold thread and shimmering beetle wings, holding a staff topped with a glowing, swirling galaxy trapped in a crystal orb.She stands before a massive oak desk covered in open grimoires with illuminated pages showing alchemical diagrams, bubbling potions in glass alembics, and a sleeping pseudodragon curled around a stack of scrolls. The room is filled with curiosities: shelves of leather-bound books, celestial globes, and dried magical herbs hanging from the ceiling. The lighting is chiaroscuro, from a large fireplace with green flames and a magical candelabra floating in mid-air. The brushwork is visible and textured, with rich, deep colors. The style is reminiscent of Rembrandt meets classic fantasy art. The words 'Flux 2 Max is available on fal' are written in elegant cursive font on the top of the image."
+     ],
+     "description": "The prompt to generate an image from.",
+     "type": "string"
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "default": true,
+     "description": "Whether to enable the safety checker. Disabling it requires account authorization; unauthorized requests are always checked.",
+     "type": "boolean"
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "default": false,
+     "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history.",
+     "type": "boolean"
+    },
+    "seed": {
+     "title": "Seed",
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The seed to use for the generation."
+    },
+    "safety_tolerance": {
+     "title": "Safety Tolerance",
+     "default": "2",
+     "enum": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+     ],
+     "description": "The safety tolerance level for the generated image. 1 being the most strict and 5 being the most permissive.",
+     "type": "string"
+    },
+    "output_format": {
+     "title": "Output Format",
+     "default": "jpeg",
+     "enum": [
+      "jpeg",
+      "png"
+     ],
+     "description": "The format of the generated image.",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "fal-ai/flux-2/flash": {
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux2FlashTextToImageInput",
+   "x-fal-order-properties": [
+    "prompt",
+    "guidance_scale",
+    "seed",
+    "image_size",
+    "num_images",
+    "enable_prompt_expansion",
+    "sync_mode",
+    "enable_safety_checker",
+    "output_format"
+   ],
+   "type": "object",
+   "properties": {
+    "enable_prompt_expansion": {
+     "title": "Enable Prompt Expansion",
+     "default": false,
+     "type": "boolean",
+     "description": "If set to true, the prompt will be expanded for better results."
+    },
+    "output_format": {
+     "title": "Output Format",
+     "default": "png",
+     "type": "string",
+     "enum": [
+      "jpeg",
+      "png",
+      "webp"
+     ],
+     "description": "The format of the generated image."
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "default": true,
+     "type": "boolean",
+     "description": "If set to true, the safety checker will be enabled. Disabling it requires account authorization; unauthorized requests are always checked, and images flagged as unsafe are returned as black images."
+    },
+    "prompt": {
+     "title": "Prompt",
+     "type": "string",
+     "examples": [
+      "An army of ants battles for a sugar cube in a giant sandbox, with tiny plastic soldier toys caught in the melee. Ant bodies shine against gritty beige sand and the glossy, crystalline cube. Fiery sunrise spills golden highlights, throwing dramatic shadows, amplifying the excitement. Shot macro (100mm), aperture f/2.8 for soft background, centered composition with ground-level POV, mixing organic and manufactured textures."
+     ],
+     "description": "The prompt to generate an image from."
+    },
+    "num_images": {
+     "title": "Number of Images",
+     "default": 1,
+     "type": "integer",
+     "maximum": 4,
+     "minimum": 1,
+     "description": "The number of images to generate."
+    },
+    "guidance_scale": {
+     "title": "Guidance Scale",
+     "default": 2.5,
+     "type": "number",
+     "maximum": 20,
+     "minimum": 0,
+     "description": "Guidance Scale is a measure of how close you want the model to stick to your prompt when looking for a related image to show you."
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Seed",
+     "description": "The seed to use for the generation. If not provided, a random seed will be used."
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "default": false,
+     "type": "boolean",
+     "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history."
+    },
+    "image_size": {
+     "anyOf": [
+      {
+       "properties": {
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The width of the generated image."
+        },
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The height of the generated image."
+        }
+       },
+       "title": "ImageSize",
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "type": "object"
+      },
+      {
+       "type": "string",
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ]
+      }
+     ],
+     "title": "Image Size",
+     "default": "landscape_4_3",
+     "description": "The size of the image to generate. The width and height must be between 512 and 2048 pixels."
+    }
+   }
+  },
+  "fal-ai/flux-2-flex": {
+   "title": "Flux2FlexTextToImageInput",
+   "x-fal-order-properties": [
+    "prompt",
+    "image_size",
+    "seed",
+    "safety_tolerance",
+    "enable_safety_checker",
+    "output_format",
+    "sync_mode",
+    "guidance_scale",
+    "num_inference_steps"
+   ],
+   "properties": {
+    "image_size": {
+     "title": "Image Size",
+     "anyOf": [
+      {
+       "title": "ImageSize",
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "properties": {
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "maximum": 14142,
+         "description": "The width of the generated image.",
+         "type": "integer",
+         "exclusiveMinimum": 0
+        },
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "maximum": 14142,
+         "description": "The height of the generated image.",
+         "type": "integer",
+         "exclusiveMinimum": 0
+        }
+       },
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ],
+       "type": "string"
+      }
+     ],
+     "x-fal": {
+      "max_area": 4194304,
+      "min_width": 256,
+      "multiple_of": 16,
+      "min_height": 256,
+      "max_height": 2560,
+      "max_width": 2560
+     },
+     "description": "The size of the generated image.",
+     "default": "landscape_4_3"
+    },
+    "prompt": {
+     "title": "Prompt",
+     "examples": [
+      "A high-quality 3D render of a cute fluffy monster eating a giant donut; the fur simulation is incredibly detailed, the donut glaze is sticky and reflective, bright daylight lighting, shallow depth of field."
+     ],
+     "description": "The prompt to generate an image from.",
+     "type": "string"
+    },
+    "num_inference_steps": {
+     "title": "Number of Inference Steps",
+     "default": 28,
+     "maximum": 50,
+     "description": "The number of inference steps to perform.",
+     "type": "integer",
+     "minimum": 2
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "default": false,
+     "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history.",
+     "type": "boolean"
+    },
+    "seed": {
+     "title": "Seed",
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The seed to use for the generation."
+    },
+    "output_format": {
+     "enum": [
+      "jpeg",
+      "png"
+     ],
+     "default": "jpeg",
+     "title": "Output Format",
+     "description": "The format of the generated image.",
+     "type": "string"
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "default": true,
+     "description": "Whether to enable the safety checker. Disabling it requires account authorization; unauthorized requests are always checked.",
+     "type": "boolean"
+    },
+    "guidance_scale": {
+     "title": "Guidance Scale",
+     "default": 3.5,
+     "maximum": 10,
+     "description": "The guidance scale to use for the generation.",
+     "type": "number",
+     "minimum": 1.5
+    },
+    "safety_tolerance": {
+     "enum": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+     ],
+     "default": "2",
+     "title": "Safety Tolerance",
+     "description": "The safety tolerance level for the generated image. 1 being the most strict and 5 being the most permissive.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "type": "object"
+  },
+  "fal-ai/flux-2/klein/9b": {
+   "x-fal-order-properties": [
+    "prompt",
+    "seed",
+    "num_inference_steps",
+    "image_size",
+    "num_images",
+    "sync_mode",
+    "enable_safety_checker",
+    "output_format"
+   ],
+   "title": "Klein9BDistilledInput",
+   "properties": {
+    "num_inference_steps": {
+     "title": "Number of Inference Steps",
+     "maximum": 8,
+     "minimum": 4,
+     "description": "The number of inference steps to perform.",
+     "default": 4,
+     "type": "integer"
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "description": "If `True`, the media will be returned as a data URI. Output is not stored when this is True.",
+     "default": false,
+     "type": "boolean"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The seed to use for the generation. If not provided, a random seed will be used.",
+     "title": "Seed"
+    },
+    "num_images": {
+     "title": "Number of Images",
+     "maximum": 4,
+     "minimum": 1,
+     "description": "The number of images to generate.",
+     "default": 1,
+     "type": "integer"
+    },
+    "output_format": {
+     "title": "Output Format",
+     "enum": [
+      "jpeg",
+      "png",
+      "webp"
+     ],
+     "description": "The format of the generated image.",
+     "default": "png",
+     "type": "string"
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "description": "If set to true, the safety checker will be enabled. Disabling it requires account authorization; unauthorized requests are always checked, and images flagged as unsafe are returned as black images.",
+     "default": true,
+     "type": "boolean"
+    },
+    "prompt": {
+     "title": "Prompt",
+     "description": "The prompt to generate an image from.",
+     "examples": [
+      "A bright, surreal scene on a vast white salt flat under a clear blue sky, featuring two fluffy white alpacas standing in the foreground. Behind them sits a sleek white supercar with its scissor doors open, creating a dramatic futuristic silhouette. The sunlight is strong and crisp, casting sharp shadows on the ground and giving the image a clean, high-contrast cinematic look. Minimalist composition, playful luxury vibe, ultra sharp detail, wide-angle perspective, high resolution."
+     ],
+     "type": "string"
+    },
+    "image_size": {
+     "anyOf": [
+      {
+       "properties": {
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The width of the generated image."
+        },
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The height of the generated image."
+        }
+       },
+       "title": "ImageSize",
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ],
+       "type": "string"
+      }
+     ],
+     "description": "The size of the image to generate.",
+     "default": "landscape_4_3",
+     "title": "Image Size"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "type": "object"
+  },
+  "fal-ai/flux-2/klein/4b": {
+   "x-fal-order-properties": [
+    "prompt",
+    "seed",
+    "num_inference_steps",
+    "image_size",
+    "num_images",
+    "sync_mode",
+    "enable_safety_checker",
+    "output_format"
+   ],
+   "title": "KleinDistilledInput",
+   "properties": {
+    "num_inference_steps": {
+     "title": "Number of Inference Steps",
+     "maximum": 8,
+     "minimum": 4,
+     "description": "The number of inference steps to perform.",
+     "default": 4,
+     "type": "integer"
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "description": "If `True`, the media will be returned as a data URI. Output is not stored when this is True.",
+     "default": false,
+     "type": "boolean"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The seed to use for the generation. If not provided, a random seed will be used.",
+     "title": "Seed"
+    },
+    "num_images": {
+     "title": "Number of Images",
+     "maximum": 4,
+     "minimum": 1,
+     "description": "The number of images to generate.",
+     "default": 1,
+     "type": "integer"
+    },
+    "output_format": {
+     "title": "Output Format",
+     "enum": [
+      "jpeg",
+      "png",
+      "webp"
+     ],
+     "description": "The format of the generated image.",
+     "default": "png",
+     "type": "string"
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "description": "If set to true, the safety checker will be enabled. Disabling it requires account authorization; unauthorized requests are always checked, and images flagged as unsafe are returned as black images.",
+     "default": true,
+     "type": "boolean"
+    },
+    "prompt": {
+     "title": "Prompt",
+     "description": "The prompt to generate an image from.",
+     "examples": [
+      "Cheetah in pre-sprint crouch, muscles tensed, gazelle visible in distance, African savanna golden grass, dust particles in air, National Geographic wildlife photography"
+     ],
+     "type": "string"
+    },
+    "image_size": {
+     "anyOf": [
+      {
+       "properties": {
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The width of the generated image."
+        },
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The height of the generated image."
+        }
+       },
+       "title": "ImageSize",
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ],
+       "type": "string"
+      }
+     ],
+     "description": "The size of the image to generate.",
+     "default": "landscape_4_3",
+     "title": "Image Size"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "type": "object"
   }
  },
- "_note": "blackforestlabs/flux-video-upscale (FluxVideoUpscaleInput), krea/v3/text-to-image (V3TextToImageInput) and krea/v3/edit (V3EditInput) added for PR 3 from the same per-endpoint queue OpenAPI, read 2026-10-15, with $refs inlined."
+ "_note": "blackforestlabs/flux-video-upscale (FluxVideoUpscaleInput), krea/v3/text-to-image (V3TextToImageInput) and krea/v3/edit (V3EditInput) added for PR 3 from the same per-endpoint queue OpenAPI, read 2026-10-15, with $refs inlined. fal-ai/flux-2-pro, fal-ai/flux-2-max, fal-ai/flux-2/flash, fal-ai/flux-2-flex, fal-ai/flux-2/klein/9b and fal-ai/flux-2/klein/4b added for PR 4 the same way (read 2026-10-15)."
 }

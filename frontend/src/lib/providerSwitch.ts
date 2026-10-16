@@ -136,11 +136,12 @@ function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<Re
 }
 
 function price(definition: ModelNodeDefinition, route: RouteSpec, estimates: ReturnType<typeof estimateRoutes>,
-  pricing: PricingTable | null | undefined, plan: boolean): { price: string; priceTitle?: string } {
+  pricing: PricingTable | null | undefined, plan: boolean, params: Params,
+  wired: Iterable<string>): { price: string; priceTitle?: string } {
   if (plan) return { price: '-', priceTitle: 'Billed to your Krea plan' };
   const estimate = estimates[route.id];
   if (!estimate || estimate.currency !== 'usd') return { price: '-', priceTitle: 'No list price for these settings' };
-  const unconfirmed = routePriceUnconfirmed(definition, route.id, pricing);
+  const unconfirmed = routePriceUnconfirmed(definition, route.id, pricing, params, wired);
   return {
     price: `${formatUsdRange(estimate.low, estimate.high)}${unconfirmed ? '*' : ''}`,
     priceTitle: unconfirmed ? "Estimate: the provider's page doesn't state this price exactly" : 'List price per run at these settings',
@@ -156,6 +157,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
   const routed = withWiredBlockers(definition, saved, wired);
   const choice = providerChoice(saved);
   const estimates = estimateRoutes(definition, saved, wired, context.pricing);
+  const wiredPorts = [...wired.keys()];
   const unavailable = routeUnavailable(definition, routed, context.apiKeys);
   const route = selectRoute(definition, routed, context.apiKeys);
   const autoRoute = selectRoute(definition, { ...routed, [PROVIDER_PARAM]: AUTO }, context.apiKeys);
@@ -167,7 +169,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
     id: AUTO, routeId: null, plan: false,
     label: autoUnavailable ? `Auto · can't run: ${autoReason(definition, autoUnavailable)}` : `Auto · runs on ${autoName}`,
     keyState: null, price: autoUnavailable || !autoSpec ? '-'
-      : price(definition, autoSpec, estimates, context.pricing, autoRoute.kind === 'plan').price,
+      : price(definition, autoSpec, estimates, context.pricing, autoRoute.kind === 'plan', saved, wiredPorts).price,
     block: null, selected: choice === AUTO, writes: billingWrites(definition, AUTO, false),
   }];
   for (const spec of routesOf(definition)) {
@@ -182,7 +184,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
         label: both ? `${label} · API balance` : label,
         keyState: keyed ? 'set' : 'missing',
         setup: spec.keys[0] ? { kind: 'api-key', key: spec.keys[0] } : undefined,
-        ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, false)),
+        ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, false, saved, wiredPorts)),
         block: note,
         ...(spec.note && !note ? { info: spec.note } : {}),
         selected: choice === spec.id && !(both && kreaPlanPicked(saved)),
@@ -195,7 +197,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
         label: `${label} · plan`,
         keyState: context.kreaSignedIn ? 'signed-in' : 'sign-in',
         setup: { kind: 'krea-mcp' },
-        ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, true)),
+        ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, true, saved, wiredPorts)),
         block: note,
         selected: choice === spec.id && (spec.plan === 'only' || kreaPlanPicked(saved)),
         writes: billingWrites(definition, spec.id, true),

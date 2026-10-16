@@ -2,6 +2,1071 @@
  "_read": "2026-10-15",
  "_source": "https://api.bfl.ai/openapi.json",
  "schemas": {
+  "flux-2-flex": {
+   "properties": {
+    "guidance": {
+     "anyOf": [
+      {
+       "maximum": 10.0,
+       "minimum": 1.5,
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 5.0,
+     "description": "Guidance scale for image generation. High guidance scales improve prompt adherence at the cost of reduced realism.",
+     "example": 5.0,
+     "title": "Guidance"
+    },
+    "height": {
+     "anyOf": [
+      {
+       "minimum": 64.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 0,
+     "description": "Height of the image",
+     "title": "Height"
+    },
+    "input_image": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the input image.",
+     "title": "Input Image"
+    },
+    "input_image_2": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the second input image.",
+     "title": "Input Image 2"
+    },
+    "input_image_3": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the third input image.",
+     "title": "Input Image 3"
+    },
+    "input_image_4": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the fourth input image.",
+     "title": "Input Image 4"
+    },
+    "input_image_5": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the fifth input image.",
+     "title": "Input Image 5"
+    },
+    "input_image_6": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the sixth input image.",
+     "title": "Input Image 6"
+    },
+    "input_image_7": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the seventh input image.",
+     "title": "Input Image 7"
+    },
+    "input_image_8": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the eighth input image.",
+     "title": "Input Image 8"
+    },
+    "input_image_blob_path": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Blob path to the input image.",
+     "title": "Input Image Blob Path"
+    },
+    "output_format": {
+     "anyOf": [
+      {
+       "enum": [
+        "jpeg",
+        "png",
+        "webp"
+       ],
+       "title": "OutputFormat",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": "jpeg"
+    },
+    "prompt": {
+     "description": "Text prompt for image generation.",
+     "example": "ein fantastisches bild",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "prompt_upsampling": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": true,
+     "description": "Whether to use prompt upsampling.",
+     "title": "Prompt Upsampling"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+     "maximum": 7.0,
+     "minimum": 0.0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional seed for reproducibility.",
+     "example": 42,
+     "title": "Seed"
+    },
+    "steps": {
+     "anyOf": [
+      {
+       "maximum": 50.0,
+       "minimum": 1.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 50,
+     "description": "Number of steps for image generation. Higher steps lead to more detailed and realistic images.",
+     "example": 50,
+     "title": "Steps"
+    },
+    "user": {
+     "anyOf": [
+      {
+       "maxLength": 256,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Opaque identifier for the end user supplied by the calling platform.",
+     "title": "User"
+    },
+    "webhook_secret": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional secret for webhook signature verification",
+     "title": "Webhook Secret"
+    },
+    "webhook_url": {
+     "anyOf": [
+      {
+       "format": "uri",
+       "maxLength": 2083,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "URL to receive webhook notifications",
+     "title": "Webhook Url"
+    },
+    "width": {
+     "anyOf": [
+      {
+       "minimum": 64.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 0,
+     "description": "Width of the image",
+     "title": "Width"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux2FlexInputs",
+   "type": "object"
+  },
+  "flux-2-klein-4b": {
+   "description": "Input model for FLUX.2 Klein (non-base) - like Pro but max 4 images.",
+   "properties": {
+    "height": {
+     "anyOf": [
+      {
+       "minimum": 64.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 0,
+     "description": "Height of the image",
+     "title": "Height"
+    },
+    "input_image": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the input image.",
+     "title": "Input Image"
+    },
+    "input_image_2": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the second input image.",
+     "title": "Input Image 2"
+    },
+    "input_image_3": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the third input image.",
+     "title": "Input Image 3"
+    },
+    "input_image_4": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the fourth input image.",
+     "title": "Input Image 4"
+    },
+    "output_format": {
+     "anyOf": [
+      {
+       "enum": [
+        "jpeg",
+        "png",
+        "webp"
+       ],
+       "title": "OutputFormat",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": "jpeg"
+    },
+    "prompt": {
+     "description": "Text prompt for image generation.",
+     "example": "ein fantastisches bild",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+     "maximum": 7.0,
+     "minimum": 0.0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional seed for reproducibility.",
+     "example": 42,
+     "title": "Seed"
+    },
+    "user": {
+     "anyOf": [
+      {
+       "maxLength": 256,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Opaque identifier for the end user supplied by the calling platform.",
+     "title": "User"
+    },
+    "webhook_secret": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional secret for webhook signature verification",
+     "title": "Webhook Secret"
+    },
+    "webhook_url": {
+     "anyOf": [
+      {
+       "format": "uri",
+       "maxLength": 2083,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "URL to receive webhook notifications",
+     "title": "Webhook Url"
+    },
+    "width": {
+     "anyOf": [
+      {
+       "minimum": 64.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 0,
+     "description": "Width of the image",
+     "title": "Width"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux2KleinInputs",
+   "type": "object"
+  },
+  "flux-2-klein-9b": {
+   "description": "Input model for FLUX.2 Klein (non-base) - like Pro but max 4 images.",
+   "properties": {
+    "height": {
+     "anyOf": [
+      {
+       "minimum": 64.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 0,
+     "description": "Height of the image",
+     "title": "Height"
+    },
+    "input_image": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the input image.",
+     "title": "Input Image"
+    },
+    "input_image_2": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the second input image.",
+     "title": "Input Image 2"
+    },
+    "input_image_3": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the third input image.",
+     "title": "Input Image 3"
+    },
+    "input_image_4": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the fourth input image.",
+     "title": "Input Image 4"
+    },
+    "output_format": {
+     "anyOf": [
+      {
+       "enum": [
+        "jpeg",
+        "png",
+        "webp"
+       ],
+       "title": "OutputFormat",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": "jpeg"
+    },
+    "prompt": {
+     "description": "Text prompt for image generation.",
+     "example": "ein fantastisches bild",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+     "maximum": 7.0,
+     "minimum": 0.0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional seed for reproducibility.",
+     "example": 42,
+     "title": "Seed"
+    },
+    "user": {
+     "anyOf": [
+      {
+       "maxLength": 256,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Opaque identifier for the end user supplied by the calling platform.",
+     "title": "User"
+    },
+    "webhook_secret": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional secret for webhook signature verification",
+     "title": "Webhook Secret"
+    },
+    "webhook_url": {
+     "anyOf": [
+      {
+       "format": "uri",
+       "maxLength": 2083,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "URL to receive webhook notifications",
+     "title": "Webhook Url"
+    },
+    "width": {
+     "anyOf": [
+      {
+       "minimum": 64.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 0,
+     "description": "Width of the image",
+     "title": "Width"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux2KleinInputs",
+   "type": "object"
+  },
+  "flux-2-max": {
+   "properties": {
+    "disable_pup": {
+     "default": false,
+     "description": "Disable automatic prompt upsampling for this request. FLUX.2 [pro] and [max] apply prompt upsampling by default; set this to true to generate from your prompt exactly as written.",
+     "title": "Disable Pup",
+     "type": "boolean"
+    },
+    "height": {
+     "anyOf": [
+      {
+       "minimum": 64.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 0,
+     "description": "Height of the image",
+     "title": "Height"
+    },
+    "input_image": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the input image.",
+     "title": "Input Image"
+    },
+    "input_image_2": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the second input image.",
+     "title": "Input Image 2"
+    },
+    "input_image_3": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the third input image.",
+     "title": "Input Image 3"
+    },
+    "input_image_4": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the fourth input image.",
+     "title": "Input Image 4"
+    },
+    "input_image_5": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the fifth input image.",
+     "title": "Input Image 5"
+    },
+    "input_image_6": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the sixth input image.",
+     "title": "Input Image 6"
+    },
+    "input_image_7": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the seventh input image.",
+     "title": "Input Image 7"
+    },
+    "input_image_8": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the eighth input image.",
+     "title": "Input Image 8"
+    },
+    "output_format": {
+     "anyOf": [
+      {
+       "enum": [
+        "jpeg",
+        "png",
+        "webp"
+       ],
+       "title": "OutputFormat",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": "jpeg"
+    },
+    "prompt": {
+     "description": "Text prompt for image generation.",
+     "example": "ein fantastisches bild",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+     "maximum": 7.0,
+     "minimum": 0.0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional seed for reproducibility.",
+     "example": 42,
+     "title": "Seed"
+    },
+    "user": {
+     "anyOf": [
+      {
+       "maxLength": 256,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Opaque identifier for the end user supplied by the calling platform.",
+     "title": "User"
+    },
+    "webhook_secret": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional secret for webhook signature verification",
+     "title": "Webhook Secret"
+    },
+    "webhook_url": {
+     "anyOf": [
+      {
+       "format": "uri",
+       "maxLength": 2083,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "URL to receive webhook notifications",
+     "title": "Webhook Url"
+    },
+    "width": {
+     "anyOf": [
+      {
+       "minimum": 64.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 0,
+     "description": "Width of the image",
+     "title": "Width"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux2Inputs",
+   "type": "object"
+  },
+  "flux-2-pro": {
+   "properties": {
+    "disable_pup": {
+     "default": false,
+     "description": "Disable automatic prompt upsampling for this request. FLUX.2 [pro] and [max] apply prompt upsampling by default; set this to true to generate from your prompt exactly as written.",
+     "title": "Disable Pup",
+     "type": "boolean"
+    },
+    "height": {
+     "anyOf": [
+      {
+       "minimum": 64.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 0,
+     "description": "Height of the image",
+     "title": "Height"
+    },
+    "input_image": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the input image.",
+     "title": "Input Image"
+    },
+    "input_image_2": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the second input image.",
+     "title": "Input Image 2"
+    },
+    "input_image_3": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the third input image.",
+     "title": "Input Image 3"
+    },
+    "input_image_4": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the fourth input image.",
+     "title": "Input Image 4"
+    },
+    "input_image_5": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the fifth input image.",
+     "title": "Input Image 5"
+    },
+    "input_image_6": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the sixth input image.",
+     "title": "Input Image 6"
+    },
+    "input_image_7": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the seventh input image.",
+     "title": "Input Image 7"
+    },
+    "input_image_8": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Path to the eighth input image.",
+     "title": "Input Image 8"
+    },
+    "output_format": {
+     "anyOf": [
+      {
+       "enum": [
+        "jpeg",
+        "png",
+        "webp"
+       ],
+       "title": "OutputFormat",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": "jpeg"
+    },
+    "prompt": {
+     "description": "Text prompt for image generation.",
+     "example": "ein fantastisches bild",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Harm moderation tolerance from 0 to 7, with 0 the strictest. The route and organization determine the approved maximum and per-category ceilings. Unapproved levels return 422 with approved levels.",
+     "maximum": 7.0,
+     "minimum": 0.0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional seed for reproducibility.",
+     "example": 42,
+     "title": "Seed"
+    },
+    "user": {
+     "anyOf": [
+      {
+       "maxLength": 256,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Opaque identifier for the end user supplied by the calling platform.",
+     "title": "User"
+    },
+    "webhook_secret": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional secret for webhook signature verification",
+     "title": "Webhook Secret"
+    },
+    "webhook_url": {
+     "anyOf": [
+      {
+       "format": "uri",
+       "maxLength": 2083,
+       "minLength": 1,
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "URL to receive webhook notifications",
+     "title": "Webhook Url"
+    },
+    "width": {
+     "anyOf": [
+      {
+       "minimum": 64.0,
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 0,
+     "description": "Width of the image",
+     "title": "Width"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux2Inputs",
+   "type": "object"
+  },
   "flux-3-image": {
    "additionalProperties": false,
    "properties": {

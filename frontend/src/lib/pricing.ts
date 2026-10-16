@@ -6,7 +6,12 @@ import { allParamDefinitions, hasRoutes, routeBlock, routeById, routesOf, withWi
  * that estimate, and both are tested against the same shared cases. */
 export type PriceValue = number | [number, number];
 
-export interface PriceRow { match?: Record<string, unknown>; price: PriceValue }
+export interface PriceRow {
+  match?: Record<string, unknown>;
+  price: PriceValue;
+  /** Only this row's price isn't stated exactly (model_pricing.route_price_unconfirmed). */
+  unconfirmed?: boolean;
+}
 
 export interface PriceEntry {
   currency: string;
@@ -152,6 +157,21 @@ export function entryForRoute(entry: PriceEntry | undefined, provider: string | 
  * price reads a RUN_TIME_VARIABLES quantity). The wired ports also give the
  * VIDEO_MODE and REFERENCES a row may match. A `routes` entry prices the route
  * `routeProvider` names. */
+/** The values an entry's rows are matched against: the effective params
+ * plus the price variables read from the wired ports (model_pricing._price_values). */
+function priceValues(
+  entry: PriceEntry,
+  definition: Partial<ModelNodeDefinition>,
+  params: Record<string, unknown> | undefined,
+  ports: string[],
+): Record<string, unknown> {
+  const priced = pricedKeys(entry);
+  const values = effectiveParams(entry, definition, params);
+  if (priced.has(VIDEO_MODE)) values[VIDEO_MODE] = videoMode(ports);
+  if (priced.has(REFERENCES)) values[REFERENCES] = references(ports);
+  return values;
+}
+
 export function estimateNode(
   priceEntry: PriceEntry | undefined,
   definition: Partial<ModelNodeDefinition>,
@@ -167,9 +187,7 @@ export function estimateNode(
   const priced = pricedKeys(entry);
   const ports = [...wired];
   if (ports.some((port) => priced.has(port)) || RUN_TIME_VARIABLES.some((key) => priced.has(key))) return null;
-  const values = effectiveParams(entry, definition, params);
-  if (priced.has(VIDEO_MODE)) values[VIDEO_MODE] = videoMode(ports);
-  if (priced.has(REFERENCES)) values[REFERENCES] = references(ports);
+  const values = priceValues(entry, definition, params, ports);
   const row = (entry.rows ?? []).find((candidate) => matches(values, candidate.match));
   if (!row) return null;
   const base = bounds(row.price);
@@ -236,9 +254,21 @@ export function estimateRoutes(
 }
 
 /** A route's price that its provider's page doesn't state exactly (its
- * entry's `unconfirmed`; model_pricing.route_price_unconfirmed). */
-export function routePriceUnconfirmed(definition: ModelNodeDefinition, routeId: string, pricing?: PricingTable | null): boolean {
+ * entry's `unconfirmed`), or, at these params (the defaults when left out),
+ * the row they price at says so (FLUX.2's Flash and Klein on fal);
+ * model_pricing.route_price_unconfirmed. */
+export function routePriceUnconfirmed(
+  definition: ModelNodeDefinition,
+  routeId: string,
+  pricing?: PricingTable | null,
+  params?: Record<string, unknown>,
+  wired: Iterable<string> = [],
+): boolean {
   const spec = routeById(definition, routeId);
   if (!spec) return false;
-  return entryForRoute(pricing?.nodes[definition.id], spec.pricing ?? spec.id)?.unconfirmed === true;
+  const entry = entryForRoute(pricing?.nodes[definition.id], spec.pricing ?? spec.id);
+  if (!entry) return false;
+  if (entry.unconfirmed === true) return true;
+  const values = priceValues(entry, definition, params, [...wired]);
+  return (entry.rows ?? []).find((candidate) => matches(values, candidate.match))?.unconfirmed === true;
 }

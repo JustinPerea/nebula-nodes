@@ -1,9 +1,9 @@
 ---
 name: bfl
-description: Black Forest Labs (BFL) in Nebula — the FLUX 3 nodes (flux-3-image, flux-3-image-klein, flux-3-image-klein-base, flux-3-video, flux-video-edit, flux-video-upscale), each one node with a provider switcher whose maker route is BFL's own API (api.bfl.ai, BFL_API_KEY) and whose other routes are fal, Replicate, OpenRouter and Krea. Activate when the user asks about FLUX 3, Klein, FLUX video, video edit or upscale, BFL, BFL_API_KEY, a BFL error or moderation status, which provider a FLUX 3 node runs on, or why a FLUX 3 run stopped and offered another provider. Sourced from api.bfl.ai/openapi.json, docs.bfl.ai and bfl.ai/pricing (fetched 2026-10-15); user guide at docs/api-guides/bfl.md, routes at docs/PROVIDER-ROUTES.md.
+description: Black Forest Labs (BFL) in Nebula — the FLUX 3 nodes (flux-3-image, flux-3-image-klein, flux-3-image-klein-base, flux-3-video, flux-video-edit, flux-video-upscale) and FLUX.2 (flux-2-pro: FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B, plus fal's FLUX 2 Flash), each one node with a provider switcher whose maker route is BFL's own API (api.bfl.ai, BFL_API_KEY) and whose other routes are fal, Replicate, OpenRouter and Krea. Activate when the user asks about FLUX 3, FLUX.2, Klein, FLUX video, video edit or upscale, BFL, BFL_API_KEY, a BFL error or moderation status, which provider a FLUX 3 node runs on, or why a FLUX 3 run stopped and offered another provider. Sourced from api.bfl.ai/openapi.json, docs.bfl.ai and bfl.ai/pricing (fetched 2026-10-15); user guide at docs/api-guides/bfl.md, routes at docs/PROVIDER-ROUTES.md.
 ---
 
-# Black Forest Labs (FLUX 3)
+# Black Forest Labs (FLUX 3 and FLUX.2)
 
 ## Hard facts first
 
@@ -26,6 +26,7 @@ description: Black Forest Labs (BFL) in Nebula — the FLUX 3 nodes (flux-3-imag
 | `flux-3-video` "FLUX 3 Video" | `prompt`; `start_image`, `end_image`, `start_video`, `keyframes` (multiple) | bfl `/v1/flux-3-video` · fal `blackforestlabs/flux-3/*` (endpoint by ports and draft) · replicate `black-forest-labs/flux-3` · openrouter `black-forest-labs/flux-3-video` (`/api/v1/videos`) · krea (catalog Flux 3 Video, API token or plan) |
 | `flux-video-edit` "FLUX Video Edit [fast]" | `prompt`; `start_video` (required) | bfl `/v1/flux-tools/video-edit-v1` · fal `blackforestlabs/flux-3/edit-video` · krea |
 | `flux-video-upscale` "FLUX Video Upscale" | `video` (required); `prompt` (optional) | bfl `/v1/flux-tools/video-upscale-v1` · fal `blackforestlabs/flux-video-upscale` · replicate `black-forest-labs/flux-video-upscale` · krea |
+| `flux-2-pro` "FLUX.2" | `prompt` | bfl `/v1/flux-2-{pro,max,flex,klein-9b,klein-4b}` by `model` · fal `fal-ai/flux-2-pro`, `-max`, `-flex`, `flux-2/flash`, `flux-2/klein/9b`, `/4b` |
 
 Every node outputs one port: `image` or `video`.
 
@@ -79,6 +80,23 @@ Drafts render at `hd` only (BFL: "sending `draft: true` with any other resolutio
 - **Upscale** shares `creativity` (0 Precise or 1 Creative, default 1) and `upscale_factor` 1.5-3 (default 2). The prompt is optional.
 - Neither has an OpenRouter route. OpenRouter lists both models, but it documents no way to send a source clip. Edit has no Replicate route either (404).
 
+### FLUX.2
+
+One node for the FLUX.2 family; `model` picks the endpoint and is never sent. Its id stays `flux-2-pro` because saved graphs use it, and its param names are fal's (the route it ran on before).
+
+Shared: `model` (`pro` default, `max`, `flash`, `flex`, `klein-9b`, `klein-4b`; labelled with the providers' own names, "FLUX.2 [pro]", "FLUX.2 [max]", "FLUX 2 Flash" (fal's name; BFL has no Flash), "FLUX.2 [flex]", "FLUX.2 [klein] 9B", "FLUX.2 [klein] 4B"), `image_size` (fal's six presets, default `landscape_4_3`), `output_format` jpeg or png, `safety_tolerance` `"1"`-`"5"` (default `"2"`), `seed`, and on Flex only `num_inference_steps` and `guidance_scale` (1.5-10).
+
+| Route | Differs |
+|---|---|
+| bfl | no `flash` (the run stops and offers fal); the preset is sent as `width`/`height` (`square_hd` 1024×1024 ... `landscape_16_9` 1024×576); steps 1-50 |
+| fal | also `enable_safety_checker` (default on); steps 2-50; Klein takes no `safety_tolerance`, so only the default `"2"` runs there |
+
+- Steps and guidance show on Flex only. A value left from Flex is hidden on the other models and isn't sent on either route.
+- `model` must be one of the six lowercase values. Each route lists the models it serves (`accepts`), so any other value (`"MAX"`, `"Flash"`) stops the run with no route to offer; it never runs Pro.
+- Clicking Black Forest Labs on a Flash node moves it to Flex and resets a switched-off safety checker, with a note on the card ("FLUX 2 Flash isn't on Black Forest Labs: set to FLUX.2 [flex]").
+- fal Flash still receives `safety_tolerance` (not in its schema), exactly as the fal-only node sent it, so saved graphs make the same request.
+- No image input or editing, no prompt upsampling switch, no exact pixel sizes. Detail and sources: `docs/model-providers/bfl/flux-2.md`.
+
 ## Prices
 
 From each provider's own page, read 2026-10-15. `model_pricing.json` is the source the app uses; a `*` in the switcher means the price is unconfirmed, and `-` means there's no list price.
@@ -91,6 +109,7 @@ From each provider's own page, read 2026-10-15. `model_pricing.json` is the sour
 | Video, per second (hd / fhd / qhd / uhd) | $0.15 / 0.24 / 0.28 / 0.41; continuation 0.21 / 0.27 / 0.31 / 0.45; draft 0.06 | 720p 0.17, 1080p 0.29 (unconfirmed; qhd/uhd unpriced) | 0.17 / 0.29; continuation 0.41 / 0.53 | 0.17 / 0.29 / 0.28 / 0.41 | 0.17 / 0.29; continuation 0.41 / 0.53 |
 | Video Edit, per second | $0.03 | $0.03 | - | - | unpriced |
 | Video Upscale | $0.07 (precise) / $0.10 (creative) per output megapixel-second | per output second by tier (unconfirmed) | $0.07 / $0.10 per megapixel-second | - | unpriced |
+| FLUX.2, per image (pro / max / flex / klein-9b / klein-4b; fal also flash) | $0.03 / 0.07 / 0.05 / 0.015 / 0.014 | $0.03 / 0.07 / 0.05 / 0.011 / 0.009; flash 0.005 (Flash and Klein unconfirmed) | - | - | - |
 
 fal's FLUX 3 page and its pricing API disagree (the page still mentions a launch promo); Nebula uses the higher number until a billed run settles it. 1 BFL credit = $0.01.
 
@@ -124,7 +143,7 @@ From BFL's guides (docs.bfl.ai/guides/prompting_unified_technical, flux_3/flux3_
 
 ## Not wired yet
 
-- FLUX.2 [pro] / [max] / [flex] / [klein 9B] / [klein 4B] on BFL (`flux-2-pro` still runs on fal; its BFL route is the next PR).
+- FLUX.2 image input and editing, the preview endpoints, prompt upsampling, `safety_tolerance` 0, exact sizes.
 - FLUX 3 Video `draft_enhance`; `duration: auto`; Klein's exact `width` / `height`; Klein Base custom sizes; `safety_tolerance` above 4 (BFL allows up to 7 only for approved organizations).
 - FLUX 3 Action (robotics, weights only, no generation endpoint).
 - No paid BFL run has been made from Nebula yet; the first live check is one Klein image at 768sq ($0.008), with Justin's go-ahead.

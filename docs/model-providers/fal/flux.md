@@ -40,7 +40,7 @@ run by the `fal` route client in `backend/execution/route_clients.py`: see
 | `flux-schnell` | FLUX Schnell | `fal-ai/flux/schnell` | T2I | `sync` |
 | `fast-sdxl` | Fast SDXL | `fal-ai/fast-sdxl` | T2I | `sync` |
 | `flux-kontext` | FLUX Kontext | `fal-ai/flux-pro/kontext` | I2I edit | `async-poll` |
-| `flux-2-pro` | FLUX 2 Pro | `fal-ai/flux-2-pro` | T2I | `async-poll` |
+| `flux-2-pro` | FLUX.2 (was "FLUX 2 Pro"; route-table node since PR 4) | `fal-ai/flux-2-pro` and five more by `model` | T2I | `async-poll` |
 
 ---
 
@@ -139,6 +139,8 @@ most permissive" for `safety_tolerance`, but the actual enum schema lists
 values `1`–`6`. The registry correctly includes all 6 values.
 
 ### flux-2-pro (`fal-ai/flux-2-pro`)
+
+> **Superseded 2026-10-15 (provider routes, PR 4):** `flux-2-pro` is now the FLUX.2 route-table node (BFL first, then fal, six models). Current detail: `docs/model-providers/bfl/flux-2.md`. The notes below describe the old fal-only handler.
 
 | Parameter | Type | Default | Accepted values | Status |
 |-----------|------|---------|-----------------|--------|

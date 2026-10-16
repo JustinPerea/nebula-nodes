@@ -366,6 +366,134 @@
           }
         }
       }
+    },
+    {
+      "name": "FLUX.2: a click on BFL from fal's Flash with the safety checker off moves to Flex and turns the checker back on",
+      "definition": "flux-2-pro",
+      "saved": {
+        "_provider": "fal",
+        "model": "flash",
+        "enable_safety_checker": false
+      },
+      "keys": [
+        "BFL_API_KEY",
+        "FAL_KEY"
+      ],
+      "wired": {},
+      "click": "bfl",
+      "switcher": {
+        "before": {
+          "chip": "fal",
+          "blocked": false,
+          "alternatives": []
+        },
+        "chip": "BFL",
+        "blocked": false,
+        "alternatives": [],
+        "notes": [
+          "FLUX 2 Flash isn't on Black Forest Labs: set to FLUX.2 [flex]",
+          "Safety Checker isn't on Black Forest Labs: back to its default"
+        ]
+      },
+      "writes": {
+        "_provider": "bfl",
+        "model": "flex",
+        "enable_safety_checker": true
+      },
+      "run": {
+        "route": "bfl",
+        "request": {
+          "method": "POST",
+          "url": "https://api.bfl.ai/v1/flux-2-flex",
+          "schema": [
+            "bfl",
+            "flux-2-flex"
+          ],
+          "body": {
+            "prompt": "p",
+            "width": 1024,
+            "height": 768,
+            "output_format": "jpeg",
+            "safety_tolerance": 2
+          }
+        }
+      }
+    },
+    {
+      "name": "FLUX.2: no click: a saved Flash node stops on BFL once its key is added and offers fal",
+      "definition": "flux-2-pro",
+      "saved": {
+        "model": "flash"
+      },
+      "keys": [
+        "BFL_API_KEY",
+        "FAL_KEY"
+      ],
+      "wired": {},
+      "click": null,
+      "switcher": {
+        "before": {
+          "chip": "Auto · BFL",
+          "blocked": true,
+          "alternatives": [
+            "fal"
+          ]
+        },
+        "chip": "Auto · BFL",
+        "blocked": true,
+        "alternatives": [
+          "fal"
+        ],
+        "notes": []
+      },
+      "writes": {},
+      "run": {
+        "route": null,
+        "refused": "can't run on Black Forest Labs: it doesn't take model flash"
+      }
+    },
+    {
+      "name": "FLUX.2: the one-click switch to fal runs the saved Flash node where it always ran",
+      "definition": "flux-2-pro",
+      "saved": {
+        "model": "flash"
+      },
+      "keys": [
+        "BFL_API_KEY",
+        "FAL_KEY"
+      ],
+      "wired": {},
+      "click": "alternative:fal",
+      "switcher": {
+        "before": {
+          "chip": "Auto · BFL",
+          "blocked": true,
+          "alternatives": [
+            "fal"
+          ]
+        },
+        "chip": "fal",
+        "blocked": false,
+        "alternatives": [],
+        "notes": []
+      },
+      "writes": {
+        "_provider": "fal"
+      },
+      "run": {
+        "route": "fal",
+        "request": {
+          "method": "POST",
+          "url": "https://queue.fal.run/fal-ai/flux-2/flash",
+          "body": {
+            "prompt": "p",
+            "image_size": "landscape_4_3",
+            "output_format": "jpeg",
+            "safety_tolerance": "2",
+            "enable_safety_checker": true
+          }
+        }
+      }
     }
   ]
 }
