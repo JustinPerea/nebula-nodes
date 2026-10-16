@@ -79,6 +79,11 @@ async def handle_openai_chat(
             request_body["reasoning_effort"] = _gpt6_effort(model, str(reasoning_effort))
     elif is_gpt5:
         reasoning_effort = node.params.get("reasoning_effort")
+        if reasoning_effort == "max":
+            # "max" is offered only for GPT-6, but a node switched over from a
+            # GPT-6 model can still hold it. OpenAI's gpt-5.5 page lists none,
+            # low, medium, high and xhigh, so refuse it before a paid HTTP 400.
+            raise ValueError(f"Reasoning effort 'max' isn't available for {model}.")
         if reasoning_effort:
             request_body["reasoning_effort"] = reasoning_effort
     else:

@@ -3002,7 +3002,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'Default', value: '' },
           // Gemini 4 Argon and Gemini 3.8 Flash reject "minimal".
-          { label: 'Minimal', value: 'minimal', visibleWhen: { model: ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'] } },
+          { label: 'Minimal', value: 'minimal', visibleWhen: { model: ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'] } },
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },

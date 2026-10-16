@@ -122,11 +122,11 @@ Draft iterations: use `gemini-3.6-flash` with lower `max_tokens` before Pro mode
 
 | `key` | `type` | `default` | Values |
 |-------|--------|-----------|--------|
-| `model` | enum | `gemini-3.5-flash` | `gemini-3.5-flash`, `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
-| `max_tokens` | integer | `8192` | 1–65535 → `maxOutputTokens` |
-| `temperature` | float | `1` | 0–2 |
+| `model` | enum | `gemini-3.6-flash` | `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
+| `max_tokens` | integer | `8192` | 1–65535 → `maxOutputTokens`; the handler caps it at 65,536 on `gemini-4-argon` (Argon's synchronous output limit) |
+| `temperature` | float | `1` | 0–2. Hidden and not sent for `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.6-flash` and `gemini-3.5-flash-lite` |
 | `system` | textarea | `""` | → `systemInstruction.parts[].text` |
-| `thinkingLevel` | enum | `""` | Gemini 3.x only: `minimal`, `low`, `medium`, `high` → `thinkingConfig.thinkingLevel` |
+| `thinkingLevel` | enum | `""` | Gemini 3.x and 4: `minimal`, `low`, `medium`, `high` → `thinkingConfig.thinkingLevel`. No `minimal` on `gemini-4-argon` or `gemini-3.8-flash` (the handler refuses it before the request) |
 | `thinkingBudget` | integer | unset | Gemini 2.5 only → `thinkingConfig.thinkingBudget` |
 | `top_p` | float | unset | **Not forwarded** by handler today |
 | `top_k` | integer | unset | **Not forwarded** by handler today |
@@ -208,11 +208,11 @@ Content-Type: application/json
 | Local image path | `inline_data` with `mime_type` + base64 `data` |
 | HTTP(S) URL | `file_data.file_uri` |
 | `data:` URI | Split header → `inline_data` |
-| `temperature` param | `generationConfig.temperature` if set |
+| `temperature` param | `generationConfig.temperature` if set, except on the four models in `GEMINI_CHAT_NO_SAMPLING` |
 | `max_tokens` param | `generationConfig.maxOutputTokens` if truthy |
 | `response_format` param | `generationConfig.responseMimeType` when ≠ `text/plain` |
 | `system` param | Top-level `systemInstruction` when non-empty |
-| `thinkingLevel` param | `generationConfig.thinkingConfig.thinkingLevel` when set (3.x models) |
+| `thinkingLevel` param | `generationConfig.thinkingConfig.thinkingLevel` when set (3.x and 4 models) |
 | `thinkingBudget` param | `generationConfig.thinkingConfig.thinkingBudget` when set (2.5 models) — only if `thinkingLevel` absent |
 | `top_p`, `top_k`, `stop_sequences` | **Omitted** — in registry UI but not forwarded |
 

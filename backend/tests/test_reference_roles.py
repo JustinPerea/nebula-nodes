@@ -362,7 +362,9 @@ APPROVED_PARAM_FIELD_ADDITIONS.update({
 APPROVED_OPTION_FIELD_ADDITIONS.update({
     "gpt-4o-chat": {"reasoning_effort": {"none": {"visibleWhen": {"model": ["gpt-6-luna"] + _GPT5}}}},
     "gemini-chat": {"thinkingLevel": {"minimal": {
-        "visibleWhen": {"model": ["gemini-3.6-flash", "gemini-3.5-flash-lite"] + _GEM_THINKING_OLD}}}},
+        # Google's thinking table lists gemini-3.1-pro-preview as low/medium/high only.
+        "visibleWhen": {"model": ["gemini-3.6-flash", "gemini-3.5-flash-lite"]
+                        + [m for m in _GEM_THINKING_OLD if m != "gemini-3.1-pro-preview"]}}}},
 })
 APPROVED_APPENDED_OPTIONS["gpt-4o-chat"] = {"reasoning_effort": [
     {"label": "Max", "value": "max", "visibleWhen": {"model": _GPT6}},

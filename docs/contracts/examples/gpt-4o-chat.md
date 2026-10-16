@@ -63,7 +63,7 @@ OpenAI bills chat models by **input + output tokens**. Rates vary by model tier 
 | `model` | Primary lever — GPT-5.5 > GPT-5.4 > mini/nano tiers |
 | `max_completion_tokens` | Caps output tokens (and thus output cost) |
 | `images` port | Vision images add image input tokens per attached frame |
-| `reasoning_effort` | GPT-5.x only — higher effort can increase internal reasoning tokens |
+| `reasoning_effort` | GPT-6 and GPT-5.x — higher effort can increase internal reasoning tokens |
 
 **Not billed through Nebula UI:** upstream caching, tool calls, or hidden reasoning tokens beyond what the API returns in usage.
 
@@ -81,7 +81,7 @@ OpenAI bills chat models by **input + output tokens**. Rates vary by model tier 
 
 Do not re-derive behavior from React components. **Python handler + tests are the oracle.**
 
-**Critical porting note:** GPT-5.x models use `reasoning_effort` and **reject** sampler params (`temperature`, `top_p`, penalties). Legacy `gpt-4o` / `gpt-4.1` models use samplers and **must not** receive `reasoning_effort`.
+**Critical porting note:** GPT-6 and GPT-5.x models use `reasoning_effort` and **reject** sampler params (`temperature`, `top_p`, penalties). Legacy `gpt-4o` / `gpt-4.1` models use samplers and **must not** receive `reasoning_effort`.
 
 ---
 
@@ -117,7 +117,7 @@ Registry key: `gpt-4o-chat` (id kept for saved-graph compatibility).
 | `key` | `type` | `default` | Allowed values / notes |
 |-------|--------|-----------|------------------------|
 | `model` | enum | `gpt-5.4` | `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano` |
-| `reasoning_effort` | enum | `medium` | `none`, `low`, `medium`, `high`, `xhigh` — **GPT-5.x only** (UI `visibleWhen`) |
+| `reasoning_effort` | enum | `medium` | `none` (not on `gpt-6-astra` or `gpt-6.1-sol`), `low`, `medium`, `high`, `xhigh`, `max` (GPT-6 only; refused before the request on `gpt-5*`) — shown for GPT-6 and GPT-5.x (UI `visibleWhen`) |
 | `max_completion_tokens` | int | `4096` | 1–128000 |
 | `temperature` | float | `1` | 0–2 — **legacy models only** |
 | `top_p` | float | unset | 0–1 — legacy only; omitted when unset |
@@ -168,7 +168,7 @@ flowchart LR
 | Model prefix | Forwarded params | Omitted params |
 |--------------|------------------|----------------|
 | `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-luna` | `reasoning_effort` (when set; `none` refused on Astra and 6.1 Sol) | `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` |
-| `gpt-5*` | `reasoning_effort` (when set) | `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` |
+| `gpt-5*` | `reasoning_effort` (when set; `max` refused) | `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` |
 | `gpt-4o*`, `gpt-4.1*` | samplers when set | `reasoning_effort` |
 
 ---
@@ -284,6 +284,7 @@ Handler return value (port output map):
 |-----------|----------|
 | GPT-5.x + sampler params in saved graph | Samplers silently dropped — only `reasoning_effort` sent |
 | Legacy model + `reasoning_effort` in params | `reasoning_effort` never sent |
+| GPT-5.x + saved `reasoning_effort: "max"` (node switched from GPT-6) | `ValueError` before the request: "Reasoning effort 'max' isn't available for <model>." |
 | `response_format: text` | Key omitted from request body |
 | `max_completion_tokens` absent / falsy | Key omitted from request body |
 | `temperature: 0` on legacy | Forwarded as `0.0` when explicitly set |

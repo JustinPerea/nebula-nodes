@@ -4928,3 +4928,9 @@ Justin asked whether the Jev nodes could take their question straight on the car
 
 - **Silent conflict in `tests/test_reference_roles.py`.** Both lanes added an `APPROVED_OPTION_LABEL_CHANGES` table and a loop over it. Git merged them without a conflict, but the second definition replaced the first (dropping the two ElevenLabs Turbo labels) and the second loop would have re-checked labels already reset to baseline. Now one table (the chat entries go in via `.update(...)`) and one loop.
 - **MODEL_REFERENCE.md** regenerated after the merge, not hand-merged.
+
+## 2026-10-16 review fixes (catalog-chat-tts-models)
+
+- Gemini and GPT contract docs (`docs/contracts/examples/gemini-chat.md`, `gpt-4o-chat.md`) now match the definitions: 11 Gemini ids with default `gemini-3.6-flash`, no `minimal` on Argon or 3.8 Flash, temperature not sent to the four new Gemini models, the Argon 65,536 output cap, and GPT-6 effort rules (`max` GPT-6 only, no `none` on Astra or 6.1 Sol).
+- `gpt-5*` now refuses a saved `reasoning_effort: "max"` before the request. That value only exists on a node switched over from GPT-6; OpenAI's gpt-5.5 page lists none, low, medium, high and xhigh. Every value that worked before is sent exactly as it was.
+- I took `gemini-3.1-pro-preview` off the `minimal` option's `visibleWhen`, because Google's "Controlling thinking" table (fetched 2026-10-16) lists low, medium and high for it. This changes only the card. A saved `minimal` on that model is still sent as before. I did not add a handler refusal for 3.1 Pro, because that would change an existing request and needs Justin's call.

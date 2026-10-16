@@ -189,6 +189,8 @@ def test_gemini_minimal_hidden_for_argon_and_38_flash():
     minimal = next(o for o in level["options"] if o["value"] == "minimal")
     assert "gemini-4-argon" not in minimal["visibleWhen"]["model"]
     assert "gemini-3.8-flash" not in minimal["visibleWhen"]["model"]
+    # Google's "Controlling thinking" table: gemini-3.1-pro-preview takes low, medium, high.
+    assert "gemini-3.1-pro-preview" not in minimal["visibleWhen"]["model"]
     for key in ("temperature", "top_p", "top_k"):
         visible = set(_param("gemini-chat", key)["visibleWhen"]["model"])
         assert not visible & {"gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"}
@@ -297,6 +299,20 @@ async def test_gpt6_none_effort_refused_where_rejected(model):
 async def test_gpt6_luna_accepts_none_effort():
     _, _, body = await _openai({**_defaults("gpt-4o-chat"), "model": "gpt-6-luna", "reasoning_effort": "none"})
     assert body["reasoning_effort"] == "none"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"])
+async def test_gpt5_max_effort_refused_before_request(model):
+    with pytest.raises(ValueError, match="Reasoning effort 'max' isn't available for " + model):
+        await _openai({**_defaults("gpt-4o-chat"), "model": model, "reasoning_effort": "max"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("effort", ["none", "low", "medium", "high", "xhigh"])
+async def test_gpt5_existing_efforts_still_forwarded(effort):
+    _, _, body = await _openai({**_defaults("gpt-4o-chat"), "model": "gpt-5.5", "reasoning_effort": effort})
+    assert body["reasoning_effort"] == effort
 
 
 @pytest.mark.asyncio
