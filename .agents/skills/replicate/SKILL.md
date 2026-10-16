@@ -1,6 +1,6 @@
 ---
 name: replicate
-description: "Replicate universal gateway in Nebula for running image, video, audio, 3D, or text models by owner/name slug through replicate-universal. Use when configuring the node, mapping a model's dynamic inputs and outputs, or debugging Replicate authentication, version resolution, streaming, async prediction polling, and cancellation."
+description: "Replicate in Nebula: the replicate-universal gateway for running image, video, audio, 3D, or text models by owner/name slug, and the Replicate route of the FLUX 3 route-table nodes (flux-3-image, flux-3-video, flux-video-upscale). Use when configuring the universal node, mapping a model's dynamic inputs and outputs, choosing Replicate in a FLUX 3 node's provider switcher, or debugging Replicate authentication, version resolution, streaming, async prediction polling, file upload, and cancellation."
 ---
 
 # Replicate Skill
@@ -13,7 +13,7 @@ description: "Replicate universal gateway in Nebula for running image, video, au
 - User asks why a Replicate model input isn't showing as a port (answer: there are no fixed ports — see the contract below).
 - User asks about Replicate auth/setup (`REPLICATE_API_TOKEN`) or about features Replicate has that Nebula doesn't expose (streaming, fine-tuning, deployments, model search).
 
-This is the ONLY Replicate node. There is no per-model node, no image/video/audio split — every Replicate run goes through `replicate-universal`.
+`replicate-universal` is the only node whose provider is Replicate, and the only way to run an arbitrary Replicate model. Since 2026-10-15 Replicate is also one route of three route-table nodes (one node per model with a provider switcher; see **Replicate as a route** below). Those runs go through a different client and don't follow the universal node's rules.
 
 ## Universal rules
 
@@ -26,7 +26,7 @@ This is the ONLY Replicate node. There is no per-model node, no image/video/audi
    4. Poll `GET /v1/predictions/{id}` every **2 s**, up to **300 times** (~**600 s / 10 min** ceiling). Statuses `starting`/`processing` keep polling; terminal success is `succeeded`, terminal failure is `failed` or `canceled`.
    5. Read `output` from the succeeded prediction and infer its port type (rules below).
 4. **Status / error codes.** Submit must return **200 or 201** (else `RuntimeError("Async submit failed (<code>): <body>")`). Each poll must return **200** (else `RuntimeError("Poll request failed ...")`). On a `failed`/`canceled` prediction the handler raises `Async job failed: <prediction.error>`. On hitting the 300-poll cap it raises `Async job timed out after 300 polls (600s)`. A missing `output` on success raises `RuntimeError("Replicate returned no output")`. The version lookup raises if the model 404s or has no version. Common HTTP causes: `401` bad/missing token, `402` insufficient credit / spend limit, `404` wrong slug, `422` invalid `input` for that model's schema, `429` rate-limited.
-5. **Input-URI rules.** Nebula does **not** use Replicate's Files API. File-type model inputs (an `image`, `audio`, `video`, `mask` field, etc.) must be passed as **public HTTPS URLs or data URLs** — the handler forwards input values verbatim into the prediction's `input` object with no upload step. When chaining from an upstream Nebula node, the upstream output is a served URL that you map straight into the downstream model's file-input field by its exact name (e.g. an Image output → a model's `image` or `input_image` field).
+5. **Input-URI rules.** The universal node does **not** use Replicate's Files API (the FLUX 3 route client does; see below). File-type model inputs (an `image`, `audio`, `video`, `mask` field, etc.) must be passed as **public HTTPS URLs or data URLs** — the handler forwards input values verbatim into the prediction's `input` object with no upload step. When chaining from an upstream Nebula node, the upstream output is a served URL that you map straight into the downstream model's file-input field by its exact name (e.g. an Image output → a model's `image` or `input_image` field).
 6. **Key gotchas.**
    - **No fixed ports + no baked schema.** `inputPorts` and `outputPorts` are both `[]`. The node has no idea what fields the chosen model wants. You must know the model's input field names (from its replicate.com page → **Inputs**, or `GET /v1/models/{owner}/{name}`) and name your connected ports / extra params to match exactly. Misspelled or missing required fields surface as a `422`/`failed` from Replicate, not a Nebula validation error.
    - **`model_id` must contain a `/`.** `owner/name` only. A bare name like `sdxl` raises `ValueError("Model ID is required (format: owner/name ...)")`. Do not append a `:version` — versioning is resolved automatically to the model's latest version.
@@ -105,6 +105,28 @@ All recipes use the real node id `replicate-universal`.
 
 3. **Transcribe then summarize (two Replicate nodes).** Node A: `model_id` = a Whisper-family model, with an `audio` field set to a public URL/data URL → returns a plain string → **Text** port. Node B: `model_id` = an instruct LLM slug, with `prompt` set to "Summarize:\n" + the upstream text (mapped from A's Text output) → **Text** port. Two gateway nodes, no custom node code.
 
+## Replicate as a route (FLUX 3, 2026-10-15)
+
+Three nodes made by Black Forest Labs list Replicate as one route of several (`docs/PROVIDER-ROUTES.md`, the `bfl` skill). The person picks it in the node's provider switcher (`_provider: "replicate"`), or Auto lands on it when no BFL or fal key is set (Auto order: BFL, fal, Replicate, then the rest).
+
+| Node | Replicate model | What the route takes |
+|---|---|---|
+| `flux-3-image` | `black-forest-labs/flux-3-image` | every shared setting, plus `grounding`; up to 10 `images` |
+| `flux-3-video` | `black-forest-labs/flux-3` | `hd` and `fhd` only, no 9:21, `duration` sent as the strings "5" to "20", `draft` (720p only) |
+| `flux-video-upscale` | `black-forest-labs/flux-video-upscale` | `creativity`, `upscale_factor`, the source `video` |
+
+No Replicate route for FLUX 3 Image Klein, Klein Base or FLUX Video Edit [fast]: Replicate has no such model (404, checked 2026-10-15). Krea 3 isn't on Replicate either, though Krea's blog says it is.
+
+The route client is `backend/handlers/replicate_model.py` `run_model`, not the universal handler:
+
+- `POST /v1/models/{owner}/{name}/predictions` (Replicate's official-model route): no version lookup.
+- A local Nebula output goes up through `POST /v1/files` first, and its `urls.get` is sent as the input. URLs pass through.
+- Polls every 3 s, up to 300 polls (15 minutes). Stop cancels with `POST /v1/predictions/{id}/cancel`.
+- The output is saved as the node's port type (`image` or `video`), fetched with the token only from `replicate.delivery`.
+- A setting the route can't take (4K video, a draft at `fhd`) stops the run before any request and names the routes that could take it. Auto never moves to another provider by itself.
+
+Prices are per route in `backend/data/model_pricing.json`: FLUX 3 Image $0.0205 / 0.024 / 0.035 / 0.05 / 0.3035 per image (768sq to 4k); FLUX 3 Video $0.17 (720p) / $0.29 (1080p) per second, continuation $0.41 / $0.53; Video Upscale $0.07 / $0.10 per output megapixel-second (unconfirmed: Replicate doesn't define its megapixel).
+
 ## In the nebula_nodes context
 
 - **Node id:** `replicate-universal` (display "Replicate"), category `universal`, `apiProvider: replicate`, `executionPattern: async-poll`, `envKeyName: REPLICATE_API_TOKEN`, `apiEndpoint: https://api.replicate.com/v1/predictions`.
@@ -116,9 +138,9 @@ All recipes use the real node id `replicate-universal`.
 
 ### Capability boundaries (what Replicate's API can do that Nebula does NOT expose)
 
-Never promise these through the `replicate-universal` node — they're in the API but unwired (per the audit gap table in `docs/api-guides/replicate.md`):
+Never promise these through the `replicate-universal` node — they're in the API but unwired there (per the audit gap table in `docs/api-guides/replicate.md`). The FLUX 3 route client above does use the Files API and the official-model route:
 
-- **No Files API upload** (`POST /v1/files`). File inputs must be public URLs or data URLs the user supplies; Nebula won't host a local file for them.
+- **No Files API upload on the universal node** (`POST /v1/files`). File inputs must be public URLs or data URLs the user supplies; the universal node won't host a local file for them. (The FLUX 3 Replicate route does upload local outputs.)
 - **Streaming is wired when Replicate advertises `urls.stream`.** There is no user control to force it, media data URIs are intentionally buffered rather than exposed as text telemetry, and idle reconnect via `Last-Event-ID` is not implemented.
 - **No synchronous mode** (`Prefer: wait` header). Always polls at 2 s; fast models can't return faster via a held request.
 - **No webhooks** (`webhook_events_filter`). Completion is detected by polling only; no callbacks.
@@ -128,7 +150,7 @@ Never promise these through the `replicate-universal` node — they're in the AP
 - **No trainings / fine-tuning** (`/v1/…/trainings`, `GET /v1/trainings/{id}`).
 - **No in-app model search / collections** (`QUERY /v1/models`, `GET /v1/models`, `/v1/collections`, `GET /v1/search`). The user must already know the `owner/name` slug.
 - **No version picker / examples / readme** — only the model's **latest** version is used; no pinning to an older version, and no examples/readme surfaced.
-- **No official-model convenience route** (`POST /v1/models/{owner}/{name}/predictions`), **no hardware list** (`GET /v1/hardware`), **no account info** (`GET /v1/account`). Roughly ~30% of the Replicate API surface (create + poll + version-resolve + advertised streaming + cancellation) is wired — the run-a-model happy path and live text streaming are covered, but the management and async-callback surfaces are not.
+- **No official-model convenience route on the universal node** (`POST /v1/models/{owner}/{name}/predictions`; the FLUX 3 Replicate route uses it), **no hardware list** (`GET /v1/hardware`), **no account info** (`GET /v1/account`). Roughly ~30% of the Replicate API surface (create + poll + version-resolve + advertised streaming + cancellation) is wired — the run-a-model happy path and live text streaming are covered, but the management and async-callback surfaces are not.
 
 ## Sources
 

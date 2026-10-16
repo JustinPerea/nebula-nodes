@@ -242,6 +242,16 @@ export interface RouteSpec {
   note?: string;
 }
 
+/** The most inputs a route takes on a wired port (`max: 0` refuses any).
+ *  With `of`, the entry caps several ports together, its key naming the
+ *  group and `label` how messages name it (FLUX 3 Video's ten images in all,
+ *  start image, keyframes and end image together). */
+export interface RoutePortLimit {
+  max: number;
+  of?: string[];
+  label?: string;
+}
+
 /** A route's rules: the directRoute grammar, plus `ports`, the most inputs
  *  the route takes on a wired port (`max: 0` refuses any). Computed specs of
  *  older dual-route nodes (lib/directRoute.ts routesOf) also carry
@@ -252,7 +262,7 @@ export interface RouteRules {
   rejects?: Record<string, ReadonlyArray<string | number | boolean>>;
   rejectsWhen?: DirectRejectsWhenRule[];
   size?: DirectSizeLimits;
-  ports?: Record<string, { max: number }>;
+  ports?: Record<string, RoutePortLimit>;
   requires?: string;
   retires?: { on: string; param?: string; values?: readonly string[] };
 }

@@ -9,7 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from services.file_access import require_allowed_path, validate_file_references
-from services.retired_nodes import migrate_node
+from services.retired_nodes import migrate_graph, migrate_node
 
 
 class CLIGraph:
@@ -293,9 +293,33 @@ class CLIGraph:
         source = require_allowed_path(path)
         data = json.loads(source.read_text())
         validate_file_references(data)
-        self.nodes = {n["id"]: _migrate_retired(n) for n in data["nodes"]}
-        self.edges = data["edges"]
-        self._counter = data.get("counter", len(self.nodes))
+        counter = data.get("counter", len(data["nodes"]))
+        taken = {str(n.get("id")) for n in data["nodes"] if isinstance(n, dict)}
+
+        def next_id(_hint: str) -> str:
+            nonlocal counter
+            counter += 1
+            while f"n{counter}" in taken:
+                counter += 1
+            taken.add(f"n{counter}")
+            return f"n{counter}"
+
+        # Folded Krea nodes move onto their new node first (with any typed
+        # prompt or media on an input node), then retired ones.
+        nodes, edges, warnings = migrate_graph(data["nodes"], data["edges"], new_id=next_id)
+        for warning in warnings:
+            print(f"[cli_graph] {warning}", flush=True)
+        edge_ids = {str(e.get("id")) for e in edges if isinstance(e, dict) and e.get("id")}
+        for edge in edges if nodes is not data["nodes"] else ():
+            if isinstance(edge, dict) and not edge.get("id"):
+                n = len(edge_ids) + 1
+                while f"e{n}" in edge_ids:
+                    n += 1
+                edge["id"] = f"e{n}"
+                edge_ids.add(edge["id"])
+        self.nodes = {n["id"]: _migrate_retired(n) for n in nodes}
+        self.edges = edges
+        self._counter = counter
 
 
 def _migrate_retired(node: dict[str, Any]) -> dict[str, Any]:

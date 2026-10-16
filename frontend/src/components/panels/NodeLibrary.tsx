@@ -10,7 +10,7 @@ import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { getNodesByCategory } from '../../constants/nodeDefinitions';
 import { CATEGORY_COLORS } from '../../constants/ports';
 import { findAvailableNodePosition, type NodePosition } from '../../lib/nodePlacement';
-import { CATEGORY_LABELS, matchesModelProvider, matchesModelSearch, modelInputSummary, providerLabel, supportedModelProviders } from '../../lib/modelDiscovery';
+import { CATEGORY_LABELS, libraryProviderLine, matchesModelProvider, matchesModelSearch, modelInputSummary, providerLabel, supportedModelProviders } from '../../lib/modelDiscovery';
 import { matchesNodeBrowseType, NODE_BROWSE_TYPES, type NodeBrowseType } from '../../lib/nodeBrowsing';
 import { ProviderReadinessBadge } from '../ProviderReadinessBadge';
 import { ScrollFade } from '../ScrollFade';
@@ -357,7 +357,7 @@ export function NodeLibrary() {
                   aria-describedby={`node-library-${def.id}-summary`}
                 >
                   <span className="node-library__name">{def.displayName}</span>
-                  <span className="node-library__metadata">{providerLabel(def.apiProvider)}</span>
+                  <span className="node-library__metadata">{libraryProviderLine(def)}</span>
                   <span className="node-library__inputs" id={`node-library-${def.id}-summary`}>{modelInputSummary(def)}</span>
                 </button>
                 {!isCollapsed && <ProviderReadinessBadge definition={def} />}

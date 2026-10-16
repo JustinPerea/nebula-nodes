@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 
 import pytest
 
@@ -64,3 +65,30 @@ def test_rejects_traversal_project_id(store):
     import pytest as _pytest
     with _pytest.raises(ValueError):
         store.list("project", "../escape")
+
+
+def test_a_preset_on_a_folded_krea_node_reads_as_the_node_it_became(store, tmp_path):
+    """A preset Create saved on Flux 3 Video (Krea) before the fold applies to
+    FLUX 3 Video on its Krea route, billing the way it was saved."""
+    old = store.create(name="Comet", category="My Styles", prompt="", scope="global", projectId=None, refImages=[],
+                       modelId="krea-video-black-forest-labs-flux-3-video",
+                       params={"_kreaAuth": "api-token", "resolution": "1080p", "duration": 5})
+    plan = store.create(name="Plan", category="My Styles", prompt="", scope="global", projectId=None, refImages=[],
+                        modelId="krea-enhance-black-forest-labs-flux-video-upscale",
+                        params={"_kreaAuth": "mcp", "creativity": "creative"})
+    got = store.get(old["id"])
+    assert got["modelId"] == "flux-3-video"
+    assert got["params"] == {"_provider": "krea", "_kreaAuth": "api-token", "resolution": "fhd", "duration": 5}
+    listed = {p["name"]: p for p in store.list("global")}
+    assert listed["Comet"] == got
+    assert listed["Plan"]["modelId"] == "flux-video-upscale"
+    assert listed["Plan"]["params"] == {"_provider": "krea", "_kreaAuth": "mcp", "creativity": 1}
+    # The file keeps what was saved; an edit returns the current reading.
+    assert json.loads(next(tmp_path.rglob(f"{old['id']}.json")).read_text())["modelId"] == old["modelId"]
+    assert store.update(old["id"], name="Comet 2")["modelId"] == "flux-3-video"
+
+
+def test_a_preset_on_a_current_node_reads_as_saved(store):
+    p = store.create(name="N", category="X", prompt="", params={"_provider": "fal", "aspect_ratio": "16:9"},
+                     modelId="flux-3-image", refImages=[], scope="global", projectId=None)
+    assert store.get(p["id"]) == p

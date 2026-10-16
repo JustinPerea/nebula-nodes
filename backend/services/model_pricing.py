@@ -10,7 +10,7 @@ Shape of one entry (keyed by node definition id)::
 
     {
       "currency": "usd" | "krea_cu",
-      "per": "image" | "video" | "second" | "request",
+      "per": "image" | "video" | "second" | "request" | "megapixel-second",
       "priceParams": ["model", "quality"],          # documentation only
       "rows": [{"match": {"quality": "low"}, "price": 0.011},
                {"match": {"quality": "auto"}, "price": [0.011, 0.167]}],
@@ -54,6 +54,23 @@ A priced setting that arrives by wire (an input port with the same id as a
 param the entry reads, like Krea Kling 3.0's ``multi_prompt``) is only known
 at run time, so a node with one wired is unpriced (``wired``).
 
+Two kinds of price variable aren't saved params, so their names are in
+parentheses and can never be a param's key:
+
+- ``(mode)`` (VIDEO_MODE) is a FLUX 3 Video run's mode, read from the wired
+  ports: ``v2v`` with ``start_video`` wired, ``i2v`` with ``start_image``,
+  ``keyframes`` or ``end_image``, else ``t2v``. It is the rule the route
+  clients use to pick BFL's ``mode`` (execution/route_clients.py bfl_body).
+- ``(references)`` (REFERENCES) is ``some`` when the reference-image port
+  (``images``) has an edge in, else ``none``. Krea 3 prices by it: a run with
+  no references costs exactly the base price on Krea and fal, and only a run
+  with references wired gets the range up to the most references a route
+  takes (their number and size are only known at run time).
+- RUN_TIME_VARIABLES depend on the source clip a run is given (its length,
+  its frame size), which only exists once the upstream node has run. An entry
+  that reads one keeps the provider's real formula, and is unpriced before
+  the run: never priced as one unit.
+
 ``frontend/src/lib/pricing.ts`` implements the same estimate; both are tested
 against ``tests/fixtures/pricing_cases.json`` so they cannot drift.
 """
@@ -70,7 +87,20 @@ from services.retired_nodes import migrate_params
 
 PRICING_PATH = Path(__file__).resolve().parent.parent / "data" / "model_pricing.json"
 CURRENCIES = ("usd", "krea_cu")
-PER_UNITS = ("image", "video", "second", "request")
+# megapixel-second: one megapixel of output frame for one second of output
+# video (BFL and Replicate price FLUX Video Upscale this way).
+PER_UNITS = ("image", "video", "second", "request", "megapixel-second")
+# The wired-port price variable (see the module docstring) and its values.
+VIDEO_MODE = "(mode)"
+VIDEO_MODES = ("t2v", "i2v", "v2v")
+_IMAGE_PORTS = ("start_image", "keyframes", "end_image")
+REFERENCES = "(references)"
+REFERENCE_VALUES = ("none", "some")
+_REFERENCE_PORTS = ("images",)
+# Price variables known only once the run's source clip is: FLUX Video Edit [fast]
+# bills the source's length, Upscale its output frame size too (source size
+# times upscale_factor squared), and fal's upscale tiers by that output size.
+RUN_TIME_VARIABLES = ("(source seconds)", "(output megapixels)", "(output tier)")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -230,7 +260,7 @@ def _validate_entry(
                 problems.append(f"{where} every source needs the quoted price line")
 
     params = {p.get("key"): p for p in _definition_params(definition)}
-    known_keys = set(params) | set((entry.get("defaults") or {}).keys())
+    known_keys = set(params) | set((entry.get("defaults") or {}).keys()) | {VIDEO_MODE, REFERENCES, *RUN_TIME_VARIABLES}
     rows = entry.get("rows")
     if not isinstance(rows, list) or not rows:
         problems.append(f"{where} needs at least one row")
@@ -245,6 +275,10 @@ def _validate_entry(
             if key not in known_keys:
                 problems.append(f"{where} row {index} matches unknown param '{key}'")
                 continue
+            if key == VIDEO_MODE and value not in VIDEO_MODES:
+                problems.append(f"{where} row {index} {VIDEO_MODE} must be one of {VIDEO_MODES}")
+            if key == REFERENCES and value not in REFERENCE_VALUES:
+                problems.append(f"{where} row {index} {REFERENCES} must be one of {REFERENCE_VALUES}")
             options = (params.get(key) or {}).get("options")
             if isinstance(options, list) and options:
                 allowed = {str(o.get("value") if isinstance(o, Mapping) else o) for o in options}
@@ -319,6 +353,20 @@ def _matches(values: Mapping[str, Any], match: Mapping[str, Any]) -> bool:
     return all(_as_match_value(values.get(key)) == _as_match_value(want) for key, want in match.items())
 
 
+def video_mode(wired: Iterable[str]) -> str:
+    """A video run's mode from its wired ports (VIDEO_MODE). A source video
+    wins, as in the clients, which refuse a video and images together."""
+    ports = {str(port) for port in wired}
+    if "start_video" in ports:
+        return "v2v"
+    return "i2v" if ports & set(_IMAGE_PORTS) else "t2v"
+
+
+def references(wired: Iterable[str]) -> str:
+    """Whether a run has reference images wired (REFERENCES)."""
+    return "some" if {str(port) for port in wired} & set(_REFERENCE_PORTS) else "none"
+
+
 def priced_keys(entry: Mapping[str, Any]) -> set[str]:
     """Every setting an entry's price reads: row and extra matches, multiplyBy."""
     keys = {str(key) for row in entry.get("rows") or [] if isinstance(row, Mapping)
@@ -357,8 +405,10 @@ def estimate_node(
     node's input ports that have an edge into them: a priced setting among
     them is only known at run time (the wire's value replaces the param), so
     the run is unpriced. Not just the rows that name it: a more general row
-    or a skipped extra would price it wrong. A ``routes`` entry prices the
-    route ``route_provider`` names, or nothing when it isn't given."""
+    or a skipped extra would price it wrong. The wired ports also give the
+    VIDEO_MODE and REFERENCES an entry may match, and an entry reading a RUN_TIME_VARIABLES
+    quantity is unpriced. A ``routes`` entry prices the route
+    ``route_provider`` names, or nothing when it isn't given."""
     routed = entry_for_route(entry, route_provider)
     if not routed:
         return None
@@ -367,11 +417,17 @@ def estimate_node(
     if routed is entry and entry.get("provider") and route_provider and entry["provider"] != route_provider:
         return None
     entry = routed
-    if priced_keys(entry) & {str(port) for port in wired}:
+    wired = {str(port) for port in wired}
+    priced = priced_keys(entry)
+    if priced & wired or priced & set(RUN_TIME_VARIABLES):
         return None
     # Price what will run: a retired value is replaced before the run (retired_nodes).
     params = migrate_params(str(definition.get("id") or ""), dict(params or {}))
     values = effective_params(entry, definition, params)
+    if VIDEO_MODE in priced:
+        values[VIDEO_MODE] = video_mode(wired)
+    if REFERENCES in priced:
+        values[REFERENCES] = references(wired)
     for row in entry.get("rows") or []:
         if _matches(values, row.get("match") or {}):
             bounds = _price_bounds(row.get("price"))

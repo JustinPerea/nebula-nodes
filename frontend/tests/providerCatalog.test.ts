@@ -34,12 +34,13 @@ describe('provider catalog', () => {
     expect(nodesForKey('BYTEPLUS_API_KEY').map((node) => node.id)).toContain('seedream-4-5');
   });
 
-  it('offers the Black Forest Labs key before any node lists it', () => {
-    // BFL_API_KEY lands ahead of the FLUX 3 nodes, so the row reads its note
-    // rather than an empty node list.
+  it('offers the Black Forest Labs key for the FLUX 3 nodes it is the maker route of', () => {
     const bfl = PROVIDER_KEYS.find((spec) => spec.key === 'BFL_API_KEY')!;
     expect(bfl).toMatchObject({ label: 'Black Forest Labs', url: 'https://dashboard.bfl.ai' });
-    expect(unlockSummary(bfl, 'add')).toBe(bfl.note);
+    expect(nodesForKey('BFL_API_KEY').map((node) => node.id).sort()).toEqual([
+      'flux-3-image', 'flux-3-image-klein', 'flux-3-video', 'flux-video-edit', 'flux-video-upscale',
+    ]);
+    expect(unlockSummary(bfl, 'add')).toMatch(/^5 nodes: /);
     expect(PROVIDER_KEY_LABELS.BFL_API_KEY).toBe('Black Forest Labs');
   });
 

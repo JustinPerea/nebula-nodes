@@ -23930,6 +23930,2100 @@
       }
     ]
   },
+  "flux-3-image": {
+    "id": "flux-3-image",
+    "displayName": "FLUX 3 Image",
+    "description": "Black Forest Labs' FLUX 3 image model: text to image, or edit and combine up to 10 reference images. Runs on BFL, fal.ai, Replicate or OpenRouter.",
+    "category": "image-gen",
+    "apiProvider": "bfl",
+    "apiEndpoint": "/v1/flux-3-image",
+    "executionPattern": "async-poll",
+    "envKeyName": [
+      "BFL_API_KEY",
+      "FAL_KEY",
+      "REPLICATE_API_TOKEN",
+      "OPENROUTER_API_KEY"
+    ],
+    "directKeyName": [
+      "BFL_API_KEY"
+    ],
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "Images",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true,
+        "maxConnections": 10
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_provider",
+        "label": "Provider",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "auto",
+            "value": "auto"
+          },
+          {
+            "label": "bfl",
+            "value": "bfl"
+          },
+          {
+            "label": "fal",
+            "value": "fal"
+          },
+          {
+            "label": "replicate",
+            "value": "replicate"
+          },
+          {
+            "label": "openrouter",
+            "value": "openrouter"
+          }
+        ],
+        "hidden": true
+      }
+    ],
+    "sharedParams": [
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "2:1",
+            "value": "2:1"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "7:5",
+            "value": "7:5"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "5:4",
+            "value": "5:4"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "4:5",
+            "value": "4:5"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "5:7",
+            "value": "5:7"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "1:2",
+            "value": "1:2"
+          },
+          {
+            "label": "9:21",
+            "value": "9:21"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "type": "enum",
+        "required": false,
+        "default": "1k",
+        "options": [
+          {
+            "label": "768 x 768",
+            "value": "768sq"
+          },
+          {
+            "label": "1K",
+            "value": "1k"
+          },
+          {
+            "label": "1.5K",
+            "value": "1.5k"
+          },
+          {
+            "label": "2K",
+            "value": "2k"
+          },
+          {
+            "label": "4K",
+            "value": "4k"
+          }
+        ]
+      },
+      {
+        "key": "safety_tolerance",
+        "label": "Safety tolerance",
+        "type": "integer",
+        "required": false,
+        "default": 2,
+        "min": 0,
+        "max": 4,
+        "step": 1
+      }
+    ],
+    "routes": [
+      {
+        "id": "bfl",
+        "provider": "bfl",
+        "maker": true,
+        "keys": [
+          "BFL_API_KEY"
+        ],
+        "handler": "bfl",
+        "endpoint": "/v1/flux-3-image",
+        "params": [
+          {
+            "key": "grounding",
+            "label": "Grounding (web + image search)",
+            "type": "boolean",
+            "required": false,
+            "default": true
+          }
+        ],
+        "rules": {
+          "ports": {
+            "images": {
+              "max": 10
+            }
+          }
+        }
+      },
+      {
+        "id": "fal",
+        "provider": "fal",
+        "keys": [
+          "FAL_KEY"
+        ],
+        "handler": "fal",
+        "endpoint": "blackforestlabs/flux-3/text-to-image",
+        "endpointWhen": [
+          {
+            "when": {
+              "images": "(set)"
+            },
+            "endpoint": "blackforestlabs/flux-3/edit-image"
+          }
+        ],
+        "params": [
+          {
+            "key": "enable_prompt_expansion",
+            "label": "Prompt expansion",
+            "type": "boolean",
+            "required": false,
+            "default": false
+          }
+        ],
+        "valueMap": {
+          "resolution": {
+            "768sq": "768sq",
+            "1k": "1k",
+            "2k": "2k",
+            "4k": "4k"
+          },
+          "aspect_ratio": {
+            "auto": "auto",
+            "21:9": "21:9",
+            "2:1": "2:1",
+            "16:9": "16:9",
+            "3:2": "3:2",
+            "7:5": "7:5",
+            "4:3": "4:3",
+            "5:4": "5:4",
+            "1:1": "1:1",
+            "4:5": "4:5",
+            "3:4": "3:4",
+            "5:7": "5:7",
+            "2:3": "2:3",
+            "9:16": "9:16",
+            "1:2": "1:2"
+          }
+        },
+        "rules": {
+          "ports": {
+            "images": {
+              "max": 10
+            }
+          }
+        },
+        "note": "fal.ai has no 1.5k or 9:21."
+      },
+      {
+        "id": "replicate",
+        "provider": "replicate",
+        "keys": [
+          "REPLICATE_API_TOKEN"
+        ],
+        "handler": "replicate-model",
+        "endpoint": "black-forest-labs/flux-3-image",
+        "params": [
+          {
+            "key": "grounding",
+            "label": "Grounding (web + image search)",
+            "type": "boolean",
+            "required": false,
+            "default": true
+          }
+        ],
+        "rules": {
+          "ports": {
+            "images": {
+              "max": 10
+            }
+          }
+        }
+      },
+      {
+        "id": "openrouter",
+        "provider": "openrouter",
+        "keys": [
+          "OPENROUTER_API_KEY"
+        ],
+        "handler": "openrouter-images",
+        "endpoint": "black-forest-labs/flux-3-image",
+        "valueMap": {
+          "resolution": {
+            "768sq": "768",
+            "1k": "1K",
+            "1.5k": "1.5K",
+            "2k": "2K",
+            "4k": "4K"
+          }
+        },
+        "rules": {
+          "ports": {
+            "images": {
+              "max": 10
+            }
+          }
+        }
+      }
+    ]
+  },
+  "flux-3-image-klein": {
+    "id": "flux-3-image-klein",
+    "displayName": "FLUX 3 Image Klein",
+    "description": "Black Forest Labs' fast open-weights FLUX 3 Image Klein (5.6B, distilled): text to image, or edit with up to 10 reference images. Runs on BFL or OpenRouter.",
+    "category": "image-gen",
+    "apiProvider": "bfl",
+    "apiEndpoint": "/v1/flux-3-image-klein",
+    "executionPattern": "async-poll",
+    "envKeyName": [
+      "BFL_API_KEY",
+      "OPENROUTER_API_KEY"
+    ],
+    "directKeyName": [
+      "BFL_API_KEY"
+    ],
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "Images",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true,
+        "maxConnections": 10
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_provider",
+        "label": "Provider",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "auto",
+            "value": "auto"
+          },
+          {
+            "label": "bfl",
+            "value": "bfl"
+          },
+          {
+            "label": "openrouter",
+            "value": "openrouter"
+          }
+        ],
+        "hidden": true
+      }
+    ],
+    "sharedParams": [
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "Auto",
+            "value": "auto"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "2:1",
+            "value": "2:1"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "3:2",
+            "value": "3:2"
+          },
+          {
+            "label": "7:5",
+            "value": "7:5"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "5:4",
+            "value": "5:4"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "4:5",
+            "value": "4:5"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "5:7",
+            "value": "5:7"
+          },
+          {
+            "label": "2:3",
+            "value": "2:3"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "1:2",
+            "value": "1:2"
+          },
+          {
+            "label": "9:21",
+            "value": "9:21"
+          }
+        ]
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "type": "enum",
+        "required": false,
+        "default": "1k",
+        "options": [
+          {
+            "label": "768 x 768",
+            "value": "768sq"
+          },
+          {
+            "label": "1K",
+            "value": "1k"
+          },
+          {
+            "label": "1.5K",
+            "value": "1.5k"
+          },
+          {
+            "label": "2K",
+            "value": "2k"
+          },
+          {
+            "label": "4K",
+            "value": "4k"
+          }
+        ]
+      },
+      {
+        "key": "safety_tolerance",
+        "label": "Safety tolerance",
+        "type": "integer",
+        "required": false,
+        "default": 2,
+        "min": 0,
+        "max": 4,
+        "step": 1
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "type": "integer",
+        "required": false,
+        "min": 0,
+        "max": 4294967295,
+        "placeholder": "Random"
+      }
+    ],
+    "routes": [
+      {
+        "id": "bfl",
+        "provider": "bfl",
+        "maker": true,
+        "keys": [
+          "BFL_API_KEY"
+        ],
+        "handler": "bfl",
+        "endpoint": "/v1/flux-3-image-klein",
+        "params": [
+          {
+            "key": "steps",
+            "label": "Steps",
+            "type": "integer",
+            "required": false,
+            "default": 16,
+            "min": 1,
+            "max": 16,
+            "step": 1
+          },
+          {
+            "key": "output_format",
+            "label": "Format",
+            "type": "enum",
+            "required": false,
+            "default": "jpeg",
+            "options": [
+              {
+                "label": "JPEG",
+                "value": "jpeg"
+              },
+              {
+                "label": "PNG",
+                "value": "png"
+              }
+            ]
+          }
+        ],
+        "rules": {
+          "ports": {
+            "images": {
+              "max": 10
+            }
+          }
+        }
+      },
+      {
+        "id": "openrouter",
+        "provider": "openrouter",
+        "keys": [
+          "OPENROUTER_API_KEY"
+        ],
+        "handler": "openrouter-images",
+        "endpoint": "black-forest-labs/flux-3-image-klein",
+        "valueMap": {
+          "resolution": {
+            "768sq": "768",
+            "1k": "1K",
+            "1.5k": "1.5K",
+            "2k": "2K",
+            "4k": "4K"
+          }
+        },
+        "rules": {
+          "ports": {
+            "images": {
+              "max": 10
+            }
+          },
+          "rejectsWhen": [
+            {
+              "match": {
+                "seed": "(set)"
+              },
+              "label": "a seed"
+            }
+          ]
+        },
+        "note": "OpenRouter can't take a seed."
+      }
+    ]
+  },
+  "flux-3-image-klein-base": {
+    "id": "flux-3-image-klein-base",
+    "displayName": "FLUX 3 Image Klein Base",
+    "description": "FLUX 3 Image Klein Base, the undistilled 5.6B open-weights model (50 steps, for LoRA and research): text to image or edit with up to 10 reference images. On fal.ai only; BFL's API doesn't serve it.",
+    "category": "image-gen",
+    "apiProvider": "fal",
+    "apiEndpoint": "blackforestlabs/flux-3/klein/base/text-to-image",
+    "executionPattern": "async-poll",
+    "envKeyName": [
+      "FAL_KEY"
+    ],
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "Images",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true,
+        "maxConnections": 10
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_provider",
+        "label": "Provider",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "auto",
+            "value": "auto"
+          },
+          {
+            "label": "fal",
+            "value": "fal"
+          }
+        ],
+        "hidden": true
+      }
+    ],
+    "sharedParams": [
+      {
+        "key": "image_size",
+        "label": "Size",
+        "type": "enum",
+        "required": false,
+        "default": "square_hd",
+        "options": [
+          {
+            "label": "Square HD",
+            "value": "square_hd"
+          },
+          {
+            "label": "Square",
+            "value": "square"
+          },
+          {
+            "label": "Portrait 4:3",
+            "value": "portrait_4_3"
+          },
+          {
+            "label": "Portrait 16:9",
+            "value": "portrait_16_9"
+          },
+          {
+            "label": "Landscape 4:3",
+            "value": "landscape_4_3"
+          },
+          {
+            "label": "Landscape 16:9",
+            "value": "landscape_16_9"
+          }
+        ]
+      },
+      {
+        "key": "seed",
+        "label": "Seed",
+        "type": "integer",
+        "required": false,
+        "placeholder": "Random"
+      },
+      {
+        "key": "output_format",
+        "label": "Format",
+        "type": "enum",
+        "required": false,
+        "default": "png",
+        "options": [
+          {
+            "label": "PNG",
+            "value": "png"
+          },
+          {
+            "label": "JPEG",
+            "value": "jpeg"
+          },
+          {
+            "label": "WebP",
+            "value": "webp"
+          }
+        ]
+      },
+      {
+        "key": "enable_prompt_expansion",
+        "label": "Prompt expansion",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      },
+      {
+        "key": "enable_safety_checker",
+        "label": "Safety checker",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      }
+    ],
+    "routes": [
+      {
+        "id": "fal",
+        "provider": "fal",
+        "keys": [
+          "FAL_KEY"
+        ],
+        "handler": "fal",
+        "endpoint": "blackforestlabs/flux-3/klein/base/text-to-image",
+        "endpointWhen": [
+          {
+            "when": {
+              "images": "(set)"
+            },
+            "endpoint": "blackforestlabs/flux-3/klein/base/edit-image"
+          }
+        ],
+        "rules": {
+          "ports": {
+            "images": {
+              "max": 10
+            }
+          }
+        }
+      }
+    ]
+  },
+  "flux-3-video": {
+    "id": "flux-3-video",
+    "displayName": "FLUX 3 Video",
+    "description": "Black Forest Labs' FLUX 3 Video: text to video with sound, animate a start image, an end image or up to 10 keyframes, or continue a video clip. Runs on BFL, fal.ai, Replicate, OpenRouter or Krea.",
+    "category": "video-gen",
+    "apiProvider": "bfl",
+    "apiEndpoint": "/v1/flux-3-video",
+    "executionPattern": "async-poll",
+    "envKeyName": [
+      "BFL_API_KEY",
+      "FAL_KEY",
+      "REPLICATE_API_TOKEN",
+      "OPENROUTER_API_KEY",
+      "KREA_API_TOKEN"
+    ],
+    "directKeyName": [
+      "BFL_API_KEY"
+    ],
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      },
+      {
+        "id": "start_image",
+        "label": "Start image",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "end_image",
+        "label": "End image",
+        "dataType": "Image",
+        "required": false
+      },
+      {
+        "id": "start_video",
+        "label": "Start video",
+        "dataType": "Video",
+        "required": false
+      },
+      {
+        "id": "keyframes",
+        "label": "Keyframes",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true,
+        "maxConnections": 10
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      }
+    ],
+    "params": [
+      {
+        "key": "_provider",
+        "label": "Provider",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "auto",
+            "value": "auto"
+          },
+          {
+            "label": "bfl",
+            "value": "bfl"
+          },
+          {
+            "label": "fal",
+            "value": "fal"
+          },
+          {
+            "label": "replicate",
+            "value": "replicate"
+          },
+          {
+            "label": "openrouter",
+            "value": "openrouter"
+          },
+          {
+            "label": "krea",
+            "value": "krea"
+          }
+        ],
+        "hidden": true
+      },
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "default": "api-token",
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ]
+      }
+    ],
+    "sharedParams": [
+      {
+        "key": "duration",
+        "label": "Duration",
+        "type": "integer",
+        "required": false,
+        "default": 5,
+        "min": 5,
+        "max": 20,
+        "step": 1
+      },
+      {
+        "key": "resolution",
+        "label": "Resolution",
+        "type": "enum",
+        "required": false,
+        "default": "hd",
+        "options": [
+          {
+            "label": "HD (720p)",
+            "value": "hd"
+          },
+          {
+            "label": "Full HD (1080p)",
+            "value": "fhd"
+          },
+          {
+            "label": "QHD (1440p)",
+            "value": "qhd"
+          },
+          {
+            "label": "UHD (4K)",
+            "value": "uhd"
+          }
+        ]
+      },
+      {
+        "key": "aspect_ratio",
+        "label": "Aspect ratio",
+        "type": "enum",
+        "required": false,
+        "default": "16:9",
+        "options": [
+          {
+            "label": "auto",
+            "value": "auto"
+          },
+          {
+            "label": "21:9",
+            "value": "21:9"
+          },
+          {
+            "label": "2:1",
+            "value": "2:1"
+          },
+          {
+            "label": "16:9",
+            "value": "16:9"
+          },
+          {
+            "label": "4:3",
+            "value": "4:3"
+          },
+          {
+            "label": "1:1",
+            "value": "1:1"
+          },
+          {
+            "label": "3:4",
+            "value": "3:4"
+          },
+          {
+            "label": "9:16",
+            "value": "9:16"
+          },
+          {
+            "label": "9:21",
+            "value": "9:21"
+          }
+        ]
+      },
+      {
+        "key": "generate_audio",
+        "label": "Generate audio",
+        "type": "boolean",
+        "required": false,
+        "default": true
+      }
+    ],
+    "routes": [
+      {
+        "id": "bfl",
+        "provider": "bfl",
+        "maker": true,
+        "keys": [
+          "BFL_API_KEY"
+        ],
+        "handler": "bfl",
+        "endpoint": "/v1/flux-3-video",
+        "params": [
+          {
+            "key": "draft",
+            "label": "Draft (fast preview)",
+            "type": "boolean",
+            "required": false,
+            "default": false
+          }
+        ],
+        "rules": {
+          "rejectsWhen": [
+            {
+              "match": {
+                "draft": true,
+                "resolution": "fhd"
+              },
+              "label": "a draft above hd"
+            },
+            {
+              "match": {
+                "draft": true,
+                "resolution": "qhd"
+              },
+              "label": "a draft above hd"
+            },
+            {
+              "match": {
+                "draft": true,
+                "resolution": "uhd"
+              },
+              "label": "a draft above hd"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "duration": 16
+              },
+              "label": "a video continuation longer than 15 s"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "duration": 17
+              },
+              "label": "a video continuation longer than 15 s"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "duration": 18
+              },
+              "label": "a video continuation longer than 15 s"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "duration": 19
+              },
+              "label": "a video continuation longer than 15 s"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "duration": 20
+              },
+              "label": "a video continuation longer than 15 s"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "start_image": "(set)"
+              },
+              "label": "a start video together with images"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "keyframes": "(set)"
+              },
+              "label": "a start video together with images"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "end_image": "(set)"
+              },
+              "label": "a start video together with images"
+            },
+            {
+              "match": {
+                "end_image": "(set)",
+                "start_image": "(unset)",
+                "keyframes": "(unset)"
+              },
+              "label": "an end image without a start image or keyframes"
+            }
+          ],
+          "ports": {
+            "keyframes": {
+              "max": 10
+            },
+            "frames": {
+              "max": 10,
+              "of": [
+                "start_image",
+                "keyframes",
+                "end_image"
+              ],
+              "label": "images (start + keyframes + end)"
+            }
+          }
+        }
+      },
+      {
+        "id": "fal",
+        "provider": "fal",
+        "keys": [
+          "FAL_KEY"
+        ],
+        "handler": "fal",
+        "endpoint": "blackforestlabs/flux-3/text-to-video",
+        "endpointWhen": [
+          {
+            "when": {
+              "start_video": "(set)",
+              "draft": true
+            },
+            "endpoint": "blackforestlabs/flux-3/extend-video/draft"
+          },
+          {
+            "when": {
+              "start_video": "(set)"
+            },
+            "endpoint": "blackforestlabs/flux-3/extend-video"
+          },
+          {
+            "when": {
+              "keyframes": "(set)",
+              "draft": true
+            },
+            "endpoint": "blackforestlabs/flux-3/keyframes-to-video/draft"
+          },
+          {
+            "when": {
+              "keyframes": "(set)"
+            },
+            "endpoint": "blackforestlabs/flux-3/keyframes-to-video"
+          },
+          {
+            "when": {
+              "end_image": "(set)",
+              "draft": true
+            },
+            "endpoint": "blackforestlabs/flux-3/first-last-frame-to-video/draft"
+          },
+          {
+            "when": {
+              "end_image": "(set)"
+            },
+            "endpoint": "blackforestlabs/flux-3/first-last-frame-to-video"
+          },
+          {
+            "when": {
+              "start_image": "(set)",
+              "draft": true
+            },
+            "endpoint": "blackforestlabs/flux-3/image-to-video/draft"
+          },
+          {
+            "when": {
+              "start_image": "(set)"
+            },
+            "endpoint": "blackforestlabs/flux-3/image-to-video"
+          },
+          {
+            "when": {
+              "draft": true
+            },
+            "endpoint": "blackforestlabs/flux-3/text-to-video/draft"
+          }
+        ],
+        "params": [
+          {
+            "key": "draft",
+            "label": "Draft (fast preview)",
+            "type": "boolean",
+            "required": false,
+            "default": false
+          }
+        ],
+        "valueMap": {
+          "resolution": {
+            "hd": "720p",
+            "fhd": "1080p",
+            "qhd": "1440p",
+            "uhd": "2160p"
+          }
+        },
+        "rules": {
+          "accepts": {
+            "aspect_ratio": {
+              "values": [
+                "auto",
+                "21:9",
+                "2:1",
+                "16:9",
+                "4:3",
+                "1:1",
+                "3:4",
+                "9:16"
+              ]
+            }
+          },
+          "rejectsWhen": [
+            {
+              "match": {
+                "draft": true,
+                "resolution": "fhd"
+              },
+              "label": "a draft above hd"
+            },
+            {
+              "match": {
+                "draft": true,
+                "resolution": "qhd"
+              },
+              "label": "a draft above hd"
+            },
+            {
+              "match": {
+                "draft": true,
+                "resolution": "uhd"
+              },
+              "label": "a draft above hd"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "start_image": "(set)"
+              },
+              "label": "a start video together with images"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "keyframes": "(set)"
+              },
+              "label": "a start video together with images"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "end_image": "(set)"
+              },
+              "label": "a start video together with images"
+            },
+            {
+              "match": {
+                "end_image": "(set)",
+                "start_image": "(unset)",
+                "keyframes": "(unset)"
+              },
+              "label": "an end image without a start image or keyframes"
+            }
+          ],
+          "ports": {
+            "keyframes": {
+              "max": 10
+            },
+            "frames": {
+              "max": 10,
+              "of": [
+                "start_image",
+                "keyframes",
+                "end_image"
+              ],
+              "label": "images (start + keyframes + end)"
+            }
+          }
+        }
+      },
+      {
+        "id": "replicate",
+        "provider": "replicate",
+        "keys": [
+          "REPLICATE_API_TOKEN"
+        ],
+        "handler": "replicate-model",
+        "endpoint": "black-forest-labs/flux-3",
+        "params": [
+          {
+            "key": "draft",
+            "label": "Draft (fast preview)",
+            "type": "boolean",
+            "required": false,
+            "default": false
+          }
+        ],
+        "valueMap": {
+          "resolution": {
+            "hd": "720p",
+            "fhd": "1080p"
+          },
+          "duration": {
+            "5": "5",
+            "6": "6",
+            "7": "7",
+            "8": "8",
+            "9": "9",
+            "10": "10",
+            "11": "11",
+            "12": "12",
+            "13": "13",
+            "14": "14",
+            "15": "15",
+            "16": "16",
+            "17": "17",
+            "18": "18",
+            "19": "19",
+            "20": "20"
+          }
+        },
+        "rules": {
+          "accepts": {
+            "aspect_ratio": {
+              "values": [
+                "auto",
+                "21:9",
+                "2:1",
+                "16:9",
+                "4:3",
+                "1:1",
+                "3:4",
+                "9:16"
+              ]
+            }
+          },
+          "rejectsWhen": [
+            {
+              "match": {
+                "draft": true,
+                "resolution": "fhd"
+              },
+              "label": "a draft above hd"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "start_image": "(set)"
+              },
+              "label": "a start video together with images"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "keyframes": "(set)"
+              },
+              "label": "a start video together with images"
+            },
+            {
+              "match": {
+                "start_video": "(set)",
+                "end_image": "(set)"
+              },
+              "label": "a start video together with images"
+            },
+            {
+              "match": {
+                "end_image": "(set)",
+                "start_image": "(unset)",
+                "keyframes": "(unset)"
+              },
+              "label": "an end image without a start image or keyframes"
+            }
+          ],
+          "ports": {
+            "keyframes": {
+              "max": 10
+            },
+            "frames": {
+              "max": 10,
+              "of": [
+                "start_image",
+                "keyframes",
+                "end_image"
+              ],
+              "label": "images (start + keyframes + end)"
+            }
+          }
+        }
+      },
+      {
+        "id": "openrouter",
+        "provider": "openrouter",
+        "keys": [
+          "OPENROUTER_API_KEY"
+        ],
+        "handler": "openrouter-videos",
+        "endpoint": "black-forest-labs/flux-3-video",
+        "valueMap": {
+          "resolution": {
+            "hd": "720p",
+            "fhd": "1080p",
+            "qhd": "2K",
+            "uhd": "4K"
+          }
+        },
+        "rules": {
+          "accepts": {
+            "aspect_ratio": {
+              "values": [
+                "21:9",
+                "16:9",
+                "4:3",
+                "1:1",
+                "3:4",
+                "9:16"
+              ]
+            }
+          },
+          "rejects": {
+            "draft": [
+              true
+            ]
+          },
+          "rejectsWhen": [
+            {
+              "match": {
+                "end_image": "(set)",
+                "start_image": "(unset)",
+                "keyframes": "(unset)"
+              },
+              "label": "an end image without a start image or keyframes"
+            }
+          ],
+          "ports": {
+            "keyframes": {
+              "max": 0
+            },
+            "start_video": {
+              "max": 0
+            }
+          }
+        },
+        "note": "Start and end images go only as public http(s) URLs (a Nebula output can't be sent)."
+      },
+      {
+        "id": "krea",
+        "provider": "krea",
+        "keys": [
+          "KREA_API_TOKEN"
+        ],
+        "plan": "optional",
+        "handler": "krea",
+        "endpoint": "/generate/video/black-forest-labs/flux-3-video",
+        "valueMap": {
+          "resolution": {
+            "hd": "720p",
+            "fhd": "1080p"
+          }
+        },
+        "rules": {
+          "accepts": {
+            "aspect_ratio": {
+              "values": [
+                "21:9",
+                "2:1",
+                "16:9",
+                "4:3",
+                "1:1",
+                "3:4",
+                "9:16"
+              ]
+            }
+          },
+          "rejects": {
+            "draft": [
+              true
+            ]
+          },
+          "rejectsWhen": [
+            {
+              "match": {
+                "end_image": "(set)",
+                "start_image": "(unset)",
+                "keyframes": "(unset)"
+              },
+              "label": "an end image without a start image or keyframes"
+            }
+          ],
+          "ports": {
+            "keyframes": {
+              "max": 0
+            }
+          }
+        }
+      }
+    ]
+  },
+  "flux-video-edit": {
+    "id": "flux-video-edit",
+    "displayName": "FLUX Video Edit [fast]",
+    "description": "Black Forest Labs' FLUX Video Edit [fast]: change a video clip with a text prompt; the edit keeps the clip's length. Runs on BFL, fal.ai or Krea.",
+    "category": "video-gen",
+    "apiProvider": "bfl",
+    "apiEndpoint": "/v1/flux-tools/video-edit-v1",
+    "executionPattern": "async-poll",
+    "envKeyName": [
+      "BFL_API_KEY",
+      "FAL_KEY",
+      "KREA_API_TOKEN"
+    ],
+    "directKeyName": [
+      "BFL_API_KEY"
+    ],
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      },
+      {
+        "id": "start_video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      }
+    ],
+    "params": [
+      {
+        "key": "_provider",
+        "label": "Provider",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "auto",
+            "value": "auto"
+          },
+          {
+            "label": "bfl",
+            "value": "bfl"
+          },
+          {
+            "label": "fal",
+            "value": "fal"
+          },
+          {
+            "label": "krea",
+            "value": "krea"
+          }
+        ],
+        "hidden": true
+      },
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "default": "api-token",
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ]
+      }
+    ],
+    "sharedParams": [],
+    "routes": [
+      {
+        "id": "bfl",
+        "provider": "bfl",
+        "maker": true,
+        "keys": [
+          "BFL_API_KEY"
+        ],
+        "handler": "bfl",
+        "endpoint": "/v1/flux-tools/video-edit-v1"
+      },
+      {
+        "id": "fal",
+        "provider": "fal",
+        "keys": [
+          "FAL_KEY"
+        ],
+        "handler": "fal",
+        "endpoint": "blackforestlabs/flux-3/edit-video"
+      },
+      {
+        "id": "krea",
+        "provider": "krea",
+        "keys": [
+          "KREA_API_TOKEN"
+        ],
+        "plan": "optional",
+        "handler": "krea",
+        "endpoint": "/generate/video/black-forest-labs/flux-video-edit"
+      }
+    ]
+  },
+  "flux-video-upscale": {
+    "id": "flux-video-upscale",
+    "displayName": "FLUX Video Upscale",
+    "description": "Black Forest Labs' FLUX Video Upscale: upscale a video clip 1.5x to 3x, precise or creative, with an optional prompt. Runs on BFL, fal.ai, Replicate or Krea.",
+    "category": "transform",
+    "apiProvider": "bfl",
+    "apiEndpoint": "/v1/flux-tools/video-upscale-v1",
+    "executionPattern": "async-poll",
+    "envKeyName": [
+      "BFL_API_KEY",
+      "FAL_KEY",
+      "REPLICATE_API_TOKEN",
+      "KREA_API_TOKEN"
+    ],
+    "directKeyName": [
+      "BFL_API_KEY"
+    ],
+    "inputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      },
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": false
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "video",
+        "label": "Video",
+        "dataType": "Video",
+        "required": true
+      }
+    ],
+    "params": [
+      {
+        "key": "_provider",
+        "label": "Provider",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "auto",
+            "value": "auto"
+          },
+          {
+            "label": "bfl",
+            "value": "bfl"
+          },
+          {
+            "label": "fal",
+            "value": "fal"
+          },
+          {
+            "label": "replicate",
+            "value": "replicate"
+          },
+          {
+            "label": "krea",
+            "value": "krea"
+          }
+        ],
+        "hidden": true
+      },
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "default": "api-token",
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ]
+      }
+    ],
+    "sharedParams": [
+      {
+        "key": "creativity",
+        "label": "Creativity",
+        "type": "enum",
+        "required": false,
+        "default": 1,
+        "options": [
+          {
+            "label": "Precise",
+            "value": 0
+          },
+          {
+            "label": "Creative",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "key": "upscale_factor",
+        "label": "Upscale factor",
+        "type": "float",
+        "required": false,
+        "default": 2,
+        "min": 1.5,
+        "max": 3,
+        "step": 0.01
+      }
+    ],
+    "routes": [
+      {
+        "id": "bfl",
+        "provider": "bfl",
+        "maker": true,
+        "keys": [
+          "BFL_API_KEY"
+        ],
+        "handler": "bfl",
+        "endpoint": "/v1/flux-tools/video-upscale-v1"
+      },
+      {
+        "id": "fal",
+        "provider": "fal",
+        "keys": [
+          "FAL_KEY"
+        ],
+        "handler": "fal",
+        "endpoint": "blackforestlabs/flux-video-upscale"
+      },
+      {
+        "id": "replicate",
+        "provider": "replicate",
+        "keys": [
+          "REPLICATE_API_TOKEN"
+        ],
+        "handler": "replicate-model",
+        "endpoint": "black-forest-labs/flux-video-upscale"
+      },
+      {
+        "id": "krea",
+        "provider": "krea",
+        "keys": [
+          "KREA_API_TOKEN"
+        ],
+        "plan": "optional",
+        "handler": "krea",
+        "endpoint": "/generate/enhance/black-forest-labs/flux-video-upscale",
+        "valueMap": {
+          "creativity": {
+            "0": "precise",
+            "1": "creative"
+          }
+        }
+      }
+    ]
+  },
+  "krea-3": {
+    "id": "krea-3",
+    "displayName": "Krea 3",
+    "description": "Krea's own Krea 3 image model: text to image, or edit with up to 8 reference images. Runs on Krea (early access for beta workspaces) or fal.ai.",
+    "category": "image-gen",
+    "apiProvider": "krea",
+    "apiEndpoint": "/generate/image/krea/krea-3",
+    "executionPattern": "async-poll",
+    "envKeyName": [
+      "KREA_API_TOKEN",
+      "FAL_KEY"
+    ],
+    "directKeyName": [
+      "KREA_API_TOKEN"
+    ],
+    "inputPorts": [
+      {
+        "id": "prompt",
+        "label": "Prompt",
+        "dataType": "Text",
+        "required": true
+      },
+      {
+        "id": "images",
+        "label": "Images",
+        "dataType": "Image",
+        "required": false,
+        "multiple": true,
+        "maxConnections": 8
+      }
+    ],
+    "outputPorts": [
+      {
+        "id": "image",
+        "label": "Image",
+        "dataType": "Image",
+        "required": false
+      }
+    ],
+    "params": [
+      {
+        "key": "_provider",
+        "label": "Provider",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "auto",
+            "value": "auto"
+          },
+          {
+            "label": "krea",
+            "value": "krea"
+          },
+          {
+            "label": "fal",
+            "value": "fal"
+          }
+        ],
+        "hidden": true
+      },
+      {
+        "key": "_kreaAuth",
+        "label": "Krea connection",
+        "type": "enum",
+        "required": false,
+        "default": "api-token",
+        "options": [
+          {
+            "value": "api-token",
+            "label": "API token · API balance"
+          },
+          {
+            "value": "mcp",
+            "label": "Krea account · workspace compute"
+          }
+        ]
+      }
+    ],
+    "sharedParams": [
+      {
+        "key": "seed",
+        "label": "Seed",
+        "type": "integer",
+        "required": false,
+        "step": 1
+      }
+    ],
+    "routes": [
+      {
+        "id": "krea",
+        "provider": "krea",
+        "maker": true,
+        "keys": [
+          "KREA_API_TOKEN"
+        ],
+        "plan": "optional",
+        "handler": "krea",
+        "endpoint": "/generate/image/krea/krea-3",
+        "note": "Early access: Krea 3 on Krea's API is for beta workspaces",
+        "params": [
+          {
+            "key": "thinking_mode",
+            "label": "Thinking mode",
+            "type": "enum",
+            "required": false,
+            "default": "fast",
+            "options": [
+              {
+                "label": "Fast",
+                "value": "fast"
+              },
+              {
+                "label": "High",
+                "value": "high"
+              }
+            ]
+          },
+          {
+            "key": "resolution",
+            "label": "Resolution",
+            "type": "enum",
+            "required": false,
+            "default": "1K",
+            "options": [
+              {
+                "label": "1K",
+                "value": "1K"
+              },
+              {
+                "label": "2K",
+                "value": "2K"
+              }
+            ]
+          },
+          {
+            "key": "aspect_ratio",
+            "label": "Aspect ratio",
+            "type": "enum",
+            "required": false,
+            "options": [
+              {
+                "label": "1:1",
+                "value": "1:1"
+              },
+              {
+                "label": "4:5",
+                "value": "4:5"
+              },
+              {
+                "label": "3:4",
+                "value": "3:4"
+              },
+              {
+                "label": "2:3",
+                "value": "2:3"
+              },
+              {
+                "label": "9:16",
+                "value": "9:16"
+              },
+              {
+                "label": "5:4",
+                "value": "5:4"
+              },
+              {
+                "label": "4:3",
+                "value": "4:3"
+              },
+              {
+                "label": "3:2",
+                "value": "3:2"
+              },
+              {
+                "label": "16:9",
+                "value": "16:9"
+              },
+              {
+                "label": "21:9",
+                "value": "21:9"
+              }
+            ]
+          },
+          {
+            "key": "regional_edit",
+            "label": "Regional edit",
+            "type": "boolean",
+            "required": false,
+            "default": false
+          }
+        ],
+        "rules": {
+          "ports": {
+            "images": {
+              "max": 8
+            }
+          },
+          "rejectsWhen": [
+            {
+              "match": {
+                "regional_edit": true,
+                "images": "(unset)"
+              },
+              "label": "a regional edit without a reference image"
+            }
+          ]
+        }
+      },
+      {
+        "id": "fal",
+        "provider": "fal",
+        "keys": [
+          "FAL_KEY"
+        ],
+        "handler": "fal",
+        "endpoint": "krea/v3/text-to-image",
+        "endpointWhen": [
+          {
+            "when": {
+              "images": "(set)"
+            },
+            "endpoint": "krea/v3/edit"
+          }
+        ],
+        "params": [
+          {
+            "key": "model",
+            "label": "Model",
+            "type": "enum",
+            "required": false,
+            "default": "berry",
+            "options": [
+              {
+                "label": "Berry (quality)",
+                "value": "berry"
+              },
+              {
+                "label": "Jam (speed)",
+                "value": "jam"
+              }
+            ]
+          },
+          {
+            "key": "reasoning_level",
+            "label": "Reasoning level",
+            "type": "enum",
+            "required": false,
+            "default": "low",
+            "options": [
+              {
+                "label": "Low",
+                "value": "low"
+              },
+              {
+                "label": "Medium",
+                "value": "medium"
+              },
+              {
+                "label": "High",
+                "value": "high"
+              }
+            ]
+          },
+          {
+            "key": "image_size",
+            "label": "Image size",
+            "type": "enum",
+            "required": false,
+            "default": "auto",
+            "options": [
+              {
+                "label": "auto",
+                "value": "auto"
+              },
+              {
+                "label": "square_hd",
+                "value": "square_hd"
+              },
+              {
+                "label": "square",
+                "value": "square"
+              },
+              {
+                "label": "portrait_4_3",
+                "value": "portrait_4_3"
+              },
+              {
+                "label": "portrait_16_9",
+                "value": "portrait_16_9"
+              },
+              {
+                "label": "landscape_4_3",
+                "value": "landscape_4_3"
+              },
+              {
+                "label": "landscape_16_9",
+                "value": "landscape_16_9"
+              }
+            ]
+          },
+          {
+            "key": "negative_prompt",
+            "label": "Negative prompt",
+            "type": "string",
+            "required": false,
+            "default": "",
+            "visibleWhen": {
+              "model": [
+                "berry"
+              ]
+            }
+          },
+          {
+            "key": "output_format",
+            "label": "Output format",
+            "type": "enum",
+            "required": false,
+            "default": "png",
+            "options": [
+              {
+                "label": "png",
+                "value": "png"
+              },
+              {
+                "label": "jpeg",
+                "value": "jpeg"
+              }
+            ]
+          }
+        ],
+        "rules": {
+          "ports": {
+            "images": {
+              "max": 8
+            }
+          },
+          "rejectsWhen": [
+            {
+              "match": {
+                "reasoning_level": "high",
+                "images": "(unset)"
+              },
+              "label": "high reasoning without a reference image (fal.ai takes it on krea/v3/edit only)"
+            }
+          ]
+        }
+      }
+    ]
+  },
   "krea-image-krea-krea-2-medium": {
     "id": "krea-image-krea-krea-2-medium",
     "displayName": "Krea 2 Medium (Krea)",
@@ -41499,263 +43593,6 @@
       }
     }
   },
-  "krea-video-black-forest-labs-flux-3-video": {
-    "id": "krea-video-black-forest-labs-flux-3-video",
-    "displayName": "Flux 3 Video (Krea)",
-    "category": "video-gen",
-    "apiProvider": "krea",
-    "apiEndpoint": "/generate/video/black-forest-labs/flux-3-video",
-    "envKeyName": "KREA_API_TOKEN",
-    "executionPattern": "async-poll",
-    "inputPorts": [
-      {
-        "id": "prompt",
-        "label": "Prompt",
-        "dataType": "Text",
-        "required": false
-      },
-      {
-        "id": "start_image",
-        "label": "Start image",
-        "dataType": "Image",
-        "required": false
-      },
-      {
-        "id": "start_video",
-        "label": "Start video",
-        "dataType": "Video",
-        "required": false
-      },
-      {
-        "id": "end_image",
-        "label": "End image",
-        "dataType": "Image",
-        "required": false
-      }
-    ],
-    "outputPorts": [
-      {
-        "id": "video",
-        "label": "Video",
-        "dataType": "Video",
-        "required": true
-      },
-      {
-        "id": "videos",
-        "label": "All videos",
-        "dataType": "Array",
-        "required": false
-      },
-      {
-        "id": "artifacts",
-        "label": "All artifacts",
-        "dataType": "Array",
-        "required": false
-      },
-      {
-        "id": "job",
-        "label": "Job",
-        "dataType": "Any",
-        "required": false
-      }
-    ],
-    "params": [
-      {
-        "key": "_kreaAuth",
-        "label": "Krea connection",
-        "type": "enum",
-        "required": false,
-        "options": [
-          {
-            "value": "api-token",
-            "label": "API token · API balance"
-          },
-          {
-            "value": "mcp",
-            "label": "Krea account · workspace compute"
-          }
-        ],
-        "default": "api-token"
-      },
-      {
-        "key": "prompt",
-        "label": "Prompt",
-        "required": true,
-        "type": "textarea"
-      },
-      {
-        "key": "start_image",
-        "label": "Start image",
-        "required": false,
-        "type": "string"
-      },
-      {
-        "key": "start_video",
-        "label": "Start video",
-        "required": false,
-        "type": "string"
-      },
-      {
-        "key": "end_image",
-        "label": "End image",
-        "required": false,
-        "type": "string"
-      },
-      {
-        "key": "duration",
-        "label": "Duration",
-        "required": false,
-        "type": "integer",
-        "min": 5,
-        "max": 20,
-        "step": 1,
-        "default": 5
-      },
-      {
-        "key": "resolution",
-        "label": "Resolution",
-        "required": false,
-        "type": "enum",
-        "options": [
-          {
-            "label": "720p",
-            "value": "720p"
-          },
-          {
-            "label": "1080p",
-            "value": "1080p"
-          }
-        ],
-        "default": "720p"
-      },
-      {
-        "key": "aspect_ratio",
-        "label": "Aspect ratio",
-        "required": false,
-        "type": "enum",
-        "options": [
-          {
-            "label": "21:9",
-            "value": "21:9"
-          },
-          {
-            "label": "2:1",
-            "value": "2:1"
-          },
-          {
-            "label": "16:9",
-            "value": "16:9"
-          },
-          {
-            "label": "4:3",
-            "value": "4:3"
-          },
-          {
-            "label": "1:1",
-            "value": "1:1"
-          },
-          {
-            "label": "3:4",
-            "value": "3:4"
-          },
-          {
-            "label": "9:16",
-            "value": "9:16"
-          }
-        ],
-        "default": "16:9"
-      },
-      {
-        "key": "generate_audio",
-        "label": "Generate audio",
-        "required": false,
-        "type": "boolean",
-        "default": true
-      }
-    ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
-  },
-  "krea-video-black-forest-labs-flux-video-edit": {
-    "id": "krea-video-black-forest-labs-flux-video-edit",
-    "displayName": "Flux Video Edit (Krea)",
-    "category": "video-gen",
-    "apiProvider": "krea",
-    "apiEndpoint": "/generate/video/black-forest-labs/flux-video-edit",
-    "envKeyName": "KREA_API_TOKEN",
-    "executionPattern": "async-poll",
-    "inputPorts": [
-      {
-        "id": "prompt",
-        "label": "Prompt",
-        "dataType": "Text",
-        "required": false
-      },
-      {
-        "id": "start_video",
-        "label": "Start video",
-        "dataType": "Video",
-        "required": false
-      }
-    ],
-    "outputPorts": [
-      {
-        "id": "video",
-        "label": "Video",
-        "dataType": "Video",
-        "required": true
-      },
-      {
-        "id": "videos",
-        "label": "All videos",
-        "dataType": "Array",
-        "required": false
-      },
-      {
-        "id": "artifacts",
-        "label": "All artifacts",
-        "dataType": "Array",
-        "required": false
-      },
-      {
-        "id": "job",
-        "label": "Job",
-        "dataType": "Any",
-        "required": false
-      }
-    ],
-    "params": [
-      {
-        "key": "_kreaAuth",
-        "label": "Krea connection",
-        "type": "enum",
-        "required": false,
-        "options": [
-          {
-            "value": "api-token",
-            "label": "API token · API balance"
-          },
-          {
-            "value": "mcp",
-            "label": "Krea account · workspace compute"
-          }
-        ],
-        "default": "api-token"
-      },
-      {
-        "key": "prompt",
-        "label": "Prompt",
-        "required": true,
-        "type": "textarea"
-      },
-      {
-        "key": "start_video",
-        "label": "Start video",
-        "required": true,
-        "type": "string"
-      }
-    ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
-  },
   "krea-enhance-topaz-video-upscale": {
     "id": "krea-enhance-topaz-video-upscale",
     "displayName": "Topaz Video Upscale (Krea)",
@@ -43462,114 +45299,6 @@
         "max": 1,
         "step": 0.01,
         "default": 0.1
-      },
-      {
-        "key": "video_url",
-        "label": "Video URL",
-        "required": true,
-        "type": "string"
-      }
-    ],
-    "docUrl": "docs/model-providers/krea/krea-gateway.md"
-  },
-  "krea-enhance-black-forest-labs-flux-video-upscale": {
-    "id": "krea-enhance-black-forest-labs-flux-video-upscale",
-    "displayName": "Flux Video Upscale (Krea)",
-    "category": "transform",
-    "apiProvider": "krea",
-    "apiEndpoint": "/generate/enhance/black-forest-labs/flux-video-upscale",
-    "envKeyName": "KREA_API_TOKEN",
-    "executionPattern": "async-poll",
-    "inputPorts": [
-      {
-        "id": "prompt",
-        "label": "Prompt",
-        "dataType": "Text",
-        "required": false
-      },
-      {
-        "id": "video_url",
-        "label": "Video URL",
-        "dataType": "Video",
-        "required": false
-      }
-    ],
-    "outputPorts": [
-      {
-        "id": "video",
-        "label": "Video",
-        "dataType": "Video",
-        "required": true
-      },
-      {
-        "id": "videos",
-        "label": "All videos",
-        "dataType": "Array",
-        "required": false
-      },
-      {
-        "id": "artifacts",
-        "label": "All artifacts",
-        "dataType": "Array",
-        "required": false
-      },
-      {
-        "id": "job",
-        "label": "Job",
-        "dataType": "Any",
-        "required": false
-      }
-    ],
-    "params": [
-      {
-        "key": "_kreaAuth",
-        "label": "Krea connection",
-        "type": "enum",
-        "required": false,
-        "options": [
-          {
-            "value": "api-token",
-            "label": "API token · API balance"
-          },
-          {
-            "value": "mcp",
-            "label": "Krea account · workspace compute"
-          }
-        ],
-        "default": "api-token"
-      },
-      {
-        "key": "creativity",
-        "label": "Creativity",
-        "required": false,
-        "type": "enum",
-        "options": [
-          {
-            "label": "precise",
-            "value": "precise"
-          },
-          {
-            "label": "creative",
-            "value": "creative"
-          }
-        ],
-        "default": "creative"
-      },
-      {
-        "key": "upscale_factor",
-        "label": "Upscale factor",
-        "required": false,
-        "type": "float",
-        "min": 1.5,
-        "max": 3,
-        "step": 0.01,
-        "default": 2
-      },
-      {
-        "key": "prompt",
-        "label": "Prompt",
-        "required": false,
-        "type": "textarea"
       },
       {
         "key": "video_url",

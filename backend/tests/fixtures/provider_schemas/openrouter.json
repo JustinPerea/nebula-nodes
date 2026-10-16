@@ -102,6 +102,106 @@
    ],
    "type": "object"
   },
+  "images/black-forest-labs/flux-3-image-klein": {
+   "additionalProperties": false,
+   "properties": {
+    "aspect_ratio": {
+     "enum": [
+      "21:9",
+      "2:1",
+      "16:9",
+      "3:2",
+      "7:5",
+      "4:3",
+      "5:4",
+      "1:1",
+      "4:5",
+      "3:4",
+      "5:7",
+      "2:3",
+      "9:16",
+      "1:2",
+      "9:21",
+      "auto"
+     ]
+    },
+    "input_references": {
+     "items": {
+      "additionalProperties": false,
+      "properties": {
+       "image_url": {
+        "additionalProperties": false,
+        "properties": {
+         "url": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "url"
+        ],
+        "type": "object"
+       },
+       "type": {
+        "const": "image_url"
+       }
+      },
+      "required": [
+       "type",
+       "image_url"
+      ],
+      "type": "object"
+     },
+     "maxItems": 10,
+     "type": "array"
+    },
+    "model": {
+     "const": "black-forest-labs/flux-3-image-klein"
+    },
+    "n": {
+     "maximum": 1,
+     "minimum": 1,
+     "type": "integer"
+    },
+    "prompt": {
+     "type": "string"
+    },
+    "provider": {
+     "additionalProperties": false,
+     "properties": {
+      "options": {
+       "additionalProperties": false,
+       "properties": {
+        "black-forest-labs": {
+         "additionalProperties": false,
+         "properties": {
+          "safety_tolerance": {
+           "type": "integer"
+          }
+         },
+         "type": "object"
+        }
+       },
+       "type": "object"
+      }
+     },
+     "type": "object"
+    },
+    "resolution": {
+     "enum": [
+      "768",
+      "1K",
+      "1.5K",
+      "2K",
+      "4K"
+     ]
+    }
+   },
+   "required": [
+    "model",
+    "prompt"
+   ],
+   "type": "object"
+  },
   "videos/black-forest-labs/flux-3-video": {
    "additionalProperties": false,
    "properties": {
@@ -219,5 +319,6 @@
    ],
    "type": "object"
   }
- }
+ },
+ "_note": "images/black-forest-labs/flux-3-image-klein added for PR 3 from GET https://openrouter.ai/api/v1/images/models/black-forest-labs/flux-3-image-klein/endpoints (2026-10-15): the same supported_parameters (resolution 768/1K/1.5K/2K/4K, the 16 aspect ratios, n 1, input_references 0-10) and allowed_passthrough_parameters [safety_tolerance] as flux-3-image; no seed."
 }

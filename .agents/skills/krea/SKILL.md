@@ -1,11 +1,11 @@
 ---
 name: krea
-description: Use when building or editing a Nebula graph with Krea image/video/audio/enhance/3D provider nodes, Krea 2, image style references, styles, moodboards, style search or training, library management, or 3D export. Covers the schema-generated model catalog, exact node IDs and ports, direct-Krea routing, media upload, async jobs, legacy style wiring, credentials, and verification boundaries.
+description: Use when building or editing a Nebula graph with Krea image/video/audio/enhance/3D provider nodes, Krea 2, Krea 3 (krea-3, Krea or fal), the Krea route of the FLUX 3 video nodes, image style references, styles, moodboards, style search or training, library management, or 3D export. Covers the schema-generated model catalog, exact node IDs and ports, direct-Krea routing, media upload, async jobs, legacy style wiring, credentials, and verification boundaries.
 ---
 
 # Krea — Nebula Integration
 
-Use Krea direct API nodes when the user chooses Krea. FAL Krea endpoints and automatic routing through another provider are not part of this integration.
+Use Krea direct API nodes when the user chooses Krea. Two kinds of node also reach Krea or Krea models another way, and only by the rules below: the maker-route copies (a Krea copy that runs on the model maker's own key, see Maker routes) and the route-table nodes (one node per model with a provider switcher, where Krea is one route: Krea 3 and the FLUX 3 video nodes, see "Krea 3 and the FLUX 3 nodes"). A fal Krea endpoint is reachable only as Krea 3's fal route.
 
 Current gateway contract (image, video, audio, enhance, 3D): `docs/model-providers/krea/krea-gateway.md`. User-facing setup and recipes: `docs/api-guides/krea.md`. The older `docs/model-providers/krea/krea-2.md` describes the preserved legacy wrapper; it is not the full current provider catalog.
 
@@ -182,9 +182,26 @@ non-whole or out-of-range `duration`, and `upscale` / `enhance_prompt` /
 `draft` switched on. On BytePlus the node fills `video`, `videos` and
 `artifacts`, with no Krea `job`.
 
+## Krea 3 and the FLUX 3 nodes (route tables, 2026-10-15)
+
+These are one node per model with a provider switcher (`_provider`: `auto` or a route id; `docs/PROVIDER-ROUTES.md`). Auto takes the first keyed route in table order, the maker first, and never moves to another provider when a setting doesn't fit: the run stops and offers the routes that take it. An agent proposes a provider change (`propose_change`); a direct edit of `_provider` or `_kreaAuth` is refused.
+
+**`krea-3` "Krea 3"** (Krea is the maker). Ports `prompt`, `images` (up to 8 references; Krea's OpenAPI, MCP schema and docs all say 8).
+
+- Route `krea` first: `/generate/image/krea/krea-3`, API token or plan (`plan: optional`). Early access: Krea 3 on Krea's API is for beta workspaces (sales@krea.ai), and the Krea MCP's guide says closed beta there too. Under Auto, `_kreaAuth: mcp` runs on the plan, and new nodes take the global Krea mode, because Krea is the maker.
+- Route `fal` second: `krea/v3/text-to-image`, or `krea/v3/edit` when images are wired.
+- Shared: `seed` only. The two providers name everything else differently, and neither documents a mapping, so each route keeps its own settings:
+  - Krea: `thinking_mode` fast / high (default fast), `resolution` 1K / 2K (default 1K), `aspect_ratio` (10 values; unset means automatic framing), `regional_edit` (needs a reference image).
+  - fal: `model` berry / jam, `reasoning_level` low / medium / high (high needs a reference image), `image_size` (presets or `auto`), `negative_prompt` (berry), `output_format`.
+- Prices: Krea $0.03 at 1K, $0.06 at 2K, +$0.02 for high thinking, +$0.02 or $0.07 per reference by the reference's own size (so a range until the run); fal $0.025 per megapixel of output plus references (unconfirmed). Plan runs are unpriced.
+
+**FLUX 3 video copies folded.** `krea-video-black-forest-labs-flux-3-video`, `krea-video-black-forest-labs-flux-video-edit` and `krea-enhance-black-forest-labs-flux-video-upscale` are no longer separate nodes. They are the `krea` route of `flux-3-video`, `flux-video-edit` and `flux-video-upscale` (BFL is the maker; routes bfl, fal, replicate, openrouter, krea; see the `bfl` skill). A saved Krea node loads as the new node with `_provider: "krea"` and its `_kreaAuth` kept, so billing doesn't change on load; `720p`/`1080p` become `hd`/`fhd`, upscale `precise`/`creative` become 0/1, and the upscale port `video_url` becomes `video`. The Krea-only outputs `videos`, `artifacts` and `job` have no port on the new nodes. On these BFL-maker nodes the Krea plan bills only when the person picks the "Krea · plan" row; Auto never picks it.
+
+Catalog: the four endpoints are in `FOLDED` in `scripts/sync-krea-catalog.py`, so `--refresh` can't bring the old nodes back. Their entries stay in `backend/data/krea_gateway_models.json` with `foldedInto`, and `--check` verifies the route's Krea params against that entry's request schema.
+
 ## Gateway Model Nodes
 
-The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108) included as specific first-class Nebula nodes. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and Flux Video Edit require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.
+The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108), each a specific first-class Nebula node, except the three FLUX 3 video routes, which are folded into the FLUX 3 nodes (above). Krea 3 (`/generate/image/krea/krea-3`, added 2026-10-15) is likewise the `krea` route of `krea-3`, not a `krea-*` node. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and FLUX Video Edit [fast] (`flux-video-edit`) require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.
 
 Node IDs are `krea-` plus the API path after `/generate/`, with non-alphanumeric characters replaced by hyphens. For example:
 

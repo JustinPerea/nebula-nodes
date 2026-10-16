@@ -113,6 +113,10 @@ All 52 nodes below carry `apiProvider: "fal"` in `backend/data/node_definitions.
 
 > The bundle ships **169 per-model spec files** under `skills/` and **16 category overviews** under `categories/` covering the full FAL catalog (including audio, LLM, vision, and training models that Nebula does **not** wrap). Those extra files are reference material for the `fal-universal` escape hatch, not 169 Nebula nodes. The authoritative Nebula roster is the **52 ids above**.
 
+### fal as a route on the FLUX 3 and Krea 3 nodes (2026-10-15)
+
+`flux-3-image`, `flux-3-image-klein-base`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale` and `krea-3` are route-table nodes: one node per model with a provider switcher (`_provider`, `docs/PROVIDER-ROUTES.md`), where fal is one route (the only one on Klein Base). They run through the `fal` route client in `backend/execution/route_clients.py`, not a `sync_runner.py` wrapper. Endpoints and what fal takes on each: the "fal as a route" section of `.agents/skills/fal/SKILL.md`, and the `bfl` and `krea` skills.
+
 ## Param reference
 
 Types, defaults, ranges, and enums below come straight from `backend/data/node_definitions.json`. Inputs marked `*` are required ports. Where a node lists no params, only `defaults` apply (just wire the inputs).

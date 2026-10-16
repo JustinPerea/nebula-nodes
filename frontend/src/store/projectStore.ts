@@ -164,6 +164,7 @@ async function activate(action: () => Promise<api.ProjectActivation>): Promise<v
     applyProject(result.project, result.workspaceRevision);
     updateSummary(result.project);
     useProjectStore.setState({ screen: 'workspace' });
+    if (result.warnings?.length) alert(`Opened.\n${result.warnings.map((line) => `• ${line}`).join('\n')}`);
   } catch (error) {
     // A lost activation reply can follow a successful server commit. Re-read
     // on Retry instead of sending a second create/open or saving under an old

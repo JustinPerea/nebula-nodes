@@ -17,6 +17,11 @@ the shared infrastructure contract). Each wrapper handler lives in
 `backend/execution/sync_runner.py` and injects `endpoint_id` via
 `node.params.setdefault(...)` before calling the universal handler.
 
+FLUX 3 (2026-10-15) is not in this note. Its nodes are route-table nodes with
+fal as one route (`blackforestlabs/flux-3/*`, `blackforestlabs/flux-video-upscale`),
+run by the `fal` route client in `backend/execution/route_clients.py`: see
+`../bfl/flux-3.md`.
+
 ## Sources
 
 - `https://fal.ai/models/fal-ai/flux-pro/v1.1-ultra/api` — fetched 2026-05-17

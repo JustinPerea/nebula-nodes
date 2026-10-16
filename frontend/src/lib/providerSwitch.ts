@@ -1,8 +1,8 @@
 import type { ModelNodeDefinition, ParamDefinition, RouteSpec } from '../types';
 import {
-  allParamDefinitions, AUTO, matchValue, PROVIDER_PARAM, providerChoice, providerLabel, routeAcceptRule, routeBlock,
-  routeById, routeParamDefinitions, routesOf, routeSwitch, routeTakesValue, routeUnavailable, selectRoute, usesRoutePlan,
-  withWiredBlockers, type DirectBlock,
+  allParamDefinitions, AUTO, BILLING_PARAMS, matchValue, portLimitName, PROVIDER_PARAM, providerChoice, providerLabel,
+  routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routesOf, routeSwitch, routeTakesValue,
+  routeUnavailable, selectRoute, usesRoutePlan, withWiredBlockers, type DirectBlock,
 } from './directRoute';
 import { estimateRoutes, formatUsdRange, routePriceUnconfirmed, type PricingTable } from './pricing';
 import type { ProviderSetupTarget } from './providerReadiness';
@@ -45,6 +45,9 @@ export interface ProviderRow {
   priceTitle?: string;
   /** Why this route can't take the recipe as it is ("Doesn't take 1.5k"). */
   block: string | null;
+  /** The route's own note (RouteSpec.note, e.g. Krea 3's early access),
+   *  on its API row; a block note replaces it. */
+  info?: string;
   selected: boolean;
   /** The billing params a pick writes (BILLING_PARAMS). */
   writes: Params;
@@ -94,10 +97,15 @@ function billingWrites(definition: ModelNodeDefinition, routeId: string, plan: b
   return { [PROVIDER_PARAM]: routeId, _kreaAuth: plan ? 'mcp' : 'api-token' };
 }
 
-/** A block's value without its param name: "resolution 1.5k" -> "1.5k". */
+/** A block's value without its param name: "resolution 1.5k" -> "1.5k". A
+ * switch keeps its name ("draft true" -> "draft", "draft false" -> "no
+ * draft"), since "true" alone says nothing. */
 function blockedValue(block: Partial<DirectBlock>): string {
   const detail = String(block.detail ?? block.param ?? '');
-  return block.param && detail.startsWith(`${block.param} `) ? detail.slice(block.param.length + 1) : detail;
+  const value = block.param && detail.startsWith(`${block.param} `) ? detail.slice(block.param.length + 1) : detail;
+  if (block.param && value === 'true') return block.param;
+  if (block.param && value === 'false') return `no ${block.param}`;
+  return value;
 }
 
 /** A row's block note: what this route doesn't take of the recipe. */
@@ -108,8 +116,9 @@ function rowBlock(route: RouteSpec, block: DirectBlock): string {
   if (block.reason === 'size') return "Can't make that size";
   if (block.reason === 'retired') return 'Retired by the maker';
   if (block.reason === 'ports') {
-    const most = route.rules?.ports?.[block.param ?? '']?.max;
-    return most ? `Takes at most ${most} ${block.param}` : `Doesn't take wired ${block.param}`;
+    const limit = route.rules?.ports?.[block.param ?? ''];
+    const name = portLimitName(block.param ?? '', limit);
+    return limit?.max ? `Takes at most ${limit.max} ${name}` : `Doesn't take wired ${name}`;
   }
   return String(block.detail ?? block.reason);
 }
@@ -122,7 +131,7 @@ function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<Re
   if (!spec) return unavailable.missing.length ? 'no provider key set' : 'no route can take it';
   if (!block) return `no ${label} key`;
   if (block.reason === 'unsupported' || block.reason === 'blocked') return `${blockedValue(block)} isn't on ${label}`;
-  if (block.reason === 'ports') return `too many ${block.param} for ${label}`;
+  if (block.reason === 'ports') return `too many ${portLimitName(block.param ?? '', spec.rules?.ports?.[block.param ?? ''])} for ${label}`;
   return rowBlock(spec, block as DirectBlock).toLowerCase();
 }
 
@@ -175,6 +184,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
         setup: spec.keys[0] ? { kind: 'api-key', key: spec.keys[0] } : undefined,
         ...(block ? { price: '-', priceTitle: note ?? undefined } : price(definition, spec, estimates, context.pricing, false)),
         block: note,
+        ...(spec.note && !note ? { info: spec.note } : {}),
         selected: choice === spec.id && !(both && kreaPlanPicked(saved)),
         writes: billingWrites(definition, spec.id, false),
       });
@@ -257,9 +267,13 @@ function closestValue(route: RouteSpec, offered: ParamDefinition, whole: ParamDe
 
 /** A person's switch to `routeId`: each saved value that route doesn't take
  * moves to its closest value there (closestValue), with one note per change
- * for the card ("1.5k isn't on fal.ai: set to 2k"). Only an explicit click
- * calls this; a route change without one (keys, a shared graph, an import)
- * keeps every value, and the switcher shows the stop instead. */
+ * for the card ("1.5k isn't on fal.ai: set to 2k"). Another route's own
+ * param the new route doesn't offer, but whose saved value its rules refuse
+ * (FLUX 3 Video's Draft on Krea), goes back to its default, since the new
+ * route shows no control to change it ("Draft (fast preview) isn't on Krea:
+ * turned off"). Only an explicit click calls this; a route change without
+ * one (keys, a shared graph, an import) keeps every value, and the switcher
+ * shows the stop instead. */
 export function snapForRoute(definition: ModelNodeDefinition, params: Params, routeId: string | null | undefined): { params: Params; notes: string[] } {
   const route = routeId ? routeById(definition, routeId) : undefined;
   if (!route) return { params, notes: [] };
@@ -278,6 +292,20 @@ export function snapForRoute(definition: ModelNodeDefinition, params: Params, ro
     } else {
       next[offered.key] = snapped;
       notes.push(`${was} isn't on ${label}: set to ${optionLabel(whole.get(offered.key), snapped)}`);
+    }
+  }
+  const offeredKeys = new Set(routeParamDefinitions(definition, route.id).map((param) => param.key));
+  for (const param of whole.values()) {
+    const value = params[param.key];
+    if (offeredKeys.has(param.key) || BILLING_PARAMS.includes(param.key) || !hasValue(value)
+      || routeTakesValue(route, param.key, value)) continue;
+    const name = param.label || param.key;
+    if (param.default === undefined || !routeTakesValue(route, param.key, param.default)) {
+      delete next[param.key];
+      notes.push(`${name} isn't on ${label}: cleared`);
+    } else {
+      next[param.key] = param.default;
+      notes.push(`${name} isn't on ${label}: ${param.default === false ? 'turned off' : 'back to its default'}`);
     }
   }
   return { params: next, notes };

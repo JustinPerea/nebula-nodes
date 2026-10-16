@@ -62,18 +62,22 @@ describe('createModels', () => {
     expect(searchModels('music').some((model) => model.id === 'krea-audio-elevenlabs-music-v2-5')).toBe(true);
   });
 
-  it('keeps Krea routes requiring structured or video inputs on Canvas', () => {
+  it('keeps models requiring structured or video inputs on Canvas', () => {
     const createIds = new Set(getCreateModels().map((model) => model.id));
     const searchIds = new Set(searchModels('Krea').map((model) => model.id));
     for (const id of [
       'krea-image-runway-gen-4-image',
       'krea-video-minimax-h3-max-camera-controls',
-      'krea-video-black-forest-labs-flux-video-edit',
     ]) {
       expect(NODE_DEFINITIONS[id]?.apiProvider).toBe('krea');
       expect(createIds.has(id)).toBe(false);
       expect(searchIds.has(id)).toBe(false);
     }
+    // FLUX Video Edit [fast] runs on BFL, fal.ai or Krea, and always edits a video.
+    const edit = NODE_DEFINITIONS['flux-video-edit'];
+    expect(edit?.routes?.some((route) => route.provider === 'krea')).toBe(true);
+    expect(createIds.has('flux-video-edit')).toBe(false);
+    expect(searchIds.has('flux-video-edit')).toBe(false);
     // Plain image inputs remain accessible through Create's attachment path.
     expect(createIds.has('krea-image-bytedance-seededit')).toBe(true);
     expect(createIds.has('krea-image-xai-grok-imagine-2-edit')).toBe(true);

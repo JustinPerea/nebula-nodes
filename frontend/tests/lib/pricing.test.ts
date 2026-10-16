@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import shared from '../../../backend/tests/fixtures/pricing_cases.json';
 import shippedTable from '../../../backend/data/model_pricing.json';
 import backendCatalog from '../../../backend/data/node_definitions.json';
-import { estimateNode, estimateRoutes, formatUsd, formatUsdRange, routePriceUnconfirmed, type PriceEntry, type PricingTable } from '../../src/lib/pricing';
+import { estimateNode, estimateRoutes, formatUsd, formatUsdRange, pricedKeys, routePriceUnconfirmed, RUN_TIME_VARIABLES, type PriceEntry, type PricingTable } from '../../src/lib/pricing';
 import type { ModelNodeDefinition } from '../../src/types';
 
 type Fixture = {
@@ -52,11 +52,20 @@ describe('the shipped price table', () => {
     // or the chip would read "unpriced" for a fresh node.
     // A dual-route node prices each route on its own: check every route.
     // A local node priced only in a paid mode (QC Jev) is free at its
-    // defaults, so it must resolve in that mode instead.
-    const missing = Object.entries(nodes)
+    // defaults, so it must resolve in that mode instead. A price that reads
+    // the source clip (FLUX Video Edit [fast] and Upscale) is known only once the
+    // run is, so it is the one kind left unpriced on a fresh node.
+    const runTime = (entry: PriceEntry) => RUN_TIME_VARIABLES.some((key) => pricedKeys(entry).has(key));
+    const routed = Object.entries(nodes)
       .flatMap(([id, entry]) => (entry.routes
-        ? Object.keys(entry.routes).map((provider) => [id, entry, provider, `${id} (${provider})`] as const)
-        : [[id, entry, entry.provider, id] as const]))
+        ? Object.entries(entry.routes).map(([provider, priced]) => [id, entry, provider, `${id} (${provider})`, priced] as const)
+        : [[id, entry, entry.provider, id, entry] as const]));
+    expect(routed.filter(([, , , , priced]) => runTime(priced)).map(([, , , label]) => label)).toEqual([
+      'flux-video-edit (bfl)', 'flux-video-edit (fal)',
+      'flux-video-upscale (bfl)', 'flux-video-upscale (fal)', 'flux-video-upscale (replicate)',
+    ]);
+    const missing = routed
+      .filter(([, , , , priced]) => !runTime(priced))
       .filter(([id, entry, provider]) => {
         const local = catalog[id]?.apiProvider === 'utility';
         const params = local ? { ...(entry.rows?.[0]?.match ?? {}) } : {};
@@ -65,6 +74,30 @@ describe('the shipped price table', () => {
       .map(([, , , label]) => label);
     expect(missing).toEqual([]);
   });
+});
+
+describe('estimateRoutes on the shipped table (cases shared with the backend)', () => {
+  // The registry's route-table nodes priced by backend/data/model_pricing.json
+  // (pricing_cases.json shippedRouteCases; test_flux3_nodes.py runs them too).
+  const cases = (shared as unknown as {
+    shippedRouteCases: Array<{ name: string; nodeId: string; params: Record<string, unknown>; wired: string[];
+      expected: Record<string, number | [number, number] | null> }>;
+  }).shippedRouteCases;
+  const table = shippedTable as unknown as PricingTable;
+  const registry = backendCatalog as unknown as Record<string, ModelNodeDefinition>;
+  for (const testCase of cases) {
+    it(testCase.name, () => {
+      const result = estimateRoutes(registry[testCase.nodeId], testCase.params, testCase.wired, table);
+      expect(Object.keys(result).sort()).toEqual(Object.keys(testCase.expected).sort());
+      for (const [routeId, price] of Object.entries(testCase.expected)) {
+        const estimate = result[routeId];
+        if (price === null) { expect(estimate, routeId).toBeNull(); continue; }
+        const [low, high] = Array.isArray(price) ? price : [price, price];
+        expect(estimate?.low, routeId).toBeCloseTo(low, 6);
+        expect(estimate?.high, routeId).toBeCloseTo(high, 6);
+      }
+    });
+  }
 });
 
 describe('formatUsd', () => {
