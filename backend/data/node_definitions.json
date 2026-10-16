@@ -6558,7 +6558,7 @@
         "default": 8192,
         "defaultBy": {
           "model": {
-            "gemini-4-argon": 32768
+            "gemini-4-argon": 65536
           }
         },
         "min": 1,

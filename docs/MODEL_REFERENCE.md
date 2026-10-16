@@ -4200,7 +4200,7 @@ Nodes: 304 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | gemini-3.6-flash | Gemini 4 Argon, Gemini 3.8 Flash, Gemini 3.6 Flash, Gemini 3.5 Flash-Lite, Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash), Gemini 3.1 Pro (preview), Gemini 3 Flash (preview), Gemini 3.1 Flash-Lite (retiring 2027-05-07), … |
-| Max Tokens | int | 8192; 32768 for model gemini-4-argon | 1–65536 |
+| Max Tokens | int | 8192; 65536 for model gemini-4-argon | 1–65536 |
 | Temperature | float | 1 | 0–2 |
 | System Prompt | textarea | — | — |
 | Thinking Level | enum | — | Default, Minimal, Low, Medium, High |

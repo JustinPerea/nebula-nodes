@@ -8,9 +8,13 @@ A param such as Max Tokens can default differently for some models::
 ``default`` covers every value not listed, including the model param's own
 default (scripts/check-node-contracts.mjs checks that). The canvas writes
 defaults into node.params when it makes a node and moves them when the model
-changes (frontend/src/lib/paramDefaults.ts). A handler calls
-:func:`listed_default` only when the value is missing, for example on a node an
-agent made without it, so saved graphs keep sending what they sent before.
+changes (frontend/src/lib/paramDefaults.ts).
+
+Only a handler whose API requires the value calls :func:`listed_default` for a
+missing one (anthropic_chat.py: Messages needs max_tokens). Where the API takes
+the param as optional (OpenAI max_completion_tokens, Gemini maxOutputTokens), a
+missing value sends nothing, because the provider's own limit is larger than any
+listed default and a fallback would cut answers shorter than before.
 """
 from __future__ import annotations
 
@@ -52,10 +56,3 @@ def listed_default(definition_id: str, key: str, params: Mapping[str, Any]) -> A
         return None
     return table.get(str(value))
 
-
-def value_or_listed_default(definition_id: str, key: str, params: Mapping[str, Any]) -> Any | None:
-    """``params[key]`` when set; otherwise the listed per-value default (or None)."""
-    value = params.get(key)
-    if not _missing(value):
-        return value
-    return listed_default(definition_id, key, params)

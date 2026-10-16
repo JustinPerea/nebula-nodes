@@ -10,6 +10,17 @@ interface ParamPillsProps {
   onChange: (next: Record<string, unknown>) => void;
 }
 
+interface SnapNotes {
+  def: ModelNodeDefinition;
+  params: Record<string, unknown>;
+  notes: DefaultSnapNote[];
+}
+
+function sameValues(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((k) => Object.is(a[k], b[k]));
+}
+
 export function ParamPills({ def, params, onChange }: ParamPillsProps) {
   const apiKeys = useUIStore((s) => s.settingsCache.apiKeys);
   const visible = deriveVisibleParams(def, params, apiKeys).filter(
@@ -17,17 +28,20 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
   );
 
   // What the last model change did to a per-model default (Max Tokens),
-  // shown under the pills until the next edit (lib/paramDefaults.ts).
-  const [notes, setNotes] = useState<DefaultSnapNote[]>([]);
+  // shown under the pills until the next edit (lib/paramDefaults.ts). A note
+  // belongs to the definition and values it was made for: switching to another
+  // node or applying a preset swaps them from outside, and the note goes.
+  const [snapNotes, setSnapNotes] = useState<SnapNotes>({ def, params, notes: [] });
+  const notes = snapNotes.def === def && sameValues(snapNotes.params, params) ? snapNotes.notes : [];
   const set = (key: string, value: unknown) => {
     const snap = snapParamDefaults(def, params, { ...params, [key]: value });
-    setNotes(snap.notes);
+    setSnapNotes({ def, params: snap.params, notes: snap.notes });
     onChange(snap.params);
   };
   const unset = (key: string) => {
     const next = { ...params };
     delete next[key];
-    setNotes([]);
+    setSnapNotes({ def, params: next, notes: [] });
     onChange(next);
   };
 

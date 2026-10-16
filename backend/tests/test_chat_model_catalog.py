@@ -438,7 +438,7 @@ def test_max_token_defaults_by_model():
     assert gpt["max"] == 128000
     gemini = _param("gemini-chat", "max_tokens")
     assert gemini["default"] == 8192
-    assert gemini["defaultBy"] == {"model": {"gemini-4-argon": 32768}}
+    assert gemini["defaultBy"] == {"model": {"gemini-4-argon": 65536}}
     assert gemini["max"] == 65536
 
 
@@ -454,15 +454,13 @@ def test_static_default_covers_the_default_model(node_id):
 
 
 def test_listed_default_lookup():
-    from services.param_defaults import listed_default, value_or_listed_default
+    from services.param_defaults import listed_default
 
     assert listed_default("claude-chat", "max_tokens", {"model": "claude-opus-5-5"}) == 64000
     assert listed_default("claude-chat", "max_tokens", {"model": "claude-sonnet-4-6"}) is None
     assert listed_default("claude-chat", "max_tokens", {}) is None  # default model, not listed
-    assert listed_default("gemini-chat", "max_tokens", {"model": "gemini-4-argon"}) == 32768
+    assert listed_default("gemini-chat", "max_tokens", {"model": "gemini-4-argon"}) == 65536
     assert listed_default("claude-chat", "temperature", {"model": "claude-opus-5-5"}) is None
-    assert value_or_listed_default("claude-chat", "max_tokens", {"model": "claude-opus-5-5", "max_tokens": 900}) == 900
-    assert value_or_listed_default("claude-chat", "max_tokens", {"model": "claude-opus-5-5", "max_tokens": ""}) == 64000
 
 
 @pytest.mark.asyncio
@@ -474,8 +472,10 @@ async def test_fresh_claude_5_node_body(model):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model,expected", [("claude-opus-5-5", 64000), ("claude-sonnet-4-6", 4096)])
-async def test_claude_missing_max_tokens_uses_model_default(model, expected):
-    params = {"model": model}  # e.g. a node an agent made with only a model
+@pytest.mark.parametrize("unset", ["missing", None, ""])
+async def test_claude_missing_max_tokens_uses_model_default(model, expected, unset):
+    # Messages requires max_tokens, so Claude is the one handler that falls back.
+    params = {"model": model} if unset == "missing" else {"model": model, "max_tokens": unset}
     _, _, body = await _claude(params)
     assert body["max_tokens"] == expected
 
@@ -507,10 +507,14 @@ async def test_new_openai_models_refuse_minimal(model):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("model,expected", [("gpt-6-luna", 25000), ("gpt-5.6-sol", 25000), ("gpt-5.4", None)])
-async def test_openai_missing_max_tokens_uses_model_default(model, expected):
-    _, _, body = await _openai({"model": model})
-    assert body.get("max_completion_tokens") == expected
+@pytest.mark.parametrize("model", [*REASONING, "gpt-5.4"])
+@pytest.mark.parametrize("unset", ["missing", None, ""])
+async def test_openai_missing_max_tokens_sends_no_cap(model, unset):
+    # A cleared or agent-made node sends no max_completion_tokens, so OpenAI
+    # applies the model's own limit (defaultBy acts only in the canvas).
+    params = {"model": model} if unset == "missing" else {"model": model, "max_completion_tokens": unset}
+    _, _, body = await _openai(params)
+    assert "max_completion_tokens" not in body
 
 
 def test_openai_labels_use_openai_spelling():
@@ -528,14 +532,17 @@ def test_openai_labels_use_openai_spelling():
 async def test_fresh_argon_node_body():
     _, url, body = await _gemini(_fresh("gemini-chat", "gemini-4-argon"))
     assert url == _gemini_url("gemini-4-argon")
-    assert body == {"contents": USER_TURN_GEMINI, "generationConfig": {"maxOutputTokens": 32768}}
+    assert body == {"contents": USER_TURN_GEMINI, "generationConfig": {"maxOutputTokens": 65536}}
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("model,expected", [("gemini-4-argon", 32768), ("gemini-3.6-flash", None)])
-async def test_gemini_missing_max_tokens_uses_model_default(model, expected):
-    _, _, body = await _gemini({"model": model})
-    assert body.get("generationConfig", {}).get("maxOutputTokens") == expected
+@pytest.mark.parametrize("model", ["gemini-4-argon", "gemini-3.6-flash"])
+@pytest.mark.parametrize("unset", ["missing", None, ""])
+async def test_gemini_missing_max_tokens_sends_no_cap(model, unset):
+    # No generationConfig at all: Google applies the model's own default.
+    params = {"model": model} if unset == "missing" else {"model": model, "max_tokens": unset}
+    _, _, body = await _gemini(params)
+    assert body == {"contents": USER_TURN_GEMINI}
 
 
 # --------------------------------------------------------------------------
@@ -559,7 +566,7 @@ async def test_gemini_sampling_and_stops_sent_to_older_models(model):
 async def test_gemini_new_models_get_stops_but_no_sampling(model):
     params = {**_fresh("gemini-chat", model), "top_p": 0.8, "top_k": 40, "stop_sequences": "END"}
     _, _, body = await _gemini(params)
-    expected_max = 32768 if model == "gemini-4-argon" else 8192
+    expected_max = 65536 if model == "gemini-4-argon" else 8192
     assert body == {"contents": USER_TURN_GEMINI,
                     "generationConfig": {"maxOutputTokens": expected_max, "stopSequences": ["END"]}}
 
@@ -589,4 +596,4 @@ def test_agent_brief_and_cli_show_per_model_defaults():
     assert brief["default"] == 4096 and brief["max"] == 128000
     assert brief["defaultBy"] == {"model": {m: 64000 for m in CLAUDE_5}}
     detail = format_node_detail(DEFS["gemini-chat"])
-    assert "(default by model: gemini-4-argon=32768)" in detail
+    assert "(default by model: gemini-4-argon=65536)" in detail

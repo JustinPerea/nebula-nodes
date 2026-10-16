@@ -7,7 +7,6 @@ from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
 from services.image_input import load_local_image
 from execution.missing_credential import MissingCredentialError
-from services.param_defaults import value_or_listed_default
 
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
@@ -73,9 +72,10 @@ async def handle_openai_chat(
         "stream": True,
     }
 
-    # A node an agent made without it gets its model's listed default (25,000
-    # for the GPT-6 and GPT-5.6 models); other models send nothing, as before.
-    max_completion_tokens = value_or_listed_default("gpt-4o-chat", "max_completion_tokens", {**node.params, "model": model})
+    # Missing or cleared sends no cap, so OpenAI applies the model's own limit.
+    # The per-model default (defaultBy) is written by the canvas, not here: a
+    # fallback would send a smaller cap than an unset value does.
+    max_completion_tokens = node.params.get("max_completion_tokens")
     if max_completion_tokens:
         request_body["max_completion_tokens"] = int(max_completion_tokens)
 

@@ -123,7 +123,7 @@ Draft iterations: use `gemini-3.6-flash` with lower `max_tokens` before Pro mode
 | `key` | `type` | `default` | Values |
 |-------|--------|-----------|--------|
 | `model` | enum | `gemini-3.6-flash` | `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
-| `max_tokens` | integer | `8192`; `32768` for `gemini-4-argon` (`defaultBy`) | 1–65536 → `maxOutputTokens` (every listed model's output limit is 65,536). Google recommends at least 32,768 for Argon because it spends more of the limit on thinking. The handler caps it at 65,536 on `gemini-4-argon` (Argon's synchronous output limit) |
+| `max_tokens` | integer | `8192`; `65536` for `gemini-4-argon` (`defaultBy`) | 1–65536 → `maxOutputTokens` (every listed model's output limit is 65,536). Argon spends more of the limit on thinking; for standard tasks Google says "Keep the default of 65,536 or don't set any value". The handler caps it at 65,536 on `gemini-4-argon` (Argon's synchronous output limit) |
 | `temperature` | float | `1` | 0–2. Hidden and not sent for `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.6-flash` and `gemini-3.5-flash-lite` |
 | `system` | textarea | `""` | → `systemInstruction.parts[].text` |
 | `thinkingLevel` | enum | `""` | Gemini 3.x and 4: `minimal`, `low`, `medium`, `high` → `thinkingConfig.thinkingLevel`. No `minimal` on `gemini-4-argon` or `gemini-3.8-flash` (the handler refuses it before the request) |
@@ -209,7 +209,7 @@ Content-Type: application/json
 | HTTP(S) URL | `file_data.file_uri` |
 | `data:` URI | Split header → `inline_data` |
 | `temperature` param | `generationConfig.temperature` if set, except on the four models in `GEMINI_CHAT_NO_SAMPLING` |
-| `max_tokens` param | `generationConfig.maxOutputTokens` if truthy. When the key is missing or empty, `gemini-4-argon` sends its `defaultBy` value (32,768); other models send none |
+| `max_tokens` param | `generationConfig.maxOutputTokens` if truthy. When the key is missing or empty, no `maxOutputTokens` is sent on any model, so Google applies the model's own default. `defaultBy` acts only in the canvas (new nodes, model switches) |
 | `response_format` param | `generationConfig.responseMimeType` when ≠ `text/plain` |
 | `system` param | Top-level `systemInstruction` when non-empty |
 | `thinkingLevel` param | `generationConfig.thinkingConfig.thinkingLevel` when set (3.x and 4 models) |
@@ -364,4 +364,4 @@ Official reference: [Generate content](https://ai.google.dev/api/generate-conten
 |------|--------|
 | 2026-07-01 | Initial exemplar (partial) |
 | 2026-07-01 | Gold upgrade — full Vol 1–4, pricing, parameter matrix |
-| 2026-10-16 | Top P, Top K and stop sequences forwarded; Argon `max_tokens` default 32,768; max 65,536 |
+| 2026-10-16 | Top P, Top K and stop sequences forwarded; Argon `max_tokens` default 65,536 (canvas only; a missing value sends none); max 65,536 |

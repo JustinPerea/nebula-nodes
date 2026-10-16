@@ -2980,9 +2980,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'integer',
         required: false,
         default: 8192,
-        // Google recommends at least 32,768 for Gemini 4 Argon, which spends more
-        // of the limit on thinking. 65,536 is every Gemini chat model's output cap.
-        defaultBy: { model: { 'gemini-4-argon': 32768 } },
+        // Gemini 4 Argon spends more of the limit on thinking; for standard tasks
+        // Google says "Keep the default of 65,536 or don't set any value"
+        // (ai.google.dev/gemini-api/docs/latest-model). 65,536 is also every
+        // Gemini chat model's output cap.
+        defaultBy: { model: { 'gemini-4-argon': 65536 } },
         min: 1,
         max: 65536,
       },

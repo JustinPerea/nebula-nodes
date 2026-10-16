@@ -44,7 +44,7 @@ The 2026-10-16 GPT-6 refresh was checked against OpenAI's own pages, fetched tha
 |---|---|---|---|---|---|
 | `model` | enum | yes | `gpt-5.4` | `model` | See model list below |
 | `reasoning_effort` | enum | no | `medium` | `reasoning_effort` | **GPT-6, GPT-5.6 and gpt-5.x only** — `none`, `low`, `medium`, `high`, `xhigh`, plus `max` on GPT-6 and GPT-5.6. `none` is hidden for GPT-6 Astra and GPT-6.1 Sol (HTTP 400) |
-| `max_completion_tokens` | integer | no | 4096; 25000 on GPT-6 and GPT-5.6 (`defaultBy`) | `max_completion_tokens` | 1–128000. Reasoning tokens count toward it; OpenAI's reasoning guide: "reserving at least 25,000 tokens for reasoning and outputs when you start experimenting". When the key is missing, GPT-6 and GPT-5.6 send 25,000 and other models send none |
+| `max_completion_tokens` | integer | no | 4096; 25000 on GPT-6 and GPT-5.6 (`defaultBy`) | `max_completion_tokens` | 1–128000. Reasoning tokens count toward it; OpenAI's reasoning guide: "reserving at least 25,000 tokens for reasoning and outputs when you start experimenting". When the key is missing or empty, nothing is sent on any model (OpenAI applies the model's own limit) |
 | `temperature` | float | no | 1 | `temperature` | **Legacy gpt-4o/4.1 only** — omitted for GPT-6 and gpt-5.x |
 | `top_p` | float | no | — | `top_p` | Legacy only; omitted when unset |
 | `frequency_penalty` | float | no | 0 | `frequency_penalty` | Legacy only |

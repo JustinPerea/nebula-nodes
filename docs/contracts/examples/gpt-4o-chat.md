@@ -216,7 +216,7 @@ Built inline in `handle_openai_chat`:
 | `images` port | Optional; each value appended as `image_url` part |
 | Local image path | Converted to `data:{mime};base64,{bytes}` data URI |
 | `http(s)://` or `data:` image | Passed through unchanged |
-| `max_completion_tokens` | Include only when truthy in params. When the key is missing or empty (a node an agent made without it), the model's `defaultBy` value is sent: 25,000 for the GPT-6 and GPT-5.6 models; other models send none |
+| `max_completion_tokens` | Include only when truthy in params. When the key is missing or empty (a cleared field, or a node an agent made without it), nothing is sent on any model, so OpenAI applies the model's own limit. `defaultBy` acts only in the canvas (new nodes, model switches) |
 | `response_format` | Include as `{ "type": "json_object" }` only when ≠ `text` |
 | `max_tokens` | **Never** forward (deprecated) |
 
@@ -286,7 +286,7 @@ Handler return value (port output map):
 | Legacy model + `reasoning_effort` in params | `reasoning_effort` never sent |
 | GPT-5.x + saved `reasoning_effort: "max"` (node switched from GPT-6) | `ValueError` before the request: "Reasoning effort 'max' isn't available for <model>." |
 | `response_format: text` | Key omitted from request body |
-| `max_completion_tokens` absent | Omitted, except the GPT-6 and GPT-5.6 models send `25000` |
+| `max_completion_tokens` absent | Omitted |
 | `max_completion_tokens: 0` | Key omitted from request body |
 | `temperature: 0` on legacy | Forwarded as `0.0` when explicitly set |
 | HTTP ≠ 200 | `RuntimeError` from stream runner |
@@ -397,4 +397,4 @@ Official reference: [Create chat completion](https://developers.openai.com/api/r
 | Date | Change |
 |------|--------|
 | 2026-07-01 | Initial gold exemplar from `openai_chat.py` + tests |
-| 2026-10-16 | GPT-6 Sol and GPT-5.6 Sol/Terra/Luna; per-model `max_completion_tokens` default (25,000) for GPT-6 and GPT-5.6 |
+| 2026-10-16 | GPT-6 Sol and GPT-5.6 Sol/Terra/Luna; per-model `max_completion_tokens` default (25,000) for GPT-6 and GPT-5.6 (canvas only; a missing value sends none) |

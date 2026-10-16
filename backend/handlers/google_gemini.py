@@ -15,7 +15,6 @@ from services.image_input import load_local_image
 from services.retired_nodes import GEMINI_TTS_PREVIEWS_SHUTDOWN, default_until
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
-from services.param_defaults import value_or_listed_default
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -102,9 +101,10 @@ async def handle_gemini_chat(
     temperature = node.params.get("temperature")
     if temperature is not None and model not in GEMINI_CHAT_NO_SAMPLING:
         generation_config["temperature"] = float(temperature)
-    # A node an agent made without max_tokens gets its model's listed default
-    # (32,768 for Gemini 4 Argon); other models send none, as before.
-    max_tokens = value_or_listed_default("gemini-chat", "max_tokens", {**node.params, "model": model})
+    # Missing or cleared sends no maxOutputTokens, so Google applies the model's
+    # own default (65,536 on Argon). The per-model default (defaultBy) is written
+    # by the canvas, not here: a fallback would send a smaller cap than unset.
+    max_tokens = node.params.get("max_tokens")
     if max_tokens:
         output_cap = GEMINI_CHAT_MAX_OUTPUT.get(model)
         generation_config["maxOutputTokens"] = min(int(max_tokens), output_cap) if output_cap else int(max_tokens)

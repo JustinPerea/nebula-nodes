@@ -375,7 +375,7 @@ APPROVED_PARAM_FIELD_ADDITIONS.update({
     "gpt-4o-chat": {"max_completion_tokens": {"defaultBy": {"model": {model: 25000 for model in _GPT_REASONING}}}},
     "gemini-chat": {
         **{key: {"visibleWhen": {"model": _GEM_OLD}} for key in ("temperature", "top_p", "top_k")},
-        "max_tokens": {"defaultBy": {"model": {"gemini-4-argon": 32768}}},
+        "max_tokens": {"defaultBy": {"model": {"gemini-4-argon": 65536}}},
     },
 })
 APPROVED_OPTION_FIELD_ADDITIONS.update({

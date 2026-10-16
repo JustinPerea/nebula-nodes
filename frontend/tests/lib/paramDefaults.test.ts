@@ -29,7 +29,7 @@ describe('per-model defaults (defaultBy)', () => {
     expect(paramDefaultFor(CLAUDE, param(CLAUDE, 'max_tokens'), { model: 'claude-sonnet-4-6' })).toBe(4096);
     expect(paramDefaultFor(CLAUDE, param(CLAUDE, 'max_tokens'), {})).toBe(4096);
     expect(paramDefaultFor(GPT, param(GPT, 'max_completion_tokens'), { model: 'gpt-6-sol' })).toBe(25000);
-    expect(paramDefaultFor(GEMINI, param(GEMINI, 'max_tokens'), { model: 'gemini-4-argon' })).toBe(32768);
+    expect(paramDefaultFor(GEMINI, param(GEMINI, 'max_tokens'), { model: 'gemini-4-argon' })).toBe(65536);
     expect(paramDefaultFor(GEMINI, param(GEMINI, 'max_tokens'), { model: 'gemini-3.6-flash' })).toBe(8192);
   });
 
@@ -78,7 +78,7 @@ describe('per-model defaults (defaultBy)', () => {
 
   it('fills a missing value on a model change (a Create draft before any edit)', () => {
     const snap = snapParamDefaults(GEMINI, {}, { model: 'gemini-4-argon' });
-    expect(snap.params).toEqual({ model: 'gemini-4-argon', max_tokens: 32768 });
-    expect(snap.notes[0].text).toBe('Max Tokens moved to 32,768, the Gemini 4 Argon default.');
+    expect(snap.params).toEqual({ model: 'gemini-4-argon', max_tokens: 65536 });
+    expect(snap.notes[0].text).toBe('Max Tokens moved to 65,536, the Gemini 4 Argon default.');
   });
 });

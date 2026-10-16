@@ -276,7 +276,7 @@ describe('Inspector per-model Max Tokens', () => {
     renderModel('gemini-chat', { model: 'gemini-3.6-flash', max_tokens: 12000 });
     fireEvent.change(model(), { target: { value: 'gemini-4-argon' } });
     expect(currentParams()).toMatchObject({ model: 'gemini-4-argon', max_tokens: 12000 });
-    expect(screen.getByText('Max Tokens stays at 12,000, the value you set. The Gemini 4 Argon default is 32,768.')).toBeVisible();
+    expect(screen.getByText('Max Tokens stays at 12,000, the value you set. The Gemini 4 Argon default is 65,536.')).toBeVisible();
     // The note is about that change; the next edit clears it.
     fireEvent.change(maxTokens(), { target: { value: '30000' } });
     expect(screen.queryByText(/Gemini 4 Argon default/)).toBeNull();
