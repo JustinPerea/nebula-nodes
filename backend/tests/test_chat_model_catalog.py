@@ -115,6 +115,10 @@ def _gemini(params):
     return _run(handle_gemini_chat, "gemini-chat", params, "GOOGLE_API_KEY", _gemini_lines("hi"))
 
 
+REASONING = ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]
+GPT5_OLD = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"]
+CLAUDE_5 = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
+
 USER_TURN_CLAUDE = [{"role": "user", "content": [{"type": "text", "text": "Say hi"}]}]
 USER_TURN_OPENAI = [{"role": "user", "content": [{"type": "text", "text": "Say hi"}]}]
 USER_TURN_GEMINI = [{"role": "user", "parts": [{"text": "Say hi"}]}]
@@ -144,13 +148,19 @@ def test_openai_menu_lists_gpt6_first_with_retirement_notes():
     options = _options("gpt-4o-chat", "model")
     values = [o["value"] for o in options]
     assert values == [
-        "gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano",
+        "gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna",
+        "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
+        "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano",
         "gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano",
     ]
     labels = {o["value"]: o["label"] for o in options}
     assert labels["gpt-6-astra"] == "GPT-6 Astra (flagship)"
     assert labels["gpt-6.1-sol"] == "GPT-6.1 Sol"
+    assert labels["gpt-6-sol"] == "GPT-6 Sol"
     assert labels["gpt-6-luna"] == "GPT-6 Luna"
+    assert labels["gpt-5.6-sol"] == "GPT-5.6 Sol"
+    assert labels["gpt-5.6-terra"] == "GPT-5.6 Terra"
+    assert labels["gpt-5.6-luna"] == "GPT-5.6 Luna"
     assert labels["gpt-4.1-nano"].endswith("retiring 2026-10-23)")
     for value in ("gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"):
         assert labels[value].endswith("retiring 2027-01-14)")
@@ -160,12 +170,12 @@ def test_openai_menu_lists_gpt6_first_with_retirement_notes():
 
 def test_openai_effort_options_follow_each_model():
     effort = _param("gpt-4o-chat", "reasoning_effort")
-    assert {"gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"} <= set(effort["visibleWhen"]["model"])
+    assert set(effort["visibleWhen"]["model"]) == set(REASONING) | set(GPT5_OLD)
     by_value = {o["value"]: o for o in effort["options"]}
     none_models = set(by_value["none"]["visibleWhen"]["model"])
     assert "gpt-6-astra" not in none_models and "gpt-6.1-sol" not in none_models
-    assert {"gpt-6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"} == none_models
-    assert set(by_value["max"]["visibleWhen"]["model"]) == {"gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"}
+    assert {"gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"} | set(GPT5_OLD) == none_models
+    assert set(by_value["max"]["visibleWhen"]["model"]) == set(REASONING)
     assert effort["default"] == "medium"
 
 
@@ -400,3 +410,183 @@ async def test_gemini_25_body_unchanged():
     assert body == {"contents": USER_TURN_GEMINI,
                     "generationConfig": {"temperature": 0.7, "maxOutputTokens": 100000,
                                          "thinkingConfig": {"thinkingBudget": 1024}}}
+
+
+# --------------------------------------------------------------------------
+# Per-model max-token defaults (defaultBy), 2026-10-16 follow-ups
+# --------------------------------------------------------------------------
+
+def _fresh(node_id: str, model: str) -> dict[str, Any]:
+    """Mirror frontend lib/paramDefaults.ts withParamDefaults: a new node made
+    with ``model`` gets that model's listed defaults."""
+    params = {**_defaults(node_id), "model": model}
+    for p in DEFS[node_id]["params"]:
+        for controller, table in (p.get("defaultBy") or {}).items():
+            if str(params.get(controller)) in table:
+                params[p["key"]] = table[str(params[controller])]
+    return params
+
+
+def test_max_token_defaults_by_model():
+    claude = _param("claude-chat", "max_tokens")
+    assert claude["default"] == 4096
+    assert claude["defaultBy"] == {"model": {m: 64000 for m in CLAUDE_5}}
+    assert claude["max"] == 128000  # every Claude model's synchronous output cap
+    gpt = _param("gpt-4o-chat", "max_completion_tokens")
+    assert gpt["default"] == 4096
+    assert gpt["defaultBy"] == {"model": {m: 25000 for m in REASONING}}
+    assert gpt["max"] == 128000
+    gemini = _param("gemini-chat", "max_tokens")
+    assert gemini["default"] == 8192
+    assert gemini["defaultBy"] == {"model": {"gemini-4-argon": 32768}}
+    assert gemini["max"] == 65536
+
+
+@pytest.mark.parametrize("node_id", ["claude-chat", "gpt-4o-chat", "gemini-chat"])
+def test_static_default_covers_the_default_model(node_id):
+    """Every canvas path that writes `default` into a new node uses the default
+    model, so that model must not have a listed default of its own."""
+    model_default = _param(node_id, "model")["default"]
+    for p in DEFS[node_id]["params"]:
+        for table in (p.get("defaultBy") or {}).values():
+            assert model_default not in table
+            assert all(isinstance(v, int) and p["min"] <= v <= p["max"] for v in table.values())
+
+
+def test_listed_default_lookup():
+    from services.param_defaults import listed_default, value_or_listed_default
+
+    assert listed_default("claude-chat", "max_tokens", {"model": "claude-opus-5-5"}) == 64000
+    assert listed_default("claude-chat", "max_tokens", {"model": "claude-sonnet-4-6"}) is None
+    assert listed_default("claude-chat", "max_tokens", {}) is None  # default model, not listed
+    assert listed_default("gemini-chat", "max_tokens", {"model": "gemini-4-argon"}) == 32768
+    assert listed_default("claude-chat", "temperature", {"model": "claude-opus-5-5"}) is None
+    assert value_or_listed_default("claude-chat", "max_tokens", {"model": "claude-opus-5-5", "max_tokens": 900}) == 900
+    assert value_or_listed_default("claude-chat", "max_tokens", {"model": "claude-opus-5-5", "max_tokens": ""}) == 64000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_5)
+async def test_fresh_claude_5_node_body(model):
+    _, _, body = await _claude(_fresh("claude-chat", model))
+    assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 64000, "stream": True}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model,expected", [("claude-opus-5-5", 64000), ("claude-sonnet-4-6", 4096)])
+async def test_claude_missing_max_tokens_uses_model_default(model, expected):
+    params = {"model": model}  # e.g. a node an agent made with only a model
+    _, _, body = await _claude(params)
+    assert body["max_tokens"] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", REASONING)
+async def test_fresh_reasoning_node_body(model):
+    params = {**_fresh("gpt-4o-chat", model), "temperature": 0.3, "top_p": 0.9}
+    _, url, body = await _openai(params)
+    assert url == "https://api.openai.com/v1/chat/completions"
+    assert body == {"model": model, "messages": USER_TURN_OPENAI, "stream": True,
+                    "max_completion_tokens": 25000, "reasoning_effort": "medium"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gpt-6-sol", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"])
+@pytest.mark.parametrize("effort", ["none", "low", "medium", "high", "xhigh", "max"])
+async def test_new_openai_models_take_every_listed_effort(model, effort):
+    _, _, body = await _openai({**_fresh("gpt-4o-chat", model), "reasoning_effort": effort})
+    assert body == {"model": model, "messages": USER_TURN_OPENAI, "stream": True,
+                    "max_completion_tokens": 25000, "reasoning_effort": effort}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gpt-6-sol", "gpt-5.6-terra"])
+async def test_new_openai_models_refuse_minimal(model):
+    with pytest.raises(ValueError, match="isn't available"):
+        await _openai({**_fresh("gpt-4o-chat", model), "reasoning_effort": "minimal"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model,expected", [("gpt-6-luna", 25000), ("gpt-5.6-sol", 25000), ("gpt-5.4", None)])
+async def test_openai_missing_max_tokens_uses_model_default(model, expected):
+    _, _, body = await _openai({"model": model})
+    assert body.get("max_completion_tokens") == expected
+
+
+def test_openai_labels_use_openai_spelling():
+    labels = {o["value"]: o["label"] for o in _options("gpt-4o-chat", "model")}
+    # OpenAI's model pages: "GPT-5.4 Mini", "GPT-4o Mini", "GPT-4.1 Mini", but
+    # "GPT-5.4 nano" and "GPT-4.1 nano" (checked 2026-10-16).
+    assert labels["gpt-5.4-mini"] == "GPT-5.4 Mini"
+    assert labels["gpt-5.4-nano"] == "GPT-5.4 nano (retiring 2027-04-01)"
+    assert labels["gpt-4o-mini"] == "GPT-4o Mini (legacy, retiring 2027-01-14)"
+    assert labels["gpt-4.1-mini"] == "GPT-4.1 Mini (legacy, retiring 2027-01-14)"
+    assert labels["gpt-4.1-nano"] == "GPT-4.1 nano (legacy, retiring 2026-10-23)"
+
+
+@pytest.mark.asyncio
+async def test_fresh_argon_node_body():
+    _, url, body = await _gemini(_fresh("gemini-chat", "gemini-4-argon"))
+    assert url == _gemini_url("gemini-4-argon")
+    assert body == {"contents": USER_TURN_GEMINI, "generationConfig": {"maxOutputTokens": 32768}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model,expected", [("gemini-4-argon", 32768), ("gemini-3.6-flash", None)])
+async def test_gemini_missing_max_tokens_uses_model_default(model, expected):
+    _, _, body = await _gemini({"model": model})
+    assert body.get("generationConfig", {}).get("maxOutputTokens") == expected
+
+
+# --------------------------------------------------------------------------
+# Gemini Top P, Top K and stop sequences
+# --------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-flash-preview",
+                                   "gemini-3.1-flash-lite", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"])
+async def test_gemini_sampling_and_stops_sent_to_older_models(model):
+    params = {**_defaults("gemini-chat"), "model": model, "top_p": 0.8, "top_k": 40,
+              "stop_sequences": "END, STOP ,"}
+    _, _, body = await _gemini(params)
+    assert body == {"contents": USER_TURN_GEMINI,
+                    "generationConfig": {"temperature": 1.0, "maxOutputTokens": 8192, "topP": 0.8, "topK": 40,
+                                         "stopSequences": ["END", "STOP"]}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"])
+async def test_gemini_new_models_get_stops_but_no_sampling(model):
+    params = {**_fresh("gemini-chat", model), "top_p": 0.8, "top_k": 40, "stop_sequences": "END"}
+    _, _, body = await _gemini(params)
+    expected_max = 32768 if model == "gemini-4-argon" else 8192
+    assert body == {"contents": USER_TURN_GEMINI,
+                    "generationConfig": {"maxOutputTokens": expected_max, "stopSequences": ["END"]}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unset", [None, ""])
+async def test_gemini_unset_sampling_and_stops_not_sent(unset):
+    params = {**_defaults("gemini-chat"), "model": "gemini-2.5-flash", "top_p": unset, "top_k": unset,
+              "stop_sequences": unset if unset is not None else ""}
+    _, _, body = await _gemini(params)
+    assert body == {"contents": USER_TURN_GEMINI,
+                    "generationConfig": {"temperature": 1.0, "maxOutputTokens": 8192}}
+
+
+@pytest.mark.asyncio
+async def test_gemini_more_than_five_stop_sequences_refused():
+    params = {**_defaults("gemini-chat"), "stop_sequences": "a,b,c,d,e,f"}
+    with pytest.raises(ValueError, match="up to 5 stop sequences"):
+        await _gemini(params)
+
+
+def test_agent_brief_and_cli_show_per_model_defaults():
+    import main
+    from cli.formatter import format_node_detail
+
+    brief = main._brief_param(_param("claude-chat", "max_tokens"))
+    assert brief["default"] == 4096 and brief["max"] == 128000
+    assert brief["defaultBy"] == {"model": {m: 64000 for m in CLAUDE_5}}
+    detail = format_node_detail(DEFS["gemini-chat"])
+    assert "(default by model: gemini-4-argon=32768)" in detail

@@ -96,6 +96,10 @@ def format_node_detail(node: dict[str, Any]) -> str:
                 lo = p.get("min", "")
                 hi = p.get("max", "")
                 detail += f"  min={lo} max={hi}"
+            for controller, table in (p.get("defaultBy") or {}).items():
+                listed = ", ".join(f"{v}={d}" for v, d in list(table.items())[:3])
+                more = ", …" if len(table) > 3 else ""
+                detail += f"  (default by {controller}: {listed}{more})"
             vis = p.get("visibleWhen")
             if vis:
                 conds = [f"{k}={v}" for k, vals in vis.items() for v in vals]

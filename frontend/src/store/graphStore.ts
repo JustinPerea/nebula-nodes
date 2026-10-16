@@ -85,6 +85,7 @@ import { validateManifest } from '../lib/video/manifestValidator';
 import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
 import { isPortCompatible } from '../lib/portCompatibility';
 import { getProjectContext } from '../lib/projectContext';
+import { withParamDefaults } from '../lib/paramDefaults';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
 
@@ -4307,11 +4308,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     for (let v = 0; v < count; v++) {
       const t = uuidv4();
       modelTemps.push(t);
-      const params = {
+      // A per-model default (Max Tokens) follows the model asked for unless the
+      // request sets it (lib/paramDefaults.ts).
+      const params = withParamDefaults(def, {
         ...withNewKreaMode(def, buildDefaultParams(def),
           useUIStore.getState().settingsCache.kreaConnectionMode),
         ...request.params,
-      };
+      }, request.params);
       if (hasSeed) {
         params.seed = seedBase + v;
       } else {

@@ -16,6 +16,7 @@ import { JevResultDetails } from './JevResultDetails';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
 import { paramDefinitionsForRun, selectRoute, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
+import { snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
 import { nodeWiredPorts } from '../../lib/runScope';
 import { skippedLabel } from '../../lib/gating';
 import '../../styles/panels.css';
@@ -201,6 +202,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
   // Info panel toggle
   const [showInfo, setShowInfo] = useState(false);
+  // What the last model change did to a per-model default, shown under that
+  // param until the next edit on the same node.
+  const [defaultNotes, setDefaultNotes] = useState<{ nodeId: string; notes: DefaultSnapNote[] }>({ nodeId: '', notes: [] });
   const [maskPainterOpen, setMaskPainterOpen] = useState(false);
 
   // Favorites state
@@ -435,12 +439,16 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const activeNodeData = nodeData;
 
   function onParamChange(key: string, value: unknown) {
-    updateNodeData(activeNode.id, {
-      params: { ...activeNodeData.params, [key]: value },
-    });
+    const next = { ...activeNodeData.params, [key]: value };
+    // A model change moves a per-model default (Max Tokens) that wasn't edited,
+    // and says so under that param (lib/paramDefaults.ts).
+    const snap = definition ? snapParamDefaults(definition, activeNodeData.params, next) : { params: next, notes: [] };
+    setDefaultNotes({ nodeId: activeNode.id, notes: snap.notes });
+    updateNodeData(activeNode.id, { params: snap.params });
   }
 
   function clearParam(key: string) {
+    setDefaultNotes({ nodeId: activeNode.id, notes: [] });
     const params = { ...activeNodeData.params };
     delete params[key];
     updateNodeData(activeNode.id, { params });
@@ -903,6 +911,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
         {source === 'definition' && makerSizeNote && param.key === makerSizeNote.param && (
           <div className="inspector__notice" role="note" data-inspector-size-note="true">{makerSizeNote.text}</div>
         )}
+        {source === 'definition' && defaultNotes.nodeId === activeNode.id
+          && defaultNotes.notes.filter((note) => note.param === param.key).map((note) => (
+            <div key={note.text} className="inspector__notice" role="note" data-inspector-default-note="true">{note.text}</div>
+          ))}
         {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && (
           <button
             type="button"

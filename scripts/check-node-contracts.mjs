@@ -186,6 +186,41 @@ function validateParams(nodeId, group, params) {
     if (!VALID_PARAM_TYPES.has(param.type)) errors.push(`${nodeId}.${group}.${param.key} invalid type: ${param.type}`);
     if (typeof param.required !== 'boolean') errors.push(`${nodeId}.${group}.${param.key}.required must be boolean`);
     if (param.type === 'enum') validateEnumParam(nodeId, group, param);
+    if ('defaultBy' in param) validateDefaultBy(nodeId, group, param, params);
+  }
+}
+
+// A per-value default (frontend lib/paramDefaults.ts, backend
+// services/param_defaults.py): one controlling enum in the same group, keyed by
+// its option values, never by its own default (every canvas path that writes
+// `default` into a new node uses that one), and inside the param's range.
+function validateDefaultBy(nodeId, group, param, params) {
+  const where = `${nodeId}.${group}.${param.key}.defaultBy`;
+  const entries = Object.entries(param.defaultBy ?? {});
+  if (entries.length !== 1) {
+    errors.push(`${where} must name exactly one param`);
+    return;
+  }
+  const [controllerKey, table] = entries[0];
+  const controller = params.find((candidate) => candidate?.key === controllerKey);
+  if (!controller || controller.type !== 'enum') {
+    errors.push(`${where} must name an enum param in ${group}: ${controllerKey}`);
+    return;
+  }
+  if (!table || typeof table !== 'object' || !Object.keys(table).length) {
+    errors.push(`${where}.${controllerKey} must list at least one value`);
+    return;
+  }
+  const values = new Set((controller.options ?? []).map((option) => String(option.value)));
+  for (const [value, dflt] of Object.entries(table)) {
+    if (!values.has(value)) errors.push(`${where}.${controllerKey} lists ${value}, which isn't a ${controllerKey} option`);
+    if (value === String(controller.default) && dflt !== param.default) {
+      errors.push(`${where}.${controllerKey} lists the ${controllerKey} default ${value}; put that in ${param.key}.default`);
+    }
+    if (param.type === 'integer' && !Number.isInteger(dflt)) errors.push(`${where}.${controllerKey}.${value} must be an integer`);
+    if (typeof dflt === 'number' && ((param.min != null && dflt < param.min) || (param.max != null && dflt > param.max))) {
+      errors.push(`${where}.${controllerKey}.${value} is outside ${param.min}–${param.max}`);
+    }
   }
 }
 

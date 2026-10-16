@@ -15,6 +15,7 @@ from services.image_input import load_local_image
 from services.retired_nodes import GEMINI_TTS_PREVIEWS_SHUTDOWN, default_until
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
+from services.param_defaults import value_or_listed_default
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -38,6 +39,9 @@ GEMINI_CHAT_THINKING_LEVELS = {
     "gemini-3.5-flash-lite": ("minimal", "low", "medium", "high"),
 }
 GEMINI_CHAT_MAX_OUTPUT = {"gemini-4-argon": 65_536}
+# generationConfig.stopSequences takes "up to 5" sequences
+# (https://ai.google.dev/api/generate-content, checked 2026-10-16).
+GEMINI_MAX_STOP_SEQUENCES = 5
 
 
 async def handle_gemini_chat(
@@ -98,10 +102,34 @@ async def handle_gemini_chat(
     temperature = node.params.get("temperature")
     if temperature is not None and model not in GEMINI_CHAT_NO_SAMPLING:
         generation_config["temperature"] = float(temperature)
-    max_tokens = node.params.get("max_tokens")
+    # A node an agent made without max_tokens gets its model's listed default
+    # (32,768 for Gemini 4 Argon); other models send none, as before.
+    max_tokens = value_or_listed_default("gemini-chat", "max_tokens", {**node.params, "model": model})
     if max_tokens:
         output_cap = GEMINI_CHAT_MAX_OUTPUT.get(model)
         generation_config["maxOutputTokens"] = min(int(max_tokens), output_cap) if output_cap else int(max_tokens)
+
+    # Top P, Top K and stop sequences were on the card but never sent. They go
+    # out only when set (neither sampling param has a default to compare with)
+    # and, for Top P and Top K, only to models Google still takes them from: from
+    # Gemini 3.6 Flash and 3.5 Flash-Lite on they are ignored, and Google says
+    # later models will return HTTP 400. Stop sequences aren't deprecated.
+    if model not in GEMINI_CHAT_NO_SAMPLING:
+        top_p = node.params.get("top_p")
+        if top_p is not None and top_p != "":
+            generation_config["topP"] = float(top_p)
+        top_k = node.params.get("top_k")
+        if top_k is not None and top_k != "":
+            generation_config["topK"] = int(top_k)
+    stop_sequences_raw = node.params.get("stop_sequences")
+    if stop_sequences_raw:
+        sequences = [s.strip() for s in str(stop_sequences_raw).split(",") if s.strip()]
+        if len(sequences) > GEMINI_MAX_STOP_SEQUENCES:
+            raise ValueError(
+                f"Gemini takes up to {GEMINI_MAX_STOP_SEQUENCES} stop sequences; this node has {len(sequences)}."
+            )
+        if sequences:
+            generation_config["stopSequences"] = sequences
 
     # Structured output: response_format carries the MIME type (e.g. application/json).
     # The node exposed this param but the handler previously ignored it.

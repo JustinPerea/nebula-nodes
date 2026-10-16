@@ -170,3 +170,20 @@ describe('Create parameter values', () => {
     expect(screen.getByRole('option', { name: 'Choose…' })).toBeInTheDocument();
   });
 });
+
+describe('Create pills per-model Max Tokens', () => {
+  it('moves Max Tokens with the model and notes it', () => {
+    const onChange = vi.fn();
+    render(<ControlledPills def={NODE_DEFINITIONS['gpt-4o-chat']}
+      initial={{ model: 'gpt-5.4', max_completion_tokens: 4096, reasoning_effort: 'medium' }} onChange={onChange} />);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: 'gpt-6-sol' } });
+    expect(onChange).toHaveBeenLastCalledWith({ model: 'gpt-6-sol', max_completion_tokens: 25000, reasoning_effort: 'medium' });
+    expect(screen.getByRole('spinbutton', { name: 'Max Tokens' })).toHaveValue(25000);
+    expect(screen.getByRole('note')).toHaveTextContent('Max Tokens moved to 25,000, the GPT-6 Sol default.');
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Max Tokens' }), { target: { value: '9000' } });
+    expect(screen.queryByRole('note')).toBeNull();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), { target: { value: 'gpt-5.4' } });
+    expect(onChange).toHaveBeenLastCalledWith({ model: 'gpt-5.4', max_completion_tokens: 9000, reasoning_effort: 'medium' });
+    expect(screen.getByRole('note')).toHaveTextContent('Max Tokens stays at 9,000, the value you set. The GPT-5.4 default is 4,096.');
+  });
+});

@@ -157,8 +157,12 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'integer',
         required: true,
         default: 4096,
+        // Claude 5.x always think, and thinking counts toward max_tokens. Anthropic
+        // says to start around 64K at high effort and above; 128K is every Claude
+        // model's synchronous output cap.
+        defaultBy: { model: { 'claude-fable-5-1': 64000, 'claude-opus-5-5': 64000, 'claude-sonnet-5-5': 64000, 'claude-haiku-5-5': 64000 } },
         min: 1,
-        max: 200000,
+        max: 128000,
       },
       {
         key: 'temperature',
@@ -2829,16 +2833,20 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'GPT-6 Astra (flagship)', value: 'gpt-6-astra' },
           { label: 'GPT-6.1 Sol', value: 'gpt-6.1-sol' },
+          { label: 'GPT-6 Sol', value: 'gpt-6-sol' },
           { label: 'GPT-6 Luna', value: 'gpt-6-luna' },
+          { label: 'GPT-5.6 Sol', value: 'gpt-5.6-sol' },
+          { label: 'GPT-5.6 Terra', value: 'gpt-5.6-terra' },
+          { label: 'GPT-5.6 Luna', value: 'gpt-5.6-luna' },
           { label: 'GPT-5.5', value: 'gpt-5.5' },
           { label: 'GPT-5.4', value: 'gpt-5.4' },
           { label: 'GPT-5.4 Mini', value: 'gpt-5.4-mini' },
-          { label: 'GPT-5.4 Nano (retiring 2027-04-01)', value: 'gpt-5.4-nano' },
+          { label: 'GPT-5.4 nano (retiring 2027-04-01)', value: 'gpt-5.4-nano' },
           { label: 'GPT-4o (legacy, retiring 2027-01-14)', value: 'gpt-4o' },
           { label: 'GPT-4o Mini (legacy, retiring 2027-01-14)', value: 'gpt-4o-mini' },
           { label: 'GPT-4.1 (legacy, retiring 2027-01-14)', value: 'gpt-4.1' },
           { label: 'GPT-4.1 Mini (legacy, retiring 2027-01-14)', value: 'gpt-4.1-mini' },
-          { label: 'GPT-4.1 Nano (legacy, retiring 2026-10-23)', value: 'gpt-4.1-nano' },
+          { label: 'GPT-4.1 nano (legacy, retiring 2026-10-23)', value: 'gpt-4.1-nano' },
         ],
       },
       {
@@ -2849,14 +2857,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         default: 'medium',
         options: [
           // GPT-6 Astra and GPT-6.1 Sol return HTTP 400 for "none".
-          { label: 'None', value: 'none', visibleWhen: { model: ['gpt-6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] } },
+          { label: 'None', value: 'none', visibleWhen: { model: ['gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] } },
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
           { label: 'X-High', value: 'xhigh' },
-          { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna'] } },
+          // GPT-5.5 and older list no "max" (OpenAI's gpt-5.5 page).
+          { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'] } },
         ],
-        visibleWhen: { model: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] },
+        visibleWhen: { model: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] },
       },
       {
         key: 'max_completion_tokens',
@@ -2864,6 +2873,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'integer',
         required: false,
         default: 4096,
+        // Reasoning tokens count toward max_completion_tokens. OpenAI's reasoning
+        // guide recommends reserving at least 25,000 for reasoning and output.
+        defaultBy: { model: { 'gpt-6-astra': 25000, 'gpt-6.1-sol': 25000, 'gpt-6-sol': 25000, 'gpt-6-luna': 25000, 'gpt-5.6-sol': 25000, 'gpt-5.6-terra': 25000, 'gpt-5.6-luna': 25000 } },
         min: 1,
         max: 128000,
       },
@@ -2968,8 +2980,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'integer',
         required: false,
         default: 8192,
+        // Google recommends at least 32,768 for Gemini 4 Argon, which spends more
+        // of the limit on thinking. 65,536 is every Gemini chat model's output cap.
+        defaultBy: { model: { 'gemini-4-argon': 32768 } },
         min: 1,
-        max: 65535,
+        max: 65536,
       },
       {
         key: 'temperature',

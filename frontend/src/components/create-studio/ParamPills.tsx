@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import type { ModelNodeDefinition } from '../../types';
 import { deriveVisibleParams, resolveCreateParamDefinitions } from '../../lib/createParams';
+import { snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
 import { useUIStore } from '../../store/uiStore';
 
 interface ParamPillsProps {
@@ -14,10 +16,18 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
     (p) => p.type === 'enum' || p.type === 'integer' || p.type === 'float' || p.type === 'boolean',
   );
 
-  const set = (key: string, value: unknown) => onChange({ ...params, [key]: value });
+  // What the last model change did to a per-model default (Max Tokens),
+  // shown under the pills until the next edit (lib/paramDefaults.ts).
+  const [notes, setNotes] = useState<DefaultSnapNote[]>([]);
+  const set = (key: string, value: unknown) => {
+    const snap = snapParamDefaults(def, params, { ...params, [key]: value });
+    setNotes(snap.notes);
+    onChange(snap.params);
+  };
   const unset = (key: string) => {
     const next = { ...params };
     delete next[key];
+    setNotes([]);
     onChange(next);
   };
 
@@ -121,6 +131,9 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
           </label>
         );
       })}
+      {notes.map((note) => (
+        <p key={note.text} className="param-pills__note" role="note" data-param-default-note={note.param}>{note.text}</p>
+      ))}
     </div>
   );
 }

@@ -273,8 +273,16 @@
         "type": "integer",
         "required": true,
         "default": 4096,
+        "defaultBy": {
+          "model": {
+            "claude-fable-5-1": 64000,
+            "claude-opus-5-5": 64000,
+            "claude-sonnet-5-5": 64000,
+            "claude-haiku-5-5": 64000
+          }
+        },
         "min": 1,
-        "max": 200000
+        "max": 128000
       },
       {
         "key": "temperature",
@@ -6213,8 +6221,24 @@
             "value": "gpt-6.1-sol"
           },
           {
+            "label": "GPT-6 Sol",
+            "value": "gpt-6-sol"
+          },
+          {
             "label": "GPT-6 Luna",
             "value": "gpt-6-luna"
+          },
+          {
+            "label": "GPT-5.6 Sol",
+            "value": "gpt-5.6-sol"
+          },
+          {
+            "label": "GPT-5.6 Terra",
+            "value": "gpt-5.6-terra"
+          },
+          {
+            "label": "GPT-5.6 Luna",
+            "value": "gpt-5.6-luna"
           },
           {
             "label": "GPT-5.5",
@@ -6229,7 +6253,7 @@
             "value": "gpt-5.4-mini"
           },
           {
-            "label": "GPT-5.4 Nano (retiring 2027-04-01)",
+            "label": "GPT-5.4 nano (retiring 2027-04-01)",
             "value": "gpt-5.4-nano"
           },
           {
@@ -6249,7 +6273,7 @@
             "value": "gpt-4.1-mini"
           },
           {
-            "label": "GPT-4.1 Nano (legacy, retiring 2026-10-23)",
+            "label": "GPT-4.1 nano (legacy, retiring 2026-10-23)",
             "value": "gpt-4.1-nano"
           }
         ]
@@ -6266,7 +6290,11 @@
             "value": "none",
             "visibleWhen": {
               "model": [
+                "gpt-6-sol",
                 "gpt-6-luna",
+                "gpt-5.6-sol",
+                "gpt-5.6-terra",
+                "gpt-5.6-luna",
                 "gpt-5.5",
                 "gpt-5.4",
                 "gpt-5.4-mini",
@@ -6297,7 +6325,11 @@
               "model": [
                 "gpt-6-astra",
                 "gpt-6.1-sol",
-                "gpt-6-luna"
+                "gpt-6-sol",
+                "gpt-6-luna",
+                "gpt-5.6-sol",
+                "gpt-5.6-terra",
+                "gpt-5.6-luna"
               ]
             }
           }
@@ -6306,7 +6338,11 @@
           "model": [
             "gpt-6-astra",
             "gpt-6.1-sol",
+            "gpt-6-sol",
             "gpt-6-luna",
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
             "gpt-5.5",
             "gpt-5.4",
             "gpt-5.4-mini",
@@ -6320,6 +6356,17 @@
         "type": "integer",
         "required": false,
         "default": 4096,
+        "defaultBy": {
+          "model": {
+            "gpt-6-astra": 25000,
+            "gpt-6.1-sol": 25000,
+            "gpt-6-sol": 25000,
+            "gpt-6-luna": 25000,
+            "gpt-5.6-sol": 25000,
+            "gpt-5.6-terra": 25000,
+            "gpt-5.6-luna": 25000
+          }
+        },
         "min": 1,
         "max": 128000
       },
@@ -6509,8 +6556,13 @@
         "type": "integer",
         "required": false,
         "default": 8192,
+        "defaultBy": {
+          "model": {
+            "gemini-4-argon": 32768
+          }
+        },
         "min": 1,
-        "max": 65535
+        "max": 65536
       },
       {
         "key": "temperature",

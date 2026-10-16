@@ -309,6 +309,12 @@ _CLAUDE_OLD = ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-4-6",
 _CLAUDE_NEW = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
 _GPT5 = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"]
 _GPT6 = ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"]
+# Follow-ups (2026-10-16): GPT-6 Sol and the GPT-5.6 models join the menu, each
+# chat node's max-token param gets per-model defaults (defaultBy) and a max that
+# matches the makers' output caps, and OpenAI's "nano" is lowercase as on its
+# model pages.
+_GPT_REASONING = ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna",
+                  "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]
 _GEM_OLD = ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite",
             "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 _GEM_NEW = ["gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]
@@ -323,7 +329,11 @@ APPROVED_LEADING_OPTIONS = {
     "gpt-4o-chat": {"model": [
         {"label": "GPT-6 Astra (flagship)", "value": "gpt-6-astra"},
         {"label": "GPT-6.1 Sol", "value": "gpt-6.1-sol"},
+        {"label": "GPT-6 Sol", "value": "gpt-6-sol"},
         {"label": "GPT-6 Luna", "value": "gpt-6-luna"},
+        {"label": "GPT-5.6 Sol", "value": "gpt-5.6-sol"},
+        {"label": "GPT-5.6 Terra", "value": "gpt-5.6-terra"},
+        {"label": "GPT-5.6 Luna", "value": "gpt-5.6-luna"},
     ]},
     "gemini-chat": {"model": [
         {"label": "Gemini 4 Argon", "value": "gemini-4-argon"},
@@ -336,12 +346,12 @@ APPROVED_OPTION_LABEL_CHANGES.update({
     "claude-chat": {"model": {"claude-fable-5": ("Claude Fable 5 (flagship)", "Claude Fable 5")}},
     "gpt-4o-chat": {"model": {
         "gpt-5.5": ("GPT-5.5 (flagship)", "GPT-5.5"),
-        "gpt-5.4-nano": ("GPT-5.4 Nano", "GPT-5.4 Nano (retiring 2027-04-01)"),
+        "gpt-5.4-nano": ("GPT-5.4 Nano", "GPT-5.4 nano (retiring 2027-04-01)"),
         "gpt-4o": ("GPT-4o (legacy)", "GPT-4o (legacy, retiring 2027-01-14)"),
         "gpt-4o-mini": ("GPT-4o Mini (legacy)", "GPT-4o Mini (legacy, retiring 2027-01-14)"),
         "gpt-4.1": ("GPT-4.1 (legacy)", "GPT-4.1 (legacy, retiring 2027-01-14)"),
         "gpt-4.1-mini": ("GPT-4.1 Mini (legacy)", "GPT-4.1 Mini (legacy, retiring 2027-01-14)"),
-        "gpt-4.1-nano": ("GPT-4.1 Nano (legacy, sunsets 2026-10-23)", "GPT-4.1 Nano (legacy, retiring 2026-10-23)"),
+        "gpt-4.1-nano": ("GPT-4.1 Nano (legacy, sunsets 2026-10-23)", "GPT-4.1 nano (legacy, retiring 2026-10-23)"),
     }},
     "gemini-chat": {"model": {
         "gemini-3.5-flash": ("Gemini 3.5 Flash", "Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash)"),
@@ -349,25 +359,35 @@ APPROVED_OPTION_LABEL_CHANGES.update({
     }},
 })
 APPROVED_PARAM_FIELD_CHANGES = {
-    "gpt-4o-chat": {"reasoning_effort": {"visibleWhen": ({"model": _GPT5}, {"model": _GPT6 + _GPT5})}},
+    "claude-chat": {"max_tokens": {"max": (200000, 128000)}},
+    "gpt-4o-chat": {"reasoning_effort": {"visibleWhen": ({"model": _GPT5}, {"model": _GPT_REASONING + _GPT5})}},
     "gemini-chat": {
         "model": {"default": ("gemini-3.5-flash", "gemini-3.6-flash")},
+        "max_tokens": {"max": (65535, 65536)},
         "thinkingLevel": {"visibleWhen": ({"model": _GEM_THINKING_OLD}, {"model": _GEM_NEW + _GEM_THINKING_OLD})},
     },
 }
 APPROVED_PARAM_FIELD_ADDITIONS.update({
-    "claude-chat": {key: {"visibleWhen": {"model": _CLAUDE_OLD}} for key in ("temperature", "top_p")},
-    "gemini-chat": {key: {"visibleWhen": {"model": _GEM_OLD}} for key in ("temperature", "top_p", "top_k")},
+    "claude-chat": {
+        **{key: {"visibleWhen": {"model": _CLAUDE_OLD}} for key in ("temperature", "top_p")},
+        "max_tokens": {"defaultBy": {"model": {model: 64000 for model in _CLAUDE_NEW}}},
+    },
+    "gpt-4o-chat": {"max_completion_tokens": {"defaultBy": {"model": {model: 25000 for model in _GPT_REASONING}}}},
+    "gemini-chat": {
+        **{key: {"visibleWhen": {"model": _GEM_OLD}} for key in ("temperature", "top_p", "top_k")},
+        "max_tokens": {"defaultBy": {"model": {"gemini-4-argon": 32768}}},
+    },
 })
 APPROVED_OPTION_FIELD_ADDITIONS.update({
-    "gpt-4o-chat": {"reasoning_effort": {"none": {"visibleWhen": {"model": ["gpt-6-luna"] + _GPT5}}}},
+    "gpt-4o-chat": {"reasoning_effort": {"none": {"visibleWhen": {"model": [
+        "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] + _GPT5}}}},
     "gemini-chat": {"thinkingLevel": {"minimal": {
         # Google's thinking table lists gemini-3.1-pro-preview as low/medium/high only.
         "visibleWhen": {"model": ["gemini-3.6-flash", "gemini-3.5-flash-lite"]
                         + [m for m in _GEM_THINKING_OLD if m != "gemini-3.1-pro-preview"]}}}},
 })
 APPROVED_APPENDED_OPTIONS["gpt-4o-chat"] = {"reasoning_effort": [
-    {"label": "Max", "value": "max", "visibleWhen": {"model": _GPT6}},
+    {"label": "Max", "value": "max", "visibleWhen": {"model": _GPT_REASONING}},
 ]}
 APPROVED_INSERTED_PARAMS = {
     "claude-chat": [("thinkingBudget", {

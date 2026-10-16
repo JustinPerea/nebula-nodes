@@ -251,3 +251,34 @@ describe('Canvas inspector enum controls', () => {
     expect(currentParams()).toEqual({ style: '' });
   });
 });
+
+describe('Inspector per-model Max Tokens', () => {
+  function model() {
+    return screen.getByRole('combobox', { name: 'Model' });
+  }
+  function maxTokens() {
+    return document.querySelector('[data-inspector-param="max_tokens"] input') as HTMLInputElement;
+  }
+
+  it('moves an untouched Max Tokens with the model and notes it under the field', () => {
+    renderModel('claude-chat', { model: 'claude-sonnet-4-6', max_tokens: 4096, temperature: 1 });
+    fireEvent.change(model(), { target: { value: 'claude-opus-5-5' } });
+    expect(currentParams()).toMatchObject({ model: 'claude-opus-5-5', max_tokens: 64000 });
+    expect(maxTokens()).toHaveValue(64000);
+    expect(document.querySelector('[data-inspector-param="max_tokens"] [data-inspector-default-note]'))
+      .toHaveTextContent('Max Tokens moved to 64,000, the Claude Opus 5.5 default.');
+    fireEvent.change(model(), { target: { value: 'claude-sonnet-4-6' } });
+    expect(currentParams()).toMatchObject({ model: 'claude-sonnet-4-6', max_tokens: 4096 });
+    expect(screen.getByText('Max Tokens moved to 4,096, the Claude Sonnet 4.6 default.')).toBeVisible();
+  });
+
+  it('keeps an edited Max Tokens and says what the new default is', () => {
+    renderModel('gemini-chat', { model: 'gemini-3.6-flash', max_tokens: 12000 });
+    fireEvent.change(model(), { target: { value: 'gemini-4-argon' } });
+    expect(currentParams()).toMatchObject({ model: 'gemini-4-argon', max_tokens: 12000 });
+    expect(screen.getByText('Max Tokens stays at 12,000, the value you set. The Gemini 4 Argon default is 32,768.')).toBeVisible();
+    // The note is about that change; the next edit clears it.
+    fireEvent.change(maxTokens(), { target: { value: '30000' } });
+    expect(screen.queryByText(/Gemini 4 Argon default/)).toBeNull();
+  });
+});

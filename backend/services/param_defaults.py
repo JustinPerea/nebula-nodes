@@ -1,0 +1,61 @@
+"""Per-value param defaults (a param's ``defaultBy`` in node_definitions.json).
+
+A param such as Max Tokens can default differently for some models::
+
+    "default": 4096,
+    "defaultBy": {"model": {"claude-opus-5-5": 64000}}
+
+``default`` covers every value not listed, including the model param's own
+default (scripts/check-node-contracts.mjs checks that). The canvas writes
+defaults into node.params when it makes a node and moves them when the model
+changes (frontend/src/lib/paramDefaults.ts). A handler calls
+:func:`listed_default` only when the value is missing, for example on a node an
+agent made without it, so saved graphs keep sending what they sent before.
+"""
+from __future__ import annotations
+
+from functools import lru_cache
+from typing import Any, Mapping
+
+
+@lru_cache(maxsize=1)
+def _definitions() -> dict[str, dict[str, Any]]:
+    from services.node_registry import NodeRegistry
+
+    return NodeRegistry().get_all()
+
+
+def _params(definition: Mapping[str, Any]) -> list[dict[str, Any]]:
+    if "sharedParams" in definition:
+        return [*definition["sharedParams"], *definition.get("falParams", []), *definition.get("directParams", [])]
+    return list(definition.get("params", []))
+
+
+def _missing(value: Any) -> bool:
+    return value is None or value == ""
+
+
+def listed_default(definition_id: str, key: str, params: Mapping[str, Any]) -> Any | None:
+    """The ``defaultBy`` entry for ``key`` under the node's current values, or
+    None when the current value isn't listed (the caller keeps its own rule)."""
+    definition = _definitions().get(definition_id) or {}
+    sources = _params(definition)
+    param = next((p for p in sources if p.get("key") == key), None)
+    rule = (param or {}).get("defaultBy") or {}
+    if len(rule) != 1:
+        return None
+    (controller, table), = rule.items()
+    value = params.get(controller)
+    if _missing(value):
+        value = next((p.get("default") for p in sources if p.get("key") == controller), None)
+    if _missing(value):
+        return None
+    return table.get(str(value))
+
+
+def value_or_listed_default(definition_id: str, key: str, params: Mapping[str, Any]) -> Any | None:
+    """``params[key]`` when set; otherwise the listed per-value default (or None)."""
+    value = params.get(key)
+    if not _missing(value):
+        return value
+    return listed_default(definition_id, key, params)
