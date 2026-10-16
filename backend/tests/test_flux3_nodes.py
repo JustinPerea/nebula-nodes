@@ -128,8 +128,11 @@ CHEAPEST = [
      ("fal", "blackforestlabs/flux-3/klein/base/edit-image"),
      {"prompt": P, "image_size": "square_hd", "output_format": "png", "enable_prompt_expansion": True,
       "enable_safety_checker": True, "image_urls": [REF]}),
+    # A draft hides Resolution on every draft route (PR 5, D1: "Yes to all
+    # 4"), so BFL and Replicate drafts no longer send it; both default to it
+    # (BFL hd, Replicate "Drafts are 720p"), so the output is the same.
     ("flux-3-video", "bfl", {"draft": True}, {}, "https://api.bfl.ai/v1/flux-3-video", ("bfl", "flux-3-video"),
-     {"mode": "t2v", "prompt": P, "duration": 5, "resolution": "hd", "aspect_ratio": "16:9", "generate_audio": True,
+     {"mode": "t2v", "prompt": P, "duration": 5, "aspect_ratio": "16:9", "generate_audio": True,
       "draft": True}),
     ("flux-3-video", "fal", {"draft": True}, {}, "https://queue.fal.run/blackforestlabs/flux-3/text-to-video/draft",
      ("fal", "blackforestlabs/flux-3/text-to-video/draft"),
@@ -137,7 +140,7 @@ CHEAPEST = [
     ("flux-3-video", "replicate", {"draft": True}, {},
      "https://api.replicate.com/v1/models/black-forest-labs/flux-3/predictions",
      ("replicate", "black-forest-labs/flux-3"),
-     {"input": {"prompt": P, "duration": "5", "resolution": "720p", "aspect_ratio": "16:9", "generate_audio": True,
+     {"input": {"prompt": P, "duration": "5", "aspect_ratio": "16:9", "generate_audio": True,
                 "draft": True}}),
     ("flux-3-video", "openrouter", {}, {}, "https://openrouter.ai/api/v1/videos",
      ("openrouter", "videos/black-forest-labs/flux-3-video"),
@@ -224,6 +227,24 @@ async def test_each_routes_cheapest_run_sends_a_body_its_provider_takes(monkeypa
     # One provider per run.
     host = httpx.URL(url).host
     assert {httpx.URL(str(r.url)).host for r in hosts.requests if r.method == "POST"} <= {host, "api.replicate.com"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model, sends", [("berry", True), ("jam", False)])
+async def test_krea_3_on_fal_sends_a_negative_prompt_only_where_it_shows(monkeypatch, model, sends):
+    """Negative prompt shows only on Berry (visibleWhen {model: [berry]}; fal:
+    "Used by berry only"). PR 5: one typed under Berry and left saved after a
+    switch to Jam is hidden there, so route_sent_keys drops it (it was sent
+    before), and the run doesn't stop: no route shows it on Jam."""
+    definition = REGISTRY["krea-3"]
+    hosts = hosts_for(monkeypatch, "fal", False)
+    saved = {**defaults(definition), "model": model, "negative_prompt": "blurry", "_provider": "fal"}
+    assert node_route.route_block(definition, node_route.route_by_id(definition, "fal"), saved) is None
+    await registry_handler("krea-3")(node("krea-3", **saved), ports(prompt=P), dict(KEYS))
+    sent = hosts.json("POST", re.escape("https://queue.fal.run/krea/v3/text-to-image"))
+    assert ("negative_prompt" in sent) == sends
+    assert sent["model"] == model
+    validate(SCHEMAS["fal"]["krea/v3/text-to-image"], sent)
 
 
 def test_every_route_is_priced_or_said_to_be_unpriced():

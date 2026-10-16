@@ -187,6 +187,8 @@ def entry_for_route(entry: Mapping[str, Any] | None, provider: str | None) -> Ma
 
 def validate_pricing(pricing: Mapping[str, Any], definitions: Mapping[str, Mapping[str, Any]]) -> list[str]:
     """Every problem with the file, as readable strings. Empty means valid."""
+    from services import node_route
+
     problems: list[str] = []
     currencies = pricing.get("currencies") or {}
     for node_id, entry in (pricing.get("nodes") or {}).items():
@@ -222,6 +224,9 @@ def validate_pricing(pricing: Mapping[str, Any], definitions: Mapping[str, Mappi
                 if routed.get("provider") not in (None, billed):
                     problems.append(f"{route_where} provider must be {billed!r} or left out")
                 _validate_entry(route_where, routed, definition, currencies, problems, multi_route_ok=True)
+                # A price never reads a setting the route hides (paramVisibleWhen).
+                problems += node_route.price_row_problems(definition, str(provider), routed.get("rows"),
+                                                        routed.get("extras"), routed.get("multiplyBy"))
             continue
         _validate_entry(where, entry, definition, currencies, problems)
     return problems

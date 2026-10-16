@@ -10,7 +10,7 @@ description: Black Forest Labs (BFL) in Nebula — the FLUX 3 nodes (flux-3-imag
 - **One node per model.** Each FLUX 3 model is one node with a `routes` table and a provider switcher on the card, in the Inspector and in Create. The saved `_provider` is `auto` or a route id (`bfl`, `fal`, `replicate`, `openrouter`, `krea`). Auto takes the first route in table order whose key is set, and BFL, the maker, is always first. How it works: `docs/PROVIDER-ROUTES.md`.
 - **Auto never moves.** If the route Auto lands on can't take a setting or an input (1.5k on fal, a seed on OpenRouter Klein, a 4K video on Replicate), the run stops before any spend and names the routes that could take it. It doesn't quietly try the next provider. Who bills depends only on `_provider` and the saved keys.
 - **The provider is the person's call.** An agent that wants another provider proposes it (`propose_change`, `nebula propose`). A direct edit of `_provider` (or `_kreaAuth`) is refused.
-- **Each route shows only what it takes.** The Inspector, Create and `describe_node` list each route's own values and ranges (`route_param_definitions`). Read the route rows in `describe_node` before setting a value; a saved value the shown route lacks reads "(not on fal.ai)" and blocks the run.
+- **Each route shows only what it takes.** The Inspector, Create and `describe_node` list each route's own values and ranges (`route_param_definitions`). Read the route rows in `describe_node` before setting a value; a saved value the shown route lacks reads "(not on fal.ai)" and blocks the run. A setting a provider doesn't offer is absent from its row or has `onlyWhen`, and `hides` names it ("no Seed" on OpenRouter Klein); a stop on one comes with `fixes`, plain param edits. `docs/MODEL_REFERENCE.md` has the same table per provider.
 - **Key:** `BFL_API_KEY`, sent as `x-key` to `https://api.bfl.ai`. Keys are per project and shown once (dashboard.bfl.ai → API → Keys); credits belong to the organization. Settings checks the key with the free `GET /v1/credits` (403 = rejected, 422 = malformed).
 - **No cancel on BFL.** Stopping a BFL run stops polling only; the task finishes and bills. fal and Replicate runs are cancelled upstream on Stop.
 - **Results expire.** BFL's `result.sample` link lasts about 1 hour (image) or 2 hours (video). Nebula downloads it at once.
@@ -52,7 +52,7 @@ BFL has no seed, negative prompt or output format on FLUX 3 Image. `auto` follow
 
 ### FLUX 3 Image Klein
 
-Shared: `aspect_ratio`, `resolution` (the same tiers), `safety_tolerance` 0-4, `seed` (0 to 4294967295, unset by default). BFL also takes `steps` 1-16 (default 16) and `output_format` jpeg or png (default jpeg). OpenRouter takes no seed: a set seed stops the run on OpenRouter ("it doesn't take a seed").
+Shared: `aspect_ratio`, `resolution` (the same tiers), `safety_tolerance` 0-4, `seed` (0 to 4294967295, unset by default). BFL also takes `steps` 1-16 (default 16) and `output_format` jpeg or png (default jpeg). OpenRouter takes no seed: there is no Seed row on OpenRouter and none is sent; a seed saved on another route stops the run there ("it doesn't offer Seed 7. Clear Seed, or switch provider.") until it is cleared or the route switched.
 
 No fal route: fal's Klein takes only exact pixel sizes, and BFL publishes no exact size for its tiers. No Replicate route: Replicate has no Klein model (404, 2026-10-15).
 
@@ -66,13 +66,13 @@ Shared: `duration` 5-20 s (default 5), `resolution` `hd` / `fhd` / `qhd` / `uhd`
 
 | Route | Takes | Stops on |
 |---|---|---|
-| bfl | everything | a draft above `hd`; a continuation longer than 15 s |
-| fal | 720p-2160p; no 9:21 | a draft above `hd` |
-| replicate | `hd`, `fhd` only; no 9:21 | a draft at `fhd` |
-| openrouter | `hd` to `uhd` (2K, 4K); only 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 | `keyframes` or `start_video` wired; `draft`; a start or end image that isn't a public http(s) URL (a Nebula output can't be sent) |
-| krea | `hd`, `fhd`; no `auto` or 9:21 | `keyframes` wired; `draft` |
+| bfl | everything | a continuation longer than 15 s |
+| fal | 720p-2160p; no 9:21 | |
+| replicate | `hd`, `fhd` only; no 9:21 (a draft at any resolution runs) | |
+| openrouter | `hd` to `uhd` (2K, 4K); only 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 | `keyframes` or `start_video` wired; a saved `draft` (not offered there; "Turn Draft (fast preview) off"); a start or end image that isn't a public http(s) URL (a Nebula output can't be sent) |
+| krea | `hd`, `fhd`; no `auto` or 9:21 | `keyframes` wired; a saved `draft` (not offered there) |
 
-Drafts render at `hd` only (BFL: "sending `draft: true` with any other resolution is rejected"). BFL's `draft_enhance` mode isn't offered yet.
+Drafts render at 720p (BFL: "sending `draft: true` with any other resolution is rejected"), so a draft hides Resolution and sends none: a draft saved at `fhd` or above runs as the 720p draft. BFL's `draft_enhance` mode isn't offered yet.
 
 ### FLUX Video Edit [fast] and FLUX Video Upscale
 
@@ -89,7 +89,7 @@ Shared: `model` (`pro` default, `max`, `flash`, `flex`, `klein-9b`, `klein-4b`; 
 | Route | Differs |
 |---|---|
 | bfl | no `flash` (the run stops and offers fal); the preset is sent as `width`/`height` (`square_hd` 1024×1024 ... `landscape_16_9` 1024×576); steps 1-50 |
-| fal | also `enable_safety_checker` (default on); steps 2-50; Klein takes no `safety_tolerance`, so only the default `"2"` runs there |
+| fal | also `enable_safety_checker` (default on); steps 2-50; Flash and Klein have no `safety_tolerance`: hidden and not sent there; on Klein a saved value other than `"2"` stops the run ("Set Safety back to 2"), on Flash it is ignored |
 
 - Steps and guidance show on Flex only. A value left from Flex is hidden on the other models and isn't sent on either route.
 - `model` must be one of the six lowercase values. Each route lists the models it serves (`accepts`), so any other value (`"MAX"`, `"Flash"`) stops the run with no route to offer; it never runs Pro.

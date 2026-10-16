@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import type { ModelNodeDefinition } from '../../types';
 import { routeSwitch } from '../../lib/directRoute';
-import { applyProviderPick, providerSwitchState, type ProviderRow, type SwitchState } from '../../lib/providerSwitch';
+import { applyFix, applyProviderPick, providerSwitchState, type ProviderRow, type SwitchState } from '../../lib/providerSwitch';
+import type { RouteFix } from '../../lib/directRoute';
 import type { ProviderSetupTarget } from '../../lib/providerReadiness';
 import { useUIStore } from '../../store/uiStore';
 import { useSwitchContext } from '../../hooks/useSwitchContext';
@@ -23,8 +24,11 @@ import '../../styles/provider-switcher.css';
  * A pick is a person's switch: it writes `_provider` (and `_kreaAuth` on a
  * node with a Krea plan route: lib/providerSwitch.ts billingWrites) and
  * moves any saved value the new route doesn't take to its closest one there, returning one note per change for the card. Nothing
- * else here writes params: keys changing, a shared graph or an import keep
- * every value, and the menu shows the stop with one-click switches instead.
+ * else here writes params on its own: keys changing, a shared graph or an
+ * import keep every value, and the menu shows the stop with one-click rows
+ * instead. A fix row ("Set Safety back to 2", "Clear Seed") is a person's
+ * edit of that one setting (applyFix), so the run starts where it is; a
+ * switch row moves it to a provider that can take the recipe.
  */
 
 type Params = Record<string, unknown>;
@@ -48,16 +52,17 @@ export function ProviderSwitcher({ definition, params, variant, onPick, wired = 
     const result = applyProviderPick(definition, params, row, context);
     onPick(result.params, result.notes);
   }, [definition, params, context, onPick]);
+  const fix = useCallback((choice: RouteFix) => onPick(applyFix(params, choice), []), [params, onPick]);
   if (!routeSwitch(definition)) return null;
   if (variant === 'inspector') {
     return (
       <div className="inspector__section provider-switcher provider-switcher--inspector" data-inspector-provider="true">
         <div className="inspector__label" id={`provider-label-${definition.id}`}>Provider</div>
-        <ProviderMenu state={state} labelledBy={`provider-label-${definition.id}`} inline onPick={pick} />
+        <ProviderMenu state={state} labelledBy={`provider-label-${definition.id}`} inline onPick={pick} onFix={fix} />
       </div>
     );
   }
-  return <ProviderPopoverTrigger state={state} variant={variant} displayName={definition.displayName} onPick={pick} />;
+  return <ProviderPopoverTrigger state={state} variant={variant} displayName={definition.displayName} onPick={pick} onFix={fix} />;
 }
 
 function openSetup(target: ProviderSetupTarget | undefined) {
@@ -83,6 +88,8 @@ function keyCell(row: ProviderRow, onSetup: (row: ProviderRow) => void): ReactNo
 interface ProviderMenuProps {
   state: SwitchState;
   onPick: (row: Pick<ProviderRow, 'writes' | 'routeId'>) => void;
+  /** A fix row under a stop: reset or clear the one setting that stops it. */
+  onFix?: (fix: RouteFix) => void;
   /** Rendered in place (the Inspector) rather than in a popover. */
   inline?: boolean;
   labelledBy?: string;
@@ -93,7 +100,7 @@ interface ProviderMenuProps {
 /** The menu: role=menu with menuitemradio rows, arrow keys, Home/End,
  * Escape and Tab (both close a popover, focus back on its trigger). In a popover the checked row takes focus when it opens; in place,
  * one row is in the tab order (roving tabindex). */
-export function ProviderMenu({ state, onPick, inline = false, labelledBy, label, onClose }: ProviderMenuProps) {
+export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy, label, onClose }: ProviderMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const checkedIndex = Math.max(0, state.rows.findIndex((row) => row.selected));
   // The row in the tab order when the menu is in place: the last one
@@ -163,18 +170,36 @@ export function ProviderMenu({ state, onPick, inline = false, labelledBy, label,
           {row.routeId !== null && keyCell(row, setup)}
         </div>
       ))}
-      {state.blocked && state.alternatives.length > 0 && (
-        <div role="group" aria-label="Providers that can run it" className="provider-switcher__alternatives">
-          {state.alternatives.map((alternative) => (
-            <button key={alternative.routeId} type="button" role="menuitem" tabIndex={-1}
-              className="provider-switcher__alternative"
-              onClick={() => {
-                onPick({ writes: alternative.writes, routeId: alternative.routeId });
-                onClose?.(true);
-              }}>
-              Switch to {alternative.label}
-            </button>
-          ))}
+      {state.blocked && ((onFix && state.fixes.length > 0) || state.alternatives.length > 0) && (
+        <div role="none" className="provider-switcher__actions">
+          {onFix && state.fixes.length > 0 && (
+            <div role="group" aria-label="Settings that let it run here" className="provider-switcher__alternatives">
+              {state.fixes.map((choice) => (
+                <button key={choice.param} type="button" role="menuitem" tabIndex={-1}
+                  className="provider-switcher__alternative provider-switcher__fix"
+                  onClick={() => {
+                    onFix(choice);
+                    onClose?.(true);
+                  }}>
+                  {choice.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {state.alternatives.length > 0 && (
+            <div role="group" aria-label="Providers that can run it" className="provider-switcher__alternatives">
+              {state.alternatives.map((alternative) => (
+                <button key={alternative.routeId} type="button" role="menuitem" tabIndex={-1}
+                  className="provider-switcher__alternative"
+                  onClick={() => {
+                    onPick({ writes: alternative.writes, routeId: alternative.routeId });
+                    onClose?.(true);
+                  }}>
+                  Switch to {alternative.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -185,11 +210,12 @@ export function ProviderMenu({ state, onPick, inline = false, labelledBy, label,
   );
 }
 
-function ProviderPopoverTrigger({ state, variant, displayName, onPick }: {
+function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: {
   state: SwitchState;
   variant: 'chip' | 'pill';
   displayName: string;
   onPick: (row: Pick<ProviderRow, 'writes' | 'routeId'>) => void;
+  onFix: (fix: RouteFix) => void;
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -219,7 +245,7 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick }: {
       </button>
       {open && (
         <ProviderPopover anchorRef={triggerRef} id={menuId} onClose={close}>
-          <ProviderMenu state={state} onPick={onPick} label={`Provider for ${displayName}`} onClose={close} />
+          <ProviderMenu state={state} onPick={onPick} onFix={onFix} label={`Provider for ${displayName}`} onClose={close} />
         </ProviderPopover>
       )}
     </>

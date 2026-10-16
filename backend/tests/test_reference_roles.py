@@ -291,6 +291,14 @@ APPROVED_TOP_LEVEL_FIELD_ADDITIONS["runway-sts"] = {"directRoute": {"rejectsWhen
 # stops instead of running Pro), and the two Flex-only params are shown on
 # Flex only (visibleWhen) and dropped elsewhere by the route clients, so the
 # per-model steps/guidance rejectsWhen entries are gone.
+# PR 5, hide what the provider doesn't offer (2026-10-16). Justin, on the
+# design: "Yes to all 4" (D4: approve this exact new entry). The fal route's
+# eight "a safety tolerance other than 2 on Klein" rejectsWhen entries are
+# replaced by "paramVisibleWhen": {"safety_tolerance": {"model": ["pro",
+# "max", "flex"]}} (fal's Flash and Klein endpoints have no
+# safety_tolerance), and the BFL route's rejects {enable_safety_checker:
+# [false]} is gone (rule H: fal offers the switch, so a saved "off" still
+# stops on BFL). Nothing else in the entry changed.
 _FLUX2_BFL_MODELS = ["pro", "max", "flex", "klein-9b", "klein-4b"]
 _FLUX2_FAL_MODELS = ["pro", "max", "flash", "flex", "klein-9b", "klein-4b"]
 
@@ -305,8 +313,7 @@ _FLUX2_ROUTES = [
      "rename": {"num_inference_steps": "steps", "guidance_scale": "guidance"},
      "valueMap": {"safety_tolerance": {str(level): level for level in range(1, 6)},
                   "image_size": {preset: {"width": w, "height": h} for preset, (w, h) in _FLUX2_SIZES.items()}},
-     "rules": {"accepts": {"model": {"values": _FLUX2_BFL_MODELS}},
-               "rejects": {"enable_safety_checker": [False]}},
+     "rules": {"accepts": {"model": {"values": _FLUX2_BFL_MODELS}}},
      "note": "BFL has no FLUX 2 Flash and no safety-checker switch."},
     {"id": "fal", "provider": "fal", "keys": ["FAL_KEY"], "handler": "fal", "endpoint": "fal-ai/flux-2-pro",
      "endpointWhen": [{"when": {"model": model}, "endpoint": endpoint} for model, endpoint in (
@@ -315,11 +322,8 @@ _FLUX2_ROUTES = [
      "params": [{"key": "enable_safety_checker", "label": "Safety Checker", "type": "boolean", "required": False,
                  "default": True}],
      "rules": {"accepts": {"model": {"values": _FLUX2_FAL_MODELS},
-                           "num_inference_steps": {"min": 2, "max": 50, "integer": True}},
-               "rejectsWhen": [
-                   {"match": {"safety_tolerance": value, "model": model},
-                    "label": "a safety tolerance other than 2 on Klein"}
-                   for model in ("klein-9b", "klein-4b") for value in ("1", "3", "4", "5")]}},
+                           "num_inference_steps": {"min": 2, "max": 50, "integer": True}}},
+     "paramVisibleWhen": {"safety_tolerance": {"model": ["pro", "max", "flex"]}}},
 ]
 APPROVED_ROUTE_TABLE_CONVERSIONS = {
     "flux-2-pro": {
@@ -764,6 +768,11 @@ def test_seedream_route_split_still_fingerprints_every_param(definitions, change
     lambda node: node["routes"][1]["params"][0].update(default=False),
     lambda node: node["routes"][0]["rules"]["accepts"]["model"]["values"].append("flash"),
     lambda node: _sole_entry(node["sharedParams"], "key", "guidance_scale").pop("visibleWhen"),
+    # PR 5: dropping, widening or adding a route's paramVisibleWhen still fails.
+    lambda node: node["routes"][1].pop("paramVisibleWhen"),
+    lambda node: node["routes"][1]["paramVisibleWhen"]["safety_tolerance"]["model"].append("flash"),
+    lambda node: node["routes"][0].update(paramVisibleWhen={"seed": False}),
+    lambda node: node["routes"][0]["rules"].update(rejects={"enable_safety_checker": [False]}),
     lambda node: node["routes"].reverse(),
     lambda node: node["sharedParams"][-1].update(max=20),
     lambda node: _sole_entry(node["sharedParams"], "key", "model")["options"].pop(),

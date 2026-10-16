@@ -23,6 +23,7 @@ function shown(route: RouteSpec): Record<string, unknown> {
   }
   out.paramKeys = (route.params ?? []).map((param) => param.key);
   if (route.rules && Object.keys(route.rules).length) out.rules = route.rules;
+  if (route.paramVisibleWhen && Object.keys(route.paramVisibleWhen).length) out.paramVisibleWhen = route.paramVisibleWhen;
   return out;
 }
 
@@ -49,6 +50,9 @@ describe('routesOf (snapshot of backend node_route.routes_of)', () => {
             ...(Array.isArray(param.options) ? { options: param.options.map((option) => option.value) } : {}),
             ...(param.min !== undefined ? { min: param.min } : {}),
             ...(param.max !== undefined ? { max: param.max } : {}),
+            // A route-table node pins what each route shows a param under.
+            ...(hasRoutes(definition) && param.visibleWhen && Object.keys(param.visibleWhen).length
+              ? { visibleWhen: param.visibleWhen } : {}),
           }))]));
         expect({ nodeId, offered }).toEqual({ nodeId, offered: expected.routeParams });
       } else {

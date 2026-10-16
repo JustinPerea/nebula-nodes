@@ -36,7 +36,7 @@ Nebula Nodes is a node-graph studio for AI images, video and audio. You work on 
 
 Workflow:
 1. look_at_canvas: nodes, wires, outputs, the person's selection and pins. Read get_selected_nodes before acting on "these" or "the selected".
-2. find_nodes / describe_node: pick a node type that can run here (runsWith) and learn its ports, params and price.
+2. find_nodes / describe_node: pick a node type that can run here (runsWith) and learn its ports, params and price. A node with `routes` runs on one provider each: each route's `params` are what that provider offers (a setting it lacks is absent or has `onlyWhen`); `_provider` changes go through propose_change.
 3. edit_canvas: add nodes (refs like "+img"), wires, param changes, renames and moves in one call; all of it lands or none of it. remove_from_canvas deletes nodes or wires.
 4. run_nodes: runs a node and what feeds it. It returns outputs with small previews, or status "running" with a runId: then get_run(runId) or cancel_run(runId).
 5. view_output: look at any node's output again.
@@ -350,6 +350,17 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     """One node type in detail: input and output ports (ids to wire), params
     (type, default, options, ranges, `onlyWhen` another param has a value),
     whether it runs here, and list prices by the params that set them.
+    A node with `routes` (one per provider, in Auto order) has
+    `providerChoice` (`_provider`, auto, and the route Auto resolves to
+    here) and, per route, `params` exactly as the card shows them on that
+    provider (values cut, ranges narrowed, `onlyWhen`; a setting it doesn't
+    offer is absent and named in `hides`), `price`, `priceUnconfirmed`,
+    `note` and `block`. A route never receives a setting it doesn't offer;
+    a saved non-default value of one stops the run when another route
+    would use it. The fix for such a stop comes as `fixes` ([{param, value}],
+    null = clear: plain param edits) on a propose_change cost entry; a run
+    error or the estimate gives the same fix as a sentence in its message.
+    A `_provider` change is the person's call: propose it, don't edit it.
     Dual-route nodes (a fal or Krea copy that also runs on the model maker's
     API with your key) also list `paramsDirect` / `paramsFallback`; `route`
     says which one this machine uses ("direct", or the `fallback` provider,

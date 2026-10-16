@@ -304,7 +304,9 @@ def cost_for(
 
     A route-table node is paid by the provider of the route it would take
     (node_route.select_route with ``api_keys``); when that route can't run,
-    ``provider`` is None and ``unavailable`` says why. Without ``api_keys``
+    ``provider`` is None, ``unavailable`` says why and, for a setting the
+    route doesn't offer, ``fixes`` lists route_unavailable's one-click
+    param edits ([{param, value}], value None = clear). Without ``api_keys``
     it names the explicit route's provider, or under Auto the maker's."""
     from services import model_pricing, node_readiness, node_route
 
@@ -313,8 +315,11 @@ def cost_for(
             route = node_route.select_route(definition, params, api_keys)
             if route.kind == node_route.UNSET:
                 why = node_route.route_unavailable(definition, params, api_keys) or {}
+                # A stop on a setting the route doesn't offer can be fixed in
+                # place: route_unavailable's one-click param edits.
                 return {"kind": "paid", "provider": None, "label": "paid · can't run as set",
-                        "unavailable": str(why.get("message") or "")}
+                        "unavailable": str(why.get("message") or ""),
+                        **({"fixes": list(why["fixes"])} if why.get("fixes") else {})}
             routed = str(route.provider or "") or None
         else:
             choice = node_route.provider_choice(params)

@@ -630,7 +630,7 @@
           "multiplyBy": [
             "duration"
           ],
-          "notes": "Per second of output by mode and resolution. BFL's card '/v1/flux-3' FLUX 3 Video (effort standard) lists t2v720 15, t2v1080 24, t2v1440 28, t2v2160 41, v2v720 21, v2v1080 27, v2v1440 31, v2v2160 45 credits a second; the docs table prices image to video with the t2v fields. The Draft card has only t2v720 (6 credits), used for text and image drafts; a video-continuation draft is 'Not listed', so it is unpriced. (mode) is read from the wired ports, not a saved param: v2v with start_video wired, i2v with start_image, keyframes or end_image, else t2v. A combination no row lists is unpriced.",
+          "notes": "Per second of output by mode and resolution. BFL's card '/v1/flux-3' FLUX 3 Video (effort standard) lists t2v720 15, t2v1080 24, t2v1440 28, t2v2160 41, v2v720 21, v2v1080 27, v2v1440 31, v2v2160 45 credits a second; the docs table prices image to video with the t2v fields. The Draft card has only t2v720 (6 credits), used for text and image drafts; a video-continuation draft is 'Not listed', so it is unpriced (re-checked 2026-10-16: the docs table's v2v Draft cell reads field v2v720 with effort draft, and bfl.ai/pricing's FLUX 3 Video Draft rates list only t2v720 6). A draft hides Resolution (paramVisibleWhen, PR 5), so draft rows never read it. (mode) is read from the wired ports, not a saved param: v2v with start_video wired, i2v with start_image, keyframes or end_image, else t2v. A combination no row lists is unpriced.",
           "sources": [
             {
               "url": "https://bfl.ai/pricing",
@@ -645,7 +645,7 @@
               "quote": "1 credit equals $0.01 USD."
             }
           ],
-          "checked": "2026-10-15"
+          "checked": "2026-10-16"
         },
         "fal": {
           "currency": "usd",
