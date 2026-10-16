@@ -84,7 +84,7 @@ Auto order is left to right. A dash means no route, for the reason in "Left out"
 ## FLUX Video Edit
 
 - **Ports:** `prompt`, `start_video` (Krea's ids; the clients map them to BFL's `video` and fal's `video_url`). No settings.
-- **fal `blackforestlabs/flux-3/edit-video`** is the same model: fal titles it "FLUX.3 Edit Video [FAST]", and it matches BFL on price ($0.03/s), limits (15 s, 50 MB), 720p output and fields.
+- **fal `blackforestlabs/flux-3/edit-video`** is the same model: fal titles it "Flux 3 FAST Edit Video" (its description says "FLUX.3 Edit Video [FAST]"), and it matches BFL on price ($0.03/s), limits (15 s, 50 MB), 720p output and fields.
 - **Prices:** BFL and fal $0.03 per output second; Krea unpriced (no `x-krea-pricing` on the operation).
 
 ## FLUX Video Upscale

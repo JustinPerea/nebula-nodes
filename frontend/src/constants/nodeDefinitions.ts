@@ -13581,7 +13581,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'flux-3-image-klein': {
     id: 'flux-3-image-klein',
     displayName: 'FLUX 3 Image Klein',
-    description: "Black Forest Labs' fast open-weights FLUX 3 Klein (5.6B, distilled): text to image, or edit with up to 10 reference images. Runs on BFL or OpenRouter.",
+    description: "Black Forest Labs' fast open-weights FLUX 3 Image Klein (5.6B, distilled): text to image, or edit with up to 10 reference images. Runs on BFL or OpenRouter.",
     category: 'image-gen',
     apiProvider: 'bfl',
     apiEndpoint: '/v1/flux-3-image-klein',
@@ -13720,7 +13720,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'flux-3-image-klein-base': {
     id: 'flux-3-image-klein-base',
     displayName: 'FLUX 3 Image Klein Base',
-    description: "FLUX 3 Klein Base, the undistilled 5.6B open-weights model (50 steps, for LoRA and research): text to image or edit with up to 10 reference images. On fal.ai only; BFL's API doesn't serve it.",
+    description: "FLUX 3 Image Klein Base, the undistilled 5.6B open-weights model (50 steps, for LoRA and research): text to image or edit with up to 10 reference images. On fal.ai only; BFL's API doesn't serve it.",
     category: 'image-gen',
     apiProvider: 'fal',
     apiEndpoint: 'blackforestlabs/flux-3/klein/base/text-to-image',
