@@ -614,72 +614,22 @@
      "handler": "bfl",
      "paramKeys": [],
      "rules": {
+      "accepts": {
+       "model": {
+        "values": [
+         "pro",
+         "max",
+         "flex",
+         "klein-9b",
+         "klein-4b"
+        ]
+       }
+      },
       "rejects": {
-       "model": [
-        "flash"
-       ],
        "enable_safety_checker": [
         false
        ]
-      },
-      "rejectsWhen": [
-       {
-        "match": {
-         "model": "pro",
-         "num_inference_steps": "(set)"
-        },
-        "label": "steps on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "pro",
-         "guidance_scale": "(set)"
-        },
-        "label": "guidance on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "max",
-         "num_inference_steps": "(set)"
-        },
-        "label": "steps on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "max",
-         "guidance_scale": "(set)"
-        },
-        "label": "guidance on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "klein-9b",
-         "num_inference_steps": "(set)"
-        },
-        "label": "steps on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "klein-9b",
-         "guidance_scale": "(set)"
-        },
-        "label": "guidance on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "klein-4b",
-         "num_inference_steps": "(set)"
-        },
-        "label": "steps on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "klein-4b",
-         "guidance_scale": "(set)"
-        },
-        "label": "guidance on a model other than Flex"
-       }
-      ]
+      }
      }
     },
     {
@@ -694,6 +644,16 @@
      ],
      "rules": {
       "accepts": {
+       "model": {
+        "values": [
+         "pro",
+         "max",
+         "flash",
+         "flex",
+         "klein-9b",
+         "klein-4b"
+        ]
+       },
        "num_inference_steps": {
         "min": 2,
         "max": 50,
@@ -703,127 +663,57 @@
       "rejectsWhen": [
        {
         "match": {
-         "model": "pro",
-         "num_inference_steps": "(set)"
-        },
-        "label": "steps on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "pro",
-         "guidance_scale": "(set)"
-        },
-        "label": "guidance on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "max",
-         "num_inference_steps": "(set)"
-        },
-        "label": "steps on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "max",
-         "guidance_scale": "(set)"
-        },
-        "label": "guidance on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "flash",
-         "num_inference_steps": "(set)"
-        },
-        "label": "steps on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "flash",
-         "guidance_scale": "(set)"
-        },
-        "label": "guidance on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "klein-9b",
-         "num_inference_steps": "(set)"
-        },
-        "label": "steps on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "klein-9b",
-         "guidance_scale": "(set)"
-        },
-        "label": "guidance on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "klein-4b",
-         "num_inference_steps": "(set)"
-        },
-        "label": "steps on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "klein-4b",
-         "guidance_scale": "(set)"
-        },
-        "label": "guidance on a model other than Flex"
-       },
-       {
-        "match": {
-         "model": "klein-9b",
-         "safety_tolerance": "1"
+         "safety_tolerance": "1",
+         "model": "klein-9b"
         },
         "label": "a safety tolerance other than 2 on Klein"
        },
        {
         "match": {
-         "model": "klein-9b",
-         "safety_tolerance": "3"
+         "safety_tolerance": "3",
+         "model": "klein-9b"
         },
         "label": "a safety tolerance other than 2 on Klein"
        },
        {
         "match": {
-         "model": "klein-9b",
-         "safety_tolerance": "4"
+         "safety_tolerance": "4",
+         "model": "klein-9b"
         },
         "label": "a safety tolerance other than 2 on Klein"
        },
        {
         "match": {
-         "model": "klein-9b",
-         "safety_tolerance": "5"
+         "safety_tolerance": "5",
+         "model": "klein-9b"
         },
         "label": "a safety tolerance other than 2 on Klein"
        },
        {
         "match": {
-         "model": "klein-4b",
-         "safety_tolerance": "1"
+         "safety_tolerance": "1",
+         "model": "klein-4b"
         },
         "label": "a safety tolerance other than 2 on Klein"
        },
        {
         "match": {
-         "model": "klein-4b",
-         "safety_tolerance": "3"
+         "safety_tolerance": "3",
+         "model": "klein-4b"
         },
         "label": "a safety tolerance other than 2 on Klein"
        },
        {
         "match": {
-         "model": "klein-4b",
-         "safety_tolerance": "4"
+         "safety_tolerance": "4",
+         "model": "klein-4b"
         },
         "label": "a safety tolerance other than 2 on Klein"
        },
        {
         "match": {
-         "model": "klein-4b",
-         "safety_tolerance": "5"
+         "safety_tolerance": "5",
+         "model": "klein-4b"
         },
         "label": "a safety tolerance other than 2 on Klein"
        }

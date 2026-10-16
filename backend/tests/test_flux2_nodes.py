@@ -159,7 +159,6 @@ async def test_a_saved_node_keeps_running_on_fal_until_a_bfl_key_is_added(monkey
 @pytest.mark.parametrize("saved, why", [
     ({"model": "flash"}, "it doesn't take model flash"),
     ({"enable_safety_checker": False}, "it doesn't take enable_safety_checker false"),
-    ({"model": "pro", "num_inference_steps": 20}, "it doesn't take steps on a model other than Flex"),
 ])
 async def test_a_saved_value_bfl_cant_take_stops_before_any_request_and_offers_fal(monkeypatch, saved, why):
     """Auto with both keys lands on BFL; a saved value it can't take stops the
@@ -171,15 +170,13 @@ async def test_a_saved_value_bfl_cant_take_stops_before_any_request_and_offers_f
         await registry_handler("flux-2-pro")(node("flux-2-pro", **params), ports(prompt=P), keys)
     assert hosts.requests == []
     unavailable = node_route.route_unavailable(DEFINITION, params, keys)
-    assert unavailable["routeId"] == "bfl" and unavailable["alternatives"] == (
-        ["fal"] if saved.get("num_inference_steps") is None else [])
+    assert unavailable["routeId"] == "bfl" and unavailable["alternatives"] == ["fal"]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("saved, why", [
     ({"model": "klein-4b", "safety_tolerance": "4"}, "a safety tolerance other than 2 on Klein"),
     ({"model": "flex", "num_inference_steps": 1}, "num_inference_steps 1"),
-    ({"model": "flash", "guidance_scale": 2.5}, "guidance on a model other than Flex"),
 ])
 async def test_fal_stops_what_its_endpoint_cant_take(monkeypatch, saved, why):
     hosts = FakeHosts(monkeypatch, [])
@@ -187,6 +184,65 @@ async def test_fal_stops_what_its_endpoint_cant_take(monkeypatch, saved, why):
     with pytest.raises(MissingCredentialError, match=re.escape(f"can't run on fal.ai: it doesn't take {why}")):
         await registry_handler("flux-2-pro")(node("flux-2-pro", **params), ports(prompt=P), dict(KEYS))
     assert hosts.requests == []
+
+
+# -- PR 4 review follow-up ---------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["MAX", "Flash", "flux-2-max", "dev"])
+@pytest.mark.parametrize("keys", [FAL_ONLY, {**FAL_ONLY, **BFL_ONLY}], ids=["fal-key", "both-keys"])
+async def test_a_model_no_route_lists_stops_unbilled_instead_of_running_pro(monkeypatch, model, keys):
+    """A saved ``model`` that isn't one of the enum's lowercase values (the
+    CLI or an agent can save one) used to fall through endpointWhen to Pro on
+    either route, unpriced. Each route's ``accepts`` lists the models it
+    serves, so the run stops before any request and nothing is offered."""
+    hosts = FakeHosts(monkeypatch, [])
+    params = {**defaults(DEFINITION), "model": model}
+    with pytest.raises(MissingCredentialError, match=re.escape(f"it doesn't take model {model}")):
+        await registry_handler("flux-2-pro")(node("flux-2-pro", **params), ports(prompt=P), dict(keys))
+    assert hosts.requests == []
+    unavailable = node_route.route_unavailable(DEFINITION, params, keys)
+    assert unavailable["block"] == {"reason": "unsupported", "param": "model", "detail": f"model {model}"}
+    assert unavailable["alternatives"] == []
+    assert all(node_route.route_block(DEFINITION, route, params) is not None for route in DEFINITION["routes"])
+
+
+def test_each_route_offers_exactly_the_models_it_accepts():
+    for route_id, models in (("bfl", ["pro", "max", "flex", "klein-9b", "klein-4b"]),
+                             ("fal", ["pro", "max", "flash", "flex", "klein-9b", "klein-4b"])):
+        shown = {p["key"]: p for p in node_route.route_param_definitions(DEFINITION, route_id)}
+        assert [o["value"] for o in shown["model"]["options"]] == models
+        assert node_route.route_by_id(DEFINITION, route_id)["rules"]["accepts"]["model"] == {"values": models}
+
+
+def test_steps_and_guidance_show_on_flex_only():
+    for key in ("num_inference_steps", "guidance_scale"):
+        assert node_route.param_definition(DEFINITION, key)["visibleWhen"] == {"model": ["flex"]}
+
+
+STALE_FLEX = {"num_inference_steps": 30, "guidance_scale": 4.5}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route_id, model, url, body", [
+    ("bfl", "pro", "https://api.bfl.ai/v1/flux-2-pro", DEFAULT_BFL),
+    ("bfl", "max", "https://api.bfl.ai/v1/flux-2-max", DEFAULT_BFL),
+    ("bfl", "klein-4b", "https://api.bfl.ai/v1/flux-2-klein-4b", DEFAULT_BFL),
+    ("fal", "pro", "https://queue.fal.run/fal-ai/flux-2-pro", DEFAULT_FAL),
+    ("fal", "flash", "https://queue.fal.run/fal-ai/flux-2/flash", DEFAULT_FAL),
+    ("fal", "klein-9b", "https://queue.fal.run/fal-ai/flux-2/klein/9b",
+     {k: v for k, v in DEFAULT_FAL.items() if k != "safety_tolerance"}),
+])
+async def test_steps_and_guidance_left_from_flex_are_hidden_and_not_sent(monkeypatch, route_id, model, url, body):
+    """Set on Flex, then the model changed: the fields are hidden and change
+    nothing, on either route. Before the follow-up they stopped both routes
+    with nothing to switch to."""
+    params = {**defaults(DEFINITION), "model": model, **STALE_FLEX, "_provider": route_id}
+    assert node_route.route_block(DEFINITION, node_route.route_by_id(DEFINITION, route_id), params) is None
+    hosts = bfl_hosts(monkeypatch) if route_id == "bfl" else fal_hosts(monkeypatch, video=False)
+    await registry_handler("flux-2-pro")(node("flux-2-pro", **params), ports(prompt=P), dict(KEYS))
+    assert hosts.json("POST", re.escape(url)) == body
 
 
 # -- the fal route sends what the fal-only handler sent ---------------------------

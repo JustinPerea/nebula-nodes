@@ -207,6 +207,11 @@ BFL_IMAGE_PATHS = frozenset({"flux-3-image", "flux-3-image-klein"})
 # checked with unknown fields refused anyway.
 BFL_FLUX2_PATHS = frozenset({"flux-2-pro", "flux-2-max", "flux-2-flex", "flux-2-klein-9b", "flux-2-klein-4b"})
 BFL_FLUX2_SWITCHES = frozenset({"model"})
+# Flux2FlexInputs is the only FLUX.2 body with ``steps`` and ``guidance``.
+# The node shows them on Flex only (visibleWhen), so on any other path a
+# value saved under Flex is hidden and isn't sent (PR 4 review follow-up).
+BFL_FLUX2_FLEX_PATH = "flux-2-flex"
+BFL_FLUX2_FLEX_ONLY = frozenset({"steps", "guidance"})
 BFL_VIDEO_PATH = "flux-3-video"
 BFL_VIDEO_EDIT_PATH = "flux-tools/video-edit-v1"
 BFL_VIDEO_UPSCALE_PATH = "flux-tools/video-upscale-v1"
@@ -229,7 +234,8 @@ def bfl_body(path: str, params: Mapping[str, Any], inputs: Mapping[str, Any]) ->
             body["images"] = images
     elif path in BFL_FLUX2_PATHS:
         refuse_unwired(inputs, {"prompt"}, where)
-        for key in BFL_FLUX2_SWITCHES:
+        dropped = BFL_FLUX2_SWITCHES if path == BFL_FLUX2_FLEX_PATH else BFL_FLUX2_SWITCHES | BFL_FLUX2_FLEX_ONLY
+        for key in dropped:
             body.pop(key, None)
         size = body.pop("image_size", None)
         if size is not None:
@@ -352,11 +358,17 @@ FAL_DRAFT_DROPS = frozenset({"resolution"})
 # fal-ai/flux-2/flash has no safety_tolerance either, but still gets it: the
 # fal-only handler sent it, and a saved Flash node sends what it always did
 # (tests/test_flux2_nodes.py pins the parity).
-_FLUX2_KLEIN_DROPS = frozenset({"model", "safety_tolerance"})
+# Steps and guidance are Flex-only on the node (visibleWhen model flex): on
+# any other model a value saved under Flex is hidden and changes nothing, so
+# it isn't sent (PR 4 review follow-up). Nano Banana treats its hidden
+# resolution the same way (maker_routes _SIZED).
+_FLUX2_FLEX_ONLY = frozenset({"num_inference_steps", "guidance_scale"})
+_FLUX2_DROPS = frozenset({"model"}) | _FLUX2_FLEX_ONLY
+_FLUX2_KLEIN_DROPS = _FLUX2_DROPS | {"safety_tolerance"}
 FAL_ENDPOINT_DROPS: dict[str, frozenset[str]] = {
-    "fal-ai/flux-2-pro": frozenset({"model"}),
-    "fal-ai/flux-2-max": frozenset({"model"}),
-    "fal-ai/flux-2/flash": frozenset({"model"}),
+    "fal-ai/flux-2-pro": _FLUX2_DROPS,
+    "fal-ai/flux-2-max": _FLUX2_DROPS,
+    "fal-ai/flux-2/flash": _FLUX2_DROPS,
     "fal-ai/flux-2-flex": frozenset({"model"}),
     "fal-ai/flux-2/klein/9b": _FLUX2_KLEIN_DROPS,
     "fal-ai/flux-2/klein/4b": _FLUX2_KLEIN_DROPS,

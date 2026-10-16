@@ -286,14 +286,13 @@ APPROVED_TOP_LEVEL_FIELD_ADDITIONS["runway-sts"] = {"directRoute": {"rejectsWhen
 # rebuilt here in their baseline order; two Flex-only params appended to
 # sharedParams; and three model options appended (APPROVED_APPENDED_OPTIONS).
 # Any other change to a baseline param still fails the fingerprint.
-_FLUX2_STEPS_LABEL = "steps on a model other than Flex"
-_FLUX2_GUIDANCE_LABEL = "guidance on a model other than Flex"
-
-
-def _flux2_flex_only(models: list[str]) -> list[dict[str, Any]]:
-    return [rule for model in models for rule in (
-        {"match": {"model": model, "num_inference_steps": "(set)"}, "label": _FLUX2_STEPS_LABEL},
-        {"match": {"model": model, "guidance_scale": "(set)"}, "label": _FLUX2_GUIDANCE_LABEL})]
+# PR 4 review follow-up (2026-10-15): each route's ``accepts`` lists exactly
+# the models it serves (any other saved value, "MAX" or "Flash" included,
+# stops instead of running Pro), and the two Flex-only params are shown on
+# Flex only (visibleWhen) and dropped elsewhere by the route clients, so the
+# per-model steps/guidance rejectsWhen entries are gone.
+_FLUX2_BFL_MODELS = ["pro", "max", "flex", "klein-9b", "klein-4b"]
+_FLUX2_FAL_MODELS = ["pro", "max", "flash", "flex", "klein-9b", "klein-4b"]
 
 
 _FLUX2_SIZES = {"square_hd": (1024, 1024), "square": (512, 512), "portrait_4_3": (768, 1024),
@@ -306,8 +305,8 @@ _FLUX2_ROUTES = [
      "rename": {"num_inference_steps": "steps", "guidance_scale": "guidance"},
      "valueMap": {"safety_tolerance": {str(level): level for level in range(1, 6)},
                   "image_size": {preset: {"width": w, "height": h} for preset, (w, h) in _FLUX2_SIZES.items()}},
-     "rules": {"rejects": {"model": ["flash"], "enable_safety_checker": [False]},
-               "rejectsWhen": _flux2_flex_only(["pro", "max", "klein-9b", "klein-4b"])},
+     "rules": {"accepts": {"model": {"values": _FLUX2_BFL_MODELS}},
+               "rejects": {"enable_safety_checker": [False]}},
      "note": "BFL has no Flash and no safety-checker switch."},
     {"id": "fal", "provider": "fal", "keys": ["FAL_KEY"], "handler": "fal", "endpoint": "fal-ai/flux-2-pro",
      "endpointWhen": [{"when": {"model": model}, "endpoint": endpoint} for model, endpoint in (
@@ -315,9 +314,10 @@ _FLUX2_ROUTES = [
          ("klein-9b", "fal-ai/flux-2/klein/9b"), ("klein-4b", "fal-ai/flux-2/klein/4b"))],
      "params": [{"key": "enable_safety_checker", "label": "Safety Checker", "type": "boolean", "required": False,
                  "default": True}],
-     "rules": {"accepts": {"num_inference_steps": {"min": 2, "max": 50, "integer": True}},
-               "rejectsWhen": _flux2_flex_only(["pro", "max", "flash", "klein-9b", "klein-4b"]) + [
-                   {"match": {"model": model, "safety_tolerance": value},
+     "rules": {"accepts": {"model": {"values": _FLUX2_FAL_MODELS},
+                           "num_inference_steps": {"min": 2, "max": 50, "integer": True}},
+               "rejectsWhen": [
+                   {"match": {"safety_tolerance": value, "model": model},
                     "label": "a safety tolerance other than 2 on Klein"}
                    for model in ("klein-9b", "klein-4b") for value in ("1", "3", "4", "5")]}},
 ]
@@ -335,9 +335,9 @@ APPROVED_ROUTE_TABLE_CONVERSIONS = {
                               "hidden": True}]},
         "addedShared": [
             {"key": "num_inference_steps", "label": "Steps (Flex)", "type": "integer", "required": False, "min": 1,
-             "max": 50, "step": 1, "placeholder": "Provider default"},
+             "max": 50, "step": 1, "placeholder": "Provider default", "visibleWhen": {"model": ["flex"]}},
             {"key": "guidance_scale", "label": "Guidance (Flex)", "type": "float", "required": False, "min": 1.5,
-             "max": 10, "step": 0.1, "placeholder": "Provider default"},
+             "max": 10, "step": 0.1, "placeholder": "Provider default", "visibleWhen": {"model": ["flex"]}},
         ],
         "routeParams": {"fal": ["enable_safety_checker"]},
         "order": ["model", "image_size", "output_format", "safety_tolerance", "enable_safety_checker", "seed"],
@@ -742,7 +742,8 @@ def test_seedream_route_split_still_fingerprints_every_param(definitions, change
 @pytest.mark.parametrize("change", [
     lambda node: _sole_entry(node["sharedParams"], "key", "image_size").update(default="square_hd"),
     lambda node: node["routes"][1]["params"][0].update(default=False),
-    lambda node: node["routes"][0]["rules"]["rejects"]["model"].clear(),
+    lambda node: node["routes"][0]["rules"]["accepts"]["model"]["values"].append("flash"),
+    lambda node: _sole_entry(node["sharedParams"], "key", "guidance_scale").pop("visibleWhen"),
     lambda node: node["routes"].reverse(),
     lambda node: node["sharedParams"][-1].update(max=20),
     lambda node: _sole_entry(node["sharedParams"], "key", "model")["options"].pop(),
