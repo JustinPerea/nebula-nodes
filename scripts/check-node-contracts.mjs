@@ -277,8 +277,10 @@ function validatePinnedCorrections() {
     const model = paramByKey(dialogue, 'model_id');
     if (model?.default !== 'eleven_v4') errors.push('elevenlabs-dialogue.model_id default must be eleven_v4');
     assertSet('elevenlabs-dialogue.model_id', new Set((model?.options ?? []).map((option) => option.value)), ['eleven_v4', 'eleven_v3']);
-    for (const key of ['similarity', 'stability', 'output_format', 'seed', 'language_code', 'voice_1']) paramByKey(dialogue, key);
-    for (const key of ['speed', 'style', 'use_speaker_boost', 'similarity_boost']) {
+    for (const key of ['similarity', 'stability', 'output_format', 'seed', 'language_code']) paramByKey(dialogue, key);
+    // Speakers are voice names written in the script, looked up at run time,
+    // so the card has no per-speaker voice fields.
+    for (const key of ['speed', 'style', 'use_speaker_boost', 'similarity_boost', 'voice_1', 'voice_2', 'voice_3', 'voice_4']) {
       if ((dialogue.params ?? []).some((param) => param.key === key)) errors.push(`elevenlabs-dialogue must not expose ${key}`);
     }
   } else {

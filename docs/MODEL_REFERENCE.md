@@ -4321,10 +4321,6 @@ Nodes: 304 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | eleven_v4 | Eleven v4, Eleven v3 |
-| Speaker 1 Voice ID | string | 21m00Tcm4TlvDq8ikWAM | — |
-| Speaker 2 Voice ID | string | — | — |
-| Speaker 3 Voice ID | string | — | — |
-| Speaker 4 Voice ID | string | — | — |
 | Stability | float | 0.5 | 0–1 |
 | Similarity | float | 0.75 | 0–1 |
 | Language Code | string | — | — |

@@ -1067,8 +1067,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
 
   // ElevenLabs Text to Dialogue (POST /v1/text-to-dialogue). Eleven v4 runs
   // only on this endpoint (ElevenLabs models page, read 2026-10-16). The script
-  // is one line per turn, "1:" to "4:", parsed by the backend handler
-  // (handlers/elevenlabs.py parse_dialogue_script).
+  // is one line per turn, "<voice name>: text"; the backend handler looks the
+  // names up in the person's ElevenLabs voices (handlers/elevenlabs.py
+  // resolve_dialogue_voices) before the paid call.
   'elevenlabs-dialogue': {
     id: 'elevenlabs-dialogue',
     displayName: 'ElevenLabs Text to Dialogue',
@@ -1077,7 +1078,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     apiEndpoint: '/v1/text-to-dialogue',
     envKeyName: 'ELEVENLABS_API_KEY',
     executionPattern: 'sync',
-    capabilityNote: "Write one line per turn, starting with a speaker label from 1: to 4: (for example 1: Hi there.). Each label speaks with that speaker's voice ID. Up to 2,000 characters per run, the limit ElevenLabs gives for reliable dialogue.",
+    description: "A conversation between several ElevenLabs voices in one audio file (Eleven v4 by default). The script input is one line per turn, \"<voice name>: <text>\", for example \"Rachel: Hello there.\" then \"Adam: Hi!\". The speaker is everything before the first colon. Use names from the person's ElevenLabs voice library; they match ignoring case, and a voice ID works in place of a name. Before the paid call Nebula looks the names up in their voices (a free call). A name that matches no voice, or more than one, stops the run without generating, and the error lists the candidate voices with their IDs. Up to 10 different voices and 2,000 characters per run. Audio tags such as [whispering] go in the text.",
+    capabilityNote: "Write one line per turn as Name: text, with voice names from your ElevenLabs voices (for example Rachel: Hi there. then Adam: Hey!). Nebula looks the names up before generating. If a name matches no voice, or more than one, the run stops and lists the voices with their IDs; you can write a voice ID in place of the name. Up to 10 voices and 2,000 characters per run.",
     inputPorts: [
       { id: 'script', label: 'Script', dataType: 'Text', required: true },
     ],
@@ -1096,17 +1098,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
           { label: 'Eleven v3', value: 'eleven_v3' },
         ],
       },
-      {
-        key: 'voice_1',
-        label: 'Speaker 1 Voice ID',
-        type: 'string',
-        required: false,
-        default: '21m00Tcm4TlvDq8ikWAM',
-        placeholder: 'Rachel (default)',
-      },
-      { key: 'voice_2', label: 'Speaker 2 Voice ID', type: 'string', required: false, placeholder: 'Voice ID for lines starting 2:' },
-      { key: 'voice_3', label: 'Speaker 3 Voice ID', type: 'string', required: false, placeholder: 'Voice ID for lines starting 3:' },
-      { key: 'voice_4', label: 'Speaker 4 Voice ID', type: 'string', required: false, placeholder: 'Voice ID for lines starting 4:' },
       { key: 'stability', label: 'Stability', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
       { key: 'similarity', label: 'Similarity', type: 'float', required: false, default: 0.75, min: 0, max: 1, step: 0.05 },
       { key: 'language_code', label: 'Language Code', type: 'string', required: false, placeholder: 'Auto (e.g. en, es)' },

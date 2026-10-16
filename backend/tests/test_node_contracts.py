@@ -434,6 +434,9 @@ def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[
     dialogue_keys = {p["key"] for p in dialogue["params"]}
     assert {"stability", "similarity", "seed", "language_code", "output_format"} <= dialogue_keys
     assert not dialogue_keys & {"speed", "style", "use_speaker_boost", "similarity_boost"}
+    # Speakers are voice names in the script, so no per-speaker voice fields.
+    assert not {key for key in dialogue_keys if key.startswith("voice")}
+    assert "voice name" in dialogue["description"]
 
     # --- OpenAI image nodes (verified 2026-05-16 against openai-python SDK types) ---
 
