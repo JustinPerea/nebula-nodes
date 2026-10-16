@@ -6,6 +6,7 @@
 
 **Speech (voice)**
 - Lifelike text-to-speech narration in 70+ languages, with control over a specific voice, stability, style, and speaking speed.
+- Multi-speaker dialogue in one call: write a script with up to four speakers, give each a voice, and get one audio file back (Eleven v4 by default).
 - Voice changer: keep the words and delivery of an existing recording but render it in a different ElevenLabs voice.
 - Translated dubbing: take a clip in one language and produce a spoken version in another (Spanish, French, Japanese, and more), with the original speaker's voice preserved by default.
 - Transcription: turn a spoken clip into text (or SRT/VTT subtitles), with optional speaker labels.
@@ -16,13 +17,14 @@
 **Audio cleanup**
 - Audio isolation: pull clean speech out of a noisy recording, removing hiss, room tone, and background clutter.
 
-## Nodes available in Nebula (6)
+## Nodes available in Nebula (7)
 
-All six live in the **audio-gen** category. Names, IDs, and params below match `backend/data/node_definitions.json` exactly.
+All seven live in the **audio-gen** category. Names, IDs, and params below match `backend/data/node_definitions.json` exactly.
 
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
-| ElevenLabs TTS | `elevenlabs-tts` | audio-gen | `text` (Text) → `audio` (Audio) | `voice_id` (default Rachel `21m00Tcm4TlvDq8ikWAM`), `model_id` (v3 / Multilingual v2 / Turbo v2.5 / Flash v2.5 / Turbo v2 / Flash v2), `stability`, `similarity_boost`, `style`, `use_speaker_boost`, `speed` (0.7–1.2), `output_format`, `seed` | Narration, character voices, voiceover from a script |
+| ElevenLabs TTS | `elevenlabs-tts` | audio-gen | `text` (Text) → `audio` (Audio) | `voice_id` (default Rachel `21m00Tcm4TlvDq8ikWAM`), `model_id` (v3 / Multilingual v2 / Turbo v2.5 / Flash v2.5 / Turbo v2 / Flash v2; ElevenLabs lists both Turbo models as deprecated, and the menu says so), `stability`, `similarity_boost`, `style`, `use_speaker_boost`, `speed` (0.7–1.2), `output_format`, `seed` | Narration, character voices, voiceover from a script |
+| ElevenLabs Text to Dialogue | `elevenlabs-dialogue` | audio-gen | `script` (Text) → `audio` (Audio) | `model_id` (Eleven v4 default / Eleven v3), `voice_1`…`voice_4` (speaker 1 defaults to Rachel), `stability`, `similarity`, `language_code`, `output_format`, `seed` | A conversation between up to four voices in one file |
 | ElevenLabs Sound Effects | `elevenlabs-sfx` | audio-gen | `text` (Text) → `audio` (Audio) | `duration_seconds` (0.5–30, Auto if blank), `prompt_influence` (default 0.3), `loop` (seamless loop), `output_format` | Foley, ambiences, UI/game sounds, stingers from a text prompt |
 | ElevenLabs Speech-to-Speech | `elevenlabs-sts` | audio-gen | `audio` (Audio) → `audio` (Audio) | `voice_id`, `model_id` (English STS v2 / Multilingual STS v2), `stability`, `similarity_boost`, `remove_background_noise`, `seed`, `output_format` | Re-voice a recording in a different ElevenLabs voice while keeping the performance |
 | ElevenLabs Audio Isolation | `elevenlabs-isolation` | audio-gen | `audio` (Audio) → `audio` (Isolated Audio) | *(none — output is always MP3)* | Clean up a noisy clip; extract clear speech from background noise |
@@ -34,10 +36,11 @@ Notes that match the handler (`backend/handlers/elevenlabs.py`):
 - `seed` (TTS and STS) is only sent when you set it; leave it blank for random.
 - For TTS, `output_format` includes MP3 (44.1kHz / 22kHz) and raw PCM (16/24/44.1kHz). Raw PCM is saved as a `.pcm` file (it has no WAV header), so prefer an MP3 format unless you specifically need PCM.
 - Audio Isolation and Dubbing always return MP3, regardless of any format setting.
+- Text to Dialogue always sends `model_id` (the endpoint's own default is `eleven_v3`) and sends `settings` with only `stability` and `similarity`. The endpoint has no speed, style or speaker-boost field.
 
 ## How to use it in Nebula
 
-**Where the nodes appear.** Open the node palette (the add-node menu on the canvas) and look under the **audio-gen** category. The six ElevenLabs nodes are listed by their display names ("ElevenLabs TTS", "ElevenLabs Sound Effects", etc.). Drag one onto the canvas, wire an input into its input port, and set params in the node's panel.
+**Where the nodes appear.** Open the node palette (the add-node menu on the canvas) and look under the **audio-gen** category. The seven ElevenLabs nodes are listed by their display names ("ElevenLabs TTS", "ElevenLabs Sound Effects", etc.). Drag one onto the canvas, wire an input into its input port, and set params in the node's panel.
 
 **API-key setup.** Get a key from your ElevenLabs account dashboard (Profile → API Keys). Open Nebula **Settings** → **Providers**, choose **Add key** on the **ElevenLabs** row (`ELEVENLABS_API_KEY`), paste it and choose **Save key**. Saving checks the key without generating anything. Nebula stores it under `apiKeys.ELEVENLABS_API_KEY` in the project-root `settings.json`; no restart is required. Every ElevenLabs node uses this same key; if it is missing, the node fails with "ELEVENLABS_API_KEY is required."
 
@@ -62,6 +65,24 @@ Notes that match the handler (`backend/handlers/elevenlabs.py`):
 - Option A (same language, new voice): feed it into `elevenlabs-sts`, set the target `voice_id`, enable `remove_background_noise` if the source is noisy.
 - Option B (new language, same speaker): feed it into `elevenlabs-dubbing`, set `target_lang` (e.g. `ja` for Japanese), leave `source_lang` on Auto-detect, and keep `disable_voice_cloning` off so the original speaker's voice is preserved.
 - For a noisy source, chain `elevenlabs-isolation` first (audio → isolated audio) and feed the clean result into dubbing or STS.
+
+## Text to Dialogue and Eleven v4 (2026-10-16)
+
+ElevenLabs offers Eleven v4 (`eleven_v4`) on the Text to Dialogue API, not on Text to Speech: "Eleven v4 is available via the Text to Dialogue API" ([models page](https://elevenlabs.io/docs/overview/models)). So it is its own node, **ElevenLabs Text to Dialogue** (`elevenlabs-dialogue`, `POST /v1/text-to-dialogue`), and the TTS node's model menu doesn't list it. Eleven v3 is the other choice on the node.
+
+**Writing the script.** Wire a Text node into the `script` port. Write one line per turn, starting with a speaker label from `1:` to `4:` (`Speaker 1:` works too). Each label speaks with that speaker's voice ID (`voice_1` … `voice_4`). Blank lines are skipped. Audio tags such as `[whispering]` or `[laughing]` go inside the line ([Eleven v4 page](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4)).
+
+```
+1: [cheerfully] Morning! Did you sleep at all?
+2: Not really. The neighbours had a party.
+1: [laughing] Of course they did.
+```
+
+**Checked before any call** (no cost): a line with no label, a label above 4, a speaker whose voice ID is empty, an empty turn, a voice ID that isn't letters and digits, and a script over **2,000 characters** in total. The endpoint reference says "For reliable generation, keep the total character count across all `inputs[].text` values at or below 2,000 characters per request. Longer requests can terminate early in streaming responses or return a validation error." The models page gives Eleven v4 a 10,000-character limit, but for this endpoint the node holds to 2,000. Split a longer script across two nodes.
+
+**Settings.** `stability` (default 0.5) and `similarity` (default 0.75; the endpoint's name, not `similarity_boost`) go in `settings`. "Style and Speed sliders are not available in Eleven v4" (Eleven v4 page), and the endpoint has no speaker-boost field, so the node has none of them. `language_code` is optional (ISO 639-1, e.g. `en`; ISO 639-3 for `ast`, `yue`, `ceb`, `fil`). `seed` is 0 to 4294967295. `output_format` has the same five choices as the TTS node; the endpoint documents 192 kbps MP3 as Creator tier and 44.1 kHz PCM/WAV as Pro tier.
+
+**Not in the node.** `previous_text` / `next_text`, pronunciation dictionaries, request stitching, `audio_effects` and the Eleven v4 Turbo WebSocket. Text to Dialogue bills per character, and Nebula's price table can't price by text length, so the node has no price estimate (the same as `elevenlabs-tts`); agent runs of it must be proposed.
 
 ## ElevenLabs copies on your ElevenLabs key (2026-10-14)
 
@@ -91,7 +112,7 @@ Prices (checked 2026-10-14 on https://elevenlabs.io/pricing/api): Music is "$0.1
 | Dubbing — `POST /v1/dubbing` (+ poll + download) | Yes | **partial** | `elevenlabs-dubbing` submits, polls, and downloads dubbed audio. Does not expose transcripts, per-segment editing, speaker rendering, or watch/CSV-script dubbing. |
 | Speech-to-Text — `POST /v1/speech-to-text` | Yes | **full** | `elevenlabs-stt`. Transcription with optional diarization; plain text or SRT/VTT subtitles (subtitle formats auto-enable diarization + timestamps, per the API). |
 | Music generation — `POST /v1/music` (+ stream, composition plans, video-to-music, stems) | Yes | **partial** | `elevenlabs-music` and the three Krea music copies run `POST /v1/music` (prompt, `music_length_ms`, `force_instrumental`, `model_id`) on your ElevenLabs key. Composition plans, streaming, inpainting, stems and video-to-music have no node. |
-| Text-to-Dialogue — `POST /v1/text-to-dialogue` | Yes | **none** | Multi-speaker dialogue in one call. No node (TTS handles single-voice only). |
+| Text-to-Dialogue — `POST /v1/text-to-dialogue` | Yes | **partial** | `elevenlabs-dialogue` (2026-10-16): up to four speakers, Eleven v4 / v3, stability, similarity, language_code, seed, output_format. No previous/next text, pronunciation dictionaries, request stitching, audio effects or the WebSocket variant. |
 | Voice Design — `POST /v1/text-to-voice/design` `/create` `/remix` | Yes | **none** | Generate a brand-new voice from a text description. No node. |
 | Voice Cloning — `POST /v1/voices/add` (IVC), `/add/professional` (PVC) | Yes | **none** | Clone a voice from samples. No node. |
 | Voices management & library — `GET /v1/voices`, `/v1/voices/shared`, `/similar` | Yes | **none** | Nebula takes a `voice_id` string but can't list, search, or pick voices in-app. |
@@ -104,21 +125,21 @@ Prices (checked 2026-10-14 on https://elevenlabs.io/pricing/api): Music is "$0.1
 | History — `GET /v1/history` | Yes | **none** | Past-generation retrieval/download. Nebula manages its own run outputs instead. |
 | Streaming / WebSocket variants (TTS stream, multi-context, realtime STT) | Yes | **none** | All Nebula nodes are request/response; no low-latency streaming. |
 
-Coverage: ~33% of the ElevenLabs API surface is exposed in Nebula (6 of ~18 major capability families; among the ~12 generative/transformation families a node-based media app would plausibly want — i.e. excluding the Conversational AI, Studio, Audio-Native, and account/history platforms — coverage is closer to ~42%).
+Coverage: 8 of the ~18 major capability families in the table have a node (TTS, sound effects, speech-to-speech, isolation, dubbing, speech-to-text, music and text-to-dialogue), some of them partly.
 
-Notable unused capabilities: **Music generation** (prompt-to-music with stem separation), **Text-to-Dialogue** (multi-speaker scenes in one call), **Voice Design** (create a new voice from a description), and **Voice cloning** (IVC/PVC). For an app whose whole premise is wiring media nodes together, the absence of a music node (prompt-to-music with stems, which has no equivalent anywhere else in the catalog) is now the most visible gap.
+Notable unused capabilities: music extras (composition plans, stems), **Voice Design** (create a new voice from a description), and **Voice cloning** (IVC/PVC).
 
 ## Agent skill coverage
 
-**A complete skill exists** at `.claude/skills/elevenlabs/SKILL.md` (new 2026-06-04, updated 2026-06-05 for STT). It covers all **6** wired ElevenLabs audio nodes — including the new `elevenlabs-stt` — giving an agent the node IDs and ports, per-node param schemas, voice handling, wiring/chaining rules, auth/failure modes, and capability boundaries.
+**A complete skill exists** at `.claude/skills/elevenlabs/SKILL.md` (new 2026-06-04, updated 2026-06-05 for STT). It covers all **7** wired ElevenLabs audio nodes — including `elevenlabs-stt` and, since 2026-10-16, `elevenlabs-dialogue` — giving an agent the node IDs and ports, per-node param schemas, voice handling, wiring/chaining rules, auth/failure modes, and capability boundaries.
 
 What it covers:
-- **Node inventory & IDs** — the six node IDs (`elevenlabs-tts`, `elevenlabs-sfx`, `elevenlabs-sts`, `elevenlabs-isolation`, `elevenlabs-dubbing`, `elevenlabs-stt`), their input/output ports (`text`/`audio` in, `audio` or `text` out), and that all are `audio-gen`.
+- **Node inventory & IDs** — the seven node IDs (`elevenlabs-tts`, `elevenlabs-dialogue`, `elevenlabs-sfx`, `elevenlabs-sts`, `elevenlabs-isolation`, `elevenlabs-dubbing`, `elevenlabs-stt`), their input/output ports (`text`/`audio` in, `audio` or `text` out), and that all are `audio-gen`.
 - **Param schemas & valid values** — per-node param keys with types, ranges, and enums (TTS/STS model lineups, dubbing `target_lang`/`source_lang` codes, STT `transcript_format`, output_format options).
 - **Voice handling** — that `voice_id` is a free-text ElevenLabs ID (default Rachel `21m00Tcm4TlvDq8ikWAM`), where to obtain IDs, and that Nebula can't enumerate voices.
 - **Wiring rules & encoding** — which nodes take Text vs. Audio, valid chains (isolation → STS/dubbing; TTS → STS), JSON-vs-multipart encoding, and the dubbing submit→poll internals.
 - **Auth & failure modes** — `ELEVENLABS_API_KEY` / the `xi-api-key` header, and common errors (missing key/input, the PCM-saved-as-`.pcm` gotcha, dubbing timeout).
-- **Capability boundaries** — that music, text-to-dialogue, voice design, and cloning are NOT nodes, so an agent doesn't promise them.
+- **Capability boundaries** — that voice design, cloning and the music extras are NOT nodes, so an agent doesn't promise them.
 
 ## Sources
 
@@ -126,4 +147,7 @@ What it covers:
 - ElevenLabs docs index (machine-readable capability map): https://elevenlabs.io/docs/llms.txt
 - ElevenLabs OpenAPI specification (authoritative endpoint list): https://api.elevenlabs.io/openapi.json
 - Speech-to-Text reference: https://elevenlabs.io/docs/api-reference/speech-to-text/convert
+- Text to Dialogue reference (read 2026-10-16): https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert
+- Models page, Eleven v4 and deprecated models (read 2026-10-16): https://elevenlabs.io/docs/overview/models
+- Eleven v4 page (read 2026-10-16): https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4
 - Existing Nebula developer audit (verified against `openapi.json` + official Python SDK, 2026-05-16/17/19): `docs/model-providers/elevenlabs/elevenlabs.md`

@@ -269,6 +269,21 @@ function validatePinnedCorrections() {
   for (const key of ['similarity_boost', 'style', 'use_speaker_boost', 'speed', 'output_format', 'seed']) {
     paramByKey(elevenlabs, key);
   }
+
+  // Text to Dialogue: the endpoint defaults to eleven_v3, so the node pins
+  // eleven_v4, and its `settings` take only stability and similarity.
+  const dialogue = definitions['elevenlabs-dialogue'];
+  if (dialogue) {
+    const model = paramByKey(dialogue, 'model_id');
+    if (model?.default !== 'eleven_v4') errors.push('elevenlabs-dialogue.model_id default must be eleven_v4');
+    assertSet('elevenlabs-dialogue.model_id', new Set((model?.options ?? []).map((option) => option.value)), ['eleven_v4', 'eleven_v3']);
+    for (const key of ['similarity', 'stability', 'output_format', 'seed', 'language_code', 'voice_1']) paramByKey(dialogue, key);
+    for (const key of ['speed', 'style', 'use_speaker_boost', 'similarity_boost']) {
+      if ((dialogue.params ?? []).some((param) => param.key === key)) errors.push(`elevenlabs-dialogue must not expose ${key}`);
+    }
+  } else {
+    errors.push('elevenlabs-dialogue definition is missing');
+  }
 }
 
 function validateLocalExecutionCoverage() {

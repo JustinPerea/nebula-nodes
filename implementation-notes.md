@@ -1,5 +1,26 @@
 # Implementation Notes
 
+## 2026-10-16 — ElevenLabs Text to Dialogue node (Eleven v4)
+
+`elevenlabs-dialogue` ("ElevenLabs Text to Dialogue"), `POST /v1/text-to-dialogue`. Facts from ElevenLabs' own pages read 2026-10-16: the text-to-dialogue reference, the models page and the Eleven v4 page.
+
+- **Why a new node and not a TTS menu entry.** "Eleven v4 is available via the Text to Dialogue API" (models page). Only v3 gets "can also be used with the Text to Speech API". So v4 is on the dialogue node and `elevenlabs-tts` doesn't list it.
+- **Script shape (a choice; Justin can change it).** A `script` Text input with one line per turn, each starting `1:` to `4:` (`Speaker 1:` also works, any case), plus four voice params `voice_1`..`voice_4`.
+  - Why: the card model has no list-of-rows param type. Voice IDs are free-text strings on every ElevenLabs node (there is no voice picker anywhere in the frontend), so one string per speaker is the existing pattern. The script comes from a wire, like TTS's `text`, so any Text node or LLM output can write it.
+  - Four, not ten (the endpoint allows 10 unique voices), to keep the card short. `DIALOGUE_SPEAKERS` in the handler; raising it means adding `voice_5`.. to both registries.
+  - Numbers instead of names: a name like "Ava:" would need a name param per speaker as well (eight params), and a line of prose that happens to contain a colon could be read as a name. Numbers are unambiguous.
+  - `voice_1` defaults to Rachel (the TTS node's default), so `1: Hello.` runs with no setup. `voice_2`..`voice_4` have no default; a line for an empty speaker is an error naming the param.
+  - A line with no label is an error, not a continuation of the previous turn. That keeps "which voice says this" explicit.
+- **Validated before any call** (`parse_dialogue_script`, `build_dialogue_request`): unknown label, missing voice, empty turn, empty script, a voice ID that isn't letters and digits (the same rule as TTS), `model_id` outside v4/v3, `language_code` not 2-3 lowercase letters, `seed` outside 0..4294967295, and `output_format` (same pattern check as the other nodes).
+- **2,000 characters: refuse, not warn.** The endpoint says to keep the total at or below 2,000 "for reliable generation" and that longer requests "can terminate early ... or return a validation error". The models page gives `eleven_v4` 10,000. Handlers have no way to show a warning on the card (nothing in `handlers/` returns one), and a run past 2,000 may be billed and cut short, so the handler refuses with the count and suggests splitting. The card's `capabilityNote` states the limit up front.
+- **Body.** `{inputs, model_id, settings: {stability, similarity}}`, plus `language_code` and `seed` when set; `output_format` in the query. `model_id` is always sent because the endpoint's default is `eleven_v3`. No `speed`, `style` or `use_speaker_boost` (no such fields; "Style and Speed sliders are not available in Eleven v4"). `similarity` is the endpoint's name, not `similarity_boost`.
+- **Not exposed:** `previous_text`/`next_text` ("Not supported by every model"), pronunciation dictionaries, request ids for stitching, `apply_text_normalization`, `use_pvc_as_ivc`, `audio_effects`, `enable_logging`, and Eleven v4 Turbo (WebSocket only, which doesn't fit a sync node).
+- **No price row.** The pricing file can't multiply by text length (same reason `elevenlabs-tts` has none), so the node is unpriced and agent runs of it must be proposed. The per-character figure is in the api guide's existing price paragraph, not in `model_pricing.json`.
+- **Timeout 180 s** (TTS uses 60 s): a dialogue is one request for the whole script.
+- **TTS Turbo labels.** `eleven_turbo_v2_5` and `eleven_turbo_v2` are in ElevenLabs' "Deprecated models" table (replacements Flash v2.5 / Flash v2). Their labels now say "deprecated: use Flash ...". The values stay so saved graphs open. The reference-roles fingerprint test gained `APPROVED_OPTION_LABEL_CHANGES` for exactly these two labels, rather than a new baseline hash.
+- **Contract checks.** `scripts/check-node-contracts.mjs` and `tests/test_node_contracts.py` pin the dialogue node's `model_id` default and options and that it has no speed/style/speaker-boost/similarity_boost.
+- **Not live-tested.** No paid or keyed call was made. Request bodies are checked with mocked HTTP only, so whether ElevenLabs accepts every field exactly as sent is unverified until a first real run.
+
 ## 2026-10-13 — Connect your agent (PR 3 of 3, and BYO-agent Phase 0)
 
 Settings > Preferences > Agent spending > **Connect your agent** and `nebula mcp connect|disconnect <client>`. Config text lives in one place, `backend/services/agent_connect.py`, used by both.

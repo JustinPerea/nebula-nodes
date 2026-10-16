@@ -951,9 +951,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'v3 (Highest Quality)', value: 'eleven_v3' },
           { label: 'Multilingual v2', value: 'eleven_multilingual_v2' },
-          { label: 'Turbo v2.5 (Low Latency)', value: 'eleven_turbo_v2_5' },
+          { label: 'Turbo v2.5 (deprecated: use Flash v2.5)', value: 'eleven_turbo_v2_5' },
           { label: 'Flash v2.5 (Fastest)', value: 'eleven_flash_v2_5' },
-          { label: 'Turbo v2', value: 'eleven_turbo_v2' },
+          { label: 'Turbo v2 (deprecated: use Flash v2)', value: 'eleven_turbo_v2' },
           { label: 'Flash v2', value: 'eleven_flash_v2' },
         ],
       },
@@ -1033,6 +1033,69 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         placeholder: 'Random',
       },
+    ],
+  },
+
+  // ElevenLabs Text to Dialogue (POST /v1/text-to-dialogue). Eleven v4 runs
+  // only on this endpoint (ElevenLabs models page, read 2026-10-16). The script
+  // is one line per turn, "1:" to "4:", parsed by the backend handler
+  // (handlers/elevenlabs.py parse_dialogue_script).
+  'elevenlabs-dialogue': {
+    id: 'elevenlabs-dialogue',
+    displayName: 'ElevenLabs Text to Dialogue',
+    category: 'audio-gen',
+    apiProvider: 'elevenlabs',
+    apiEndpoint: '/v1/text-to-dialogue',
+    envKeyName: 'ELEVENLABS_API_KEY',
+    executionPattern: 'sync',
+    capabilityNote: "Write one line per turn, starting with a speaker label from 1: to 4: (for example 1: Hi there.). Each label speaks with that speaker's voice ID. Up to 2,000 characters per run, the limit ElevenLabs gives for reliable dialogue.",
+    inputPorts: [
+      { id: 'script', label: 'Script', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
+    ],
+    params: [
+      {
+        key: 'model_id',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'eleven_v4',
+        options: [
+          { label: 'Eleven v4', value: 'eleven_v4' },
+          { label: 'Eleven v3', value: 'eleven_v3' },
+        ],
+      },
+      {
+        key: 'voice_1',
+        label: 'Speaker 1 Voice ID',
+        type: 'string',
+        required: false,
+        default: '21m00Tcm4TlvDq8ikWAM',
+        placeholder: 'Rachel (default)',
+      },
+      { key: 'voice_2', label: 'Speaker 2 Voice ID', type: 'string', required: false, placeholder: 'Voice ID for lines starting 2:' },
+      { key: 'voice_3', label: 'Speaker 3 Voice ID', type: 'string', required: false, placeholder: 'Voice ID for lines starting 3:' },
+      { key: 'voice_4', label: 'Speaker 4 Voice ID', type: 'string', required: false, placeholder: 'Voice ID for lines starting 4:' },
+      { key: 'stability', label: 'Stability', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
+      { key: 'similarity', label: 'Similarity', type: 'float', required: false, default: 0.75, min: 0, max: 1, step: 0.05 },
+      { key: 'language_code', label: 'Language Code', type: 'string', required: false, placeholder: 'Auto (e.g. en, es)' },
+      {
+        key: 'output_format',
+        label: 'Output Format',
+        type: 'enum',
+        required: false,
+        default: 'mp3_44100_128',
+        options: [
+          { label: 'MP3 44.1kHz', value: 'mp3_44100_128' },
+          { label: 'MP3 22kHz', value: 'mp3_22050_32' },
+          { label: 'PCM 16kHz', value: 'pcm_16000' },
+          { label: 'PCM 24kHz', value: 'pcm_24000' },
+          { label: 'PCM 44.1kHz', value: 'pcm_44100' },
+        ],
+      },
+      { key: 'seed', label: 'Seed', type: 'integer', required: false, min: 0, max: 4294967295, placeholder: 'Random' },
     ],
   },
 

@@ -425,6 +425,16 @@ def test_researched_provider_corrections_are_pinned(definitions: dict[str, dict[
     for key in ("similarity_boost", "style", "use_speaker_boost", "speed", "output_format", "seed"):
         _param_by_key(elevenlabs_tts, key)
 
+    # Text to Dialogue (read 2026-10-16): eleven_v4 is pinned because the
+    # endpoint defaults to eleven_v3; `settings` has only stability/similarity.
+    dialogue = definitions["elevenlabs-dialogue"]
+    dialogue_model = _param_by_key(dialogue, "model_id")
+    assert dialogue_model["default"] == "eleven_v4"
+    assert [o["value"] for o in dialogue_model["options"]] == ["eleven_v4", "eleven_v3"]
+    dialogue_keys = {p["key"] for p in dialogue["params"]}
+    assert {"stability", "similarity", "seed", "language_code", "output_format"} <= dialogue_keys
+    assert not dialogue_keys & {"speed", "style", "use_speaker_boost", "similarity_boost"}
+
     # --- OpenAI image nodes (verified 2026-05-16 against openai-python SDK types) ---
 
     # gpt-image-1-generate: quality must include "auto" (API default); output_format and

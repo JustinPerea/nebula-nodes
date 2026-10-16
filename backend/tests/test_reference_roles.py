@@ -90,6 +90,15 @@ APPROVED_PORT_LABEL_CHANGES = {
 APPROVED_OPTION_FIELD_ADDITIONS = {
     "seedream-4-5": {"image_size": {"auto_3K": {"visibleWhen": {"model": ["5.0-lite"]}}}},
 }
+# ElevenLabs lists eleven_turbo_v2_5 and eleven_turbo_v2 as "Deprecated
+# models" (https://elevenlabs.io/docs/overview/models, read 2026-10-16). The
+# values stay so saved graphs still open; only their labels say so.
+APPROVED_OPTION_LABEL_CHANGES = {
+    "elevenlabs-tts": {"model_id": {
+        "eleven_turbo_v2_5": ("Turbo v2.5 (Low Latency)", "Turbo v2.5 (deprecated: use Flash v2.5)"),
+        "eleven_turbo_v2": ("Turbo v2", "Turbo v2 (deprecated: use Flash v2)"),
+    }},
+}
 # Krea account billing (2026-10-09): the three original Krea nodes that call
 # Krea gained the same `_kreaAuth` choice as the gateway catalog, prepended,
 # and Style Train gained the training models Krea added since the baseline.
@@ -436,6 +445,12 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
         param = _sole_entry(normalized["params"], "key", param_key)
         for option_value, additions in options.items():
             _remove_approved_fields(_sole_entry(param["options"], "value", option_value), additions)
+    for param_key, options in APPROVED_OPTION_LABEL_CHANGES.get(node_id, {}).items():
+        param = _sole_entry(normalized["params"], "key", param_key)
+        for option_value, (baseline_label, current_label) in options.items():
+            option = _sole_entry(param["options"], "value", option_value)
+            assert option["label"] == current_label, f"unapproved option label: {node_id}.{param_key}.{option_value}"
+            option["label"] = baseline_label
     for section in ("inputPorts", "outputPorts"):
         normalized[section] = [
             {key: value for key, value in port.items() if key not in {"role", "weight"}}
