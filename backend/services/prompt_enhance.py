@@ -24,7 +24,9 @@ SYSTEM_PROMPT = (
 _PROVIDERS: list[tuple[str, str, str]] = [
     ("openai", "OPENAI_API_KEY", "gpt-5.4-mini"),
     ("anthropic", "ANTHROPIC_API_KEY", "claude-haiku-4-5-20251001"),
-    ("google", "GOOGLE_API_KEY", "gemini-3.5-flash"),
+    # Google deprecated gemini-3.5-flash on 2026-10-08 and routes it to
+    # gemini-3.6-flash (ai.google.dev/gemini-api/docs/deprecations), so call that.
+    ("google", "GOOGLE_API_KEY", "gemini-3.6-flash"),
 ]
 
 
