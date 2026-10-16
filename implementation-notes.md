@@ -1,5 +1,13 @@
 # Implementation Notes
 
+## 2026-10-16 — PR 5 integration: both lanes merged into provider-hidden-params
+
+- Merged hide-params-ui, then hide-params-agents, with `--no-ff`. The only conflict was this file (both lanes added a section at the top); both sections are kept. Code and docs merged cleanly, including docs/PROVIDER-ROUTES.md. Re-running `generate-route-tables.py` and then `generate-model-reference.mjs` on the merged tree changed nothing.
+- Updated the core section's "next lanes" wording to point at the two merged lanes.
+- Gate on the merged tree: 246 backend test files each in isolation (0 failed), the four script checks rc=0, vitest 2859/2859, tsc -b clean, lint rc=0.
+- Live check on the merged code (isolated backend 8150 and Vite 5270: temp HOME, scratch NEBULA_* dirs, placeholder keys, no runs; the backend log shows no run requests). The UI lane's screenshots were repeated and match: fal FLUX.2 [pro] shows Safety; Klein 9B hides it and resets 5 to 2 with the card note; OpenRouter Klein has no Seed; FLUX 3 Video drafts on fal hide Resolution and it comes back when Draft is off; Krea 3 on fal with Jam has no Negative prompt; a saved Reasoning level Medium under Auto (Krea) shows "Set Reasoning level back to Low" and "Switch to fal.ai", and the reset row makes Auto run on Krea. describe_node for flux-2-pro and flux-3-image-klein matches the card (fal Safety `onlyWhen` model pro/max/flex; OpenRouter Klein has no seed and `hides: ["no Seed"]`; safety_tolerance min 0 is reported).
+- To get the stop under Auto on the merged code, the saved Medium value was written straight into the node's params (as a shared graph or key change would), because clicking the Auto row is a click and snaps the value back to Low, as designed.
+
 ## 2026-10-16 — PR 5 UI: the Inspector, switcher and pills read hidden settings (hide-params-ui)
 
 Stacked on the PR 5 core (provider-hidden-params, 51e3eb4c).
