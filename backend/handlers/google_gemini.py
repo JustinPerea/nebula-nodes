@@ -92,7 +92,7 @@ async def handle_gemini_chat(
                     }
                 })
 
-    model = node.params.get("model", "gemini-3.6-flash")
+    model = node.params.get("model", "gemini-4-argon")
 
     generation_config: dict[str, Any] = {}
     temperature = node.params.get("temperature")
@@ -119,6 +119,11 @@ async def handle_gemini_chat(
     # Cannot use both — API returns 400
     thinking_level = node.params.get("thinkingLevel")
     thinking_budget = node.params.get("thinkingBudget")
+    if model.startswith("gemini-2.5-"):
+        # The 2.5 cards show Thinking Budget, not Thinking Level. A level left
+        # from another model, or the "medium" a new node starts with, is not
+        # sent, so it can't override the budget the card shows.
+        thinking_level = None
     if thinking_level and thinking_level != "":
         levels = GEMINI_CHAT_THINKING_LEVELS.get(model)
         if levels is not None and thinking_level not in levels:

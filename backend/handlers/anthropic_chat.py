@@ -25,6 +25,16 @@ ADAPTIVE_EFFORT_MODELS = frozenset({
 ADAPTIVE_MAX_OUTPUT_TOKENS = 128_000
 EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 
+# Claude Opus 4.7 and 4.8 take adaptive thinking only, and it is off until the
+# request sets thinking: {"type": "adaptive"}. They return HTTP 400 for
+# thinking.type "enabled" (a budget_tokens budget) and for non-default
+# temperature/top_p/top_k, and they support all five effort levels (API default
+# high). Sources, fetched 2026-10-16: platform.claude.com/docs/en/build-with-claude/
+# thinking-troubleshooting (per-model table), /thinking ("Thinking and sampling
+# parameters"), /effort (supportedModels, effort levels) and /extended-thinking.
+OPTIONAL_ADAPTIVE_MODELS = frozenset({"claude-opus-4-8", "claude-opus-4-7"})
+EFFORT_MODELS = ADAPTIVE_EFFORT_MODELS | OPTIONAL_ADAPTIVE_MODELS
+
 
 async def handle_claude_chat(
     node: GraphNode,
@@ -74,15 +84,16 @@ async def handle_claude_chat(
 
     messages = [{"role": "user", "content": content}]
 
-    model = node.params.get("model", "claude-sonnet-4-6")
+    model = node.params.get("model", "claude-opus-5-5")
     max_tokens = int(node.params.get("max_tokens", 4096))
     adaptive = model in ADAPTIVE_EFFORT_MODELS
+    optional_adaptive = model in OPTIONAL_ADAPTIVE_MODELS
     if adaptive:
         max_tokens = min(max_tokens, ADAPTIVE_MAX_OUTPUT_TOKENS)
 
     request_body: dict[str, Any] = {"model": model, "messages": messages, "max_tokens": max_tokens, "stream": True}
 
-    if not adaptive:
+    if not adaptive and not optional_adaptive:
         temperature = node.params.get("temperature")
         if temperature is not None:
             request_body["temperature"] = float(temperature)
@@ -112,15 +123,21 @@ async def handle_claude_chat(
     # thinking and reject the extended-thinking param; only older models accept
     # a thinking budget. A stale extended_thinking=True left from another model
     # is dropped here rather than sent.
-    supports_extended_thinking = not adaptive and not model.startswith(("claude-fable", "claude-mythos"))
-    if node.params.get("extended_thinking") and supports_extended_thinking:
+    supports_extended_thinking = (
+        not adaptive and not optional_adaptive and not model.startswith(("claude-fable", "claude-mythos"))
+    )
+    if node.params.get("extended_thinking") and optional_adaptive:
+        # Opus 4.7/4.8: the toggle turns on adaptive thinking. A saved
+        # thinkingBudget is not sent; Effort controls the depth instead.
+        request_body["thinking"] = {"type": "adaptive"}
+    elif node.params.get("extended_thinking") and supports_extended_thinking:
         budget = int(node.params.get("thinkingBudget", 10000))
         budget = max(1024, budget)
         request_body["thinking"] = {"type": "enabled", "budget_tokens": budget}
         # thinking mode requires temperature=1 (API constraint)
         request_body["temperature"] = 1
 
-    if adaptive:
+    if model in EFFORT_MODELS:
         effort = str(node.params.get("effort") or "").strip().lower()
         if effort:
             if effort not in EFFORT_LEVELS:

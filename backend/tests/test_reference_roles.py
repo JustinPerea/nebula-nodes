@@ -307,6 +307,15 @@ APPROVED_APPENDED_OPTIONS = {
 _CLAUDE_OLD = ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-4-6",
                "claude-haiku-4-5-20251001", "claude-opus-4-7", "claude-opus-4-6"]
 _CLAUDE_NEW = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
+# Chat defaults and Opus 4.7/4.8 on Effort (2026-10-16, approved by Justin):
+# claude-chat defaults to Opus 5.5 at Effort "medium", gpt-4o-chat to GPT-6.1
+# Sol, gemini-chat to Gemini 4 Argon at Thinking Level "medium". Opus 4.7/4.8
+# reject a thinking budget and non-default sampling params, so they leave the
+# temperature/top_p/thinkingBudget lists and join Effort's.
+_OPUS_47_48 = ["claude-opus-4-8", "claude-opus-4-7"]
+_CLAUDE_SAMPLING = [m for m in _CLAUDE_OLD if m not in _OPUS_47_48]
+_CLAUDE_BUDGET_BASELINE = ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
+                           "claude-opus-4-7", "claude-opus-4-6"]
 _GPT5 = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"]
 _GPT6 = ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"]
 _GEM_OLD = ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite",
@@ -349,14 +358,26 @@ APPROVED_OPTION_LABEL_CHANGES.update({
     }},
 })
 APPROVED_PARAM_FIELD_CHANGES = {
-    "gpt-4o-chat": {"reasoning_effort": {"visibleWhen": ({"model": _GPT5}, {"model": _GPT6 + _GPT5})}},
+    "claude-chat": {
+        "model": {"default": ("claude-sonnet-4-6", "claude-opus-5-5")},
+        "thinkingBudget": {"visibleWhen": (
+            {"model": _CLAUDE_BUDGET_BASELINE},
+            {"model": [m for m in _CLAUDE_BUDGET_BASELINE if m not in _OPUS_47_48]})},
+    },
+    "gpt-4o-chat": {
+        "model": {"default": ("gpt-5.4", "gpt-6.1-sol")},
+        "reasoning_effort": {"visibleWhen": ({"model": _GPT5}, {"model": _GPT6 + _GPT5})},
+    },
     "gemini-chat": {
-        "model": {"default": ("gemini-3.5-flash", "gemini-3.6-flash")},
-        "thinkingLevel": {"visibleWhen": ({"model": _GEM_THINKING_OLD}, {"model": _GEM_NEW + _GEM_THINKING_OLD})},
+        "model": {"default": ("gemini-3.5-flash", "gemini-4-argon")},
+        "thinkingLevel": {
+            "visibleWhen": ({"model": _GEM_THINKING_OLD}, {"model": _GEM_NEW + _GEM_THINKING_OLD}),
+            "default": ("", "medium"),
+        },
     },
 }
 APPROVED_PARAM_FIELD_ADDITIONS.update({
-    "claude-chat": {key: {"visibleWhen": {"model": _CLAUDE_OLD}} for key in ("temperature", "top_p")},
+    "claude-chat": {key: {"visibleWhen": {"model": _CLAUDE_SAMPLING}} for key in ("temperature", "top_p")},
     "gemini-chat": {key: {"visibleWhen": {"model": _GEM_OLD}} for key in ("temperature", "top_p", "top_k")},
 })
 APPROVED_OPTION_FIELD_ADDITIONS.update({
@@ -371,8 +392,8 @@ APPROVED_APPENDED_OPTIONS["gpt-4o-chat"] = {"reasoning_effort": [
 ]}
 APPROVED_INSERTED_PARAMS = {
     "claude-chat": [("thinkingBudget", {
-        "key": "effort", "label": "Effort", "type": "enum", "required": False, "default": "",
-        "visibleWhen": {"model": _CLAUDE_NEW},
+        "key": "effort", "label": "Effort", "type": "enum", "required": False, "default": "medium",
+        "visibleWhen": {"model": _CLAUDE_NEW + _OPUS_47_48},
         "options": [{"label": "Default", "value": ""}, {"label": "Low", "value": "low"},
                     {"label": "Medium", "value": "medium"}, {"label": "High", "value": "high"},
                     {"label": "X-High", "value": "xhigh"}, {"label": "Max", "value": "max"}],

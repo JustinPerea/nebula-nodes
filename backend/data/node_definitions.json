@@ -223,7 +223,7 @@
         "label": "Model",
         "type": "enum",
         "required": true,
-        "default": "claude-sonnet-4-6",
+        "default": "claude-opus-5-5",
         "options": [
           {
             "label": "Claude Fable 5.1 (flagship)",
@@ -288,10 +288,8 @@
         "visibleWhen": {
           "model": [
             "claude-fable-5",
-            "claude-opus-4-8",
             "claude-sonnet-4-6",
             "claude-haiku-4-5-20251001",
-            "claude-opus-4-7",
             "claude-opus-4-6"
           ]
         }
@@ -316,10 +314,8 @@
         "visibleWhen": {
           "model": [
             "claude-fable-5",
-            "claude-opus-4-8",
             "claude-sonnet-4-6",
             "claude-haiku-4-5-20251001",
-            "claude-opus-4-7",
             "claude-opus-4-6"
           ]
         }
@@ -359,10 +355,8 @@
         "condition": "extended_thinking",
         "visibleWhen": {
           "model": [
-            "claude-opus-4-8",
             "claude-sonnet-4-6",
             "claude-haiku-4-5-20251001",
-            "claude-opus-4-7",
             "claude-opus-4-6"
           ]
         }
@@ -372,13 +366,15 @@
         "label": "Effort",
         "type": "enum",
         "required": false,
-        "default": "",
+        "default": "medium",
         "visibleWhen": {
           "model": [
             "claude-fable-5-1",
             "claude-opus-5-5",
             "claude-sonnet-5-5",
-            "claude-haiku-5-5"
+            "claude-haiku-5-5",
+            "claude-opus-4-8",
+            "claude-opus-4-7"
           ]
         },
         "options": [
@@ -6202,7 +6198,7 @@
         "label": "Model",
         "type": "enum",
         "required": true,
-        "default": "gpt-5.4",
+        "default": "gpt-6.1-sol",
         "options": [
           {
             "label": "GPT-6 Astra (flagship)",
@@ -6455,7 +6451,7 @@
         "label": "Model",
         "type": "enum",
         "required": true,
-        "default": "gemini-3.6-flash",
+        "default": "gemini-4-argon",
         "options": [
           {
             "label": "Gemini 4 Argon",
@@ -6546,7 +6542,7 @@
         "label": "Thinking Level",
         "type": "enum",
         "required": false,
-        "default": "",
+        "default": "medium",
         "visibleWhen": {
           "model": [
             "gemini-4-argon",

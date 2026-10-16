@@ -29,6 +29,19 @@ def _defaults(node_id: str) -> dict[str, Any]:
     return {p["key"]: p["default"] for p in DEFS[node_id]["params"] if "default" in p}
 
 
+# The defaults a node created before 2026-10-16's default change was saved
+# with. Saved graphs keep these values, so they must send what they sent before.
+_SAVED_BEFORE = {
+    "claude-chat": {"model": "claude-sonnet-4-6", "effort": ""},
+    "gpt-4o-chat": {"model": "gpt-5.4"},
+    "gemini-chat": {"model": "gemini-3.6-flash", "thinkingLevel": ""},
+}
+
+
+def _saved_defaults(node_id: str) -> dict[str, Any]:
+    return {**_defaults(node_id), **_SAVED_BEFORE[node_id]}
+
+
 def _options(node_id: str, key: str) -> list[dict[str, Any]]:
     return next(p for p in DEFS[node_id]["params"] if p["key"] == key)["options"]
 
@@ -137,7 +150,7 @@ def test_claude_menu_lists_new_models_first_and_keeps_every_old_value():
     assert labels["claude-sonnet-5-5"] == "Claude Sonnet 5.5"
     assert labels["claude-haiku-5-5"] == "Claude Haiku 5.5"
     assert labels["claude-fable-5"] == "Claude Fable 5"
-    assert _param("claude-chat", "model")["default"] == "claude-sonnet-4-6"
+    assert _param("claude-chat", "model")["default"] == "claude-opus-5-5"
 
 
 def test_openai_menu_lists_gpt6_first_with_retirement_notes():
@@ -155,7 +168,7 @@ def test_openai_menu_lists_gpt6_first_with_retirement_notes():
     for value in ("gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"):
         assert labels[value].endswith("retiring 2027-01-14)")
     assert labels["gpt-5.4-nano"].endswith("(retiring 2027-04-01)")
-    assert _param("gpt-4o-chat", "model")["default"] == "gpt-5.4"
+    assert _param("gpt-4o-chat", "model")["default"] == "gpt-6.1-sol"
 
 
 def test_openai_effort_options_follow_each_model():
@@ -169,7 +182,7 @@ def test_openai_effort_options_follow_each_model():
     assert effort["default"] == "medium"
 
 
-def test_gemini_menu_default_moves_to_36_flash():
+def test_gemini_menu_lists_new_models_first():
     options = _options("gemini-chat", "model")
     values = [o["value"] for o in options]
     assert values[:5] == ["gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"]
@@ -180,7 +193,7 @@ def test_gemini_menu_default_moves_to_36_flash():
     assert labels["gemini-3.5-flash-lite"] == "Gemini 3.5 Flash-Lite"
     assert "deprecated" in labels["gemini-3.5-flash"]
     assert labels["gemini-3.1-flash-lite"].endswith("(retiring 2027-05-07)")
-    assert _param("gemini-chat", "model")["default"] == "gemini-3.6-flash"
+    assert _param("gemini-chat", "model")["default"] == "gemini-4-argon"
 
 
 def test_gemini_minimal_hidden_for_argon_and_38_flash():
@@ -204,7 +217,7 @@ def test_gemini_minimal_hidden_for_argon_and_38_flash():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model", ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"])
 async def test_claude_5_body_drops_sampling_and_thinking_budget(model):
-    params = {**_defaults("claude-chat"), "model": model, "temperature": 0.4, "top_p": 0.5,
+    params = {**_saved_defaults("claude-chat"), "model": model, "temperature": 0.4, "top_p": 0.5,
               "extended_thinking": True, "thinkingBudget": 20000}
     result, url, body = await _claude(params)
     assert url == "https://api.anthropic.com/v1/messages"
@@ -238,7 +251,7 @@ async def test_claude_5_unknown_effort_refused_before_request():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("with_effort_key", [False, True])
 async def test_claude_existing_model_body_unchanged(with_effort_key):
-    params = _defaults("claude-chat")
+    params = _saved_defaults("claude-chat")
     if with_effort_key:
         params["effort"] = "max"  # a stale effort left from a 5.x model is ignored
     else:
@@ -250,10 +263,10 @@ async def test_claude_existing_model_body_unchanged(with_effort_key):
 
 @pytest.mark.asyncio
 async def test_claude_existing_model_thinking_body_unchanged():
-    params = {**_defaults("claude-chat"), "model": "claude-opus-4-8", "extended_thinking": True,
+    params = {**_saved_defaults("claude-chat"), "model": "claude-opus-4-6", "extended_thinking": True,
               "thinkingBudget": 2048, "temperature": 0.2, "max_tokens": 200000}
     _, _, body = await _claude(params)
-    assert body == {"model": "claude-opus-4-8", "messages": USER_TURN_CLAUDE, "max_tokens": 200000,
+    assert body == {"model": "claude-opus-4-6", "messages": USER_TURN_CLAUDE, "max_tokens": 200000,
                     "stream": True, "temperature": 1, "thinking": {"type": "enabled", "budget_tokens": 2048}}
 
 
@@ -317,7 +330,7 @@ async def test_gpt5_existing_efforts_still_forwarded(effort):
 
 @pytest.mark.asyncio
 async def test_gpt5_body_unchanged():
-    params = {**_defaults("gpt-4o-chat"), "reasoning_effort": "none"}
+    params = {**_saved_defaults("gpt-4o-chat"), "reasoning_effort": "none"}
     _, _, body = await _openai(params)
     assert body == {"model": "gpt-5.4", "messages": USER_TURN_OPENAI, "stream": True,
                     "max_completion_tokens": 4096, "reasoning_effort": "none"}
@@ -353,8 +366,8 @@ async def test_new_gemini_body_drops_temperature(model):
 
 
 @pytest.mark.asyncio
-async def test_fresh_gemini_node_uses_36_flash():
-    _, url, body = await _gemini(_defaults("gemini-chat"))
+async def test_gemini_node_saved_on_36_flash_body_unchanged():
+    _, url, body = await _gemini(_saved_defaults("gemini-chat"))
     assert url == _gemini_url("gemini-3.6-flash")
     assert body == {"contents": USER_TURN_GEMINI, "generationConfig": {"maxOutputTokens": 8192}}
 

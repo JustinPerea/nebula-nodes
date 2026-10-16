@@ -58,7 +58,7 @@ async def handle_openai_chat(
 
     messages = [{"role": "user", "content": content}]
 
-    model = node.params.get("model", "gpt-5.4")
+    model = node.params.get("model", "gpt-6.1-sol")
     request_body: dict[str, Any] = {
         "model": model,
         "messages": messages,

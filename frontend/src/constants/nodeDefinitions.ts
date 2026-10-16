@@ -137,7 +137,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'claude-sonnet-4-6',
+        default: 'claude-opus-5-5',
         options: [
           { label: 'Claude Fable 5.1 (flagship)', value: 'claude-fable-5-1' },
           { label: 'Claude Opus 5.5', value: 'claude-opus-5-5' },
@@ -169,8 +169,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 0,
         max: 1,
         step: 0.1,
-        // Claude 5.5-generation models and Fable 5.1 reject non-default sampling params.
-        visibleWhen: { model: ['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7', 'claude-opus-4-6'] },
+        // Claude 5.5-generation models, Fable 5.1 and Opus 4.7/4.8 reject non-default sampling params.
+        visibleWhen: { model: ['claude-fable-5', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
       },
       {
         key: 'system',
@@ -189,7 +189,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 1,
         step: 0.05,
         placeholder: 'Default',
-        visibleWhen: { model: ['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7', 'claude-opus-4-6'] },
+        visibleWhen: { model: ['claude-fable-5', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
       },
       {
         key: 'stop_sequences',
@@ -205,6 +205,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: false,
         // Fable/Mythos 5 use always-on adaptive thinking — no extended-thinking param.
+        // On Opus 4.7/4.8 (thinking off by default, adaptive only) this turns on
+        // thinking: {type: 'adaptive'} with no budget; Effort sets the depth.
         visibleWhen: { model: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7', 'claude-opus-4-6'] },
       },
       {
@@ -217,17 +219,19 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 1024,
         max: 200000,
         condition: 'extended_thinking',
-        visibleWhen: { model: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7', 'claude-opus-4-6'] },
+        // Opus 4.7 and later return HTTP 400 for a manual budget_tokens.
+        visibleWhen: { model: ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
       },
       {
         key: 'effort',
         label: 'Effort',
         type: 'enum',
         required: false,
-        default: '',
-        // Sent as output_config.effort. These models always think and reject a
-        // thinking budget; Default leaves each model at its own default effort.
-        visibleWhen: { model: ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'] },
+        default: 'medium',
+        // Sent as output_config.effort. These models reject a thinking budget;
+        // Default leaves each model at its own default effort (medium on
+        // Opus 5.5 and Haiku 5.5, high on the others).
+        visibleWhen: { model: ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-4-8', 'claude-opus-4-7'] },
         options: [
           { label: 'Default', value: '' },
           { label: 'Low', value: 'low' },
@@ -2825,7 +2829,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gpt-5.4',
+        default: 'gpt-6.1-sol',
         options: [
           { label: 'GPT-6 Astra (flagship)', value: 'gpt-6-astra' },
           { label: 'GPT-6.1 Sol', value: 'gpt-6.1-sol' },
@@ -2946,7 +2950,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gemini-3.6-flash',
+        default: 'gemini-4-argon',
         options: [
           { label: 'Gemini 4 Argon', value: 'gemini-4-argon' },
           { label: 'Gemini 3.8 Flash', value: 'gemini-3.8-flash' },
@@ -2997,7 +3001,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Thinking Level',
         type: 'enum',
         required: false,
-        default: '',
+        // Sent only to the models listed here (2.5 uses Thinking Budget).
+        default: 'medium',
         visibleWhen: { model: ['gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'] },
         options: [
           { label: 'Default', value: '' },
