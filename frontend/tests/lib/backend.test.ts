@@ -829,3 +829,131 @@ describe('browser person link', () => {
     window.removeEventListener('nebula:person-required', seen);
   });
 });
+
+// ---------------------------------------------------------------------------
+// VITE_NEBULA_BACKEND_PORT: a second, isolated dev frontend talks to its own
+// backend only (devBackendPort.ts).
+// ---------------------------------------------------------------------------
+
+describe('dev frontend pinned to one backend port', () => {
+  const TOKEN = 'browser-person-token-000000000000000000000';
+  const healthy = { ok: true, status: 200, json: async () => ({ status: 'ok', app: 'nebula' }) } as Response;
+
+  beforeEach(() => {
+    vi.resetModules();
+    delete (window as Record<string, unknown>).nebulaDesktop;
+    sessionStorage.clear();
+    localStorage.clear();
+    history.replaceState({}, '', '/');
+    vi.stubEnv('MODE', 'production');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+    localStorage.clear();
+    history.replaceState({}, '', '/');
+    vi.resetModules();
+  });
+
+  it('probes only the pinned port and never 8000-8010, ignoring a stored 8000 URL', async () => {
+    vi.stubEnv('VITE_NEBULA_BACKEND_PORT', '8155');
+    localStorage.setItem('nebula:backendBaseUrl', 'http://127.0.0.1:8000');
+    const fetchMock = vi.fn(async () => healthy);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const backend = await import('../../src/lib/backend');
+    const found = await backend.getBackendBaseUrl();
+    const probed = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(probed.length).toBeGreaterThan(0);
+    for (const url of probed) {
+      if (url.startsWith('/')) continue; // same origin, through the pinned Vite proxy
+      expect(new URL(url).port).toBe('8155');
+    }
+    expect(probed.some((url) => /:80(0\d|10)\//.test(url))).toBe(false);
+    expect(['', 'http://localhost:8155', 'http://127.0.0.1:8155']).toContain(found);
+  });
+
+  it('reports the pinned port, not a scan, when that backend is down', async () => {
+    vi.stubEnv('VITE_NEBULA_BACKEND_PORT', '8155');
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }) as Response));
+    const backend = await import('../../src/lib/backend');
+    await expect(backend.getBackendBaseUrl()).rejects.toThrow(/port 8155 .*not scanning/);
+  });
+
+  it('with nothing set, still scans 8000-8010 and still uses a stored URL', async () => {
+    localStorage.setItem('nebula:backendBaseUrl', 'http://127.0.0.1:8003');
+    const fetchMock = vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }) as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    const backend = await import('../../src/lib/backend');
+    await expect(backend.getBackendBaseUrl()).rejects.toThrow(
+      'Nebula backend not found on localhost ports 8000, 8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009, 8010',
+    );
+    const probed = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(probed[0]).toBe('http://127.0.0.1:8003/api/health');
+    for (const port of [8000, 8005, 8010]) {
+      expect(probed).toContain(`http://127.0.0.1:${port}/api/health`);
+    }
+  });
+
+  it('refuses a person link for another backend, but still strips it', async () => {
+    vi.stubEnv('VITE_NEBULA_BACKEND_PORT', '8155');
+    history.replaceState({}, '', `/#nebula-person=${TOKEN}&backend=http://127.0.0.1:8000`);
+    vi.stubGlobal('fetch', vi.fn(async () => healthy));
+    const backend = await import('../../src/lib/backend');
+    expect(location.hash).toBe('');
+    expect(sessionStorage.getItem('nebula.person')).toBeNull();
+    expect(backend.getCachedBackendBaseUrl()).not.toBe('http://127.0.0.1:8000');
+  });
+
+  it('accepts the person link for the pinned backend', async () => {
+    vi.stubEnv('VITE_NEBULA_BACKEND_PORT', '8155');
+    history.replaceState({}, '', `/#nebula-person=${TOKEN}&backend=http://127.0.0.1:8155`);
+    vi.stubGlobal('fetch', vi.fn(async () => healthy));
+    const backend = await import('../../src/lib/backend');
+    expect(backend.getCachedBackendBaseUrl()).toBe('http://127.0.0.1:8155');
+  });
+
+  it('ignores a stored person credential for another backend', async () => {
+    vi.stubEnv('VITE_NEBULA_BACKEND_PORT', '8155');
+    sessionStorage.setItem('nebula.person', JSON.stringify({ token: TOKEN, backend: 'http://127.0.0.1:8000' }));
+    vi.stubGlobal('fetch', vi.fn(async () => healthy));
+    const backend = await import('../../src/lib/backend');
+    expect(backend.getCachedBackendBaseUrl()).toBeNull();
+  });
+
+  it('a link without backend= defaults to the pinned port', async () => {
+    vi.stubEnv('VITE_NEBULA_BACKEND_PORT', '8155');
+    history.replaceState({}, '', `/#nebula-person=${TOKEN}`);
+    vi.stubGlobal('fetch', vi.fn(async () => healthy));
+    const backend = await import('../../src/lib/backend');
+    expect(backend.getCachedBackendBaseUrl()).toBe('http://127.0.0.1:8155');
+  });
+
+  it('the injected desktop endpoint still wins over a pin', async () => {
+    vi.stubEnv('VITE_NEBULA_BACKEND_PORT', '8155');
+    (window as Record<string, unknown>).nebulaDesktop = {
+      apiBaseUrl: 'http://127.0.0.1:49321',
+      wsBaseUrl: 'ws://127.0.0.1:49321',
+    };
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const backend = await import('../../src/lib/backend');
+      await expect(backend.getBackendBaseUrl({ force: true })).resolves.toBe('http://127.0.0.1:49321');
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      delete (window as Record<string, unknown>).nebulaDesktop;
+    }
+  });
+
+  it('a pin that contradicts VITE_NEBULA_API_BASE fails closed', async () => {
+    vi.stubEnv('VITE_NEBULA_BACKEND_PORT', '8155');
+    vi.stubEnv('VITE_NEBULA_API_BASE', 'http://127.0.0.1:8000');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const backend = await import('../../src/lib/backend');
+    await expect(backend.getBackendBaseUrl()).rejects.toThrow(/name different backends/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

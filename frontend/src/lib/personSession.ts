@@ -14,7 +14,13 @@
  * The token is bound to the backend that issued it: while a tab holds one,
  * backend.ts pins that origin (no port discovery, no stored fallback) and the
  * header and the `/ws` hello go only there.
+ *
+ * A dev frontend pinned with VITE_NEBULA_BACKEND_PORT (devBackendPort.ts)
+ * refuses a link or stored credential naming a backend on another port, and a
+ * link without `backend=` defaults to the pinned port instead of 8000.
  */
+
+import { originAllowedByPin, pinnedBackendPort, type BackendPortEnv } from './devBackendPort';
 
 const STORAGE_KEY = 'nebula.person';
 // Commons' old name for the same per-launch secret. Read once, then removed.
@@ -63,9 +69,20 @@ export function loopbackOrigin(value: string | null | undefined): string | null 
   }
 }
 
+function backendPortEnv(): BackendPortEnv {
+  return { port: import.meta.env.VITE_NEBULA_BACKEND_PORT as string | undefined };
+}
+
 function defaultBackend(): string {
   const configured = (import.meta.env.VITE_NEBULA_API_BASE as string | undefined)?.trim();
-  return loopbackOrigin(configured) ?? DEFAULT_DEV_BACKEND;
+  const pinned = pinnedBackendPort(backendPortEnv().port);
+  return loopbackOrigin(configured)
+    ?? (pinned === null ? DEFAULT_DEV_BACKEND : `http://127.0.0.1:${pinned}`);
+}
+
+/** A loopback backend this tab may hold a token for (the pin, when set). */
+function allowedBackend(origin: string): boolean {
+  return originAllowedByPin(origin, backendPortEnv());
 }
 
 function hasDesktopBridge(): boolean {
@@ -77,7 +94,7 @@ function valid(credential: unknown): credential is PersonCredential {
   if (!credential || typeof credential !== 'object') return false;
   const { token, backend } = credential as Record<string, unknown>;
   return typeof token === 'string' && TOKEN_SHAPE.test(token)
-    && typeof backend === 'string' && loopbackOrigin(backend) === backend;
+    && typeof backend === 'string' && loopbackOrigin(backend) === backend && allowedBackend(backend);
 }
 
 function readStored(): PersonCredential | null {
@@ -125,8 +142,9 @@ function consumeLink(): PersonCredential | null | undefined {
     window.location.pathname + window.location.search + (remaining ? `#${remaining}` : ''));
   if (!token || !TOKEN_SHAPE.test(token)) return null;
   const backend = backendParam === null ? defaultBackend() : loopbackOrigin(backendParam);
-  // A link that names a non-loopback backend is refused outright.
-  if (!backend) return null;
+  // A link that names a non-loopback backend is refused outright, and so is
+  // one for another port when this frontend is pinned to one backend.
+  if (!backend || !allowedBackend(backend)) return null;
   return { token, backend };
 }
 
