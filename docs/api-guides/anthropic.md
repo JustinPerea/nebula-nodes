@@ -16,7 +16,7 @@ It does **not** generate images, video, audio, or 3D itself — those come from 
 
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
-| Claude | `claude-chat` | text-gen | `messages` (Text, required), `images` (Image, optional, multiple) | `model` (Fable 5 flagship / Opus 4.8 / Sonnet 4.6 / Haiku 4.5 / Opus 4.7 legacy / Opus 4.6 legacy), `max_tokens`, `temperature`, `system` (system prompt), `top_p`, `stop_sequences`, `extended_thinking` + `thinkingBudget` (hidden on Fable 5 — always-on adaptive thinking) | Writing, summarizing, translating, captioning images, and drafting prompts to feed other nodes |
+| Claude | `claude-chat` | text-gen | `messages` (Text, required), `images` (Image, optional, multiple) | `model` (Fable 5.1 flagship / Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5 / Opus 4.8 / Sonnet 4.6 default / Haiku 4.5 / Opus 4.7 legacy / Opus 4.6 legacy), `max_tokens`, `temperature` + `top_p` (hidden on Fable 5.1 and the 5.5 generation, which reject non-default sampling), `system` (system prompt), `stop_sequences`, `extended_thinking` + `thinkingBudget` (hidden on Fable 5 / 5.1 and the 5.5 generation — always-on thinking), `effort` (Fable 5.1 and the 5.5 generation only; sent as `output_config.effort`) | Writing, summarizing, translating, captioning images, and drafting prompts to feed other nodes |
 
 Output port: `text` (Text) — the written response, streamed token-by-token as it generates.
 
@@ -54,7 +54,7 @@ For a multi-step request ("plan a 5-shot product video and write a prompt for ea
 | Vision / image input | Yes | full | `images` port supports base64 data URLs, http(s) URLs, and local paths (PNG/JPG/JPEG/WebP). |
 | System prompt | Yes | full | `system` param → top-level `system` field. |
 | Sampling: `temperature`, `top_p`, `stop_sequences` | Yes | partial | All three wired. `top_k` is **not** exposed. |
-| Extended thinking | Yes | partial | Toggle + `thinkingBudget` wired for the pre-Fable models; the thinking deltas are filtered out, so the reasoning chain isn't shown — only the final text. Claude Fable/Mythos 5 use always-on adaptive thinking and do **not** support the extended-thinking param — the handler suppresses the thinking block for those models and the UI hides `extended_thinking`/`thinkingBudget` for them (2026-06-10). |
+| Extended thinking | Yes | partial | Toggle + `thinkingBudget` wired for the pre-Fable models; the thinking deltas are filtered out, so the reasoning chain isn't shown — only the final text. Claude Fable/Mythos 5 use always-on adaptive thinking and do **not** support the extended-thinking param — the handler suppresses the thinking block for those models and the UI hides `extended_thinking`/`thinkingBudget` for them (2026-06-10). Fable 5.1, Opus 5.5, Sonnet 5.5 and Haiku 5.5 (added 2026-10-16) also always think: no `thinking` block, no `temperature`/`top_p`, an optional `effort` (low…max) sent as `output_config.effort`, and `max_tokens` capped at their 128K sync limit. |
 | Multi-turn conversation history | Yes | none | The node sends a single user turn built from `messages` text; no assistant/prior-turn history is constructed. |
 | Tool use / function calling (custom/client tools) | Yes | none | `tools` / `tool_choice` not exposed — Claude can't call your functions from the node. |
 | Server tools: web search, web fetch, code execution, tool search | Yes | none | None of the Anthropic-executed tools are wired. |
@@ -82,7 +82,7 @@ Notable unused capabilities: tool use / function calling (custom + server tools 
 What it covers:
 
 - **The node contract** — node ID `claude-chat`, category `text-gen`, the `messages` (required) and `images` (optional, multiple) input ports, the `text` output port, and the streaming execution pattern.
-- **Param reference** — exact keys and ranges: `model` (the valid enum values), `max_tokens` (1–200000, required), `temperature` (0–1), `top_p` (silently dropped), `stop_sequences` (comma-separated string), `system`, and the `extended_thinking` + `thinkingBudget` (min 1024) pairing — including that thinking forces `temperature=1`, that the thinking chain is filtered out, and that Fable/Mythos 5 don't take the param at all (always-on adaptive thinking; handler suppresses it, UI hides it).
+- **Param reference** — exact keys and ranges: `model` (the valid enum values), `max_tokens` (1–200000, required), `temperature` (0–1), `top_p` (silently dropped), `stop_sequences` (comma-separated string), `system`, and the `extended_thinking` + `thinkingBudget` (min 1024) pairing — including that thinking forces `temperature=1`, that the thinking chain is filtered out, and that Fable/Mythos 5 don't take the param at all (always-on adaptive thinking; handler suppresses it, UI hides it). Fable 5.1 and the 5.5 generation take `effort` instead and get no sampling params (2026-10-16).
 - **Image input formats** — base64 data URLs, http(s) URLs, local file paths; PNG/JPG/JPEG/WebP.
 - **Wiring patterns** — text → prompt expansion → image node; image → caption; plan → fan-out to multiple media nodes.
 - **Capability boundaries** — single-turn only, no tools, no JSON-schema output, no PDF input, and a hardcoded model list (may drift from the live `GET /v1/models`).

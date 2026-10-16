@@ -6,9 +6,14 @@ Sourced from https://ai.google.dev/gemini-api/docs/models (fetched 2026-04-16; i
 
 | ID | Family | Role |
 |---|---|---|
+| `gemini-4-argon` | Gemini 4 | Gemini 4 Argon, GA 2026-10-13. Hardest reasoning; no `minimal` thinking; 65,536 sync output cap (added 2026-10-16) |
+| `gemini-3.8-flash` | Gemini 3 | Gemini 3.8 Flash; no `minimal` thinking (added 2026-10-16) |
+| `gemini-3.6-flash` | Gemini 3 | Gemini 3.6 Flash; `gemini-chat` default from 2026-10-16 |
+| `gemini-3.5-flash-lite` | Gemini 3 | Gemini 3.5 Flash-Lite; lowest cost, replaces `gemini-3.1-flash-lite` (added 2026-10-16) |
+| `gemini-3.5-flash` | Gemini 3 | Deprecated 2026-10-08; Google routes it to `gemini-3.6-flash` |
 | `gemini-3.1-pro-preview` | Gemini 3 | Advanced reasoning, agentic, hardest problems |
 | `gemini-3-flash-preview` | Gemini 3 | Frontier cost/perf for everyday use |
-| `gemini-3.1-flash-lite-preview` | Gemini 3 | High throughput, lowest cost in 3.x |
+| `gemini-3.1-flash-lite` | Gemini 3 | High throughput, low cost; shutdown 2027-05-07 |
 | `gemini-2.5-pro` | Gemini 2.5 | Previous-gen deep reasoning |
 | `gemini-2.5-flash` | Gemini 2.5 | Previous-gen everyday |
 | `gemini-2.5-flash-lite` | Gemini 2.5 | Previous-gen budget |

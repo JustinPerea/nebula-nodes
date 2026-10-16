@@ -116,7 +116,7 @@ Registry key: `gpt-4o-chat` (id kept for saved-graph compatibility).
 
 | `key` | `type` | `default` | Allowed values / notes |
 |-------|--------|-----------|------------------------|
-| `model` | enum | `gpt-5.4` | `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano` |
+| `model` | enum | `gpt-5.4` | `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano` |
 | `reasoning_effort` | enum | `medium` | `none`, `low`, `medium`, `high`, `xhigh` — **GPT-5.x only** (UI `visibleWhen`) |
 | `max_completion_tokens` | int | `4096` | 1–128000 |
 | `temperature` | float | `1` | 0–2 — **legacy models only** |
@@ -167,6 +167,7 @@ flowchart LR
 
 | Model prefix | Forwarded params | Omitted params |
 |--------------|------------------|----------------|
+| `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-luna` | `reasoning_effort` (when set; `none` refused on Astra and 6.1 Sol) | `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` |
 | `gpt-5*` | `reasoning_effort` (when set) | `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` |
 | `gpt-4o*`, `gpt-4.1*` | samplers when set | `reasoning_effort` |
 

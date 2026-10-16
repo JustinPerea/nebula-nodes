@@ -4,16 +4,24 @@ Sourced from `/gemini-api/docs/prompting-strategies`, `/gemini-api/docs/structur
 
 ## Model map (text)
 
+Updated 2026-10-16 from Google's models, deprecations and thinking pages. The ids
+are the ones the `gemini-chat` node sends.
+
 | Model ID | Role |
 |---|---|
-| `gemini-3.1-pro-preview` | Advanced reasoning, agentic, hardest problems |
-| `gemini-3-flash-preview` | Frontier cost/performance for everyday use |
-| `gemini-3.1-flash-lite-preview` | Highest throughput, lowest cost |
-| `gemini-2.5-pro` | Previous-gen deep reasoning |
-| `gemini-2.5-flash` | Previous-gen everyday |
-| `gemini-2.5-flash-lite` | Previous-gen budget |
+| `gemini-4-argon` | Gemini 4 Argon (GA 2026-10-13). Hardest reasoning. Thinking low/medium/high only (no `minimal`); 65,536 sync output cap, Google recommends `max_tokens` of at least 32,768 |
+| `gemini-3.8-flash` | Gemini 3.8 Flash. Thinking low/medium/high only (no `minimal`) |
+| `gemini-3.6-flash` | Gemini 3.6 Flash. Everyday default in Nebula; replaces the deprecated `gemini-3.5-flash` |
+| `gemini-3.5-flash-lite` | Gemini 3.5 Flash-Lite. Highest throughput, lowest cost; default thinking `minimal`; replaces `gemini-3.1-flash-lite` (shutdown 2027-05-07) |
+| `gemini-3.1-pro-preview` | Previous Pro (preview) |
+| `gemini-3-flash-preview` | Previous Flash (preview); Google's replacement is `gemini-3.6-flash` |
+| `gemini-2.5-pro` | Previous-gen deep reasoning (since 2026-09-18 limited to accounts that used it before) |
+| `gemini-2.5-flash` | Previous-gen everyday (same access limit) |
+| `gemini-2.5-flash-lite` | Previous-gen budget (same access limit) |
 
-Gemini 3 is the current primary tier. Gemini 2.5 remains supported.
+From Gemini 3.6 Flash and 3.5 Flash-Lite on, `temperature`, `top_p` and `top_k` are
+ignored, and Google says future models will return HTTP 400 for them. Nebula hides
+them and doesn't send them for the four newest models.
 
 ## Core prompt structure
 

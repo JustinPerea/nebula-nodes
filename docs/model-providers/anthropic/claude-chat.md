@@ -5,7 +5,7 @@ project: nebula_nodes
 provider: anthropic
 model: claude-chat
 status: active
-verified: 2026-05-16
+verified: 2026-10-16
 stale_after_days: 30
 ---
 
@@ -22,6 +22,17 @@ Verified against canonical Anthropic docs fetched 2026-05-16:
 - `https://platform.claude.com/docs/en/docs/about-claude/models/all-models` (model list)
 
 Both URLs redirect from `docs.anthropic.com` with HTTP 301 to `platform.claude.com`.
+
+The 2026-10-16 model refresh (Fable 5.1 and the 5.5 generation) was checked
+against these Anthropic pages, fetched that day:
+
+- `https://platform.claude.com/docs/en/about-claude/models/overview.md`
+- `https://platform.claude.com/docs/en/about-claude/model-deprecations.md`
+- `https://platform.claude.com/docs/en/build-with-claude/effort.md`
+- `https://platform.claude.com/docs/en/models/opus-5-5/migration-guide.md`
+- `https://platform.claude.com/docs/en/models/fable-5-1/whats-new-fable-5-1.md`
+- `https://platform.claude.com/docs/en/models/sonnet-5-5/whats-new-sonnet-5-5.md`
+- `https://platform.claude.com/docs/en/models/haiku-5-5/migration-guide.md`
 
 ## Node Summary
 
@@ -40,23 +51,49 @@ Both URLs redirect from `docs.anthropic.com` with HTTP 301 to `platform.claude.c
 |---|---|---|---|---|---|
 | `model` | enum | yes | `claude-sonnet-4-6` | `model` | See model list below |
 | `max_tokens` | integer | yes | 4096 | `max_tokens` | Required by Anthropic API (unlike OpenAI); always sent |
-| `temperature` | float | no | 1 | `temperature` | 0–1; overridden to 1 when extended_thinking is enabled |
+| `temperature` | float | no | 1 | `temperature` | 0–1; overridden to 1 when extended_thinking is enabled. Hidden and never sent for Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5 |
 | `system` | textarea | no | — | `system` | Top-level field, not a messages role |
-| `top_p` | float | no | — | `top_p` | Not forwarded if absent (FIXED) |
+| `top_p` | float | no | — | `top_p` | Not forwarded if absent (FIXED). Hidden and never sent for the 5.5 generation and Fable 5.1 |
 | `stop_sequences` | string | no | — | `stop_sequences` | Comma-separated → forwarded as string array (FIXED) |
 | `extended_thinking` | boolean | no | false | `thinking.type` | When true, sends `{"type":"enabled","budget_tokens":N}` (FIXED) |
 | `thinkingBudget` | integer | no | 10000 | `thinking.budget_tokens` | Clamped to min 1024; only sent when extended_thinking=true (FIXED) |
+| `effort` | enum | no | `""` (model default) | `output_config.effort` | low / medium / high / xhigh / max. Shown and sent only for Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5 (2026-10-16) |
 
 ## Model Lineup (post-audit)
 
 Canonical source: `https://platform.claude.com/docs/en/docs/about-claude/models/all-models`, verified 2026-05-16.
 
-| Label | API ID | Context | Max Output | Notes |
-|---|---|---|---|---|
-| Claude Opus 4.7 | `claude-opus-4-7` | 1M tokens | 128k tokens | Current flagship |
-| Claude Sonnet 4.6 | `claude-sonnet-4-6` | 1M tokens | 64k tokens | Default; speed + intelligence |
-| Claude Haiku 4.5 | `claude-haiku-4-5-20251001` | 200k tokens | 64k tokens | Fastest |
-| Claude Opus 4.6 (legacy) | `claude-opus-4-6` | 1M tokens | 128k tokens | Still available, not deprecated |
+Menu as of 2026-10-16, newest first (Anthropic models overview and deprecations pages, fetched that day):
+
+| Label | API ID | Notes |
+|---|---|---|
+| Claude Fable 5.1 (flagship) | `claude-fable-5-1` | Released 2026-09-01. 1M context, 128K sync output, default effort `high` |
+| Claude Opus 5.5 | `claude-opus-5-5` | Released 2026-09-22. 1M / 128K, default effort `medium` |
+| Claude Sonnet 5.5 | `claude-sonnet-5-5` | Released 2026-09-28. 1M / 128K, default effort `high` |
+| Claude Haiku 5.5 | `claude-haiku-5-5` | Released 2026-10-07. 1M / 128K, default effort `medium` |
+| Claude Fable 5 | `claude-fable-5` | Superseded by Fable 5.1; retirement not sooner than 2027-06-09 |
+| Claude Opus 4.8 | `claude-opus-4-8` | Not sooner than 2027-05-28 |
+| Claude Sonnet 4.6 | `claude-sonnet-4-6` | Node default |
+| Claude Haiku 4.5 | `claude-haiku-4-5-20251001` | "Not sooner than October 15, 2026"; no deprecation announced yet |
+| Claude Opus 4.7 (legacy) | `claude-opus-4-7` | Not sooner than 2027-04-16 |
+| Claude Opus 4.6 (legacy) | `claude-opus-4-6` | Not sooner than 2027-02-05 |
+
+### Call shape for Fable 5.1 and the 5.5 generation (2026-10-16)
+
+The four new models always think. Anthropic's model pages say they return HTTP 400
+for `thinking: {type: "enabled", budget_tokens}` and for non-default
+`temperature` / `top_p` / `top_k`, and take an effort level as top-level
+`output_config: {"effort": ...}`. The handler (`ADAPTIVE_EFFORT_MODELS` in
+`handlers/anthropic_chat.py`) therefore:
+
+- never sends `temperature`, `top_p` or `thinking` for them, even when a node
+  switched from an older model still holds those values;
+- sends `output_config.effort` only when the Effort param is set;
+- caps `max_tokens` at 128,000, the synchronous output limit;
+- skips `thinking_delta` / `signature_delta` stream events (they carry no
+  `delta.text`), so only the answer text reaches the output port.
+
+Every other model sends exactly the request it sent before.
 
 Models removed from lineup:
 

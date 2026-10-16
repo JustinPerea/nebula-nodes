@@ -4167,11 +4167,11 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | stream |
 | **Inputs** | Messages (Text)*, Images (Image ×n) |
 | **Outputs** | Text (Text) |
-| **Audited** | 2026-05-16 |
+| **Audited** | 2026-10-16 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | claude-sonnet-4-6 | Claude Fable 5 (flagship), Claude Opus 4.8, Claude Sonnet 4.6, Claude Haiku 4.5, Claude Opus 4.7 (legacy), Claude Opus 4.6 (legacy) |
+| Model | enum | claude-sonnet-4-6 | Claude Fable 5.1 (flagship), Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5, Claude Fable 5, Claude Opus 4.8, Claude Sonnet 4.6, Claude Haiku 4.5, … |
 | Max Tokens | int | 4096 | 1–200000 |
 | Temperature | float | 1 | 0–1 |
 | System Prompt | textarea | — | — |
@@ -4179,6 +4179,7 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Stop Sequences | string | — | — |
 | Extended Thinking | bool | false | — |
 | Thinking Budget | int | 10000 | 1024–200000 |
+| Effort | enum | — | Default, Low, Medium, High, X-High, Max |
 | Prompt Caching | bool | false | — |
 
 ---
@@ -4198,7 +4199,7 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gemini-3.5-flash | Gemini 3.5 Flash, Gemini 3.1 Pro (preview), Gemini 3 Flash (preview), Gemini 3.1 Flash-Lite, Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.5 Flash-Lite |
+| Model | enum | gemini-3.6-flash | Gemini 4 Argon, Gemini 3.8 Flash, Gemini 3.6 Flash, Gemini 3.5 Flash-Lite, Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash), Gemini 3.1 Pro (preview), Gemini 3 Flash (preview), Gemini 3.1 Flash-Lite (retiring 2027-05-07), … |
 | Max Tokens | int | 8192 | 1–65535 |
 | Temperature | float | 1 | 0–2 |
 | System Prompt | textarea | — | — |
@@ -4222,12 +4223,12 @@ Nodes: 303 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | stream |
 | **Inputs** | Messages (Text)*, Images (Image ×n) |
 | **Outputs** | Text (Text) |
-| **Audited** | 2026-06-30 |
+| **Audited** | 2026-10-16 |
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gpt-5.4 | GPT-5.5 (flagship), GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano, GPT-4o (legacy), GPT-4o Mini (legacy), GPT-4.1 (legacy), GPT-4.1 Mini (legacy), … |
-| Reasoning Effort | enum | medium | None, Low, Medium, High, X-High |
+| Model | enum | gpt-5.4 | GPT-6 Astra (flagship), GPT-6.1 Sol, GPT-6 Luna, GPT-5.5, GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano (retiring 2027-04-01), GPT-4o (legacy, retiring 2027-01-14), … |
+| Reasoning Effort | enum | medium | None, Low, Medium, High, X-High, Max |
 | Max Tokens | int | 4096 | 1–128000 |
 | Temperature | float | 1 | 0–2 |
 | Top P | float | — | 0–1 |

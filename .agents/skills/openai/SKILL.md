@@ -1,6 +1,6 @@
 ---
 name: openai
-description: OpenAI (BYOK, direct) in Nebula — text-to-image (GPT Image 1/1.5/mini, GPT Image 2 up to 4K, GPT Image 2.5 Flare/Sunburst with transparent backgrounds and xhigh/max quality), image edit + inpaint (single image or up to 16 refs, optional mask), text-to-speech (13 voices, 6 formats, voice instructions), Whisper/GPT-4o transcription (text/json/srt/vtt), audio translation to English, and OpenAI Chat (GPT-5.5/5.4 + legacy GPT-4o/4.1) with vision and JSON-object output. Activate when the user configures any gpt-image-1-generate, gpt-image-1-edit, gpt-image-2-generate, gpt-image-2-edit, gpt-image-2-5-generate, gpt-image-2-5-edit, openai-tts, openai-stt, openai-translate, or gpt-4o-chat node, or asks about OpenAI in Nebula. Also covers the fal and Krea GPT Image copies (gpt-image-1-5, gpt-image-1-5-edit, gpt-image-2-fal-generate, gpt-image-2-fal-edit, krea-image-openai-gpt-image-2, -2-5-flare, -2-5-sunburst), which run on OpenAI with the same key (2026-10-14). For gpt-image-2 prompting craft and the FAL-routed gpt-image-2 nodes, see .agents/skills/gpt-image-2/SKILL.md. Sourced from the official OpenAI API docs (platform.openai.com / developers.openai.com) and the Nebula audit guide docs/api-guides/openai.md, verified against the backend handlers on 2026-06-04 (updated 2026-06-10; GPT Image 2.5 added 2026-10-10).
+description: OpenAI (BYOK, direct) in Nebula — text-to-image (GPT Image 1/1.5/mini, GPT Image 2 up to 4K, GPT Image 2.5 Flare/Sunburst with transparent backgrounds and xhigh/max quality), image edit + inpaint (single image or up to 16 refs, optional mask), text-to-speech (13 voices, 6 formats, voice instructions), Whisper/GPT-4o transcription (text/json/srt/vtt), audio translation to English, and OpenAI Chat (GPT-6 Astra/6.1 Sol/6 Luna, GPT-5.5/5.4 + legacy GPT-4o/4.1) with vision and JSON-object output. Activate when the user configures any gpt-image-1-generate, gpt-image-1-edit, gpt-image-2-generate, gpt-image-2-edit, gpt-image-2-5-generate, gpt-image-2-5-edit, openai-tts, openai-stt, openai-translate, or gpt-4o-chat node, or asks about OpenAI in Nebula. Also covers the fal and Krea GPT Image copies (gpt-image-1-5, gpt-image-1-5-edit, gpt-image-2-fal-generate, gpt-image-2-fal-edit, krea-image-openai-gpt-image-2, -2-5-flare, -2-5-sunburst), which run on OpenAI with the same key (2026-10-14). For gpt-image-2 prompting craft and the FAL-routed gpt-image-2 nodes, see .agents/skills/gpt-image-2/SKILL.md. Sourced from the official OpenAI API docs (platform.openai.com / developers.openai.com) and the Nebula audit guide docs/api-guides/openai.md, verified against the backend handlers on 2026-06-04 (updated 2026-06-10; GPT Image 2.5 added 2026-10-10).
 ---
 
 # OpenAI Skill
@@ -10,7 +10,7 @@ These are the **ten OpenAI-direct nodes** (all BYOK, one key). For prompting *cr
 ## When to use
 
 - User drags or configures any of: `gpt-image-1-generate`, `gpt-image-1-edit`, `gpt-image-2-generate`, `gpt-image-2-edit`, `gpt-image-2-5-generate`, `gpt-image-2-5-edit`, `openai-tts`, `openai-stt`, `openai-translate`, `gpt-4o-chat`.
-- User wants to turn text → image, edit/inpaint an image, read text aloud, transcribe or translate speech, or run OpenAI chat (GPT-5.x or legacy 4o/4.1, including describing piped-in images).
+- User wants to turn text → image, edit/inpaint an image, read text aloud, transcribe or translate speech, or run OpenAI chat (GPT-6, GPT-5.x or legacy 4o/4.1, including describing piped-in images).
 - User asks which OpenAI model/voice/format to pick, what a param does, or why an OpenAI run failed (org verification, English-only translate, missing key).
 - User asks to chain OpenAI nodes (e.g. image → caption → speech, or audio → subtitles).
 
@@ -32,7 +32,8 @@ These are the **ten OpenAI-direct nodes** (all BYOK, one key). For prompting *cr
    - **STT `temperature` only affects `whisper-1`.** The GPT-4o transcribe models ignore it; the handler only forwards non-zero values.
    - **gpt-image-2 drops `n>1`, `background`, `input_fidelity`, and a user `partial_images` count** — OpenAI rejects `n>1` while streaming, and these params aren't valid/forwarded. Run the node multiple times for multiple images.
    - **GPT Image 2.5 is the newer pair (released 2026-09-08).** Pick `model` Flare (`gpt-image-2.5-flare`, fast, default) or Sunburst (`gpt-image-2.5-sunburst`, most precise). Unlike gpt-image-2 it accepts `background: transparent` (needs `png` or `webp`; the handler refuses `jpeg` before any request) and two extra quality levels, `xhigh` and `max`. It still streams, so `n>1` and `input_fidelity` stay dropped. Sizes above 2560x1440 are experimental per OpenAI. Token pricing matches GPT Image 2; higher quality levels emit more output tokens.
-   - **gpt-5.x are reasoning models: sampler params are dropped.** On `gpt-4o-chat`, the handler omits `temperature`/`top_p`/`frequency_penalty`/`presence_penalty` for any `gpt-5.*` model (the API rejects them) and instead sends `reasoning_effort` (none/low/medium/high/xhigh). The sampler params are only forwarded — and only shown in the UI — for the legacy gpt-4o/4.1 models.
+   - **GPT-6 and gpt-5.x are reasoning models: sampler params are dropped.** On `gpt-4o-chat`, the handler omits `temperature`/`top_p`/`frequency_penalty`/`presence_penalty` for `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-luna` and any `gpt-5.*` model (the API rejects them) and instead sends `reasoning_effort` (none/low/medium/high/xhigh, plus `max` on GPT-6). The sampler params are only forwarded — and only shown in the UI — for the legacy gpt-4o/4.1 models.
+   - **No `none` effort on GPT-6 Astra or GPT-6.1 Sol.** OpenAI returns HTTP 400 for it. The card hides it for those two; a node that still holds `none` from a GPT-5.x model is refused before the request with the allowed levels. (2026-10-16)
 
 ## Pick the right node
 
@@ -47,7 +48,7 @@ These are the **ten OpenAI-direct nodes** (all BYOK, one key). For prompting *cr
 | OpenAI TTS | `openai-tts` | `/v1/audio/speech` · `tts-1` \| `tts-1-hd` \| `gpt-4o-mini-tts` | `text` (Text) | `model`, `voice` (13), `speed`, `response_format` (6), `instructions` (mini-tts only) |
 | OpenAI Whisper STT | `openai-stt` | `/v1/audio/transcriptions` · `whisper-1` \| `gpt-4o-transcribe` \| `gpt-4o-mini-transcribe` | `audio` (Audio) | `model`, `language`, `response_format` (text/json/verbose_json/srt/vtt), `temperature`, `prompt` |
 | OpenAI Audio Translate | `openai-translate` | `/v1/audio/translations` · **`whisper-1` (fixed)** → English | `audio` (Audio) | `response_format`, `temperature`, `prompt` (must be English) |
-| OpenAI Chat | `gpt-4o-chat` | `/v1/chat/completions` · `gpt-5.5` \| `gpt-5.4` \| `gpt-5.4-mini` \| `gpt-5.4-nano` \| legacy `gpt-4o` \| `gpt-4o-mini` \| `gpt-4.1` \| `gpt-4.1-mini` \| `gpt-4.1-nano` (streams) | `messages` (Text), `images` (Image, multiple) | `model`, `reasoning_effort` (gpt-5.x only), `max_completion_tokens`, `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` (legacy only), `response_format` (text/json_object) |
+| OpenAI Chat | `gpt-4o-chat` | `/v1/chat/completions` · `gpt-6-astra` \| `gpt-6.1-sol` \| `gpt-6-luna` \| `gpt-5.5` \| `gpt-5.4` \| `gpt-5.4-mini` \| `gpt-5.4-nano` \| legacy `gpt-4o` \| `gpt-4o-mini` \| `gpt-4.1` \| `gpt-4.1-mini` \| `gpt-4.1-nano` (streams) | `messages` (Text), `images` (Image, multiple) | `model`, `reasoning_effort` (GPT-6 and gpt-5.x only), `max_completion_tokens`, `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` (legacy only), `response_format` (text/json_object) |
 
 ## Param reference
 
@@ -107,11 +108,11 @@ Types/ranges/enums/defaults are from `node_definitions.json`; behavior notes are
 - `temperature` *(float 0–1, default 0)*: forwarded only when non-zero.
 - `prompt` *(string, optional)*: must be in **English**.
 
-### `gpt-4o-chat` (stream) — display name "OpenAI Chat" (updated 2026-06-10)
-- `model` *(enum, req, default `gpt-5.4`)*: `gpt-5.5` (flagship) · `gpt-5.4` · `gpt-5.4-mini` · `gpt-5.4-nano` · legacy `gpt-4o` · `gpt-4o-mini` · `gpt-4.1` · `gpt-4.1-mini` · `gpt-4.1-nano` (sunsets 2026-10-23).
-- `reasoning_effort` *(enum, default `medium`)*: `none` · `low` · `medium` · `high` · `xhigh`. **gpt-5.x models only** — shown only when a `gpt-5.*` model is selected and sent only for those models.
+### `gpt-4o-chat` (stream) — display name "OpenAI Chat" (updated 2026-10-16)
+- `model` *(enum, req, default `gpt-5.4`)*: `gpt-6-astra` (GPT-6 Astra, flagship) · `gpt-6.1-sol` (GPT-6.1 Sol) · `gpt-6-luna` (GPT-6 Luna) · `gpt-5.5` · `gpt-5.4` · `gpt-5.4-mini` · `gpt-5.4-nano` (retiring 2027-04-01) · legacy `gpt-4o` · `gpt-4o-mini` · `gpt-4.1` · `gpt-4.1-mini` (all four retiring 2027-01-14) · `gpt-4.1-nano` (retiring 2026-10-23). Retiring models stay on the menu so saved graphs open.
+- `reasoning_effort` *(enum, default `medium`)*: `none` · `low` · `medium` · `high` · `xhigh` · `max`. **GPT-6 and gpt-5.x models only** — shown only when one of them is selected and sent only for those models. `max` is GPT-6 only; `none` is hidden (and refused) for `gpt-6-astra` and `gpt-6.1-sol`.
 - `max_completion_tokens` *(int 1–128000, default 4096)*.
-- `temperature` *(float 0–2, step 0.1, default 1)* — **legacy gpt-4o/4.1 models only**; the handler omits it for gpt-5.x (reasoning models reject it).
+- `temperature` *(float 0–2, step 0.1, default 1)* — **legacy gpt-4o/4.1 models only**; the handler omits it for GPT-6 and gpt-5.x (reasoning models reject it).
 - `top_p` *(float 0–1, step 0.05, default unset/blank)* — only sent when set; legacy models only.
 - `frequency_penalty` / `presence_penalty` *(float −2–2, step 0.1, default 0)* — legacy models only.
 - `response_format` *(enum, default `text`)*: `text` · `json_object`. `json_object` sends `{"type":"json_object"}` and enables **JSON mode** — **JSON-mode only, no strict `json_schema`** (see boundaries). **Gotcha:** OpenAI requires the literal word **"json"** to appear somewhere in the prompt (`messages`/`system`) when `json_object` is set, or the request errors. Instruct the model to "respond in JSON."

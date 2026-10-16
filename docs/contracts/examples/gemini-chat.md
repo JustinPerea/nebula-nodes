@@ -59,7 +59,11 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 
 | Model (registry id) | Typical use |
 |---------------------|-------------|
-| `gemini-3.5-flash` | Default — fast chat |
+| `gemini-3.6-flash` | Default — fast chat (from 2026-10-16) |
+| `gemini-3.8-flash` | Newer Flash |
+| `gemini-4-argon` | Hardest reasoning; thinking counts against `max_tokens` |
+| `gemini-3.5-flash-lite` | Cheapest |
+| `gemini-3.5-flash` | Deprecated 2026-10-08; Google routes it to `gemini-3.6-flash` |
 | `gemini-3.1-pro-preview` | Higher quality reasoning |
 | `gemini-2.5-pro` / `gemini-2.5-flash` | Legacy 2.5 family |
 
@@ -73,7 +77,7 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 | `thinkingLevel` / `thinkingBudget` | Thinking tokens on supported models |
 | `response_format: application/json` | Same token math; may increase output length |
 
-Draft iterations: use `gemini-3.5-flash` with lower `max_tokens` before Pro models.
+Draft iterations: use `gemini-3.6-flash` with lower `max_tokens` before Pro models.
 
 ---
 
@@ -284,7 +288,7 @@ Assertions on fixture body:
       "id": "n2",
       "definitionId": "gemini-chat",
       "params": {
-        "model": "gemini-3.5-flash",
+        "model": "gemini-3.6-flash",
         "max_tokens": 1024,
         "temperature": 0.7
       },
