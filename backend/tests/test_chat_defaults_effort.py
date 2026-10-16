@@ -160,11 +160,22 @@ async def test_new_openai_node_on_older_model_matches_a_saved_node(model):
 @pytest.mark.parametrize("model", ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"])
 async def test_gemini_25_sends_the_budget_not_a_leftover_level(model):
     # A new node starts with thinkingLevel "medium"; the 2.5 card hides it and
-    # shows Thinking Budget, so the budget is what goes out.
+    # shows Thinking Budget, so a set budget is what goes out.
     _, _, body = await _gemini({**_defaults("gemini-chat"), "model": model, "thinkingBudget": 2048})
     assert body["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 2048}
-    _, _, body = await _gemini({**_defaults("gemini-chat"), "model": model})
-    assert "thinkingConfig" not in body["generationConfig"]
+    _, _, body = await _gemini({**_saved_defaults("gemini-chat"), "model": model,
+                                "thinkingLevel": "high", "thinkingBudget": 0})
+    assert body["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 0}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"])
+@pytest.mark.parametrize("level", ["low", "medium", "high"])
+async def test_gemini_25_level_only_saved_node_is_unchanged(model, level):
+    # Without a budget, a saved 2.5 node keeps sending its level, byte for byte
+    # what 30109694 sent.
+    _, _, body = await _gemini({**_saved_defaults("gemini-chat"), "model": model, "thinkingLevel": level})
+    assert body["generationConfig"]["thinkingConfig"] == {"thinkingLevel": level}
 
 
 @pytest.mark.asyncio

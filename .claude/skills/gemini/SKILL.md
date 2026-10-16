@@ -58,7 +58,7 @@ Defaults, ranges, and enums per node, straight from `node_definitions.json` + ha
 - `max_tokens` (int, default 8192, 1–65535) → `generationConfig.maxOutputTokens`.
 - `temperature` (float, default 1, 0–2, step 0.1). Keep at 1.0 for Gemini 3 (lowering can loop/degrade).
 - `system` (textarea) → `systemInstruction`.
-- `thinkingLevel` (enum, default `medium` since 2026-10-16, **Gemini 3 and 4 models only**: `""`/minimal/low/medium/high; no `minimal` on `gemini-4-argon` / `gemini-3.8-flash`) → `thinkingConfig.thinkingLevel`. `""` = model default (Argon's own default is `medium`). Never sent to the 2.5 models, even if a node switched from Gemini 3 still holds a level.
+- `thinkingLevel` (enum, default `medium` since 2026-10-16, **Gemini 3 and 4 models only**: `""`/minimal/low/medium/high; no `minimal` on `gemini-4-argon` / `gemini-3.8-flash`) → `thinkingConfig.thinkingLevel`. `""` = model default (Argon's own default is `medium`). On the 2.5 models a level left from Gemini 3 is dropped when a `thinkingBudget` is set; without a budget it is still sent.
 - `thinkingBudget` (int, **2.5 models only**, 0–65536) → `thinkingConfig.thinkingBudget`. Mutually exclusive with `thinkingLevel`.
 - `top_p` (float, 0–1, step 0.05), `top_k` (int, hint 64), `stop_sequences` (comma-separated string).
 - `response_format` (enum, default `text/plain`; or `application/json`). **JSON mode is now wired** (2026-06-05): `application/json` sets `generationConfig.responseMimeType = "application/json"` so the reply is valid JSON. **There is still no `responseSchema` field**, so a strict schema must be prompt-engineered. Unit-tested.

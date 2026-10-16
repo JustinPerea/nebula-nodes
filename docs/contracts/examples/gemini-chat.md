@@ -126,7 +126,7 @@ Draft iterations: use `gemini-3.6-flash` or `gemini-3.5-flash-lite` with lower `
 | `max_tokens` | integer | `8192` | 1–65535 → `maxOutputTokens`; the handler caps it at 65,536 on `gemini-4-argon` (Argon's synchronous output limit) |
 | `temperature` | float | `1` | 0–2. Hidden and not sent for `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.6-flash` and `gemini-3.5-flash-lite` |
 | `system` | textarea | `""` | → `systemInstruction.parts[].text` |
-| `thinkingLevel` | enum | `medium` | `""` (Default, sends nothing), `minimal`, `low`, `medium`, `high` → `thinkingConfig.thinkingLevel` on Gemini 3.x and 4. No `minimal` on `gemini-4-argon` or `gemini-3.8-flash` (the handler refuses it before the request). Never sent to `gemini-2.5-*`, whose card shows `thinkingBudget` instead. The default was `""` before 2026-10-16; saved nodes keep their value |
+| `thinkingLevel` | enum | `medium` | `""` (Default, sends nothing), `minimal`, `low`, `medium`, `high` → `thinkingConfig.thinkingLevel` on Gemini 3.x and 4. No `minimal` on `gemini-4-argon` or `gemini-3.8-flash` (the handler refuses it before the request). On `gemini-2.5-*` (whose card shows `thinkingBudget` instead) it is dropped when a `thinkingBudget` is set; without a budget a saved level is still sent. The default was `""` before 2026-10-16; saved nodes keep their value |
 | `thinkingBudget` | integer | unset | Gemini 2.5 only → `thinkingConfig.thinkingBudget` |
 | `top_p` | float | unset | **Not forwarded** by handler today |
 | `top_k` | integer | unset | **Not forwarded** by handler today |
@@ -212,8 +212,8 @@ Content-Type: application/json
 | `max_tokens` param | `generationConfig.maxOutputTokens` if truthy |
 | `response_format` param | `generationConfig.responseMimeType` when ≠ `text/plain` |
 | `system` param | Top-level `systemInstruction` when non-empty |
-| `thinkingLevel` param | `generationConfig.thinkingConfig.thinkingLevel` when set (3.x and 4 models; ignored on `gemini-2.5-*`) |
-| `thinkingBudget` param | `generationConfig.thinkingConfig.thinkingBudget` when set (2.5 models) — only if no `thinkingLevel` is sent |
+| `thinkingLevel` param | `generationConfig.thinkingConfig.thinkingLevel` when set (3.x and 4 models; on `gemini-2.5-*` only when no `thinkingBudget` is set) |
+| `thinkingBudget` param | `generationConfig.thinkingConfig.thinkingBudget` when set (2.5 models) — on 2.5 it wins over any hidden `thinkingLevel` |
 | `top_p`, `top_k`, `stop_sequences` | **Omitted** — in registry UI but not forwarded |
 
 ### Response parsing
@@ -362,4 +362,4 @@ Official reference: [Generate content](https://ai.google.dev/api/generate-conten
 |------|--------|
 | 2026-07-01 | Initial exemplar (partial) |
 | 2026-07-01 | Gold upgrade — full Vol 1–4, pricing, parameter matrix |
-| 2026-10-16 | Default model `gemini-4-argon`, Thinking Level default `medium`; `thinkingLevel` no longer sent to 2.5 models; handler fallback for a missing `model` is `gemini-4-argon` |
+| 2026-10-16 | Default model `gemini-4-argon`, Thinking Level default `medium`; `thinkingLevel` no longer sent to 2.5 models when a `thinkingBudget` is set; handler fallback for a missing `model` is `gemini-4-argon` |

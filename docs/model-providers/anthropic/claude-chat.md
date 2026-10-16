@@ -49,11 +49,11 @@ against these Anthropic pages, fetched that day:
 
 | Param key | Type | Required | Default | API field | Notes |
 |---|---|---|---|---|---|
-| `model` | enum | yes | `claude-sonnet-4-6` | `model` | See model list below |
+| `model` | enum | yes | `claude-opus-5-5` | `model` | See model list below. Was `claude-sonnet-4-6` until 2026-10-16 |
 | `max_tokens` | integer | yes | 4096 | `max_tokens` | Required by Anthropic API (unlike OpenAI); always sent |
 | `temperature` | float | no | 1 | `temperature` | 0–1; overridden to 1 when extended_thinking is enabled. Hidden and never sent for Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Opus 4.8 / Opus 4.7 |
 | `system` | textarea | no | — | `system` | Top-level field, not a messages role |
-| `top_p` | float | no | — | `top_p` | Not forwarded if absent (FIXED). Hidden and never sent for the 5.5 generation and Fable 5.1 |
+| `top_p` | float | no | — | `top_p` | Not forwarded if absent (FIXED). Hidden and never sent for the 5.5 generation, Fable 5.1, Opus 4.8 and Opus 4.7 |
 | `stop_sequences` | string | no | — | `stop_sequences` | Comma-separated → forwarded as string array (FIXED) |
 | `extended_thinking` | boolean | no | false | `thinking.type` | When true, sends `{"type":"enabled","budget_tokens":N}` (FIXED). On Opus 4.7/4.8 sends `{"type":"adaptive"}` with no budget (2026-10-16) |
 | `thinkingBudget` | integer | no | 10000 | `thinking.budget_tokens` | Clamped to min 1024; only sent when extended_thinking=true (FIXED). Hidden and never sent on Opus 4.7/4.8 |

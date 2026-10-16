@@ -119,10 +119,11 @@ async def handle_gemini_chat(
     # Cannot use both — API returns 400
     thinking_level = node.params.get("thinkingLevel")
     thinking_budget = node.params.get("thinkingBudget")
-    if model.startswith("gemini-2.5-"):
-        # The 2.5 cards show Thinking Budget, not Thinking Level. A level left
-        # from another model, or the "medium" a new node starts with, is not
-        # sent, so it can't override the budget the card shows.
+    if model.startswith("gemini-2.5-") and thinking_budget is not None and thinking_budget != "":
+        # The 2.5 cards show Thinking Budget, not Thinking Level. When a budget
+        # is set, a hidden level (left from another model, or the "medium" a
+        # new node starts with) must not override it. A level-only saved 2.5
+        # node still sends its level, as before 2026-10-16.
         thinking_level = None
     if thinking_level and thinking_level != "":
         levels = GEMINI_CHAT_THINKING_LEVELS.get(model)
