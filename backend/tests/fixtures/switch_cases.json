@@ -652,6 +652,56 @@
       }
     },
     {
+      "name": "FLUX.2: picking Klein 9B on fal with Safety 5 and the checker off still puts Safety back to 2: BFL would stop only on the checker, not on the Model that hides Safety",
+      "definition": "flux-2-pro",
+      "saved": {
+        "_provider": "fal",
+        "model": "pro",
+        "safety_tolerance": "5",
+        "enable_safety_checker": false
+      },
+      "keys": [
+        "BFL_API_KEY",
+        "FAL_KEY"
+      ],
+      "wired": {},
+      "click": "edit:model=\"klein-9b\"",
+      "switcher": {
+        "before": {
+          "chip": "fal",
+          "blocked": false,
+          "alternatives": []
+        },
+        "chip": "fal",
+        "blocked": false,
+        "alternatives": [],
+        "notes": [
+          "Safety 5 (Permissive) isn't on fal.ai with FLUX.2 [klein] 9B: back to 2"
+        ]
+      },
+      "writes": {
+        "model": "klein-9b",
+        "safety_tolerance": "2"
+      },
+      "run": {
+        "route": "fal",
+        "request": {
+          "method": "POST",
+          "url": "https://queue.fal.run/fal-ai/flux-2/klein/9b",
+          "schema": [
+            "fal",
+            "fal-ai/flux-2/klein/9b"
+          ],
+          "body": {
+            "prompt": "p",
+            "image_size": "landscape_4_3",
+            "output_format": "jpeg",
+            "enable_safety_checker": false
+          }
+        }
+      }
+    },
+    {
       "name": "FLUX.2: no click: Klein 9B at Safety 5 reaching fal by a key change stops, offers the reset and names BFL's key",
       "definition": "flux-2-pro",
       "saved": {

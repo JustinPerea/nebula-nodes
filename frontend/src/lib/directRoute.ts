@@ -642,10 +642,11 @@ export interface HiddenStop { param: string; honoredBy: string; controllers: str
  * param the route doesn't show with these values whose saved value is set
  * and isn't its default, that some other route shows with these values,
  * takes on its own (routeTakesValue), whose rules don't block these values
- * (keys don't matter), and which isn't itself stopped by a hidden value one
- * level down (there only its rules are read), leaving out what it hides only
- * because of this very value (BFL hides Resolution under the Draft it
- * honors). Any other hidden value is ignored. */
+ * (keys don't matter), and which wouldn't itself stop, one level down, on
+ * one of the settings that hide this param on `route` (OpenRouter would stop
+ * on the Draft that hides Resolution on fal). Any other stop of that route
+ * doesn't count: then both routes stop, each with its own reset. Any other
+ * hidden value is ignored. */
 export function hiddenStops(definition: RoutedDefinition, route: RouteSpec, params: Record<string, unknown>, depth = 0): HiddenStop[] {
   if (!hasRoutes(definition)) return [];
   const full = definition as ModelNodeDefinition;
@@ -659,14 +660,14 @@ export function hiddenStops(definition: RoutedDefinition, route: RouteSpec, para
     const value = params[param.key];
     if (!hasValue(value) || value === WIRED) continue;
     if (param.default !== undefined && param.default !== null && matchValue(value) === matchValue(param.default)) continue;
-    const honored = others.find((spec) => routeSentKeys(full, spec.id, params).has(param.key)
-      && routeTakesValue(spec, param.key, value) && shownRulesBlock(definition, spec, params) === null
-      && (depth > 0 || hiddenStops(definition, spec, params, depth + 1)
-        .every((stop) => stop.controllers.includes(param.key))));
-    if (!honored) continue;
     const condition = offered.get(param.key)?.visibleWhen ?? {};
     const controllers = Object.keys(condition).filter((ctrl) => offered.has(ctrl)
       && !visibleWhenHolds({ [ctrl]: condition[ctrl] }, effective));
+    const honored = others.find((spec) => routeSentKeys(full, spec.id, params).has(param.key)
+      && routeTakesValue(spec, param.key, value) && shownRulesBlock(definition, spec, params) === null
+      && (depth > 0 || !hiddenStops(definition, spec, params, depth + 1)
+        .some((stop) => controllers.includes(stop.param))));
+    if (!honored) continue;
     stops.push({ param: param.key, honoredBy: honored.id, controllers });
   }
   return stops;

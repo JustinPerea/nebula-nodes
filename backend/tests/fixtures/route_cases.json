@@ -10760,6 +10760,604 @@
         "generate_audio",
         "resolution"
       ]
+    },
+    {
+      "name": "flux-2-pro: Klein 9B on fal at Safety 5 with the checker off stops on Safety: BFL's own stop (the checker) isn't what hides Safety on fal",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "_provider": "fal",
+        "model": "klein-9b",
+        "safety_tolerance": "5",
+        "enable_safety_checker": false
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": "fal",
+        "block": {
+          "reason": "hidden",
+          "param": "safety_tolerance",
+          "on": "bfl",
+          "detail": "Safety 5 (Permissive)",
+          "when": "Model FLUX.2 [klein] 9B"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "fal",
+        "missing": [],
+        "block": {
+          "reason": "hidden",
+          "param": "safety_tolerance",
+          "on": "bfl",
+          "detail": "Safety 5 (Permissive)",
+          "when": "Model FLUX.2 [klein] 9B"
+        },
+        "alternatives": [],
+        "fixes": [
+          {
+            "param": "safety_tolerance",
+            "value": "2"
+          }
+        ],
+        "message": "FLUX.2 can't run on fal.ai: it doesn't offer Safety 5 (Permissive) with Model FLUX.2 [klein] 9B. Set Safety back to 2, or switch provider."
+      },
+      "shownRoute": "fal",
+      "routeParams": [
+        {
+          "key": "model",
+          "options": [
+            "pro",
+            "max",
+            "flash",
+            "flex",
+            "klein-9b",
+            "klein-4b"
+          ]
+        },
+        {
+          "key": "image_size",
+          "options": [
+            "square_hd",
+            "square",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        {
+          "key": "output_format",
+          "options": [
+            "jpeg",
+            "png"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "visibleWhen": {
+            "model": [
+              "pro",
+              "max",
+              "flex"
+            ]
+          }
+        },
+        {
+          "key": "seed"
+        },
+        {
+          "key": "num_inference_steps",
+          "min": 2,
+          "max": 50,
+          "visibleWhen": {
+            "model": [
+              "flex"
+            ]
+          }
+        },
+        {
+          "key": "guidance_scale",
+          "min": 1.5,
+          "max": 10,
+          "visibleWhen": {
+            "model": [
+              "flex"
+            ]
+          }
+        },
+        {
+          "key": "enable_safety_checker"
+        }
+      ],
+      "sentKeys": [
+        "enable_safety_checker",
+        "image_size",
+        "model",
+        "output_format",
+        "seed"
+      ]
+    },
+    {
+      "name": "flux-2-pro: the same values on BFL stop on the checker fal would honor",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "_provider": "bfl",
+        "model": "klein-9b",
+        "safety_tolerance": "5",
+        "enable_safety_checker": false
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": "bfl",
+        "block": {
+          "reason": "hidden",
+          "param": "enable_safety_checker",
+          "on": "fal",
+          "detail": "Safety Checker off"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "bfl",
+        "missing": [],
+        "block": {
+          "reason": "hidden",
+          "param": "enable_safety_checker",
+          "on": "fal",
+          "detail": "Safety Checker off"
+        },
+        "alternatives": [],
+        "fixes": [
+          {
+            "param": "enable_safety_checker",
+            "value": true
+          }
+        ],
+        "message": "FLUX.2 can't run on Black Forest Labs: it doesn't offer Safety Checker off. Turn Safety Checker on, or switch provider."
+      },
+      "shownRoute": "bfl",
+      "routeParams": [
+        {
+          "key": "model",
+          "options": [
+            "pro",
+            "max",
+            "flex",
+            "klein-9b",
+            "klein-4b"
+          ]
+        },
+        {
+          "key": "image_size",
+          "options": [
+            "square_hd",
+            "square",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        {
+          "key": "output_format",
+          "options": [
+            "jpeg",
+            "png"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "key": "seed"
+        },
+        {
+          "key": "num_inference_steps",
+          "min": 1,
+          "max": 50,
+          "visibleWhen": {
+            "model": [
+              "flex"
+            ]
+          }
+        },
+        {
+          "key": "guidance_scale",
+          "min": 1.5,
+          "max": 10,
+          "visibleWhen": {
+            "model": [
+              "flex"
+            ]
+          }
+        }
+      ],
+      "sentKeys": [
+        "image_size",
+        "model",
+        "output_format",
+        "safety_tolerance",
+        "seed"
+      ]
+    },
+    {
+      "name": "krea-3: thinking High on fal still stops with fal's own Model on Jam",
+      "nodeId": "krea-3",
+      "params": {
+        "_provider": "fal",
+        "thinking_mode": "high",
+        "model": "jam"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": "fal",
+        "block": {
+          "reason": "hidden",
+          "param": "thinking_mode",
+          "on": "krea",
+          "detail": "Thinking mode High"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "fal",
+        "missing": [],
+        "block": {
+          "reason": "hidden",
+          "param": "thinking_mode",
+          "on": "krea",
+          "detail": "Thinking mode High"
+        },
+        "alternatives": [],
+        "fixes": [
+          {
+            "param": "thinking_mode",
+            "value": "fast"
+          }
+        ],
+        "message": "Krea 3 can't run on fal.ai: it doesn't offer Thinking mode High. Set Thinking mode back to Fast, or switch provider."
+      },
+      "shownRoute": "fal",
+      "routeParams": [
+        {
+          "key": "seed"
+        },
+        {
+          "key": "model",
+          "options": [
+            "berry",
+            "jam"
+          ]
+        },
+        {
+          "key": "reasoning_level",
+          "options": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        {
+          "key": "image_size",
+          "options": [
+            "auto",
+            "square_hd",
+            "square",
+            "portrait_4_3",
+            "portrait_16_9",
+            "landscape_4_3",
+            "landscape_16_9"
+          ]
+        },
+        {
+          "key": "negative_prompt",
+          "visibleWhen": {
+            "model": [
+              "berry"
+            ]
+          }
+        },
+        {
+          "key": "output_format",
+          "options": [
+            "png",
+            "jpeg"
+          ]
+        }
+      ],
+      "sentKeys": [
+        "image_size",
+        "model",
+        "output_format",
+        "reasoning_level",
+        "seed"
+      ]
+    },
+    {
+      "name": "flux-3-image: Grounding off and Prompt expansion on stop on fal (BFL takes Grounding)",
+      "nodeId": "flux-3-image",
+      "params": {
+        "_provider": "fal",
+        "grounding": false,
+        "enable_prompt_expansion": true
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": "fal",
+        "block": {
+          "reason": "hidden",
+          "param": "grounding",
+          "on": "bfl",
+          "detail": "Grounding (web + image search) off"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "fal",
+        "missing": [],
+        "block": {
+          "reason": "hidden",
+          "param": "grounding",
+          "on": "bfl",
+          "detail": "Grounding (web + image search) off"
+        },
+        "alternatives": [],
+        "fixes": [
+          {
+            "param": "grounding",
+            "value": true
+          }
+        ],
+        "message": "FLUX 3 Image can't run on fal.ai: it doesn't offer Grounding (web + image search) off. Turn Grounding (web + image search) on, or switch provider."
+      },
+      "shownRoute": "fal",
+      "routeParams": [
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "3:2",
+            "7:5",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "5:7",
+            "2:3",
+            "9:16",
+            "1:2"
+          ]
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "768sq",
+            "1k",
+            "2k",
+            "4k"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "min": 0,
+          "max": 4
+        },
+        {
+          "key": "enable_prompt_expansion"
+        }
+      ],
+      "sentKeys": [
+        "aspect_ratio",
+        "enable_prompt_expansion",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "flux-3-image: the same values on BFL stop on the Prompt expansion fal takes",
+      "nodeId": "flux-3-image",
+      "params": {
+        "_provider": "bfl",
+        "grounding": false,
+        "enable_prompt_expansion": true
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": "bfl",
+        "block": {
+          "reason": "hidden",
+          "param": "enable_prompt_expansion",
+          "on": "fal",
+          "detail": "Prompt expansion"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "bfl",
+        "missing": [],
+        "block": {
+          "reason": "hidden",
+          "param": "enable_prompt_expansion",
+          "on": "fal",
+          "detail": "Prompt expansion"
+        },
+        "alternatives": [],
+        "fixes": [
+          {
+            "param": "enable_prompt_expansion",
+            "value": false
+          }
+        ],
+        "message": "FLUX 3 Image can't run on Black Forest Labs: it doesn't offer Prompt expansion. Turn Prompt expansion off, or switch provider."
+      },
+      "shownRoute": "bfl",
+      "routeParams": [
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "3:2",
+            "7:5",
+            "4:3",
+            "5:4",
+            "1:1",
+            "4:5",
+            "3:4",
+            "5:7",
+            "2:3",
+            "9:16",
+            "1:2",
+            "9:21"
+          ]
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "768sq",
+            "1k",
+            "1.5k",
+            "2k",
+            "4k"
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "min": 0,
+          "max": 4
+        },
+        {
+          "key": "grounding"
+        }
+      ],
+      "sentKeys": [
+        "aspect_ratio",
+        "grounding",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "flux-3-video: a Draft on fal at Full HD still runs at 720p: OpenRouter would stop on the Draft that hides Resolution",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "fal",
+        "draft": true,
+        "resolution": "fhd"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only",
+        "REPLICATE_API_TOKEN": "fixture-only",
+        "OPENROUTER_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "shownRoute": "fal",
+      "routeParams": [
+        {
+          "key": "duration",
+          "min": 5,
+          "max": 20
+        },
+        {
+          "key": "resolution",
+          "options": [
+            "hd",
+            "fhd",
+            "qhd",
+            "uhd"
+          ],
+          "visibleWhen": {
+            "draft": [
+              false
+            ]
+          }
+        },
+        {
+          "key": "aspect_ratio",
+          "options": [
+            "auto",
+            "21:9",
+            "2:1",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        {
+          "key": "generate_audio"
+        },
+        {
+          "key": "draft"
+        }
+      ],
+      "sentKeys": [
+        "aspect_ratio",
+        "draft",
+        "duration",
+        "generate_audio"
+      ]
     }
   ]
 }

@@ -1129,15 +1129,18 @@ def hidden_stops(definition: Mapping[str, Any], route: Mapping[str, Any], params
     saved value is set and isn't its default, and that some other route R'
     would honor: R' shows it with these values, takes it on its own
     (route_takes_value), its rules don't block these values (_rules_block;
-    keys don't matter), and it isn't itself stopped by a hidden value one
-    level down (there only R''s rules are read, so this never recurses
-    further), leaving out what R' hides only because of this very value.
+    keys don't matter), and it wouldn't itself stop, one level down, on
+    one of the settings that hide this param on ``route`` (there only R''s
+    rules are read, so this never recurses further). Any other stop of R'
+    doesn't count: then both routes stop, each with its own reset.
     That check keeps a Draft run on fal at Full HD running at 720p:
-    OpenRouter shows Resolution but would stop on the Draft it doesn't
-    offer, so it honors nothing. And it keeps a Draft on OpenRouter a stop:
-    BFL hides Resolution only because of the Draft it honors. Any other
-    hidden value is ignored: no provider of this node would use it with
-    these settings.
+    OpenRouter shows Resolution but would stop on the Draft that hides
+    Resolution on fal, so it honors nothing. It keeps a Draft on OpenRouter
+    a stop: BFL's own stop (Resolution) isn't what hides Draft there. And
+    two routes that each hide a value the other takes (fal's Safety under
+    Klein, BFL's Safety Checker) both stop instead of each dropping the
+    other's value. Any other hidden value is ignored: no provider of this
+    node would use it with these settings.
     directRoute.ts hiddenStops is the same."""
     if not has_routes(definition):
         return []
@@ -1157,17 +1160,18 @@ def hidden_stops(definition: Mapping[str, Any], route: Mapping[str, Any], params
             continue
         if param.get("default") is not None and match_value(value) == match_value(param.get("default")):
             continue
+        condition = (offered.get(key) or {}).get("visibleWhen") if key in offered else None
+        failing = tuple((str(ctrl), effective.get(ctrl)) for ctrl in (condition or {})
+                        if ctrl in offered and not visible_when_holds({ctrl: condition[ctrl]}, effective))
+        hiders = {ctrl for ctrl, _ in failing}
         honored = next((spec for spec in others
                         if key in route_sent_keys(definition, spec.get("id"), values)
                         and route_takes_value(spec, key, value)
                         and _shown_rules_block(definition, spec, values) is None
                         and (_depth > 0 or not [stop for stop in hidden_stops(definition, spec, values, _depth + 1)
-                                                if key not in dict(stop.controllers)])), None)
+                                                if stop.param in hiders])), None)
         if honored is None:
             continue
-        condition = (offered.get(key) or {}).get("visibleWhen") if key in offered else None
-        failing = tuple((str(ctrl), effective.get(ctrl)) for ctrl in (condition or {})
-                        if ctrl in offered and not visible_when_holds({ctrl: condition[ctrl]}, effective))
         stops.append(HiddenStop(key, str(honored.get("id")), failing))
     return stops
 
