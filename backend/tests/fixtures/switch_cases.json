@@ -1,5 +1,5 @@
 {
-  "_note": "PR 2's two halves joined: a person's pick in the provider switcher (frontend lib/providerSwitch.ts) to the route client that runs it (backend execution/route_clients.py). Each case runs on a fixture node in route_client_definitions.json or on a real route-table node of the registry (PR 3). `saved` is what the node holds before the click, on top of every param's default; `keys` the key names set (values are fixtures); `wired` the input ports and what each carries (one edge each). `click` is a menu row id ('auto', a route id, '<route id>:plan'), 'alternative:<route id>' for the one-click switch under a stopped run, or null for no click. `switcher` is what the switcher shows before (`before`) and after the click, and `writes` the params the click changes on the saved node (snapped values included). Python (test_route_clients.py) saves `saved` + `writes` on the node and runs it through multi_route: `run.route` is the route the router picks, and `run.request` the one provider request it makes (`body` exactly, checked against `schema`), or `run.refused` the message it stops with before any request. TS (frontend/tests/components/switchToClient.test.tsx) seeds the node in the graph store, clicks the row in the Inspector's switcher and checks the store holds `saved` + `writes`, the card note is `notes`, and the switcher shows `switcher`.",
+  "_note": "PR 2's two halves joined: a person's pick in the provider switcher (frontend lib/providerSwitch.ts) to the route client that runs it (backend execution/route_clients.py). Each case runs on a fixture node in route_client_definitions.json or on a real route-table node of the registry (PR 3). `saved` is what the node holds before the click, on top of every param's default; `keys` the key names set (values are fixtures); `wired` the input ports and what each carries (one edge each). `click` is a menu row id ('auto', a route id, '<route id>:plan'), 'alternative:<route id>' for the one-click switch under a stopped run, or null for no click. `switcher` is what the switcher shows before (`before`) and after the click, and `writes` the params the click changes on the saved node (snapped values included). Python (test_route_clients.py) saves `saved` + `writes` on the node and runs it through multi_route: `run.route` is the route the router picks, and `run.request` the one provider request it makes (`body` exactly, checked against `schema`), or `run.refused` the message it stops with before any request. TS (frontend/tests/components/switchToClient.test.tsx) seeds the node in the graph store, clicks the row in the Inspector's switcher and checks the store holds `saved` + `writes`, the card note is `notes`, and the switcher shows `switcher`. `click` may also be 'edit:<param>=<JSON value>', a person's edit of one setting in the Inspector or a pill (lib/providerSwitch.ts snapHidden on the shown route), or 'fix:<param>', the reset row under a stopped run (routeUnavailable fixes, applyFix). A `writes` value of null means the click cleared that param. PR 5: both twins compute every click's writes and notes (frontend tests/lib/providerSwitch.test.ts and test_route_clients.py test_switch_cases_snap_like_the_switcher, with node_route.snap_for_route / snap_hidden); the Inspector half (switchToClient.test.tsx) runs the row and alternative clicks.",
   "cases": [
     {
       "name": "a click on fal snaps 1.5k to 2k and sends the wired image to fal's edit endpoint",
@@ -453,7 +453,7 @@
       }
     },
     {
-      "name": "FLUX.2: the one-click switch to fal runs the saved Flash node where it always ran",
+      "name": "FLUX.2: the one-click switch to fal runs the saved Flash node there, without the Safety Flash doesn't have",
       "definition": "flux-2-pro",
       "saved": {
         "model": "flash"
@@ -485,11 +485,240 @@
         "request": {
           "method": "POST",
           "url": "https://queue.fal.run/fal-ai/flux-2/flash",
+          "schema": [
+            "fal",
+            "fal-ai/flux-2/flash"
+          ],
           "body": {
             "prompt": "p",
             "image_size": "landscape_4_3",
             "output_format": "jpeg",
-            "safety_tolerance": "2",
+            "enable_safety_checker": true
+          }
+        }
+      }
+    },
+    {
+      "name": "FLUX 3 Image Klein: a click on OpenRouter clears a seed it doesn't offer, and the run sends none",
+      "definition": "flux-3-image-klein",
+      "saved": {
+        "_provider": "bfl",
+        "seed": 42
+      },
+      "keys": [
+        "BFL_API_KEY",
+        "OPENROUTER_API_KEY"
+      ],
+      "wired": {},
+      "click": "openrouter",
+      "switcher": {
+        "before": {
+          "chip": "BFL",
+          "blocked": false,
+          "alternatives": []
+        },
+        "chip": "OR",
+        "blocked": false,
+        "alternatives": [],
+        "notes": [
+          "Seed isn't on OpenRouter: cleared"
+        ]
+      },
+      "writes": {
+        "_provider": "openrouter",
+        "seed": null
+      },
+      "run": {
+        "route": "openrouter",
+        "request": {
+          "method": "POST",
+          "url": "https://openrouter.ai/api/v1/images",
+          "schema": [
+            "openrouter",
+            "images/black-forest-labs/flux-3-image-klein"
+          ],
+          "body": {
+            "model": "black-forest-labs/flux-3-image-klein",
+            "prompt": "p",
+            "aspect_ratio": "auto",
+            "resolution": "1K",
+            "provider": {
+              "options": {
+                "black-forest-labs": {
+                  "safety_tolerance": 2
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "FLUX.2: a click on fal with Klein 9B at Safety 5 puts Safety back to 2, which fal's Klein doesn't offer",
+      "definition": "flux-2-pro",
+      "saved": {
+        "_provider": "bfl",
+        "model": "klein-9b",
+        "safety_tolerance": "5"
+      },
+      "keys": [
+        "BFL_API_KEY",
+        "FAL_KEY"
+      ],
+      "wired": {},
+      "click": "fal",
+      "switcher": {
+        "before": {
+          "chip": "BFL",
+          "blocked": false,
+          "alternatives": []
+        },
+        "chip": "fal",
+        "blocked": false,
+        "alternatives": [],
+        "notes": [
+          "Safety 5 (Permissive) isn't on fal.ai with FLUX.2 [klein] 9B: back to 2"
+        ]
+      },
+      "writes": {
+        "_provider": "fal",
+        "safety_tolerance": "2"
+      },
+      "run": {
+        "route": "fal",
+        "request": {
+          "method": "POST",
+          "url": "https://queue.fal.run/fal-ai/flux-2/klein/9b",
+          "schema": [
+            "fal",
+            "fal-ai/flux-2/klein/9b"
+          ],
+          "body": {
+            "prompt": "p",
+            "image_size": "landscape_4_3",
+            "output_format": "jpeg",
+            "enable_safety_checker": true
+          }
+        }
+      }
+    },
+    {
+      "name": "FLUX.2: picking Klein 9B on fal in the Inspector with Safety 5 puts Safety back to 2",
+      "definition": "flux-2-pro",
+      "saved": {
+        "_provider": "fal",
+        "model": "pro",
+        "safety_tolerance": "5"
+      },
+      "keys": [
+        "BFL_API_KEY",
+        "FAL_KEY"
+      ],
+      "wired": {},
+      "click": "edit:model=\"klein-9b\"",
+      "switcher": {
+        "before": {
+          "chip": "fal",
+          "blocked": false,
+          "alternatives": []
+        },
+        "chip": "fal",
+        "blocked": false,
+        "alternatives": [],
+        "notes": [
+          "Safety 5 (Permissive) isn't on fal.ai with FLUX.2 [klein] 9B: back to 2"
+        ]
+      },
+      "writes": {
+        "model": "klein-9b",
+        "safety_tolerance": "2"
+      },
+      "run": {
+        "route": "fal",
+        "request": {
+          "method": "POST",
+          "url": "https://queue.fal.run/fal-ai/flux-2/klein/9b",
+          "schema": [
+            "fal",
+            "fal-ai/flux-2/klein/9b"
+          ],
+          "body": {
+            "prompt": "p",
+            "image_size": "landscape_4_3",
+            "output_format": "jpeg",
+            "enable_safety_checker": true
+          }
+        }
+      }
+    },
+    {
+      "name": "FLUX.2: no click: Klein 9B at Safety 5 reaching fal by a key change stops, offers the reset and names BFL's key",
+      "definition": "flux-2-pro",
+      "saved": {
+        "model": "klein-9b",
+        "safety_tolerance": "5"
+      },
+      "keys": [
+        "FAL_KEY"
+      ],
+      "wired": {},
+      "click": null,
+      "switcher": {
+        "before": {
+          "chip": "Auto · fal",
+          "blocked": true,
+          "alternatives": []
+        },
+        "chip": "Auto · fal",
+        "blocked": true,
+        "alternatives": [],
+        "notes": []
+      },
+      "writes": {},
+      "run": {
+        "route": null,
+        "refused": "can't run on fal.ai: it doesn't offer Safety 5 (Permissive) with Model FLUX.2 [klein] 9B. Set Safety back to 2, or switch provider. Black Forest Labs can take it (add its key in Settings > Providers)."
+      }
+    },
+    {
+      "name": "FLUX.2: the reset row under that stop puts Safety back to 2 and the run starts on fal",
+      "definition": "flux-2-pro",
+      "saved": {
+        "model": "klein-9b",
+        "safety_tolerance": "5"
+      },
+      "keys": [
+        "FAL_KEY"
+      ],
+      "wired": {},
+      "click": "fix:safety_tolerance",
+      "switcher": {
+        "before": {
+          "chip": "Auto · fal",
+          "blocked": true,
+          "alternatives": []
+        },
+        "chip": "Auto · fal",
+        "blocked": false,
+        "alternatives": [],
+        "notes": []
+      },
+      "writes": {
+        "safety_tolerance": "2"
+      },
+      "run": {
+        "route": "fal",
+        "request": {
+          "method": "POST",
+          "url": "https://queue.fal.run/fal-ai/flux-2/klein/9b",
+          "schema": [
+            "fal",
+            "fal-ai/flux-2/klein/9b"
+          ],
+          "body": {
+            "prompt": "p",
+            "image_size": "landscape_4_3",
+            "output_format": "jpeg",
             "enable_safety_checker": true
           }
         }

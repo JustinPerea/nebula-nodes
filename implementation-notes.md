@@ -1,5 +1,41 @@
 # Implementation Notes
 
+## 2026-10-16 — PR 5 core: hide what the provider doesn't offer (provider-hidden-params)
+
+Design: the approved hide-params DESIGN.md (Justin: "Yes to all 4", D1-D4). This is the core: the route grammar (`paramVisibleWhen`), rule H, `route_sent_keys`, the Python/TS twins, the definitions, validation, fixtures and tests. The Inspector/switcher/pills wiring of `snapHidden` and fix rows, `describe_node` (`onlyWhen`), the MODEL_REFERENCE generator, the MCP docstring and the CLI are the next two lanes; the functions they need exist and are tested here. Legacy `directRoute` nodes are byte for byte unchanged (the first 147 route cases, `route_sent_keys` = `route_param_keys` on every legacy node, now a test).
+
+### Behaviour changes for saved graphs
+
+1. FLUX.2 on fal, Flash: `safety_tolerance` is no longer sent (`Flux2FlashInput` has no such field). The only approved delta against the 6,048 legacy requests (`APPROVED_LEGACY_DELTA`); the legacy fixture and its sha are unchanged.
+2. FLUX.2 on fal, Klein with a saved Safety other than 2: still stops, now with "it doesn't offer Safety 3 with Model FLUX.2 [klein] 4B. Set Safety back to 2, or switch provider." A click on the fal row resets it to 2 with a note; an Inspector model edit will too once the next lane wires `snapHidden` (tested here at the lib level). On Flash the saved value is ignored (BFL has no Flash).
+3. FLUX.2 on BFL with the safety checker saved off: still stops (rule H; the explicit `rejects` is gone).
+4. FLUX 3 Image Klein on OpenRouter: no Seed row, no seed sent; a saved seed stops with "Clear Seed"; a click on the OpenRouter row clears it.
+5. FLUX 3 Video drafts on bfl, fal and replicate send no `resolution` (D1). A draft saved at Full HD or above now runs as the 720p draft instead of stopping, priced at the draft row. Replicate draft + 4K runs.
+6. FLUX 3 Video with a saved draft on OpenRouter or Krea: still stops ("doesn't offer Draft (fast preview)", fix "Turn Draft (fast preview) off"); the explicit `rejects {draft}` is gone.
+7. Krea 3 on fal with Jam: a negative prompt typed under Berry is no longer sent, and the run doesn't stop.
+8. Krea 3 high thinking on fal is now unpriced and stops there (the shipped price case was renamed; fal → null), because fal's route doesn't offer Krea's own `thinking_mode` and Krea would honor it.
+9. `route_unavailable` (and the TS `RouteUnavailable`) always carries `fixes` (`[]` unless the block is hidden). A message whose honoring route has no key ends "(add its key in Settings > Providers)."
+10. The switcher's snap on a click now also resets hidden stops (e.g. "Grounding isn't on fal.ai: turned off" on the fixture table, "Seed isn't on OpenRouter: cleared"); the row note for a hidden stop reads "Doesn't take Safety 5 (Permissive)".
+
+### Decisions and deviations from the design
+
+- `DirectBlock` gained a `when` field, and `on` names the honoring route for a hidden block, so the message can say "with Model FLUX.2 [klein] 4B" and "Black Forest Labs can take it".
+- Rule H checks the honoring route one level deep: R' must itself have no hidden stop other than one on a setting R's condition reads. The design said no recursion; removing `rejects {draft}` from OpenRouter/Krea made "would BFL honor it?" need one level to resolve (otherwise a saved draft on OpenRouter loops or is wrongly ignored).
+- A route's own value rules read a hidden listed setting at its default (`_shown_rules_block`), so a value nobody sends can't trip a rule.
+- Fix sentences: "Set X back to Y" for an enum/number default, "Turn X on|off" for a boolean default (not in the design), "Clear X" when there is no default.
+- `snapForRoute` loop 1 skips hidden settings (so it doesn't snap a value the route won't send), and loop 2 is `hiddenStops`. Python twins of the snap (`snap_for_route`, `snap_hidden`, `_closest_value`, `_default_note`) were added so `switch_cases.json` is checked in Python too (`test_switch_cases_snap_like_the_switcher`).
+- Messages use option labels ("Safety 5 (Permissive)", "Model FLUX.2 [klein] 9B"), not raw values.
+- Small component change: the Inspector's visible list now comes from the shared `visibleParams` predicate (one predicate with Create's pills, `route_sent_keys` and rule H). Create's legacy pills now pass undefined controllers the same way the Inspector does.
+- `test_flux3_nodes.py`: the BFL and Replicate cheapest draft bodies changed (no `resolution`). The task said "unchanged", but D1 (design 10.5) approves exactly this.
+- The schema-backed coverage test lives in a new `backend/tests/test_route_schema_coverage.py`, not `test_route_clients.py`, because it needs `test_flux3_nodes.py`'s host fakes, which import from `test_route_clients.py` (a circular import otherwise). Mutation-checked: sending `route_param_keys` instead of `route_sent_keys` fails it on FLUX.2 (`steps`) and FLUX 3 Video (`resolution`). Krea 3's Jam negative prompt is in fal's schema ("Used by berry only"), so a dedicated test covers it in `test_flux3_nodes.py`.
+- `test_reference_roles.py`: `APPROVED_ROUTE_TABLE_CONVERSIONS["flux-2-pro"]` replaced per D4 (dated comment), and four drift cases added (drop, widen or add a `paramVisibleWhen`, or bring back the BFL `rejects`).
+- `test_route_agent_surfaces.py` `onlyWhen` coverage waits for the describe_node lane.
+
+### Prices
+
+- BFL publishes no video-continuation draft price. Re-checked 2026-10-16: https://docs.bfl.ai/quick_start/pricing's v2v Draft cell is `<Pricing endpoint="/v1/flux-3" field="v2v720" effort="draft">` (renders "Not listed"), and https://bfl.ai/pricing's CMS "FLUX 3 Video Draft" rates are only `{"effort":"draft","t2v720":6}`. It stays unpriced; the `model_pricing.json` note and `checked` date say so.
+- New check: a price row may not read a setting its route hides with the values the row matches (`price_row_problems`, `validateHiddenPrices`); both were mutation-tested and agree.
+
 ## 2026-10-16 — flux-3-nodes merged into flux-2-bfl (the FLUX Video Edit [fast] rename)
 
 Merged with `--no-ff`. Three conflicts, all one-line overlaps: `AGENTS.md` line 13 kept this branch's FLUX.2 coverage clause and took Krea's own names for the folded entries; `docs/api-guides/bfl.md` kept the PR 4 status line and took "FLUX Video Edit [fast]"; these notes keep both sections. Generated files were regenerated, not hand-merged.

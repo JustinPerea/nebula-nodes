@@ -14,7 +14,7 @@ import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from './MaskPainterModal';
 import { JevResultDetails } from './JevResultDetails';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
-import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, withWiredBlockers } from '../../lib/directRoute';
+import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
 import { nodeWiredCounts, nodeWiredPorts } from '../../lib/runScope';
 import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
@@ -280,25 +280,14 @@ export function Inspector({ embedded = false }: InspectorProps) {
   );
 
   // Filter params by visibleWhen conditions
+  // Hidden params are editor-managed internal state (e.g. cinema-scene's
+  // `scene` spec, authored via the Cinema Studio): never an editable field
+  // here. The rest follow paramShown (lib/directRoute.ts visibleParams), the
+  // predicate Create's pills and the backend router read too.
   const visibleParams = useMemo(() => {
-    if (!nodeData) return resolvedParams;
-    return resolvedParams.filter((param) => {
-      // Hidden params are editor-managed internal state (e.g. cinema-scene's
-      // `scene` spec, authored via the Cinema Studio). They're declared only so
-      // the backend validator accepts the key — never an editable field here.
-      if (param.hidden) return false;
-      if (!param.visibleWhen) return true;
-      return Object.entries(param.visibleWhen).every(([key, allowedValues]) => {
-        // On a route-table node a controller that only another route takes
-        // counts as absent, whatever value is still saved for it.
-        if (switchable && !resolvedParams.some((p) => p.key === key)) return true;
-        const currentValue = nodeData.params[key] ?? resolvedParams.find((p) => p.key === key)?.default;
-        // If the controlling param isn't set (e.g. model in directParams when using FAL), pass through
-        if (currentValue === undefined || currentValue === null) return true;
-        return allowedValues.includes(currentValue as string | number | boolean);
-      });
-    });
-  }, [resolvedParams, nodeData, switchable]);
+    if (!nodeData || !definition) return resolvedParams;
+    return visibleParamsFor(definition, nodeData.params, resolvedParams);
+  }, [resolvedParams, nodeData, definition]);
 
   // Universal-model nodes (OpenRouter, Nous Portal) share the modality-driven
   // model-picker UX. Map definitionId → favorites bucket + loader so we can

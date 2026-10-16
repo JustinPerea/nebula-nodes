@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import pricingCases from '../../../backend/tests/fixtures/pricing_cases.json';
 import routeCases from '../../../backend/tests/fixtures/route_cases.json';
-import { applyProviderPick, providerKeyWarnings, providerSwitchState, snapForRoute, type SwitchContext } from '../../src/lib/providerSwitch';
+import switchCases from '../../../backend/tests/fixtures/switch_cases.json';
+import clientDefinitions from '../../../backend/tests/fixtures/route_client_definitions.json';
+import {
+  applyFix, applyProviderPick, fixLabel, providerKeyWarnings, providerSwitchState, snapForRoute, snapHidden,
+  type SwitchContext,
+} from '../../src/lib/providerSwitch';
+import { allParamDefinitions, shownRouteId, withWiredBlockers } from '../../src/lib/directRoute';
 import type { PricingTable } from '../../src/lib/pricing';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../../src/types';
@@ -134,8 +140,11 @@ describe('providerSwitchState', () => {
 describe('snapForRoute (a person switching provider)', () => {
   it('moves each saved value the new route does not take to its closest value there, with a note each', () => {
     const { params, notes } = snapForRoute(TABLE, { resolution: '1.5k', aspect_ratio: '9:21', grounding: true }, 'fal');
-    expect(params).toEqual({ resolution: '2k', aspect_ratio: '16:9', grounding: true });
-    expect(notes).toEqual(["9:21 isn't on fal.ai: set to 16:9", "1.5k isn't on fal.ai: set to 2k"]);
+    // Grounding is another route's own setting, saved on: fal doesn't offer
+    // it and BFL would honor it, so the click turns it off (rule H, PR 5).
+    expect(params).toEqual({ resolution: '2k', aspect_ratio: '16:9', grounding: false });
+    expect(notes).toEqual(["9:21 isn't on fal.ai: set to 16:9", "1.5k isn't on fal.ai: set to 2k",
+      "Grounding isn't on fal.ai: turned off"]);
   });
 
   it('clamps a number into the route range', () => {
@@ -157,7 +166,7 @@ describe('snapForRoute (a person switching provider)', () => {
     });
     // Before the click the rows name the setting, not its value.
     const before = providerSwitchState(video, { _provider: 'bfl', draft: true }, context({ BFL_API_KEY: KEY }));
-    expect(before.rows.find((row) => row.id === 'krea')?.block).toBe("Doesn't take draft");
+    expect(before.rows.find((row) => row.id === 'krea')?.block).toBe("Doesn't take Draft (fast preview)");
     // A route that offers the param keeps it, and an unset one is left alone.
     expect(snapForRoute(video, { draft: true }, 'fal')).toEqual({ params: { draft: true }, notes: [] });
     expect(snapForRoute(video, {}, 'krea')).toEqual({ params: {}, notes: [] });
@@ -195,5 +204,73 @@ describe('providerKeyWarnings (the .nebula import summary)', () => {
       '"Hero" (n1) is set to Replicate, which you have no key for.',
       '"Auto" (n3) is on Auto, and none of its providers has a key here.',
     ]);
+  });
+});
+
+type Params = Record<string, unknown>;
+interface SwitchCase {
+  name: string; definition: string; saved: Params; keys: string[]; wired: Record<string, unknown>;
+  click: string | null; switcher: { notes: string[] }; writes: Params;
+}
+const SWITCH_CASES = (switchCases as unknown as { cases: SwitchCase[] }).cases;
+const CLIENT_DEFINITIONS = (clientDefinitions as unknown as { definitions: Record<string, ModelNodeDefinition> }).definitions;
+
+describe('switch_cases.json clicks at the lib level (the twin of node_route.snap_for_route / snap_hidden)', () => {
+  it.each(SWITCH_CASES.map((c) => [c.name, c] as const))('%s', (_name, c) => {
+    const definition = CLIENT_DEFINITIONS[c.definition] ?? (NODE_DEFINITIONS as Record<string, ModelNodeDefinition>)[c.definition];
+    const before: Params = { ...Object.fromEntries(allParamDefinitions(definition)
+      .filter((param) => param.default !== undefined).map((param) => [param.key, param.default])), ...c.saved };
+    const apiKeys = Object.fromEntries(c.keys.map((key) => [key, KEY]));
+    const wired = new Map(Object.keys(c.wired).map((port) => [port, 1]));
+    const ctx = { ...context(apiKeys), wired };
+    let result: { params: Params; notes: string[] } = { params: before, notes: [] };
+    if (c.click?.startsWith('edit:')) {
+      const [key, value] = c.click.slice('edit:'.length).split(/=(.*)/s);
+      const edited = { ...before, [key]: JSON.parse(value) };
+      result = snapHidden(definition, edited, shownRouteId(definition, withWiredBlockers(definition, edited, wired), apiKeys), key);
+    } else if (c.click?.startsWith('fix:')) {
+      const fix = providerSwitchState(definition, before, ctx).fixes.find((candidate) => candidate.param === c.click!.slice(4))!;
+      expect(fix.label).toBe(fixLabel(definition, fix));
+      result = { params: applyFix(before, fix), notes: [] };
+    } else if (c.click?.startsWith('alternative:')) {
+      const routeId = c.click.slice('alternative:'.length);
+      const offer = providerSwitchState(definition, before, ctx).alternatives.find((a) => a.routeId === routeId)!;
+      result = applyProviderPick(definition, before, { writes: offer.writes, routeId }, ctx);
+    } else if (c.click) {
+      const row = providerSwitchState(definition, before, ctx).rows.find((candidate) => candidate.id === c.click)!;
+      result = applyProviderPick(definition, before, row, ctx);
+    }
+    const expected: Params = { ...before, ...c.writes };
+    for (const [key, value] of Object.entries(c.writes)) if (value === null) delete expected[key];
+    expect(result.params).toEqual(expected);
+    expect(result.notes).toEqual(c.switcher.notes);
+  });
+});
+
+describe('snapHidden (a person editing a setting that controls a hidden one)', () => {
+  const flux2 = (NODE_DEFINITIONS as Record<string, ModelNodeDefinition>)['flux-2-pro'];
+  it('resets only what the edited setting now hides on the shown route, when another route would honor it', () => {
+    expect(snapHidden(flux2, { model: 'klein-4b', safety_tolerance: '3' }, 'fal', 'model')).toEqual({
+      params: { model: 'klein-4b', safety_tolerance: '2' },
+      notes: ["Safety 3 isn't on fal.ai with FLUX.2 [klein] 4B: back to 2"],
+    });
+    // Flash: BFL has no Flash, so no route would honor Safety there; kept.
+    expect(snapHidden(flux2, { model: 'flash', safety_tolerance: '3' }, 'fal', 'model').notes).toEqual([]);
+    // An edit of another setting resets nothing.
+    expect(snapHidden(flux2, { model: 'klein-4b', safety_tolerance: '3' }, 'fal', 'seed').notes).toEqual([]);
+    // Flex-only steps hidden on Pro are hidden on every route: kept.
+    expect(snapHidden(flux2, { model: 'pro', num_inference_steps: 30 }, 'fal', 'model').notes).toEqual([]);
+  });
+
+  it('offers the reset as a fix row under a stop, labelled as the message ends', () => {
+    const state = providerSwitchState(flux2, { _provider: 'fal', model: 'klein-9b', safety_tolerance: '5' },
+      context({ FAL_KEY: KEY, BFL_API_KEY: KEY }));
+    expect(state.fixes).toEqual([{ param: 'safety_tolerance', value: '2', label: 'Set Safety back to 2' }]);
+    expect(state.rows.find((row) => row.id === 'fal')?.block).toBe("Doesn't take Safety 5 (Permissive)");
+    const auto = providerSwitchState(flux2, { model: 'klein-9b', safety_tolerance: '5' }, context({ FAL_KEY: KEY }));
+    expect(auto.rows[0].label).toBe("Auto · can't run: fal.ai doesn't offer Safety 5 (Permissive)");
+    expect(fixLabel(flux2, { param: 'seed', value: null })).toBe('Clear Seed');
+    expect(fixLabel(flux2, { param: 'enable_safety_checker', value: true })).toBe('Turn Safety Checker on');
+    expect(applyFix({ seed: 4, model: 'pro' }, { param: 'seed', value: null })).toEqual({ model: 'pro' });
   });
 });

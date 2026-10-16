@@ -3,8 +3,9 @@ import shared from '../../../backend/tests/fixtures/route_cases.json';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { buildDefaultParamsForUi, resolveCreateParamDefinitions } from '../../src/lib/createParams';
 import {
-  blockFields, configuredDirectKey, directBlock, directKeyNames, fallbackProvider, hasRoutes, paramDefinitionsForRun,
-  routeParamDefinitions, routeUnavailable, selectRoute, shownRouteId, usesRoutePlan, WIRED, withWiredBlockers,
+  blockFields, configuredDirectKey, directBlock, directKeyNames, fallbackProvider, hasRoutes, mergeVisibleWhen,
+  paramDefinitionsForRun, paramShown, routeParamDefinitions, routeSentKeys, routeUnavailable, selectRoute, shownRouteId, usesRoutePlan, WIRED,
+  withWiredBlockers,
 } from '../../src/lib/directRoute';
 import { runRouteProvider } from '../../src/lib/modelDiscovery';
 import type { ModelNodeDefinition } from '../../src/types';
@@ -23,6 +24,7 @@ type RouteCase = {
   paramKeys?: string[];
   shownRoute?: string | null;
   routeParams?: Record<string, unknown>[];
+  sentKeys?: string[];
   wired?: string[];
   wiredCounts?: Record<string, number>;
   block?: { reason: string; param: string | null; detail?: string; on?: string } | null;
@@ -32,11 +34,13 @@ const fixture = shared as unknown as {
   defaultToday: string; cases: RouteCase[]; definitions: Record<string, ModelNodeDefinition>;
 };
 /** A param as route_cases.json `routeParams` spells it: key, option values, range. */
-function offered(param: { key: string; options?: { value: unknown }[]; min?: number; max?: number }): Record<string, unknown> {
+function offered(param: { key: string; options?: { value: unknown }[]; min?: number; max?: number;
+  visibleWhen?: Record<string, unknown[]> }): Record<string, unknown> {
   const shown: Record<string, unknown> = { key: param.key };
   if (Array.isArray(param.options)) shown.options = param.options.map((option) => option.value);
   if (param.min !== undefined) shown.min = param.min;
   if (param.max !== undefined) shown.max = param.max;
+  if (param.visibleWhen && Object.keys(param.visibleWhen).length) shown.visibleWhen = param.visibleWhen;
   return shown;
 }
 
@@ -77,6 +81,10 @@ describe('selectRoute (cases shared with backend services/node_route.py)', () =>
         expect(shown ?? null).toBe(testCase.shownRoute);
         // The options the node offers on that route (enums cut, ranges narrowed).
         expect(routeParamDefinitions(definition, shown).map(offered)).toEqual(testCase.routeParams);
+      }
+      if (testCase.sentKeys) {
+        // What a run on the shown route sends: a hidden setting never is.
+        expect([...routeSentKeys(definition, testCase.shownRoute, params)].sort()).toEqual(testCase.sentKeys);
       }
     });
   }
@@ -222,5 +230,44 @@ describe('when the direct route can\'t take a run', () => {
       reason: 'unsupported', param: 'resolution', on: null, detail: '1080p at 10 seconds' });
     expect(selectRoute(hailuo, { duration: 8 }, { MINIMAX_API_KEY: 'k', KREA_API_TOKEN: 'k' }))
       .toEqual({ kind: 'fallback', provider: 'krea', key: 'KREA_API_TOKEN' });
+  });
+});
+
+
+// PR 5: hide what the provider doesn't offer. backend test_node_route.py has the same.
+describe('paramVisibleWhen (the Python twins in test_node_route.py)', () => {
+  const HIDE = (shared as unknown as { definitions: Record<string, ModelNodeDefinition> }).definitions['routes-hide'];
+
+  it('ANDs a route condition onto the param\'s own', () => {
+    expect(mergeVisibleWhen(undefined, { mode: ['slow'] })).toEqual({ mode: ['slow'] });
+    expect(mergeVisibleWhen({ mode: ['fast', 'slow', 'best'] }, { mode: ['best', 'slow'] })).toEqual({ mode: ['slow', 'best'] });
+    expect(mergeVisibleWhen({ mode: ['fast'] }, { tone: ['warm'] })).toEqual({ mode: ['fast'], tone: ['warm'] });
+    expect(mergeVisibleWhen({ draft: [true] }, { draft: [false] })).toEqual({ draft: [] });
+  });
+
+  it('drops a never-offered param and merges conditions', () => {
+    const keys = (route: string) => routeParamDefinitions(HIDE, route).map((p) => p.key);
+    expect(keys('a')).toEqual(['mode', 'quality', 'tone', 'seed']);
+    expect(keys('b')).toEqual(['mode', 'quality', 'tone', 'seed', 'sharpen']);
+    expect(keys('c')).toEqual(['mode', 'quality', 'tone']);
+    expect(routeParamDefinitions(HIDE, 'b').find((p) => p.key === 'quality')?.visibleWhen).toEqual({ mode: ['slow', 'best'] });
+  });
+
+  it.each([
+    ['a', {}, ['mode', 'quality', 'seed', 'tone']],
+    ['b', {}, ['mode', 'seed', 'tone']],
+    ['b', { mode: 'slow' }, ['mode', 'quality', 'seed', 'tone']],
+    ['b', { mode: 'best' }, ['mode', 'quality', 'seed', 'sharpen', 'tone']],
+    ['c', { seed: 7 }, ['mode', 'quality', 'tone']],
+  ] as const)('route %s with %j sends %j', (route, saved, sent) => {
+    expect([...routeSentKeys(HIDE, route, { ...saved })].sort()).toEqual(sent);
+  });
+
+  it('paramShown ignores a controller only another route takes', () => {
+    const sharpen = { visibleWhen: { mode: ['best'] } };
+    expect(paramShown(sharpen, { mode: 'best' })).toBe(true);
+    expect(paramShown(sharpen, { mode: 'fast' })).toBe(false);
+    expect(paramShown(sharpen, { mode: 'fast' }, ['sharpen'])).toBe(true);
+    expect(paramShown(sharpen, {})).toBe(true);
   });
 });

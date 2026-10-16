@@ -2149,7 +2149,7 @@
       }
     },
     {
-      "name": "Krea 3: high thinking at 2K on Krea, no references",
+      "name": "Krea 3: high thinking at 2K on Krea, no references; fal.ai doesn't offer Krea's thinking mode, so it stops there (rule H)",
       "nodeId": "krea-3",
       "params": {
         "thinking_mode": "high",
@@ -2158,10 +2158,7 @@
       "wired": [],
       "expected": {
         "krea": 0.08,
-        "fal": [
-          0.1,
-          0.1006
-        ]
+        "fal": null
       }
     },
     {
@@ -2293,6 +2290,53 @@
       "expected": {
         "bfl": null,
         "fal": 0.03
+      }
+    },
+    {
+      "name": "FLUX 3 Video: a draft hides Resolution, so a draft saved at Full HD prices at the draft row (PR 5, D1)",
+      "nodeId": "flux-3-video",
+      "params": {
+        "draft": true,
+        "resolution": "fhd"
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.3,
+        "fal": 0.3,
+        "replicate": 0.3,
+        "openrouter": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "FLUX 3 Video: a continuation draft saved at 4K: fal and Replicate price the v2v draft row, BFL publishes no v2v draft price",
+      "nodeId": "flux-3-video",
+      "params": {
+        "draft": true,
+        "resolution": "uhd"
+      },
+      "wired": [
+        "start_video"
+      ],
+      "expected": {
+        "bfl": null,
+        "fal": 0.6,
+        "replicate": 0.6,
+        "openrouter": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "FLUX.2: Flash on fal at Safety 5 still prices (Safety isn't shown or sent there)",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "flash",
+        "safety_tolerance": "5"
+      },
+      "wired": [],
+      "expected": {
+        "bfl": null,
+        "fal": 0.005
       }
     }
   ],

@@ -122,8 +122,10 @@ describe('ProviderSwitcher picks', () => {
     const onPick = vi.fn();
     render(<Controlled initial={{ resolution: '1.5k', grounding: true }} onPick={onPick} />);
     fireEvent.click(row(/^fal\.ai/));
-    expect(onPick).toHaveBeenCalledWith({ resolution: '2k', grounding: true, _provider: 'fal', _kreaAuth: 'api-token' },
-      ["1.5k isn't on fal.ai: set to 2k"]);
+    // Grounding is BFL's own setting, saved on: fal doesn't offer it, so the
+    // click turns it off with a note (rule H, PR 5).
+    expect(onPick).toHaveBeenCalledWith({ resolution: '2k', grounding: false, _provider: 'fal', _kreaAuth: 'api-token' },
+      ["1.5k isn't on fal.ai: set to 2k", "Grounding isn't on fal.ai: turned off"]);
     expect(row(/^fal\.ai/)).toHaveAttribute('aria-checked', 'true');
   });
 

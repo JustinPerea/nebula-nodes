@@ -61,9 +61,13 @@ def test_route_matches_shared_cases(case, monkeypatch):
         assert shown == case["shownRoute"]
         # The options the node offers on that route (enums cut, ranges narrowed).
         assert [_offered(param) for param in node_route.route_param_definitions(definition, shown)] == case["routeParams"]
-        # The same params the router sends on it.
+        # The same params the router may send on it.
         assert {param["key"] for param in node_route.route_param_definitions(definition, shown)} == \
             node_route.route_param_keys(definition, shown)
+    if "sentKeys" in case:
+        # What a run on the shown route sends with these values: a setting
+        # it hides (paramVisibleWhen, or a param's own visibleWhen) never is.
+        assert sorted(node_route.route_sent_keys(definition, case["shownRoute"], params)) == case["sentKeys"]
 
 
 def _offered(param):
@@ -72,6 +76,8 @@ def _offered(param):
     if isinstance(param.get("options"), list):
         shown["options"] = [option.get("value") if isinstance(option, dict) else option for option in param["options"]]
     shown.update({bound: param[bound] for bound in ("min", "max") if bound in param})
+    if param.get("visibleWhen"):
+        shown["visibleWhen"] = param["visibleWhen"]
     return shown
 
 
@@ -466,3 +472,85 @@ def test_route_tables_snapshot_is_current():
     spec.loader.exec_module(module)
     assert (Path(__file__).parent / "fixtures" / "route_tables.json").read_text() == module.build(), (
         "run scripts/generate-route-tables.py")
+
+
+# PR 5: hide what the provider doesn't offer (paramVisibleWhen, rule H).
+HIDE = FIXTURE_DEFINITIONS["routes-hide"]
+
+
+def test_merge_visible_when_ands_the_route_condition_onto_the_params_own():
+    assert node_route.merge_visible_when(None, {"mode": ["slow"]}) == {"mode": ["slow"]}
+    assert node_route.merge_visible_when({"mode": ["fast", "slow", "best"]}, {"mode": ["best", "slow"]}) == {
+        "mode": ["slow", "best"]}  # the values both allow, in the param's order
+    assert node_route.merge_visible_when({"mode": ["fast"]}, {"tone": ["warm"]}) == {
+        "mode": ["fast"], "tone": ["warm"]}
+    assert node_route.merge_visible_when({"draft": [True]}, {"draft": [False]}) == {"draft": []}
+
+
+def test_route_param_definitions_drop_never_offered_and_merge_conditions():
+    keys = {route: [p["key"] for p in node_route.route_param_definitions(HIDE, route)] for route in "abc"}
+    assert keys == {"a": ["mode", "quality", "tone", "seed"], "b": ["mode", "quality", "tone", "seed", "sharpen"],
+                    "c": ["mode", "quality", "tone"]}
+    quality = node_route.param_definition({"params": node_route.route_param_definitions(HIDE, "b")}, "quality")
+    assert quality["visibleWhen"] == {"mode": ["slow", "best"]}
+    assert node_route.route_param_keys(HIDE, "c") == {"mode", "quality", "tone"}
+
+
+@pytest.mark.parametrize("route, saved, sent", [
+    ("a", {}, {"mode", "quality", "tone", "seed"}),
+    ("b", {}, {"mode", "tone", "seed"}),  # fast: no quality, no sharpen
+    ("b", {"mode": "slow"}, {"mode", "quality", "tone", "seed"}),
+    ("b", {"mode": "best"}, {"mode", "quality", "tone", "seed", "sharpen"}),
+    ("c", {"seed": 7}, {"mode", "quality", "tone"}),  # never offered, never sent
+])
+def test_route_sent_keys_leave_out_what_the_route_hides(route, saved, sent):
+    assert node_route.route_sent_keys(HIDE, route, saved) == sent
+
+
+def test_param_shown_ignores_a_controller_only_another_route_takes():
+    sharpen = {"key": "sharpen", "visibleWhen": {"mode": ["best"]}}
+    assert node_route.param_shown(sharpen, {"mode": "best"})
+    assert not node_route.param_shown(sharpen, {"mode": "fast"})
+    assert node_route.param_shown(sharpen, {"mode": "fast"}, route_keys={"sharpen"})
+    assert node_route.param_shown(sharpen, {})
+
+
+def test_route_sent_keys_are_route_param_keys_on_a_legacy_node():
+    for node_id, definition in DEFINITIONS.items():
+        if node_route.has_routes(definition):
+            continue
+        for route in (None, *{spec.get("id") for spec in node_route.routes_of(definition)}):
+            assert node_route.route_sent_keys(definition, route, {}) == node_route.route_param_keys(
+                definition, route), (node_id, route)
+
+
+def test_routes_problems_names_each_broken_param_visible_when():
+    def problems(condition):
+        broken = json.loads(json.dumps(HIDE))
+        broken["routes"][1]["paramVisibleWhen"] = condition
+        return "\n".join(node_route.routes_problems(broken))
+
+    assert node_route.routes_problems(HIDE) == []
+    for condition, expected in [
+        ({}, "paramVisibleWhen must be a non-empty object"),
+        ({"nope": False}, "nope isn't one of this route's params"),
+        ({"quality": True}, "must be false or {controller: [values]}"),
+        ({"quality": {"quality": ["low"]}}, "names quality, which isn't another of this route's params"),
+        ({"quality": {"mode": []}}, "must list one or more values"),
+        ({"quality": {"mode": ["(set)"]}}, "can't use (set)/(unset)"),
+        ({"quality": {"mode": ["turbo"]}}, "values must be options of mode"),
+        ({"seed": False, "quality": {"seed": [1]}}, "names seed, which this route never offers"),
+    ]:
+        assert expected in problems(condition), (condition, problems(condition))
+
+
+def test_price_row_problems_refuses_a_row_that_reads_a_hidden_setting():
+    rows = [{"match": {"quality": "high"}, "usd": 0.2}, {"usd": 0.1}]
+    found = node_route.price_row_problems(HIDE, "b", rows)
+    assert found and "price row 0 reads quality, which the route doesn't show with" in found[0], found
+    # The same row on a route that always shows quality is fine, and so is a
+    # row that names the controller that shows it.
+    assert node_route.price_row_problems(HIDE, "a", rows) == []
+    assert node_route.price_row_problems(HIDE, "b", [
+        {"match": {"mode": "slow", "quality": "high"}, "usd": 0.2},
+        {"match": {"mode": "best", "quality": "high"}, "usd": 0.2}, {"usd": 0.1}]) == []

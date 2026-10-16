@@ -209,9 +209,8 @@ BFL_FLUX2_PATHS = frozenset({"flux-2-pro", "flux-2-max", "flux-2-flex", "flux-2-
 BFL_FLUX2_SWITCHES = frozenset({"model"})
 # Flux2FlexInputs is the only FLUX.2 body with ``steps`` and ``guidance``.
 # The node shows them on Flex only (visibleWhen), so on any other path a
-# value saved under Flex is hidden and isn't sent (PR 4 review follow-up).
-BFL_FLUX2_FLEX_PATH = "flux-2-flex"
-BFL_FLUX2_FLEX_ONLY = frozenset({"steps", "guidance"})
+# value saved under Flex is hidden, and the router never sends a hidden
+# setting (maker_routes.multi_route, node_route.route_sent_keys).
 BFL_VIDEO_PATH = "flux-3-video"
 BFL_VIDEO_EDIT_PATH = "flux-tools/video-edit-v1"
 BFL_VIDEO_UPSCALE_PATH = "flux-tools/video-upscale-v1"
@@ -234,8 +233,7 @@ def bfl_body(path: str, params: Mapping[str, Any], inputs: Mapping[str, Any]) ->
             body["images"] = images
     elif path in BFL_FLUX2_PATHS:
         refuse_unwired(inputs, {"prompt"}, where)
-        dropped = BFL_FLUX2_SWITCHES if path == BFL_FLUX2_FLEX_PATH else BFL_FLUX2_SWITCHES | BFL_FLUX2_FLEX_ONLY
-        for key in dropped:
+        for key in BFL_FLUX2_SWITCHES:
             body.pop(key, None)
         size = body.pop("image_size", None)
         if size is not None:
@@ -346,32 +344,24 @@ FAL_KEYFRAMES = "keyframes-to-video"
 # field: FLUX 3 Video's ``draft`` chooses fal's /draft endpoint, and none of
 # fal's FLUX 3 video schemas has a draft field.
 FAL_ENDPOINT_SWITCHES = frozenset({"draft"})
-# Fields fal's /draft endpoints don't have: drafts are 720p, so the
-# resolution (a draft is blocked anywhere but hd) isn't sent.
-FAL_DRAFT_DROPS = frozenset({"resolution"})
 # Params that aren't request fields on one endpoint, by endpoint id. FLUX.2's
 # ``model`` only picks the endpoint (endpointWhen), as the fal-only handler
-# before PR 4 dropped it (sync_runner _fal_wrapper_node internal_params).
-# fal's own Klein copies have no ``safety_tolerance`` (Flux2Klein9bInput,
-# Flux2Klein4bInput, read 2026-10-15); the route stops every value but the
-# default "2" before the run (rejectsWhen), so only the default is left out.
-# fal-ai/flux-2/flash has no safety_tolerance either, but still gets it: the
-# fal-only handler sent it, and a saved Flash node sends what it always did
-# (tests/test_flux2_nodes.py pins the parity).
-# Steps and guidance are Flex-only on the node (visibleWhen model flex): on
-# any other model a value saved under Flex is hidden and changes nothing, so
-# it isn't sent (PR 4 review follow-up). Nano Banana treats its hidden
-# resolution the same way (maker_routes _SIZED).
-_FLUX2_FLEX_ONLY = frozenset({"num_inference_steps", "guidance_scale"})
-_FLUX2_DROPS = frozenset({"model"}) | _FLUX2_FLEX_ONLY
-_FLUX2_KLEIN_DROPS = _FLUX2_DROPS | {"safety_tolerance"}
+# before PR 4 dropped it (sync_runner _fal_wrapper_node internal_params):
+# that's a switch, not a hidden setting. Settings an endpoint doesn't have
+# are hidden on the route instead (``paramVisibleWhen``: Safety only on Pro,
+# Max and Flex, as Flux2FlashInput, Flux2Klein9bInput and Flux2Klein4bInput
+# have no safety_tolerance; FLUX 3 Video's resolution only off Draft, as
+# fal's /draft endpoints have none), and the router never sends a hidden
+# setting (node_route.route_sent_keys). Flex-only steps and guidance are
+# hidden by their own visibleWhen the same way.
+_FLUX2_SWITCHES = frozenset({"model"})
 FAL_ENDPOINT_DROPS: dict[str, frozenset[str]] = {
-    "fal-ai/flux-2-pro": _FLUX2_DROPS,
-    "fal-ai/flux-2-max": _FLUX2_DROPS,
-    "fal-ai/flux-2/flash": _FLUX2_DROPS,
-    "fal-ai/flux-2-flex": frozenset({"model"}),
-    "fal-ai/flux-2/klein/9b": _FLUX2_KLEIN_DROPS,
-    "fal-ai/flux-2/klein/4b": _FLUX2_KLEIN_DROPS,
+    "fal-ai/flux-2-pro": _FLUX2_SWITCHES,
+    "fal-ai/flux-2-max": _FLUX2_SWITCHES,
+    "fal-ai/flux-2/flash": _FLUX2_SWITCHES,
+    "fal-ai/flux-2-flex": _FLUX2_SWITCHES,
+    "fal-ai/flux-2/klein/9b": _FLUX2_SWITCHES,
+    "fal-ai/flux-2/klein/4b": _FLUX2_SWITCHES,
 }
 
 
@@ -383,10 +373,6 @@ def fal_shape(endpoint: str) -> str:
     if whole in _FAL_FIELDS:
         return whole
     return segments[-1] if segments else ""
-
-
-def fal_draft(endpoint: str) -> bool:
-    return str(endpoint).strip("/").endswith("/draft")
 
 
 def keyframe_indexes(count: int, duration: int) -> list[int]:
@@ -441,16 +427,15 @@ async def run_fal(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: d
     """fal forwards every param it is given (handle_fal_universal), so the
     copy it gets holds only this route's translated params, the media fields
     and ``endpoint_id``: never ``_provider`` or another route's params, nor
-    a param that only picks the endpoint (FAL_ENDPOINT_SWITCHES), one a
-    /draft endpoint doesn't have (FAL_DRAFT_DROPS) or one that isn't a
-    field of this endpoint (FAL_ENDPOINT_DROPS)."""
+    a param that only picks the endpoint (FAL_ENDPOINT_SWITCHES,
+    FAL_ENDPOINT_DROPS). A setting the endpoint doesn't have is hidden on
+    the route and never reaches here (node_route.route_sent_keys)."""
     from execution.sync_runner import _fal_wrapper_node
     from handlers.fal_universal import handle_fal_universal
 
     definition = _definition(node)
     endpoint_id = str(endpoint if endpoint is not None else route.get("endpoint") or "").strip("/")
-    dropped = (FAL_ENDPOINT_SWITCHES | (FAL_DRAFT_DROPS if fal_draft(endpoint_id) else frozenset())
-               | FAL_ENDPOINT_DROPS.get(endpoint_id, frozenset()))
+    dropped = FAL_ENDPOINT_SWITCHES | FAL_ENDPOINT_DROPS.get(endpoint_id, frozenset())
     sent = {key: value for key, value in _set(node.params).items() if key not in dropped}
     params = {**sent, **fal_fields(endpoint_id, node.params, inputs)}
     fal_node = _fal_wrapper_node(node.model_copy(update={"params": params}), endpoint_id)

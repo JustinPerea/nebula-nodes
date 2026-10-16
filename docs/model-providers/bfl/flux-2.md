@@ -65,15 +65,15 @@ The saved names are fal's (saved graphs carry them). The BFL route translates:
 | Setting | BFL | fal |
 |---|---|---|
 | `output_format` | jpeg, png | jpeg, png |
-| `safety_tolerance` | 1-5 (BFL takes 0-5 on FLUX.2) | 1-5 on Pro, Max, Flex and Flash; Klein has no such field, so only the default `"2"` runs (not sent) |
+| `safety_tolerance` | 1-5 (BFL takes 0-5 on FLUX.2) | 1-5 on Pro, Max and Flex; Flash and Klein have no such field, so it is hidden there (`paramVisibleWhen {safety_tolerance: {model: [pro, max, flex]}}`) and not sent. On Klein a saved value other than 2 stops the run, since BFL would honor it ("it doesn't offer Safety 3 with Model FLUX.2 [klein] 4B. Set Safety back to 2, or switch provider."); on Flash it is ignored (BFL has no Flash) |
 | `seed` | yes | yes |
 | `num_inference_steps` (Flex) | 1-50 (default 50) | 2-50 (default 28) |
 | `guidance_scale` (Flex) | 1.5-10 (default 5) | 1.5-10 (default 3.5) |
-| `enable_safety_checker` | no field: saved off, the run stops and offers fal | fal's own param (default on) |
+| `enable_safety_checker` | no field: not shown; saved off, the run stops and offers fal (rule H, no rule needed) | fal's own param (default on) |
 
-- Steps and guidance show on Flex only (`visibleWhen`). A value left from Flex is hidden on the other models and isn't sent on either route (BFL: only `Flux2FlexInputs` has `steps`/`guidance`; fal: `FAL_ENDPOINT_DROPS`).
+- Steps and guidance show on Flex only (`visibleWhen`). A value left from Flex is hidden on the other models and isn't sent on either route (`node_route.route_sent_keys`; BFL: only `Flux2FlexInputs` has `steps`/`guidance`).
 - Each route's `accepts` lists exactly its models (BFL five, fal six). Any other saved `model` (a case variant such as `"MAX"` or `"Flash"`, or a typo) stops the run on both routes before billing, so it never falls through to Pro.
-- **Flash keeps `safety_tolerance`.** `Flux2FlashInput` has no such field, but the fal-only handler sent it on every Flash run, and the fal route keeps saved graphs' requests exactly as they were (`tests/test_flux2_nodes.py` replays all 6,048 saved combinations against the old handler's captured requests).
+- **Flash no longer sends `safety_tolerance`** (PR 5, 2026-10-16). `Flux2FlashInput` has no such field; the fal-only handler sent it on every Flash run. `tests/test_flux2_nodes.py` still replays all 6,048 saved combinations against the old handler's captured requests, with that one field as the only approved difference (`APPROVED_LEGACY_DELTA`).
 
 ## Prices (per image; every preset is at most 1 MP and the node takes no image input)
 

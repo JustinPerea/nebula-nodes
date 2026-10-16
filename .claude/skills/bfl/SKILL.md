@@ -52,7 +52,7 @@ BFL has no seed, negative prompt or output format on FLUX 3 Image. `auto` follow
 
 ### FLUX 3 Image Klein
 
-Shared: `aspect_ratio`, `resolution` (the same tiers), `safety_tolerance` 0-4, `seed` (0 to 4294967295, unset by default). BFL also takes `steps` 1-16 (default 16) and `output_format` jpeg or png (default jpeg). OpenRouter takes no seed: a set seed stops the run on OpenRouter ("it doesn't take a seed").
+Shared: `aspect_ratio`, `resolution` (the same tiers), `safety_tolerance` 0-4, `seed` (0 to 4294967295, unset by default). BFL also takes `steps` 1-16 (default 16) and `output_format` jpeg or png (default jpeg). OpenRouter takes no seed: there is no Seed row on OpenRouter and none is sent; a seed saved on another route stops the run there ("it doesn't offer Seed 7. Clear Seed, or switch provider.") until it is cleared or the route switched.
 
 No fal route: fal's Klein takes only exact pixel sizes, and BFL publishes no exact size for its tiers. No Replicate route: Replicate has no Klein model (404, 2026-10-15).
 
@@ -66,13 +66,13 @@ Shared: `duration` 5-20 s (default 5), `resolution` `hd` / `fhd` / `qhd` / `uhd`
 
 | Route | Takes | Stops on |
 |---|---|---|
-| bfl | everything | a draft above `hd`; a continuation longer than 15 s |
-| fal | 720p-2160p; no 9:21 | a draft above `hd` |
-| replicate | `hd`, `fhd` only; no 9:21 | a draft at `fhd` |
-| openrouter | `hd` to `uhd` (2K, 4K); only 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 | `keyframes` or `start_video` wired; `draft`; a start or end image that isn't a public http(s) URL (a Nebula output can't be sent) |
-| krea | `hd`, `fhd`; no `auto` or 9:21 | `keyframes` wired; `draft` |
+| bfl | everything | a continuation longer than 15 s |
+| fal | 720p-2160p; no 9:21 | |
+| replicate | `hd`, `fhd` only; no 9:21 (a draft at any resolution runs) | |
+| openrouter | `hd` to `uhd` (2K, 4K); only 21:9, 16:9, 4:3, 1:1, 3:4, 9:16 | `keyframes` or `start_video` wired; a saved `draft` (not offered there; "Turn Draft (fast preview) off"); a start or end image that isn't a public http(s) URL (a Nebula output can't be sent) |
+| krea | `hd`, `fhd`; no `auto` or 9:21 | `keyframes` wired; a saved `draft` (not offered there) |
 
-Drafts render at `hd` only (BFL: "sending `draft: true` with any other resolution is rejected"). BFL's `draft_enhance` mode isn't offered yet.
+Drafts render at 720p (BFL: "sending `draft: true` with any other resolution is rejected"), so a draft hides Resolution and sends none: a draft saved at `fhd` or above runs as the 720p draft. BFL's `draft_enhance` mode isn't offered yet.
 
 ### FLUX Video Edit [fast] and FLUX Video Upscale
 
@@ -89,7 +89,7 @@ Shared: `model` (`pro` default, `max`, `flash`, `flex`, `klein-9b`, `klein-4b`; 
 | Route | Differs |
 |---|---|
 | bfl | no `flash` (the run stops and offers fal); the preset is sent as `width`/`height` (`square_hd` 1024×1024 ... `landscape_16_9` 1024×576); steps 1-50 |
-| fal | also `enable_safety_checker` (default on); steps 2-50; Klein takes no `safety_tolerance`, so only the default `"2"` runs there |
+| fal | also `enable_safety_checker` (default on); steps 2-50; Flash and Klein have no `safety_tolerance`: hidden and not sent there; on Klein a saved value other than `"2"` stops the run ("Set Safety back to 2"), on Flash it is ignored |
 
 - Steps and guidance show on Flex only. A value left from Flex is hidden on the other models and isn't sent on either route.
 - `model` must be one of the six lowercase values. Each route lists the models it serves (`accepts`), so any other value (`"MAX"`, `"Flash"`) stops the run with no route to offer; it never runs Pro.

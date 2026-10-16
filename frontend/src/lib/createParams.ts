@@ -1,5 +1,5 @@
 import type { ModelNodeDefinition, ParamDefinition, ParamOption } from '../types';
-import { paramDefinitionsForRun } from './directRoute';
+import { paramDefinitionsForRun, shownValues, visibleParams, visibleWhenHolds } from './directRoute';
 import { withNewKreaMode, type KreaConnectionMode } from './kreaConnection';
 
 /** The params Create shows for the route this run would take (lib/directRoute.ts):
@@ -15,31 +15,29 @@ export function resolveCreateParamDefinitions(
   return paramDefinitionsForRun(def, params, apiKeys);
 }
 
+/** Whether a `visibleWhen` holds for these values: directRoute.ts
+ * visibleWhenHolds, the predicate the Inspector reads (a controller with no
+ * value passes). */
 export function matchesVisibleWhen(
   visibleWhen: Record<string, (string | number | boolean)[]> | undefined,
   params: Record<string, unknown>,
 ): boolean {
-  if (!visibleWhen) return true;
-  return Object.entries(visibleWhen).every(([key, allowed]) =>
-    allowed.includes(params[key] as string | number | boolean),
-  );
+  return visibleWhenHolds(visibleWhen, params);
 }
 
-/** Params the composer should render as pills for the current values. */
+/** Params the composer should render as pills for the current values: the
+ * same list the Inspector shows (directRoute.ts visibleParams). */
 export function deriveVisibleParams(
   def: ModelNodeDefinition,
   params: Record<string, unknown>,
   apiKeys: Record<string, string> = {},
 ): ParamDefinition[] {
   const sources = resolveCreateParamDefinitions(def, apiKeys, params);
-  const effectiveValues = Object.fromEntries(sources.map((p) => [p.key, params[p.key] ?? p.default]));
-  return sources
-    .filter((p) => !p.hidden)
-    .filter((p) => matchesVisibleWhen(p.visibleWhen, { ...params, ...effectiveValues }))
-    .map((p) => ({
-      ...p,
-      options: p.options?.filter((o: ParamOption) => matchesVisibleWhen(o.visibleWhen, { ...params, ...effectiveValues })),
-    }));
+  const values = shownValues(def, params, sources);
+  return visibleParams(def, params, sources).map((p) => ({
+    ...p,
+    options: p.options?.filter((o: ParamOption) => visibleWhenHolds(o.visibleWhen, values)),
+  }));
 }
 
 export function buildDefaultParamsForUi(

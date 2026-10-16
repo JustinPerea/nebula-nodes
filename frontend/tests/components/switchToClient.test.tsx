@@ -77,8 +77,21 @@ function view(definition: ModelNodeDefinition, params: Params, context: SwitchCo
   return { chip: state.chip, blocked: state.blocked, alternatives: state.alternatives.map((a) => a.routeId) };
 }
 
+/** `before` with the click's writes applied; null clears a param. */
+function after(before: Params, writes: Params): Params {
+  const out: Params = { ...before, ...writes };
+  for (const [key, value] of Object.entries(writes)) if (value === null) delete out[key];
+  return out;
+}
+
+// 'edit:' (an Inspector or pill edit, lib/providerSwitch.ts snapHidden) and
+// 'fix:' (the reset row, applyFix) clicks are checked at the lib level in
+// tests/lib/providerSwitch.test.ts until the Inspector and the switcher
+// render them (the UI lane after PR 5's core).
+const ROW_CASES = CASES.filter((c) => !c.click?.startsWith('edit:') && !c.click?.startsWith('fix:'));
+
 describe('switch_cases.json: a switcher click writes what the backend run expects', () => {
-  it.each(CASES.map((c) => [c.name, c] as const))('%s', (_name, c) => {
+  it.each(ROW_CASES.map((c) => [c.name, c] as const))('%s', (_name, c) => {
     // A fixture node, else a real route-table node (PR 3).
     const definition = DEFINITIONS[c.definition] ?? NODE_DEFINITIONS[c.definition];
     const apiKeys = Object.fromEntries(c.keys.map((key) => [key, KEY]));
@@ -106,11 +119,11 @@ describe('switch_cases.json: a switcher click writes what the backend run expect
       fireEvent.click(within(menu).getAllByRole('menuitemradio')[index]);
     }
 
-    const after = useGraphStore.getState().nodes[0].data.params;
-    expect(after).toEqual({ ...before, ...c.writes });
+    const afterClick = useGraphStore.getState().nodes[0].data.params;
+    expect(afterClick).toEqual(after(before, c.writes));
     expect(useProviderNoteStore.getState().notes.n1 ?? '').toBe(c.switcher.notes.join('. '));
     const { chip, blocked, alternatives } = c.switcher;
-    expect(view(definition, after, context)).toEqual({ chip, blocked, alternatives });
+    expect(view(definition, afterClick, context)).toEqual({ chip, blocked, alternatives });
     if (c.switcher.blocked) expect(screen.getByRole('status')).toHaveTextContent(/can't run on/);
   });
 });

@@ -7465,7 +7465,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         },
         rules: {
           accepts: { model: { values: ['pro', 'max', 'flex', 'klein-9b', 'klein-4b'] } },
-          rejects: { enable_safety_checker: [false] },
         },
         note: 'BFL has no FLUX 2 Flash and no safety-checker switch.',
       },
@@ -7496,17 +7495,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             model: { values: ['pro', 'max', 'flash', 'flex', 'klein-9b', 'klein-4b'] },
             num_inference_steps: { min: 2, max: 50, integer: true },
           },
-          rejectsWhen: [
-            { match: { safety_tolerance: '1', model: 'klein-9b' }, label: 'a safety tolerance other than 2 on Klein' },
-            { match: { safety_tolerance: '3', model: 'klein-9b' }, label: 'a safety tolerance other than 2 on Klein' },
-            { match: { safety_tolerance: '4', model: 'klein-9b' }, label: 'a safety tolerance other than 2 on Klein' },
-            { match: { safety_tolerance: '5', model: 'klein-9b' }, label: 'a safety tolerance other than 2 on Klein' },
-            { match: { safety_tolerance: '1', model: 'klein-4b' }, label: 'a safety tolerance other than 2 on Klein' },
-            { match: { safety_tolerance: '3', model: 'klein-4b' }, label: 'a safety tolerance other than 2 on Klein' },
-            { match: { safety_tolerance: '4', model: 'klein-4b' }, label: 'a safety tolerance other than 2 on Klein' },
-            { match: { safety_tolerance: '5', model: 'klein-4b' }, label: 'a safety tolerance other than 2 on Klein' },
-          ],
         },
+        paramVisibleWhen: { safety_tolerance: { model: ['pro', 'max', 'flex'] } },
       },
     ],
   },
@@ -13712,7 +13702,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         handler: 'openrouter-images',
         endpoint: 'black-forest-labs/flux-3-image-klein',
         valueMap: { resolution: { '768sq': '768', '1k': '1K', '1.5k': '1.5K', '2k': '2K', '4k': '4K' } },
-        rules: { ports: { images: { max: 10 } }, rejectsWhen: [{ match: { seed: '(set)' }, label: 'a seed' }] },
+        rules: { ports: { images: { max: 10 } } },
+        paramVisibleWhen: { seed: false },
         note: "OpenRouter can't take a seed.",
       },
     ],
@@ -13908,11 +13899,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         handler: 'bfl',
         endpoint: '/v1/flux-3-video',
         params: [{ key: 'draft', label: 'Draft (fast preview)', type: 'boolean', required: false, default: false }],
+        paramVisibleWhen: { resolution: { draft: [false] } },
         rules: {
           rejectsWhen: [
-            { match: { draft: true, resolution: 'fhd' }, label: 'a draft above hd' },
-            { match: { draft: true, resolution: 'qhd' }, label: 'a draft above hd' },
-            { match: { draft: true, resolution: 'uhd' }, label: 'a draft above hd' },
             { match: { start_video: '(set)', duration: 16 }, label: 'a video continuation longer than 15 s' },
             { match: { start_video: '(set)', duration: 17 }, label: 'a video continuation longer than 15 s' },
             { match: { start_video: '(set)', duration: 18 }, label: 'a video continuation longer than 15 s' },
@@ -13975,12 +13964,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         ],
         params: [{ key: 'draft', label: 'Draft (fast preview)', type: 'boolean', required: false, default: false }],
         valueMap: { resolution: { hd: '720p', fhd: '1080p', qhd: '1440p', uhd: '2160p' } },
+        paramVisibleWhen: { resolution: { draft: [false] } },
         rules: {
           accepts: { aspect_ratio: { values: ['auto', '21:9', '2:1', '16:9', '4:3', '1:1', '3:4', '9:16'] } },
           rejectsWhen: [
-            { match: { draft: true, resolution: 'fhd' }, label: 'a draft above hd' },
-            { match: { draft: true, resolution: 'qhd' }, label: 'a draft above hd' },
-            { match: { draft: true, resolution: 'uhd' }, label: 'a draft above hd' },
             {
               match: { start_video: '(set)', start_image: '(set)' },
               label: 'a start video together with images',
@@ -14032,10 +14019,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             '20': '20',
           },
         },
+        paramVisibleWhen: { resolution: { draft: [false] } },
         rules: {
           accepts: { aspect_ratio: { values: ['auto', '21:9', '2:1', '16:9', '4:3', '1:1', '3:4', '9:16'] } },
           rejectsWhen: [
-            { match: { draft: true, resolution: 'fhd' }, label: 'a draft above hd' },
             {
               match: { start_video: '(set)', start_image: '(set)' },
               label: 'a start video together with images',
@@ -14068,7 +14055,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         valueMap: { resolution: { hd: '720p', fhd: '1080p', qhd: '2K', uhd: '4K' } },
         rules: {
           accepts: { aspect_ratio: { values: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'] } },
-          rejects: { draft: [true] },
           rejectsWhen: [
             {
               match: { end_image: '(set)', start_image: '(unset)', keyframes: '(unset)' },
@@ -14089,7 +14075,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         valueMap: { resolution: { hd: '720p', fhd: '1080p' } },
         rules: {
           accepts: { aspect_ratio: { values: ['21:9', '2:1', '16:9', '4:3', '1:1', '3:4', '9:16'] } },
-          rejects: { draft: [true] },
           rejectsWhen: [
             {
               match: { end_image: '(set)', start_image: '(unset)', keyframes: '(unset)' },

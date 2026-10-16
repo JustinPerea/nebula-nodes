@@ -1,8 +1,10 @@
 import type { ModelNodeDefinition, ParamDefinition, RouteSpec } from '../types';
 import {
-  allParamDefinitions, AUTO, BILLING_PARAMS, matchValue, portLimitName, PROVIDER_PARAM, providerChoice, providerLabel,
-  routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routesOf, routeSwitch, routeTakesValue,
-  routeUnavailable, selectRoute, usesRoutePlan, withWiredBlockers, type DirectBlock,
+  allParamDefinitions, AUTO, effectiveValues, hiddenStops, matchValue, portLimitName, PROVIDER_PARAM, providerChoice,
+  providerLabel, routeAcceptRule, routeBlock, routeById, routeParamDefinitions, routeSentKeys, routesOf, routeSwitch,
+  routeTakesValue,
+  routeUnavailable, selectRoute, settingText, usesRoutePlan, withWiredBlockers, type DirectBlock, type HiddenStop,
+  type RouteFix,
 } from './directRoute';
 import { estimateRoutes, formatUsdRange, routePriceUnconfirmed, type PricingTable } from './pricing';
 import type { ProviderSetupTarget } from './providerReadiness';
@@ -66,6 +68,9 @@ export interface SwitchState {
    * writing what that route's API-balance row writes (the offer is made on
    * its key, so never the Krea plan). */
   alternatives: { routeId: string; label: string; writes: Params }[];
+  /** One-click edits that let the run start where it is (routeUnavailable
+   * `fixes`): "Set Safety back to 2", "Clear Seed". `value` null clears. */
+  fixes: (RouteFix & { label: string })[];
 }
 
 /** Short names for the 10px card chip; anything else uses its full label. */
@@ -110,6 +115,7 @@ function blockedValue(block: Partial<DirectBlock>): string {
 
 /** A row's block note: what this route doesn't take of the recipe. */
 function rowBlock(route: RouteSpec, block: DirectBlock): string {
+  if (block.reason === 'hidden') return `Doesn't take ${block.detail ?? block.param}`;
   if (block.reason === 'unsupported') return `Doesn't take ${blockedValue(block)}`;
   if (block.reason === 'blocked') return `Doesn't take ${block.param}`;
   if (block.reason === 'requires') return `Needs ${block.param}`;
@@ -130,6 +136,7 @@ function autoReason(definition: ModelNodeDefinition, unavailable: NonNullable<Re
   const block = unavailable.block;
   if (!spec) return unavailable.missing.length ? 'no provider key set' : 'no route can take it';
   if (!block) return `no ${label} key`;
+  if (block.reason === 'hidden') return `${label} doesn't offer ${block.detail ?? block.param}`;
   if (block.reason === 'unsupported' || block.reason === 'blocked') return `${blockedValue(block)} isn't on ${label}`;
   if (block.reason === 'ports') return `too many ${portLimitName(block.param ?? '', spec.rules?.ports?.[block.param ?? ''])} for ${label}`;
   return rowBlock(spec, block as DirectBlock).toLowerCase();
@@ -221,7 +228,26 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
       routeId, label: providerLabel(routeById(definition, routeId)?.provider),
       writes: billingWrites(definition, routeId, false),
     })),
+    fixes: (unavailable?.fixes ?? []).map((fix) => ({ ...fix, label: fixLabel(definition, fix) })),
   };
+}
+
+/** A fix row's label: "Set Safety back to 2", "Turn Draft (fast preview)
+ * off", "Clear Seed" (the sentence routeUnavailable's message ends with). */
+export function fixLabel(definition: ModelNodeDefinition, fix: RouteFix): string {
+  const param = allParamDefinitions(definition).find((candidate) => candidate.key === fix.param);
+  const label = param?.label || fix.param;
+  if (fix.value === null || fix.value === undefined) return `Clear ${label}`;
+  if (typeof fix.value === 'boolean') return `Turn ${label} ${fix.value ? 'on' : 'off'}`;
+  return `Set ${label} back to ${optionLabel(param, fix.value)}`;
+}
+
+/** What a fix row saves: the param set to the fix's value, or removed (cleared). */
+export function applyFix(params: Params | undefined, fix: RouteFix): Params {
+  const next: Params = { ...(params ?? {}) };
+  if (fix.value === null || fix.value === undefined) delete next[fix.param];
+  else next[fix.param] = fix.value;
+  return next;
 }
 
 function optionLabel(param: ParamDefinition | undefined, value: unknown): string {
@@ -267,15 +293,42 @@ function closestValue(route: RouteSpec, offered: ParamDefinition, whole: ParamDe
   return offered.default;
 }
 
+function defaultNote(param: ParamDefinition | undefined): string {
+  const fallback = param?.default;
+  if (fallback === undefined || fallback === null) return 'cleared';
+  if (typeof fallback === 'boolean') return fallback === false ? 'turned off' : 'back to its default';
+  return `back to ${optionLabel(param, fallback)}`;
+}
+
+/** Each rule-H stop back to its default (cleared when it has none), one
+ * note each (node_route._snap_stops). */
+function snapStops(definition: ModelNodeDefinition, route: RouteSpec, values: Params, stops: HiddenStop[], notes: string[]): void {
+  const label = providerLabel(route.provider);
+  const whole = new Map(allParamDefinitions(definition).map((param) => [param.key, param]));
+  const effective = effectiveValues(definition, values);
+  for (const stop of stops) {
+    const param = whole.get(stop.param);
+    if (stop.controllers.length) {
+      const hides = stop.controllers.map((ctrl) => optionLabel(whole.get(ctrl), effective[ctrl])).join(' and ');
+      notes.push(`${settingText(param, stop.param, values[stop.param])} isn't on ${label} with ${hides}: ${defaultNote(param)}`);
+    } else {
+      notes.push(`${param?.label || stop.param} isn't on ${label}: ${defaultNote(param)}`);
+    }
+    if (param?.default === undefined || param.default === null) delete values[stop.param];
+    else values[stop.param] = param.default;
+  }
+}
+
 /** A person's switch to `routeId`: each saved value that route doesn't take
  * moves to its closest value there (closestValue), with one note per change
- * for the card ("1.5k isn't on fal.ai: set to 2k"). Another route's own
- * param the new route doesn't offer, but whose saved value its rules refuse
- * (FLUX 3 Video's Draft on Krea), goes back to its default, since the new
- * route shows no control to change it ("Draft (fast preview) isn't on Krea:
- * turned off"). Only an explicit click calls this; a route change without
- * one (keys, a shared graph, an import) keeps every value, and the switcher
- * shows the stop instead. */
+ * for the card ("1.5k isn't on fal.ai: set to 2k"). Then every value rule H
+ * would stop the run on (hiddenStops: a setting the route doesn't show,
+ * that another route would honor) goes back to its default, or is cleared,
+ * with one note each ("Seed isn't on OpenRouter: cleared", "Draft (fast
+ * preview) isn't on Krea: turned off"). Only an explicit click calls this;
+ * a route change without one (keys, a shared graph, an import) keeps every
+ * value, and the switcher shows the stop instead
+ * (node_route.snap_for_route). */
 export function snapForRoute(definition: ModelNodeDefinition, params: Params, routeId: string | null | undefined): { params: Params; notes: string[] } {
   const route = routeId ? routeById(definition, routeId) : undefined;
   if (!route) return { params, notes: [] };
@@ -283,9 +336,12 @@ export function snapForRoute(definition: ModelNodeDefinition, params: Params, ro
   const next: Params = { ...params };
   const notes: string[] = [];
   const label = providerLabel(route.provider);
+  const sent = routeSentKeys(definition, route.id, params);
   for (const offered of routeParamDefinitions(definition, route.id)) {
     const value = params[offered.key];
-    if (!hasValue(value) || routeTakesValue(route, offered.key, value)) continue;
+    // A setting the route hides with these values is never sent, so it keeps
+    // its value (rule H below decides whether it stops).
+    if (!sent.has(offered.key) || !hasValue(value) || routeTakesValue(route, offered.key, value)) continue;
     const snapped = closestValue(route, offered, whole.get(offered.key), value);
     const was = optionLabel(whole.get(offered.key), value);
     if (snapped === undefined) {
@@ -296,20 +352,23 @@ export function snapForRoute(definition: ModelNodeDefinition, params: Params, ro
       notes.push(`${was} isn't on ${label}: set to ${optionLabel(whole.get(offered.key), snapped)}`);
     }
   }
-  const offeredKeys = new Set(routeParamDefinitions(definition, route.id).map((param) => param.key));
-  for (const param of whole.values()) {
-    const value = params[param.key];
-    if (offeredKeys.has(param.key) || BILLING_PARAMS.includes(param.key) || !hasValue(value)
-      || routeTakesValue(route, param.key, value)) continue;
-    const name = param.label || param.key;
-    if (param.default === undefined || !routeTakesValue(route, param.key, param.default)) {
-      delete next[param.key];
-      notes.push(`${name} isn't on ${label}: cleared`);
-    } else {
-      next[param.key] = param.default;
-      notes.push(`${name} isn't on ${label}: ${param.default === false ? 'turned off' : 'back to its default'}`);
-    }
-  }
+  snapStops(definition, route, next, hiddenStops(definition, route, next), notes);
+  return { params: next, notes };
+}
+
+/** A person's edit of `changed` (the Inspector or a pill) on the shown
+ * route `routeId`: each value the edit now hides there that rule H would
+ * stop on goes back to its default, or is cleared, with one note each
+ * ("Safety 5 isn't on fal.ai with FLUX.2 [klein] 9B: back to 2"). Only the
+ * params `changed` controls on that route; nothing else is reset
+ * (node_route.snap_hidden). `params` already hold the edit. */
+export function snapHidden(definition: ModelNodeDefinition, params: Params, routeId: string | null | undefined, changed: string): { params: Params; notes: string[] } {
+  const route = routeId ? routeById(definition, routeId) : undefined;
+  const next: Params = { ...params };
+  const notes: string[] = [];
+  if (!route || !routeSwitch(definition)) return { params: next, notes };
+  const stops = hiddenStops(definition, route, next).filter((stop) => stop.controllers.includes(changed));
+  snapStops(definition, route, next, stops, notes);
   return { params: next, notes };
 }
 
