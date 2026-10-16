@@ -90,6 +90,15 @@ APPROVED_PORT_LABEL_CHANGES = {
 APPROVED_OPTION_FIELD_ADDITIONS = {
     "seedream-4-5": {"image_size": {"auto_3K": {"visibleWhen": {"model": ["5.0-lite"]}}}},
 }
+# ElevenLabs lists eleven_turbo_v2_5 and eleven_turbo_v2 as "Deprecated
+# models" (https://elevenlabs.io/docs/overview/models, read 2026-10-16). The
+# values stay so saved graphs still open; only their labels say so.
+APPROVED_OPTION_LABEL_CHANGES = {
+    "elevenlabs-tts": {"model_id": {
+        "eleven_turbo_v2_5": ("Turbo v2.5 (Low Latency)", "Turbo v2.5 (deprecated: use Flash v2.5)"),
+        "eleven_turbo_v2": ("Turbo v2", "Turbo v2 (deprecated: use Flash v2)"),
+    }},
+}
 # Krea account billing (2026-10-09): the three original Krea nodes that call
 # Krea gained the same `_kreaAuth` choice as the gateway catalog, prepended,
 # and Style Train gained the training models Krea added since the baseline.
@@ -323,7 +332,7 @@ APPROVED_LEADING_OPTIONS = {
         {"label": "Gemini 3.5 Flash-Lite", "value": "gemini-3.5-flash-lite"},
     ]},
 }
-APPROVED_OPTION_LABEL_CHANGES = {
+APPROVED_OPTION_LABEL_CHANGES.update({
     "claude-chat": {"model": {"claude-fable-5": ("Claude Fable 5 (flagship)", "Claude Fable 5")}},
     "gpt-4o-chat": {"model": {
         "gpt-5.5": ("GPT-5.5 (flagship)", "GPT-5.5"),
@@ -338,7 +347,7 @@ APPROVED_OPTION_LABEL_CHANGES = {
         "gemini-3.5-flash": ("Gemini 3.5 Flash", "Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash)"),
         "gemini-3.1-flash-lite": ("Gemini 3.1 Flash-Lite", "Gemini 3.1 Flash-Lite (retiring 2027-05-07)"),
     }},
-}
+})
 APPROVED_PARAM_FIELD_CHANGES = {
     "gpt-4o-chat": {"reasoning_effort": {"visibleWhen": ({"model": _GPT5}, {"model": _GPT6 + _GPT5})}},
     "gemini-chat": {

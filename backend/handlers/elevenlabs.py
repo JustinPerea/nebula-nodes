@@ -139,6 +139,162 @@ async def handle_elevenlabs_tts(
     }
 
 
+# ---------------------------------------------------------------------------
+# Text to Dialogue (POST /v1/text-to-dialogue)
+# ---------------------------------------------------------------------------
+# Sources, all read 2026-10-16:
+# - https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert: body
+#   ``inputs`` (list of {text, voice_id}, max 10 unique voice ids), ``model_id``
+#   (default eleven_v3), ``language_code``, ``settings`` ({stability,
+#   similarity}), ``seed`` (0 to 4294967295); ``output_format`` is a query
+#   value. "For reliable generation, keep the total character count across all
+#   inputs[].text values at or below 2,000 characters per request. Longer
+#   requests can terminate early in streaming responses or return a validation
+#   error."
+# - https://elevenlabs.io/docs/overview/models: "Eleven v4 is available via the
+#   Text to Dialogue API". The same page lists a 10,000 character limit for
+#   eleven_v4; the endpoint's 2,000 figure is the one this node enforces.
+ELEVENLABS_DIALOGUE_URL = "https://api.elevenlabs.io/v1/text-to-dialogue"
+DIALOGUE_MODELS = ("eleven_v4", "eleven_v3")
+DIALOGUE_DEFAULT_MODEL = "eleven_v4"
+# The node's speaker slots: voice_1 .. voice_4 (node_definitions.json). The
+# endpoint allows 10 unique voices; four keeps the card short.
+DIALOGUE_SPEAKERS = 4
+DIALOGUE_MAX_CHARS = 2000
+DIALOGUE_SEED_MAX = 4_294_967_295
+# A turn: "1: text" or "Speaker 1: text" (any case, spaces around the colon).
+_DIALOGUE_LINE = re.compile(r"\s*(?:speaker\s*)?(\d+)\s*:\s*(.*)", re.IGNORECASE | re.DOTALL)
+# ISO 639-1, or ISO 639-3 for ast, yue, ceb, fil (models page, Eleven v4).
+_LANGUAGE_CODE = re.compile(r"[a-z]{2,3}")
+
+
+def _checked_voice(value: Any, param: str) -> str:
+    voice = str(value).strip()
+    if not _VOICE_ID.fullmatch(voice):
+        raise ValueError(f"{param} must be an ElevenLabs voice ID (letters and digits), received {voice!r}")
+    return voice
+
+
+def parse_dialogue_script(script: str, voices: dict[int, str]) -> list[dict[str, str]]:
+    """Turn a script into Text to Dialogue ``inputs``.
+
+    One turn per non-empty line, each starting with a speaker label: ``1:``
+    (or ``Speaker 1:``) up to ``4:``. ``voices`` maps a speaker number to the
+    voice id set on the card. Raises ValueError, before any call, for a line
+    without a label, a label past the card's speakers, a speaker with no voice,
+    an empty turn, or a script over the endpoint's 2,000-character guidance.
+    """
+    turns: list[dict[str, str]] = []
+    for number, raw in enumerate(str(script).splitlines(), start=1):
+        if not raw.strip():
+            continue
+        match = _DIALOGUE_LINE.fullmatch(raw)
+        if not match:
+            raise ValueError(
+                f"Dialogue line {number} has no speaker label. Start each line with 1: to "
+                f"{DIALOGUE_SPEAKERS}: (or Speaker 1:), e.g. '1: Hello there.' Received {raw.strip()[:60]!r}"
+            )
+        speaker = int(match.group(1))
+        text = match.group(2).strip()
+        if not 1 <= speaker <= DIALOGUE_SPEAKERS:
+            raise ValueError(
+                f"Dialogue line {number} uses unknown speaker label {match.group(1)!r}. "
+                f"This node has speakers 1 to {DIALOGUE_SPEAKERS}."
+            )
+        voice = voices.get(speaker)
+        if not voice:
+            raise ValueError(
+                f"Dialogue line {number} is spoken by speaker {speaker}, but Speaker {speaker} Voice ID is empty."
+            )
+        if not text:
+            raise ValueError(f"Dialogue line {number} (speaker {speaker}) has no text after the label.")
+        turns.append({"text": text, "voice_id": voice})
+    if not turns:
+        raise ValueError("The dialogue script is empty. Write one line per turn, e.g. '1: Hello.' then '2: Hi!'")
+    total = sum(len(turn["text"]) for turn in turns)
+    if total > DIALOGUE_MAX_CHARS:
+        raise ValueError(
+            f"The dialogue is {total:,} characters. ElevenLabs asks for at most {DIALOGUE_MAX_CHARS:,} "
+            "characters per Text to Dialogue request for reliable generation (longer ones can stop early "
+            "or be refused). Split the script across two nodes."
+        )
+    return turns
+
+
+def build_dialogue_request(node: GraphNode, script: str) -> tuple[str, dict[str, Any]]:
+    """The URL and JSON body for one Text to Dialogue call (no network)."""
+    voices: dict[int, str] = {}
+    for speaker in range(1, DIALOGUE_SPEAKERS + 1):
+        key = f"voice_{speaker}"
+        value = node.params.get(key)
+        if value is None or str(value).strip() == "":
+            if speaker != 1:
+                continue
+            value = DEFAULT_VOICE_ID  # Speaker 1 falls back to Rachel, as elevenlabs-tts does
+        voices[speaker] = _checked_voice(value, key)
+    turns = parse_dialogue_script(script, voices)
+
+    model_id = str(node.params.get("model_id") or DIALOGUE_DEFAULT_MODEL)
+    if model_id not in DIALOGUE_MODELS:
+        raise ValueError(f"model_id must be one of {', '.join(DIALOGUE_MODELS)}, received {model_id!r}")
+
+    # Always send model_id: the endpoint's own default is eleven_v3.
+    body: dict[str, Any] = {
+        "inputs": turns,
+        "model_id": model_id,
+        "settings": {
+            "stability": float(node.params.get("stability", 0.5)),
+            "similarity": float(node.params.get("similarity", 0.75)),
+        },
+    }
+
+    language = node.params.get("language_code")
+    if language is not None and str(language).strip():
+        code = str(language).strip().lower()
+        if not _LANGUAGE_CODE.fullmatch(code):
+            raise ValueError(f"language_code must be an ISO 639-1 code like en or es, received {language!r}")
+        body["language_code"] = code
+
+    seed = node.params.get("seed")
+    if seed is not None and seed != "":
+        value = int(seed)
+        if not 0 <= value <= DIALOGUE_SEED_MAX:
+            raise ValueError(f"seed must be between 0 and {DIALOGUE_SEED_MAX}, received {value}")
+        body["seed"] = value
+
+    output_format = node.params.get("output_format", "mp3_44100_128")
+    return _with_output_format(ELEVENLABS_DIALOGUE_URL, output_format), body
+
+
+async def handle_elevenlabs_dialogue(
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+) -> dict[str, Any]:
+    """POST /v1/text-to-dialogue: a multi-speaker script in one audio file."""
+    script_input = inputs.get("script")
+    if not script_input or not script_input.value:
+        raise ValueError("Script input is required but was not provided")
+
+    api_key = api_keys.get("ELEVENLABS_API_KEY")
+    if not api_key:
+        raise MissingCredentialError("ELEVENLABS_API_KEY is required")
+
+    url, body = build_dialogue_request(node, str(script_input.value))
+    output_format = node.params.get("output_format", "mp3_44100_128")
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        response = await client.post(
+            url,
+            headers={"xi-api-key": api_key, "Content-Type": "application/json"},
+            json=body,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"ElevenLabs Text to Dialogue error {response.status_code}: {response.text}")
+
+    return {"audio": {"type": "Audio", "value": _save_audio(response.content, output_format)}}
+
+
 def _audio_extension(output_format: str) -> str:
     """Map an ElevenLabs output_format value to the file extension that matches the bytes.
 
