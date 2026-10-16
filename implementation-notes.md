@@ -21,6 +21,11 @@ Decisions not in the spec:
 
 Live check (isolated backend :8148, Vite :5268, temp HOME and NEBULA_* dirs, placeholder keys, no run started; `flux3/pr4-shots/names-*.png`): library entry "FLUX.2 · BFL · fal"; on BFL the model list shows the five BFL names and no Flash; on fal it shows all six, with "FLUX 2 Flash" third; picking Flash on fal, then BFL, lands on "FLUX.2 [flex]" with the card note "FLUX 2 Flash isn't on Black Forest Labs: set to FLUX.2 [flex]". The native select was expanded in place (`size`) and the Inspector's height cap lifted for the shots.
 
+Review follow-up (same day):
+
+- **AGENTS.md** still said "FLUX.2 Pro / Max / Flex / Klein 9B / Klein 4B ... plus fal's Flash" in the Flora-audit coverage list. It now says "FLUX.2 [pro] / [max] / [flex] / [klein] 9B / [klein] 4B on BFL or fal, plus fal's FLUX 2 Flash".
+- **fal catalog cards for the node's own endpoints** (`skills/fal/skills/fal-ai__flux-2-max.md` and `fal-ai__flux-2-pro.md`, both the `.agents` and `.claude` copies) named the sibling options without brackets ("FLUX.2 pro", "FLUX.2 flex", "FLUX.2 klein", "Flux 2 Max", "Flux 2 Pro"). The earlier pass treated these as other models' catalog prose, but they describe this node's own fal endpoints, so the link texts now use BFL's names. The bare "FLUX.2 klein" links became "FLUX.2 [klein] 4B" or "[klein] 9B", depending on which endpoint the link points to. Only link labels changed; every URL is the same. The nested brackets (`[FLUX.2 [pro]](url)`) are balanced, which CommonMark allows in link text.
+
 ## 2026-10-16 — PR 3 model names match the provider (flux-3-nodes)
 
 Justin, 2026-10-16: "Let's match the provider every time." Every model name a person sees uses the provider's own spelling: the maker's (BFL, Krea) for a model several hosts carry, the only host's for a one-host model. Ids, param keys and values, endpoints and prices are unchanged.
