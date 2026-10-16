@@ -24,7 +24,7 @@
 | OpenAI TTS | `openai-tts` | audio-gen | `text` (Text) | `model` (tts-1 / tts-1-hd / gpt-4o-mini-tts), `voice` (13), `speed`, `response_format`, `instructions` | Read text aloud in a chosen voice |
 | OpenAI Whisper STT | `openai-stt` | audio-gen | `audio` (Audio) | `model` (whisper-1 / gpt-4o-transcribe / gpt-4o-mini-transcribe), `language`, `response_format` (text/json/srt/vtt), `temperature`, `prompt` | Transcribe speech to text or subtitles |
 | OpenAI Audio Translate | `openai-translate` | audio-gen | `audio` (Audio) | `response_format` (text/json/srt/vtt), `temperature`, `prompt` | Translate spoken audio into English text |
-| OpenAI Chat | `gpt-4o-chat` | text-gen | `messages` (Text), `images` (Image, multiple) | `model` (gpt-6-astra / gpt-6.1-sol / gpt-6-luna, gpt-5.5 / gpt-5.4 / gpt-5.4-mini / gpt-5.4-nano (retiring 2027-04-01), plus legacy gpt-4o / gpt-4o-mini / gpt-4.1 / gpt-4.1-mini (retiring 2027-01-14) / gpt-4.1-nano (retiring 2026-10-23)), `reasoning_effort` (GPT-6 and gpt-5.x only; `max` on GPT-6; no `none` on GPT-6 Astra / GPT-6.1 Sol), `max_completion_tokens`, `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` (legacy models only), `response_format` (text/json_object) | Text reasoning + vision (describe/caption images) |
+| OpenAI Chat | `gpt-4o-chat` | text-gen | `messages` (Text), `images` (Image, multiple) | `model` (gpt-6-astra / gpt-6.1-sol / gpt-6-sol / gpt-6-luna, gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna, gpt-5.5 / gpt-5.4 / gpt-5.4-mini / gpt-5.4-nano (retiring 2027-04-01), plus legacy gpt-4o / gpt-4o-mini / gpt-4.1 / gpt-4.1-mini (retiring 2027-01-14) / gpt-4.1-nano (retiring 2026-10-23)), `reasoning_effort` (GPT-6, GPT-5.6 and gpt-5.x only; `max` on GPT-6 and GPT-5.6; no `none` on GPT-6 Astra / GPT-6.1 Sol), `max_completion_tokens` (4096; 25000 on GPT-6 and GPT-5.6, since reasoning tokens count toward it), `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` (legacy models only), `response_format` (text/json_object) | Text reasoning + vision (describe/caption images) |
 
 > DALL-E 3 node removed 2026-06-10 — OpenAI shut down dall-e-2/3 on 2026-05-12; use the GPT Image nodes.
 
@@ -71,7 +71,7 @@ A Krea node set to the Krea plan stays on Krea. Without an OpenAI key, every cop
 | Transcription `timestamp_granularities` (word/segment) | yes | none | Not exposed; verbose_json is selectable but per-word timestamps aren't surfaced |
 | Transcription streaming / diarization (`gpt-4o-transcribe-diarize`) | yes | none | No streaming STT; diarize model not in the enum |
 | Translation `/v1/audio/translations` | yes | full | whisper-1 → English; text/json/srt/vtt |
-| Chat completions `/v1/chat/completions` (text) | yes | full | GPT-6 Astra, GPT-6.1 Sol, GPT-6 Luna (added 2026-10-16), gpt-5.5, gpt-5.4 / mini / nano (with `reasoning_effort`), plus legacy gpt-4o, gpt-4o-mini, gpt-4.1 / mini / nano |
+| Chat completions `/v1/chat/completions` (text) | yes | full | GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna (added 2026-10-16), gpt-5.5, gpt-5.4 / mini / nano (with `reasoning_effort`), plus legacy gpt-4o, gpt-4o-mini, gpt-4.1 / mini / nano |
 | Chat vision (image input) | yes | full | `images` port accepts URLs, data URIs, and local files (base64-encoded) |
 | Chat tools / function calling | yes | none | No tool/function-calling support in the node |
 | Chat structured outputs (JSON) | yes | partial | **JSON mode supported** via `gpt-4o-chat`'s `response_format` (Text / `json_object`) — handler sends `response_format: {"type":"json_object"}`. Only `json_object` mode; no strict `json_schema` enforcement |
@@ -91,7 +91,7 @@ Notable unused capabilities: image **variations** (dall-e-2 only; moot since the
 What it covers:
 - **Images** — `gpt-image-1-generate`, `gpt-image-1-edit`, `gpt-image-2-generate`, `gpt-image-2-edit`, `gpt-image-2-5-generate`, `gpt-image-2-5-edit`: the full param matrices, the `background: transparent` param (v1 and 2.5) and `n` (Count) params, the org-verification gotcha, and the `input_fidelity` / `n>1` exclusions on the v2 nodes.
 - **Audio** — `openai-tts` (voices/formats/instructions), `openai-stt` (model + `response_format`, incl. SRT/VTT), and `openai-translate` (English-only, fixed-`whisper-1`).
-- **Chat** — `gpt-4o-chat` ("OpenAI Chat"): the GPT-6 + GPT-5.x + legacy model enum, the `reasoning_effort` param (GPT-6 and gpt-5.x only), the sampler-param drop on those models, the vision `images` port (URL / data URI / local path), and `response_format: json_object`.
+- **Chat** — `gpt-4o-chat` ("OpenAI Chat"): the GPT-6 + GPT-5.6 + GPT-5.x + legacy model enum, the `reasoning_effort` param (reasoning models only), the per-model `max_completion_tokens` default, the sampler-param drop on those models, the vision `images` port (URL / data URI / local path), and `response_format: json_object`.
 - **Capability boundaries** — what's not wired (variations, streaming TTS, tools/function calling, strict JSON-schema, Realtime/Responses), so an agent doesn't over-promise.
 
 ## Sources
