@@ -171,7 +171,7 @@ Never promise these via a node; there is **no node** for any of them (per the au
 - **Text-to-Dialogue extras** — `elevenlabs-dialogue` covers up to 10 speakers; it has no previous/next text, pronunciation dictionaries, request stitching, audio effects, or the Eleven v4 Turbo WebSocket.
 - **Voice Design** (`/v1/text-to-voice/design|create|remix`) — invent a brand-new voice from a description. No node.
 - **Voice Cloning** (`/v1/voices/add` IVC, `/add/professional` PVC) — clone a voice from samples. No node.
-- **Voice management / library** (`GET /v1/voices`, `/shared`, `/similar`) — Nebula takes a `voice_id` string but **cannot list, search, or pick voices in-app**. The user must supply the ID.
+- **Voice management / library** (`GET /v1/voices`, `/shared`, `/similar`) — the TTS and voice-changer nodes take a `voice_id` string, and Nebula has **no voice picker or library browser in-app**; the user supplies the ID. The one exception: `elevenlabs-dialogue` looks speaker names up in the person's own voices via `GET /v2/voices` (free) at run time, and a label of exactly 20 letters and digits is used as a voice ID.
 - **Models list** (`GET /v1/models`) — model choices are hard-coded enums, not fetched live; SFX has no model selector at all.
 - **Dubbing extras** — the node submits/polls/downloads only. It does **not** expose transcripts, per-segment editing, speaker-by-speaker rendering, or watch/CSV-script dubbing.
 - **Forced Alignment, Pronunciation Dictionaries, History, Conversational AI/Agents, Studio/Projects, Audio Native, and all streaming/WebSocket variants** — none are nodes.

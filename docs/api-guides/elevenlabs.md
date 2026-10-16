@@ -125,7 +125,7 @@ Prices (checked 2026-10-14 on https://elevenlabs.io/pricing/api): Music is "$0.1
 | Text-to-Dialogue — `POST /v1/text-to-dialogue` | Yes | **partial** | `elevenlabs-dialogue` (2026-10-16): up to 10 speakers named by voice name or ID, Eleven v4 / v3, stability, similarity, language_code, seed, output_format. No previous/next text, pronunciation dictionaries, request stitching, audio effects or the WebSocket variant. |
 | Voice Design — `POST /v1/text-to-voice/design` `/create` `/remix` | Yes | **none** | Generate a brand-new voice from a text description. No node. |
 | Voice Cloning — `POST /v1/voices/add` (IVC), `/add/professional` (PVC) | Yes | **none** | Clone a voice from samples. No node. |
-| Voices management & library — `GET /v1/voices`, `/v1/voices/shared`, `/similar` | Yes | **none** | Nebula takes a `voice_id` string but can't list, search, or pick voices in-app. |
+| Voices management & library — `GET /v1/voices`, `/v1/voices/shared`, `/similar` | Yes | **none** | The TTS and voice-changer nodes take a `voice_id` string; there's no voice picker or library browser in-app. Exception: `elevenlabs-dialogue` looks speaker names up in the person's own voices via `GET /v2/voices` (free) at run time, and uses a label of exactly 20 letters and digits as a voice ID. |
 | Models list — `GET /v1/models` | Yes | **none** | Model choices are hard-coded enums in the node, not fetched live. |
 | Forced Alignment — `POST /v1/forced-alignment` | Yes | **none** | Word-level text↔audio timestamp alignment. No node. |
 | Conversational AI / Agents — `/v1/convai/*` | Yes | **none** | Full agent platform (agents, conversations, tools, telephony). Out of scope for a node canvas. |

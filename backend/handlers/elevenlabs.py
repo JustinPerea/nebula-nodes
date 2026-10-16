@@ -180,11 +180,14 @@ VOICES_PAGE_SIZE = 100
 VOICES_MAX_PAGES = 100
 VOICES_TIMEOUT = 15.0
 VOICE_SUGGESTIONS = 5
-# A voice ID as ElevenLabs prints them: 20 letters and digits with a digit
-# among them (21m00Tcm4TlvDq8ikWAM, JBFqnCBsd6RMkjVDRZzb in the docs). Only
-# used when the key can't list voices, to tell an ID from a name. Nebula's
-# own reading of the examples; the docs don't define the format.
-_VOICE_ID_SHAPE = re.compile(r"(?=[A-Za-z0-9]*[0-9])[A-Za-z0-9]{20}")
+# What Nebula treats as a voice ID: exactly 20 letters and digits, the shape
+# of every ID in the docs (21m00Tcm4TlvDq8ikWAM, JBFqnCBsd6RMkjVDRZzb). This is
+# Nebula's own reading of the examples; ElevenLabs doesn't define the format.
+# No digit is required: some real IDs have none. A speaker label that matches
+# no voice name but has this shape is sent as a voice ID as written, whether
+# or not it's in the person's list (shared and library voices may not be), and
+# the dialogue call itself rejects an ID that doesn't exist.
+_VOICE_ID_SHAPE = re.compile(r"[A-Za-z0-9]{20}")
 # ISO 639-1, or ISO 639-3 for ast, yue, ceb, fil (models page, Eleven v4).
 _LANGUAGE_CODE = re.compile(r"[a-z]{2,3}")
 
@@ -290,14 +293,31 @@ def dialogue_inputs(turns: list[tuple[str, str]], voices: dict[str, str]) -> lis
 
 
 class VoicesPermissionError(RuntimeError):
-    """The key may not list voices (HTTP 403 from GET /v2/voices)."""
+    """The key may not list voices (HTTP 403, or a permissions 401, from GET /v2/voices)."""
+
+
+def _raw_detail(response: Any) -> Any:
+    try:
+        return response.json().get("detail")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _is_missing_permission(response: Any) -> bool:
+    """A 401 that names a missing permission rather than a bad key.
+
+    Defensive, not verified live: ElevenLabs documents 403 for missing
+    permissions, but a key without voices_read has been reported to get a 401
+    with detail.status "missing_permissions". Either sign counts.
+    """
+    detail = _raw_detail(response)
+    if isinstance(detail, dict) and str(detail.get("status") or "").casefold() == "missing_permissions":
+        return True
+    return "permission" in _error_detail(response).casefold()
 
 
 def _error_detail(response: Any) -> str:
-    try:
-        detail = response.json().get("detail")
-    except Exception:  # noqa: BLE001
-        detail = None
+    detail = _raw_detail(response)
     if isinstance(detail, dict) and detail.get("message"):
         return str(detail["message"])
     if isinstance(detail, str):
@@ -312,6 +332,8 @@ async def _get_voices_page(client: Any, api_key: str, params: dict[str, Any]) ->
         params=params,
         timeout=VOICES_TIMEOUT,
     )
+    if response.status_code == 401 and _is_missing_permission(response):
+        raise VoicesPermissionError(f"{response.status_code}: {_error_detail(response)}")
     if response.status_code == 401:
         raise RuntimeError(
             f"ElevenLabs rejected the API key while listing voices (error 401: {_error_detail(response)}). "
@@ -335,12 +357,16 @@ async def list_elevenlabs_voices(client: Any, api_key: str) -> list[dict[str, An
     """
     voices: list[dict[str, Any]] = []
     params: dict[str, Any] = {"page_size": VOICES_PAGE_SIZE, "include_total_count": "false"}
+    # Every token already followed: a server that cycles (A, B, A) stops here
+    # instead of reading the same pages until the page limit.
+    seen_tokens: set[str] = set()
     for _ in range(VOICES_MAX_PAGES):
         page = await _get_voices_page(client, api_key, params)
         voices.extend(v for v in page.get("voices") or [] if isinstance(v, dict) and v.get("voice_id"))
         token = page.get("next_page_token")
-        if not page.get("has_more") or not token or token == params.get("next_page_token"):
+        if not page.get("has_more") or not token or str(token) in seen_tokens:
             return voices
+        seen_tokens.add(str(token))
         params = {**params, "next_page_token": token}
     raise RuntimeError(
         f"Your ElevenLabs account has more than {VOICES_PAGE_SIZE * VOICES_MAX_PAGES:,} voices, more than "
@@ -375,23 +401,26 @@ async def resolve_dialogue_voices(client: Any, api_key: str, speakers: list[str]
     """Map each speaker to a voice ID from the person's ElevenLabs voices.
 
     A speaker matches a voice whose name is the same, ignoring case and
-    surrounding spaces. No name match: a label that is exactly the voice_id
-    of one of their voices is used as it is. Anything else, or a name shared
-    by several voices, stops the run before the paid call, listing the
-    candidates with their IDs. GET /v2/voices is free.
+    surrounding spaces; names come first, so a label that equals a voice name
+    is read as that name. No name match: a label that is exactly the voice_id
+    of one of their voices, or that has the ID shape (20 letters and digits,
+    ``_VOICE_ID_SHAPE``), is used as an ID as written. Anything else, or a
+    name shared by several voices, stops the run before the paid call,
+    listing the candidates with their IDs. GET /v2/voices is free.
     """
     try:
         voices = await list_elevenlabs_voices(client, api_key)
     except VoicesPermissionError as exc:
-        # The key can't read voices. Labels that are voice IDs can still be
-        # used as written; any name stops here.
+        # The key can't read voices. ID-shaped labels are used as written (the
+        # dialogue call rejects a bad one); any other label stops here.
         names = [s for s in speakers if not _VOICE_ID_SHAPE.fullmatch(s.strip())]
         if names:
             raise ValueError(
                 f"Your ElevenLabs API key can't list your voices ({exc}), so Nebula can't look up "
                 f"{', '.join(repr(n) for n in names)}. Give the key Voices read access (voices_read) under "
                 "Developers > API Keys in ElevenLabs, or write each voice's ID in place of its name, "
-                "e.g. '21m00Tcm4TlvDq8ikWAM: Hello.'"
+                "e.g. '21m00Tcm4TlvDq8ikWAM: Hello.' A label of exactly 20 letters and digits is used as a "
+                "voice ID."
             ) from None
         return {_speaker_key(s): s.strip() for s in speakers}
 
@@ -413,7 +442,7 @@ async def resolve_dialogue_voices(client: Any, api_key: str, speakers: list[str]
             problems.append(
                 f"'{speaker}' matches {len(matches)} of your voices: {listed}. Write the ID of the one you want "
                 "in place of the name.")
-        elif speaker.strip() in by_id:
+        elif speaker.strip() in by_id or _VOICE_ID_SHAPE.fullmatch(speaker.strip()):
             resolved[_speaker_key(speaker)] = speaker.strip()
         else:
             close = await _suggestions(client, api_key, speaker, voices)
@@ -421,7 +450,8 @@ async def resolve_dialogue_voices(client: Any, api_key: str, speakers: list[str]
                     else " No similar names found.")
             problems.append(
                 f"'{speaker}' isn't the name of any of your ElevenLabs voices.{hint} Use a name exactly as it "
-                "appears in your ElevenLabs voices, or write a voice ID in place of the name.")
+                "appears in your ElevenLabs voices, or write a voice ID in place of the name (a label of "
+                "exactly 20 letters and digits is used as a voice ID).")
     if problems:
         raise ValueError("Nothing was generated. " + " ".join(problems))
     for speaker, voice_id in resolved.items():

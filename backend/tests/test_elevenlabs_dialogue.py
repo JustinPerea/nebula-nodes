@@ -281,10 +281,29 @@ async def test_a_voice_id_resolves_even_when_names_are_ambiguous():
     assert client.post.call_args.kwargs["json"]["inputs"] == [{"text": "Mine.", "voice_id": CLONE_2}]
 
 
+# 20 letters, no digit: the ID shape Nebula accepts doesn't require one.
+DIGIT_FREE_ID = "AbCdEfGhIjKlMnOpQrSt"
+
+
 @pytest.mark.asyncio
-async def test_an_id_not_in_their_voices_is_refused():
-    _, message = await _refused("ZZZZZZZZZZZZZZZZZZZ9: Hi.", match="isn't the name of any of your ElevenLabs voices")
-    assert "voice ID in place of the name" in message
+@pytest.mark.parametrize("label", ["ZZZZZZZZZZZZZZZZZZZ9", DIGIT_FREE_ID])
+async def test_an_id_shaped_label_not_in_their_voices_passes_through(label):
+    client, _ = await _run(_node(), f"{label}: Hi.\nRachel: Hello.")
+    assert [i["voice_id"] for i in client.post.call_args.kwargs["json"]["inputs"]] == [label, RACHEL]
+
+
+@pytest.mark.asyncio
+async def test_a_label_that_is_both_a_name_and_id_shaped_resolves_as_the_name():
+    voices = VOICES + [{"voice_id": "NamedLikeAnId0000001", "name": DIGIT_FREE_ID, "category": "cloned"}]
+    client, _ = await _run(_node(), f"{DIGIT_FREE_ID}: Hi.", client=_mock_client(voices=voices))
+    assert client.post.call_args.kwargs["json"]["inputs"] == [{"text": "Hi.", "voice_id": "NamedLikeAnId0000001"}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("label", ["ZZZZZZZZZZZZZZZZZZ9", "ZZZZZZZZZZZZZZZZZZZZ9", "ZZZZZZZZZZ ZZZZZZZZZ"])
+async def test_a_label_off_the_id_shape_and_no_name_is_refused(label):
+    _, message = await _refused(f"{label}: Hi.", match="isn't the name of any of your ElevenLabs voices")
+    assert "exactly 20 letters and digits is used as a voice ID" in message
 
 
 @pytest.mark.asyncio
@@ -300,6 +319,27 @@ async def test_no_match_lists_close_matches_with_ids():
 async def test_no_match_falls_back_to_near_spellings_when_search_is_empty():
     _, message = await _refused("Gorge: Hi.", match="'Gorge' isn't the name")
     assert f"George (premade): {GEORGE}" in message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["status", "exception"])
+async def test_a_failing_search_still_gives_the_main_error(failure):
+    """The suggestion search is a courtesy: a 500 or a network error during it
+    must not replace the 'isn't the name' error."""
+    listing = _mock_client()
+
+    async def get(url, headers=None, params=None, timeout=None):
+        if params and params.get("search"):
+            if failure == "exception":
+                raise elevenlabs.httpx.ConnectTimeout("search timed out")
+            return _response(500, {"detail": "boom"})
+        return await listing.get(url, headers=headers, params=params, timeout=timeout)
+
+    client = _mock_client()
+    client.get = AsyncMock(side_effect=get)
+    _, message = await _refused("Gorge: Hi.", client=client, match="'Gorge' isn't the name")
+    assert f"George (premade): {GEORGE}" in message  # near spellings from the full list still offered
+    assert any((c.kwargs.get("params") or {}).get("search") == "Gorge" for c in client.get.call_args_list)
 
 
 @pytest.mark.asyncio
@@ -344,6 +384,34 @@ async def test_pagination_stops_on_a_repeated_token():
 
 
 @pytest.mark.asyncio
+async def test_pagination_stops_on_a_token_cycle():
+    pages = {None: _voices_page(VOICES[:1], has_more=True, token="A"),
+             "A": _voices_page(VOICES[1:2], has_more=True, token="B"),
+             "B": _voices_page(VOICES[2:3], has_more=True, token="A")}
+    client, _ = await _run(_node(), "George: Hi.", client=_mock_client(pages=pages))
+    tokens = [c.kwargs["params"].get("next_page_token") for c in client.get.call_args_list]
+    assert tokens == [None, "A", "B"]
+
+
+@pytest.mark.asyncio
+async def test_pagination_gives_up_at_the_page_limit(monkeypatch):
+    monkeypatch.setattr(elevenlabs, "VOICES_MAX_PAGES", 3)
+
+    class Endless(dict):
+        def __missing__(self, token):
+            n = 0 if token is None else int(token[1:])
+            return _voices_page([], has_more=True, token=f"p{n + 1}")
+
+    client = _mock_client(pages=Endless())
+    with patch("handlers.elevenlabs.httpx.AsyncClient", return_value=client):
+        with pytest.raises(RuntimeError, match="more than 300 voices.*voice IDs in the script"):
+            await handle_elevenlabs_dialogue(
+                _node(), {"script": PortValueDict(type="Text", value="Rachel: Hi.")}, {"ELEVENLABS_API_KEY": "k"})
+    assert client.get.await_count == 3
+    client.post.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_permission_error_says_to_grant_voices_read_or_use_ids():
     client = _mock_client(get_status=403, get_payload={"detail": {
         "type": "authorization_error", "code": "insufficient_permissions",
@@ -358,6 +426,27 @@ async def test_permission_error_still_runs_a_script_written_with_voice_ids():
     client = _mock_client(get_status=403)
     client, _ = await _run(_node(), f"{RACHEL}: One.\n{GEORGE}: Two.", client=client)
     assert [i["voice_id"] for i in client.post.call_args.kwargs["json"]["inputs"]] == [RACHEL, GEORGE]
+
+
+@pytest.mark.asyncio
+async def test_permission_error_passes_a_digit_free_id_through():
+    client, _ = await _run(_node(), f"{DIGIT_FREE_ID}: One.\n{RACHEL}: Two.", client=_mock_client(get_status=403))
+    assert [i["voice_id"] for i in client.post.call_args.kwargs["json"]["inputs"]] == [DIGIT_FREE_ID, RACHEL]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("detail", [
+    {"status": "missing_permissions", "message": "The API key you used is missing the permission voices_read."},
+    {"status": "missing_permissions"},
+    {"message": "This key lacks the voices_read permission."},
+])
+async def test_a_401_for_a_missing_permission_is_a_permission_problem(detail):
+    client = _mock_client(get_status=401, get_payload={"detail": detail})
+    _, message = await _refused("Rachel: Hi.", client=client, match="can't list your voices")
+    assert "voices_read" in message
+    client = _mock_client(get_status=401, get_payload={"detail": detail})
+    client, _ = await _run(_node(), f"{RACHEL}: Hi.", client=client)
+    assert client.post.call_args.kwargs["json"]["inputs"] == [{"text": "Hi.", "voice_id": RACHEL}]
 
 
 @pytest.mark.asyncio
