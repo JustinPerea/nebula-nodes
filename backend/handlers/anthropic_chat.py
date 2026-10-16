@@ -7,6 +7,7 @@ from models.events import ExecutionEvent
 from execution.stream_runner import StreamConfig, stream_execute
 from services.image_input import load_local_image
 from execution.missing_credential import MissingCredentialError
+from services.param_defaults import param_default
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -85,7 +86,12 @@ async def handle_claude_chat(
     messages = [{"role": "user", "content": content}]
 
     model = node.params.get("model", "claude-opus-5-5")
-    max_tokens = int(node.params.get("max_tokens", 4096))
+    # A node an agent made without max_tokens gets its model's default: 64K for
+    # the 5.x models, which think on every request, and 4096 for the older ones.
+    raw_max_tokens = node.params.get("max_tokens")
+    if raw_max_tokens is None or raw_max_tokens == "":
+        raw_max_tokens = param_default("claude-chat", "max_tokens", {**node.params, "model": model}) or 4096
+    max_tokens = int(raw_max_tokens)
     adaptive = model in ADAPTIVE_EFFORT_MODELS
     optional_adaptive = model in OPTIONAL_ADAPTIVE_MODELS
     if adaptive:

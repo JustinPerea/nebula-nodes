@@ -272,9 +272,19 @@
         "label": "Max Tokens",
         "type": "integer",
         "required": true,
-        "default": 4096,
+        "default": 64000,
+        "defaultBy": {
+          "model": {
+            "claude-fable-5": 4096,
+            "claude-opus-4-8": 4096,
+            "claude-sonnet-4-6": 4096,
+            "claude-haiku-4-5-20251001": 4096,
+            "claude-opus-4-7": 4096,
+            "claude-opus-4-6": 4096
+          }
+        },
         "min": 1,
-        "max": 200000
+        "max": 128000
       },
       {
         "key": "temperature",
@@ -6181,8 +6191,24 @@
             "value": "gpt-6.1-sol"
           },
           {
+            "label": "GPT-6 Sol",
+            "value": "gpt-6-sol"
+          },
+          {
             "label": "GPT-6 Luna",
             "value": "gpt-6-luna"
+          },
+          {
+            "label": "GPT-5.6 Sol",
+            "value": "gpt-5.6-sol"
+          },
+          {
+            "label": "GPT-5.6 Terra",
+            "value": "gpt-5.6-terra"
+          },
+          {
+            "label": "GPT-5.6 Luna",
+            "value": "gpt-5.6-luna"
           },
           {
             "label": "GPT-5.5",
@@ -6197,7 +6223,7 @@
             "value": "gpt-5.4-mini"
           },
           {
-            "label": "GPT-5.4 Nano (retiring 2027-04-01)",
+            "label": "GPT-5.4 nano (retiring 2027-04-01)",
             "value": "gpt-5.4-nano"
           },
           {
@@ -6217,7 +6243,7 @@
             "value": "gpt-4.1-mini"
           },
           {
-            "label": "GPT-4.1 Nano (legacy, retiring 2026-10-23)",
+            "label": "GPT-4.1 nano (legacy, retiring 2026-10-23)",
             "value": "gpt-4.1-nano"
           }
         ]
@@ -6234,7 +6260,11 @@
             "value": "none",
             "visibleWhen": {
               "model": [
+                "gpt-6-sol",
                 "gpt-6-luna",
+                "gpt-5.6-sol",
+                "gpt-5.6-terra",
+                "gpt-5.6-luna",
                 "gpt-5.5",
                 "gpt-5.4",
                 "gpt-5.4-mini",
@@ -6265,7 +6295,11 @@
               "model": [
                 "gpt-6-astra",
                 "gpt-6.1-sol",
-                "gpt-6-luna"
+                "gpt-6-sol",
+                "gpt-6-luna",
+                "gpt-5.6-sol",
+                "gpt-5.6-terra",
+                "gpt-5.6-luna"
               ]
             }
           }
@@ -6274,7 +6308,11 @@
           "model": [
             "gpt-6-astra",
             "gpt-6.1-sol",
+            "gpt-6-sol",
             "gpt-6-luna",
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
             "gpt-5.5",
             "gpt-5.4",
             "gpt-5.4-mini",
@@ -6287,7 +6325,20 @@
         "label": "Max Tokens",
         "type": "integer",
         "required": false,
-        "default": 4096,
+        "default": 25000,
+        "defaultBy": {
+          "model": {
+            "gpt-5.5": 4096,
+            "gpt-5.4": 4096,
+            "gpt-5.4-mini": 4096,
+            "gpt-5.4-nano": 4096,
+            "gpt-4o": 4096,
+            "gpt-4o-mini": 4096,
+            "gpt-4.1": 4096,
+            "gpt-4.1-mini": 4096,
+            "gpt-4.1-nano": 4096
+          }
+        },
         "min": 1,
         "max": 128000
       },
@@ -6476,9 +6527,23 @@
         "label": "Max Tokens",
         "type": "integer",
         "required": false,
-        "default": 8192,
+        "default": 65536,
+        "defaultBy": {
+          "model": {
+            "gemini-3.8-flash": 8192,
+            "gemini-3.6-flash": 8192,
+            "gemini-3.5-flash-lite": 8192,
+            "gemini-3.5-flash": 8192,
+            "gemini-3.1-pro-preview": 8192,
+            "gemini-3-flash-preview": 8192,
+            "gemini-3.1-flash-lite": 8192,
+            "gemini-2.5-pro": 8192,
+            "gemini-2.5-flash": 8192,
+            "gemini-2.5-flash-lite": 8192
+          }
+        },
         "min": 1,
-        "max": 65535
+        "max": 65536
       },
       {
         "key": "temperature",

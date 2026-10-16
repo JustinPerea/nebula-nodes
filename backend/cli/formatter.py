@@ -96,6 +96,14 @@ def format_node_detail(node: dict[str, Any]) -> str:
                 lo = p.get("min", "")
                 hi = p.get("max", "")
                 detail += f"  min={lo} max={hi}"
+            for controller, table in (p.get("defaultBy") or {}).items():
+                # Grouped by value, every entry listed: an agent needs to know
+                # which models leave the default.
+                by_value: dict[str, list[str]] = {}
+                for v, d in table.items():
+                    by_value.setdefault(str(d), []).append(str(v))
+                listed = "; ".join(f"{d} for {', '.join(vs)}" for d, vs in by_value.items())
+                detail += f"  (default by {controller}: {listed})"
             vis = p.get("visibleWhen")
             if vis:
                 conds = [f"{k}={v}" for k, vals in vis.items() for v in vals]

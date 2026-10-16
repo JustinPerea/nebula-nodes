@@ -56,6 +56,10 @@ class TestSelectProvider:
         assert select_enhance_provider({"ANTHROPIC_API_KEY": "a", "GOOGLE_API_KEY": "g"})[0] == "anthropic"
         assert select_enhance_provider({"GOOGLE_API_KEY": "g"})[0] == "google"
 
+    def test_google_uses_gemini_36_flash(self) -> None:
+        # gemini-3.5-flash was deprecated 2026-10-08 and now routes to 3.6 Flash.
+        assert select_enhance_provider({"GOOGLE_API_KEY": "g"}) == ("google", "g", "gemini-3.6-flash")
+
 
 class TestBuildRequest:
     def test_openai_shape(self) -> None:
@@ -77,8 +81,8 @@ class TestBuildRequest:
         assert body["max_tokens"] > 0
 
     def test_google_shape(self) -> None:
-        url, headers, body = build_enhance_request("google", "k", "gemini-3.5-flash", "a cat")
-        assert "gemini-3.5-flash:generateContent" in url
+        url, headers, body = build_enhance_request("google", "k", "gemini-3.6-flash", "a cat")
+        assert "gemini-3.6-flash:generateContent" in url
         assert headers["x-goog-api-key"] == "k"
         assert body["systemInstruction"]["parts"][0]["text"] == SYSTEM_PROMPT
         assert body["contents"][0]["parts"][0]["text"] == "a cat"

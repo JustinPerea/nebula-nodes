@@ -116,9 +116,9 @@ Registry key: `gpt-4o-chat` (id kept for saved-graph compatibility).
 
 | `key` | `type` | `default` | Allowed values / notes |
 |-------|--------|-----------|------------------------|
-| `model` | enum | `gpt-6.1-sol` | `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano` |
-| `reasoning_effort` | enum | `medium` | `none` (not on `gpt-6-astra` or `gpt-6.1-sol`), `low`, `medium`, `high`, `xhigh`, `max` (GPT-6 only; refused before the request on `gpt-5*`) — shown for GPT-6 and GPT-5.x (UI `visibleWhen`) |
-| `max_completion_tokens` | int | `4096` | 1–128000 |
+| `model` | enum | `gpt-6.1-sol` | `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano` |
+| `reasoning_effort` | enum | `medium` | `none` (not on `gpt-6-astra` or `gpt-6.1-sol`), `low`, `medium`, `high`, `xhigh`, `max` (GPT-6 and GPT-5.6 only; refused before the request on `gpt-5.5` and `gpt-5.4*`) — shown for GPT-6, GPT-5.6 and GPT-5.x (UI `visibleWhen`) |
+| `max_completion_tokens` | int | `25000` (the GPT-6 and GPT-5.6 models, incl. the default `gpt-6.1-sol`); `4096` for `gpt-5.5`, `gpt-5.4*`, `gpt-4o*` and `gpt-4.1*` (`defaultBy`) | 1–128000. Reasoning tokens count toward it; OpenAI's reasoning guide recommends reserving at least 25,000 |
 | `temperature` | float | `1` | 0–2 — **legacy models only** |
 | `top_p` | float | unset | 0–1 — legacy only; omitted when unset |
 | `frequency_penalty` | float | `0` | -2–2 — legacy only |
@@ -167,8 +167,8 @@ flowchart LR
 
 | Model prefix | Forwarded params | Omitted params |
 |--------------|------------------|----------------|
-| `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-luna` | `reasoning_effort` (when set; `none` refused on Astra and 6.1 Sol) | `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` |
-| `gpt-5*` | `reasoning_effort` (when set; `max` refused) | `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` |
+| `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` (`REASONING_EFFORTS`) | `reasoning_effort` (when set; `none` refused on Astra and 6.1 Sol, `minimal` refused on all) | `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` |
+| other `gpt-5*` | `reasoning_effort` (when set; `max` refused) | `temperature`, `top_p`, `frequency_penalty`, `presence_penalty` |
 | `gpt-4o*`, `gpt-4.1*` | samplers when set | `reasoning_effort` |
 
 ---
@@ -216,7 +216,7 @@ Built inline in `handle_openai_chat`:
 | `images` port | Optional; each value appended as `image_url` part |
 | Local image path | Converted to `data:{mime};base64,{bytes}` data URI |
 | `http(s)://` or `data:` image | Passed through unchanged |
-| `max_completion_tokens` | Include only when truthy in params |
+| `max_completion_tokens` | Include only when truthy in params. When the key is missing or empty (a cleared field, or a node an agent made without it), nothing is sent on any model, so OpenAI applies the model's own limit. `defaultBy` acts only in the canvas (new nodes, model switches) |
 | `response_format` | Include as `{ "type": "json_object" }` only when ≠ `text` |
 | `max_tokens` | **Never** forward (deprecated) |
 
@@ -286,7 +286,8 @@ Handler return value (port output map):
 | Legacy model + `reasoning_effort` in params | `reasoning_effort` never sent |
 | GPT-5.x + saved `reasoning_effort: "max"` (node switched from GPT-6) | `ValueError` before the request: "Reasoning effort 'max' isn't available for <model>." |
 | `response_format: text` | Key omitted from request body |
-| `max_completion_tokens` absent / falsy | Key omitted from request body |
+| `max_completion_tokens` absent | Omitted |
+| `max_completion_tokens: 0` | Key omitted from request body |
 | `temperature: 0` on legacy | Forwarded as `0.0` when explicitly set |
 | HTTP ≠ 200 | `RuntimeError` from stream runner |
 | Vision with multiple images | All appended to single user message `content` array |
@@ -364,7 +365,7 @@ Execution: shared `POST /api/execute` — no node-specific REST route.
 | `messages` | ✓ | built from ports |
 | `stream` | ✓ | pinned `true` |
 | `max_completion_tokens` | ✓ | param (optional forward) |
-| `reasoning_effort` | ✓ (GPT-5.x) | param, GPT-5.x only |
+| `reasoning_effort` | ✓ (reasoning models) | param, GPT-6 / GPT-5.6 / GPT-5.x only |
 | `temperature` | ✓ | legacy models only |
 | `top_p` | ✓ | legacy only, when set |
 | `frequency_penalty` | ✓ | legacy only |
@@ -397,3 +398,4 @@ Official reference: [Create chat completion](https://developers.openai.com/api/r
 |------|--------|
 | 2026-07-01 | Initial gold exemplar from `openai_chat.py` + tests |
 | 2026-10-16 | Default model `gpt-6.1-sol` with `reasoning_effort` `medium` (OpenAI's documented default for it); handler fallback matches |
+| 2026-10-16 | GPT-6 Sol and GPT-5.6 Sol/Terra/Luna; per-model `max_completion_tokens` default (25,000) for GPT-6 and GPT-5.6 (canvas only; a missing value sends none) |

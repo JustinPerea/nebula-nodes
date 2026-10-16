@@ -4172,7 +4172,7 @@ Nodes: 304 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | claude-opus-5-5 | Claude Fable 5.1 (flagship), Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5, Claude Fable 5, Claude Opus 4.8, Claude Sonnet 4.6, Claude Haiku 4.5, … |
-| Max Tokens | int | 4096 | 1–200000 |
+| Max Tokens | int | 64000; 4096 for model claude-fable-5, claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5-20251001, claude-opus-4-7, claude-opus-4-6 | 1–128000 |
 | Temperature | float | 1 | 0–1 |
 | System Prompt | textarea | — | — |
 | Top P | float | — | 0–1 |
@@ -4200,7 +4200,7 @@ Nodes: 304 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | gemini-4-argon | Gemini 4 Argon, Gemini 3.8 Flash, Gemini 3.6 Flash, Gemini 3.5 Flash-Lite, Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash), Gemini 3.1 Pro (preview), Gemini 3 Flash (preview), Gemini 3.1 Flash-Lite (retiring 2027-05-07), … |
-| Max Tokens | int | 8192 | 1–65535 |
+| Max Tokens | int | 65536; 8192 for model gemini-3.8-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.5-flash, gemini-3.1-pro-preview, gemini-3-flash-preview, gemini-3.1-flash-lite, gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite | 1–65536 |
 | Temperature | float | 1 | 0–2 |
 | System Prompt | textarea | — | — |
 | Thinking Level | enum | medium | Default, Minimal, Low, Medium, High |
@@ -4227,9 +4227,9 @@ Nodes: 304 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gpt-6.1-sol | GPT-6 Astra (flagship), GPT-6.1 Sol, GPT-6 Luna, GPT-5.5, GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano (retiring 2027-04-01), GPT-4o (legacy, retiring 2027-01-14), … |
+| Model | enum | gpt-6.1-sol | GPT-6 Astra (flagship), GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5, … |
 | Reasoning Effort | enum | medium | None, Low, Medium, High, X-High, Max |
-| Max Tokens | int | 4096 | 1–128000 |
+| Max Tokens | int | 25000; 4096 for model gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.4-nano, gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano | 1–128000 |
 | Temperature | float | 1 | 0–2 |
 | Top P | float | — | 0–1 |
 | Frequency Penalty | float | 0 | -2–2 |

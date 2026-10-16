@@ -50,7 +50,7 @@ against these Anthropic pages, fetched that day:
 | Param key | Type | Required | Default | API field | Notes |
 |---|---|---|---|---|---|
 | `model` | enum | yes | `claude-opus-5-5` | `model` | See model list below. Was `claude-sonnet-4-6` until 2026-10-16 |
-| `max_tokens` | integer | yes | 4096 | `max_tokens` | Required by Anthropic API (unlike OpenAI); always sent |
+| `max_tokens` | integer | yes | 64000 (the four models below, incl. the default Opus 5.5); 4096 on the six older models (`defaultBy`) | `max_tokens` | Required by Anthropic API (unlike OpenAI); always sent. Range 1–128000. When the key is missing (a node an agent made with only a model), the handler sends the model's default |
 | `temperature` | float | no | 1 | `temperature` | 0–1; overridden to 1 when extended_thinking is enabled. Hidden and never sent for Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Opus 4.8 / Opus 4.7 |
 | `system` | textarea | no | — | `system` | Top-level field, not a messages role |
 | `top_p` | float | no | — | `top_p` | Not forwarded if absent (FIXED). Hidden and never sent for the 5.5 generation, Fable 5.1, Opus 4.8 and Opus 4.7 |
@@ -90,6 +90,12 @@ for `thinking: {type: "enabled", budget_tokens}` and for non-default
   switched from an older model still holds those values;
 - sends `output_config.effort` only when the Effort param is set;
 - caps `max_tokens` at 128,000, the synchronous output limit;
+- defaults `max_tokens` to 64,000 for them (the definition's `default`; the
+  older models are listed at 4,096 in `defaultBy`).
+  Thinking counts toward `max_tokens`, and Anthropic's effort guide says that at
+  `xhigh` or `max` effort, "start at 64k tokens and tune from there". Switching
+  the model in the Inspector or a Create pill moves an untouched value to the
+  new model's default and notes it under the field; an edited value stays;
 - skips `thinking_delta` / `signature_delta` stream events (they carry no
   `delta.text`), so only the answer text reaches the output port.
 
@@ -194,10 +200,11 @@ entirely absent. `claude-opus-4-7` is the current flagship.
 2. **`thinkingBudget` default** — Resolved: both registries now carry `"default": 10000`,
    matching the handler fallback. UI will show 10,000 as the pre-filled value.
 
-3. **`max_tokens` upper bound per model** — The registry caps `max_tokens` at 200,000.
-   Actual output limits vary: Opus 4.7 → 128k, Sonnet 4.6 → 64k, Haiku 4.5 → 64k.
-   A user setting `max_tokens=200000` on Haiku will get an API error. Per-model caps
-   would be more accurate; currently using a conservative shared ceiling.
+3. **`max_tokens` upper bound per model** — The registry caps `max_tokens` at 128,000
+   (since 2026-10-16), the largest synchronous output of any listed model. Anthropic's
+   model pages (checked 2026-10-16) list 128K for every listed model except Haiku 4.5
+   (64K), so a value over 64,000 on Haiku 4.5 still gets an API error. The UI clamps
+   only when you edit the field; a saved larger value is still sent as before.
 
 4. **Saved-graph compatibility for deprecated models** — Graphs saved before the model
    lineup audit that selected `claude-opus-4-20250514` (deprecated, retiring 2026-06-15)

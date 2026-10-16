@@ -3414,6 +3414,9 @@ def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
         brief["options"] = options[:40] + (["…"] if len(options) > 40 else [])
     if param.get("visibleWhen"):
         brief["onlyWhen"] = param["visibleWhen"]
+    if param.get("defaultBy"):
+        # e.g. {"model": {"claude-opus-5-5": 64000}}: the default for those values.
+        brief["defaultBy"] = param["defaultBy"]
     return brief
 
 

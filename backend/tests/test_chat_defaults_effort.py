@@ -20,13 +20,14 @@ import pytest
 
 from handlers.anthropic_chat import EFFORT_LEVELS, EFFORT_MODELS
 from handlers.google_gemini import GEMINI_CHAT_THINKING_LEVELS
-from handlers.openai_chat import GPT6_EFFORTS
+from handlers.openai_chat import REASONING_EFFORTS
 from tests.test_chat_model_catalog import (
     USER_TURN_CLAUDE,
     USER_TURN_GEMINI,
     USER_TURN_OPENAI,
     _claude,
     _defaults,
+    _fresh,
     _gemini,
     _gemini_url,
     _openai,
@@ -89,35 +90,34 @@ def test_default_levels_are_ones_the_handlers_accept():
     # Anthropic effort page: Opus 5.5 supports all five levels; medium is its default.
     assert "claude-opus-5-5" in EFFORT_MODELS and "medium" in EFFORT_LEVELS
     # OpenAI gpt-6.1-sol page: low, medium (default), high, xhigh, max; no none/minimal.
-    assert "medium" in GPT6_EFFORTS["gpt-6.1-sol"]
-    assert "none" not in GPT6_EFFORTS["gpt-6.1-sol"] and "minimal" not in GPT6_EFFORTS["gpt-6.1-sol"]
+    assert "medium" in REASONING_EFFORTS["gpt-6.1-sol"]
+    assert "none" not in REASONING_EFFORTS["gpt-6.1-sol"] and "minimal" not in REASONING_EFFORTS["gpt-6.1-sol"]
     # Google thinking table: gemini-4-argon low, medium, high (default medium).
     assert GEMINI_CHAT_THINKING_LEVELS["gemini-4-argon"] == ("low", "medium", "high")
 
 
 @pytest.mark.asyncio
 async def test_fresh_claude_node_sends_opus_55_at_medium():
-    _, url, body = await _claude(_defaults("claude-chat"))
+    _, url, body = await _claude(_fresh("claude-chat", "claude-opus-5-5"))
     assert url == "https://api.anthropic.com/v1/messages"
-    assert body == {"model": "claude-opus-5-5", "messages": USER_TURN_CLAUDE, "max_tokens": 4096,
+    assert body == {"model": "claude-opus-5-5", "messages": USER_TURN_CLAUDE, "max_tokens": 64000,
                     "stream": True, "output_config": {"effort": "medium"}}
 
 
 @pytest.mark.asyncio
 async def test_fresh_openai_node_sends_gpt_61_sol_at_medium():
-    _, url, body = await _openai(_defaults("gpt-4o-chat"))
+    _, url, body = await _openai(_fresh("gpt-4o-chat", "gpt-6.1-sol"))
     assert url == "https://api.openai.com/v1/chat/completions"
     assert body == {"model": "gpt-6.1-sol", "messages": USER_TURN_OPENAI, "stream": True,
-                    "max_completion_tokens": 4096, "reasoning_effort": "medium"}
+                    "max_completion_tokens": 25000, "reasoning_effort": "medium"}
 
 
 @pytest.mark.asyncio
 async def test_fresh_gemini_node_sends_argon_at_medium():
-    _, url, body = await _gemini(_defaults("gemini-chat"))
+    _, url, body = await _gemini(_fresh("gemini-chat", "gemini-4-argon"))
     assert url == _gemini_url("gemini-4-argon")
-    # maxOutputTokens is the node's 8192 default here; per-model max-token
-    # defaults (Argon) come from a separate change.
     assert body["contents"] == USER_TURN_GEMINI
+    assert body["generationConfig"]["maxOutputTokens"] == 65536
     assert body["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "medium"}
     assert "temperature" not in body["generationConfig"]
 
@@ -142,7 +142,7 @@ async def test_handler_fallbacks_match_the_new_defaults():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model", CLAUDE_OLDER)
 async def test_new_claude_node_on_older_model_sends_no_effort(model):
-    _, _, new_body = await _claude({**_defaults("claude-chat"), "model": model})
+    _, _, new_body = await _claude(_fresh("claude-chat", model))
     _, _, saved_body = await _claude({**_saved_defaults("claude-chat"), "model": model})
     assert "output_config" not in new_body
     assert new_body == saved_body
@@ -151,7 +151,7 @@ async def test_new_claude_node_on_older_model_sends_no_effort(model):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model", ["gpt-5.5", "gpt-5.4", "gpt-4o", "gpt-4.1-nano"])
 async def test_new_openai_node_on_older_model_matches_a_saved_node(model):
-    _, _, new_body = await _openai({**_defaults("gpt-4o-chat"), "model": model})
+    _, _, new_body = await _openai(_fresh("gpt-4o-chat", model))
     _, _, saved_body = await _openai({**_saved_defaults("gpt-4o-chat"), "model": model})
     assert new_body == saved_body
 
@@ -161,7 +161,7 @@ async def test_new_openai_node_on_older_model_matches_a_saved_node(model):
 async def test_gemini_25_sends_the_budget_not_a_leftover_level(model):
     # A new node starts with thinkingLevel "medium"; the 2.5 card hides it and
     # shows Thinking Budget, so a set budget is what goes out.
-    _, _, body = await _gemini({**_defaults("gemini-chat"), "model": model, "thinkingBudget": 2048})
+    _, _, body = await _gemini({**_fresh("gemini-chat", model), "thinkingBudget": 2048})
     assert body["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 2048}
     _, _, body = await _gemini({**_saved_defaults("gemini-chat"), "model": model,
                                 "thinkingLevel": "high", "thinkingBudget": 0})
@@ -207,7 +207,7 @@ def test_opus_47_48_card_shows_effort_and_hides_budget_and_sampling():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model", OPUS_47_48)
 async def test_opus_47_48_new_node_sends_effort(model):
-    _, _, body = await _claude({**_defaults("claude-chat"), "model": model})
+    _, _, body = await _claude(_fresh("claude-chat", model))
     assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 4096, "stream": True,
                     "output_config": {"effort": "medium"}}
 
@@ -216,7 +216,7 @@ async def test_opus_47_48_new_node_sends_effort(model):
 @pytest.mark.parametrize("model", OPUS_47_48)
 @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
 async def test_opus_47_48_thinking_on_sends_adaptive_and_effort(model, effort):
-    params = {**_defaults("claude-chat"), "model": model, "effort": effort, "extended_thinking": True,
+    params = {**_fresh("claude-chat", model), "effort": effort, "extended_thinking": True,
               "thinkingBudget": 5000, "temperature": 0.3, "top_p": 0.9, "max_tokens": 64000}
     _, _, body = await _claude(params)
     assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 64000, "stream": True,
