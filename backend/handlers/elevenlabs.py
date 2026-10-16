@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json as _json
 import re
 from pathlib import Path
@@ -144,74 +145,88 @@ async def handle_elevenlabs_tts(
 # ---------------------------------------------------------------------------
 # Sources, all read 2026-10-16:
 # - https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert: body
-#   ``inputs`` (list of {text, voice_id}, max 10 unique voice ids), ``model_id``
-#   (default eleven_v3), ``language_code``, ``settings`` ({stability,
-#   similarity}), ``seed`` (0 to 4294967295); ``output_format`` is a query
-#   value. "For reliable generation, keep the total character count across all
-#   inputs[].text values at or below 2,000 characters per request. Longer
-#   requests can terminate early in streaming responses or return a validation
-#   error."
+#   ``inputs`` (list of {text, voice_id}; "The maximum number of unique voice
+#   IDs is 10"), ``model_id`` (default eleven_v3), ``language_code``,
+#   ``settings`` ({stability, similarity}), ``seed`` (0 to 4294967295);
+#   ``output_format`` is a query value. "For reliable generation, keep the
+#   total character count across all inputs[].text values at or below 2,000
+#   characters per request. Longer requests can terminate early in streaming
+#   responses or return a validation error."
 # - https://elevenlabs.io/docs/overview/models: "Eleven v4 is available via the
 #   Text to Dialogue API". The same page lists a 10,000 character limit for
 #   eleven_v4; the endpoint's 2,000 figure is the one this node enforces.
+# - https://elevenlabs.io/docs/api-reference/voices/search: GET /v2/voices,
+#   "a list of all available voices for a user with search, filtering and
+#   pagination". page_size "Can not exceed 100"; next_page_token "Use this in
+#   combination with the has_more flag for reliable pagination"; search
+#   "Searches in name, description, labels, category". Each voice has
+#   voice_id, name and category.
+# - Errors (https://elevenlabs.io/docs/eleven-api/resources/errors):
+#   authorization_error, 403, "The authenticated user doesn't have the
+#   required permissions for this action". The key permission for reading
+#   voices is ``voices_read`` (PermissionType in ElevenLabs' OpenAPI spec,
+#   api.elevenlabs.io/openapi.json).
 ELEVENLABS_DIALOGUE_URL = "https://api.elevenlabs.io/v1/text-to-dialogue"
+ELEVENLABS_VOICES_URL = "https://api.elevenlabs.io/v2/voices"
 DIALOGUE_MODELS = ("eleven_v4", "eleven_v3")
 DIALOGUE_DEFAULT_MODEL = "eleven_v4"
-# The node's speaker slots: voice_1 .. voice_4 (node_definitions.json). The
-# endpoint allows 10 unique voices; four keeps the card short.
-DIALOGUE_SPEAKERS = 4
+# "The maximum number of unique voice IDs is 10" (text-to-dialogue reference).
+DIALOGUE_MAX_VOICES = 10
 DIALOGUE_MAX_CHARS = 2000
 DIALOGUE_SEED_MAX = 4_294_967_295
-# A turn: "1: text" or "Speaker 1: text" (any case, spaces around the colon).
-_DIALOGUE_LINE = re.compile(r"\s*(?:speaker\s*)?(\d+)\s*:\s*(.*)", re.IGNORECASE | re.DOTALL)
+# GET /v2/voices: page_size "Can not exceed 100".
+VOICES_PAGE_SIZE = 100
+# Nebula's own bound on how many pages one run reads (100 x 100 voices).
+VOICES_MAX_PAGES = 100
+VOICES_TIMEOUT = 15.0
+VOICE_SUGGESTIONS = 5
+# A voice ID as ElevenLabs prints them: 20 letters and digits with a digit
+# among them (21m00Tcm4TlvDq8ikWAM, JBFqnCBsd6RMkjVDRZzb in the docs). Only
+# used when the key can't list voices, to tell an ID from a name. Nebula's
+# own reading of the examples; the docs don't define the format.
+_VOICE_ID_SHAPE = re.compile(r"(?=[A-Za-z0-9]*[0-9])[A-Za-z0-9]{20}")
 # ISO 639-1, or ISO 639-3 for ast, yue, ceb, fil (models page, Eleven v4).
 _LANGUAGE_CODE = re.compile(r"[a-z]{2,3}")
 
 
-def _checked_voice(value: Any, param: str) -> str:
-    voice = str(value).strip()
-    if not _VOICE_ID.fullmatch(voice):
-        raise ValueError(f"{param} must be an ElevenLabs voice ID (letters and digits), received {voice!r}")
-    return voice
+def _speaker_key(name: str) -> str:
+    """How a speaker label and a voice name compare: case and surrounding spaces ignored."""
+    return name.strip().casefold()
 
 
-def parse_dialogue_script(script: str, voices: dict[int, str]) -> list[dict[str, str]]:
-    """Turn a script into Text to Dialogue ``inputs``.
+def parse_dialogue_script(script: str) -> list[tuple[str, str]]:
+    """Turn a script into ``(speaker, text)`` turns, before any call.
 
-    One turn per non-empty line, each starting with a speaker label: ``1:``
-    (or ``Speaker 1:``) up to ``4:``. ``voices`` maps a speaker number to the
-    voice id set on the card. Raises ValueError, before any call, for a line
-    without a label, a label past the card's speakers, a speaker with no voice,
-    an empty turn, or a script over the endpoint's 2,000-character guidance.
+    One turn per non-empty line, ``<speaker>: <text>``. The speaker is
+    everything before the first colon, trimmed (``Dr. Mae O'Neil: Hi`` is
+    spoken by ``Dr. Mae O'Neil``). Raises ValueError for a line without a
+    label, an empty label or turn, an empty script, more distinct speakers
+    than the endpoint's 10 voices, or a total over its 2,000-character
+    guidance.
     """
-    turns: list[dict[str, str]] = []
+    turns: list[tuple[str, str]] = []
     for number, raw in enumerate(str(script).splitlines(), start=1):
         if not raw.strip():
             continue
-        match = _DIALOGUE_LINE.fullmatch(raw)
-        if not match:
+        speaker, colon, text = raw.partition(":")
+        speaker, text = speaker.strip(), text.strip()
+        if not colon or not speaker:
             raise ValueError(
-                f"Dialogue line {number} has no speaker label. Start each line with 1: to "
-                f"{DIALOGUE_SPEAKERS}: (or Speaker 1:), e.g. '1: Hello there.' Received {raw.strip()[:60]!r}"
-            )
-        speaker = int(match.group(1))
-        text = match.group(2).strip()
-        if not 1 <= speaker <= DIALOGUE_SPEAKERS:
-            raise ValueError(
-                f"Dialogue line {number} uses unknown speaker label {match.group(1)!r}. "
-                f"This node has speakers 1 to {DIALOGUE_SPEAKERS}."
-            )
-        voice = voices.get(speaker)
-        if not voice:
-            raise ValueError(
-                f"Dialogue line {number} is spoken by speaker {speaker}, but Speaker {speaker} Voice ID is empty."
+                f"Dialogue line {number} has no speaker. Start each line with a voice name from your "
+                f"ElevenLabs voices and a colon, e.g. 'Rachel: Hello there.' Received {raw.strip()[:60]!r}"
             )
         if not text:
-            raise ValueError(f"Dialogue line {number} (speaker {speaker}) has no text after the label.")
-        turns.append({"text": text, "voice_id": voice})
+            raise ValueError(f"Dialogue line {number} ({speaker}) has no text after the colon.")
+        turns.append((speaker, text))
     if not turns:
-        raise ValueError("The dialogue script is empty. Write one line per turn, e.g. '1: Hello.' then '2: Hi!'")
-    total = sum(len(turn["text"]) for turn in turns)
+        raise ValueError("The dialogue script is empty. Write one line per turn, e.g. 'Rachel: Hello.' then 'Adam: Hi!'")
+    speakers = _distinct_speakers(turns)
+    if len(speakers) > DIALOGUE_MAX_VOICES:
+        raise ValueError(
+            f"The script has {len(speakers)} speakers ({', '.join(speakers)}). ElevenLabs allows at most "
+            f"{DIALOGUE_MAX_VOICES} different voices in one Text to Dialogue request. Split it across two nodes."
+        )
+    total = sum(len(text) for _, text in turns)
     if total > DIALOGUE_MAX_CHARS:
         raise ValueError(
             f"The dialogue is {total:,} characters. ElevenLabs asks for at most {DIALOGUE_MAX_CHARS:,} "
@@ -221,18 +236,22 @@ def parse_dialogue_script(script: str, voices: dict[int, str]) -> list[dict[str,
     return turns
 
 
-def build_dialogue_request(node: GraphNode, script: str) -> tuple[str, dict[str, Any]]:
-    """The URL and JSON body for one Text to Dialogue call (no network)."""
-    voices: dict[int, str] = {}
-    for speaker in range(1, DIALOGUE_SPEAKERS + 1):
-        key = f"voice_{speaker}"
-        value = node.params.get(key)
-        if value is None or str(value).strip() == "":
-            if speaker != 1:
-                continue
-            value = DEFAULT_VOICE_ID  # Speaker 1 falls back to Rachel, as elevenlabs-tts does
-        voices[speaker] = _checked_voice(value, key)
-    turns = parse_dialogue_script(script, voices)
+def _distinct_speakers(turns: list[tuple[str, str]]) -> list[str]:
+    """Each speaker once, as first written, in script order."""
+    seen: dict[str, str] = {}
+    for speaker, _ in turns:
+        seen.setdefault(_speaker_key(speaker), speaker)
+    return list(seen.values())
+
+
+def build_dialogue_request(node: GraphNode, script: str) -> tuple[str, dict[str, Any], list[tuple[str, str]]]:
+    """The URL, the JSON body without ``inputs``, and the script's turns.
+
+    Every local check runs here, so a bad script or param stops the run before
+    the voices lookup and the paid call. ``dialogue_inputs`` fills ``inputs``
+    once the speakers are resolved.
+    """
+    turns = parse_dialogue_script(script)
 
     model_id = str(node.params.get("model_id") or DIALOGUE_DEFAULT_MODEL)
     if model_id not in DIALOGUE_MODELS:
@@ -240,7 +259,6 @@ def build_dialogue_request(node: GraphNode, script: str) -> tuple[str, dict[str,
 
     # Always send model_id: the endpoint's own default is eleven_v3.
     body: dict[str, Any] = {
-        "inputs": turns,
         "model_id": model_id,
         "settings": {
             "stability": float(node.params.get("stability", 0.5)),
@@ -263,7 +281,153 @@ def build_dialogue_request(node: GraphNode, script: str) -> tuple[str, dict[str,
         body["seed"] = value
 
     output_format = node.params.get("output_format", "mp3_44100_128")
-    return _with_output_format(ELEVENLABS_DIALOGUE_URL, output_format), body
+    return _with_output_format(ELEVENLABS_DIALOGUE_URL, output_format), body, turns
+
+
+def dialogue_inputs(turns: list[tuple[str, str]], voices: dict[str, str]) -> list[dict[str, str]]:
+    """Text to Dialogue ``inputs`` from the turns and the resolved voice IDs."""
+    return [{"text": text, "voice_id": voices[_speaker_key(speaker)]} for speaker, text in turns]
+
+
+class VoicesPermissionError(RuntimeError):
+    """The key may not list voices (HTTP 403 from GET /v2/voices)."""
+
+
+def _error_detail(response: Any) -> str:
+    try:
+        detail = response.json().get("detail")
+    except Exception:  # noqa: BLE001
+        detail = None
+    if isinstance(detail, dict) and detail.get("message"):
+        return str(detail["message"])
+    if isinstance(detail, str):
+        return detail
+    return str(getattr(response, "text", "") or "")[:300]
+
+
+async def _get_voices_page(client: Any, api_key: str, params: dict[str, Any]) -> dict[str, Any]:
+    response = await client.get(
+        ELEVENLABS_VOICES_URL,
+        headers={"xi-api-key": api_key},
+        params=params,
+        timeout=VOICES_TIMEOUT,
+    )
+    if response.status_code == 401:
+        raise RuntimeError(
+            f"ElevenLabs rejected the API key while listing voices (error 401: {_error_detail(response)}). "
+            "Check ELEVENLABS_API_KEY in Settings.")
+    if response.status_code == 403:
+        raise VoicesPermissionError(f"{response.status_code}: {_error_detail(response)}")
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"ElevenLabs couldn't list your voices to look up the speaker names "
+            f"(error {response.status_code}: {_error_detail(response)})."
+        )
+    return response.json()
+
+
+async def list_elevenlabs_voices(client: Any, api_key: str) -> list[dict[str, Any]]:
+    """Every voice GET /v2/voices returns for this key, all pages.
+
+    Pages with has_more and next_page_token, as the reference asks ("Use this
+    flag (and next_page_token) for reliable pagination"). total_count is not
+    requested: "Only enable this when you actually need the total count".
+    """
+    voices: list[dict[str, Any]] = []
+    params: dict[str, Any] = {"page_size": VOICES_PAGE_SIZE, "include_total_count": "false"}
+    for _ in range(VOICES_MAX_PAGES):
+        page = await _get_voices_page(client, api_key, params)
+        voices.extend(v for v in page.get("voices") or [] if isinstance(v, dict) and v.get("voice_id"))
+        token = page.get("next_page_token")
+        if not page.get("has_more") or not token or token == params.get("next_page_token"):
+            return voices
+        params = {**params, "next_page_token": token}
+    raise RuntimeError(
+        f"Your ElevenLabs account has more than {VOICES_PAGE_SIZE * VOICES_MAX_PAGES:,} voices, more than "
+        "Nebula reads in one run. Write voice IDs in the script in place of the names."
+    )
+
+
+def _voice_line(voice: dict[str, Any]) -> str:
+    category = voice.get("category")
+    name = voice.get("name") or "(no name)"
+    return f"{name} ({category}): {voice['voice_id']}" if category else f"{name}: {voice['voice_id']}"
+
+
+async def _suggestions(client: Any, api_key: str, speaker: str, voices: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Close matches for a name with no exact match: ElevenLabs' own search
+    (name, description, labels, category), then near spellings in the list."""
+    found: list[dict[str, Any]] = []
+    try:
+        page = await _get_voices_page(
+            client, api_key, {"search": speaker, "page_size": VOICE_SUGGESTIONS, "include_total_count": "false"})
+        found = [v for v in page.get("voices") or [] if isinstance(v, dict) and v.get("voice_id")]
+    except Exception:  # noqa: BLE001 - a suggestion is a courtesy; the error below stands either way
+        found = []
+    if not found:
+        by_name = {_speaker_key(str(v.get("name") or "")): v for v in voices if v.get("name")}
+        close = difflib.get_close_matches(_speaker_key(speaker), list(by_name), n=VOICE_SUGGESTIONS, cutoff=0.6)
+        found = [by_name[name] for name in close]
+    return found[:VOICE_SUGGESTIONS]
+
+
+async def resolve_dialogue_voices(client: Any, api_key: str, speakers: list[str]) -> dict[str, str]:
+    """Map each speaker to a voice ID from the person's ElevenLabs voices.
+
+    A speaker matches a voice whose name is the same, ignoring case and
+    surrounding spaces. No name match: a label that is exactly the voice_id
+    of one of their voices is used as it is. Anything else, or a name shared
+    by several voices, stops the run before the paid call, listing the
+    candidates with their IDs. GET /v2/voices is free.
+    """
+    try:
+        voices = await list_elevenlabs_voices(client, api_key)
+    except VoicesPermissionError as exc:
+        # The key can't read voices. Labels that are voice IDs can still be
+        # used as written; any name stops here.
+        names = [s for s in speakers if not _VOICE_ID_SHAPE.fullmatch(s.strip())]
+        if names:
+            raise ValueError(
+                f"Your ElevenLabs API key can't list your voices ({exc}), so Nebula can't look up "
+                f"{', '.join(repr(n) for n in names)}. Give the key Voices read access (voices_read) under "
+                "Developers > API Keys in ElevenLabs, or write each voice's ID in place of its name, "
+                "e.g. '21m00Tcm4TlvDq8ikWAM: Hello.'"
+            ) from None
+        return {_speaker_key(s): s.strip() for s in speakers}
+
+    by_name: dict[str, list[dict[str, Any]]] = {}
+    by_id: dict[str, dict[str, Any]] = {}
+    for voice in voices:
+        by_id[str(voice["voice_id"])] = voice
+        if voice.get("name"):
+            by_name.setdefault(_speaker_key(str(voice["name"])), []).append(voice)
+
+    resolved: dict[str, str] = {}
+    problems: list[str] = []
+    for speaker in speakers:
+        matches = by_name.get(_speaker_key(speaker), [])
+        if len(matches) == 1:
+            resolved[_speaker_key(speaker)] = str(matches[0]["voice_id"])
+        elif len(matches) > 1:
+            listed = "; ".join(_voice_line(v) for v in matches)
+            problems.append(
+                f"'{speaker}' matches {len(matches)} of your voices: {listed}. Write the ID of the one you want "
+                "in place of the name.")
+        elif speaker.strip() in by_id:
+            resolved[_speaker_key(speaker)] = speaker.strip()
+        else:
+            close = await _suggestions(client, api_key, speaker, voices)
+            hint = (f" Close matches: {'; '.join(_voice_line(v) for v in close)}." if close
+                    else " No similar names found.")
+            problems.append(
+                f"'{speaker}' isn't the name of any of your ElevenLabs voices.{hint} Use a name exactly as it "
+                "appears in your ElevenLabs voices, or write a voice ID in place of the name.")
+    if problems:
+        raise ValueError("Nothing was generated. " + " ".join(problems))
+    for speaker, voice_id in resolved.items():
+        if not _VOICE_ID.fullmatch(voice_id):
+            raise ValueError(f"ElevenLabs returned an unexpected voice ID {voice_id!r} for {speaker!r}")
+    return resolved
 
 
 async def handle_elevenlabs_dialogue(
@@ -271,7 +435,12 @@ async def handle_elevenlabs_dialogue(
     inputs: dict[str, PortValueDict],
     api_keys: dict[str, str],
 ) -> dict[str, Any]:
-    """POST /v1/text-to-dialogue: a multi-speaker script in one audio file."""
+    """POST /v1/text-to-dialogue: a multi-speaker script in one audio file.
+
+    Order: the script and params are checked locally, then the speaker names
+    are looked up in the person's voices (GET /v2/voices, free), and only when
+    every speaker resolves is the paid dialogue call made.
+    """
     script_input = inputs.get("script")
     if not script_input or not script_input.value:
         raise ValueError("Script input is required but was not provided")
@@ -280,10 +449,12 @@ async def handle_elevenlabs_dialogue(
     if not api_key:
         raise MissingCredentialError("ELEVENLABS_API_KEY is required")
 
-    url, body = build_dialogue_request(node, str(script_input.value))
+    url, body, turns = build_dialogue_request(node, str(script_input.value))
     output_format = node.params.get("output_format", "mp3_44100_128")
 
     async with httpx.AsyncClient(timeout=180.0) as client:
+        voices = await resolve_dialogue_voices(client, api_key, _distinct_speakers(turns))
+        body = {"inputs": dialogue_inputs(turns, voices), **body}
         response = await client.post(
             url,
             headers={"xi-api-key": api_key, "Content-Type": "application/json"},

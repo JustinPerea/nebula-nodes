@@ -39,7 +39,7 @@ One row per real Nebula node. IDs, ports, endpoints, and params all match `node_
 | Nebula node (display name) | Node ID | Endpoint / model | In → Out ports | Key params |
 |---|---|---|---|---|
 | ElevenLabs TTS | `elevenlabs-tts` | `POST /v1/text-to-speech/{voice_id}` · model from `model_id` enum | `text` (Text) → `audio` (Audio) | `voice_id`, `model_id`, `stability`, `similarity_boost`, `style`, `use_speaker_boost`, `speed`, `output_format`, `seed` |
-| ElevenLabs Text to Dialogue | `elevenlabs-dialogue` | `POST /v1/text-to-dialogue` · `eleven_v4` (default) or `eleven_v3` | `script` (Text) → `audio` (Audio) | `voice_1`…`voice_4`, `model_id`, `stability`, `similarity`, `language_code`, `output_format`, `seed` |
+| ElevenLabs Text to Dialogue | `elevenlabs-dialogue` | `POST /v1/text-to-dialogue` · `eleven_v4` (default) or `eleven_v3` | `script` (Text) → `audio` (Audio) | `model_id`, `stability`, `similarity`, `language_code`, `output_format`, `seed` (speakers are voice names in the script) |
 | ElevenLabs Sound Effects | `elevenlabs-sfx` | `POST /v1/sound-generation` · model fixed (`eleven_text_to_sound_v2`) | `text` (Text) → `audio` (Audio) | `duration_seconds`, `prompt_influence`, `loop`, `output_format` |
 | ElevenLabs Speech-to-Speech | `elevenlabs-sts` | `POST /v1/speech-to-speech/{voice_id}` · model from `model_id` enum | `audio` (Audio) → `audio` (Audio) | `voice_id`, `model_id`, `stability`, `similarity_boost`, `remove_background_noise`, `seed`, `output_format` |
 | ElevenLabs Audio Isolation | `elevenlabs-isolation` | `POST /v1/audio-isolation` · denoise, MP3 out | `audio` (Audio) → `audio` (Isolated Audio) | *(none — no params; output always MP3)* |
@@ -62,13 +62,14 @@ Types, ranges, enums, and defaults below are exactly what the node exposes. "(ha
 - **`seed`** — integer, optional (placeholder "Random"). (handler) only sent when non-empty.
 
 ### `elevenlabs-dialogue` (Script → Audio)
-- **`script`** port (Text, required): one line per turn, starting `1:` to `4:` (or `Speaker 1:`). Blank lines are skipped. Audio tags like `[whispering]` go inside a line. Example: `1: [cheerfully] Morning!` then `2: Is it, though?`
-- **`voice_1` … `voice_4`** — strings. `voice_1` defaults to Rachel (`21m00Tcm4TlvDq8ikWAM`); the others are empty and only needed if the script uses that label. Letters and digits only.
+- **`script`** port (Text, required): one line per turn, `<voice name>: <text>`, with names from the user's ElevenLabs voice library. The speaker is everything before the first colon, trimmed, so `Dr. Mae O'Neil: Hi` works. Blank lines are skipped. Audio tags like `[whispering]` go inside a line. Example: `Rachel: [cheerfully] Morning!` then `Adam: Is it, though?`
+- **Speakers resolve at run time** (handler `resolve_dialogue_voices`): Nebula lists the user's voices once with `GET /v2/voices` (free; paged by `next_page_token` / `has_more`). A name matches a voice with the same name, ignoring case and surrounding spaces. A voice ID also works in place of a name. If a name matches no voice, the run stops before generating and lists close matches with their IDs; if it matches several, it lists each one's name, category and ID. Pass those IDs back to the user, or write the ID in the script. Up to 10 different speakers (the endpoint's limit on unique voices). There are no per-speaker voice fields on the card.
+- A restricted key needs Voices read access (`voices_read`) to list voices. Without it, a script of voice IDs still runs, and a script of names stops with that advice.
 - **`model_id`** — enum. Default `eleven_v4` (Eleven v4) · `eleven_v3` (Eleven v3). (handler) always sent, because the endpoint's own default is `eleven_v3`.
 - **`stability`** — float 0–1, default 0.5. **`similarity`** — float 0–1, default 0.75 (the endpoint's name; not `similarity_boost`). Both go in `settings`.
 - **`language_code`** — string, optional. ISO 639-1 (`en`, `es`); ISO 639-3 for `ast`, `yue`, `ceb`, `fil`.
 - **`output_format`** — same five options as TTS. **`seed`** — integer 0–4294967295, optional.
-- (handler) refused before any call, at no cost: a line with no label, a label above 4, a speaker with no voice, an empty turn, or more than **2,000 characters** in total (the endpoint's limit "for reliable generation"; the models page says 10,000 for v4, but the node holds to 2,000). Tell the user to split a longer script across two nodes.
+- (handler) refused before any call, at no cost: a line with no speaker, an empty turn, more than 10 different speakers, or more than **2,000 characters** in total (the endpoint's limit "for reliable generation"; the models page says 10,000 for v4, but the node holds to 2,000). Tell the user to split a longer script across two nodes.
 - No `speed`, `style` or `use_speaker_boost`: the endpoint has none, and Eleven v4 has no Style or Speed controls.
 
 ### `elevenlabs-sfx` (Text → Audio)
@@ -167,7 +168,7 @@ Router: `backend/execution/maker_routes_elevenlabs.py` (on `maker_routes.dual_ro
 Never promise these via a node; there is **no node** for any of them (per the audit gap table in `docs/api-guides/elevenlabs.md`):
 
 - **Music extras** — composition plans, streaming, inpainting, stems and video-to-music. Plain prompt-to-music is covered by `elevenlabs-music` (and the Krea music copies) on `POST /v1/music`.
-- **Text-to-Dialogue extras** — `elevenlabs-dialogue` covers up to four speakers; it has no previous/next text, pronunciation dictionaries, request stitching, audio effects, or the Eleven v4 Turbo WebSocket.
+- **Text-to-Dialogue extras** — `elevenlabs-dialogue` covers up to 10 speakers; it has no previous/next text, pronunciation dictionaries, request stitching, audio effects, or the Eleven v4 Turbo WebSocket.
 - **Voice Design** (`/v1/text-to-voice/design|create|remix`) — invent a brand-new voice from a description. No node.
 - **Voice Cloning** (`/v1/voices/add` IVC, `/add/professional` PVC) — clone a voice from samples. No node.
 - **Voice management / library** (`GET /v1/voices`, `/shared`, `/similar`) — Nebula takes a `voice_id` string but **cannot list, search, or pick voices in-app**. The user must supply the ID.
@@ -185,6 +186,7 @@ Seven ElevenLabs nodes are wired into Nebula, plus the music copies. If the user
 - ElevenLabs OpenAPI spec (authoritative endpoint list): https://api.elevenlabs.io/openapi.json
 - Speech-to-Text reference (now wired as the `elevenlabs-stt` node): https://elevenlabs.io/docs/api-reference/speech-to-text/convert
 - Text to Dialogue reference (`elevenlabs-dialogue`, read 2026-10-16): https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert
+- List voices, `GET /v2/voices` (speaker-name lookup, read 2026-10-16): https://elevenlabs.io/docs/api-reference/voices/search
 - Models page (Eleven v4, deprecated models, read 2026-10-16): https://elevenlabs.io/docs/overview/models
 - Nebula audit guide (node table, params, gap table, cited sources): `docs/api-guides/elevenlabs.md`
 - Ground truth in-repo: `backend/data/node_definitions.json` (node defs) · `backend/handlers/elevenlabs.py` (request building, sync/poll, param mapping, gotchas)

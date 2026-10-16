@@ -6,7 +6,7 @@
 
 **Speech (voice)**
 - Lifelike text-to-speech narration in 70+ languages, with control over a specific voice, stability, style, and speaking speed.
-- Multi-speaker dialogue in one call: write a script with up to four speakers, give each a voice, and get one audio file back (Eleven v4 by default).
+- Multi-speaker dialogue in one call: write a script with the names of up to 10 of your ElevenLabs voices (`Rachel: Hello.`) and get one audio file back (Eleven v4 by default).
 - Voice changer: keep the words and delivery of an existing recording but render it in a different ElevenLabs voice.
 - Translated dubbing: take a clip in one language and produce a spoken version in another (Spanish, French, Japanese, and more), with the original speaker's voice preserved by default.
 - Transcription: turn a spoken clip into text (or SRT/VTT subtitles), with optional speaker labels.
@@ -24,7 +24,7 @@ All seven live in the **audio-gen** category. Names, IDs, and params below match
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
 | ElevenLabs TTS | `elevenlabs-tts` | audio-gen | `text` (Text) → `audio` (Audio) | `voice_id` (default Rachel `21m00Tcm4TlvDq8ikWAM`), `model_id` (v3 / Multilingual v2 / Turbo v2.5 / Flash v2.5 / Turbo v2 / Flash v2; ElevenLabs lists both Turbo models as deprecated, and the menu says so), `stability`, `similarity_boost`, `style`, `use_speaker_boost`, `speed` (0.7–1.2), `output_format`, `seed` | Narration, character voices, voiceover from a script |
-| ElevenLabs Text to Dialogue | `elevenlabs-dialogue` | audio-gen | `script` (Text) → `audio` (Audio) | `model_id` (Eleven v4 default / Eleven v3), `voice_1`…`voice_4` (speaker 1 defaults to Rachel), `stability`, `similarity`, `language_code`, `output_format`, `seed` | A conversation between up to four voices in one file |
+| ElevenLabs Text to Dialogue | `elevenlabs-dialogue` | audio-gen | `script` (Text) → `audio` (Audio) | `model_id` (Eleven v4 default / Eleven v3), `stability`, `similarity`, `language_code`, `output_format`, `seed`. Speakers are voice names written in the script | A conversation between up to 10 voices in one file |
 | ElevenLabs Sound Effects | `elevenlabs-sfx` | audio-gen | `text` (Text) → `audio` (Audio) | `duration_seconds` (0.5–30, Auto if blank), `prompt_influence` (default 0.3), `loop` (seamless loop), `output_format` | Foley, ambiences, UI/game sounds, stingers from a text prompt |
 | ElevenLabs Speech-to-Speech | `elevenlabs-sts` | audio-gen | `audio` (Audio) → `audio` (Audio) | `voice_id`, `model_id` (English STS v2 / Multilingual STS v2), `stability`, `similarity_boost`, `remove_background_noise`, `seed`, `output_format` | Re-voice a recording in a different ElevenLabs voice while keeping the performance |
 | ElevenLabs Audio Isolation | `elevenlabs-isolation` | audio-gen | `audio` (Audio) → `audio` (Isolated Audio) | *(none — output is always MP3)* | Clean up a noisy clip; extract clear speech from background noise |
@@ -70,15 +70,25 @@ Notes that match the handler (`backend/handlers/elevenlabs.py`):
 
 ElevenLabs offers Eleven v4 (`eleven_v4`) on the Text to Dialogue API, not on Text to Speech: "Eleven v4 is available via the Text to Dialogue API" ([models page](https://elevenlabs.io/docs/overview/models)). So it is its own node, **ElevenLabs Text to Dialogue** (`elevenlabs-dialogue`, `POST /v1/text-to-dialogue`), and the TTS node's model menu doesn't list it. Eleven v3 is the other choice on the node.
 
-**Writing the script.** Wire a Text node into the `script` port. Write one line per turn, starting with a speaker label from `1:` to `4:` (`Speaker 1:` works too). Each label speaks with that speaker's voice ID (`voice_1` … `voice_4`). Blank lines are skipped. Audio tags such as `[whispering]` or `[laughing]` go inside the line ([Eleven v4 page](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4)).
+**Writing the script.** Wire a Text node into the `script` port. Write one line per turn as `<speaker>: <text>`, where the speaker is the name of one of your ElevenLabs voices. The speaker is everything before the first colon, trimmed, so names with spaces or punctuation work (`Dr. Mae O'Neil: Hi`). Blank lines are skipped. Audio tags such as `[whispering]` or `[laughing]` go inside the line ([Eleven v4 page](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4)).
 
 ```
-1: [cheerfully] Morning! Did you sleep at all?
-2: Not really. The neighbours had a party.
-1: [laughing] Of course they did.
+Rachel: [cheerfully] Morning! Did you sleep at all?
+Adam: Not really. The neighbours had a party.
+Rachel: [laughing] Of course they did.
 ```
 
-**Checked before any call** (no cost): a line with no label, a label above 4, a speaker whose voice ID is empty, an empty turn, a voice ID that isn't letters and digits, and a script over **2,000 characters** in total. The endpoint reference says "For reliable generation, keep the total character count across all `inputs[].text` values at or below 2,000 characters per request. Longer requests can terminate early in streaming responses or return a validation error." The models page gives Eleven v4 a 10,000-character limit, but for this endpoint the node holds to 2,000. Split a longer script across two nodes.
+**How names become voices (2026-10-16).** At run time Nebula lists your voices once with `GET /v2/voices` ([reference](https://elevenlabs.io/docs/api-reference/voices/search)). That call is free. It pages with `page_size=100` and follows `next_page_token` while `has_more` is true, which is what the reference recommends "for reliable pagination". Then, for each speaker:
+
+- **One voice with that name** (case and surrounding spaces ignored): its `voice_id` is used.
+- **No voice with that name:** if the label is exactly the `voice_id` of one of your voices, that ID is used. Otherwise the run stops before generating. The error names the speaker, lists close matches with their IDs (ElevenLabs' own `search`, which looks in name, description, labels and category, then near spellings), and says you can write a voice ID in place of the name.
+- **Several voices with that name:** the run stops and lists each one's name, category and ID. Write the ID of the one you want.
+
+All speakers are checked before the paid dialogue call, and every problem is reported at once. If any speaker doesn't resolve, nothing is generated.
+
+**API key permission.** A restricted ElevenLabs key needs Voices read access (`voices_read`, a `PermissionType` in ElevenLabs' [OpenAPI spec](https://api.elevenlabs.io/openapi.json)) to list voices. Without it the listing returns 403 (`authorization_error`, "The authenticated user doesn't have the required permissions for this action", [errors page](https://elevenlabs.io/docs/eleven-api/resources/errors)). Then a script written with voice IDs still runs, and a script with names stops with a message to give the key that access or to write voice IDs instead. The docs don't say which permission each endpoint needs; `voices_read` is the permission named for voices.
+
+**Checked before any call** (no cost): a line with no speaker, an empty turn, an empty script, more than **10 different speakers** ("The maximum number of unique voice IDs is 10", endpoint reference), and a script over **2,000 characters** in total. The endpoint reference says "For reliable generation, keep the total character count across all `inputs[].text` values at or below 2,000 characters per request. Longer requests can terminate early in streaming responses or return a validation error." The models page gives Eleven v4 a 10,000-character limit, but for this endpoint the node holds to 2,000. Split a longer script across two nodes.
 
 **Settings.** `stability` (default 0.5) and `similarity` (default 0.75; the endpoint's name, not `similarity_boost`) go in `settings`. "Style and Speed sliders are not available in Eleven v4" (Eleven v4 page), and the endpoint has no speaker-boost field, so the node has none of them. `language_code` is optional (ISO 639-1, e.g. `en`; ISO 639-3 for `ast`, `yue`, `ceb`, `fil`). `seed` is 0 to 4294967295. `output_format` has the same five choices as the TTS node; the endpoint documents 192 kbps MP3 as Creator tier and 44.1 kHz PCM/WAV as Pro tier.
 
@@ -112,7 +122,7 @@ Prices (checked 2026-10-14 on https://elevenlabs.io/pricing/api): Music is "$0.1
 | Dubbing — `POST /v1/dubbing` (+ poll + download) | Yes | **partial** | `elevenlabs-dubbing` submits, polls, and downloads dubbed audio. Does not expose transcripts, per-segment editing, speaker rendering, or watch/CSV-script dubbing. |
 | Speech-to-Text — `POST /v1/speech-to-text` | Yes | **full** | `elevenlabs-stt`. Transcription with optional diarization; plain text or SRT/VTT subtitles (subtitle formats auto-enable diarization + timestamps, per the API). |
 | Music generation — `POST /v1/music` (+ stream, composition plans, video-to-music, stems) | Yes | **partial** | `elevenlabs-music` and the three Krea music copies run `POST /v1/music` (prompt, `music_length_ms`, `force_instrumental`, `model_id`) on your ElevenLabs key. Composition plans, streaming, inpainting, stems and video-to-music have no node. |
-| Text-to-Dialogue — `POST /v1/text-to-dialogue` | Yes | **partial** | `elevenlabs-dialogue` (2026-10-16): up to four speakers, Eleven v4 / v3, stability, similarity, language_code, seed, output_format. No previous/next text, pronunciation dictionaries, request stitching, audio effects or the WebSocket variant. |
+| Text-to-Dialogue — `POST /v1/text-to-dialogue` | Yes | **partial** | `elevenlabs-dialogue` (2026-10-16): up to 10 speakers named by voice name or ID, Eleven v4 / v3, stability, similarity, language_code, seed, output_format. No previous/next text, pronunciation dictionaries, request stitching, audio effects or the WebSocket variant. |
 | Voice Design — `POST /v1/text-to-voice/design` `/create` `/remix` | Yes | **none** | Generate a brand-new voice from a text description. No node. |
 | Voice Cloning — `POST /v1/voices/add` (IVC), `/add/professional` (PVC) | Yes | **none** | Clone a voice from samples. No node. |
 | Voices management & library — `GET /v1/voices`, `/v1/voices/shared`, `/similar` | Yes | **none** | Nebula takes a `voice_id` string but can't list, search, or pick voices in-app. |
@@ -148,6 +158,8 @@ What it covers:
 - ElevenLabs OpenAPI specification (authoritative endpoint list): https://api.elevenlabs.io/openapi.json
 - Speech-to-Text reference: https://elevenlabs.io/docs/api-reference/speech-to-text/convert
 - Text to Dialogue reference (read 2026-10-16): https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert
+- List voices, `GET /v2/voices` (read 2026-10-16): https://elevenlabs.io/docs/api-reference/voices/search
+- Error types (read 2026-10-16): https://elevenlabs.io/docs/eleven-api/resources/errors
 - Models page, Eleven v4 and deprecated models (read 2026-10-16): https://elevenlabs.io/docs/overview/models
 - Eleven v4 page (read 2026-10-16): https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4
 - Existing Nebula developer audit (verified against `openapi.json` + official Python SDK, 2026-05-16/17/19): `docs/model-providers/elevenlabs/elevenlabs.md`

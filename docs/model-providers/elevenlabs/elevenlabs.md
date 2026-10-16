@@ -209,12 +209,17 @@ module-level imports per Python convention.
 
 ### elevenlabs-dialogue (added 2026-10-16)
 
-`POST /v1/text-to-dialogue` ([reference](https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert), read 2026-10-16). The `script` input is one line per turn, `1:` to `4:` (or `Speaker 1:`); the handler (`parse_dialogue_script`) turns it into `inputs[]` of `{text, voice_id}` and refuses a bad label, a speaker with no voice, an empty turn, or a total over 2,000 characters before any call.
+`POST /v1/text-to-dialogue` ([reference](https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert), read 2026-10-16). The `script` input is one line per turn, `<voice name>: <text>` (the speaker is everything before the first colon, trimmed). The handler checks the script locally first (`parse_dialogue_script`: a line with no speaker, an empty turn, more than 10 different speakers, a total over 2,000 characters), then lists the person's voices once with `GET /v2/voices` ([reference](https://elevenlabs.io/docs/api-reference/voices/search); free; `page_size=100`, following `next_page_token` while `has_more`), and resolves each speaker (`resolve_dialogue_voices`):
+
+- one voice with that name, ignoring case and surrounding spaces: its `voice_id`;
+- no such name: the label itself if it is exactly one of their voices' `voice_id`s, else an error with close matches and their IDs;
+- several voices with that name: an error listing each one's name, category and ID.
+
+Only when every speaker resolves does `POST /v1/text-to-dialogue` run, with `inputs[]` of `{text, voice_id}`. A 403 from the listing (a key without `voices_read`) stops a script written with names, with a message to give the key voices-read access or to write voice IDs; a script of voice IDs still runs.
 
 | Param | Type | Required | Default | API field | Notes |
 |---|---|---|---|---|---|
 | `model_id` | enum | no | `eleven_v4` | `model_id` | `eleven_v4` / `eleven_v3`; always sent (API default is `eleven_v3`) |
-| `voice_1`…`voice_4` | string | no | Rachel ID for `voice_1` | `inputs[].voice_id` | Letters and digits only |
 | `stability` | float | no | 0.5 | `settings.stability` | 0–1 |
 | `similarity` | float | no | 0.75 | `settings.similarity` | 0–1; the endpoint's name, not `similarity_boost` |
 | `language_code` | string | no | — | `language_code` | ISO 639-1 (639-3 for ast, yue, ceb, fil); only sent when set |
