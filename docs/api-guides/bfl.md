@@ -123,7 +123,7 @@ From BFL's pricing page (https://bfl.ai/pricing, the same data docs.bfl.ai/quick
 
 Drafts (hd only) cost $0.06 per second. The September 10 release note listed older qhd/uhd prices; the pricing page supersedes them.
 
-**Video tools:** Video Edit [fast] $0.03 per output second. Video Upscale $0.07 (precise) or $0.10 (creative) per output megapixel-second, at 24 fps.
+**Video tools:** FLUX Video Edit [fast] $0.03 per output second. FLUX Video Upscale $0.07 (precise) or $0.10 (creative) per output megapixel-second, at 24 fps.
 
 **FLUX.2, per megapixel** (first output MP, then each additional output MP and each input MP): [pro] $0.03 then $0.015; [max] $0.07 then $0.03; [flex] $0.05 then $0.05; [klein] 9B $0.015 then $0.002; [klein] 4B $0.014 then $0.001.
 

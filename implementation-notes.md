@@ -1,5 +1,26 @@
 # Implementation Notes
 
+## 2026-10-16 — PR 3 model names match the provider (flux-3-nodes)
+
+Justin, 2026-10-16: "Let's match the provider every time." Every model name a person sees uses the provider's own spelling: the maker's (BFL, Krea) for a model several hosts carry, the only host's for a one-host model. Ids, param keys and values, endpoints and prices are unchanged.
+
+Already matching, left as they are: `flux-3-image` "FLUX 3 Image" (docs.bfl.ai H1, pricing card), `flux-3-image-klein` "FLUX 3 Image Klein" (H1, OpenAPI summary, pricing card), `flux-3-video` "FLUX 3 Video" (H1, pricing card), `flux-video-upscale` "FLUX Video Upscale" (docs and bfl.ai/video-upscaler H1; its Precise/Creative labels match the docs pricing rows), `krea-3` "Krea 3" (docs.krea.ai, blog; "Krea 3 Beta" in the OpenAPI is a status tag).
+
+Changed:
+
+- `flux-3-image-klein` description: "FLUX 3 Klein" → "FLUX 3 Image Klein" (both definition files).
+- `flux-3-image-klein-base` description: "FLUX 3 Klein Base" → "FLUX 3 Image Klein Base", matching its displayName.
+- `docs/api-guides/bfl.md` price line: "Video Edit [fast]" / "Video Upscale" → "FLUX Video Edit [fast]" / "FLUX Video Upscale".
+- `.agents/skills/fal/SKILL.md`: "BFL's Video Edit [fast]" → "BFL's FLUX Video Edit [fast]". (The `.claude` copy differs from the `.agents` copy before this change and has no such line.)
+- `docs/model-providers/bfl/flux-3.md`: fal's title for `blackforestlabs/flux-3/edit-video` is "Flux 3 FAST Edit Video" (page `<title>`); "FLUX.3 Edit Video [FAST]" is its description. The note had them swapped.
+
+Held, not decided (kept the current label):
+
+- **`flux-video-edit` displayName** stays "FLUX Video Edit". BFL uses two names: the product H1 "FLUX Video Edit" and the tier "FLUX Video Edit [fast]" (pricing card, docs pricing row). The description already says "[fast]".
+- **`flux-3-image-klein-base` displayName** stays "FLUX 3 Image Klein Base". The two research passes disagreed: BFL's own Hugging Face card says "FLUX 3 Image Klein Base" (maker rule); fal, the only host Nebula routes it to (BFL's API doesn't serve it), says "FLUX.3 Klein Base" (one-host rule).
+
+Left alone on purpose: the retired Krea node names ("Flux 3 Video (Krea)" and the rest in `retired_nodes.MERGED`, the fixture and the migration tests) are the old nodes' saved names, which the import alert quotes; `krea_gateway_models.json` is Krea's synced catalog; `model_pricing.json` quotes are verbatim provider text; `docs/research-2026-06/` is a dated snapshot.
+
 ## 2026-10-15 — PR 3 integration: nodes, merge and docs lanes on flux-3-nodes
 
 Branch `flux-3-nodes` (from `provider-switcher`): `flux3-lane-merge` (which holds `flux3-lane-nodes`) and `flux3-lane-docs` merged with merge commits.

@@ -84,7 +84,7 @@ Route-table nodes are one node per model with a provider switcher (`_provider`, 
 | `flux-3-image` | BFL | `blackforestlabs/flux-3/text-to-image`, `/edit-image` when images are wired | no 1.5k or 9:21; fal-only `enable_prompt_expansion` (default off); prices unconfirmed |
 | `flux-3-image-klein-base` | (fal only) | `blackforestlabs/flux-3/klein/base/text-to-image`, `/edit-image` | fal's names: `image_size` presets, `seed`, `output_format`, `enable_prompt_expansion`, `enable_safety_checker` |
 | `flux-3-video` | BFL | `blackforestlabs/flux-3/{text-to-video, image-to-video, first-last-frame-to-video, keyframes-to-video, extend-video}`, each with a `/draft` variant, picked by the wired ports and `draft` | resolution sent as 720p / 1080p / 1440p / 2160p; no 9:21; drafts at hd only; 30-minute poll budget |
-| `flux-video-edit` | BFL | `blackforestlabs/flux-3/edit-video` | the same model as BFL's Video Edit [fast] (fal's title, price, limits and fields match) |
+| `flux-video-edit` | BFL | `blackforestlabs/flux-3/edit-video` | the same model as BFL's FLUX Video Edit [fast] (fal's title, price, limits and fields match) |
 | `flux-video-upscale` | BFL | `blackforestlabs/flux-video-upscale` | `creativity`, `upscale_factor`; prices unconfirmed |
 | `krea-3` | Krea | `krea/v3/text-to-image`, `krea/v3/edit` when images are wired | fal-only `model` berry/jam, `reasoning_level` (high needs references), `image_size`, `negative_prompt`, `output_format`; $0.025/MP (unconfirmed) |
 
