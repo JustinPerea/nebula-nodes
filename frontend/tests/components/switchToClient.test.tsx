@@ -84,14 +84,12 @@ function after(before: Params, writes: Params): Params {
   return out;
 }
 
-// 'edit:' (an Inspector or pill edit, lib/providerSwitch.ts snapHidden) and
-// 'fix:' (the reset row, applyFix) clicks are checked at the lib level in
-// tests/lib/providerSwitch.test.ts until the Inspector and the switcher
-// render them (the UI lane after PR 5's core).
-const ROW_CASES = CASES.filter((c) => !c.click?.startsWith('edit:') && !c.click?.startsWith('fix:'));
-
+// Every click kind runs through the rendered Inspector: a provider row, an
+// 'alternative:' switch row, a 'fix:' reset row (applyFix) and an 'edit:'
+// of a setting in the Inspector's own field (snapHidden). The lib-level twin
+// is tests/lib/providerSwitch.test.ts.
 describe('switch_cases.json: a switcher click writes what the backend run expects', () => {
-  it.each(ROW_CASES.map((c) => [c.name, c] as const))('%s', (_name, c) => {
+  it.each(CASES.map((c) => [c.name, c] as const))('%s', (_name, c) => {
     // A fixture node, else a real route-table node (PR 3).
     const definition = DEFINITIONS[c.definition] ?? NODE_DEFINITIONS[c.definition];
     const apiKeys = Object.fromEntries(c.keys.map((key) => [key, KEY]));
@@ -109,7 +107,15 @@ describe('switch_cases.json: a switcher click writes what the backend run expect
 
     render(<Inspector embedded />);
     const menu = within(document.querySelector('[data-inspector-provider]') as HTMLElement).getByRole('menu');
-    if (c.click?.startsWith('alternative:')) {
+    if (c.click?.startsWith('edit:')) {
+      const [key, raw] = c.click.slice('edit:'.length).split(/=(.*)/s);
+      const param = allParamDefinitions(definition).find((candidate) => candidate.key === key)!;
+      const field = screen.getByLabelText(param.label ?? key);
+      fireEvent.change(field, { target: { value: String(JSON.parse(raw)) } });
+    } else if (c.click?.startsWith('fix:')) {
+      const fix = providerSwitchState(definition, before, context).fixes.find((candidate) => candidate.param === c.click!.slice(4))!;
+      fireEvent.click(within(menu).getByRole('menuitem', { name: fix.label }));
+    } else if (c.click?.startsWith('alternative:')) {
       const routeId = c.click.slice('alternative:'.length);
       const label = providerSwitchState(definition, before, context).alternatives.find((a) => a.routeId === routeId)!.label;
       fireEvent.click(within(menu).getByRole('menuitem', { name: `Switch to ${label}` }));

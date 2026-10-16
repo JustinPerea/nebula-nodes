@@ -300,6 +300,117 @@ describe('Inspector and pills show only the route options', () => {
   });
 });
 
+/** A real route-table node from the registry, selected in the Inspector. */
+function selectNode(definitionId: string, params: Record<string, unknown>) {
+  useGraphStore.setState({
+    nodes: [{ id: 'n1', position: { x: 0, y: 0 },
+      data: { definitionId, label: definitionId, params, outputs: {}, state: 'idle' } }],
+    edges: [],
+  });
+  useUIStore.setState({ selectedNodeId: 'n1' });
+}
+
+function inspectorParam(key: string): Element | null {
+  return document.querySelector(`[data-inspector-param="${key}"]`);
+}
+
+describe('hidden settings: a provider shows only what it offers (PR 5)', () => {
+  it('FLUX.2 on fal shows Safety under Pro; picking Klein 9B hides it and puts Safety 5 back to 2 with the note', () => {
+    withKeys({ BFL_API_KEY: KEY, FAL_KEY: KEY });
+    selectNode('flux-2-pro', { _provider: 'fal', model: 'pro', safety_tolerance: '5' });
+    render(<Inspector embedded />);
+    expect(inspectorParam('safety_tolerance')).not.toBeNull();
+    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'klein-9b' } });
+    expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ model: 'klein-9b', safety_tolerance: '2' });
+    expect(useProviderNoteStore.getState().notes.n1).toBe("Safety 5 (Permissive) isn't on fal.ai with FLUX.2 [klein] 9B: back to 2");
+    expect(inspectorParam('safety_tolerance')).toBeNull();
+    // Nothing stops: the switcher has no stop line.
+    expect(document.querySelector('.provider-switcher__stop')).toBeNull();
+  });
+
+  it('an edit that hides nothing another provider would use writes no note (Flash: no route offers Safety with it)', () => {
+    withKeys({ BFL_API_KEY: KEY, FAL_KEY: KEY });
+    selectNode('flux-2-pro', { _provider: 'fal', model: 'pro', safety_tolerance: '5' });
+    render(<Inspector embedded />);
+    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'flash' } });
+    expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ model: 'flash', safety_tolerance: '5' });
+    expect(useProviderNoteStore.getState().notes.n1).toBeUndefined();
+    expect(inspectorParam('safety_tolerance')).toBeNull();
+  });
+
+  it('FLUX 3 Image Klein on OpenRouter has no Seed row; BFL has one', () => {
+    withKeys({ BFL_API_KEY: KEY, OPENROUTER_API_KEY: KEY });
+    selectNode('flux-3-image-klein', { _provider: 'openrouter' });
+    render(<Inspector embedded />);
+    expect(inspectorParam('seed')).toBeNull();
+    fireEvent.click(row(/^Black Forest Labs/));
+    expect(inspectorParam('seed')).not.toBeNull();
+  });
+
+  it('FLUX 3 Video on fal hides Resolution while Draft is on', () => {
+    withKeys({ FAL_KEY: KEY });
+    selectNode('flux-3-video', { _provider: 'fal', draft: false });
+    render(<Inspector embedded />);
+    expect(inspectorParam('resolution')).not.toBeNull();
+    fireEvent.click(within(inspectorParam('draft') as HTMLElement).getByRole('checkbox'));
+    expect(useGraphStore.getState().nodes[0].data.params.draft).toBe(true);
+    expect(inspectorParam('resolution')).toBeNull();
+  });
+
+  it('Krea 3 on fal hides Negative prompt under Jam', () => {
+    withKeys({ FAL_KEY: KEY });
+    selectNode('krea-3', { _provider: 'fal', model: 'berry' });
+    render(<Inspector embedded />);
+    expect(inspectorParam('negative_prompt')).not.toBeNull();
+    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'jam' } });
+    expect(inspectorParam('negative_prompt')).toBeNull();
+  });
+
+  it('a stop without a click (a new key moved Auto) shows the hidden note, the Auto reason, the reset row and the switch row', () => {
+    // Reasoning level is fal.ai's own setting. With only a fal key it ran
+    // there; a Krea token now moves Auto to Krea, which doesn't offer it.
+    withKeys({ FAL_KEY: KEY, KREA_API_TOKEN: KEY });
+    selectNode('krea-3', { reasoning_level: 'medium' });
+    render(<Inspector embedded />);
+    const menu = within(document.querySelector('[data-inspector-provider]') as HTMLElement).getByRole('menu');
+    expect(within(menu).getAllByRole('menuitemradio')[0]).toHaveTextContent("Auto · can't run: Krea doesn't offer Reasoning level Medium");
+    expect(row(/^Krea · API balance/)).toHaveTextContent("Doesn't take Reasoning level Medium");
+    const reset = within(menu).getByRole('menuitem', { name: 'Set Reasoning level back to Low' });
+    expect(within(menu).getByRole('menuitem', { name: 'Switch to fal.ai' })).toBeVisible();
+    expect(screen.getByRole('status')).toHaveTextContent("Krea 3 can't run on Krea: it doesn't offer Reasoning level Medium. Set Reasoning level back to Low, or switch provider.");
+    fireEvent.click(reset);
+    expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ reasoning_level: 'low' });
+    expect(document.querySelector('.provider-switcher__stop')).toBeNull();
+  });
+
+  it('the chip popover offers the same reset row, and it writes the node', () => {
+    withKeys({ FAL_KEY: KEY });
+    const node: Node<NodeData> = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
+      data: { definitionId: 'flux-2-pro', label: 'FLUX.2', params: { model: 'klein-9b', safety_tolerance: '5' }, state: 'idle', outputs: {} } };
+    useGraphStore.setState({ nodes: [node], edges: [] });
+    render(<ModelNode {...({ id: 'n1', data: node.data, selected: false } as NodeProps)} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Provider for FLUX\.2: Auto · fal\. Can't run/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Set Safety back to 2' }));
+    expect(useGraphStore.getState().nodes[0].data.params).toMatchObject({ model: 'klein-9b', safety_tolerance: '2' });
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('Create pills hide what the shown provider hides and snap on an edit, with the note', () => {
+    withKeys({ BFL_API_KEY: KEY, FAL_KEY: KEY });
+    const changes: Record<string, unknown>[] = [];
+    function Pills() {
+      const [params, setParams] = useState<Record<string, unknown>>({ _provider: 'fal', model: 'pro', safety_tolerance: '5' });
+      return <ParamPills def={NODE_DEFINITIONS['flux-2-pro']} params={params} onChange={(next) => { changes.push(next); setParams(next); }} />;
+    }
+    render(<Pills />);
+    expect(screen.getByTitle('Safety')).toBeVisible();
+    fireEvent.change(screen.getByTitle('Model').querySelector('select')!, { target: { value: 'klein-9b' } });
+    expect(changes.at(-1)).toEqual({ _provider: 'fal', model: 'klein-9b', safety_tolerance: '2' });
+    expect(screen.queryByTitle('Safety')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent("Safety 5 (Permissive) isn't on fal.ai with FLUX.2 [klein] 9B: back to 2");
+  });
+});
+
 describe('the card', () => {
   function renderCard(params: Record<string, unknown>) {
     const node: Node<NodeData> = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 },

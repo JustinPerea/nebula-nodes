@@ -135,11 +135,19 @@
   cursor: pointer;
 }
 
-.provider-switcher__alternatives {
+/* Under a stop: the fix rows ("Set Safety back to 2") and then the switch
+ * rows ("Switch to fal.ai"), on one wrapping line. */
+.provider-switcher__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   padding: 4px 6px 2px;
+}
+
+.provider-switcher__alternatives {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .provider-switcher__alternative {
