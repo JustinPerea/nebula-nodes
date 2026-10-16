@@ -226,7 +226,23 @@
         "default": "claude-sonnet-4-6",
         "options": [
           {
-            "label": "Claude Fable 5 (flagship)",
+            "label": "Claude Fable 5.1 (flagship)",
+            "value": "claude-fable-5-1"
+          },
+          {
+            "label": "Claude Opus 5.5",
+            "value": "claude-opus-5-5"
+          },
+          {
+            "label": "Claude Sonnet 5.5",
+            "value": "claude-sonnet-5-5"
+          },
+          {
+            "label": "Claude Haiku 5.5",
+            "value": "claude-haiku-5-5"
+          },
+          {
+            "label": "Claude Fable 5",
             "value": "claude-fable-5"
           },
           {
@@ -268,7 +284,17 @@
         "default": 1,
         "min": 0,
         "max": 1,
-        "step": 0.1
+        "step": 0.1,
+        "visibleWhen": {
+          "model": [
+            "claude-fable-5",
+            "claude-opus-4-8",
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5-20251001",
+            "claude-opus-4-7",
+            "claude-opus-4-6"
+          ]
+        }
       },
       {
         "key": "system",
@@ -286,7 +312,17 @@
         "min": 0,
         "max": 1,
         "step": 0.05,
-        "placeholder": "Default"
+        "placeholder": "Default",
+        "visibleWhen": {
+          "model": [
+            "claude-fable-5",
+            "claude-opus-4-8",
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5-20251001",
+            "claude-opus-4-7",
+            "claude-opus-4-6"
+          ]
+        }
       },
       {
         "key": "stop_sequences",
@@ -330,6 +366,47 @@
             "claude-opus-4-6"
           ]
         }
+      },
+      {
+        "key": "effort",
+        "label": "Effort",
+        "type": "enum",
+        "required": false,
+        "default": "",
+        "visibleWhen": {
+          "model": [
+            "claude-fable-5-1",
+            "claude-opus-5-5",
+            "claude-sonnet-5-5",
+            "claude-haiku-5-5"
+          ]
+        },
+        "options": [
+          {
+            "label": "Default",
+            "value": ""
+          },
+          {
+            "label": "Low",
+            "value": "low"
+          },
+          {
+            "label": "Medium",
+            "value": "medium"
+          },
+          {
+            "label": "High",
+            "value": "high"
+          },
+          {
+            "label": "X-High",
+            "value": "xhigh"
+          },
+          {
+            "label": "Max",
+            "value": "max"
+          }
+        ]
       },
       {
         "key": "prompt_caching",
@@ -5989,7 +6066,19 @@
         "default": "gpt-5.4",
         "options": [
           {
-            "label": "GPT-5.5 (flagship)",
+            "label": "GPT-6 Astra (flagship)",
+            "value": "gpt-6-astra"
+          },
+          {
+            "label": "GPT-6.1 Sol",
+            "value": "gpt-6.1-sol"
+          },
+          {
+            "label": "GPT-6 Luna",
+            "value": "gpt-6-luna"
+          },
+          {
+            "label": "GPT-5.5",
             "value": "gpt-5.5"
           },
           {
@@ -6001,27 +6090,27 @@
             "value": "gpt-5.4-mini"
           },
           {
-            "label": "GPT-5.4 Nano",
+            "label": "GPT-5.4 Nano (retiring 2027-04-01)",
             "value": "gpt-5.4-nano"
           },
           {
-            "label": "GPT-4o (legacy)",
+            "label": "GPT-4o (legacy, retiring 2027-01-14)",
             "value": "gpt-4o"
           },
           {
-            "label": "GPT-4o Mini (legacy)",
+            "label": "GPT-4o Mini (legacy, retiring 2027-01-14)",
             "value": "gpt-4o-mini"
           },
           {
-            "label": "GPT-4.1 (legacy)",
+            "label": "GPT-4.1 (legacy, retiring 2027-01-14)",
             "value": "gpt-4.1"
           },
           {
-            "label": "GPT-4.1 Mini (legacy)",
+            "label": "GPT-4.1 Mini (legacy, retiring 2027-01-14)",
             "value": "gpt-4.1-mini"
           },
           {
-            "label": "GPT-4.1 Nano (legacy, sunsets 2026-10-23)",
+            "label": "GPT-4.1 Nano (legacy, retiring 2026-10-23)",
             "value": "gpt-4.1-nano"
           }
         ]
@@ -6035,7 +6124,16 @@
         "options": [
           {
             "label": "None",
-            "value": "none"
+            "value": "none",
+            "visibleWhen": {
+              "model": [
+                "gpt-6-luna",
+                "gpt-5.5",
+                "gpt-5.4",
+                "gpt-5.4-mini",
+                "gpt-5.4-nano"
+              ]
+            }
           },
           {
             "label": "Low",
@@ -6052,10 +6150,24 @@
           {
             "label": "X-High",
             "value": "xhigh"
+          },
+          {
+            "label": "Max",
+            "value": "max",
+            "visibleWhen": {
+              "model": [
+                "gpt-6-astra",
+                "gpt-6.1-sol",
+                "gpt-6-luna"
+              ]
+            }
           }
         ],
         "visibleWhen": {
           "model": [
+            "gpt-6-astra",
+            "gpt-6.1-sol",
+            "gpt-6-luna",
             "gpt-5.5",
             "gpt-5.4",
             "gpt-5.4-mini",
@@ -6204,10 +6316,26 @@
         "label": "Model",
         "type": "enum",
         "required": true,
-        "default": "gemini-3.5-flash",
+        "default": "gemini-3.6-flash",
         "options": [
           {
-            "label": "Gemini 3.5 Flash",
+            "label": "Gemini 4 Argon",
+            "value": "gemini-4-argon"
+          },
+          {
+            "label": "Gemini 3.8 Flash",
+            "value": "gemini-3.8-flash"
+          },
+          {
+            "label": "Gemini 3.6 Flash",
+            "value": "gemini-3.6-flash"
+          },
+          {
+            "label": "Gemini 3.5 Flash-Lite",
+            "value": "gemini-3.5-flash-lite"
+          },
+          {
+            "label": "Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash)",
             "value": "gemini-3.5-flash"
           },
           {
@@ -6219,7 +6347,7 @@
             "value": "gemini-3-flash-preview"
           },
           {
-            "label": "Gemini 3.1 Flash-Lite",
+            "label": "Gemini 3.1 Flash-Lite (retiring 2027-05-07)",
             "value": "gemini-3.1-flash-lite"
           },
           {
@@ -6253,7 +6381,18 @@
         "default": 1,
         "min": 0,
         "max": 2,
-        "step": 0.1
+        "step": 0.1,
+        "visibleWhen": {
+          "model": [
+            "gemini-3.5-flash",
+            "gemini-3.1-pro-preview",
+            "gemini-3-flash-preview",
+            "gemini-3.1-flash-lite",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite"
+          ]
+        }
       },
       {
         "key": "system",
@@ -6271,6 +6410,10 @@
         "default": "",
         "visibleWhen": {
           "model": [
+            "gemini-4-argon",
+            "gemini-3.8-flash",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash-lite",
             "gemini-3.5-flash",
             "gemini-3.1-pro-preview",
             "gemini-3-flash-preview",
@@ -6284,7 +6427,17 @@
           },
           {
             "label": "Minimal",
-            "value": "minimal"
+            "value": "minimal",
+            "visibleWhen": {
+              "model": [
+                "gemini-3.6-flash",
+                "gemini-3.5-flash-lite",
+                "gemini-3.5-flash",
+                "gemini-3.1-pro-preview",
+                "gemini-3-flash-preview",
+                "gemini-3.1-flash-lite"
+              ]
+            }
           },
           {
             "label": "Low",
@@ -6324,14 +6477,36 @@
         "min": 0,
         "max": 1,
         "step": 0.05,
-        "placeholder": "Default"
+        "placeholder": "Default",
+        "visibleWhen": {
+          "model": [
+            "gemini-3.5-flash",
+            "gemini-3.1-pro-preview",
+            "gemini-3-flash-preview",
+            "gemini-3.1-flash-lite",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite"
+          ]
+        }
       },
       {
         "key": "top_k",
         "label": "Top K",
         "type": "integer",
         "required": false,
-        "placeholder": "64"
+        "placeholder": "64",
+        "visibleWhen": {
+          "model": [
+            "gemini-3.5-flash",
+            "gemini-3.1-pro-preview",
+            "gemini-3-flash-preview",
+            "gemini-3.1-flash-lite",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite"
+          ]
+        }
       },
       {
         "key": "stop_sequences",

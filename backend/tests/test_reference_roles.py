@@ -289,6 +289,85 @@ APPROVED_APPENDED_OPTIONS = {
     ]},
 }
 
+# Chat model refresh (2026-10-16): newer Claude, GPT-6 and Gemini models are
+# prepended to the three chat menus, retiring models get a date in their label,
+# gemini-chat's default moves off the deprecated gemini-3.5-flash, and params a
+# new model rejects get exact visibleWhen lists. Claude gains one param, Effort,
+# after thinkingBudget. Every value is pinned here; normalizing restores the
+# baseline, so any other edit to these nodes still fails the fingerprint.
+_CLAUDE_OLD = ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-4-6",
+               "claude-haiku-4-5-20251001", "claude-opus-4-7", "claude-opus-4-6"]
+_CLAUDE_NEW = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
+_GPT5 = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"]
+_GPT6 = ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"]
+_GEM_OLD = ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite",
+            "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+_GEM_NEW = ["gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]
+_GEM_THINKING_OLD = ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite"]
+APPROVED_LEADING_OPTIONS = {
+    "claude-chat": {"model": [
+        {"label": "Claude Fable 5.1 (flagship)", "value": "claude-fable-5-1"},
+        {"label": "Claude Opus 5.5", "value": "claude-opus-5-5"},
+        {"label": "Claude Sonnet 5.5", "value": "claude-sonnet-5-5"},
+        {"label": "Claude Haiku 5.5", "value": "claude-haiku-5-5"},
+    ]},
+    "gpt-4o-chat": {"model": [
+        {"label": "GPT-6 Astra (flagship)", "value": "gpt-6-astra"},
+        {"label": "GPT-6.1 Sol", "value": "gpt-6.1-sol"},
+        {"label": "GPT-6 Luna", "value": "gpt-6-luna"},
+    ]},
+    "gemini-chat": {"model": [
+        {"label": "Gemini 4 Argon", "value": "gemini-4-argon"},
+        {"label": "Gemini 3.8 Flash", "value": "gemini-3.8-flash"},
+        {"label": "Gemini 3.6 Flash", "value": "gemini-3.6-flash"},
+        {"label": "Gemini 3.5 Flash-Lite", "value": "gemini-3.5-flash-lite"},
+    ]},
+}
+APPROVED_OPTION_LABEL_CHANGES = {
+    "claude-chat": {"model": {"claude-fable-5": ("Claude Fable 5 (flagship)", "Claude Fable 5")}},
+    "gpt-4o-chat": {"model": {
+        "gpt-5.5": ("GPT-5.5 (flagship)", "GPT-5.5"),
+        "gpt-5.4-nano": ("GPT-5.4 Nano", "GPT-5.4 Nano (retiring 2027-04-01)"),
+        "gpt-4o": ("GPT-4o (legacy)", "GPT-4o (legacy, retiring 2027-01-14)"),
+        "gpt-4o-mini": ("GPT-4o Mini (legacy)", "GPT-4o Mini (legacy, retiring 2027-01-14)"),
+        "gpt-4.1": ("GPT-4.1 (legacy)", "GPT-4.1 (legacy, retiring 2027-01-14)"),
+        "gpt-4.1-mini": ("GPT-4.1 Mini (legacy)", "GPT-4.1 Mini (legacy, retiring 2027-01-14)"),
+        "gpt-4.1-nano": ("GPT-4.1 Nano (legacy, sunsets 2026-10-23)", "GPT-4.1 Nano (legacy, retiring 2026-10-23)"),
+    }},
+    "gemini-chat": {"model": {
+        "gemini-3.5-flash": ("Gemini 3.5 Flash", "Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash)"),
+        "gemini-3.1-flash-lite": ("Gemini 3.1 Flash-Lite", "Gemini 3.1 Flash-Lite (retiring 2027-05-07)"),
+    }},
+}
+APPROVED_PARAM_FIELD_CHANGES = {
+    "gpt-4o-chat": {"reasoning_effort": {"visibleWhen": ({"model": _GPT5}, {"model": _GPT6 + _GPT5})}},
+    "gemini-chat": {
+        "model": {"default": ("gemini-3.5-flash", "gemini-3.6-flash")},
+        "thinkingLevel": {"visibleWhen": ({"model": _GEM_THINKING_OLD}, {"model": _GEM_NEW + _GEM_THINKING_OLD})},
+    },
+}
+APPROVED_PARAM_FIELD_ADDITIONS.update({
+    "claude-chat": {key: {"visibleWhen": {"model": _CLAUDE_OLD}} for key in ("temperature", "top_p")},
+    "gemini-chat": {key: {"visibleWhen": {"model": _GEM_OLD}} for key in ("temperature", "top_p", "top_k")},
+})
+APPROVED_OPTION_FIELD_ADDITIONS.update({
+    "gpt-4o-chat": {"reasoning_effort": {"none": {"visibleWhen": {"model": ["gpt-6-luna"] + _GPT5}}}},
+    "gemini-chat": {"thinkingLevel": {"minimal": {
+        "visibleWhen": {"model": ["gemini-3.6-flash", "gemini-3.5-flash-lite"] + _GEM_THINKING_OLD}}}},
+})
+APPROVED_APPENDED_OPTIONS["gpt-4o-chat"] = {"reasoning_effort": [
+    {"label": "Max", "value": "max", "visibleWhen": {"model": _GPT6}},
+]}
+APPROVED_INSERTED_PARAMS = {
+    "claude-chat": [("thinkingBudget", {
+        "key": "effort", "label": "Effort", "type": "enum", "required": False, "default": "",
+        "visibleWhen": {"model": _CLAUDE_NEW},
+        "options": [{"label": "Default", "value": ""}, {"label": "Low", "value": "low"},
+                    {"label": "Medium", "value": "medium"}, {"label": "High", "value": "high"},
+                    {"label": "X-High", "value": "xhigh"}, {"label": "Max", "value": "max"}],
+    })],
+}
+
 # The 7 standard roles — mirrors REFERENCE_ROLE_IDS in referenceRoles.ts.
 STANDARD_ROLES = {
     "style",
@@ -424,6 +503,25 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
         port = _sole_entry(normalized["inputPorts"], "id", port_id)
         assert port["label"] == current_label, f"unapproved label: {node_id}.{port_id}"
         port["label"] = baseline_label
+    for after_key, inserted in APPROVED_INSERTED_PARAMS.get(node_id, []):
+        index = next(i for i, param in enumerate(normalized["params"]) if param.get("key") == after_key)
+        assert normalized["params"][index + 1] == inserted, f"unapproved inserted param: {node_id}.{inserted['key']}"
+        del normalized["params"][index + 1]
+    for param_key, leading in APPROVED_LEADING_OPTIONS.get(node_id, {}).items():
+        param = _sole_entry(normalized["params"], "key", param_key)
+        assert param["options"][:len(leading)] == leading, f"unapproved leading options: {node_id}.{param_key}"
+        del param["options"][:len(leading)]
+    for param_key, labels in APPROVED_OPTION_LABEL_CHANGES.get(node_id, {}).items():
+        param = _sole_entry(normalized["params"], "key", param_key)
+        for option_value, (baseline_label, current_label) in labels.items():
+            option = _sole_entry(param["options"], "value", option_value)
+            assert option["label"] == current_label, f"unapproved option label: {node_id}.{param_key}.{option_value}"
+            option["label"] = baseline_label
+    for param_key, fields in APPROVED_PARAM_FIELD_CHANGES.get(node_id, {}).items():
+        param = _sole_entry(normalized["params"], "key", param_key)
+        for field, (baseline_value, current_value) in fields.items():
+            assert param.get(field) == current_value, f"unapproved {field}: {node_id}.{param_key}"
+            param[field] = baseline_value
     leading_param = APPROVED_LEADING_PARAM_ADDITIONS.get(node_id)
     if leading_param is not None:
         assert normalized["params"][0] == leading_param, f"unapproved leading param: {node_id}"

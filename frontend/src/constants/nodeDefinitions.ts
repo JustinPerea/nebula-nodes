@@ -139,7 +139,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: true,
         default: 'claude-sonnet-4-6',
         options: [
-          { label: 'Claude Fable 5 (flagship)', value: 'claude-fable-5' },
+          { label: 'Claude Fable 5.1 (flagship)', value: 'claude-fable-5-1' },
+          { label: 'Claude Opus 5.5', value: 'claude-opus-5-5' },
+          { label: 'Claude Sonnet 5.5', value: 'claude-sonnet-5-5' },
+          { label: 'Claude Haiku 5.5', value: 'claude-haiku-5-5' },
+          { label: 'Claude Fable 5', value: 'claude-fable-5' },
           { label: 'Claude Opus 4.8', value: 'claude-opus-4-8' },
           { label: 'Claude Sonnet 4.6', value: 'claude-sonnet-4-6' },
           { label: 'Claude Haiku 4.5', value: 'claude-haiku-4-5-20251001' },
@@ -165,6 +169,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 0,
         max: 1,
         step: 0.1,
+        // Claude 5.5-generation models and Fable 5.1 reject non-default sampling params.
+        visibleWhen: { model: ['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7', 'claude-opus-4-6'] },
       },
       {
         key: 'system',
@@ -183,6 +189,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 1,
         step: 0.05,
         placeholder: 'Default',
+        visibleWhen: { model: ['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7', 'claude-opus-4-6'] },
       },
       {
         key: 'stop_sequences',
@@ -211,6 +218,24 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 200000,
         condition: 'extended_thinking',
         visibleWhen: { model: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7', 'claude-opus-4-6'] },
+      },
+      {
+        key: 'effort',
+        label: 'Effort',
+        type: 'enum',
+        required: false,
+        default: '',
+        // Sent as output_config.effort. These models always think and reject a
+        // thinking budget; Default leaves each model at its own default effort.
+        visibleWhen: { model: ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'] },
+        options: [
+          { label: 'Default', value: '' },
+          { label: 'Low', value: 'low' },
+          { label: 'Medium', value: 'medium' },
+          { label: 'High', value: 'high' },
+          { label: 'X-High', value: 'xhigh' },
+          { label: 'Max', value: 'max' },
+        ],
       },
       {
         key: 'prompt_caching',
@@ -2739,15 +2764,18 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: true,
         default: 'gpt-5.4',
         options: [
-          { label: 'GPT-5.5 (flagship)', value: 'gpt-5.5' },
+          { label: 'GPT-6 Astra (flagship)', value: 'gpt-6-astra' },
+          { label: 'GPT-6.1 Sol', value: 'gpt-6.1-sol' },
+          { label: 'GPT-6 Luna', value: 'gpt-6-luna' },
+          { label: 'GPT-5.5', value: 'gpt-5.5' },
           { label: 'GPT-5.4', value: 'gpt-5.4' },
           { label: 'GPT-5.4 Mini', value: 'gpt-5.4-mini' },
-          { label: 'GPT-5.4 Nano', value: 'gpt-5.4-nano' },
-          { label: 'GPT-4o (legacy)', value: 'gpt-4o' },
-          { label: 'GPT-4o Mini (legacy)', value: 'gpt-4o-mini' },
-          { label: 'GPT-4.1 (legacy)', value: 'gpt-4.1' },
-          { label: 'GPT-4.1 Mini (legacy)', value: 'gpt-4.1-mini' },
-          { label: 'GPT-4.1 Nano (legacy, sunsets 2026-10-23)', value: 'gpt-4.1-nano' },
+          { label: 'GPT-5.4 Nano (retiring 2027-04-01)', value: 'gpt-5.4-nano' },
+          { label: 'GPT-4o (legacy, retiring 2027-01-14)', value: 'gpt-4o' },
+          { label: 'GPT-4o Mini (legacy, retiring 2027-01-14)', value: 'gpt-4o-mini' },
+          { label: 'GPT-4.1 (legacy, retiring 2027-01-14)', value: 'gpt-4.1' },
+          { label: 'GPT-4.1 Mini (legacy, retiring 2027-01-14)', value: 'gpt-4.1-mini' },
+          { label: 'GPT-4.1 Nano (legacy, retiring 2026-10-23)', value: 'gpt-4.1-nano' },
         ],
       },
       {
@@ -2757,13 +2785,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'medium',
         options: [
-          { label: 'None', value: 'none' },
+          // GPT-6 Astra and GPT-6.1 Sol return HTTP 400 for "none".
+          { label: 'None', value: 'none', visibleWhen: { model: ['gpt-6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] } },
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
           { label: 'X-High', value: 'xhigh' },
+          { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna'] } },
         ],
-        visibleWhen: { model: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] },
+        visibleWhen: { model: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] },
       },
       {
         key: 'max_completion_tokens',
@@ -2853,12 +2883,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gemini-3.5-flash',
+        default: 'gemini-3.6-flash',
         options: [
-          { label: 'Gemini 3.5 Flash', value: 'gemini-3.5-flash' },
+          { label: 'Gemini 4 Argon', value: 'gemini-4-argon' },
+          { label: 'Gemini 3.8 Flash', value: 'gemini-3.8-flash' },
+          { label: 'Gemini 3.6 Flash', value: 'gemini-3.6-flash' },
+          { label: 'Gemini 3.5 Flash-Lite', value: 'gemini-3.5-flash-lite' },
+          // Deprecated 2026-10-08; Google routes this id to gemini-3.6-flash.
+          { label: 'Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash)', value: 'gemini-3.5-flash' },
           { label: 'Gemini 3.1 Pro (preview)', value: 'gemini-3.1-pro-preview' },
           { label: 'Gemini 3 Flash (preview)', value: 'gemini-3-flash-preview' },
-          { label: 'Gemini 3.1 Flash-Lite', value: 'gemini-3.1-flash-lite' },
+          { label: 'Gemini 3.1 Flash-Lite (retiring 2027-05-07)', value: 'gemini-3.1-flash-lite' },
           { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
           { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
           { label: 'Gemini 2.5 Flash-Lite', value: 'gemini-2.5-flash-lite' },
@@ -2882,6 +2917,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 0,
         max: 2,
         step: 0.1,
+        // Gemini 3.6 Flash, 3.5 Flash-Lite and later ignore sampling params, and
+        // Google says future models will return HTTP 400 for them.
+        visibleWhen: { model: ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
       },
       {
         key: 'system',
@@ -2897,10 +2935,11 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'enum',
         required: false,
         default: '',
-        visibleWhen: { model: ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'] },
+        visibleWhen: { model: ['gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'] },
         options: [
           { label: 'Default', value: '' },
-          { label: 'Minimal', value: 'minimal' },
+          // Gemini 4 Argon and Gemini 3.8 Flash reject "minimal".
+          { label: 'Minimal', value: 'minimal', visibleWhen: { model: ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'] } },
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
@@ -2925,6 +2964,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 1,
         step: 0.05,
         placeholder: 'Default',
+        visibleWhen: { model: ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
       },
       {
         key: 'top_k',
@@ -2932,6 +2972,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'integer',
         required: false,
         placeholder: '64',
+        visibleWhen: { model: ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
       },
       {
         key: 'stop_sequences',

@@ -11,6 +11,20 @@ from execution.missing_credential import MissingCredentialError
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 
+# Claude Fable 5.1 and the 5.5 generation always think. Per Anthropic's model
+# pages (checked 2026-10-16) they return HTTP 400 for a manual
+# thinking.budget_tokens and for non-default temperature/top_p/top_k, and take
+# an effort level as output_config.effort instead. Their synchronous output cap
+# is 128K tokens. Every other model keeps the request it sent before.
+ADAPTIVE_EFFORT_MODELS = frozenset({
+    "claude-fable-5-1",
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
+    "claude-haiku-5-5",
+})
+ADAPTIVE_MAX_OUTPUT_TOKENS = 128_000
+EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+
 
 async def handle_claude_chat(
     node: GraphNode,
@@ -62,16 +76,20 @@ async def handle_claude_chat(
 
     model = node.params.get("model", "claude-sonnet-4-6")
     max_tokens = int(node.params.get("max_tokens", 4096))
+    adaptive = model in ADAPTIVE_EFFORT_MODELS
+    if adaptive:
+        max_tokens = min(max_tokens, ADAPTIVE_MAX_OUTPUT_TOKENS)
 
     request_body: dict[str, Any] = {"model": model, "messages": messages, "max_tokens": max_tokens, "stream": True}
 
-    temperature = node.params.get("temperature")
-    if temperature is not None:
-        request_body["temperature"] = float(temperature)
+    if not adaptive:
+        temperature = node.params.get("temperature")
+        if temperature is not None:
+            request_body["temperature"] = float(temperature)
 
-    top_p = node.params.get("top_p")
-    if top_p is not None and "temperature" not in request_body:
-        request_body["top_p"] = float(top_p)
+        top_p = node.params.get("top_p")
+        if top_p is not None and "temperature" not in request_body:
+            request_body["top_p"] = float(top_p)
 
     stop_sequences_raw = node.params.get("stop_sequences")
     if stop_sequences_raw:
@@ -90,15 +108,24 @@ async def handle_claude_chat(
         else:
             request_body["system"] = str(system_prompt)
 
-    # Claude Fable/Mythos 5 use always-on adaptive thinking and reject the
-    # extended-thinking param; only pre-5 models accept a thinking budget.
-    supports_extended_thinking = not model.startswith(("claude-fable", "claude-mythos"))
+    # Claude Fable/Mythos 5 and the ADAPTIVE_EFFORT_MODELS use always-on
+    # thinking and reject the extended-thinking param; only older models accept
+    # a thinking budget. A stale extended_thinking=True left from another model
+    # is dropped here rather than sent.
+    supports_extended_thinking = not adaptive and not model.startswith(("claude-fable", "claude-mythos"))
     if node.params.get("extended_thinking") and supports_extended_thinking:
         budget = int(node.params.get("thinkingBudget", 10000))
         budget = max(1024, budget)
         request_body["thinking"] = {"type": "enabled", "budget_tokens": budget}
         # thinking mode requires temperature=1 (API constraint)
         request_body["temperature"] = 1
+
+    if adaptive:
+        effort = str(node.params.get("effort") or "").strip().lower()
+        if effort:
+            if effort not in EFFORT_LEVELS:
+                raise ValueError(f"Effort must be one of {', '.join(EFFORT_LEVELS)} for {model}, got {effort!r}")
+            request_body["output_config"] = {"effort": effort}
 
     config = StreamConfig(
         url=ANTHROPIC_API_URL,

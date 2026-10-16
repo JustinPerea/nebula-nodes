@@ -18,6 +18,27 @@ from execution.missing_credential import MissingCredentialError
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
+# Chat models added 2026-10-16 (ai.google.dev model pages, thinking guide and
+# "What's new in Gemini 4 Argon", checked that day). From Gemini 3.6 Flash and
+# 3.5 Flash-Lite on, temperature/top_p/top_k are ignored and Google says future
+# models will return HTTP 400 for them, so Nebula stops sending them to these.
+# Gemini 4 Argon and Gemini 3.8 Flash return an error for thinkingLevel
+# "minimal". Argon's synchronous output limit is 65,536 tokens; above that
+# generateContent returns HTTP 400. Older models keep the request they sent.
+GEMINI_CHAT_NO_SAMPLING = frozenset({
+    "gemini-4-argon",
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+})
+GEMINI_CHAT_THINKING_LEVELS = {
+    "gemini-4-argon": ("low", "medium", "high"),
+    "gemini-3.8-flash": ("low", "medium", "high"),
+    "gemini-3.6-flash": ("minimal", "low", "medium", "high"),
+    "gemini-3.5-flash-lite": ("minimal", "low", "medium", "high"),
+}
+GEMINI_CHAT_MAX_OUTPUT = {"gemini-4-argon": 65_536}
+
 
 async def handle_gemini_chat(
     node: GraphNode,
@@ -71,15 +92,16 @@ async def handle_gemini_chat(
                     }
                 })
 
-    model = node.params.get("model", "gemini-3.5-flash")
+    model = node.params.get("model", "gemini-3.6-flash")
 
     generation_config: dict[str, Any] = {}
     temperature = node.params.get("temperature")
-    if temperature is not None:
+    if temperature is not None and model not in GEMINI_CHAT_NO_SAMPLING:
         generation_config["temperature"] = float(temperature)
     max_tokens = node.params.get("max_tokens")
     if max_tokens:
-        generation_config["maxOutputTokens"] = int(max_tokens)
+        output_cap = GEMINI_CHAT_MAX_OUTPUT.get(model)
+        generation_config["maxOutputTokens"] = min(int(max_tokens), output_cap) if output_cap else int(max_tokens)
 
     # Structured output: response_format carries the MIME type (e.g. application/json).
     # The node exposed this param but the handler previously ignored it.
@@ -98,6 +120,13 @@ async def handle_gemini_chat(
     thinking_level = node.params.get("thinkingLevel")
     thinking_budget = node.params.get("thinkingBudget")
     if thinking_level and thinking_level != "":
+        levels = GEMINI_CHAT_THINKING_LEVELS.get(model)
+        if levels is not None and thinking_level not in levels:
+            # The card marks a saved level the model lacks as "(unavailable for
+            # selected model)"; refuse it before the request, like a Runway ratio.
+            raise ValueError(
+                f"Thinking level '{thinking_level}' isn't available for {model}. Pick one of: {', '.join(levels)}."
+            )
         request_body["generationConfig"] = request_body.get("generationConfig", {})
         request_body["generationConfig"]["thinkingConfig"] = {"thinkingLevel": thinking_level}
     elif thinking_budget is not None and thinking_budget != "":
