@@ -5,18 +5,21 @@ it doesn't offer (``paramVisibleWhen``), and ``node_route.route_sent_keys``
 stops sending them. This test keeps those declarations honest. For every
 node with a ``routes`` table, every route, every combination of the values
 that control what is shown (a ``visibleWhen`` or ``paramVisibleWhen``
-controller, or an ``endpointWhen`` key) and two port fillings (the required
-ports only, then every port), it runs the real handler against fake hosts
-and checks:
+controller, or an ``endpointWhen`` key) and every subset of the optional
+input ports (so every mode: text, image, keyframes, first/last frame,
+extend), it runs the real handler against fake hosts and checks:
 
 - the request body validates against the provider's pinned schema with
   unknown fields refused (fixtures/provider_schemas/, or the Krea catalog's
   requestSchema), after rename, valueMap and the client step;
 - every setting shown with a value is one the route sends (shown keys are a
-  subset of ``route_sent_keys``).
+  subset of ``route_sent_keys``);
+- no setting the route lists but hides with these values reaches the body
+  under the provider's name.
 
 Combinations a route stops on before any request (route_block) are skipped,
-but every route must run at least once. No real request is made.
+but every route must run at least once and reach every endpoint it names
+(``endpoint`` and each ``endpointWhen``). No real request is made.
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ import httpx
 import pytest
 
 from execution import route_clients
+from execution.maker_routes import translate_params
 from services import node_route
 from tests.test_flux3_nodes import CATALOG, CLIP, P, REF, REGISTRY, defaults, hosts_for
 from tests.test_route_clients import (  # noqa: F401  (quick is an autouse fixture)
@@ -80,10 +84,18 @@ def _port_value(port: dict[str, Any]) -> Any:
 
 
 def _fillings(definition: dict[str, Any]) -> list[dict[str, Any]]:
+    """The required ports plus every subset of the optional ones: each mode
+    a route's endpointWhen picks (and the combinations its rules refuse)."""
     inputs = definition.get("inputPorts") or []
     required = {p["id"]: _port_value(p) for p in inputs if p.get("required") or p["id"] == "prompt"}
-    every = {p["id"]: _port_value(p) for p in inputs}
-    return [required] if every == required else [required, every]
+    optional = [p for p in inputs if p["id"] not in required]
+    return [{**required, **{p["id"]: _port_value(p) for p in subset}}
+            for size in range(len(optional) + 1) for subset in itertools.combinations(optional, size)]
+
+
+def _endpoints(route: dict[str, Any]) -> set[str]:
+    """Every endpoint a route names: its own and each endpointWhen's."""
+    return {str(route["endpoint"])} | {str(option["endpoint"]) for option in route.get("endpointWhen") or []}
 
 
 def _schema_for(provider: str, url: str, sent: dict[str, Any]) -> list[dict[str, Any]]:
@@ -111,7 +123,7 @@ def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
             # A value for every offered setting that has none, so a hidden one
             # that leaked into the body would show up.
             for param in offered:
-                if base.get(param["key"]) is None and _sample(param) is not None:
+                if base.get(param["key"]) in (None, "") and _sample(param) is not None:
                     base[param["key"]] = _sample(param)
             keys = _controllers(definition, route)
             for combo in itertools.product(*(_values(definition, route, key) for key in keys)):
@@ -126,7 +138,7 @@ CASES = _cases()
 
 def test_every_route_table_node_is_covered():
     assert {"flux-2-pro", "flux-3-video", "krea-3"} <= set(NODES)
-    assert len(CASES) < 2000
+    assert len(CASES) < 4000
 
 
 @pytest.mark.asyncio
@@ -135,6 +147,7 @@ async def test_each_route_sends_only_fields_its_provider_takes(monkeypatch, node
     definition = REGISTRY[node_id]
     video = route_clients.output_port(definition)[1] == "Video"
     ran: dict[str, int] = {route["id"]: 0 for route in definition["routes"]}
+    reached: dict[str, set[str]] = {route["id"]: set() for route in definition["routes"]}
     for case_node, route_id, params, wired in CASES:
         if case_node != node_id:
             continue
@@ -161,5 +174,12 @@ async def test_each_route_sends_only_fields_its_provider_takes(monkeypatch, node
         shown = {p["key"] for p in node_route.route_param_definitions(definition, route_id)
                  if node_route.param_shown(p, values, route_keys) and params.get(p["key"]) not in (None, "")}
         assert shown <= sent_keys, (node_id, route_id, sorted(shown - sent_keys))
+        # Listed but hidden with these values: never in the body.
+        hidden = node_route.route_param_keys(definition, route_id) - node_route.route_sent_keys(definition, route_id, routed)
+        leaked = set(translate_params(route, {key: params.get(key) for key in hidden})) & set(body)
+        assert not leaked, (node_id, route_id, sorted(leaked), str(request.url))
         ran[route_id] += 1
+        reached[route_id].add(str(node_route.route_endpoint(definition, route, routed)))
     assert all(ran.values()), (node_id, ran)
+    for route in definition["routes"]:
+        assert reached[route["id"]] == _endpoints(route), (node_id, route["id"], sorted(_endpoints(route) - reached[route["id"]]))
