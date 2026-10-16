@@ -19,6 +19,7 @@ import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/ma
 import { nodeWiredCounts, nodeWiredPorts } from '../../lib/runScope';
 import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
 import { useProviderNoteStore } from '../../store/providerNoteStore';
+import { snapHidden } from '../../lib/providerSwitch';
 import { skippedLabel } from '../../lib/gating';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
@@ -443,16 +444,30 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const activeNode = renderNode;
   const activeNodeData = nodeData;
 
+  // A person's edit. On a route-table node, a setting the edit now hides on
+  // the shown provider, at a value another provider would honor (rule H),
+  // goes back to its default with one card note (lib/providerSwitch.ts
+  // snapHidden): "Safety 5 isn't on fal.ai with FLUX.2 [klein] 9B: back to 2".
+  function writeEdit(params: Record<string, unknown>, key: string) {
+    if (!definition || !switchable) {
+      updateNodeData(activeNode.id, { params });
+      return;
+    }
+    const routed = withWiredBlockers(definition, params, wiredKey ? wiredKey.split('\n') : []);
+    const routeId = shownRouteId(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {});
+    const snapped = snapHidden(definition, params, routeId, key);
+    updateNodeData(activeNode.id, { params: snapped.params });
+    if (snapped.notes.length) useProviderNoteStore.getState().show(activeNode.id, snapped.notes);
+  }
+
   function onParamChange(key: string, value: unknown) {
-    updateNodeData(activeNode.id, {
-      params: { ...activeNodeData.params, [key]: value },
-    });
+    writeEdit({ ...activeNodeData.params, [key]: value }, key);
   }
 
   function clearParam(key: string) {
     const params = { ...activeNodeData.params };
     delete params[key];
-    updateNodeData(activeNode.id, { params });
+    writeEdit(params, key);
   }
 
   // The keys this node needs with its current params: its own, or for a

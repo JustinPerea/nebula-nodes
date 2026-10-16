@@ -1,5 +1,16 @@
 # Implementation Notes
 
+## 2026-10-16 — PR 5 UI: the Inspector, switcher and pills read hidden settings (hide-params-ui)
+
+Stacked on the PR 5 core (provider-hidden-params, 51e3eb4c).
+
+- **Inspector edits snap.** `onParamChange` and `clearParam` go through one `writeEdit`: on a route-table node it works out the shown route with the edited values (wired blockers and loaded keys, the same inputs as the list) and runs `snapHidden`. The notes go to `providerNoteStore`, the card's note line. An edit that resets nothing leaves an existing note alone instead of clearing it. The visible list already came from `visibleParams` (core).
+- **Create pills snap the same way.** `ParamPills` `set`/`unset` run `snapHidden` against `shownRouteId(def, next, apiKeys)` and show the note in the pills' own note line (Create has no node id). `deriveVisibleParams` already used `visibleParams`.
+- **Fix rows.** `ProviderMenu` takes an `onFix`; `ProviderSwitcher` applies a fix as `onPick(applyFix(params, fix), [])`. That is a plain edit, so the empty notes list clears any old switch note on the card. The fix rows and the switch rows share one wrapping line (`provider-switcher__actions`, a `role="none"` wrapper around two `role="group"`s: "Settings that let it run here", "Providers that can run it"). Fix rows reuse the switch-row pill style (`provider-switcher__alternative`) plus a `provider-switcher__fix` hook. The row notes and the Auto reason for hidden stops came from the core's `rowBlock`/`autoReason`.
+- **Tests.** `switchToClient.test.tsx` now runs every `switch_cases.json` case through the rendered Inspector, including `edit:` (the Model select) and `fix:` (the reset row). Both fail with the wiring reverted. `ProviderSwitcher.test.tsx` gained a hidden-settings block on the real FLUX.2, FLUX 3 Image Klein, FLUX 3 Video and Krea 3 nodes, plus the chip popover's reset row and the pill snap (the pill test fails with the pill wiring reverted).
+- **Live check** (isolated: backend 8149, Vite 5269, temp HOME, scratch NEBULA_* dirs, placeholder keys, no runs). Screenshots in the session scratchpad `flux3/pr5-shots/`. The key-change stop used Krea 3 with Reasoning level Medium (a fal-only setting) and both a fal key and a Krea token: Auto lands on Krea and shows "Set Reasoning level back to Low" and "Switch to fal.ai". FLUX.2 can't show both rows under Auto, because the route that honors Safety (BFL) comes first.
+- **Surprise, not caused by this PR.** In the Playwright Chromium, the canvas tab crashed ("Target crashed") a few seconds after about four quick Inspector edits on any node. The same thing happened with the frontend source checked out at 46a853c3 (before PR 5), so it came before this work. Not investigated.
+
 ## 2026-10-16 — PR 5 core: hide what the provider doesn't offer (provider-hidden-params)
 
 Design: the approved hide-params DESIGN.md (Justin: "Yes to all 4", D1-D4). This is the core: the route grammar (`paramVisibleWhen`), rule H, `route_sent_keys`, the Python/TS twins, the definitions, validation, fixtures and tests. The Inspector/switcher/pills wiring of `snapHidden` and fix rows, `describe_node` (`onlyWhen`), the MODEL_REFERENCE generator, the MCP docstring and the CLI are the next two lanes; the functions they need exist and are tested here. Legacy `directRoute` nodes are byte for byte unchanged (the first 147 route cases, `route_sent_keys` = `route_param_keys` on every legacy node, now a test).
@@ -7,7 +18,7 @@ Design: the approved hide-params DESIGN.md (Justin: "Yes to all 4", D1-D4). This
 ### Behaviour changes for saved graphs
 
 1. FLUX.2 on fal, Flash: `safety_tolerance` is no longer sent (`Flux2FlashInput` has no such field). The only approved delta against the 6,048 legacy requests (`APPROVED_LEGACY_DELTA`); the legacy fixture and its sha are unchanged.
-2. FLUX.2 on fal, Klein with a saved Safety other than 2: still stops, now with "it doesn't offer Safety 3 with Model FLUX.2 [klein] 4B. Set Safety back to 2, or switch provider." A click on the fal row resets it to 2 with a note; an Inspector model edit will too once the next lane wires `snapHidden` (tested here at the lib level). On Flash the saved value is ignored (BFL has no Flash).
+2. FLUX.2 on fal, Klein with a saved Safety other than 2: still stops, now with "it doesn't offer Safety 3 with Model FLUX.2 [klein] 4B. Set Safety back to 2, or switch provider." A click on the fal row resets it to 2 with a note; an Inspector model edit or a Create pill edit does too (`snapHidden`, wired in the UI lane below). On Flash the saved value is ignored (BFL has no Flash).
 3. FLUX.2 on BFL with the safety checker saved off: still stops (rule H; the explicit `rejects` is gone).
 4. FLUX 3 Image Klein on OpenRouter: no Seed row, no seed sent; a saved seed stops with "Clear Seed"; a click on the OpenRouter row clears it.
 5. FLUX 3 Video drafts on bfl, fal and replicate send no `resolution` (D1). A draft saved at Full HD or above now runs as the 720p draft instead of stopping, priced at the draft row. Replicate draft + 4K runs.
