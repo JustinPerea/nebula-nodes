@@ -4,9 +4,22 @@ import { getBackendBaseUrl, backendAssetUrlSync, rewriteExecutionAssetUrls } fro
 // In test mode discovery resolves to http://localhost:8000 and caches it, so
 // backendAssetUrlSync can rewrite server-relative asset paths to an absolute
 // backend origin (the real-world case: frontend and backend on different ports).
+//
+// Vitest exposes exported VITE_* shell variables through import.meta.env, so
+// every test starts from an explicit unset pin and scan list: a shell that
+// exported either one (as an isolated dev session does) can't change what the
+// unset-case tests see. Tests that want a pin stub it after this runs.
+function clearBackendPortEnv() {
+  vi.stubEnv('VITE_NEBULA_BACKEND_PORT', '');
+  vi.stubEnv('VITE_NEBULA_BACKEND_PORTS', '');
+}
+
 beforeAll(async () => {
+  clearBackendPortEnv();
   await getBackendBaseUrl();
 });
+
+beforeEach(clearBackendPortEnv);
 
 describe('backendAssetUrlSync', () => {
   it('rewrites /api/outputs/ paths to the discovered backend origin', () => {

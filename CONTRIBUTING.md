@@ -41,14 +41,22 @@ mkdir -p "$TMP/home" "$TMP/state" "$TMP/output"
 echo '{}' > "$TMP/settings.json"
 
 # Backend on its own port, with its own HOME, settings, state and outputs.
+# It runs in the background; stop it later with `kill $BACKEND_PID`.
 HOME="$TMP/home" NEBULA_SETTINGS_PATH="$TMP/settings.json" \
 NEBULA_STATE_DIR="$TMP/state" NEBULA_OUTPUT_ROOT="$TMP/output" \
-  backend/.venv/bin/python backend/devserver.py --port 8155 --ui http://127.0.0.1:5275 --no-reload
+  backend/.venv/bin/python backend/devserver.py --port 8155 --ui http://127.0.0.1:5275 --no-reload &
+BACKEND_PID=$!
 
-# Vite pinned to that backend.
+# Wait until that backend answers on its own port before starting Vite.
+until curl -fsS http://127.0.0.1:8155/api/health >/dev/null; do sleep 1; done
+
+# Vite pinned to that backend (foreground; Ctrl-C stops it).
 VITE_NEBULA_BACKEND_PORT=8155 \
   npm --prefix frontend run dev -- --host 127.0.0.1 --port 5275 --strictPort
 ```
+
+Or run the two commands in two terminals, as in the README quickstart, with the
+same `TMP` in both.
 
 - `VITE_NEBULA_BACKEND_PORT` is the one setting. It moves the Vite `/api` and
   `/ws` proxy to `127.0.0.1:<port>` and makes the page talk to that port only:
