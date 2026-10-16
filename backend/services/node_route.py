@@ -1039,6 +1039,42 @@ def route_sent_keys(definition: Mapping[str, Any], route: str | None, params: Ma
     return {str(param.get("key")) for param in offered if param_shown(param, values, listed)}
 
 
+def _values_text(param: Mapping[str, Any] | None, key: str, values: Iterable[Any]) -> str:
+    """A controller and the values a condition needs, as the card names them:
+    "Model FLUX.2 [pro], FLUX.2 [max] or FLUX.2 [flex]", "Draft (fast preview) off"."""
+    listed = list(values)
+    label = _param_label(param, key)
+    if listed and all(isinstance(value, bool) for value in listed):
+        return f"{label} {_or_list(['on' if value else 'off' for value in listed])}"
+    return f"{label} {_or_list([_option_label(param, value) for value in listed])}" if listed else label
+
+
+def route_hides(definition: Mapping[str, Any], route: str | None) -> list[str]:
+    """What a route-table node's route doesn't show of the params it lists,
+    in the card's words, one entry per param its ``paramVisibleWhen`` names:
+    "no Seed" (never offered there) or "Safety only with Model FLUX.2 [pro],
+    FLUX.2 [max] or FLUX.2 [flex]" (offered under those values). `nebula
+    info` prints it under each route and describe_node gives it as the
+    route's ``hides``; the param list itself (route_param_definitions)
+    already leaves the first out and carries the second as ``visibleWhen``."""
+    if not has_routes(definition):
+        return []
+    spec = route_by_id(definition, route)
+    lines: list[str] = []
+    for key, condition in route_visible_when(spec).items():
+        param = param_definition(definition, str(key))
+        if param is None:
+            continue
+        label = _param_label(param, str(key))
+        if condition is False:
+            lines.append(f"no {label}")
+        elif isinstance(condition, Mapping) and condition:
+            lines.append(f"{label} only with " + " and ".join(
+                _values_text(param_definition(definition, str(ctrl)), str(ctrl), values or [])
+                for ctrl, values in condition.items()))
+    return lines
+
+
 def route_takes_value(route: Mapping[str, Any], key: str, value: Any) -> bool:
     """Whether ``route`` takes this one value of ``key`` on its own: its
     ``accepts`` rule (which a ``valueMap`` implies) holds and its ``rejects``
