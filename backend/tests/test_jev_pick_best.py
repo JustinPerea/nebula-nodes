@@ -212,6 +212,17 @@ async def test_over_the_context_it_retries_once_with_smaller_candidates(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_the_retry_pads_a_wide_candidate_to_typesafes_minimum_side(monkeypatch):
+    # A 3:1 candidate is 768x256 at RETRY_SIDE; TypeSafe rejects either side
+    # under 280 px (docs.typesafe.ai/images), so it must be padded to 768x280.
+    over = (400, {"error": {"code": "max_tokens_exceeded", "message": "too many tokens"}})
+    ok = (200, _response("a", {"a": 0.7, "b": 0.3}, 0.4))
+    _, calls = await _run(monkeypatch, {}, [_png((1500, 500)), _png((900, 1200))], over, ok)
+    assert len(calls) == 2
+    assert _sent_sizes(calls[1]) == [(RETRY_SIDE, 280), (576, RETRY_SIDE)]
+
+
+@pytest.mark.asyncio
 async def test_still_over_the_context_after_the_retry_says_to_split(monkeypatch):
     over = (400, {"error": {"message": "max_tokens_exceeded: 70000 > 65536"}})
     calls = _install(monkeypatch, over)

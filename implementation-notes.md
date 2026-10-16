@@ -4881,3 +4881,15 @@ Justin asked whether the Jev nodes could take their question straight on the car
 - **Two older tests relied on the leak.** `test_paper_replay.py` and `test_execution_cancellation.py::test_canvas_stop_syncs_recovery_params_before_cancelled_event` synced made-up param keys back to the canvas, which the stricter sync now drops.
   - Paper replay now uses a sticky note's declared `content` and `color` instead of keys a text input doesn't declare.
   - The cancellation test now uses `worldlabs-environment` with its declared `display_name`, the node whose resume ids are the real reason that sync runs on stop. It runs as a person and skips graph validation; the comments say why.
+
+## TypeSafe minimum image side: 256 -> 280 (2026-10-16)
+
+- **Source.** docs.typesafe.ai/images, fetched 2026-10-16: "Width and height 280 to 1568 pixels each. An image with either side under 280 pixels is rejected." and "Total pixels (width × height) 78,400 to 2,458,624, the area of a 280 × 280 to a 1568 × 1568 square." The page also says "Scale up, or pad, an image smaller than the minimum."
+- **The old value was wrong, not stale.** `MIN_SIDE = 256` didn't match the page; the Jev integration entry above ("Image limits (256 to 1568 px a side ...) match") was mistaken. `MIN_PIXELS = 78_400` was already right (it is 280 x 280), which is why square images were padded to 280 x 280 and only thin images went out under the limit.
+- **What broke.** Any image whose short side came out between 256 and 279 after shrinking was sent short and TypeSafe would refuse it. Two cases now have tests that fail on 256 and pass on 280:
+  - a 2000 x 320 banner shrinks to 1568 x 251 and was padded to 1568 x 256 (now 1568 x 280);
+  - a 3:1 candidate on Pick Best's 768 px retry is 768 x 256 and was sent as is (now padded to 768 x 280).
+- **Every use checked.** `_target_size` pads (never refuses) up to `MIN_SIDE`, so the one constant fixes Decide, Box, Pick Best (both passes) and `qc_jev` (frames thumbnailed to 768, then fitted by `prepare_images`). The `max_side` check in `prepare_images` now reads 280 to 1568; the only caller with a smaller `max_side` is Pick Best's 768 retry, which is inside it.
+- **Kept on purpose.** The `MIN_PIXELS` grow step in `_target_size` can't trigger any more (280 x 280 is exactly 78,400), but stays in case TypeSafe moves the two limits apart.
+- **Tests updated to the documented value:** the `_target_size` table, the `max_side` error message, and the hand-built `ImageTransform` box-mapping case (now a realistic 280 px sent height).
+- **Docs:** `docs/api-guides/typesafe.md` and both copies of the typesafe skill say 280-1568 px.
