@@ -34,7 +34,15 @@ The server exposes these tools for building and running (see
   a provider also has `runsWithOptions`: readiness per value of the param that
   picks the provider (Cinema Scene's `scene.base.model`, a QC node's `mode`),
   and a note when another value would run with the keys set here. A QC
-  node's `pricedWhen` lists the price rows of its paid modes (Jev).
+  node's `pricedWhen` lists the price rows of its paid modes (Jev). A
+  multi-provider node (FLUX.2, FLUX 3, Krea 3) has `providerChoice` and
+  `routes`: per provider, its `params` exactly as the card shows them there
+  (values cut, ranges narrowed, `onlyWhen`; a setting the provider doesn't
+  offer is absent and named in `hides`), `price`, `priceUnconfirmed`, `note`
+  and `block`. A saved value of a setting the route doesn't offer stops the
+  run when another route would use it; the stop's `fixes` are plain param
+  edits. `_provider` changes go through `propose_change`. See
+  [Provider routes](PROVIDER-ROUTES.md#hidden-settings-paramvisiblewhen).
 - `edit_canvas`: adds nodes, wires, param changes, renames and moves in one
   call, all or nothing. Same shape as `propose_change`.
 - `remove_from_canvas`: deletes nodes or single wires, all or nothing.
