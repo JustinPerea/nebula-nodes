@@ -482,7 +482,7 @@ def test_a_saved_project_with_the_folded_nodes_opens_as_the_new_nodes():
     by_id = {node["id"]: node for node in result["nodes"]}
     assert by_id["video-1"]["data"]["definitionId"] == "flux-3-video"
     assert by_id["video-1"]["data"]["label"] == "Comet shot"
-    assert by_id["edit-1"]["data"]["label"] == "FLUX Video Edit"
+    assert by_id["edit-1"]["data"]["label"] == "FLUX Video Edit [fast]"
     assert by_id["video-1"]["data"]["params"]["_kreaAuth"] == "mcp"
     assert set(by_id["video-1"]["data"]["outputs"]) == {"video"}
     assert by_id["video-1-start_image"]["data"]["definitionId"] == "image-input"

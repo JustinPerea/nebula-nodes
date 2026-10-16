@@ -91,7 +91,7 @@ The route clients (`backend/handlers/openrouter_media.py`, wired in `backend/exe
 
 - **Images:** wired `images` go as `input_references` (local outputs as data URLs, which `/images` documents). Settings outside OpenRouter's documented request fields go under `provider.options["black-forest-labs"]` (FLUX: `safety_tolerance`). The picture comes back as `data[0].b64_json` and is saved.
 - **Videos:** `start_image` / `end_image` go as `frame_images` (`first_frame` / `last_frame`), and only as public http(s) URLs: OpenRouter documents data URLs for `/images` references but not for `/videos` frames. A Nebula output wired into a frame stops before any request and points to another provider. A source video isn't sent (its request shape isn't documented). The finished clip is downloaded from `unsigned_urls[0]`. Polls every 5 s for up to an hour; OpenRouter has no video cancel, so Stop only stops waiting.
-- **No route for FLUX Video Edit or Video Upscale.** OpenRouter lists both models, but documents no way to send the source clip.
+- **No route for FLUX Video Edit [fast] or Video Upscale.** OpenRouter lists both models, but documents no way to send the source clip.
 - Prices (OpenRouter's model endpoints, read 2026-10-15): images the same as BFL's ($0.041 to $0.607 for FLUX 3 Image, $0.008 to $0.036 for Klein); video $0.17 (720p) / $0.29 (1080p) / $0.28 (2K) / $0.41 (4K) per second.
 
 The "Capability boundaries" table below is about `openrouter-universal` and chat completions. The FLUX 3 routes do send OpenRouter `provider` options and image size and aspect settings, on the `/images` and `/videos` endpoints only.

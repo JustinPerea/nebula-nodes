@@ -2109,7 +2109,7 @@
       }
     },
     {
-      "name": "FLUX Video Edit: priced by the source clip, so unpriced before the run",
+      "name": "FLUX Video Edit [fast]: priced by the source clip, so unpriced before the run",
       "nodeId": "flux-video-edit",
       "params": {},
       "wired": [

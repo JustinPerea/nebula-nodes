@@ -6422,7 +6422,7 @@
         ],
         "block": null,
         "alternatives": [],
-        "message": "FLUX Video Edit needs BFL_API_KEY, FAL_KEY or KREA_API_TOKEN in Settings > Providers."
+        "message": "FLUX Video Edit [fast] needs BFL_API_KEY, FAL_KEY or KREA_API_TOKEN in Settings > Providers."
       }
     },
     {

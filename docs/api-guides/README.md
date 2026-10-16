@@ -29,7 +29,7 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 | [Higgsfield](./higgsfield.md) | 1 | ~25% | complete | DoP motion/camera presets (getMotions()) — Higgsfield's headline feature — not surfaced |
 | [Anthropic (Claude)](./anthropic.md) | 1 | ~20% | complete | Tool use / function calling — both custom client tools and Anthropic server tools entirely unexposed |
 | [TypeSafe (Jev)](./typesafe.md) | 3 | ~75% | complete | Several questions in one Decide request; Box edge-check questions and several targets per image |
-| [Black Forest Labs (FLUX)](./bfl.md) | 6 FLUX 3 route-table nodes (BFL route on 5), 2026-10-15 | FLUX 3 Image, Klein, Video, Video Edit, Video Upscale; key check | complete | FLUX.2 on BFL (next PR); FLUX 3 Video `draft_enhance` |
+| [Black Forest Labs (FLUX)](./bfl.md) | 6 FLUX 3 route-table nodes (BFL route on 5), 2026-10-15 | FLUX 3 Image, Klein, Video, FLUX Video Edit [fast], FLUX Video Upscale; key check | complete | FLUX.2 on BFL (next PR); FLUX 3 Video `draft_enhance` |
 
 ## Agent skill gaps
 

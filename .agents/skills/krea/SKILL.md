@@ -201,7 +201,7 @@ Catalog: the four endpoints are in `FOLDED` in `scripts/sync-krea-catalog.py`, s
 
 ## Gateway Model Nodes
 
-The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108), each a specific first-class Nebula node, except the three FLUX 3 video routes, which are folded into the FLUX 3 nodes (above). Krea 3 (`/generate/image/krea/krea-3`, added 2026-10-15) is likewise the `krea` route of `krea-3`, not a `krea-*` node. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and FLUX Video Edit (`flux-video-edit`) require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.
+The public Krea OpenAPI catalog checked **2026-10-09** defines **34 image, 41 video, 5 audio, 18 enhance and 10 3D routes** (108), each a specific first-class Nebula node, except the three FLUX 3 video routes, which are folded into the FLUX 3 nodes (above). Krea 3 (`/generate/image/krea/krea-3`, added 2026-10-15) is likewise the `krea` route of `krea-3`, not a `krea-*` node. Canvas supports the full catalog. Create exposes models compatible with its prompt, image attachments, and simple controls; Runway's tagged references, H3 camera trajectories, and FLUX Video Edit [fast] (`flux-video-edit`) require Canvas. The nodes have model-specific controls and connectable prompt/media ports; JSON fields hold complex parameters, not a model selection UI.
 
 Node IDs are `krea-` plus the API path after `/generate/`, with non-alphanumeric characters replaced by hyphens. For example:
 

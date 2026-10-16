@@ -13996,7 +13996,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   },
   'flux-video-edit': {
     id: 'flux-video-edit',
-    displayName: 'FLUX Video Edit',
+    displayName: 'FLUX Video Edit [fast]',
     description: "Black Forest Labs' FLUX Video Edit [fast]: change a video clip with a text prompt; the edit keeps the clip's length. Runs on BFL, fal.ai or Krea.",
     category: 'video-gen',
     apiProvider: 'bfl',

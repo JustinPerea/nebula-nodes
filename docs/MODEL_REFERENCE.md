@@ -2236,7 +2236,7 @@ Nodes: 307 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 ---
 
-### FLUX Video Edit
+### FLUX Video Edit [fast]
 
 | | |
 |---|---|

@@ -24,7 +24,7 @@ description: Black Forest Labs (BFL) in Nebula — the FLUX 3 nodes (flux-3-imag
 | `flux-3-image-klein` "FLUX 3 Image Klein" | `prompt`; `images` (up to 10) | bfl `/v1/flux-3-image-klein` · openrouter `black-forest-labs/flux-3-image-klein` |
 | `flux-3-image-klein-base` "FLUX 3 Image Klein Base" | `prompt`; `images` (up to 10) | fal `blackforestlabs/flux-3/klein/base/text-to-image` (`/edit-image` when images are wired) only |
 | `flux-3-video` "FLUX 3 Video" | `prompt`; `start_image`, `end_image`, `start_video`, `keyframes` (multiple) | bfl `/v1/flux-3-video` · fal `blackforestlabs/flux-3/*` (endpoint by ports and draft) · replicate `black-forest-labs/flux-3` · openrouter `black-forest-labs/flux-3-video` (`/api/v1/videos`) · krea (catalog Flux 3 Video, API token or plan) |
-| `flux-video-edit` "FLUX Video Edit" | `prompt`; `start_video` (required) | bfl `/v1/flux-tools/video-edit-v1` · fal `blackforestlabs/flux-3/edit-video` · krea |
+| `flux-video-edit` "FLUX Video Edit [fast]" | `prompt`; `start_video` (required) | bfl `/v1/flux-tools/video-edit-v1` · fal `blackforestlabs/flux-3/edit-video` · krea |
 | `flux-video-upscale` "FLUX Video Upscale" | `video` (required); `prompt` (optional) | bfl `/v1/flux-tools/video-upscale-v1` · fal `blackforestlabs/flux-video-upscale` · replicate `black-forest-labs/flux-video-upscale` · krea |
 
 Every node outputs one port: `image` or `video`.
@@ -73,7 +73,7 @@ Shared: `duration` 5-20 s (default 5), `resolution` `hd` / `fhd` / `qhd` / `uhd`
 
 Drafts render at `hd` only (BFL: "sending `draft: true` with any other resolution is rejected"). BFL's `draft_enhance` mode isn't offered yet.
 
-### FLUX Video Edit and Video Upscale
+### FLUX Video Edit [fast] and FLUX Video Upscale
 
 - **Edit** has no settings: the prompt says what to change in the clip (remove, add or replace objects, change the setting, restyle, change text or dialogue). BFL caps the source at 15 s and 50 MB, and the output is 720p.
 - **Upscale** shares `creativity` (0 Precise or 1 Creative, default 1) and `upscale_factor` 1.5-3 (default 2). The prompt is optional.
