@@ -81,7 +81,7 @@ Auto order is left to right. A dash means no route, for the reason in "Left out"
 - **Krea:** 720p/1080p; no `auto` or 9:21; `ports.keyframes.max 0`; `plan: optional`.
 - **Prices per second:** BFL t2v/i2v 0.15 / 0.24 / 0.28 / 0.41, v2v 0.21 / 0.27 / 0.31 / 0.45, draft 0.06 (a v2v draft is "Not listed": unpriced). fal 0.17 / 0.29, extend 0.41 / 0.53, drafts 0.06 / extend draft 0.12, **unconfirmed** (the pricing API says 0.085 / 0.205 / 0.03 / 0.06; the higher page prices are used); fal qhd/uhd unpriced. Replicate and Krea 0.17 / 0.29, v2v 0.41 / 0.53. OpenRouter 0.17 / 0.29 / 0.28 / 0.41 (2K below 1080p, copied as published).
 
-## FLUX Video Edit
+## FLUX Video Edit [fast]
 
 - **Ports:** `prompt`, `start_video` (Krea's ids; the clients map them to BFL's `video` and fal's `video_url`). No settings.
 - **fal `blackforestlabs/flux-3/edit-video`** is the same model: fal titles it "Flux 3 FAST Edit Video" (its description says "FLUX.3 Edit Video [FAST]"), and it matches BFL on price ($0.03/s), limits (15 s, 50 MB), 720p output and fields.
@@ -118,7 +118,7 @@ These were real, billed runs on Black Forest Labs' API through Nebula's FLUX 3 n
 | FLUX 3 Image Klein | 768sq | 768×768 JPEG | $0.008 |
 | FLUX 3 Image | 768sq, aspect auto | 1024×576 PNG | $0.041 |
 | FLUX 3 Video | text-to-video draft, hd, 5 s | 1280×704, 5.04 s, with audio | $0.30 |
-| FLUX Video Edit | 2 s 480×270 clip | 480×256, 2.04 s | $0.06 (inferred) |
+| FLUX Video Edit [fast] | 2 s 480×270 clip | 480×256, 2.04 s | $0.06 (inferred) |
 | FLUX Video Upscale | same clip, precise, 1.5× | 720×404, 2.04 s | $0.0396 (inferred) |
 
 "Inferred": Edit and Upscale were billed late and together, as 9.96 credits. That total fits 2 s × $0.03 for the edit plus 0.2774 MP × 2.04 s × $0.07 for the upscale. So BFL counts a megapixel as 1,048,576 pixels, and the upscale is billed on the output frame size and duration. The fal, Replicate, OpenRouter and Krea routes haven't been run live yet.

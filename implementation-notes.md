@@ -1,5 +1,21 @@
 # Implementation Notes
 
+## 2026-10-16 — flux-3-nodes merged into flux-2-bfl (the FLUX Video Edit [fast] rename)
+
+Merged with `--no-ff`. Three conflicts, all one-line overlaps: `AGENTS.md` line 13 kept this branch's FLUX.2 coverage clause and took Krea's own names for the folded entries; `docs/api-guides/bfl.md` kept the PR 4 status line and took "FLUX Video Edit [fast]"; these notes keep both sections. Generated files were regenerated, not hand-merged.
+
+## 2026-10-16 — "FLUX Video Edit" is now "FLUX Video Edit [fast]" (flux-3-nodes)
+
+Justin approved this on 2026-10-16 ("Yes go ahead and rename Flux video edit"), settling the name held in the PR 3 names section below. The node calls BFL's `/v1/flux-tools/video-edit-v1`, which BFL's pricing card and its docs pricing row call "FLUX Video Edit [fast]". The product page H1, "FLUX Video Edit", is the family name. Ids, ports, endpoints and prices stay the same.
+
+Changed:
+
+- `flux-video-edit` displayName in both definition files, so the card, the node library, the "needs a key" message (`route_cases.json`) and the label a folded Krea node takes on load (`test_retired_nodes.py`) all read "FLUX Video Edit [fast]".
+- Every full mention of the model in the skills (`.agents` and `.claude`: bfl, openrouter, replicate, and the krea skill, which has the line only in `.agents`), `docs/PROVIDER-ROUTES.md`, `docs/api-guides/` (README, bfl, krea), `docs/model-providers/bfl/flux-3.md`, the `model_pricing.py` comment, a pricing-case name and the test comments. The bfl skill heading is now "FLUX Video Edit [fast] and FLUX Video Upscale".
+- AGENTS.md line 13 and the `retired_nodes.py` docstring now give Krea's own names for its catalog entries: "Flux 3 Video", "Flux Video Edit", "Flux Video Upscale".
+
+Left as they are: short forms in lists and tables that already name the family once ("Video Edit, per second", "FLUX 3 Image, Klein, Video or Video Edit bodies", "Krea's Video Edit and Upscale"); Krea's catalog spelling "Flux Video Edit"; the retired Krea node's saved name "Flux Video Edit (Krea)"; the pinned BFL schema fixture (its title "Video Edit" is BFL's schema text); dated sections of these notes; `flux-3-image-klein-base` keeps "FLUX 3 Image Klein Base" (the maker's own name on its Hugging Face card; a host's name applies only to the host's own product).
+
 ## 2026-10-16 — PR 4 FLUX.2 option labels match the provider (flux-2-bfl)
 
 Justin, 2026-10-16, asked whether the FLUX.2 labels should stay "FLUX 2 Pro / Max / ..." or follow BFL's "FLUX.2 [pro]": "Let's match the provider every time." `flux-3-nodes` (the PR 3 name pass, 758eaf08) was merged in first with a merge commit; the only conflict, this file, keeps both sections.

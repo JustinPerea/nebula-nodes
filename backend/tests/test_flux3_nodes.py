@@ -1,5 +1,5 @@
 """The real route-table nodes (PR 3 of the provider-switcher series): FLUX 3
-Image, Image Klein, Image Klein Base, FLUX 3 Video, FLUX Video Edit, FLUX
+Image, Image Klein, Image Klein Base, FLUX 3 Video, FLUX Video Edit [fast], FLUX
 Video Upscale and Krea 3.
 
 Each route's cheapest run goes through the registry's multi_route handler,

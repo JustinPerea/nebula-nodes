@@ -53,7 +53,7 @@ describe('the shipped price table', () => {
     // A dual-route node prices each route on its own: check every route.
     // A local node priced only in a paid mode (QC Jev) is free at its
     // defaults, so it must resolve in that mode instead. A price that reads
-    // the source clip (FLUX Video Edit and Upscale) is known only once the
+    // the source clip (FLUX Video Edit [fast] and Upscale) is known only once the
     // run is, so it is the one kind left unpriced on a fresh node.
     const runTime = (entry: PriceEntry) => RUN_TIME_VARIABLES.some((key) => pricedKeys(entry).has(key));
     const routed = Object.entries(nodes)

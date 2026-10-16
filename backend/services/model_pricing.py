@@ -98,7 +98,7 @@ _IMAGE_PORTS = ("start_image", "keyframes", "end_image")
 REFERENCES = "(references)"
 REFERENCE_VALUES = ("none", "some")
 _REFERENCE_PORTS = ("images",)
-# Price variables known only once the run's source clip is: FLUX Video Edit
+# Price variables known only once the run's source clip is: FLUX Video Edit [fast]
 # bills the source's length, Upscale its output frame size too (source size
 # times upscale_factor squared), and fal's upscale tiers by that output size.
 RUN_TIME_VARIABLES = ("(source seconds)", "(output megapixels)", "(output tier)")

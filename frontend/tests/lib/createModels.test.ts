@@ -73,7 +73,7 @@ describe('createModels', () => {
       expect(createIds.has(id)).toBe(false);
       expect(searchIds.has(id)).toBe(false);
     }
-    // FLUX Video Edit runs on BFL, fal.ai or Krea, and always edits a video.
+    // FLUX Video Edit [fast] runs on BFL, fal.ai or Krea, and always edits a video.
     const edit = NODE_DEFINITIONS['flux-video-edit'];
     expect(edit?.routes?.some((route) => route.provider === 'krea')).toBe(true);
     expect(createIds.has('flux-video-edit')).toBe(false);

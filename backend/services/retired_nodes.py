@@ -70,7 +70,7 @@ aleph2. All of these shutdowns are past, so nothing is date-gated.
 
 Some nodes weren't shut down but folded into a one-node-per-model node with
 a provider switcher (``MERGED``, docs/PROVIDER-ROUTES.md). Nebula's three
-synced Krea FLUX nodes (FLUX 3 Video, FLUX Video Edit, FLUX Video Upscale on
+synced Krea FLUX nodes (Flux 3 Video, Flux Video Edit, Flux Video Upscale on
 Krea's gateway) became Krea routes on ``flux-3-video``, ``flux-video-edit``
 and ``flux-video-upscale`` on 2026-10-15. A saved one loads as the new node
 set to the Krea route (``_provider: "krea"``) with its ``_kreaAuth`` kept, so

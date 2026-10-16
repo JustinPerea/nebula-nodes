@@ -18,7 +18,7 @@ sequenceDiagram
   D-->>N: image or video bytes, saved to the run folder at once
 ```
 
-**Status (2026-10-15, routing series PR 4):** BFL is the maker route of FLUX 3 Image, FLUX 3 Image Klein, FLUX 3 Video, FLUX Video Edit, FLUX Video Upscale and FLUX.2. Each is one node with a provider switcher on the card; BFL is the first route, so with `BFL_API_KEY` saved, Auto runs on BFL (and stops, offering the routes that can, when BFL can't take the settings). `draft_enhance` isn't offered yet. See `docs/PROVIDER-ROUTES.md`.
+**Status (2026-10-15, routing series PR 4):** BFL is the maker route of FLUX 3 Image, FLUX 3 Image Klein, FLUX 3 Video, FLUX Video Edit [fast], FLUX Video Upscale and FLUX.2. Each is one node with a provider switcher on the card; BFL is the first route, so with `BFL_API_KEY` saved, Auto runs on BFL (and stops, offering the routes that can, when BFL can't take the settings). `draft_enhance` isn't offered yet. See `docs/PROVIDER-ROUTES.md`.
 
 ## Nodes
 
@@ -28,7 +28,7 @@ sequenceDiagram
 | FLUX 3 Image Klein (`flux-3-image-klein`) | Black Forest Labs, OpenRouter |
 | FLUX 3 Image Klein Base (`flux-3-image-klein-base`) | fal only (BFL's API doesn't serve it) |
 | FLUX 3 Video (`flux-3-video`) | Black Forest Labs, fal, Replicate, OpenRouter, Krea |
-| FLUX Video Edit (`flux-video-edit`) | Black Forest Labs, fal, Krea |
+| FLUX Video Edit [fast] (`flux-video-edit`) | Black Forest Labs, fal, Krea |
 | FLUX Video Upscale (`flux-video-upscale`) | Black Forest Labs, fal, Replicate, Krea |
 | FLUX.2 (`flux-2-pro`): FLUX.2 [pro], [max], [flex], [klein] 9B, [klein] 4B, and fal's FLUX 2 Flash | Black Forest Labs (no FLUX 2 Flash), fal |
 
