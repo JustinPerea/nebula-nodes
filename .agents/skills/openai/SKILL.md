@@ -109,8 +109,8 @@ Types/ranges/enums/defaults are from `node_definitions.json`; behavior notes are
 - `prompt` *(string, optional)*: must be in **English**.
 
 ### `gpt-4o-chat` (stream) — display name "OpenAI Chat" (updated 2026-10-16)
-- `model` *(enum, req, default `gpt-5.4`)*: `gpt-6-astra` (GPT-6 Astra, flagship) · `gpt-6.1-sol` (GPT-6.1 Sol) · `gpt-6-luna` (GPT-6 Luna) · `gpt-5.5` · `gpt-5.4` · `gpt-5.4-mini` · `gpt-5.4-nano` (retiring 2027-04-01) · legacy `gpt-4o` · `gpt-4o-mini` · `gpt-4.1` · `gpt-4.1-mini` (all four retiring 2027-01-14) · `gpt-4.1-nano` (retiring 2026-10-23). Retiring models stay on the menu so saved graphs open.
-- `reasoning_effort` *(enum, default `medium`)*: `none` · `low` · `medium` · `high` · `xhigh` · `max`. **GPT-6 and gpt-5.x models only** — shown only when one of them is selected and sent only for those models. `max` is GPT-6 only; `none` is hidden (and refused) for `gpt-6-astra` and `gpt-6.1-sol`.
+- `model` *(enum, req, default `gpt-6.1-sol` since 2026-10-16; was `gpt-5.4`)*: `gpt-6-astra` (GPT-6 Astra, flagship) · `gpt-6.1-sol` (GPT-6.1 Sol) · `gpt-6-luna` (GPT-6 Luna) · `gpt-5.5` · `gpt-5.4` · `gpt-5.4-mini` · `gpt-5.4-nano` (retiring 2027-04-01) · legacy `gpt-4o` · `gpt-4o-mini` · `gpt-4.1` · `gpt-4.1-mini` (all four retiring 2027-01-14) · `gpt-4.1-nano` (retiring 2026-10-23). Retiring models stay on the menu so saved graphs open. The default only affects new nodes (saved graphs keep their model); a node with no stored `model` also runs `gpt-6.1-sol`.
+- `reasoning_effort` *(enum, default `medium`)*: `none` · `low` · `medium` · `high` · `xhigh` · `max`. **GPT-6 and gpt-5.x models only** — shown only when one of them is selected and sent only for those models. `max` is GPT-6 only; `none` is hidden (and refused) for `gpt-6-astra` and `gpt-6.1-sol`. `medium` is OpenAI's documented default for `gpt-6.1-sol`.
 - `max_completion_tokens` *(int 1–128000, default 4096)*.
 - `temperature` *(float 0–2, step 0.1, default 1)* — **legacy gpt-4o/4.1 models only**; the handler omits it for GPT-6 and gpt-5.x (reasoning models reject it).
 - `top_p` *(float 0–1, step 0.05, default unset/blank)* — only sent when set; legacy models only.

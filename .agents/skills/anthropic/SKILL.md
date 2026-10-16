@@ -31,6 +31,7 @@ Claude in Nebula is text-only output. It does **not** generate images, video, au
 8. **Key gotchas (read before tuning params):**
    - **`top_p` is dropped whenever `temperature` is set.** The handler only sends `top_p` if `temperature` is `None` (`if top_p is not None and "temperature" not in request_body`). But `temperature` **defaults to `1`** in the node, so in practice `temperature` is always present and **`top_p` is effectively ignored** unless you clear the Temperature field to empty/null. Tune one or the other — not both.
    - **Extended thinking forces `temperature=1`.** When `extended_thinking` is on (and the model supports it), the handler hard-sets `temperature = 1` (Anthropic API constraint) regardless of what you entered, and sends `thinking: {type: "enabled", budget_tokens: <budget>}`. Your Temperature value is overridden.
+   - **Claude Opus 4.7 and 4.8 take `effort`, not a thinking budget or sampling.** Anthropic's thinking pages say 4.7 and later return HTTP 400 for `thinking: {type: "enabled", budget_tokens}` and for non-default `temperature`/`top_p`/`top_k`. On these two the card hides Thinking Budget, Temperature and Top P and shows **Effort** (sent as `output_config.effort`; API default `high`). Their thinking is off until the request sets `thinking: {type: "adaptive"}`, so the **Extended Thinking** toggle stays on the card and sends exactly that, with no budget and no forced temperature. (2026-10-16)
    - **Claude Fable/Mythos 5 take no extended-thinking param.** They use always-on adaptive thinking; the handler suppresses the `thinking` block for `claude-fable-*`/`claude-mythos-*` models even if the toggle is set, and the UI hides `extended_thinking`/`thinkingBudget` for them (`visibleWhen` excludes Fable). Only the pre-5 models accept a thinking budget. (2026-06-10)
    - **Fable 5.1 and the 5.5 generation (Opus 5.5, Sonnet 5.5, Haiku 5.5) take `effort`, not sampling or a thinking budget.** Anthropic returns HTTP 400 for a thinking budget or a non-default `temperature`/`top_p` on these. The handler never sends `temperature`, `top_p` or `thinking` for them (even if a node switched from an older model still holds those values), sends the **Effort** param as `output_config: {"effort": ...}` when set (low / medium / high / xhigh / max; blank = the model's own default), and caps `max_tokens` at 128000. Thinking counts against `max_tokens`, so raise it well above the 4096 default for long answers; Anthropic suggests starting at 64000 for `xhigh`/`max`. (2026-10-16)
    - **Thinking output is filtered out.** Only `delta.text` is accumulated; the thinking deltas (`delta.thinking`) are never captured, so the reasoning chain is **not** surfaced to the `text` port — only the final answer is. Thinking still costs tokens and improves the answer; you just don't see the scratchpad.
@@ -43,19 +44,19 @@ Only one Anthropic node exists. Pick the **model**, not the node.
 
 | Nebula node (id · display) | Endpoint / model | Inputs → output | Key params |
 |---|---|---|---|
-| `claude-chat` · **Claude** | `POST /v1/messages` (host `api.anthropic.com`), model picked from enum (default `claude-sonnet-4-6`) | `messages` (Text, required) + `images` (Image, optional, multiple) → `text` (Text, streamed) | `model`, `max_tokens` (required), `temperature`, `system`, `top_p`, `stop_sequences`, `extended_thinking` + `thinkingBudget`, `effort` (5.5 generation and Fable 5.1 only), `prompt_caching` |
+| `claude-chat` · **Claude** | `POST /v1/messages` (host `api.anthropic.com`), model picked from enum (default `claude-opus-5-5`, Effort `medium`) | `messages` (Text, required) + `images` (Image, optional, multiple) → `text` (Text, streamed) | `model`, `max_tokens` (required), `temperature`, `system`, `top_p`, `stop_sequences`, `extended_thinking` + `thinkingBudget`, `effort` (5.5 generation, Fable 5.1, Opus 4.8 and Opus 4.7), `prompt_caching` |
 
 **Model choice (enum values — use the `value`, not the label; refreshed 2026-06-10):**
 
 | Label in app | Enum value | When to pick |
 |---|---|---|
 | Claude Fable 5.1 (flagship) | `claude-fable-5-1` | Flagship (released 2026-09-01). Hardest reasoning; always thinks, default effort `high`. No sampling params. |
-| Claude Opus 5.5 | `claude-opus-5-5` | Current Opus (2026-09-22). Heavy reasoning / planning / nuanced writing; default effort `medium`. |
+| Claude Opus 5.5 | `claude-opus-5-5` | **Default** (from 2026-10-16), Effort `medium`. Current Opus (2026-09-22). Heavy reasoning / planning / nuanced writing; Anthropic's default effort is `medium` too. |
 | Claude Sonnet 5.5 | `claude-sonnet-5-5` | Current Sonnet (2026-09-28); default effort `high`. |
 | Claude Haiku 5.5 | `claude-haiku-5-5` | Current Haiku (2026-10-07); fastest / cheapest of the 5.5 generation, default effort `medium`. |
 | Claude Fable 5 | `claude-fable-5` | Previous Fable (GA 2026-06-09), superseded by Fable 5.1. Always-on adaptive thinking — the extended-thinking toggle doesn't apply. |
-| Claude Opus 4.8 | `claude-opus-4-8` | Previous Opus, with a thinking budget. |
-| Claude Sonnet 4.6 | `claude-sonnet-4-6` | **Default.** Fast + capable — good for almost everything. |
+| Claude Opus 4.8 | `claude-opus-4-8` | Previous Opus. Effort (API default `high`) plus an adaptive-thinking toggle; no thinking budget. |
+| Claude Sonnet 4.6 | `claude-sonnet-4-6` | Fast + capable (the default before 2026-10-16). |
 | Claude Haiku 4.5 | `claude-haiku-4-5-20251001` | Fastest / cheapest pass (bulk captions, simple rewrites). |
 | Claude Opus 4.7 (legacy) | `claude-opus-4-7` | Only if a saved graph or a specific need pins it. |
 | Claude Opus 4.6 (legacy) | `claude-opus-4-6` | Only if a saved graph or a specific need pins it; may be deprecated. |
@@ -66,15 +67,15 @@ All params live on the `claude-chat` node (`backend/data/node_definitions.json`)
 
 | Param key | Type | Required | Default | Range / enum | Maps to | Notes |
 |---|---|---|---|---|---|---|
-| `model` | enum | yes | `claude-sonnet-4-6` | the 10 values in the table above | top-level `model` | Use the enum `value`. |
+| `model` | enum | yes | `claude-opus-5-5` | the 10 values in the table above | top-level `model` | Use the enum `value`. |
 | `max_tokens` | integer | yes | `4096` | `1`–`200000` | `max_tokens` | Max output tokens. Must exceed `thinkingBudget` when thinking is on. |
-| `temperature` | float | no | `1` | `0`–`1`, step `0.1` | `temperature` (sent when non-null) | Default `1` means `top_p` is suppressed (see gotcha). Overridden to `1` by extended thinking. Hidden and never sent for Fable 5.1 and the 5.5 generation. |
+| `temperature` | float | no | `1` | `0`–`1`, step `0.1` | `temperature` (sent when non-null) | Default `1` means `top_p` is suppressed (see gotcha). Overridden to `1` by extended thinking. Hidden and never sent for Fable 5.1, the 5.5 generation and Opus 4.7/4.8. |
 | `system` | textarea | no | `""` | free text | top-level `system` | Only sent if non-empty. Steers role/format ("Output only the prompt.", "Reply in JSON.", etc.). |
-| `top_p` | float | no | (unset) | `0`–`1`, step `0.05` | `top_p` | **Only applied if `temperature` is cleared to null** — otherwise dropped. Don't set alongside temperature. Hidden and never sent for Fable 5.1 and the 5.5 generation. |
+| `top_p` | float | no | (unset) | `0`–`1`, step `0.05` | `top_p` | **Only applied if `temperature` is cleared to null** — otherwise dropped. Don't set alongside temperature. Hidden and never sent for Fable 5.1, the 5.5 generation and Opus 4.7/4.8. |
 | `stop_sequences` | string | no | (unset) | comma-separated list | `stop_sequences` (array) | Split on `,`, trimmed, empties dropped. e.g. `END,###` → `["END", "###"]`. |
-| `extended_thinking` | boolean | no | `false` | true/false | `thinking.type = "enabled"` | Turns on the reasoning pass; forces `temperature=1`; reasoning is **not** surfaced (only final text). **Hidden on Fable/Mythos 5** (`visibleWhen` excludes them) — those models think adaptively always-on, and the handler suppresses the `thinking` block for them. |
-| `thinkingBudget` | integer | no | `10000` | min `1024`, max `200000` | `thinking.budget_tokens` | Only visible/active when `extended_thinking` is on (`condition: extended_thinking`); also hidden on Fable/Mythos 5. Floored to 1024; keep **below** `max_tokens`. |
-| `effort` | enum | no | `""` (model default) | `low`, `medium`, `high`, `xhigh`, `max` | `output_config.effort` | Only on `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`. Ignored for every other model. |
+| `extended_thinking` | boolean | no | `false` | true/false | `thinking.type = "enabled"` (Opus 4.7/4.8: `thinking.type = "adaptive"`, no budget) | Turns on the reasoning pass; forces `temperature=1` (not on Opus 4.7/4.8); reasoning is **not** surfaced (only final text). **Hidden on Fable/Mythos 5** (`visibleWhen` excludes them) — those models think adaptively always-on, and the handler suppresses the `thinking` block for them. |
+| `thinkingBudget` | integer | no | `10000` | min `1024`, max `200000` | `thinking.budget_tokens` | Only visible/active when `extended_thinking` is on (`condition: extended_thinking`); also hidden on Fable/Mythos 5 and Opus 4.7/4.8 (never sent to them). Floored to 1024; keep **below** `max_tokens`. |
+| `effort` | enum | no | `medium` (from 2026-10-16; was `""`) | `""` (model default), `low`, `medium`, `high`, `xhigh`, `max` | `output_config.effort` | Only on `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-opus-4-8`, `claude-opus-4-7`. Ignored (never sent) for every other model, so a new node switched to Sonnet 4.6 sends no effort. Saved nodes keep their own value. |
 | `prompt_caching` | boolean | no | `false` | true/false | `cache_control: {type: ephemeral}` on `system` (sent as a content-block array) + the last user content block | **Opt-in** prompt caching. When on, a re-run within ~5 min reads the cached prefix at ~90% lower input cost. Off by default because a never-reused large prefix pays a small cache-**write** premium; Anthropic **ignores prefixes under ~1024 tokens**, so it's a safe no-op on short prompts. Turn on when the same long `system`/prompt is reused across runs. |
 
 **What never reaches the request body:** `top_k`, `tools`/`tool_choice`, `output_config`/structured-output, `document` content blocks, multi-turn `messages` arrays, `metadata`, `service_tier`. (`cache_control` *is* now sent when `prompt_caching` is on — see that param.) See Capability boundaries.
@@ -115,7 +116,7 @@ Never promise these through the `claude-chat` node (from the audit gap table in 
 - **Prompt caching** (`cache_control`) — **now exposed** as the opt-in `prompt_caching` toggle (default off; added 2026-06-05). When on, the handler attaches `cache_control: {type: ephemeral}` to the `system` block (sent as a content-block array) and the last user content block, so a re-run within ~5 min reads the cached prefix at ~90% lower input cost. Anthropic ignores prefixes under ~1024 tokens, so it's a no-op (no write premium) on short prompts.
 - **PDF / document input** (`document` content block) — not supported. Only `image` and `text` content. No PDFs.
 - **`top_k` sampling** — not exposed (only `temperature`, `top_p`*, `stop_sequences`). *and `top_p` is itself suppressed unless temperature is cleared.
-- **Extended-thinking reasoning chain** — requested but **filtered out** of the stream (only the final text is surfaced). `adaptive` thinking is not a settable mode — on Fable/Mythos 5 it's always on (and the extended-thinking param is suppressed for those models); pre-5 models only get the budgeted toggle.
+- **Extended-thinking reasoning chain** — requested but **filtered out** of the stream (only the final text is surfaced). `adaptive` thinking has no toggle of its own — on Fable/Mythos 5 it's always on (and the extended-thinking param is suppressed for those models); Opus 4.7/4.8 get the toggle as `thinking: {type: "adaptive"}` (no budget); Opus 4.6, Sonnet 4.6 and Haiku 4.5 get the budgeted toggle.
 - **Citations** — not surfaced.
 - **MCP connector** — not wired.
 - **Token Counting API** (`POST /v1/messages/count_tokens`) — not used; no pre-flight token estimate.

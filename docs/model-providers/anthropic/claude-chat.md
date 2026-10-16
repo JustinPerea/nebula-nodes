@@ -51,13 +51,13 @@ against these Anthropic pages, fetched that day:
 |---|---|---|---|---|---|
 | `model` | enum | yes | `claude-sonnet-4-6` | `model` | See model list below |
 | `max_tokens` | integer | yes | 4096 | `max_tokens` | Required by Anthropic API (unlike OpenAI); always sent |
-| `temperature` | float | no | 1 | `temperature` | 0–1; overridden to 1 when extended_thinking is enabled. Hidden and never sent for Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5 |
+| `temperature` | float | no | 1 | `temperature` | 0–1; overridden to 1 when extended_thinking is enabled. Hidden and never sent for Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Opus 4.8 / Opus 4.7 |
 | `system` | textarea | no | — | `system` | Top-level field, not a messages role |
 | `top_p` | float | no | — | `top_p` | Not forwarded if absent (FIXED). Hidden and never sent for the 5.5 generation and Fable 5.1 |
 | `stop_sequences` | string | no | — | `stop_sequences` | Comma-separated → forwarded as string array (FIXED) |
-| `extended_thinking` | boolean | no | false | `thinking.type` | When true, sends `{"type":"enabled","budget_tokens":N}` (FIXED) |
-| `thinkingBudget` | integer | no | 10000 | `thinking.budget_tokens` | Clamped to min 1024; only sent when extended_thinking=true (FIXED) |
-| `effort` | enum | no | `""` (model default) | `output_config.effort` | low / medium / high / xhigh / max. Shown and sent only for Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5 (2026-10-16) |
+| `extended_thinking` | boolean | no | false | `thinking.type` | When true, sends `{"type":"enabled","budget_tokens":N}` (FIXED). On Opus 4.7/4.8 sends `{"type":"adaptive"}` with no budget (2026-10-16) |
+| `thinkingBudget` | integer | no | 10000 | `thinking.budget_tokens` | Clamped to min 1024; only sent when extended_thinking=true (FIXED). Hidden and never sent on Opus 4.7/4.8 |
+| `effort` | enum | no | `medium` | `output_config.effort` | `""` (model default) / low / medium / high / xhigh / max. Shown and sent only for Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5, Opus 4.8, Opus 4.7 (2026-10-16). Default was `""` before 2026-10-16 |
 
 ## Model Lineup (post-audit)
 
@@ -68,14 +68,14 @@ Menu as of 2026-10-16, newest first (Anthropic models overview and deprecations 
 | Label | API ID | Notes |
 |---|---|---|
 | Claude Fable 5.1 (flagship) | `claude-fable-5-1` | Released 2026-09-01. 1M context, 128K sync output, default effort `high` |
-| Claude Opus 5.5 | `claude-opus-5-5` | Released 2026-09-22. 1M / 128K, default effort `medium` |
+| Claude Opus 5.5 | `claude-opus-5-5` | Node default (from 2026-10-16). Released 2026-09-22. 1M / 128K, default effort `medium` |
 | Claude Sonnet 5.5 | `claude-sonnet-5-5` | Released 2026-09-28. 1M / 128K, default effort `high` |
 | Claude Haiku 5.5 | `claude-haiku-5-5` | Released 2026-10-07. 1M / 128K, default effort `medium` |
 | Claude Fable 5 | `claude-fable-5` | Superseded by Fable 5.1; retirement not sooner than 2027-06-09 |
-| Claude Opus 4.8 | `claude-opus-4-8` | Not sooner than 2027-05-28 |
-| Claude Sonnet 4.6 | `claude-sonnet-4-6` | Node default |
+| Claude Opus 4.8 | `claude-opus-4-8` | Not sooner than 2027-05-28. Effort, adaptive thinking only (off by default) |
+| Claude Sonnet 4.6 | `claude-sonnet-4-6` | Node default until 2026-10-16 |
 | Claude Haiku 4.5 | `claude-haiku-4-5-20251001` | "Not sooner than October 15, 2026"; no deprecation announced yet |
-| Claude Opus 4.7 (legacy) | `claude-opus-4-7` | Not sooner than 2027-04-16 |
+| Claude Opus 4.7 (legacy) | `claude-opus-4-7` | Not sooner than 2027-04-16. Effort, adaptive thinking only (off by default) |
 | Claude Opus 4.6 (legacy) | `claude-opus-4-6` | Not sooner than 2027-02-05 |
 
 ### Call shape for Fable 5.1 and the 5.5 generation (2026-10-16)
@@ -92,6 +92,25 @@ for `thinking: {type: "enabled", budget_tokens}` and for non-default
 - caps `max_tokens` at 128,000, the synchronous output limit;
 - skips `thinking_delta` / `signature_delta` stream events (they carry no
   `delta.text`), so only the answer text reaches the output port.
+
+### Call shape for Opus 4.7 and 4.8 (2026-10-16)
+
+Anthropic's thinking pages (fetched 2026-10-16) say Claude 4.7 and later reject
+`thinking.type: "enabled"` with `budget_tokens` (HTTP 400), and that Opus 4.7
+and 4.8 reject non-default `temperature` / `top_p` / `top_k` on every request.
+Their thinking is adaptive only and **off** by default; it turns on with
+`thinking: {"type": "adaptive"}`. The effort page lists both models with all
+five levels and an API default of `high`. The handler (`OPTIONAL_ADAPTIVE_MODELS`)
+therefore:
+
+- never sends `temperature`, `top_p` or a thinking budget for them;
+- sends `thinking: {"type": "adaptive"}` when Extended Thinking is on;
+- sends `output_config.effort` when Effort is set (new nodes start at `medium`).
+
+Sources: `build-with-claude/thinking-troubleshooting.md` (per-model table),
+`build-with-claude/thinking.md`, `build-with-claude/extended-thinking.md`,
+`build-with-claude/effort.md`, `about-claude/models/overview.md` (footnote on
+`budget_tokens`).
 
 Every other model sends exactly the request it sent before.
 

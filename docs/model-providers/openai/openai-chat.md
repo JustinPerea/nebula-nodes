@@ -58,7 +58,7 @@ The 2026-10-16 GPT-6 refresh was checked against OpenAI's own pages, fetched tha
 | Label | Value | Notes |
 |---|---|---|
 | GPT-6 Astra (flagship) | `gpt-6-astra` | Effort low…max; **no `none`** (400) |
-| GPT-6.1 Sol | `gpt-6.1-sol` | Effort low…max, default medium; **no `none` / `minimal`** |
+| GPT-6.1 Sol | `gpt-6.1-sol` | **Node default** (from 2026-10-16), Effort `medium`. Effort low…max, default medium; **no `none` / `minimal`** |
 | GPT-6 Luna | `gpt-6-luna` | Effort none…max, default medium |
 
 All three: 1,050,000 context, 128,000 max output, Chat Completions supported
@@ -74,7 +74,7 @@ selected model)".
 | Label | Value | Notes |
 |---|---|---|
 | GPT-5.5 | `gpt-5.5` | |
-| GPT-5.4 | `gpt-5.4` | Default |
+| GPT-5.4 | `gpt-5.4` | Default until 2026-10-16 |
 | GPT-5.4 Mini | `gpt-5.4-mini` | |
 | GPT-5.4 Nano (retiring 2027-04-01) | `gpt-5.4-nano` | Deprecated 2026-10-01, shutdown 2027-04-01; replacement `gpt-6-luna` |
 

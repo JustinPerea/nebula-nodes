@@ -4171,7 +4171,7 @@ Nodes: 304 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | claude-sonnet-4-6 | Claude Fable 5.1 (flagship), Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5, Claude Fable 5, Claude Opus 4.8, Claude Sonnet 4.6, Claude Haiku 4.5, … |
+| Model | enum | claude-opus-5-5 | Claude Fable 5.1 (flagship), Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5, Claude Fable 5, Claude Opus 4.8, Claude Sonnet 4.6, Claude Haiku 4.5, … |
 | Max Tokens | int | 4096 | 1–200000 |
 | Temperature | float | 1 | 0–1 |
 | System Prompt | textarea | — | — |
@@ -4179,7 +4179,7 @@ Nodes: 304 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Stop Sequences | string | — | — |
 | Extended Thinking | bool | false | — |
 | Thinking Budget | int | 10000 | 1024–200000 |
-| Effort | enum | — | Default, Low, Medium, High, X-High, Max |
+| Effort | enum | medium | Default, Low, Medium, High, X-High, Max |
 | Prompt Caching | bool | false | — |
 
 ---
@@ -4199,11 +4199,11 @@ Nodes: 304 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gemini-3.6-flash | Gemini 4 Argon, Gemini 3.8 Flash, Gemini 3.6 Flash, Gemini 3.5 Flash-Lite, Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash), Gemini 3.1 Pro (preview), Gemini 3 Flash (preview), Gemini 3.1 Flash-Lite (retiring 2027-05-07), … |
+| Model | enum | gemini-4-argon | Gemini 4 Argon, Gemini 3.8 Flash, Gemini 3.6 Flash, Gemini 3.5 Flash-Lite, Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash), Gemini 3.1 Pro (preview), Gemini 3 Flash (preview), Gemini 3.1 Flash-Lite (retiring 2027-05-07), … |
 | Max Tokens | int | 8192 | 1–65535 |
 | Temperature | float | 1 | 0–2 |
 | System Prompt | textarea | — | — |
-| Thinking Level | enum | — | Default, Minimal, Low, Medium, High |
+| Thinking Level | enum | medium | Default, Minimal, Low, Medium, High |
 | Thinking Budget | int | — | 0–65536 |
 | Top P | float | — | 0–1 |
 | Top K | int | — | — |
@@ -4227,7 +4227,7 @@ Nodes: 304 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
-| Model | enum | gpt-5.4 | GPT-6 Astra (flagship), GPT-6.1 Sol, GPT-6 Luna, GPT-5.5, GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano (retiring 2027-04-01), GPT-4o (legacy, retiring 2027-01-14), … |
+| Model | enum | gpt-6.1-sol | GPT-6 Astra (flagship), GPT-6.1 Sol, GPT-6 Luna, GPT-5.5, GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano (retiring 2027-04-01), GPT-4o (legacy, retiring 2027-01-14), … |
 | Reasoning Effort | enum | medium | None, Low, Medium, High, X-High, Max |
 | Max Tokens | int | 4096 | 1–128000 |
 | Temperature | float | 1 | 0–2 |

@@ -9,9 +9,9 @@ are the ones the `gemini-chat` node sends.
 
 | Model ID | Role |
 |---|---|
-| `gemini-4-argon` | Gemini 4 Argon (GA 2026-10-13). Hardest reasoning. Thinking low/medium/high only (no `minimal`); 65,536 sync output cap, Google recommends `max_tokens` of at least 32,768 |
+| `gemini-4-argon` | Gemini 4 Argon (GA 2026-10-13). Nebula's default from 2026-10-16, Thinking Level `medium`. Hardest reasoning. Thinking low/medium/high only (no `minimal`); 65,536 sync output cap, Google recommends `max_tokens` of at least 32,768 |
 | `gemini-3.8-flash` | Gemini 3.8 Flash. Thinking low/medium/high only (no `minimal`) |
-| `gemini-3.6-flash` | Gemini 3.6 Flash. Everyday default in Nebula; replaces the deprecated `gemini-3.5-flash` |
+| `gemini-3.6-flash` | Gemini 3.6 Flash. Fast everyday model; replaces the deprecated `gemini-3.5-flash` |
 | `gemini-3.5-flash-lite` | Gemini 3.5 Flash-Lite. Highest throughput, lowest cost; default thinking `minimal`; replaces `gemini-3.1-flash-lite` (shutdown 2027-05-07) |
 | `gemini-3.1-pro-preview` | Previous Pro (preview) |
 | `gemini-3-flash-preview` | Previous Flash (preview); Google's replacement is `gemini-3.6-flash` |

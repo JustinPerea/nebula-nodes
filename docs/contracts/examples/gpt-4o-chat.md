@@ -22,7 +22,7 @@ oracle:
 
 # Contract exemplar: OpenAI Chat (`gpt-4o-chat`)
 
-Template for porting agents. **Node id is `gpt-4o-chat` for graph compatibility**; display name is **OpenAI Chat**. Default model is **GPT-5.4** (not `gpt-4o`).
+Template for porting agents. **Node id is `gpt-4o-chat` for graph compatibility**; display name is **OpenAI Chat**. Default model is **GPT-6.1 Sol** (`gpt-6.1-sol`, from 2026-10-16; it was GPT-5.4 before). Not `gpt-4o`.
 
 **In scope:** `gpt-4o-chat` — OpenAI Chat Completions token stream (`OPENAI_API_KEY`).
 
@@ -116,7 +116,7 @@ Registry key: `gpt-4o-chat` (id kept for saved-graph compatibility).
 
 | `key` | `type` | `default` | Allowed values / notes |
 |-------|--------|-----------|------------------------|
-| `model` | enum | `gpt-5.4` | `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano` |
+| `model` | enum | `gpt-6.1-sol` | `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano` |
 | `reasoning_effort` | enum | `medium` | `none` (not on `gpt-6-astra` or `gpt-6.1-sol`), `low`, `medium`, `high`, `xhigh`, `max` (GPT-6 only; refused before the request on `gpt-5*`) — shown for GPT-6 and GPT-5.x (UI `visibleWhen`) |
 | `max_completion_tokens` | int | `4096` | 1–128000 |
 | `temperature` | float | `1` | 0–2 — **legacy models only** |
@@ -379,7 +379,7 @@ Official reference: [Create chat completion](https://developers.openai.com/api/r
 
 ## 11. Porting checklist
 
-- [ ] `NodeDefinition` matches §2 — **id** `gpt-4o-chat`, default model `gpt-5.4`
+- [ ] `NodeDefinition` matches §2 — **id** `gpt-4o-chat`, default model `gpt-6.1-sol` (handler fallback for a missing `model` too)
 - [ ] Build single `user` message with text + optional `image_url` parts
 - [ ] GPT-5.x: forward `reasoning_effort`; strip samplers
 - [ ] Legacy: forward samplers; strip `reasoning_effort`
@@ -396,3 +396,4 @@ Official reference: [Create chat completion](https://developers.openai.com/api/r
 | Date | Change |
 |------|--------|
 | 2026-07-01 | Initial gold exemplar from `openai_chat.py` + tests |
+| 2026-10-16 | Default model `gpt-6.1-sol` with `reasoning_effort` `medium` (OpenAI's documented default for it); handler fallback matches |

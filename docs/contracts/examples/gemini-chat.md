@@ -59,9 +59,9 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 
 | Model (registry id) | Typical use |
 |---------------------|-------------|
-| `gemini-3.6-flash` | Default — fast chat (from 2026-10-16) |
+| `gemini-4-argon` | Default for new nodes (from 2026-10-16), Thinking Level `medium`. Hardest reasoning; thinking counts against `max_tokens` |
 | `gemini-3.8-flash` | Newer Flash |
-| `gemini-4-argon` | Hardest reasoning; thinking counts against `max_tokens` |
+| `gemini-3.6-flash` | Fast chat (the default before 2026-10-16) |
 | `gemini-3.5-flash-lite` | Cheapest |
 | `gemini-3.5-flash` | Deprecated 2026-10-08; Google routes it to `gemini-3.6-flash` |
 | `gemini-3.1-pro-preview` | Higher quality reasoning |
@@ -77,7 +77,7 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 | `thinkingLevel` / `thinkingBudget` | Thinking tokens on supported models |
 | `response_format: application/json` | Same token math; may increase output length |
 
-Draft iterations: use `gemini-3.6-flash` with lower `max_tokens` before Pro models.
+Draft iterations: use `gemini-3.6-flash` or `gemini-3.5-flash-lite` with lower `max_tokens` before Argon or Pro models.
 
 ---
 
@@ -122,11 +122,11 @@ Draft iterations: use `gemini-3.6-flash` with lower `max_tokens` before Pro mode
 
 | `key` | `type` | `default` | Values |
 |-------|--------|-----------|--------|
-| `model` | enum | `gemini-3.6-flash` | `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
+| `model` | enum | `gemini-4-argon` | `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
 | `max_tokens` | integer | `8192` | 1–65535 → `maxOutputTokens`; the handler caps it at 65,536 on `gemini-4-argon` (Argon's synchronous output limit) |
 | `temperature` | float | `1` | 0–2. Hidden and not sent for `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.6-flash` and `gemini-3.5-flash-lite` |
 | `system` | textarea | `""` | → `systemInstruction.parts[].text` |
-| `thinkingLevel` | enum | `""` | Gemini 3.x and 4: `minimal`, `low`, `medium`, `high` → `thinkingConfig.thinkingLevel`. No `minimal` on `gemini-4-argon` or `gemini-3.8-flash` (the handler refuses it before the request) |
+| `thinkingLevel` | enum | `medium` | `""` (Default, sends nothing), `minimal`, `low`, `medium`, `high` → `thinkingConfig.thinkingLevel` on Gemini 3.x and 4. No `minimal` on `gemini-4-argon` or `gemini-3.8-flash` (the handler refuses it before the request). Never sent to `gemini-2.5-*`, whose card shows `thinkingBudget` instead. The default was `""` before 2026-10-16; saved nodes keep their value |
 | `thinkingBudget` | integer | unset | Gemini 2.5 only → `thinkingConfig.thinkingBudget` |
 | `top_p` | float | unset | **Not forwarded** by handler today |
 | `top_k` | integer | unset | **Not forwarded** by handler today |
@@ -212,8 +212,8 @@ Content-Type: application/json
 | `max_tokens` param | `generationConfig.maxOutputTokens` if truthy |
 | `response_format` param | `generationConfig.responseMimeType` when ≠ `text/plain` |
 | `system` param | Top-level `systemInstruction` when non-empty |
-| `thinkingLevel` param | `generationConfig.thinkingConfig.thinkingLevel` when set (3.x and 4 models) |
-| `thinkingBudget` param | `generationConfig.thinkingConfig.thinkingBudget` when set (2.5 models) — only if `thinkingLevel` absent |
+| `thinkingLevel` param | `generationConfig.thinkingConfig.thinkingLevel` when set (3.x and 4 models; ignored on `gemini-2.5-*`) |
+| `thinkingBudget` param | `generationConfig.thinkingConfig.thinkingBudget` when set (2.5 models) — only if no `thinkingLevel` is sent |
 | `top_p`, `top_k`, `stop_sequences` | **Omitted** — in registry UI but not forwarded |
 
 ### Response parsing
@@ -362,3 +362,4 @@ Official reference: [Generate content](https://ai.google.dev/api/generate-conten
 |------|--------|
 | 2026-07-01 | Initial exemplar (partial) |
 | 2026-07-01 | Gold upgrade — full Vol 1–4, pricing, parameter matrix |
+| 2026-10-16 | Default model `gemini-4-argon`, Thinking Level default `medium`; `thinkingLevel` no longer sent to 2.5 models; handler fallback for a missing `model` is `gemini-4-argon` |
