@@ -153,6 +153,13 @@ describe('snapForRoute (a person switching provider)', () => {
     });
   });
 
+  it('rounds a half up when it snaps an integer, as the Python twin does (node_route._closest_value)', () => {
+    const flux2 = (NODE_DEFINITIONS as Record<string, ModelNodeDefinition>)['flux-2-pro'];
+    expect(snapForRoute(flux2, { model: 'flex', num_inference_steps: 2.5 }, 'fal')).toEqual({
+      params: { model: 'flex', num_inference_steps: 3 }, notes: ["2.5 isn't on fal.ai: set to 3"],
+    });
+  });
+
   it('leaves values the route takes, and values it never shows, alone', () => {
     expect(snapForRoute(TABLE, { resolution: '2k', safety_tolerance: 3 }, 'bfl')).toEqual({
       params: { resolution: '2k', safety_tolerance: 3 }, notes: [],

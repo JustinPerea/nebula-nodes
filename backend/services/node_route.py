@@ -1234,7 +1234,8 @@ def _closest_value(route: Mapping[str, Any], offered: Mapping[str, Any], whole: 
         if isinstance(rule.get("max"), (int, float)):
             nxt = min(nxt, rule["max"])
         if rule.get("integer") or offered.get("type") == "integer":
-            nxt = round(nxt)
+            # Halves round up, as JS Math.round does (Python's round() goes to even).
+            nxt = math.floor(nxt + 0.5)
         if route_takes_value(route, str(offered.get("key")), nxt):
             return nxt
     return offered.get("default")

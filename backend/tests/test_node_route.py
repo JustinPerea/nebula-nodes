@@ -628,3 +628,13 @@ def test_validate_pricing_reads_route_extras_and_multipliers():
     table["nodes"]["flux-2-pro"]["routes"]["fal"]["extras"] = [{"match": {"safety_tolerance": "5"}, "price": 0.5}]
     found = "\n".join(model_pricing.validate_pricing(table, definitions))
     assert "flux-2-pro (fal route): price extra 0 reads safety_tolerance" in found, found
+
+
+def test_switcher_snap_rounds_halves_up_like_the_frontend():
+    """providerSwitch.ts closestValue uses Math.round (halves up); the Python
+    twin must write the same value (providerSwitch.test.ts pins the same case)."""
+    flux2 = DEFINITIONS["flux-2-pro"]
+    assert node_route.snap_for_route(flux2, {"model": "flex", "num_inference_steps": 2.5}, "fal") == (
+        {"model": "flex", "num_inference_steps": 3}, ["2.5 isn't on fal.ai: set to 3"])
+    assert node_route.snap_for_route(flux2, {"model": "flex", "num_inference_steps": 3.5}, "fal")[0][
+        "num_inference_steps"] == 4
