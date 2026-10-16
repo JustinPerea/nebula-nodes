@@ -544,6 +544,51 @@ def test_routes_problems_names_each_broken_param_visible_when():
         assert expected in problems(condition), (condition, problems(condition))
 
 
+def _hideable_broken():
+    """routes-hide with route b's endpoint picked by quality (which b hides
+    unless mode is slow or best) and mode hidden unless quality is high: a
+    circle."""
+    broken = json.loads(json.dumps(HIDE))
+    broken["routes"][1]["endpointWhen"] = [{"endpoint": "b/hq", "when": {"quality": "high"}},
+                                           {"endpoint": "b/fast", "when": {"mode": "fast"}}]
+    broken["routes"][1]["paramVisibleWhen"]["mode"] = {"quality": ["high"]}
+    broken["routes"][2]["endpointWhen"] = [{"endpoint": "c/seeded", "when": {"seed": "(set)"}}]
+    return broken
+
+
+def test_routes_problems_refuses_a_hideable_endpoint_key_and_circular_conditions():
+    """A hidden value is never sent, so it can't pick the endpoint (and the
+    price row) either; and visibility conditions can't go in a circle.
+    check-node-contracts.mjs validateHideable is the same
+    (test_contract_script_refuses_a_hideable_endpoint_key_and_a_circle)."""
+    assert node_route.routes_problems(HIDE) == []
+    problems = "\n".join(node_route.routes_problems(_hideable_broken()))
+    for expected in ("routes-hide.routes[1].endpointWhen[0] reads quality, which the route can hide",
+                     "routes-hide.routes[1].endpointWhen[1] reads mode, which the route can hide",
+                     "routes-hide.routes[2].endpointWhen[0] reads seed, which the route can hide",
+                     "routes-hide.routes[1] visibility conditions go in a circle: mode -> quality -> mode"):
+        assert expected in problems, (expected, problems)
+
+
+def test_contract_script_refuses_a_hideable_endpoint_key_and_a_circle(tmp_path):
+    import os
+    import subprocess
+
+    cases = json.loads((Path(__file__).parent / "fixtures" / "route_cases.json").read_text())
+    cases["definitions"]["routes-hide"] = _hideable_broken()
+    broken = tmp_path / "route_cases.json"
+    broken.write_text(json.dumps(cases))
+    script = Path(__file__).resolve().parents[2] / "scripts" / "check-node-contracts.mjs"
+    result = subprocess.run(["node", str(script)], capture_output=True, text=True,
+                            env={**os.environ, "NEBULA_CONTRACTS_ROUTE_CASES_PATH": str(broken)})
+    assert result.returncode == 1, result.stdout
+    for expected in ("routes-hide.routes[1].endpointWhen[0] reads quality, which the route can hide",
+                     "routes-hide.routes[1].endpointWhen[1] reads mode, which the route can hide",
+                     "routes-hide.routes[2].endpointWhen[0] reads seed, which the route can hide",
+                     "routes-hide.routes[1] visibility conditions go in a circle: mode -> quality -> mode"):
+        assert expected in result.stderr, (expected, result.stderr)
+
+
 def test_price_row_problems_refuses_a_row_that_reads_a_hidden_setting():
     rows = [{"match": {"quality": "high"}, "usd": 0.2}, {"usd": 0.1}]
     found = node_route.price_row_problems(HIDE, "b", rows)

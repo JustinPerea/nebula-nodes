@@ -11,7 +11,9 @@ const ENV_EXAMPLE_PATH = join(REPO_ROOT, '.env.example');
 const SETTINGS_EXAMPLE_PATH = join(REPO_ROOT, 'settings.example.json');
 // Inline route-table nodes (route_cases.json) and the key -> provider table
 // (route_tables.json, generated from backend services/node_route.py).
-const ROUTE_CASES_PATH = join(REPO_ROOT, 'backend', 'tests', 'fixtures', 'route_cases.json');
+// NEBULA_CONTRACTS_ROUTE_CASES_PATH: another copy of the fixture nodes (tests
+// check a broken copy with it).
+const ROUTE_CASES_PATH = process.env.NEBULA_CONTRACTS_ROUTE_CASES_PATH || join(REPO_ROOT, 'backend', 'tests', 'fixtures', 'route_cases.json');
 const ROUTE_TABLES_PATH = join(REPO_ROOT, 'backend', 'tests', 'fixtures', 'route_tables.json');
 // NEBULA_CONTRACTS_PRICING_PATH points the check at another pricing table
 // (tests/test_node_contracts.py checks a broken copy with it).
@@ -243,6 +245,7 @@ function validateRoutes(nodes, source) {
         }
       }
       validateParamVisibleWhen(definition, route, at);
+      validateHideable(definition, route, at);
     });
     const union = [...new Set(routes.flatMap((route) => keyNames(route?.keys)))];
     if (JSON.stringify(keyNames(definition.envKeyName)) !== JSON.stringify(union)) {
@@ -280,6 +283,48 @@ function validateRoutes(nodes, source) {
     for (const group of ['params', 'sharedParams']) validateParams(where, group, definition[group]);
     routes.forEach((route, index) => validateParams(where, `routes[${index}].params`, route?.params));
   }
+}
+
+// What a route can hide must not pick its endpoint or hide itself
+// (node_route._hideable_problems): an endpointWhen key that is a param must
+// be one the route always shows, and the route's visibility conditions
+// (paramVisibleWhen plus its params' own visibleWhen) may not go in a circle.
+function validateHideable(definition, route, at) {
+  if (!route || typeof route !== 'object') return;
+  const listed = new Map([...(definition.sharedParams ?? []), ...(route.params ?? [])].filter((p) => p?.key).map((p) => [p.key, p]));
+  const conditions = route.paramVisibleWhen && typeof route.paramVisibleWhen === 'object' ? route.paramVisibleWhen : {};
+  const every = new Set([definition.params, definition.sharedParams, ...(definition.routes ?? []).map((r) => r?.params)]
+    .flatMap((group) => (group ?? []).map((p) => p?.key)).filter(Boolean));
+  (route.endpointWhen ?? []).forEach((option, index) => {
+    for (const key of Object.keys(option?.when ?? {})) {
+      if (!every.has(key)) continue;
+      const own = listed.get(key)?.visibleWhen;
+      if (!listed.has(key) || conditions[key] !== undefined || (own && Object.keys(own).length)) {
+        const problem = `${at}.endpointWhen[${index}] reads ${key}, which the route can hide`;
+        if (!errors.includes(problem)) errors.push(problem);
+      }
+    }
+  });
+  const edges = new Map();
+  for (const [key, param] of listed) edges.set(key, new Set(Object.keys(param.visibleWhen ?? {}).filter((c) => listed.has(c))));
+  for (const [key, condition] of Object.entries(conditions)) {
+    if (condition && typeof condition === 'object') {
+      if (!edges.has(key)) edges.set(key, new Set());
+      for (const c of Object.keys(condition)) if (listed.has(c)) edges.get(key).add(c);
+    }
+  }
+  const state = new Map();
+  const visit = (key, path) => {
+    state.set(key, 1);
+    for (const next of [...(edges.get(key) ?? [])].sort()) {
+      if (state.get(next) === 1) {
+        const loop = path.includes(next) ? [...path.slice(path.indexOf(next)), next] : [key, next];
+        errors.push(`${at} visibility conditions go in a circle: ${loop.join(' -> ')}`);
+      } else if (!state.get(next)) visit(next, [...path, next]);
+    }
+    state.set(key, 2);
+  };
+  for (const key of [...edges.keys()].sort()) if (!state.get(key)) visit(key, [key]);
 }
 
 // What a route offers (node_route._visible_when_problems): `paramVisibleWhen`

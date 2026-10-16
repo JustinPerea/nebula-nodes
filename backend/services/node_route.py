@@ -1558,6 +1558,54 @@ def _visible_when_problems(definition: Mapping[str, Any], route: Mapping[str, An
     return problems
 
 
+def _hideable_problems(definition: Mapping[str, Any], route: Mapping[str, Any], where: str) -> list[str]:
+    """What a route can hide must not pick its endpoint or hide itself:
+    an ``endpointWhen`` key that is a param must be one the route always
+    shows (no ``paramVisibleWhen`` and no ``visibleWhen`` of its own), since
+    the endpoint would otherwise follow a value that is never sent; and the
+    route's visibility conditions (``paramVisibleWhen`` plus its params' own
+    ``visibleWhen``) may not depend on each other in a circle.
+    check-node-contracts.mjs validateHideable is the same."""
+    listed = {str(p.get("key")): p for group in (definition.get("sharedParams") or [], route.get("params") or [])
+              for p in group if isinstance(p, Mapping) and p.get("key")}
+    conditions = route.get("paramVisibleWhen") if isinstance(route.get("paramVisibleWhen"), Mapping) else {}
+    every = {str(p.get("key")) for p in all_param_definitions(definition)}
+    problems: list[str] = []
+    for index, option in enumerate(route.get("endpointWhen") or []):
+        for key in ((option.get("when") if isinstance(option, Mapping) else None) or {}):
+            if key not in every:
+                continue  # a wired port
+            own = (listed.get(key) or {}).get("visibleWhen")
+            if key not in listed or conditions.get(key) is not None or own:
+                problem = f"{where}.endpointWhen[{index}] reads {key}, which the route can hide"
+                if problem not in problems:
+                    problems.append(problem)
+    edges: dict[str, set[str]] = {}
+    for key, param in listed.items():
+        edges.setdefault(key, set()).update(str(c) for c in (param.get("visibleWhen") or {}) if str(c) in listed)
+    for key, condition in conditions.items():
+        if isinstance(condition, Mapping):
+            edges.setdefault(str(key), set()).update(str(c) for c in condition if str(c) in listed)
+    state: dict[str, int] = {}
+    cycles: list[str] = []
+
+    def visit(key: str, path: list[str]) -> None:
+        state[key] = 1
+        for nxt in sorted(edges.get(key, ())):
+            if state.get(nxt) == 1:
+                loop = path[path.index(nxt):] + [nxt] if nxt in path else [key, nxt]
+                cycles.append(" -> ".join(loop))
+            elif not state.get(nxt):
+                visit(nxt, path + [nxt])
+        state[key] = 2
+
+    for key in sorted(edges):
+        if not state.get(key):
+            visit(key, [key])
+    problems += [f"{where} visibility conditions go in a circle: {cycle}" for cycle in cycles]
+    return problems
+
+
 def _price_combinations(definition: Mapping[str, Any], rows: list[Mapping[str, Any]],
                         keys: list[str]) -> list[dict[str, Any]]:
     """Every combination of ``keys``' values a price row can tell apart: a
@@ -1730,6 +1778,7 @@ def routes_problems(definition: Mapping[str, Any]) -> list[str]:
                 if key not in shared | route_params:
                     problems.append(f"{where}.{field} names {key}, which isn't one of its params")
         problems += _visible_when_problems(definition, route, where)
+        problems += _hideable_problems(definition, route, where)
     union = list(dict.fromkeys(key for route in routes if isinstance(route, Mapping)
                                for key in keys(route.get("keys"))))
     if env_keys(definition) != union:
