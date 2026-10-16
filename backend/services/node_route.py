@@ -1574,10 +1574,12 @@ def _price_combinations(definition: Mapping[str, Any], rows: list[Mapping[str, A
     return [dict(zip(keys, combo)) for combo in itertools.product(*choices)]
 
 
-def price_row_problems(definition: Mapping[str, Any], route_key: str, rows: Any) -> list[str]:
+def price_row_problems(definition: Mapping[str, Any], route_key: str, rows: Any,
+                       extras: Any = None, multiply_by: Any = None) -> list[str]:
     """A route's price may not read a setting where the route hides it: for
-    every combination of the values its rows and its params' conditions can
-    tell apart, the first row that matches must not name a param the route
+    every combination of the values its rows, extras and its params'
+    conditions can tell apart, the first row that matches, every extra that
+    matches, and every ``multiplyBy`` param must not name a param the route
     doesn't show with those values (route_sent_keys). Otherwise the price
     would depend on a value that isn't sent. Route-table nodes only;
     model_pricing.validate_pricing calls it, and check-node-contracts.mjs
@@ -1586,28 +1588,39 @@ def price_row_problems(definition: Mapping[str, Any], route_key: str, rows: Any)
     if not has_routes(definition) or route is None or not isinstance(rows, list):
         return []
     rows = [row for row in rows if isinstance(row, Mapping)]
+    extras = [extra for extra in extras or [] if isinstance(extra, Mapping)]
+    factors = [str(key) for key in multiply_by or [] if not str(key).startswith("(")]
     offered = route_param_definitions(definition, route.get("id"))
-    named = {str(key) for row in rows for key in (row.get("match") or {}) if not str(key).startswith("(")}
+    matched = rows + extras
+    named = {str(key) for row in matched for key in (row.get("match") or {}) if not str(key).startswith("(")}
+    named |= set(factors)
     controllers = {str(ctrl) for param in offered if str(param.get("key")) in named
                    for ctrl in (param.get("visibleWhen") or {})}
-    keys = sorted(named | controllers | {str(key) for row in rows for key in (row.get("match") or {})})
+    keys = sorted(named | controllers | {str(key) for row in matched for key in (row.get("match") or {})})
     problems: list[str] = []
-    for combo in _price_combinations(definition, rows, keys):
+
+    def matches(row: Mapping[str, Any], literal: Mapping[str, Any]) -> bool:
+        return all(match_value(literal.get(k)) == match_value(want) for k, want in (row.get("match") or {}).items())
+
+    for combo in _price_combinations(definition, matched, keys):
         values = {key: (None if value == "(other)" else value) for key, value in combo.items()}
         literal = {key: (value == "true" if _literal_values(param_definition(definition, key)) == {"true", "false"}
                          else value) for key, value in values.items()}
-        row_index = next((index for index, row in enumerate(rows)
-                          if all(match_value(literal.get(k)) == match_value(want) for k, want in (row.get("match") or {}).items())),
-                         None)
+        row_index = next((index for index, row in enumerate(rows) if matches(row, literal)), None)
         if row_index is None:
             continue
         sent = route_sent_keys(definition, route.get("id"), {k: v for k, v in literal.items() if not k.startswith("(")})
-        for key in rows[row_index].get("match") or {}:
-            if not str(key).startswith("(") and key not in sent:
-                problem = (f"{definition.get('id')} ({route_key} route): price row {row_index} reads {key}, which the "
-                           f"route doesn't show with {', '.join(f'{k}={match_value(v)}' for k, v in combo.items())}")
-                if problem not in problems:
-                    problems.append(problem)
+        reads = [(f"price row {row_index}", list(rows[row_index].get("match") or {}))]
+        reads += [(f"price extra {index}", list(extra.get("match") or {}))
+                  for index, extra in enumerate(extras) if matches(extra, literal)]
+        reads += [("multiplyBy", factors)]
+        for what, read in reads:
+            for key in read:
+                if not str(key).startswith("(") and key not in sent:
+                    problem = (f"{definition.get('id')} ({route_key} route): {what} reads {key}, which the "
+                               f"route doesn't show with {', '.join(f'{k}={match_value(v)}' for k, v in combo.items())}")
+                    if problem not in problems:
+                        problems.append(problem)
     return problems[:5]
 
 # The clients a route can name (execution/route_clients.py ROUTE_CLIENTS).

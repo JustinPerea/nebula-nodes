@@ -554,3 +554,32 @@ def test_price_row_problems_refuses_a_row_that_reads_a_hidden_setting():
     assert node_route.price_row_problems(HIDE, "b", [
         {"match": {"mode": "slow", "quality": "high"}, "usd": 0.2},
         {"match": {"mode": "best", "quality": "high"}, "usd": 0.2}, {"usd": 0.1}]) == []
+
+
+def test_price_row_problems_refuses_an_extra_or_multiplier_that_reads_a_hidden_setting():
+    rows = [{"usd": 0.1}]
+    # An extra on a setting route b hides under Fast: the estimate would add
+    # it for a value that is never sent.
+    found = node_route.price_row_problems(HIDE, "b", rows, [{"match": {"quality": "high"}, "price": 0.5}])
+    assert found and "price extra 0 reads quality, which the route doesn't show with" in found[0], found
+    found = node_route.price_row_problems(HIDE, "c", rows, None, ["seed"])
+    assert found and "multiplyBy reads seed, which the route doesn't show with" in found[0], found
+    # Fine where the setting is shown, or when the extra names the controller.
+    assert node_route.price_row_problems(HIDE, "a", rows, [{"match": {"quality": "high"}, "price": 0.5}], ["seed"]) == []
+    assert node_route.price_row_problems(HIDE, "b", rows, [
+        {"match": {"mode": "slow", "quality": "high"}, "price": 0.5}]) == []
+    # Run-time variables like "(source seconds)" aren't params.
+    assert node_route.price_row_problems(HIDE, "c", rows, None, ["(source seconds)"]) == []
+
+
+def test_validate_pricing_reads_route_extras_and_multipliers():
+    """The shipped validator passes a route entry's extras and multiplyBy:
+    an extra on FLUX.2's fal safety (hidden under Flash) is refused."""
+    import copy
+
+    definitions = NodeRegistry().get_all()
+    table = copy.deepcopy(model_pricing.load_pricing())
+    assert model_pricing.validate_pricing(table, definitions) == []
+    table["nodes"]["flux-2-pro"]["routes"]["fal"]["extras"] = [{"match": {"safety_tolerance": "5"}, "price": 0.5}]
+    found = "\n".join(model_pricing.validate_pricing(table, definitions))
+    assert "flux-2-pro (fal route): price extra 0 reads safety_tolerance" in found, found

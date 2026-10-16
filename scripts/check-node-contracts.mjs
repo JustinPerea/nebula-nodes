@@ -13,7 +13,9 @@ const SETTINGS_EXAMPLE_PATH = join(REPO_ROOT, 'settings.example.json');
 // (route_tables.json, generated from backend services/node_route.py).
 const ROUTE_CASES_PATH = join(REPO_ROOT, 'backend', 'tests', 'fixtures', 'route_cases.json');
 const ROUTE_TABLES_PATH = join(REPO_ROOT, 'backend', 'tests', 'fixtures', 'route_tables.json');
-const PRICING_PATH = join(REPO_ROOT, 'backend', 'data', 'model_pricing.json');
+// NEBULA_CONTRACTS_PRICING_PATH points the check at another pricing table
+// (tests/test_node_contracts.py checks a broken copy with it).
+const PRICING_PATH = process.env.NEBULA_CONTRACTS_PRICING_PATH || join(REPO_ROOT, 'backend', 'data', 'model_pricing.json');
 
 const VALID_CATEGORIES = new Set([
   'image-gen',
@@ -327,8 +329,9 @@ function validateParamVisibleWhen(definition, route, at) {
 
 // A route's price may not read a setting where the route hides it
 // (node_route.price_row_problems): over every combination of the values its
-// rows and its params' conditions tell apart, the first row that matches
-// must not name a param that route doesn't show with those values.
+// rows, extras and its params' conditions tell apart, the first row that
+// matches, every extra that matches and every multiplyBy param must not name
+// a param that route doesn't show with those values.
 function validateHiddenPrices(nodes, table) {
   const asText = (value) => (value === undefined || value === null ? '' : String(value));
   for (const [nodeId, definition] of Object.entries(nodes)) {
@@ -340,8 +343,12 @@ function validateHiddenPrices(nodes, table) {
       for (const param of group ?? []) if (param?.key && !all.has(param.key)) all.set(param.key, param);
     }
     for (const route of definition.routes) {
-      const rows = entry.routes[route.pricing ?? route.id]?.rows;
+      const priced = entry.routes[route.pricing ?? route.id];
+      const rows = priced?.rows;
       if (!Array.isArray(rows)) continue;
+      const extras = (Array.isArray(priced.extras) ? priced.extras : []).filter((extra) => extra && typeof extra === 'object');
+      const factors = (Array.isArray(priced.multiplyBy) ? priced.multiplyBy : []).map(String).filter((key) => !key.startsWith('('));
+      const matched = [...rows, ...extras];
       const conditions = route.paramVisibleWhen ?? {};
       const offered = new Map();
       for (const param of [...(definition.sharedParams ?? []), ...(route.params ?? [])]) {
@@ -352,29 +359,33 @@ function validateHiddenPrices(nodes, table) {
         }
         offered.set(param.key, merged);
       }
-      const named = new Set(rows.flatMap((row) => Object.keys(row.match ?? {})).filter((key) => !key.startsWith('(')));
-      const keys = new Set([...rows.flatMap((row) => Object.keys(row.match ?? {}))]);
+      const named = new Set([...matched.flatMap((row) => Object.keys(row.match ?? {})).filter((key) => !key.startsWith('(')), ...factors]);
+      const keys = new Set([...matched.flatMap((row) => Object.keys(row.match ?? {})), ...factors]);
       for (const key of named) for (const ctrl of Object.keys(offered.get(key) ?? {})) keys.add(ctrl);
       const ordered = [...keys].sort();
       const choices = ordered.map((key) => {
         const literal = literalValues(all.get(key));
         if (literal) return [...literal].sort();
-        return [...new Set(rows.filter((row) => key in (row.match ?? {})).map((row) => asText(row.match[key])))].sort().concat(['(other)']);
+        return [...new Set(matched.filter((row) => key in (row.match ?? {})).map((row) => asText(row.match[key])))].sort().concat(['(other)']);
       });
       const combos = choices.reduce((acc, values) => acc.flatMap((combo) => values.map((value) => [...combo, value])), [[]]);
       for (const combo of combos) {
         const values = Object.fromEntries(ordered.map((key, i) => [key, combo[i] === '(other)' ? undefined : combo[i]]));
         for (const [key, param] of all) if (values[key] === undefined && param.default !== undefined && param.default !== null) values[key] = asText(param.default);
-        const row = rows.find((candidate) => Object.entries(candidate.match ?? {}).every(([k, want]) => asText(values[k]) === asText(want)));
+        const matches = (candidate) => Object.entries(candidate.match ?? {}).every(([k, want]) => asText(values[k]) === asText(want));
+        const row = rows.find(matches);
         if (!row) continue;
         const listed = new Set(offered.keys());
-        for (const key of Object.keys(row.match ?? {})) {
+        const reads = [[`price row ${rows.indexOf(row)}`, Object.keys(row.match ?? {})],
+          ...extras.map((extra, index) => [`price extra ${index}`, matches(extra) ? Object.keys(extra.match ?? {}) : []]),
+          ['multiplyBy', factors]];
+        for (const [what, read] of reads) for (const key of read) {
           if (key.startsWith('(')) continue;
           const condition = offered.get(key);
           const shown = condition !== undefined && Object.entries(condition).every(([ctrl, allowed]) =>
             !listed.has(ctrl) || values[ctrl] === undefined || allowed.map(asText).includes(asText(values[ctrl])));
           if (!shown) {
-            const problem = `${nodeId} (${route.pricing ?? route.id} route): price row ${rows.indexOf(row)} reads ${key}, which the route doesn't show with ${ordered.map((k, i) => `${k}=${combo[i]}`).join(', ')}`;
+            const problem = `${nodeId} (${route.pricing ?? route.id} route): ${what} reads ${key}, which the route doesn't show with ${ordered.map((k, i) => `${k}=${combo[i]}`).join(', ')}`;
             if (!errors.includes(problem)) errors.push(problem);
           }
         }
