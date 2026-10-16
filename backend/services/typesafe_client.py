@@ -55,8 +55,10 @@ _MODEL_RE = re.compile(r"^jev-[a-z0-9][a-z0-9.\-]{0,62}$")
 
 # TypeSafe's published image limits (docs.typesafe.ai/images). TypeSafe
 # refuses an image that breaks them instead of fitting it, so prepare_images
-# fits each image here first.
-MIN_SIDE = 256
+# fits each image here first. The page (checked 2026-10-16): "Width and height
+# 280 to 1568 pixels each. An image with either side under 280 pixels is
+# rejected." and "Total pixels (width × height) 78,400 to 2,458,624".
+MIN_SIDE = 280
 MAX_SIDE = 1568
 MIN_PIXELS = 78_400
 MAX_PIXELS = 2_458_624
