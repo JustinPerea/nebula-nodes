@@ -87,10 +87,11 @@ def format_node_detail(node: dict[str, Any]) -> str:
                 for o in opts:
                     val = o.get("value", "")
                     lbl = o.get("label", "")
-                    if lbl and lbl != val:
-                        parts.append(f"{val} ({lbl})")
-                    else:
-                        parts.append(str(val))
+                    part = f"{val} ({lbl})" if lbl and lbl != val else str(val)
+                    only = o.get("visibleWhen")
+                    if only:
+                        part += f" {{{_option_condition(only, p.get('visibleWhen') or {})}}}"
+                    parts.append(part)
                 detail += f"  [{', '.join(parts)}]"
             if p.get("min") is not None or p.get("max") is not None:
                 lo = p.get("min", "")
@@ -117,6 +118,22 @@ def format_node_detail(node: dict[str, Any]) -> str:
         lines.append("")
 
     return "\n".join(lines)
+
+
+def _option_condition(only: dict[str, list[Any]], param_when: dict[str, list[Any]]) -> str:
+    """When an option is offered: "not for model=a|b" when that is the shorter
+    way to say it against the param's own visibleWhen (claude-chat effort
+    xhigh isn't offered for Opus 4.6 / Sonnet 4.6), else "only model=a|b"."""
+    conds = []
+    for key, values in only.items():
+        allowed = [str(v) for v in values]
+        scope = [str(v) for v in param_when.get(key) or []]
+        excluded = [v for v in scope if v not in allowed]
+        if scope and set(allowed) <= set(scope) and len(excluded) < len(allowed):
+            conds.append(f"not for {key}={'|'.join(excluded)}")
+        else:
+            conds.append(f"only {key}={'|'.join(allowed)}")
+    return "; ".join(conds)
 
 
 def format_keys(settings: dict[str, Any], nodes: list[dict[str, Any]]) -> str:

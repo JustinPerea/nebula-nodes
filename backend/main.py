@@ -3409,9 +3409,16 @@ def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
     for field in ("default", "min", "max", "required"):
         if param.get(field) not in (None, False):
             brief[field] = param[field]
-    options = [option.get("value") for option in param.get("options") or [] if isinstance(option, dict)]
+    option_rows = [option for option in param.get("options") or [] if isinstance(option, dict)]
+    options = [option.get("value") for option in option_rows]
     if options:
         brief["options"] = options[:40] + (["…"] if len(options) > 40 else [])
+    # An option the card shows only for some values of another param, e.g.
+    # claude-chat effort "xhigh": {"model": [...]} (not Opus 4.6 / Sonnet 4.6).
+    limited = {str(option.get("value")): option["visibleWhen"] for option in option_rows[:40]
+               if option.get("visibleWhen")}
+    if limited:
+        brief["optionsOnlyWhen"] = limited
     if param.get("visibleWhen"):
         brief["onlyWhen"] = param["visibleWhen"]
     if param.get("defaultBy"):

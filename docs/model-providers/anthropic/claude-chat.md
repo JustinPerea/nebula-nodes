@@ -53,7 +53,7 @@ against these Anthropic pages, fetched that day:
 | `max_tokens` | integer | yes | 64000 (Fable 5.1, the 5.5 generation incl. the default Opus 5.5, Opus 4.8, Opus 4.7, Opus 4.6, Sonnet 4.6); 4096 on Fable 5 and Haiku 4.5 (`defaultBy`). Opus 4.6-4.8 and Sonnet 4.6 were 4096 until 2026-10-16 | `max_tokens` | Required by Anthropic API (unlike OpenAI); always sent. Range 1–128000. When the key is missing (a node an agent made with only a model), the handler sends the model's default |
 | `temperature` | float | no | 1 | `temperature` | 0–1; overridden to 1 when extended_thinking is enabled (budget thinking on Haiku 4.5, adaptive thinking on Opus 4.6 / Sonnet 4.6). Hidden and never sent for Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Opus 4.8 / Opus 4.7 |
 | `system` | textarea | no | — | `system` | Top-level field, not a messages role |
-| `top_p` | float | no | — | `top_p` | Not forwarded if absent (FIXED). Hidden and never sent for the 5.5 generation, Fable 5.1, Opus 4.8 and Opus 4.7 |
+| `top_p` | float | no | — | `top_p` | Not forwarded if absent (FIXED). Hidden and never sent for the 5.5 generation, Fable 5.1, Opus 4.8 and Opus 4.7. Dropped while Extended Thinking is on (thinking forces `temperature: 1`) |
 | `stop_sequences` | string | no | — | `stop_sequences` | Comma-separated → forwarded as string array (FIXED) |
 | `extended_thinking` | boolean | no | false | `thinking.type` | When true, sends `{"type":"enabled","budget_tokens":N}` on Haiku 4.5 (FIXED). On Opus 4.6/4.7/4.8 and Sonnet 4.6 sends `{"type":"adaptive"}` with no budget (4.7/4.8 from 2026-10-16; 4.6 from Justin's answers the same day) |
 | `thinkingBudget` | integer | no | 10000 | `thinking.budget_tokens` | Clamped to min 1024; only sent when extended_thinking=true (FIXED). Shown and sent on Haiku 4.5 only; hidden and never sent on Opus 4.6/4.7/4.8 and Sonnet 4.6 |
@@ -132,10 +132,21 @@ is on"). The handler (`SAMPLING_ADAPTIVE_MODELS`) therefore:
   saved `xhigh` is refused before the request, and the card hides X-High);
 - sends `thinking: {"type": "adaptive"}` when Extended Thinking is on, never a
   `budget_tokens` budget, and forces `temperature` to 1 then, as it did with
-  budget thinking;
+  budget thinking, and drops `top_p` (the handler never sends both, and while
+  thinking is on "top_p is allowed at values between 0.95 and 1");
 - otherwise sends `temperature` / `top_p` exactly as before;
 - defaults `max_tokens` to 64,000 (was 4,096): thinking counts toward it, as on
-  4.7/4.8. Saved nodes keep their stored value.
+  4.7/4.8. Saved nodes keep their stored value, except one: on Opus 4.6-4.8 and
+  Sonnet 4.6 with Extended Thinking on, a stored 4,096 (main's only default) is
+  sent as 64,000. A saved budget used to cap thinking inside that 4,096; adaptive
+  thinking has no cap, and "thinking tokens count toward `max_tokens`, so a long
+  thinking pass can consume the budget before the text response completes"
+  (thinking-troubleshooting). A 4,096 set on purpose can't be told apart.
+
+On every Claude model, a stream that ends with `stop_reason: "max_tokens"` (read
+from the `message_delta` event) and no text fails the node ("Claude ran out of
+Max Tokens (N) before it wrote an answer") instead of returning an empty
+success. A cut-off answer that has some text is still returned.
 
 Sources: `build-with-claude/thinking-troubleshooting.md` (per-model table),
 `build-with-claude/thinking.md`, `build-with-claude/extended-thinking.md`,

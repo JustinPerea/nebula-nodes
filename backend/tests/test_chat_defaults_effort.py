@@ -36,6 +36,7 @@ from tests.test_chat_model_catalog import (
     _gemini_url,
     _openai,
     _param,
+    _run,
     _saved_defaults,
 )
 
@@ -274,10 +275,12 @@ async def test_opus_47_48_saved_graph_with_extended_thinking(model):
     # Saved before this change: Effort "" and Extended Thinking on. It used to
     # send thinking.type "enabled" with budget_tokens, which Anthropic says
     # 4.7 and later reject with HTTP 400.
+    # Its untouched 4,096 Max Tokens goes out as 64,000 (review fix, see
+    # test_saved_4096_with_thinking_sends_64000 below).
     params = {**_saved_defaults("claude-chat"), "model": model, "extended_thinking": True,
               "thinkingBudget": 2048, "temperature": 0.2}
     _, _, body = await _claude(params)
-    assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 4096, "stream": True,
+    assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 64000, "stream": True,
                     "thinking": {"type": "adaptive"}}
 
 
@@ -388,3 +391,141 @@ async def test_claude_46_xhigh_refused_before_request(model):
     with pytest.raises(ValueError, match="Effort must be one of low, medium, high, max"):
         await _claude({**_saved_defaults("claude-chat"), "model": model, "effort": "xhigh"})
 
+
+
+# --------------------------------------------------------------------------
+# Review fixes (2026-10-16): saved 4,096 with thinking, top_p with thinking,
+# an empty max_tokens stop, and option-level limits in agent briefs
+# --------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_46 + OPUS_47_48)
+async def test_saved_4096_with_thinking_sends_64000(model):
+    # Saved on main: Max Tokens 4,096 (its only default), thinking on with a
+    # 2,048 budget. Before item 5 the budget capped thinking inside 4,096; now
+    # thinking is adaptive with no cap and "thinking tokens count toward
+    # max_tokens" (thinking-troubleshooting), so the old default goes out as
+    # the model's current one.
+    params = {**_saved_defaults("claude-chat"), "model": model, "extended_thinking": True, "thinkingBudget": 2048}
+    _, _, body = await _claude(params)
+    assert body["max_tokens"] == 64000
+    assert body["thinking"] == {"type": "adaptive"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_46 + OPUS_47_48)
+async def test_other_saved_max_tokens_kept_with_thinking(model):
+    for value in (2000, 8000, 64000):
+        params = {**_saved_defaults("claude-chat"), "model": model, "extended_thinking": True, "max_tokens": value}
+        _, _, body = await _claude(params)
+        assert body["max_tokens"] == value
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_46 + CLAUDE_OLDER)
+async def test_saved_4096_without_thinking_kept(model):
+    _, _, body = await _claude({**_saved_defaults("claude-chat"), "model": model})
+    assert body["max_tokens"] == 4096
+
+
+@pytest.mark.asyncio
+async def test_haiku_45_saved_4096_with_budget_thinking_kept():
+    # Budget thinking still caps thinking inside max_tokens; nothing moves.
+    params = {**_saved_defaults("claude-chat"), "model": "claude-haiku-4-5-20251001",
+              "extended_thinking": True, "thinkingBudget": 2048}
+    _, _, body = await _claude(params)
+    assert body["max_tokens"] == 4096
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_46)
+async def test_claude_46_thinking_drops_top_p(model):
+    # Temperature cleared, Top P 0.9, thinking on: the forced temperature 1
+    # used to go out with top_p 0.9, which the thinking page allows only at
+    # 0.95-1 while thinking is on. The handler never sends both.
+    params = {**_saved_defaults("claude-chat"), "model": model, "extended_thinking": True,
+              "temperature": None, "top_p": 0.9, "max_tokens": 8000}
+    _, _, body = await _claude(params)
+    assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 8000, "stream": True,
+                    "temperature": 1, "thinking": {"type": "adaptive"}}
+
+
+@pytest.mark.asyncio
+async def test_haiku_45_budget_thinking_drops_top_p():
+    params = {**_saved_defaults("claude-chat"), "model": "claude-haiku-4-5-20251001", "extended_thinking": True,
+              "thinkingBudget": 2048, "temperature": None, "top_p": 0.9}
+    _, _, body = await _claude(params)
+    assert body == {"model": "claude-haiku-4-5-20251001", "messages": USER_TURN_CLAUDE, "max_tokens": 4096,
+                    "stream": True, "temperature": 1, "thinking": {"type": "enabled", "budget_tokens": 2048}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_46)
+async def test_claude_46_top_p_without_thinking_unchanged(model):
+    params = {**_saved_defaults("claude-chat"), "model": model, "temperature": None, "top_p": 0.9}
+    _, _, body = await _claude(params)
+    assert body["top_p"] == 0.9 and "temperature" not in body
+
+
+def _stream_lines(text: str, stop_reason: str) -> list[str]:
+    # Shape from Anthropic's streaming page: message_delta carries
+    # {"delta": {"stop_reason": ..., "stop_sequence": null}, "usage": {...}}.
+    lines = [
+        "event: content_block_delta",
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Hmm."}}',
+        "",
+    ]
+    if text:
+        lines += ["event: content_block_delta",
+                  'data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"' + text + '"}}',
+                  ""]
+    lines += [
+        "event: message_delta",
+        'data: {"type":"message_delta","delta":{"stop_reason":"' + stop_reason + '","stop_sequence":null},'
+        '"usage":{"output_tokens":4096}}',
+        "",
+        "event: message_stop",
+        'data: {"type":"message_stop"}',
+        "",
+    ]
+    return lines
+
+
+async def _claude_stream(lines: list[str]):
+    from handlers.anthropic_chat import handle_claude_chat
+    params = {**_saved_defaults("claude-chat"), "model": "claude-sonnet-4-6", "extended_thinking": True}
+    return await _run(handle_claude_chat, "claude-chat", params, "ANTHROPIC_API_KEY", lines)
+
+
+@pytest.mark.asyncio
+async def test_max_tokens_stop_with_no_text_fails():
+    with pytest.raises(RuntimeError, match=r"ran out of Max Tokens \(64,000\) before it wrote an answer"):
+        await _claude_stream(_stream_lines("", "max_tokens"))
+
+
+@pytest.mark.asyncio
+async def test_max_tokens_stop_with_text_returns_it():
+    result, _, _ = await _claude_stream(_stream_lines("partial", "max_tokens"))
+    assert result["text"]["value"] == "partial"
+
+
+@pytest.mark.asyncio
+async def test_end_turn_returns_text():
+    result, _, _ = await _claude_stream(_stream_lines("done", "end_turn"))
+    assert result["text"]["value"] == "done"
+
+
+def test_agent_brief_and_cli_show_option_limits():
+    import main
+    from cli.formatter import format_node_detail
+
+    brief = main._brief_param(_param("claude-chat", "effort"))
+    assert brief["optionsOnlyWhen"] == {"xhigh": {"model": [
+        "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5",
+        "claude-opus-4-8", "claude-opus-4-7"]}}
+    assert "optionsOnlyWhen" not in main._brief_param(_param("claude-chat", "model"))
+    detail = format_node_detail({"id": "claude-chat", "displayName": "Claude", "params": [_param("claude-chat", "effort")]})
+    assert "xhigh (X-High) {not for model=claude-sonnet-4-6|claude-opus-4-6}" in detail
+    gemini = format_node_detail({"id": "gemini-chat", "displayName": "Gemini",
+                                 "params": [_param("gemini-chat", "thinkingLevel")]})
+    assert "minimal (Minimal) {not for model=" in gemini

@@ -49,6 +49,17 @@ MODEL_EFFORT_LEVELS = {
     **{model: ("low", "medium", "high", "max") for model in SAMPLING_ADAPTIVE_MODELS},
 }
 
+# Max Tokens on every node saved before 2026-10-16 (main's only default). On
+# Opus 4.6-4.8 and Sonnet 4.6 with Extended Thinking on, the toggle now sends
+# adaptive thinking with no budget, and "thinking tokens count toward
+# max_tokens, so a long thinking pass can consume the budget before the text
+# response completes" (Anthropic, thinking-troubleshooting, fetched
+# 2026-10-16). A saved 4096 there is read as the old untouched default and
+# sent as the model's current one (64,000), the same move the Inspector makes
+# on a model switch. A 4096 typed on purpose can't be told apart; see
+# implementation-notes.md.
+LEGACY_MAX_TOKENS = 4096
+
 
 async def handle_claude_chat(
     node: GraphNode,
@@ -110,6 +121,11 @@ async def handle_claude_chat(
     sampling_adaptive = model in SAMPLING_ADAPTIVE_MODELS
     if adaptive:
         max_tokens = min(max_tokens, ADAPTIVE_MAX_OUTPUT_TOKENS)
+    if (
+        node.params.get("extended_thinking") and (optional_adaptive or sampling_adaptive)
+        and max_tokens == LEGACY_MAX_TOKENS
+    ):
+        max_tokens = int(param_default("claude-chat", "max_tokens", {**node.params, "model": model}) or max_tokens)
 
     request_body: dict[str, Any] = {"model": model, "messages": messages, "max_tokens": max_tokens, "stream": True}
 
@@ -154,12 +170,17 @@ async def handle_claude_chat(
         if sampling_adaptive:
             # Same rule the 4.6 models had with budget thinking: temperature 1.
             request_body["temperature"] = 1
+            # The handler never sends top_p next to temperature, and with
+            # thinking on "top_p is allowed at values between 0.95 and 1"
+            # (Anthropic, thinking page, sampling section, fetched 2026-10-16).
+            request_body.pop("top_p", None)
     elif node.params.get("extended_thinking") and supports_extended_thinking:
         budget = int(node.params.get("thinkingBudget", 10000))
         budget = max(1024, budget)
         request_body["thinking"] = {"type": "enabled", "budget_tokens": budget}
         # thinking mode requires temperature=1 (API constraint)
         request_body["temperature"] = 1
+        request_body.pop("top_p", None)  # see the adaptive branch above
 
     if model in EFFORT_MODELS:
         effort = str(node.params.get("effort") or "").strip().lower()
@@ -169,12 +190,14 @@ async def handle_claude_chat(
                 raise ValueError(f"Effort must be one of {', '.join(levels)} for {model}, got {effort!r}")
             request_body["output_config"] = {"effort": effort}
 
+    stop: dict[str, str] = {}
     config = StreamConfig(
         url=ANTHROPIC_API_URL,
         headers={"x-api-key": api_key, "anthropic-version": ANTHROPIC_VERSION, "Content-Type": "application/json"},
         event_type_filter="content_block_delta",
         delta_path="delta.text",
         timeout=30.0,
+        on_event=_record_stop_reason(stop),
     )
 
     async def noop_emit(event: ExecutionEvent) -> None:
@@ -182,4 +205,23 @@ async def handle_claude_chat(
 
     full_text = await stream_execute(config=config, request_body=request_body, node_id=node.id, emit=emit or noop_emit)
 
+    if stop.get("reason") == "max_tokens" and not full_text.strip():
+        # Thinking used the whole Max Tokens and no answer came back. Before
+        # 2026-10-16 this returned an empty "success".
+        raise RuntimeError(
+            f"Claude ran out of Max Tokens ({max_tokens:,}) before it wrote an answer "
+            "(stop_reason max_tokens). Raise Max Tokens or lower Effort."
+        )
+
     return {"text": {"type": "Text", "value": full_text}}
+
+
+def _record_stop_reason(stop: dict[str, str]) -> Callable[[dict[str, Any]], None]:
+    """Keep the stop_reason from the stream's message_delta event:
+    {"type": "message_delta", "delta": {"stop_reason": "end_turn", ...}}."""
+    def record(data: dict[str, Any]) -> None:
+        if data.get("type") == "message_delta":
+            reason = (data.get("delta") or {}).get("stop_reason")
+            if reason:
+                stop["reason"] = str(reason)
+    return record
