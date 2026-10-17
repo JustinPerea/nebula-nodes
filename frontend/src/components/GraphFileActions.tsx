@@ -58,6 +58,8 @@ export function GraphFileActions() {
             source: edge.source, sourceHandle: edge.sourceHandle ?? '',
             target: edge.target, targetHandle: edge.targetHandle ?? '',
           })),
+          // 0 for a file saved before the marker: the backend upgrades it once.
+          paramsVersion: result.paramsVersion,
         }),
       });
       if (!response.ok) {

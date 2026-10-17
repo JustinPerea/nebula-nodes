@@ -3,6 +3,7 @@ import type { Node } from '@xyflow/react';
 import type { NodeData, VariantScope } from '../src/types';
 import type { RunRecord } from '../src/lib/runHistory';
 import type { ExecutionEvent } from '../src/lib/wsClient';
+import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
 const boundary = vi.hoisted(() => ({ execute: vi.fn(), cancel: vi.fn(), status: vi.fn(),
   subscribe: vi.fn(), fetch: vi.fn(), apiFetch: vi.fn(),
@@ -116,7 +117,7 @@ describe('Batch preview ownership through real graph store paths', () => {
       input: { value: 'blue', type: 'Text' as const } };
     await boot([record], [{ ...preview('n2'), id: 'preview', data: { ...preview().data, outputs: reversed } }]);
     expect(live().batchRunId).toBe('multi');
-    receive({ type: 'graphSync', empty: false, edges: [], nodes: [{ ...preview(),
+    receive({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, empty: false, edges: [], nodes: [{ ...preview(),
       data: { ...preview().data, outputs: last } }] });
     expect(live().batchOutputs).toHaveLength(2);
     expect(boundary.execute).not.toHaveBeenCalled();
@@ -138,13 +139,13 @@ describe('Batch preview ownership through real graph store paths', () => {
     await boot([saved('saved', ['red', 'blue'], 'n2')], [preview('n2')]);
     boundary.clearCanvasViewport.mockClear();
     boundary.clearCinemaSelectedShots.mockClear();
-    const sync = (outputs: NodeData['outputs']) => receive({ type: 'graphSync', empty: false, edges: [],
+    const sync = (outputs: NodeData['outputs']) => receive({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, empty: false, edges: [],
       nodes: [{ ...preview('n2'), data: { ...preview('n2').data, outputs } }] });
     sync(output('blue')); expect(live().batchOutputs).toHaveLength(2);
     sync({}); expect(live().batchOutputs).toHaveLength(2);
     sync(output('purple')); expect(live().batchOutputs).toBeUndefined();
     expect(live().outputs).toEqual(output('purple'));
-    receive({ type: 'graphSync', empty: false, edges: [], nodes: [{ ...preview('n2'),
+    receive({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, empty: false, edges: [], nodes: [{ ...preview('n2'),
       data: { ...preview('n2').data, definitionId: 'batch', params: { items_text: 'red' }, outputs: {} } }] });
     expect(store.getState().nodes[0].type).toBe('batchNode');
     expect(boundary.clearCanvasViewport).not.toHaveBeenCalled();
