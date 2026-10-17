@@ -4,7 +4,9 @@ import type { RunGraphSnapshot } from './runHistory';
  * One-time param upgrades of values saved in the browser.
  *
  * The backend (services/saved_graph_upgrades.py) upgrades everything it
- * stores: projects, the live graph, imported graph files and recovered copies.
+ * stores: projects, the live graph, imported graph files, recovered copies and
+ * style presets (upgraded when read; Create's "Save current" sends
+ * `paramsVersion` so a value set after an upgrade is kept).
  * Create drafts are also kept in localStorage, which only the browser reads,
  * so the same rule runs here when those drafts load. A backend test keeps the
  * version, the four models and both numbers equal to the Python ones.

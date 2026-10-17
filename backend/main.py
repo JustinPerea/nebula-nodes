@@ -87,7 +87,7 @@ from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services.cli_graph import CLIGraph
 from services.retired_nodes import migrate_node, migrate_param_update, migrate_params, retired_message
-from services.saved_graph_upgrades import request_version, upgrade_flat_nodes, upgrade_project
+from services.saved_graph_upgrades import PARAMS_VERSION, request_version, upgrade_flat_nodes, upgrade_project
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, now as project_now,
@@ -9453,6 +9453,10 @@ class PresetCreate(BaseModel):
     scope: str = "global"
     projectId: str | None = None
     thumbnail: str = ""
+    # The params version ``params`` were made at, checked by the shared
+    # request_version rule in the route (Any keeps the raw JSON value, so
+    # "1", true and 1.5 are refused rather than coerced).
+    paramsVersion: Any = None
 
 
 class PresetUpdate(BaseModel):
@@ -9463,6 +9467,16 @@ class PresetUpdate(BaseModel):
     modelId: str | None = None
     refImages: list[str] | None = None
     thumbnail: str | None = None
+    paramsVersion: Any = None
+
+
+def _preset_params_version(body: BaseModel, missing: int) -> int:
+    """The body's ``paramsVersion`` (``missing`` when the key wasn't sent), or 422."""
+    sent = {"paramsVersion": body.paramsVersion} if "paramsVersion" in body.model_fields_set else {}
+    try:
+        return request_version(sent, missing)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _char_store():
@@ -9661,11 +9675,16 @@ async def list_presets(scope: str = "global", projectId: str | None = None) -> l
 @app.post("/api/presets")
 async def create_preset(body: PresetCreate) -> dict:
     _validate_project_id_param(body.projectId)
+    # Create's "Save current" sends the version its draft is at. Main's bundle
+    # (a tab open across an update) POSTs without the key, and nothing else
+    # posts presets (no agent, CLI or MCP tool), so a body without it holds
+    # params from before every upgrade: version 0 (services/saved_graph_upgrades.py).
+    params_version = _preset_params_version(body, 0)
     try:
         return preset_store.create(
             name=body.name, category=body.category, prompt=body.prompt, params=body.params,
             modelId=body.modelId, refImages=body.refImages, scope=body.scope, projectId=body.projectId,
-            thumbnail=body.thumbnail,
+            thumbnail=body.thumbnail, params_version=params_version,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -9699,8 +9718,12 @@ async def get_preset(preset_id: str) -> dict:
 
 @app.put("/api/presets/{preset_id}")
 async def update_preset(preset_id: str, body: PresetUpdate) -> dict:
+    # No bundle sends PUT (old or new), so a caller here is deliberate API use
+    # writing params now: a body without the key is taken as current.
+    params_version = _preset_params_version(body, PARAMS_VERSION)
+    fields = body.model_dump(exclude_none=True, exclude={"paramsVersion"})
     try:
-        return preset_store.update(preset_id, **body.model_dump(exclude_none=True))
+        return preset_store.update(preset_id, params_version=params_version, **fields)
     except KeyError:
         raise HTTPException(status_code=404, detail="preset not found")
     except ValueError as exc:
@@ -9734,7 +9757,7 @@ def seed_presets_if_empty() -> None:
             preset_store.create(
                 name=s["name"], category=s.get("category", "Style"), prompt=s.get("prompt", ""),
                 params=s.get("params", {}), modelId=s.get("modelId"), refImages=s.get("refImages", []),
-                scope="global", projectId=None,
+                scope="global", projectId=None, params_version=PARAMS_VERSION,
             )
     except Exception as exc:  # never let seeding break boot
         print(f"[presets] seed failed: {exc}", flush=True)

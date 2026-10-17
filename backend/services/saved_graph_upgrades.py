@@ -17,7 +17,13 @@ once per saved graph, and the graph records that it ran (``PARAMS_VERSION``):
   at (a body without it came from a bundle older than the marker: version 0);
 - Create drafts kept in the browser: ``paramsVersion`` in the localStorage
   payload (frontend/src/store/createDraftStore.ts, rule mirrored in
-  frontend/src/lib/savedParamsUpgrades.ts).
+  frontend/src/lib/savedParamsUpgrades.ts);
+- a style preset: ``"paramsVersion"`` in its file (services/preset_store.py;
+  not the preset's ``version``, which counts edits). Reads upgrade a copy
+  without writing, every write stores the upgraded params stamped current, and
+  ``POST /api/presets`` takes the body's ``paramsVersion`` (missing = 0: main's
+  Create posts without it), ``PUT`` the same (missing = current: no bundle
+  sends PUT).
 
 Run records are never rewritten: each one is what that run sent. The canvas
 stamps each new record with the version it was sent at (``paramsVersion`` on
