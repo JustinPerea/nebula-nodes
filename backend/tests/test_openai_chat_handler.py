@@ -218,8 +218,8 @@ async def test_registry_model_list():
     assert "gpt-5.4" in model_values
     assert "gpt-5.4-mini" in model_values
     assert "gpt-5.4-nano" in model_values
-    # Default must be a current-generation model
-    assert model_param["default"].startswith("gpt-5")
+    # Default is GPT-6.1 Sol (2026-10-16), one of OpenAI's featured models
+    assert model_param["default"] == "gpt-6.1-sol"
 
     # Legacy models still callable until their 2026-10-23 shutdown
     assert "gpt-4o" in model_values

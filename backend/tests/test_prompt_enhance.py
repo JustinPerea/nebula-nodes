@@ -53,9 +53,16 @@ class TestSelectProvider:
         )
         assert sel == ("openai", "o", "gpt-5.4-mini")
 
+    def test_anthropic_uses_haiku_55(self) -> None:
+        assert select_enhance_provider({"ANTHROPIC_API_KEY": "a"}) == ("anthropic", "a", "claude-haiku-5-5")
+
     def test_falls_through_to_anthropic_then_google(self) -> None:
         assert select_enhance_provider({"ANTHROPIC_API_KEY": "a", "GOOGLE_API_KEY": "g"})[0] == "anthropic"
         assert select_enhance_provider({"GOOGLE_API_KEY": "g"})[0] == "google"
+
+    def test_google_uses_gemini_36_flash(self) -> None:
+        # gemini-3.5-flash was deprecated 2026-10-08 and now routes to 3.6 Flash.
+        assert select_enhance_provider({"GOOGLE_API_KEY": "g"}) == ("google", "g", "gemini-3.6-flash")
 
 
 class TestBuildRequest:
@@ -69,17 +76,24 @@ class TestBuildRequest:
         assert body["messages"][1]["content"] == "a cat"
 
     def test_anthropic_shape(self) -> None:
-        url, headers, body = build_enhance_request("anthropic", "k", "claude-haiku-4-5-20251001", "a cat")
+        url, headers, body = build_enhance_request("anthropic", "k", "claude-haiku-5-5", "a cat")
         assert url.endswith("/v1/messages")
         assert headers["x-api-key"] == "k"
         assert headers["anthropic-version"]
-        assert body["system"] == SYSTEM_PROMPT
-        assert body["messages"][0]["content"] == "a cat"
-        assert body["max_tokens"] > 0
+        # Haiku 5.5: no sampling params (400), no thinking block (adaptive is
+        # on by default; budget_tokens is a 400), no assistant prefill (400),
+        # room for thinking plus the answer, and medium effort.
+        assert body == {
+            "model": "claude-haiku-5-5",
+            "max_tokens": 16000,
+            "system": SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": "a cat"}],
+            "output_config": {"effort": "medium"},
+        }
 
     def test_google_shape(self) -> None:
-        url, headers, body = build_enhance_request("google", "k", "gemini-3.5-flash", "a cat")
-        assert "gemini-3.5-flash:generateContent" in url
+        url, headers, body = build_enhance_request("google", "k", "gemini-3.6-flash", "a cat")
+        assert "gemini-3.6-flash:generateContent" in url
         assert headers["x-goog-api-key"] == "k"
         assert body["systemInstruction"]["parts"][0]["text"] == SYSTEM_PROMPT
         assert body["contents"][0]["parts"][0]["text"] == "a cat"
@@ -96,6 +110,12 @@ class TestExtract:
 
     def test_anthropic_concats_text_blocks(self) -> None:
         data = {"content": [{"type": "text", "text": "enhanced "}, {"type": "text", "text": "cat"}]}
+        assert extract_enhanced("anthropic", data) == "enhanced cat"
+
+    def test_anthropic_skips_thinking_blocks(self) -> None:
+        # Haiku 5.5 thinks by default; its reply can start with a thinking block.
+        data = {"content": [{"type": "thinking", "thinking": "", "signature": "s"},
+                            {"type": "text", "text": "enhanced cat"}]}
         assert extract_enhanced("anthropic", data) == "enhanced cat"
 
     def test_google(self) -> None:

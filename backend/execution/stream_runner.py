@@ -29,6 +29,9 @@ class StreamConfig:
     delta_path: str = "delta.text"
     timeout: float = 30.0
     extra_stop_events: set[str] = field(default_factory=lambda: {"message_stop"})
+    # Called with every parsed data event, before event_type_filter applies
+    # (Anthropic's stop_reason arrives on message_delta, not the text events).
+    on_event: Callable[[dict[str, Any]], None] | None = None
 
 
 def _get_nested(data: dict[str, Any], path: str) -> Any:
@@ -83,13 +86,20 @@ async def stream_execute(
                     if data_str == "[DONE]":
                         break
 
-                    if config.event_type_filter and current_event_type != config.event_type_filter:
+                    if config.on_event is None and config.event_type_filter and \
+                            current_event_type != config.event_type_filter:
                         continue
 
                     try:
                         data = json.loads(data_str)
                     except (ValueError, TypeError):
                         continue
+
+                    if config.on_event is not None:
+                        if isinstance(data, dict):
+                            config.on_event(data)
+                        if config.event_type_filter and current_event_type != config.event_type_filter:
+                            continue
 
                     delta_text = _get_nested(data, config.delta_path)
                     if delta_text and isinstance(delta_text, str):

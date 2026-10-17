@@ -16,6 +16,7 @@ import { composerStateFromSelection } from '../../lib/createSelection';
 import type { ResultContext } from '../../lib/resultContext';
 import { applyPresetToComposer } from '../../lib/applyPreset';
 import { createPreset, type Preset } from '../../lib/createPresets';
+import { GRAPH_PARAMS_VERSION } from '../../lib/savedParamsUpgrades';
 import { CreateComposer } from './CreateComposer';
 import { PresetLibrary } from './PresetLibrary';
 import { ResultsGallery } from './ResultsGallery';
@@ -165,7 +166,9 @@ export function CreateView() {
           }
         }
       }
-      await createPreset({ name, category: 'My Styles', prompt, params, modelId: modelDef.id, refImages: refs.map((r) => r.filePath), scope: 'project', thumbnail });
+      // The draft is current: loadDrafts and the backend upgrade saved drafts,
+      // presets are upgraded when read, and "Reuse settings" upgrades its run.
+      await createPreset({ name, category: 'My Styles', prompt, params, modelId: modelDef.id, refImages: refs.map((r) => r.filePath), scope: 'project', thumbnail, paramsVersion: GRAPH_PARAMS_VERSION });
       styleName.current = null;
       if (mounted.current) setPresetReloadKey((k) => k + 1);
     } catch (err) {
