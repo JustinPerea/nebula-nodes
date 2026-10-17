@@ -32,8 +32,12 @@ class CLIGraph:
         self.edges: list[dict[str, str]] = []
         self._counter: int = 0
         self._persist_path: Path | None = persist_path
-        # Nodes whose params ``load`` upgraded (services/saved_graph_upgrades.py).
+        # Nodes whose params ``load`` upgraded (services/saved_graph_upgrades.py),
+        # and whether the file was saved before ``PARAMS_VERSION`` (true even
+        # when no value changed: main's boot step writes the marker and makes
+        # tabs loaded before the restart reload).
         self.upgraded_on_load = 0
+        self.params_advanced_on_load = False
 
     def _maybe_persist(self) -> None:
         """Best-effort save — swallow errors so a hostile filesystem never
@@ -304,11 +308,13 @@ class CLIGraph:
         nodes = {n["id"]: _migrate_retired(n) for n in data["nodes"]}
         # A file written before an upgrade existed gets it once; the next save
         # records the current version, so a value set afterwards is kept.
-        upgraded = upgrade_flat_nodes(nodes.values(), stored_version(data.get("paramsVersion")))
+        version = stored_version(data.get("paramsVersion"))
+        upgraded = upgrade_flat_nodes(nodes.values(), version)
         edges = data["edges"]
         counter = data.get("counter", len(nodes))
         self.nodes, self.edges, self._counter = nodes, edges, counter
         self.upgraded_on_load = upgraded
+        self.params_advanced_on_load = version < PARAMS_VERSION
 
 
 def _migrate_retired(node: dict[str, Any]) -> dict[str, Any]:

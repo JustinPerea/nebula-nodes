@@ -33,3 +33,8 @@
 - UI: the trash button deletes in one click (it's reversible now) and shows an Undo toast for 8 s, held while the toast is hovered or focused. A collapsed **Recently deleted** section below the grid lists entries with Restore and a two-step Delete forever, plus Empty. The toast enters on a computed spring (`linear()` from k 380, c 30, m 1) and is static under reduced motion.
 - Recovery of a stale tab's edits now names the copy after the trashed project when the source is still in the trash.
 
+## 2026-10-17 — Tabs from before a params upgrade
+
+- A tab whose bundle was built for another saved-params version (`backend/services/saved_graph_upgrades.py`) is stale even with the current revision. Every request from the canvas sends `X-Nebula-Params-Version`; a request with the revision header and a missing, lower or higher version gets 409 `{code: "params_outdated"}` on the graph, execute, cinema and quick routes, every project write except `/api/projects/recover`, and preset writes. Requests with neither header (agents, CLI, MCP) pass.
+- A boot that finds the catalog or state.json saved before the current version rotates `workspaceRevision` once and writes the catalog at once, so tabs from before the restart ignore graph syncs and go to the existing conflict flow (recover if dirty, then Retry).
+- `paramsVersion` is in graphSync and `GET /api/projects`. A tab that sees another version stops saving, recovers unsaved work once, and reloads; it reloads at most once per backend version (sessionStorage), and otherwise says to rebuild the frontend or restart the backend. Details in implementation-notes.md, "Justin's answers 2026-10-17, round 2", item 3.

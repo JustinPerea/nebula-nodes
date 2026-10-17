@@ -19,6 +19,8 @@ export interface TrashedProject extends ProjectSummary { deletedAt: string; purg
 export interface ProjectList {
   projects: ProjectSummary[]; trash?: TrashedProject[]; activeProjectId: string | null;
   workspaceRevision: string; migratedProjectId?: string | null;
+  /** The backend's params version (lib/savedParamsUpgrades.ts). */
+  paramsVersion?: number;
 }
 export interface ProjectActivation { project: SavedProject; workspaceRevision: string }
 export interface ProjectDeletion {

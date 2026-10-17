@@ -236,13 +236,13 @@ def test_boot_writes_the_upgraded_live_graph(tmp_path, monkeypatch):
     graph = CLIGraph(persist_path=path)
     graph.load(path)
     assert graph.upgraded_on_load == 1
+    assert graph.params_advanced_on_load
     graph._maybe_persist()
     written = json.loads(path.read_text())
     assert written["paramsVersion"] == PARAMS_VERSION
     assert written["nodes"][0]["params"]["max_tokens"] == 64000
-    source = (Path(main_module.__file__)).read_text()
-    assert re.search(r"cli_graph\.load\(_STATE_PATH\)[\s\S]{0,400}if cli_graph\.upgraded_on_load:\s+[\s\S]{0,300}"
-                     r"cli_graph\._maybe_persist\(\)", source)
+    # The real boot (a fresh process importing main) is covered in
+    # test_params_version_gate.py.
 
 
 def test_new_projects_start_current():

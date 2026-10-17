@@ -7,6 +7,7 @@ import { rewriteBackendAssetUrls } from '../lib/backend';
 import { normalizeRuntimeMediaParams } from '../lib/graphFile';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { getProjectContext, setProjectContext } from '../lib/projectContext';
+import { onParamsOutdated, reloadPage } from '../lib/paramsOutdated';
 import { clearPersistedRunHistory, loadRunHistory } from '../lib/runHistory';
 import * as api from '../lib/projects';
 import { wsClient } from '../lib/wsClient';
@@ -48,6 +49,16 @@ let pendingRecovery: { sourceProjectId: string; snapshot: ProjectSnapshot; recov
  * copy sends it, so the backend upgrades the copy from what the tab actually
  * holds rather than from its source project. */
 let canvasParamsVersion = GRAPH_PARAMS_VERSION;
+/** The backend's params version differs from this bundle's: the one handling
+ * of it (recover once, then reload), shared by every report of it. */
+let paramsVersionChange: Promise<void> | null = null;
+/** Set when the tab reloads for a params upgrade, so the unsaved-changes
+ * prompt doesn't stop a reload whose edits are already in a recovered copy. */
+let reloadingForParams = false;
+/** The backend version this tab already reloaded for (sessionStorage), so a
+ * window whose frontend build is still older after a reload stops instead of
+ * reloading again. */
+const PARAMS_RELOAD_KEY = 'nebula:paramsReloadedFor';
 
 /** Persist authoring and results, excluding React Flow measurements/selection
  * and transient credential/progress presentation. JSON gives each save its
@@ -138,6 +149,74 @@ function preserveWorkspaceConflict(message: string): void {
   };
   useProjectStore.setState({ screen: 'home', initialized: false, loading: false, dirty, error: message });
 }
+/** Save a stale tab's unsaved work as an inactive recovered copy, once: the
+ * recoveryId makes a retry of the same request idempotent, and afterwards the
+ * captured canvas counts as saved, so a later conflict doesn't copy it again. */
+async function recoverPendingWork(): Promise<boolean> {
+  const recovery = pendingRecovery;
+  if (!recovery) return false;
+  await api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId, recovery.paramsVersion);
+  if (pendingRecovery === recovery) pendingRecovery = null;
+  lastSaved = JSON.stringify(recovery.snapshot);
+  return true;
+}
+
+/** A reload resets these in the app; tests share one module. */
+export function resetParamsVersionChangeForTests(): void {
+  paramsVersionChange = null;
+  reloadingForParams = false;
+  pendingRecovery = null;
+}
+
+function reloadOnceFor(backendVersion: number | null): boolean {
+  try {
+    const mark = String(backendVersion ?? 'unknown');
+    if (window.sessionStorage.getItem(PARAMS_RELOAD_KEY) === mark) return false;
+    window.sessionStorage.setItem(PARAMS_RELOAD_KEY, mark);
+    return true;
+  } catch { return false; /* Without the mark a reload could repeat: ask instead. */ }
+}
+function clearParamsReloadMark(): void {
+  try { window.sessionStorage.removeItem(PARAMS_RELOAD_KEY); } catch { /* Nothing to clear. */ }
+}
+
+const PARAMS_UPDATED = 'Nebula was updated while this tab was open.';
+/** The backend runs another params version than this bundle (graphSync, the
+ * project listing or a 409 params_outdated said so). The tab's values may be
+ * from before a one-time upgrade, and the backend refuses its saves and runs,
+ * so: stop saving, save unsaved work once as a recovered copy (from the
+ * version this canvas was loaded at), then reload to get the bundle that
+ * matches. Never applies a project in this bundle: only a reload brings the
+ * new definitions and upgrade rules. */
+function handleParamsVersionChange(backendVersion: number | null): Promise<void> {
+  if (paramsVersionChange) return paramsVersionChange;
+  paramsVersionChange = (async () => {
+    if (!pendingRecovery) preserveWorkspaceConflict(PARAMS_UPDATED);
+    let recovered: boolean;
+    try {
+      recovered = await recoverPendingWork();
+    } catch (error) {
+      paramsVersionChange = null;
+      const reason = error instanceof Error ? error.message : 'the backend did not answer';
+      useProjectStore.setState({ error: `${PARAMS_UPDATED} Your unsaved edits couldn't be saved as a recovered project yet (${reason}). Try again before reloading.` });
+      return;
+    }
+    const kept = recovered ? ' Your unsaved edits were saved as a recovered project.' : ' Your saved work is kept.';
+    useProjectStore.setState({ dirty: false });
+    const newer = backendVersion === null || backendVersion > GRAPH_PARAMS_VERSION;
+    if (newer && reloadOnceFor(backendVersion)) {
+      reloadingForParams = true;
+      useProjectStore.setState({ error: `${PARAMS_UPDATED} Reloading it so it uses the update.${kept}` });
+      reloadPage();
+      return;
+    }
+    useProjectStore.setState({ error: newer
+      ? `Nebula was updated, but this window still has the frontend from before the update, so it can't save or run. Rebuild the frontend (or restart the dev server), then reload.${kept}`
+      : `This window's frontend is newer than the Nebula backend it is connected to, so it can't save or run. Restart the backend, then reload.${kept}` });
+  })();
+  return paramsVersionChange;
+}
+
 function markDirty(): void {
   const state = useProjectStore.getState();
   if (applying || !state.initialized || !state.activeProject || state.busy) return;
@@ -201,12 +280,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       try {
         // A stale tab cannot write to its former active project. Persist its
         // unsaved authoring as an inactive recovered copy before replacement.
-        if (pendingRecovery) {
-          const recovery = pendingRecovery;
-          await api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId, recovery.paramsVersion);
-          if (pendingRecovery === recovery) pendingRecovery = null;
-        }
+        await recoverPendingWork();
         const list = await api.listProjects();
+        if (typeof list.paramsVersion === 'number') {
+          if (list.paramsVersion !== GRAPH_PARAMS_VERSION) {
+            await handleParamsVersionChange(list.paramsVersion);
+            return;
+          }
+          clearParamsReloadMark();
+        }
         set({ projects: list.projects, trash: list.trash ?? [], workspaceRevision: list.workspaceRevision });
         if (list.activeProjectId) {
           let project = await api.getProject(list.activeProjectId);
@@ -397,6 +479,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
   retry: async () => {
     set({ error: null });
+    // A params-version stop is checked again from the listing.
+    if (!reloadingForParams) paramsVersionChange = null;
     if (!get().initialized) await get().initialize();
     else {
       try {
@@ -419,6 +503,13 @@ export function subscribeProjectAutosave(): () => void {
   const drafts = useCreateDraftStore.subscribe(() => markDirty());
   const socket = wsClient.subscribe((event) => {
     if (event.type !== 'graphSync') return;
+    const paramsVersion = (event as unknown as { paramsVersion?: unknown }).paramsVersion;
+    if (typeof paramsVersion === 'number' && paramsVersion !== GRAPH_PARAMS_VERSION) {
+      // Checked before the revision: an upgrade also rotates it, and this tab
+      // must reload rather than offer to load the project in this bundle.
+      void handleParamsVersionChange(paramsVersion);
+      return;
+    }
     const revision = (event as unknown as { workspaceRevision?: string }).workspaceRevision;
     const context = getProjectContext();
     const state = useProjectStore.getState();
@@ -429,14 +520,15 @@ export function subscribeProjectAutosave(): () => void {
       ? 'The active project changed in another window. Try again to save your unsaved edits as a recovered project.'
       : 'The active project changed in another window. Reload projects to continue.');
   });
+  const outdated = onParamsOutdated((backendVersion) => { void handleParamsVersionChange(backendVersion); });
   const beforeUnload = (event: BeforeUnloadEvent) => {
-    if (!useProjectStore.getState().dirty) return;
+    if (reloadingForParams || !useProjectStore.getState().dirty) return;
     event.preventDefault();
     event.returnValue = '';
   };
   window.addEventListener('beforeunload', beforeUnload);
   return () => {
-    graph(); ui(); drafts(); socket();
+    graph(); ui(); drafts(); socket(); outdated();
     window.removeEventListener('beforeunload', beforeUnload);
     if (saveTimer !== null) clearTimeout(saveTimer);
     saveTimer = null;

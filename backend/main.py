@@ -238,18 +238,43 @@ canvas_pins = CanvasPins(lambda: project_store)
 _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
 _synchronous_workspace_runs: set[str] = set()
+_live_graph_load_failed = False
 if _STATE_PATH is not None and _STATE_PATH.exists():
     try:
         cli_graph.load(_STATE_PATH)
         print(f"[main] restored graph from {_STATE_PATH} — {len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges", flush=True)
-        if cli_graph.upgraded_on_load:
+        if cli_graph.params_advanced_on_load:
             # Write the upgraded params and the version marker now, so the
-            # file matches what the canvas, agents and runs read
+            # file matches what the canvas, agents and runs read, and the
+            # next boot doesn't count it as advanced again
             # (services/saved_graph_upgrades.py).
             cli_graph._maybe_persist()
-            print(f"[main] upgraded saved params on {cli_graph.upgraded_on_load} node(s)", flush=True)
+            if cli_graph.upgraded_on_load:
+                print(f"[main] upgraded saved params on {cli_graph.upgraded_on_load} node(s)", flush=True)
     except Exception as exc:
+        _live_graph_load_failed = True
         print(f"[main] failed to restore graph from {_STATE_PATH}: {exc} — starting fresh", flush=True)
+
+
+def _finish_params_upgrade_at_boot(*, live_graph_advanced: bool) -> bool:
+    """A one-time params upgrade ran at this boot: rotate the workspace
+    revision so tabs loaded before it stop writing (ProjectStore.
+    advance_params_version). Best effort: a storage error is printed, and the
+    params-version gate (project_workspace_fence) still refuses stale tabs."""
+    try:
+        rotated = project_store.advance_params_version(live_graph_advanced=live_graph_advanced)
+    except ProjectStoreError as exc:
+        print(f"[main] could not write the params upgrade to the project catalog: {exc}", flush=True)
+        return False
+    if rotated:
+        print(f"[main] saved params are at version {PARAMS_VERSION}; tabs opened before this restart will reload", flush=True)
+    return rotated
+
+
+# Not after a failed state.json load: that boot already started from an empty
+# live graph, and nothing here should build on it.
+if not _live_graph_load_failed:
+    _finish_params_upgrade_at_boot(live_graph_advanced=cli_graph.params_advanced_on_load)
 
 provider_recovery_store = ProviderRecoveryStore(
     _STATE_DIR / "provider-recoveries.json" if _STATE_PATH is not None else None
@@ -455,7 +480,10 @@ async def project_storage_error(request, exc: ProjectStoreError):
 
 def _workspace_context() -> dict[str, Any]:
     catalog = project_store.read()
-    return {"activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"]}
+    # paramsVersion: a tab built for another version reloads (graphSync,
+    # GET /api/projects; services/saved_graph_upgrades.py).
+    return {"activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"],
+            "paramsVersion": PARAMS_VERSION}
 
 
 def _check_workspace_revision(revision: str | None = None) -> None:
@@ -484,8 +512,56 @@ def _track_synchronous_project_run(handler):
     return tracked
 
 
+# Routes where a tab's request stores or runs params. A tab whose bundle was
+# built for another params version gets 409 params_outdated on them, so a tab
+# loaded before a one-time upgrade can't save, run or push its old values
+# (services/saved_graph_upgrades.py). Recovery stays open: it is how such a tab
+# keeps its unsaved work, and it upgrades the copy from the body's version.
+_PARAMS_GATED_PREFIXES = ("/api/graph", "/api/execute", "/api/cinema", "/api/quick", "/api/projects", "/api/presets")
+_PARAMS_GATE_EXEMPT = frozenset({"/api/projects/recover"})
+# Shown verbatim by main's bundle (its project and run errors print `detail`).
+PARAMS_OUTDATED_DETAIL = (
+    "Nebula was updated while this tab was open, so this tab can't save or run until it reloads. "
+    "Reload the tab; your saved work is kept. If this keeps happening after a reload, this window's "
+    "frontend build doesn't match the backend: rebuild the frontend, or restart the backend."
+)
+
+
+def _params_outdated(request: Request) -> bool:
+    """Whether a request comes from a tab built for another params version.
+
+    Every bundle since the gate sends ``X-Nebula-Params-Version`` on every
+    request (frontend/src/lib/backend.ts ``apiFetch``). Older bundles send none,
+    and only the canvas sends ``X-Nebula-Workspace-Revision`` (the same
+    function, while a project is open; nothing in the backend, CLI, MCP or
+    agent skills sets it), so a request with the revision and without the
+    version came from a bundle older than the gate: version 0. A request with
+    neither is an agent, the CLI, MCP or a script, whose values are set now and
+    pass as sent. An old bundle with no project open sends neither, but it is
+    on Home then (main's App.tsx renders no canvas, studio or Create view while
+    ``screen`` is 'home', and ``screen`` becomes 'workspace' only after
+    ``applyProject`` sets the project), so it can't run, autosave, push params
+    or open Create; its preset POST carries no ``paramsVersion`` and is
+    upgraded from 0 (create_preset)."""
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        return False
+    path = request.url.path
+    if path in _PARAMS_GATE_EXEMPT or not path.startswith(_PARAMS_GATED_PREFIXES):
+        return False
+    supplied = request.headers.get("x-nebula-params-version")
+    if supplied is None:
+        return request.headers.get("x-nebula-workspace-revision") is not None
+    # Lower (loaded before an upgrade) or higher (a backend older than the
+    # bundle) are both refused: neither side can upgrade the other's values.
+    return supplied.strip() != str(PARAMS_VERSION)
+
+
 @app.middleware("http")
 async def project_workspace_fence(request: Request, call_next):
+    if _params_outdated(request):
+        return JSONResponse(status_code=409, content={
+            "code": "params_outdated", "detail": PARAMS_OUTDATED_DETAIL, "paramsVersion": PARAMS_VERSION,
+        })
     path = request.url.path
     guarded = request.method not in {"GET", "HEAD", "OPTIONS"} and path.startswith((
         "/api/graph", "/api/execute", "/api/cinema", "/api/quick",
@@ -537,6 +613,7 @@ app.add_middleware(LocalRequestGuard)
 _DESKTOP_RENDERER_ORIGINS = frozenset({"null", "file://"})
 _DESKTOP_CORS_HEADERS = ", ".join((
     "Content-Type", "Authorization", "X-Nebula-Person", "X-Nebula-Workspace-Revision", "X-Nebula-Proposal-Key",
+    "X-Nebula-Params-Version",
 ))
 
 
@@ -8497,6 +8574,9 @@ async def list_projects() -> dict[str, Any]:
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
             "activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"],
+            # The canvas reloads instead of loading a project when it differs
+            # from its own (frontend/src/store/projectStore.ts).
+            "paramsVersion": PARAMS_VERSION,
             **({"migratedProjectId": catalog["migratedProjectId"]} if catalog.get("migratedProjectId") else {}),
         }
 

@@ -48,6 +48,7 @@ import {
   type ActiveRun,
   type CreateRunOrigin,
 } from '../lib/runHistory';
+import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import type { PaperSourceRecord } from '../lib/paperSource';
 import {
   executeGraph as apiExecuteGraph,
@@ -2026,6 +2027,10 @@ wsClient.subscribe((event) => {
   const context = getProjectContext();
   if (revision !== undefined && revision !== context?.revision) return;
   if (event.type === 'graphSync') {
+    // A backend at another params version holds values this bundle's rules
+    // don't describe; projectStore reloads the tab instead (paramsOutdated.ts).
+    const paramsVersion = (event as ExecutionEvent & { paramsVersion?: unknown }).paramsVersion;
+    if (typeof paramsVersion === 'number' && paramsVersion !== GRAPH_PARAMS_VERSION) return;
     useCinemaMotionStore.getState().observeGraphSync();
     // Real-time sync: MERGE cli_graph into the canvas. Key invariant: frontend-only
     // nodes (library drags, undo'd results, etc.) must survive graphSync — only

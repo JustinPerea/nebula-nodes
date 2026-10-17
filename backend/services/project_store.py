@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
-from services.saved_graph_upgrades import PARAMS_VERSION, upgrade_catalog
+from services.saved_graph_upgrades import PARAMS_VERSION, catalog_params_behind, upgrade_catalog
 
 MAX_PROJECT_BYTES = 16 * 1024 * 1024
 MAX_CATALOG_BYTES = 128 * 1024 * 1024
@@ -146,7 +146,7 @@ class ProjectStore:
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(self.root, 0o700)
 
-    def _read(self) -> dict[str, Any]:
+    def _read(self, *, upgrade: bool = True) -> dict[str, Any]:
         if not self.path.exists():
             return {"version": 1, "projects": {}, "activeProjectId": None, "workspaceRevision": self._initial_revision}
         if self.path.is_symlink() or self.path.stat().st_size > MAX_CATALOG_BYTES:
@@ -178,7 +178,8 @@ class ProjectStore:
             # Every reader gets upgraded params (services/saved_graph_upgrades.py).
             # The version marker is set with them, so the first commit stores
             # both and a value set after that is never upgraded again.
-            upgrade_catalog(result)
+            if upgrade:
+                upgrade_catalog(result)
             return result
         except (ValueError, OSError) as exc:
             raise ProjectStoreError("Project catalog could not be read; the existing file was preserved") from exc
@@ -199,6 +200,26 @@ class ProjectStore:
     def read(self) -> dict[str, Any]:
         with self.transaction() as catalog:
             return catalog
+
+    def advance_params_version(self, *, live_graph_advanced: bool) -> bool:
+        """Boot step after a one-time params upgrade (main.py). When the
+        catalog on disk holds an entry saved before ``PARAMS_VERSION``, or
+        state.json did (``live_graph_advanced``), give the workspace a new
+        revision and write the upgraded catalog now. A tab loaded before the
+        restart then holds a revision the backend refuses, so it can't write
+        its pre-upgrade values back, and the upgrade is on disk instead of
+        waiting for the next commit (which could be that tab's autosave).
+        Values alone don't decide it: a tab can hold values that were never
+        saved. Returns whether it rotated. Without a catalog file there is
+        nothing to write, and the revision is already new in each process."""
+        if not self.path.exists():
+            return False
+        with self.transaction() as catalog:
+            if not live_graph_advanced and not catalog_params_behind(self._read(upgrade=False)):
+                return False
+            catalog["workspaceRevision"] = uuid4().hex
+            self.commit(catalog)
+            return True
 
     def prepare(self, catalog: dict[str, Any]) -> Path:
         """Write/fsync a private temporary catalog before any live graph edit."""

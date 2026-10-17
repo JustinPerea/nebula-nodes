@@ -33,6 +33,23 @@ when it is used again: replays, Create's "Reuse settings" and Paper freshness
 (``upgradeRunSnapshot`` in frontend/src/lib/savedParamsUpgrades.ts). The
 backend only stores records, so it keeps the stamp as sent.
 
+A browser tab whose canvas loaded before an upgrade can't be upgraded in
+place: its values may have been set in that tab, and its bundle has the old
+rules. It is treated as stale instead (round 2, item 3):
+
+- the bundle sends ``X-Nebula-Params-Version`` on every request; a request
+  carrying the canvas's ``X-Nebula-Workspace-Revision`` with a missing, lower
+  or higher version gets 409 ``params_outdated`` on every route that stores or
+  runs params (``project_workspace_fence`` in main.py; recovery stays open).
+  Agents, the CLI, MCP and scripts send neither header and pass as sent;
+- a boot that finds the catalog or state.json saved before ``PARAMS_VERSION``
+  gives the workspace a new revision and writes both files at once
+  (``ProjectStore.advance_params_version``), so tabs from before the restart
+  stop merging graph syncs and stop saving;
+- ``paramsVersion`` is in graphSync and ``GET /api/projects``, and a newer
+  bundle that sees another version saves its unsaved work as a recovered copy
+  and reloads (frontend/src/store/projectStore.ts).
+
 A graph without the marker is version 0, saved before any upgrade existed.
 
 Version 1 (Justin, 2026-10-17): claude-chat nodes on Claude Opus 4.6, Sonnet
@@ -150,6 +167,16 @@ def upgrade_project(project: dict[str, Any]) -> int:
     changed = upgrade_snapshot(project.get("snapshot"), version)
     project["_paramsVersion"] = PARAMS_VERSION
     return changed
+
+
+def catalog_params_behind(catalog: dict[str, Any]) -> bool:
+    """Whether a catalog read from disk (not yet upgraded) holds a project or
+    trash entry saved before ``PARAMS_VERSION``."""
+    return any(
+        isinstance(project, dict) and stored_version(project.get("_paramsVersion")) < PARAMS_VERSION
+        for group in (catalog.get("projects"), catalog.get("trash")) if isinstance(group, dict)
+        for project in group.values()
+    )
 
 
 def upgrade_catalog(catalog: dict[str, Any]) -> int:

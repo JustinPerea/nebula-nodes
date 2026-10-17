@@ -17,6 +17,13 @@ import type { RunGraphSnapshot } from './runHistory';
  * recipe when it is used again: replays (executeHistoricalRun), Create's
  * "Reuse settings" (resultContext.ts) and Paper freshness checks.
  *
+ * A tab is only current at this bundle's version. Every request sends it
+ * (`X-Nebula-Params-Version`, lib/backend.ts), the backend refuses saves and
+ * runs from another version (409 `params_outdated`), and a tab that learns the
+ * backend moved on saves unsaved work as a recovered copy and reloads
+ * (lib/paramsOutdated.ts, store/projectStore.ts). So no tab saves or runs
+ * values from before an upgrade with rules that don't know about it.
+ *
  * Version 1 (Justin, 2026-10-17): a claude-chat value on Claude Opus 4.6,
  * Sonnet 4.6, Opus 4.7 or Opus 4.8 with Extended Thinking on, holding Max
  * Tokens 4,096 (the only default before 2026-10-16), becomes 64,000, the
