@@ -5184,7 +5184,7 @@ Justin approved "Desktop launch check" (after #63). The desktop app runs the che
 - Backend: `/api/health` body equality in `test_params_version_gate.py`. Frontend: `tests/buildStamp.test.ts`.
 
 **Surprises**
-- `cd desktop && npm test` has three failures that were there before this branch: two expect 19 provider keys but `credential_catalog.py` now lists 20 (`credential-service.test.mjs`, `sidecar.test.mjs` "the provider-key list"); and the parent-lifeline test needs this checkout's own `backend/.venv` (it drops `NEBULA_DESKTOP_PYTHON`), which this worktree doesn't have. The count failure also happens with this branch's desktop changes stashed. Left alone here (not this task's scope).
+- `cd desktop && npm test` had three failures on main before this branch. Two pinned 19 provider keys, but both lists have held 20 since TypeSafe joined (#53): `credential-service.test.mjs` and `sidecar.test.mjs` ("the provider-key list"). The pins now say 20. The provider stack (#57) raises them to 21 with BFL, so expect that one-line conflict there. The third, the parent-lifeline test, runs the checkout's own `backend/.venv`, which a fresh worktree lacks; it passes with one. Whole suite with a venv in place: 378/378, none skipped.
 - The in-tab gate from #63 is unchanged; it still covers browser tabs (the web build's stamp is written but nothing reads it).
 
 **Live check with real Electron (2026-10-17), and one fix**
