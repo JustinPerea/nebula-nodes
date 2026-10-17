@@ -38,17 +38,22 @@ place: its values may have been set in that tab, and its bundle has the old
 rules. It is treated as stale instead (round 2, item 3):
 
 - the bundle sends ``X-Nebula-Params-Version`` on every request; a request
-  carrying the canvas's ``X-Nebula-Workspace-Revision`` with a missing, lower
-  or higher version gets 409 ``params_outdated`` on every route that stores or
-  runs params (``project_workspace_fence`` in main.py; recovery stays open).
-  Agents, the CLI, MCP and scripts send neither header and pass as sent;
+  with a lower or higher version, or with none when it carries the canvas's
+  ``X-Nebula-Workspace-Revision`` or comes from a browser (``Origin`` or
+  ``Sec-Fetch-Site``: an old tab can be on the canvas with no project
+  context), gets 409 ``params_outdated`` on every route that stores or runs
+  params (``project_workspace_fence`` and ``_params_outdated`` in main.py;
+  recovery stays open). Agents, the CLI, MCP and scripts send none of these
+  headers and pass as sent;
 - a boot that finds the catalog or state.json saved before ``PARAMS_VERSION``
   gives the workspace a new revision and writes both files at once
   (``ProjectStore.advance_params_version``), so tabs from before the restart
   stop merging graph syncs and stop saving;
-- ``paramsVersion`` is in graphSync and ``GET /api/projects``, and a newer
-  bundle that sees another version saves its unsaved work as a recovered copy
-  and reloads (frontend/src/store/projectStore.ts).
+- ``paramsVersion`` is in graphSync, ``GET /api/projects`` and the project
+  create and open replies, and a bundle that sees another version (a backend
+  that sends none predates the gate: version 0) stops saving and running,
+  saves its unsaved work as a recovered copy, and reloads when the backend is
+  newer (frontend/src/store/projectStore.ts).
 
 A graph without the marker is version 0, saved before any upgrade existed.
 
@@ -120,8 +125,10 @@ def upgrade_snapshot(snapshot: Any, version: int) -> int:
     Run records (``runHistory``) are left alone. Each one is what that run
     sent (main sent 4,096), and a Paper run keeps a hash of its recipe
     (runHistory.ts ``recipeRevision``), so rewriting one would record a
-    request that never happened. A replay of an old record sends 4,096, as
-    the original run did."""
+    request that never happened. The canvas upgrades a copy instead, by the
+    record's ``paramsVersion`` stamp, when the record is replayed or reused
+    (``upgradeRunSnapshot`` in frontend/src/lib/savedParamsUpgrades.ts): a
+    replay of a version-0 record that sent 4,096 sends 64,000."""
     if not isinstance(snapshot, dict):
         return 0
     changed = 0

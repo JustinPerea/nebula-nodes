@@ -19,8 +19,10 @@ import type { RunGraphSnapshot } from './runHistory';
  *
  * A tab is only current at this bundle's version. Every request sends it
  * (`X-Nebula-Params-Version`, lib/backend.ts), the backend refuses saves and
- * runs from another version (409 `params_outdated`), and a tab that learns the
- * backend moved on saves unsaved work as a recovered copy and reloads
+ * runs from another version, and from a browser that sends none (409
+ * `params_outdated`). A tab that learns the backend moved on saves unsaved
+ * work as a recovered copy and reloads, and a tab connected to an older
+ * backend (one that reports no version is 0) stops and loads nothing from it
  * (lib/paramsOutdated.ts, store/projectStore.ts). So no tab saves or runs
  * values from before an upgrade with rules that don't know about it.
  *

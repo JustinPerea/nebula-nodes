@@ -28,6 +28,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { requestGraphLoad, requestGraphSave } from '../src/lib/graphFileActions';
 import * as api from '../src/lib/api';
+import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
 const initialGraph = { ...useGraphStore.getState() };
 const initialUI = { ...useUIStore.getState() };
@@ -269,7 +270,7 @@ describe('workspace-independent graph file actions', () => {
     // returning HTTP. Exercise the subscribed merge handler, not a setState stub.
     const importedNodes = [node('n8'), node('n9')];
     const importedEdges = [{ id: 'imported-wire', source: 'n8', sourceHandle: 'image', target: 'n9', targetHandle: 'images' }];
-    act(() => mocks.onSync!({ type: 'graphSync', nodes: importedNodes, edges: importedEdges, empty: false }));
+    act(() => mocks.onSync!({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, nodes: importedNodes, edges: importedEdges, empty: false }));
     expect(useGraphStore.getState().nodes.map((entry) => entry.id)).toEqual(['n8', 'n9']);
     expect(useGraphStore.getState().edges).toEqual(importedEdges);
     expect(useGraphStore.getState().isImportingGraph).toBe(true);

@@ -49,6 +49,7 @@ import {
   type CreateRunOrigin,
 } from '../lib/runHistory';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
+import { backendParamsVersion } from '../lib/paramsOutdated';
 import type { PaperSourceRecord } from '../lib/paperSource';
 import {
   executeGraph as apiExecuteGraph,
@@ -496,6 +497,27 @@ const retiredProjectRunIds = new Set<string>();
 const settledCinemaRuns = new Map<string, 'complete' | 'failed' | 'cancelled'>();
 const cancelledRunIds = new Set<string>();
 const pendingStartRunIds = new Set<string>();
+/** Runs whose start a backend refused (ExecutionStartRejectedError): they
+ * never ran, so their records are not work a stale tab must keep. */
+const refusedStartRunIds = new Set<string>();
+
+/** Every run start's catch goes through here first. */
+function settleFailedStart(runId: string, err: unknown): void {
+  pendingStartRunIds.delete(runId);
+  if (!(err instanceof ExecutionStartRejectedError)) return;
+  refusedStartRunIds.add(runId);
+  if (refusedStartRunIds.size > 1000) refusedStartRunIds.delete(refusedStartRunIds.values().next().value!);
+}
+
+/** Run records that never ran: refused starts and, with `includePending`,
+ * starts still waiting for an answer. projectStore leaves them out of a
+ * params-version stop's unsaved work: a backend at another params version
+ * refuses every start from this bundle (backend/main.py _params_outdated), so
+ * a pending one is refused too, but the refusal and the stop can arrive in
+ * either order. */
+export function runsThatNeverStarted(includePending: boolean): Set<string> {
+  return new Set([...refusedStartRunIds, ...(includePending ? pendingStartRunIds : [])]);
+}
 const cancellationRequestedRunIds = new Set<string>();
 const statusReconciliationTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -1810,7 +1832,7 @@ async function executeHistoricalRun(
       }));
     }
   } catch (err) {
-    pendingStartRunIds.delete(runId);
+    settleFailedStart(runId, err);
     console.error('Failed to replay historical run:', err);
     if (currentRunId !== runId) return;
     if (!(err instanceof ExecutionStartRejectedError)) {
@@ -2029,8 +2051,9 @@ wsClient.subscribe((event) => {
   if (event.type === 'graphSync') {
     // A backend at another params version holds values this bundle's rules
     // don't describe; projectStore reloads the tab instead (paramsOutdated.ts).
-    const paramsVersion = (event as ExecutionEvent & { paramsVersion?: unknown }).paramsVersion;
-    if (typeof paramsVersion === 'number' && paramsVersion !== GRAPH_PARAMS_VERSION) return;
+    // A sync without a version is from a backend older than the gate (0).
+    if (backendParamsVersion((event as ExecutionEvent & { paramsVersion?: unknown }).paramsVersion)
+      !== GRAPH_PARAMS_VERSION) return;
     useCinemaMotionStore.getState().observeGraphSync();
     // Real-time sync: MERGE cli_graph into the canvas. Key invariant: frontend-only
     // nodes (library drags, undo'd results, etc.) must survive graphSync — only
@@ -3894,7 +3917,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }));
       }
     } catch (err) {
-      pendingStartRunIds.delete(runId);
+      settleFailedStart(runId, err);
       console.error('Failed to start execution:', err);
       if (currentRunId !== runId) return;
       if (!(err instanceof ExecutionStartRejectedError)) {
@@ -3971,7 +3994,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }));
       }
     } catch (err) {
-      pendingStartRunIds.delete(runId);
+      settleFailedStart(runId, err);
       console.error('Failed to start node execution:', err);
       if (currentRunId !== runId) return;
       if (!(err instanceof ExecutionStartRejectedError)) {
@@ -4076,7 +4099,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       scheduleWorldLabsStatusReconciliation(runId, set, get);
       // status 'started' → the generated image(s) (or per-shot error) arrive via graphSync.
     } catch (err) {
-      pendingStartRunIds.delete(runId);
+      settleFailedStart(runId, err);
       if (!ownsRun(runId)) return;
       console.error('Failed to generate shot:', err);
       if (err instanceof ExecutionStartRejectedError) {
@@ -4197,7 +4220,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         }));
       }
     } catch (err) {
-      pendingStartRunIds.delete(runId);
+      settleFailedStart(runId, err);
       console.error('Failed to start generation:', err);
       if (currentRunId !== runId) return;
       if (!(err instanceof ExecutionStartRejectedError)) {
@@ -4261,7 +4284,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
           'Validation failed before generation. Check required inputs and API keys.')
         : markNodesErrored(state.nodes, idSet, `Execution did not start (${result.status || 'unknown status'}).`) }));
     } catch (error) {
-      pendingStartRunIds.delete(runId);
+      settleFailedStart(runId, error);
       if (!ownsRun(runId)) return;
       console.error('Failed to start concurrent generation:', error);
       // A lost HTTP acknowledgement can follow an accepted start. Query the

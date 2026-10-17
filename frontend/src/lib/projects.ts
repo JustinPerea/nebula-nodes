@@ -22,7 +22,11 @@ export interface ProjectList {
   /** The backend's params version (lib/savedParamsUpgrades.ts). */
   paramsVersion?: number;
 }
-export interface ProjectActivation { project: SavedProject; workspaceRevision: string }
+export interface ProjectActivation {
+  project: SavedProject; workspaceRevision: string;
+  /** Create and open only: the backend's params version (none = 0, a backend from before the gate). */
+  paramsVersion?: number;
+}
 export interface ProjectDeletion {
   deletedProjectId: string; trashedProject: TrashedProject;
   activeProjectId: string | null; workspaceRevision: string;

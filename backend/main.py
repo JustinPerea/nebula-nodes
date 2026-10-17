@@ -527,22 +527,40 @@ PARAMS_OUTDATED_DETAIL = (
 )
 
 
+def _from_a_browser(request: Request) -> bool:
+    """Whether a browser sent this request (never a proof of who, only of what).
+
+    Every browser sends ``Origin`` on a request that isn't GET or HEAD. The
+    packaged desktop renderer (a file: page) sends no Origin but does send
+    ``Sec-Fetch-Site``. curl, Python (the CLI, MCP, agent tools) send neither,
+    and Node's fetch sends only ``Sec-Fetch-Mode``. Checked 2026-10-17 against
+    Electron 44.3 and Node 22.16."""
+    return request.headers.get("origin") is not None or request.headers.get("sec-fetch-site") is not None
+
+
 def _params_outdated(request: Request) -> bool:
     """Whether a request comes from a tab built for another params version.
 
     Every bundle since the gate sends ``X-Nebula-Params-Version`` on every
-    request (frontend/src/lib/backend.ts ``apiFetch``). Older bundles send none,
-    and only the canvas sends ``X-Nebula-Workspace-Revision`` (the same
-    function, while a project is open; nothing in the backend, CLI, MCP or
-    agent skills sets it), so a request with the revision and without the
-    version came from a bundle older than the gate: version 0. A request with
-    neither is an agent, the CLI, MCP or a script, whose values are set now and
-    pass as sent. An old bundle with no project open sends neither, but it is
-    on Home then (main's App.tsx renders no canvas, studio or Create view while
-    ``screen`` is 'home', and ``screen`` becomes 'workspace' only after
-    ``applyProject`` sets the project), so it can't run, autosave, push params
-    or open Create; its preset POST carries no ``paramsVersion`` and is
-    upgraded from 0 (create_preset)."""
+    request (frontend/src/lib/backend.ts ``apiFetch``, which every write to a
+    gated route goes through). Older bundles send none. A request without it
+    is version 0 when it came from the canvas or a browser:
+
+    - ``X-Nebula-Workspace-Revision`` is set only by the canvas (the same
+      function, while a project context exists; nothing in the backend, CLI,
+      MCP or agent skills sets it).
+    - A browser request (``_from_a_browser``) without it. Main's bundle can
+      reach the canvas with no project context, so the revision alone doesn't
+      cover it: after its conflict flow, Try again while no project is active
+      clears the context but keeps ``activeProject``, and Open of that same
+      project then takes ``open()``'s shortcut to the canvas without
+      ``applyProject`` (main's projectStore.ts). Its runs, param pushes and
+      saves then carry neither canvas header, but always an Origin (or, from
+      the desktop renderer, Sec-Fetch-Site).
+
+    A request with neither marker is an agent, the CLI, MCP or a script,
+    whose values are set now and pass as sent. A script that writes an Origin
+    is treated as a browser: it is refused until it sends the version."""
     if request.method in {"GET", "HEAD", "OPTIONS"}:
         return False
     path = request.url.path
@@ -550,7 +568,7 @@ def _params_outdated(request: Request) -> bool:
         return False
     supplied = request.headers.get("x-nebula-params-version")
     if supplied is None:
-        return request.headers.get("x-nebula-workspace-revision") is not None
+        return request.headers.get("x-nebula-workspace-revision") is not None or _from_a_browser(request)
     # Lower (loaded before an upgrade) or higher (a backend older than the
     # bundle) are both refused: neither side can upgrade the other's values.
     return supplied.strip() != str(PARAMS_VERSION)
@@ -8679,7 +8697,8 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         _commit_project_workspace(catalog, CLIGraph())
         revision = catalog["workspaceRevision"]
     await _broadcast_graph_sync(graph_replaced=True, reason="project-create")
-    return {"project": public_project(project), "workspaceRevision": revision}
+    # A bundle built for another version doesn't load it (projectStore.ts activate).
+    return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
 
 @app.post("/api/projects/{project_id}/open")
@@ -8700,7 +8719,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         _commit_project_workspace(catalog, candidate)
         revision = catalog["workspaceRevision"]
     await _broadcast_graph_sync(graph_replaced=True, reason="project-open")
-    return {"project": public_project(project), "workspaceRevision": revision}
+    return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
 
 @app.put("/api/projects/{project_id}")

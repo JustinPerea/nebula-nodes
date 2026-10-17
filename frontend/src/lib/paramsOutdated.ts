@@ -7,6 +7,14 @@
  */
 export const PARAMS_VERSION_HEADER = 'X-Nebula-Params-Version';
 
+/** The params version a backend reports (graphSync, the project listing,
+ * create and open replies). A backend that sends none predates the gate, and
+ * with it the version marker: version 0. Its values may be from before an
+ * upgrade, so this bundle must not load, save or run through it. */
+export function backendParamsVersion(value: unknown): number {
+  return Number.isInteger(value) && (value as number) >= 0 ? value as number : 0;
+}
+
 /** `backendVersion` is null when the refusal didn't say. */
 type Listener = (backendVersion: number | null) => void;
 const listeners = new Set<Listener>();

@@ -29,6 +29,7 @@ const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
 import { useGraphStore } from '../../src/store/graphStore';
 import { wsClient, type ExecutionEvent } from '../../src/lib/wsClient';
+import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
 
 function mockResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -103,7 +104,7 @@ describe('graphStore', () => {
       warning: null,
     });
     subscribed?.({
-      type: 'graphSync',
+      type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION,
       nodes: [],
       edges: [],
       empty: true,
@@ -176,7 +177,7 @@ describe('graphStore', () => {
     });
 
     subscribed?.({
-      type: 'graphSync',
+      type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION,
       nodes: [],
       edges: [],
       empty: true,
@@ -209,7 +210,7 @@ describe('graphStore', () => {
       | undefined;
 
     subscribed?.({
-      type: 'graphSync',
+      type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION,
       nodes: [{
         id: 'n1',
         type: 'model-node',
@@ -276,7 +277,7 @@ describe('graphStore', () => {
       const runId = useGraphStore.getState().runHistory[0].id;
 
       subscribed?.({
-        type: 'graphSync',
+        type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION,
         nodes: [],
         edges: [],
         empty: true,
@@ -356,7 +357,7 @@ describe('graphStore', () => {
     const runId = useGraphStore.getState().runHistory[0].id;
 
     subscribed?.({
-      type: 'graphSync',
+      type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION,
       nodes: [],
       edges: [],
       empty: true,
@@ -368,7 +369,7 @@ describe('graphStore', () => {
     });
 
     subscribed?.({
-      type: 'graphSync',
+      type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION,
       nodes: [],
       edges: [],
       empty: true,
@@ -407,7 +408,7 @@ describe('graphStore', () => {
     const runId = useGraphStore.getState().runHistory[0].id;
 
     subscribed?.({
-      type: 'graphSync',
+      type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION,
       nodes: [],
       edges: [],
       empty: true,
@@ -457,7 +458,7 @@ describe('graphStore', () => {
         fetchMock.mockResolvedValueOnce(mockResponse({ runId, status: terminalStatus }));
 
         subscribed?.({
-          type: 'graphSync',
+          type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION,
           nodes: [],
           edges: [],
           empty: true,
@@ -719,7 +720,7 @@ describe('graphStore', () => {
       | ((event: ExecutionEvent) => void)
       | undefined;
     subscribed?.({
-      type: 'graphSync',
+      type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION,
       empty: false,
       nodes: [{
         id: 'n1',

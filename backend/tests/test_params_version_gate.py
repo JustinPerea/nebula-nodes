@@ -7,9 +7,10 @@ never runs its params, and the tab reloads (services/saved_graph_upgrades.py,
 ``project_workspace_fence`` in main.py).
 
 - The bundle sends ``X-Nebula-Params-Version`` on every request. A request
-  that carries the canvas's ``X-Nebula-Workspace-Revision`` with a missing,
-  lower or higher version gets 409 ``params_outdated`` before any route runs.
-- Agents, the CLI, MCP and scripts send neither header and pass as sent.
+  with a lower or higher version, or with none when it carries the canvas's
+  ``X-Nebula-Workspace-Revision`` or comes from a browser (``Origin`` or
+  ``Sec-Fetch-Site``), gets 409 ``params_outdated`` before any route runs.
+- Agents, the CLI, MCP and scripts send none of these and pass as sent.
 - At boot, a catalog or state.json saved before the current version gives the
   workspace a new revision and is written at once.
 
@@ -216,11 +217,60 @@ def test_main_bundle_recovery_is_kept_and_upgraded(workspace, tmp_path):
 
 
 # --------------------------------------------------------------------------
-# Agents, CLI, MCP, scripts: no headers, values pass as sent
+# Main's bundle with no project context: a browser request, still refused
 # --------------------------------------------------------------------------
 
-def test_requests_without_canvas_headers_pass_unchanged(workspace, route_calls, no_provider_calls):
+# What a browser adds by itself. Every browser sends Origin on a request that
+# isn't GET or HEAD. The packaged desktop renderer (a file: page) sends no
+# Origin but does send Sec-Fetch-Site (checked 2026-10-17 against Electron
+# 44.3: "sec-fetch-site: cross-site", "sec-fetch-mode: cors", no origin).
+BROWSER_MARKERS = {
+    "vite tab": {"Origin": "http://localhost:5173", "Sec-Fetch-Site": "same-site", "Sec-Fetch-Mode": "cors"},
+    "safari before 16.4": {"Origin": "http://127.0.0.1:5173"},
+    "desktop renderer": {"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty"},
+}
+
+
+@pytest.mark.parametrize("browser", BROWSER_MARKERS.values(), ids=BROWSER_MARKERS.keys())
+def test_main_bundle_without_a_project_context_is_refused(
+        workspace, tmp_path, route_calls, no_provider_calls, browser):
+    """Review round 2: main's tab can reach the canvas with getProjectContext()
+    null (conflict, then Try again while no project is active, then Open of
+    the same project takes main's open() shortcut without applyProject), so
+    it sends neither header. A browser request with no params version is
+    from a bundle older than the gate: version 0."""
     client, graph, store, presets = workspace
+    project_id, revision = open_project(client, graph)
+    node_id = next(iter(graph.nodes))
+    before_graph = copy.deepcopy(graph.get_state())
+    before_disk = disk(tmp_path)
+    route_calls.clear()
+
+    for method, path, body in main_requests(project_id, revision, node_id):
+        response = send(client, method, path, body, dict(browser))
+        assert response.status_code == 409, (method, path, response.text)
+        assert response.json()["code"] == "params_outdated", (method, path)
+
+    assert route_calls == []
+    assert no_provider_calls == []
+    assert graph.get_state() == before_graph
+    assert disk(tmp_path) == before_disk
+
+
+# --------------------------------------------------------------------------
+# Agents, CLI, MCP, scripts: no canvas or browser headers, values pass as sent
+# --------------------------------------------------------------------------
+
+# curl, Python (the CLI, MCP, agent tools) send none of these. Node's fetch
+# sends Sec-Fetch-Mode but no Origin and no Sec-Fetch-Site (checked
+# 2026-10-17, Node 22.16 undici).
+NON_BROWSER = {"curl or python": {}, "node fetch": {"Sec-Fetch-Mode": "cors", "User-Agent": "node"}}
+
+
+@pytest.mark.parametrize("caller", NON_BROWSER.values(), ids=NON_BROWSER.keys())
+def test_requests_without_canvas_headers_pass_unchanged(workspace, route_calls, no_provider_calls, caller):
+    client, graph, store, presets = workspace
+    client.headers.update(caller)
     project_id, revision = open_project(client, graph)
     node_id = next(iter(graph.nodes))
     route_calls.clear()
@@ -282,8 +332,16 @@ def test_current_bundle_passes_and_other_versions_are_refused(workspace, route_c
 
 def test_listing_and_graph_sync_carry_the_params_version(workspace):
     client, graph, _, _ = workspace
-    open_project(client, graph)
+    project_id, _ = open_project(client, graph)
     assert client.get("/api/projects").json()["paramsVersion"] == PARAMS_VERSION
+    # Create and open replies too: the canvas applies a project only from a
+    # backend at its own version (a backend from before the gate sends none).
+    created = client.post("/api/projects", json={"name": "Second"})
+    assert created.json()["paramsVersion"] == PARAMS_VERSION
+    opened = client.post(f"/api/projects/{project_id}/open",
+                         json={"workspaceRevision": created.json()["workspaceRevision"]})
+    assert opened.status_code == 200, opened.text
+    assert opened.json()["paramsVersion"] == PARAMS_VERSION
     assert client.get("/api/graph/export").json()["paramsVersion"] == PARAMS_VERSION
     with client.websocket_connect("/ws") as socket:
         first = json.loads(socket.receive_text())

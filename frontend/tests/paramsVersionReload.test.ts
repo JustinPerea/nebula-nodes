@@ -18,7 +18,7 @@ vi.mock('../src/lib/paramsOutdated', async (original) => ({
 }));
 vi.mock('../src/lib/projects', async (original) => ({
   ...await original<typeof import('../src/lib/projects')>(),
-  listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(), recoverProject: vi.fn(),
+  listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(), recoverProject: vi.fn(), openProject: vi.fn(),
 }));
 
 import { useProjectStore, resetParamsVersionChangeForTests, subscribeProjectAutosave } from '../src/store/projectStore';
@@ -29,6 +29,7 @@ import { getProjectContext, setProjectContext } from '../src/lib/projectContext'
 import { reloadPage, reportParamsOutdated, noteParamsOutdated } from '../src/lib/paramsOutdated';
 import * as projects from '../src/lib/projects';
 import * as execution from '../src/lib/api';
+import { ExecutionStartRejectedError } from '../src/lib/api';
 import type { SavedProject } from '../src/lib/projects';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
@@ -220,5 +221,104 @@ describe('graphSync from another workspace or version is not merged', () => {
       nodes: [backendNode], edges: [], empty: false });
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('from backend');
     expect(reloadPage).not.toHaveBeenCalled();
+  });
+});
+
+describe('review round 2', () => {
+  const refusal = () => new Response(JSON.stringify({ code: 'params_outdated', detail: 'Reload the tab',
+    paramsVersion: NEXT }), { status: 409 });
+
+  describe('a Run refused with params_outdated is not unsaved work', () => {
+    // The refusal reaches projectStore (apiFetch's noteParamsOutdated) and the
+    // run's own catch in either order; neither may count the refused run.
+    it.each([
+      ['the refusal is reported before the start fails', true],
+      ['the start fails before the refusal is reported', false],
+    ])('a clean tab reloads without a recovered copy when %s', async (_label, reportFirst) => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      vi.spyOn(execution, 'executeGraph').mockImplementation(async () => {
+        if (reportFirst) { reportParamsOutdated(NEXT); await flush(); } else noteParamsOutdated(refusal());
+        throw new ExecutionStartRejectedError('Reload the tab', 409);
+      });
+      await useGraphStore.getState().executeGraph();
+      await vi.waitFor(() => expect(reloadPage).toHaveBeenCalledTimes(1));
+      expect(projects.recoverProject).not.toHaveBeenCalled();
+      expect(projects.saveProject).not.toHaveBeenCalled();
+      expect(useProjectStore.getState().error).toContain('Your saved work is kept.');
+    });
+
+    it('an edited tab\'s recovered copy keeps the edit and leaves out the refused run', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      editCanvas();
+      vi.spyOn(execution, 'executeGraph').mockImplementation(async () => {
+        reportParamsOutdated(NEXT);
+        await flush();
+        throw new ExecutionStartRejectedError('Reload the tab', 409);
+      });
+      await useGraphStore.getState().executeGraph();
+      await vi.waitFor(() => expect(reloadPage).toHaveBeenCalledTimes(1));
+      expect(projects.recoverProject).toHaveBeenCalledTimes(1);
+      const [, snapshot] = vi.mocked(projects.recoverProject).mock.calls[0];
+      expect(snapshot.nodes[0].data.params.value).toBe('Unsaved edit');
+      expect(snapshot.runHistory).toEqual([]);
+    });
+  });
+
+  describe('a backend that sends no paramsVersion predates the gate (version 0)', () => {
+    it('startup stops before loading a project and says to restart the backend', async () => {
+      unsubscribe?.(); unsubscribe = null;
+      useProjectStore.setState(initial, true);
+      setProjectContext(null);
+      vi.mocked(projects.getProject).mockClear();
+      vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], activeProjectId: 'alpha',
+        workspaceRevision: 'rev-a' });
+      await useProjectStore.getState().retry();
+      expect(projects.getProject).not.toHaveBeenCalled();
+      expect(getProjectContext()).toBeNull();
+      expect(reloadPage).not.toHaveBeenCalled();
+      expect(useProjectStore.getState().initialized).toBe(false);
+      expect(useProjectStore.getState().error).toMatch(/newer than the Nebula backend.*Restart the backend/);
+    });
+
+    it('a graphSync without it is not merged and stops the tab', async () => {
+      const backendNode = { id: 'n1', type: 'model-node', position: { x: 0, y: 0 }, data: { definitionId: 'text-input',
+        label: 'Text', params: { value: 'max_tokens 4096 from main' }, state: 'idle', outputs: {} } };
+      emit({ type: 'graphSync', workspaceRevision: 'rev-a', nodes: [backendNode], edges: [], empty: false });
+      await flush();
+      expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
+      expect(useProjectStore.getState().initialized).toBe(false);
+      expect(useProjectStore.getState().error).toMatch(/Restart the backend/);
+      expect(projects.recoverProject).not.toHaveBeenCalled();
+      expect(reloadPage).not.toHaveBeenCalled();
+    });
+
+    it('an open reply without it is not applied', async () => {
+      vi.mocked(projects.openProject).mockResolvedValue({ project: { ...project('beta'), snapshot: {
+        ...project('beta').snapshot } }, workspaceRevision: 'rev-b' });
+      useProjectStore.setState({ screen: 'home' });
+      await useProjectStore.getState().open('beta');
+      expect(projects.openProject).toHaveBeenCalledTimes(1);
+      expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
+      expect(getProjectContext()?.id).not.toBe('beta');
+      expect(useProjectStore.getState().screen).toBe('home');
+      expect(useProjectStore.getState().initialized).toBe(false);
+      expect(useProjectStore.getState().error).toMatch(/Restart the backend/);
+    });
+  });
+
+  it('with sessionStorage blocked, asks for a reload instead of a rebuild', async () => {
+    const blocked = () => { throw new DOMException('blocked', 'SecurityError'); };
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(blocked);
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(blocked);
+    try {
+      emit({ type: 'graphSync', workspaceRevision: 'rev-rotated', paramsVersion: NEXT, nodes: [], edges: [], empty: true });
+      await flush();
+      // Without the mark a reload could repeat forever, so the tab asks.
+      expect(reloadPage).not.toHaveBeenCalled();
+      const { error } = useProjectStore.getState();
+      expect(error).toMatch(/^Nebula was updated while this tab was open\. Reload the tab to use the update\./);
+      expect(error).not.toMatch(/Rebuild/);
+      expect(error).toContain('Your saved work is kept.');
+    } finally { getItem.mockRestore(); setItem.mockRestore(); }
   });
 });
