@@ -63,5 +63,7 @@ export const purgeTrashedProject = (id: string) =>
   request<{ trash: TrashedProject[] }>(`/api/projects/trash/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((result) => result.trash);
 export const emptyProjectTrash = () =>
   request<{ trash: TrashedProject[] }>('/api/projects/trash/empty', { method: 'POST' }).then((result) => result.trash);
-export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string) =>
-  request<ProjectActivation>('/api/projects/recover', json('POST', { sourceProjectId, snapshot, recoveryId })).then((result) => result.project);
+/** `paramsVersion`: the one-time param upgrades the tab's canvas had when it
+ * loaded (lib/savedParamsUpgrades.ts). The backend upgrades the copy from it. */
+export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number) =>
+  request<ProjectActivation>('/api/projects/recover', json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion })).then((result) => result.project);

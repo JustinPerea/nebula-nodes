@@ -298,13 +298,17 @@ class CLIGraph:
         source = require_allowed_path(path)
         data = json.loads(source.read_text())
         validate_file_references(data)
-        self.nodes = {n["id"]: _migrate_retired(n) for n in data["nodes"]}
+        # Build everything first and assign together, so a file that fails
+        # part way leaves the previous graph whole (main keeps it on failure,
+        # and the next save would write new nodes with old edges otherwise).
+        nodes = {n["id"]: _migrate_retired(n) for n in data["nodes"]}
         # A file written before an upgrade existed gets it once; the next save
         # records the current version, so a value set afterwards is kept.
-        self.upgraded_on_load = upgrade_flat_nodes(
-            self.nodes.values(), stored_version(data.get("paramsVersion")))
-        self.edges = data["edges"]
-        self._counter = data.get("counter", len(self.nodes))
+        upgraded = upgrade_flat_nodes(nodes.values(), stored_version(data.get("paramsVersion")))
+        edges = data["edges"]
+        counter = data.get("counter", len(nodes))
+        self.nodes, self.edges, self._counter = nodes, edges, counter
+        self.upgraded_on_load = upgraded
 
 
 def _migrate_retired(node: dict[str, Any]) -> dict[str, Any]:

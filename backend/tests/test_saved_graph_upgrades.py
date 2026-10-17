@@ -168,8 +168,8 @@ def test_saved_project_opens_holding_64000_and_keeps_a_later_4096(workspace):
     assert max_tokens(snapshot["nodes"]) == EXPECTED_MAX
     # The live graph that the CLI, agents and runs read holds the same.
     assert {nid: n["params"]["max_tokens"] for nid, n in graph.nodes.items()} == EXPECTED_MAX
-    # A replay of a saved run sends its recipe, so the recipe is upgraded too.
-    assert snapshot["runHistory"][0]["snapshot"]["nodes"][0]["params"]["max_tokens"] == 64000
+    # A run record is what that run sent (4,096), so it is never rewritten.
+    assert snapshot["runHistory"] == saved_snapshot()["runHistory"]
     # Stored once, with the marker; nothing else about the nodes changed.
     on_disk = json.loads(store.path.read_text())["projects"][project_id]
     assert on_disk["_paramsVersion"] == PARAMS_VERSION
@@ -264,24 +264,43 @@ def test_trashed_project_is_upgraded_when_read(workspace):
     assert max_tokens(entry["snapshot"]["nodes"]) == EXPECTED_MAX
 
 
-def test_recovered_copy_takes_the_source_version(workspace):
+def recover(client, source, snapshot, **extra):
+    body = {"sourceProjectId": source, "recoveryId": uuid4().hex, "snapshot": snapshot, **extra}
+    return client.post("/api/projects/recover", json=body), body["recoveryId"]
+
+
+def test_recovered_copy_takes_the_version_the_tab_loaded_at(workspace):
+    """The copy holds the tab's canvas, so the tab's own paramsVersion decides,
+    not the source project's (which may be gone, or upgraded after the tab
+    loaded)."""
     client, _, store = workspace
     source = create(client, "Source")
+    source_id = source["project"]["id"]
     snapshot = {**saved_snapshot(), "runHistory": []}
     snapshot["nodes"][0]["data"]["params"]["max_tokens"] = 4096  # set on purpose, after the upgrade
-    body = {"sourceProjectId": source["project"]["id"], "recoveryId": uuid4().hex, "snapshot": snapshot,
-            "workspaceRevision": source["workspaceRevision"]}
-    kept = client.post("/api/projects/recover", json=body)
-    assert kept.status_code == 200, kept.text
-    assert kept.json()["project"]["snapshot"]["nodes"][0]["data"]["params"]["max_tokens"] == 4096
-    assert store.read()["projects"][body["recoveryId"]]["snapshot"]["nodes"][0]["data"]["params"]["max_tokens"] == 4096
 
-    # A tab whose project is gone entirely: nothing says when it was saved,
-    # so it is treated like any project saved before the upgrade.
-    orphan = {**body, "sourceProjectId": uuid4().hex, "recoveryId": uuid4().hex}
-    upgraded = client.post("/api/projects/recover", json=orphan)
-    assert upgraded.status_code == 200, upgraded.text
-    assert max_tokens(upgraded.json()["project"]["snapshot"]["nodes"])["n1"] == 64000
+    # A current tab: its 4,096 is kept, whether the source exists or is gone.
+    for source_project in (source_id, uuid4().hex):
+        kept, recovery_id = recover(client, source_project, snapshot, paramsVersion=PARAMS_VERSION)
+        assert kept.status_code == 200, kept.text
+        assert max_tokens(kept.json()["project"]["snapshot"]["nodes"])["n1"] == 4096
+        assert store.read()["projects"][recovery_id]["snapshot"]["nodes"][0]["data"]["params"]["max_tokens"] == 4096
+
+    # A tab that loaded before the upgrade (its bundle sends no paramsVersion,
+    # or 0) is upgraded, even though the source project already reads as current.
+    for extra in ({}, {"paramsVersion": 0}):
+        upgraded, _ = recover(client, source_id, snapshot, **extra)
+        assert upgraded.status_code == 200, upgraded.text
+        assert max_tokens(upgraded.json()["project"]["snapshot"]["nodes"]) == EXPECTED_MAX
+
+
+@pytest.mark.parametrize("bad", ["0", -1, 1.5, True, None])
+def test_recover_refuses_a_malformed_version(workspace, bad):
+    client, _, _ = workspace
+    source = create(client, "Source")
+    response, _ = recover(client, source["project"]["id"], {**saved_snapshot(), "runHistory": []}, paramsVersion=bad)
+    assert response.status_code == 400
+    assert "paramsVersion" in response.json()["detail"]
 
 
 # --------------------------------------------------------------------------
@@ -323,10 +342,22 @@ def test_import_refuses_a_malformed_version(workspace, bad):
     assert "paramsVersion" in response.json()["detail"]
 
 
-def test_frontend_file_version_matches_backend():
-    source = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "graphFile.ts").read_text()
+def test_frontend_rule_matches_backend():
+    """The browser upgrades Create drafts kept in localStorage with the same
+    rule (frontend/src/lib/savedParamsUpgrades.ts), and graph files carry the
+    same version."""
+    from services.saved_graph_upgrades import OLD_MAX_TOKENS
+    lib = Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib"
+    source = (lib / "savedParamsUpgrades.ts").read_text()
     match = re.search(r"export const GRAPH_PARAMS_VERSION = (\d+);", source)
     assert match and int(match.group(1)) == PARAMS_VERSION
+    models = re.search(r"CLAUDE_THINKING_MODELS[^=]*= new Set\(\[([^\]]*)\]\)", source)
+    assert models and set(re.findall(r"'([^']+)'", models.group(1))) == CLAUDE_THINKING_MODELS
+    assert re.search(rf"export const OLD_MAX_TOKENS = {OLD_MAX_TOKENS};", source)
+    assert re.search(rf"export const UPGRADED_MAX_TOKENS = {UPGRADED_MAX_TOKENS};", source)
+    graph_file = (lib / "graphFile.ts").read_text()
+    assert "import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';" in graph_file
+    assert "export { GRAPH_PARAMS_VERSION };" in graph_file
 
 
 # --------------------------------------------------------------------------
@@ -350,3 +381,131 @@ async def test_run_of_an_upgraded_node_sends_64000_and_a_later_4096_sends_4096(w
     graph.update_params("n1", {"max_tokens": 4096})
     _, _, body = await _claude(graph.nodes["n1"]["params"])
     assert body["max_tokens"] == 4096
+
+
+# --------------------------------------------------------------------------
+# Run records, Create drafts, malformed saved values
+# --------------------------------------------------------------------------
+
+def test_catalog_read_leaves_run_records_as_they_were_sent(workspace):
+    """A record says what a run sent, and a Paper run keeps a hash of it
+    (recipeRevision). Main sent 4,096, so the record keeps 4,096."""
+    client, _, store = workspace
+    created = create(client, "Saved on main")
+    project_id = created["project"]["id"]
+    mark_saved_before_upgrade(store, project_id, saved_snapshot())
+    entry = store.read()["projects"][project_id]
+    assert entry["_paramsVersion"] == PARAMS_VERSION
+    assert entry["snapshot"]["runHistory"] == saved_snapshot()["runHistory"]
+
+
+def draft(model_id="claude-chat", **params):
+    return {"revision": "r1", "modelId": model_id, "prompt": "Hi", "params": params, "refs": [],
+            "quantity": 1, "uploads": []}
+
+
+def test_saved_create_draft_opens_holding_64000_once(workspace):
+    """Claude is a featured Create model, and Generate in Create sends the
+    draft's params. A draft saved on main is upgraded with the project."""
+    client, _, store = workspace
+    first = create(client, "Saved on main")
+    project_id = first["project"]["id"]
+    second = create(client, "Other", first["workspaceRevision"])
+    snapshot = {**saved_snapshot(), "createSessionId": f"project:{project_id}:create",
+                "createDraft": draft(**OLD)}
+    mark_saved_before_upgrade(store, project_id, snapshot)
+
+    opened = client.post(f"/api/projects/{project_id}/open", json={"workspaceRevision": second["workspaceRevision"]})
+    assert opened.status_code == 200, opened.text
+    saved = opened.json()["project"]["snapshot"]
+    assert saved["createDraft"]["params"] == {**OLD, "max_tokens": 64000}
+    assert {k: v for k, v in saved["createDraft"].items() if k != "params"} == {
+        k: v for k, v in draft().items() if k != "params"}
+
+    # A 4,096 typed in Create afterwards is kept.
+    saved["createDraft"]["params"]["max_tokens"] = 4096
+    save(client, project_id, opened.json()["workspaceRevision"], saved)
+    assert ProjectStore(store.root).read()["projects"][project_id]["snapshot"]["createDraft"]["params"][
+        "max_tokens"] == 4096
+
+
+@pytest.mark.parametrize("value", [
+    draft("gpt-4o-chat", **OLD),               # another model's draft
+    draft(None, **OLD),                        # no model picked
+    {**draft(**OLD), "params": ["not", "a", "dict"]},
+    "not a draft", None,
+])
+def test_other_create_drafts_are_left_alone(value):
+    from services.saved_graph_upgrades import upgrade_snapshot
+    snapshot = {"nodes": [], "createDraft": copy.deepcopy(value)}
+    assert upgrade_snapshot(snapshot, 0) == 0
+    assert snapshot["createDraft"] == value
+
+
+@pytest.mark.parametrize("model", [["claude-opus-4-6"], {"x": 1}, 4.6, None])
+def test_rule_ignores_a_model_that_is_not_a_string(model):
+    assert upgrade_params("claude-chat", {**OLD, "model": model}, 0) is None
+
+
+@pytest.mark.parametrize("nodes", [{"a": 1}, 7, "nodes", [None, 3, {"data": "x"}, {"data": {"params": 1}}]])
+def test_snapshot_with_malformed_nodes_is_left_alone(nodes):
+    from services.saved_graph_upgrades import upgrade_snapshot
+    snapshot = {"nodes": copy.deepcopy(nodes)}
+    assert upgrade_snapshot(snapshot, 0) == 0
+    assert snapshot["nodes"] == nodes
+
+
+def test_catalog_with_an_unhashable_model_still_reads(workspace):
+    client, _, store = workspace
+    created = create(client, "Hand edited")
+    project_id = created["project"]["id"]
+    snapshot = saved_snapshot()
+    snapshot["nodes"][0]["data"]["params"]["model"] = ["claude-opus-4-6"]
+    snapshot["runHistory"][0]["snapshot"]["nodes"][0]["params"]["model"] = {"x": 1}
+    mark_saved_before_upgrade(store, project_id, snapshot)
+    entry = store.read()["projects"][project_id]
+    assert entry["snapshot"]["nodes"][0]["data"]["params"]["max_tokens"] == 4096
+    assert max_tokens(entry["snapshot"]["nodes"])["n2"] == 64000
+
+
+def test_live_graph_with_an_unhashable_model_loads_whole(tmp_path):
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"nodes": [
+        {"id": "n1", "definitionId": "claude-chat", "params": {**OLD, "model": {"x": 1}}, "outputs": {}},
+        {"id": "n2", "definitionId": "claude-chat", "params": dict(OLD), "outputs": {}},
+    ], "edges": [{"id": "e1", "source": "n1", "target": "n2"}], "counter": 2}))
+    graph = CLIGraph(persist_path=path)
+    graph.load(path)
+    assert graph.upgraded_on_load == 1
+    assert graph.nodes["n1"]["params"]["max_tokens"] == 4096
+    assert graph.nodes["n2"]["params"]["max_tokens"] == 64000
+    assert len(graph.edges) == 1
+
+
+def test_live_graph_load_that_fails_keeps_the_previous_graph(tmp_path, monkeypatch):
+    """A load that raises part way must not leave new nodes with old edges:
+    main keeps the in-memory graph when load fails, and the next save writes it."""
+    import services.cli_graph as cli_graph_module
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({"nodes": [{"id": "n9", "definitionId": "claude-chat", "params": dict(OLD),
+                                           "outputs": {}}], "edges": [], "counter": 9}))
+    graph = CLIGraph(persist_path=tmp_path / "other.json")
+    graph.nodes = {"n1": {"id": "n1", "definitionId": "claude-chat", "params": {}, "outputs": {}}}
+    graph.edges = [{"id": "e1", "source": "n1", "target": "n1"}]
+    before = (copy.deepcopy(graph.nodes), copy.deepcopy(graph.edges), graph._counter)
+
+    def boom(*_args, **_kwargs):
+        raise TypeError("boom")
+    monkeypatch.setattr(cli_graph_module, "upgrade_flat_nodes", boom)
+    with pytest.raises(TypeError):
+        graph.load(path)
+    assert (graph.nodes, graph.edges, graph._counter) == before
+
+
+def test_import_with_an_unhashable_model_at_version_0(workspace):
+    client, _, _ = workspace
+    body = import_body(paramsVersion=0)
+    body["nodes"][0]["params"]["model"] = ["claude-opus-4-6"]
+    without = {k: v for k, v in copy.deepcopy(body).items() if k != "paramsVersion"}
+    expected = client.post("/api/graph/import", json=without).status_code
+    assert client.post("/api/graph/import", json=body).status_code == expected

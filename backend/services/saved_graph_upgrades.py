@@ -11,7 +11,15 @@ once per saved graph, and the graph records that it ran (``PARAMS_VERSION``):
 - the live graph file (state.json): ``"paramsVersion"`` (``CLIGraph.load``
   upgrades, every save writes the current version);
 - a graph file being imported: ``"paramsVersion"`` in the .nebula file, which
-  the canvas forwards to ``POST /api/graph/import``.
+  the canvas forwards to ``POST /api/graph/import``;
+- a stale tab's canvas saved as a recovered copy: ``"paramsVersion"`` in the
+  ``POST /api/projects/recover`` body, the version the tab's canvas was loaded
+  at (a body without it came from a bundle older than the marker: version 0);
+- Create drafts kept in the browser: ``paramsVersion`` in the localStorage
+  payload (frontend/src/store/createDraftStore.ts, rule mirrored in
+  frontend/src/lib/savedParamsUpgrades.ts).
+
+Run records are never upgraded: each one is what that run sent.
 
 A graph without the marker is version 0, saved before any upgrade existed.
 
@@ -51,16 +59,19 @@ def upgrade_params(definition_id: Any, params: Any, version: int) -> dict[str, A
     """The params a node saved at ``version`` should hold now, or None if unchanged."""
     if version >= 1 or definition_id != "claude-chat" or not isinstance(params, dict):
         return None
+    # A hand-edited file can hold any JSON here; only a model id string is
+    # one of the four (a list or dict would make the set lookup raise).
+    model = params.get("model")
     # Same truthiness the handler uses for the toggle.
-    if (params.get("model") in CLAUDE_THINKING_MODELS and params.get("extended_thinking")
+    if (isinstance(model, str) and model in CLAUDE_THINKING_MODELS and params.get("extended_thinking")
             and _is_old_max_tokens(params.get("max_tokens"))):
         return {**params, "max_tokens": UPGRADED_MAX_TOKENS}
     return None
 
 
 def upgrade_flat_nodes(nodes: Iterable[Any], version: int) -> int:
-    """Upgrade ``{definitionId, params}`` nodes in place (live graph, run
-    recipes, import bodies). Returns how many changed."""
+    """Upgrade ``{definitionId, params}`` nodes in place (live graph, import
+    bodies). Returns how many changed."""
     changed = 0
     for node in nodes:
         if not isinstance(node, dict):
@@ -74,12 +85,19 @@ def upgrade_flat_nodes(nodes: Iterable[Any], version: int) -> int:
 
 def upgrade_snapshot(snapshot: Any, version: int) -> int:
     """Upgrade a saved canvas snapshot in place: its React Flow nodes
-    (``{data: {definitionId, params}}``) and the recipe of every run in its
-    history, which a replay sends as saved."""
+    (``{data: {definitionId, params}}``) and its Create draft
+    (``{modelId, params}``), which Generate in Create sends as saved.
+
+    Run records (``runHistory``) are left alone. Each one is what that run
+    sent (main sent 4,096), and a Paper run keeps a hash of its recipe
+    (runHistory.ts ``recipeRevision``), so rewriting one would record a
+    request that never happened. A replay of an old record sends 4,096, as
+    the original run did."""
     if not isinstance(snapshot, dict):
         return 0
     changed = 0
-    for node in snapshot.get("nodes") or []:
+    nodes = snapshot.get("nodes")
+    for node in nodes if isinstance(nodes, list) else []:
         data = node.get("data") if isinstance(node, dict) else None
         if not isinstance(data, dict):
             continue
@@ -87,11 +105,25 @@ def upgrade_snapshot(snapshot: Any, version: int) -> int:
         if upgraded is not None:
             data["params"] = upgraded
             changed += 1
-    for record in snapshot.get("runHistory") or []:
-        recipe = record.get("snapshot") if isinstance(record, dict) else None
-        if isinstance(recipe, dict) and isinstance(recipe.get("nodes"), list):
-            changed += upgrade_flat_nodes(recipe["nodes"], version)
+    draft = snapshot.get("createDraft")
+    if isinstance(draft, dict):
+        # The Create model id is the node definition id (createModels.ts).
+        upgraded = upgrade_params(draft.get("modelId"), draft.get("params"), version)
+        if upgraded is not None:
+            draft["params"] = upgraded
+            changed += 1
     return changed
+
+
+def request_version(body: dict[str, Any], missing: int | None) -> int | None:
+    """``body["paramsVersion"]`` from a request, or ``missing`` without the key.
+    Raises ValueError unless it is a non-negative integer."""
+    if "paramsVersion" not in body:
+        return missing
+    version = body["paramsVersion"]
+    if not isinstance(version, int) or isinstance(version, bool) or version < 0:
+        raise ValueError("paramsVersion must be a non-negative integer")
+    return version
 
 
 def stored_version(value: Any) -> int:

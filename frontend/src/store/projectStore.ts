@@ -5,6 +5,7 @@ import { readDraft, useCreateDraftStore } from './createDraftStore';
 import { fetchCLIGraph } from '../lib/api';
 import { rewriteBackendAssetUrls } from '../lib/backend';
 import { normalizeRuntimeMediaParams } from '../lib/graphFile';
+import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { getProjectContext, setProjectContext } from '../lib/projectContext';
 import { clearPersistedRunHistory, loadRunHistory } from '../lib/runHistory';
 import * as api from '../lib/projects';
@@ -40,7 +41,13 @@ let saveQueue: Promise<void> = Promise.resolve();
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSaved = '';
 let applying = false;
-let pendingRecovery: { sourceProjectId: string; snapshot: ProjectSnapshot; recoveryId: string } | null = null;
+let pendingRecovery: { sourceProjectId: string; snapshot: ProjectSnapshot; recoveryId: string; paramsVersion: number } | null = null;
+/** The one-time param upgrades the canvas had when it was loaded. Every
+ * project the backend returns is already upgraded to the backend's version,
+ * which ships with this bundle's GRAPH_PARAMS_VERSION. A stale tab's recovered
+ * copy sends it, so the backend upgrades the copy from what the tab actually
+ * holds rather than from its source project. */
+let canvasParamsVersion = GRAPH_PARAMS_VERSION;
 
 /** Persist authoring and results, excluding React Flow measurements/selection
  * and transient credential/progress presentation. JSON gives each save its
@@ -92,6 +99,7 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
   const previous = getProjectContext();
   try {
     setProjectContext({ id: project.id, revision });
+    canvasParamsVersion = GRAPH_PARAMS_VERSION;
     const snapshot = rewriteBackendAssetUrls(project.snapshot);
     if (!useGraphStore.getState().loadProjectGraph(snapshot.nodes, snapshot.edges, snapshot.runHistory, { bootstrap })) {
       setProjectContext(previous);
@@ -126,6 +134,7 @@ function preserveWorkspaceConflict(message: string): void {
   const dirty = Boolean(context) && JSON.stringify(snapshot) !== lastSaved;
   if (dirty && context) pendingRecovery = {
     sourceProjectId: context.id, snapshot, recoveryId: crypto.randomUUID().replaceAll('-', ''),
+    paramsVersion: canvasParamsVersion,
   };
   useProjectStore.setState({ screen: 'home', initialized: false, loading: false, dirty, error: message });
 }
@@ -194,7 +203,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         // unsaved authoring as an inactive recovered copy before replacement.
         if (pendingRecovery) {
           const recovery = pendingRecovery;
-          await api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId);
+          await api.recoverProject(recovery.sourceProjectId, recovery.snapshot, recovery.recoveryId, recovery.paramsVersion);
           if (pendingRecovery === recovery) pendingRecovery = null;
         }
         const list = await api.listProjects();

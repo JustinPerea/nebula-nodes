@@ -140,7 +140,11 @@ is on"). The handler (`SAMPLING_ADAPTIVE_MODELS`) therefore:
   Sonnet 4.6 with Extended Thinking on, a stored 4,096 (main's only default)
   becomes 64,000 once, when the saved graph loads
   (`backend/services/saved_graph_upgrades.py`, 2026-10-17), so the card shows
-  what runs. A saved budget used to cap thinking inside that 4,096; adaptive
+  what runs. That covers projects (including their Create draft), the live
+  graph, imported graph files, recovered copies of a stale tab (from the
+  version the tab loaded at) and Create drafts kept in the browser
+  (`frontend/src/lib/savedParamsUpgrades.ts`). Run records are not rewritten:
+  each keeps the 4,096 it sent, so replaying one sends 4,096. A saved budget used to cap thinking inside that 4,096; adaptive
   thinking has no cap, and "thinking tokens count toward `max_tokens`, so a long
   thinking pass can consume the budget before the text response completes"
   (thinking-troubleshooting). The graph records that the upgrade ran, so a

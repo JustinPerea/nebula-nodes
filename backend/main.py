@@ -87,7 +87,7 @@ from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services.cli_graph import CLIGraph
 from services.retired_nodes import migrate_node, migrate_param_update, migrate_params, retired_message
-from services.saved_graph_upgrades import stored_version, upgrade_flat_nodes, upgrade_project
+from services.saved_graph_upgrades import request_version, upgrade_flat_nodes, upgrade_project
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, now as project_now,
@@ -7992,10 +7992,11 @@ async def import_graph(body: dict[str, Any]) -> dict:
     # before the marker existed), and an older file gets the one-time upgrades
     # (services/saved_graph_upgrades.py). A body without the key is a graph
     # written now (an agent or script), so its values are taken as set.
-    if "paramsVersion" in body:
-        version = body["paramsVersion"]
-        if not isinstance(version, int) or isinstance(version, bool) or version < 0:
-            raise HTTPException(status_code=400, detail="paramsVersion must be a non-negative integer")
+    try:
+        version = request_version(body, None)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if version is not None:
         upgrade_flat_nodes(raw_nodes, version)
     id_map = _stage_graph_nodes(
         candidate,
@@ -8522,6 +8523,15 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         validate_project_id(recovery_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Recovery requires a UUID hex recoveryId") from exc
+    # The copy holds the tab's canvas, so the version that canvas was loaded
+    # at decides its one-time upgrades (services/saved_graph_upgrades.py), not
+    # the source project's: the source may be gone, or upgraded after the tab
+    # loaded. The canvas sends it; a body without it came from a bundle older
+    # than the marker, so its canvas predates every upgrade (version 0).
+    try:
+        params_version = request_version(body, 0)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     with project_store.transaction() as catalog:
         source_id = body.get("sourceProjectId")
         try:
@@ -8554,10 +8564,7 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
             "id": recovery_id, "lastOpenedAt": None, "_recoveryFingerprint": fingerprint,
             "_recoverySourceId": source["id"], "_nodeCounter": max(candidate._counter, source.get("_nodeCounter", 0)),
             "_backendNodeIds": [], "_backendEdgeIds": [],
-            # The tab's canvas came from the source project, so its params are
-            # as current as the source's. A deleted source leaves version 0,
-            # and the copy is upgraded like any project saved before then.
-            "_paramsVersion": stored_version(source.get("_paramsVersion")),
+            "_paramsVersion": params_version,
         })
         upgrade_project(project)
         catalog["projects"][recovery_id] = project

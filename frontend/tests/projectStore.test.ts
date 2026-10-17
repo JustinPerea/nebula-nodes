@@ -9,6 +9,7 @@ import type { SavedProject } from '../src/lib/projects';
 import * as execution from '../src/lib/api';
 import { RUN_HISTORY_STORAGE_KEY } from '../src/lib/runHistory';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
+import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
 vi.mock('../src/lib/projects', async (original) => ({
   ...await original<typeof import('../src/lib/projects')>(),
@@ -288,6 +289,8 @@ describe('saved project coordinator', () => {
     expect(vi.mocked(projects.recoverProject).mock.calls[1]).toEqual(firstRecovery);
     expect(firstRecovery[0]).toBe('alpha');
     expect(firstRecovery[1].nodes[0].data.params.value).toBe('Unsaved alpha edits');
+    // The canvas was loaded from an upgraded project, so the copy keeps its values.
+    expect(firstRecovery[3]).toBe(GRAPH_PARAMS_VERSION);
     expect(vi.mocked(projects.recoverProject).mock.invocationCallOrder.at(-1)).toBeLessThan(vi.mocked(projects.listProjects).mock.invocationCallOrder.at(-1)!);
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('beta');
     expect(useProjectStore.getState().screen).toBe('home');

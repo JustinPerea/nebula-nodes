@@ -10,6 +10,7 @@ import {
   parseRepresentation,
 } from './representationViewerRegistry';
 import { isSafeWorldUrl } from './worldValue';
+import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';
 
 /**
  * .nebula.zip / .nebula file format — graph persistence.
@@ -28,12 +29,13 @@ import { isSafeWorldUrl } from './worldValue';
  */
 
 /**
- * One-time param upgrades a graph file has had (backend
- * services/saved_graph_upgrades.py PARAMS_VERSION; a backend test keeps the
- * two equal). Files written now carry it; a file without it is version 0,
- * and POST /api/graph/import upgrades its params once when it loads.
+ * GRAPH_PARAMS_VERSION: one-time param upgrades a graph file has had (backend
+ * services/saved_graph_upgrades.py PARAMS_VERSION; defined in
+ * savedParamsUpgrades.ts, and a backend test keeps the two equal). Files
+ * written now carry it; a file without it is version 0, and
+ * POST /api/graph/import upgrades its params once when it loads.
  */
-export const GRAPH_PARAMS_VERSION = 1;
+export { GRAPH_PARAMS_VERSION };
 
 export interface NebulaFile {
   version: 1 | 2 | 3;
