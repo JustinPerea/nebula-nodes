@@ -1379,7 +1379,7 @@ describe('startSidecar — person token', () => {
     const block = source.match(/CREDENTIAL_PROVIDERS[^=]*= frozenset\(\{([\s\S]*?)\}\)/);
     assert.ok(block, 'CREDENTIAL_PROVIDERS literal not found');
     const backend = [...block[1].matchAll(/"([A-Z0-9_]+)"/g)].map((m) => m[1]).sort();
-    assert.equal(backend.length, 19);
+    assert.equal(backend.length, 20);
     assert.deepEqual([...ALLOWED_PROVIDERS].sort(), backend);
     for (const name of backend) assert.ok(INHERITED_CREDENTIAL_ENV_KEYS.includes(name), name);
     for (const name of [...LAUNCH_SECRET_ENV_KEYS, ...INHERITED_CREDENTIAL_ENV_KEYS]) {
