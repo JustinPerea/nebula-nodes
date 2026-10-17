@@ -24,6 +24,12 @@
  * (lib/paramsOutdated.ts, store/projectStore.ts). So no tab saves or runs
  * values from before an upgrade with rules that don't know about it.
  *
+ * Builds also carry the version: vite-plugins/buildStamp.ts writes it to
+ * nebula-build.json, and the desktop app refuses at launch to open a build
+ * whose stamp differs from /api/health's `paramsVersion`
+ * (desktop/frontend-build.mjs). Keep this module free of imports; the stamp
+ * plugin reads it under the Node tsconfig.
+ *
  * Version 1 (Justin, 2026-10-17): a claude-chat value on Claude Opus 4.6,
  * Sonnet 4.6, Opus 4.7 or Opus 4.8 with Extended Thinking on, holding Max
  * Tokens 4,096 (the only default before 2026-10-16), becomes 64,000, the
