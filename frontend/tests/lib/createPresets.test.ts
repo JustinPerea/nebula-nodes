@@ -17,12 +17,13 @@ describe('createPresets client', () => {
 
   it('createPreset POSTs the body', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'p2' }) });
-    const out = await createPreset({ name: 'B', category: 'Style', prompt: 'x', params: {}, modelId: 'nano-banana', refImages: [], scope: 'project' });
+    const out = await createPreset({ name: 'B', category: 'Style', prompt: 'x', params: {}, modelId: 'nano-banana', refImages: [], scope: 'project', paramsVersion: 1 });
     expect(out.id).toBe('p2');
     const [path, init] = fetchMock.mock.calls[0];
     expect(path).toBe('/api/presets');
     expect((init as { method: string }).method).toBe('POST');
     expect(JSON.parse((init as { body: string }).body).projectId).toBe('nebula_nodes');
+    expect(JSON.parse((init as { body: string }).body).paramsVersion).toBe(1);
   });
 
   it('fetchPresets supplies the current id for project scope', async () => {

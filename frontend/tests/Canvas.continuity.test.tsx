@@ -53,6 +53,7 @@ vi.mock('../src/lib/canvasSelection', () => ({
 import { Canvas } from '../src/components/Canvas';
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore, type ViewMode } from '../src/store/uiStore';
+import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
 const initialUI = useUIStore.getState();
 const initialGraph = useGraphStore.getState();
@@ -205,7 +206,7 @@ describe('Canvas workspace continuity', () => {
     useUIStore.getState().setCinemaSelectedShot('motion', 'shot-2');
     render(<Canvas />);
     const oldCallbacks = flow.props!;
-    act(() => { flow.onSync!({ type: 'graphSync', graphReplaced: true, empty: false,
+    act(() => { flow.onSync!({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, graphReplaced: true, empty: false,
       nodes: [node('motion')], edges: [] }); });
     act(() => { oldCallbacks.onInit({ getViewport: () => camera }); });
     expect(useUIStore.getState().canvasViewport).toBeNull();
@@ -216,7 +217,7 @@ describe('Canvas workspace continuity', () => {
   it('does not discard navigation context on ordinary WebSocket output updates', () => {
     useUIStore.getState().setCanvasViewport(camera);
     useUIStore.getState().setCinemaSelectedShot('motion', 'shot-2');
-    act(() => { flow.onSync!({ type: 'graphSync', empty: false, nodes: [node('motion')], edges: [] }); });
+    act(() => { flow.onSync!({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, empty: false, nodes: [node('motion')], edges: [] }); });
     expect(useUIStore.getState().canvasViewport).toEqual(camera);
     expect(useUIStore.getState().cinemaSelectedShotIds).toEqual({ motion: 'shot-2' });
     expect(useGraphStore.getState().runHistory).toBe(history);

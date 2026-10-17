@@ -5,6 +5,7 @@ import type { NodeData } from '../../src/types';
 import type { Preset } from '../../src/lib/createPresets';
 import { CreateView } from '../../src/components/create-studio/CreateView';
 import { CREATE_DRAFT_STORAGE_KEY, useCreateDraftStore } from '../../src/store/createDraftStore';
+import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
 
 const mocks = vi.hoisted(() => ({
   createPreset: vi.fn(), fetchPresets: vi.fn(),
@@ -54,6 +55,17 @@ describe('Create style saving', () => {
     fireEvent.click(view.getByRole('button', { name: 'OK' }));
     await waitFor(() => expect(mocks.createPreset).toHaveBeenCalledWith(expect.objectContaining({ name: 'Warm grain', scope: 'project' })));
     prompt.mockRestore();
+  });
+
+  it('sends the params version the draft is at, so the backend keeps its values as set', async () => {
+    // Without the key the backend reads the body as main's bundle (version 0)
+    // and would turn a deliberate claude-chat 4,096 into 64,000.
+    const view = render(<CreateView />);
+    await openSave(view);
+    fireEvent.change(view.getByRole('textbox', { name: 'Name this style:' }), { target: { value: 'Versioned' } });
+    fireEvent.click(view.getByRole('button', { name: 'OK' }));
+    await waitFor(() => expect(mocks.createPreset).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Versioned', paramsVersion: GRAPH_PARAMS_VERSION })));
   });
 
   it('does not create a style on Cancel, Escape, or a blank name', async () => {

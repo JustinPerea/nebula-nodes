@@ -10,6 +10,24 @@ from execution.missing_credential import MissingCredentialError
 
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 
+# GPT-6 and GPT-5.6 families (OpenAI model pages, checked 2026-10-16). All are
+# reasoning models on Chat Completions: they take reasoning_effort and Nebula
+# never sends them sampler params. Effort "max" is new with these families.
+# GPT-6 Astra and GPT-6.1 Sol return HTTP 400 for "none" (6.1 Sol also rejects
+# "minimal"); GPT-6 Sol, GPT-6 Luna and the three GPT-5.6 models list none,
+# low, medium (default), high, xhigh and max.
+_ALL_EFFORTS = ("none", "low", "medium", "high", "xhigh", "max")
+REASONING_EFFORTS = {
+    "gpt-6-astra": ("low", "medium", "high", "xhigh", "max"),
+    "gpt-6.1-sol": ("low", "medium", "high", "xhigh", "max"),
+    "gpt-6-sol": _ALL_EFFORTS,
+    "gpt-6-luna": _ALL_EFFORTS,
+    "gpt-5.6-sol": _ALL_EFFORTS,
+    "gpt-5.6-terra": _ALL_EFFORTS,
+    "gpt-5.6-luna": _ALL_EFFORTS,
+}
+REASONING_MODELS = frozenset(REASONING_EFFORTS)
+
 
 async def handle_openai_chat(
     node: GraphNode,
@@ -47,13 +65,16 @@ async def handle_openai_chat(
 
     messages = [{"role": "user", "content": content}]
 
-    model = node.params.get("model", "gpt-5.4")
+    model = node.params.get("model", "gpt-6.1-sol")
     request_body: dict[str, Any] = {
         "model": model,
         "messages": messages,
         "stream": True,
     }
 
+    # Missing or cleared sends no cap, so OpenAI applies the model's own limit.
+    # The per-model default (defaultBy) is written by the canvas, not here: a
+    # fallback would send a smaller cap than an unset value does.
     max_completion_tokens = node.params.get("max_completion_tokens")
     if max_completion_tokens:
         request_body["max_completion_tokens"] = int(max_completion_tokens)
@@ -62,8 +83,17 @@ async def handle_openai_chat(
     # non-default sampler params (temperature/top_p/penalties), so those are
     # only forwarded for legacy gpt-4o/gpt-4.1 models.
     is_gpt5 = model.startswith("gpt-5")
-    if is_gpt5:
+    if model in REASONING_MODELS:
         reasoning_effort = node.params.get("reasoning_effort")
+        if reasoning_effort:
+            request_body["reasoning_effort"] = _listed_effort(model, str(reasoning_effort))
+    elif is_gpt5:
+        reasoning_effort = node.params.get("reasoning_effort")
+        if reasoning_effort == "max":
+            # "max" is offered only for GPT-6, but a node switched over from a
+            # GPT-6 model can still hold it. OpenAI's gpt-5.5 page lists none,
+            # low, medium, high and xhigh, so refuse it before a paid HTTP 400.
+            raise ValueError(f"Reasoning effort 'max' isn't available for {model}.")
         if reasoning_effort:
             request_body["reasoning_effort"] = reasoning_effort
     else:
@@ -110,3 +140,20 @@ async def handle_openai_chat(
     )
 
     return {"text": {"type": "Text", "value": full_text}}
+
+
+def _listed_effort(model: str, effort: str) -> str:
+    """Return the saved effort if this model accepts it; refuse it otherwise.
+
+    The card hides "none" for GPT-6 Astra and GPT-6.1 Sol, but a node switched
+    over from another model can still hold it. The Inspector then shows it as
+    "(unavailable for selected model)". Refusing before the request matches
+    that, and matches how the Runway handler treats a saved ratio the new model
+    lacks, instead of paying for an HTTP 400 or silently picking another level.
+    """
+    allowed = REASONING_EFFORTS[model]
+    if effort in allowed:
+        return effort
+    raise ValueError(
+        f"Reasoning effort '{effort}' isn't available for {model}. Pick one of: {', '.join(allowed)}."
+    )

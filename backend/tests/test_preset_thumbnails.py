@@ -153,7 +153,7 @@ def test_backfill_does_not_touch_user_presets(fresh, tmp_path, monkeypatch):
     # Create a user preset with a custom name before seeding
     user_preset = fresh.create(
         name="My Style", category="My Styles", prompt="custom", params={},
-        modelId=None, refImages=[], scope="global", projectId=None,
+        modelId=None, refImages=[], scope="global", projectId=None, params_version=1,
     )
     original_version = user_preset["version"]
     original_thumbnail = user_preset["thumbnail"]
@@ -176,7 +176,7 @@ def test_backfill_preserves_custom_thumbnail_on_seed_named_preset(fresh, tmp_pat
     # User makes a global preset named exactly like the seed, with their own thumbnail.
     custom = fresh.create(
         name="Cinematic Noir", category="My Styles", prompt="my take", params={},
-        modelId=None, refImages=[], scope="global", projectId=None,
+        modelId=None, refImages=[], scope="global", projectId=None, params_version=1,
         thumbnail="/api/outputs/my-custom.webp",
     )
     original_version = custom["version"]

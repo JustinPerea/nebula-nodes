@@ -110,6 +110,13 @@ export interface ParamDefinition {
   type: 'string' | 'integer' | 'float' | 'boolean' | 'enum' | 'textarea' | 'file' | 'palette';
   required: boolean;
   default?: unknown;
+  /** A different default for some values of one other param, e.g.
+   *  { model: { 'claude-opus-5-5': 64000 } }. `default` covers every value not
+   *  listed, including the other param's own default (scripts/check-node-contracts.mjs
+   *  checks that), so code that writes `default` for a new node stays right.
+   *  lib/paramDefaults.ts applies it when that param changes; backend
+   *  services/param_defaults.py is the same rule. */
+  defaultBy?: Record<string, Record<string, unknown>>;
   options?: ParamOption[];
   min?: number;
   max?: number;
