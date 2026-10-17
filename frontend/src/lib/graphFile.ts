@@ -27,8 +27,18 @@ import { isSafeWorldUrl } from './worldValue';
  * v1: structure + params only, no outputs.
  */
 
+/**
+ * One-time param upgrades a graph file has had (backend
+ * services/saved_graph_upgrades.py PARAMS_VERSION; a backend test keeps the
+ * two equal). Files written now carry it; a file without it is version 0,
+ * and POST /api/graph/import upgrades its params once when it loads.
+ */
+export const GRAPH_PARAMS_VERSION = 1;
+
 export interface NebulaFile {
   version: 1 | 2 | 3;
+  /** See GRAPH_PARAMS_VERSION. Missing in files saved before 2026-10-17. */
+  paramsVersion?: number;
   name: string;
   createdAt: string;
   nodes: NebulaNode[];
@@ -172,6 +182,7 @@ export function serializeGraph(
 ): NebulaFile {
   return {
     version: 2,
+    paramsVersion: GRAPH_PARAMS_VERSION,
     name: name ?? 'Untitled Graph',
     createdAt: new Date().toISOString(),
     nodes: nodes.map((n) => {
@@ -211,7 +222,7 @@ export function serializeGraph(
  */
 export function deserializeGraph(
   file: NebulaFile,
-): { nodes: Node<NodeData>[]; edges: Edge[]; viewport?: Viewport; warnings: string[] } {
+): { nodes: Node<NodeData>[]; edges: Edge[]; viewport?: Viewport; paramsVersion: number; warnings: string[] } {
   const warnings: string[] = [];
 
   const nodes: Node<NodeData>[] = file.nodes.map((n) => {
@@ -273,7 +284,7 @@ export function deserializeGraph(
     ? { x: file.viewport.x, y: file.viewport.y, zoom: file.viewport.zoom }
     : undefined;
 
-  return { nodes, edges, viewport, warnings };
+  return { nodes, edges, viewport, paramsVersion: file.paramsVersion ?? 0, warnings };
 }
 
 const OUTPUTS_PREFIX = '/api/outputs/';
@@ -992,6 +1003,10 @@ function assertValidNebulaEnvelope(parsed: unknown): asserts parsed is NebulaFil
   if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) {
     throw new Error(`Unsupported .nebula file version: ${String(parsed.version)}`);
   }
+  if (parsed.paramsVersion !== undefined
+    && !(Number.isInteger(parsed.paramsVersion) && (parsed.paramsVersion as number) >= 0)) {
+    throw new Error('Invalid .nebula file: paramsVersion must be a non-negative integer');
+  }
   if (typeof parsed.name !== 'string' || !parsed.name.trim()) {
     throw new Error('Invalid .nebula file: name must be a non-empty string');
   }
@@ -1116,6 +1131,8 @@ export async function loadFromFile(): Promise<{
   nodes: Node<NodeData>[];
   edges: Edge[];
   viewport?: Viewport;
+  /** Forwarded to POST /api/graph/import, which upgrades older files once. */
+  paramsVersion: number;
   warnings: string[];
 } | null> {
   let selection: GraphFileSelection | null = null;

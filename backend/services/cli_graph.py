@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from services.file_access import require_allowed_path, validate_file_references
 from services.retired_nodes import migrate_node
+from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrade_flat_nodes
 
 
 class CLIGraph:
@@ -31,6 +32,8 @@ class CLIGraph:
         self.edges: list[dict[str, str]] = []
         self._counter: int = 0
         self._persist_path: Path | None = persist_path
+        # Nodes whose params ``load`` upgraded (services/saved_graph_upgrades.py).
+        self.upgraded_on_load = 0
 
     def _maybe_persist(self) -> None:
         """Best-effort save — swallow errors so a hostile filesystem never
@@ -256,6 +259,8 @@ class CLIGraph:
             "nodes": list(nodes.values()),
             "edges": list(edges),
             "counter": counter,
+            # Everything this code writes already holds upgraded params.
+            "paramsVersion": PARAMS_VERSION,
         }
         temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
         try:
@@ -294,6 +299,10 @@ class CLIGraph:
         data = json.loads(source.read_text())
         validate_file_references(data)
         self.nodes = {n["id"]: _migrate_retired(n) for n in data["nodes"]}
+        # A file written before an upgrade existed gets it once; the next save
+        # records the current version, so a value set afterwards is kept.
+        self.upgraded_on_load = upgrade_flat_nodes(
+            self.nodes.values(), stored_version(data.get("paramsVersion")))
         self.edges = data["edges"]
         self._counter = data.get("counter", len(self.nodes))
 

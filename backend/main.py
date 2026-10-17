@@ -87,6 +87,7 @@ from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services.cli_graph import CLIGraph
 from services.retired_nodes import migrate_node, migrate_param_update, migrate_params, retired_message
+from services.saved_graph_upgrades import stored_version, upgrade_flat_nodes, upgrade_project
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, now as project_now,
@@ -241,6 +242,12 @@ if _STATE_PATH is not None and _STATE_PATH.exists():
     try:
         cli_graph.load(_STATE_PATH)
         print(f"[main] restored graph from {_STATE_PATH} — {len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges", flush=True)
+        if cli_graph.upgraded_on_load:
+            # Write the upgraded params and the version marker now, so the
+            # file matches what the canvas, agents and runs read
+            # (services/saved_graph_upgrades.py).
+            cli_graph._maybe_persist()
+            print(f"[main] upgraded saved params on {cli_graph.upgraded_on_load} node(s)", flush=True)
     except Exception as exc:
         print(f"[main] failed to restore graph from {_STATE_PATH}: {exc} — starting fresh", flush=True)
 
@@ -7981,6 +7988,15 @@ async def import_graph(body: dict[str, Any]) -> dict:
     candidate = CLIGraph()
     raw_nodes = _graph_ingress_items(body, "nodes")
     raw_edges = _graph_ingress_items(body, "edges")
+    # The canvas forwards the .nebula file's paramsVersion (0 for a file saved
+    # before the marker existed), and an older file gets the one-time upgrades
+    # (services/saved_graph_upgrades.py). A body without the key is a graph
+    # written now (an agent or script), so its values are taken as set.
+    if "paramsVersion" in body:
+        version = body["paramsVersion"]
+        if not isinstance(version, int) or isinstance(version, bool) or version < 0:
+            raise HTTPException(status_code=400, detail="paramsVersion must be a non-negative integer")
+        upgrade_flat_nodes(raw_nodes, version)
     id_map = _stage_graph_nodes(
         candidate,
         raw_nodes,
@@ -8538,7 +8554,12 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
             "id": recovery_id, "lastOpenedAt": None, "_recoveryFingerprint": fingerprint,
             "_recoverySourceId": source["id"], "_nodeCounter": max(candidate._counter, source.get("_nodeCounter", 0)),
             "_backendNodeIds": [], "_backendEdgeIds": [],
+            # The tab's canvas came from the source project, so its params are
+            # as current as the source's. A deleted source leaves version 0,
+            # and the copy is upgraded like any project saved before then.
+            "_paramsVersion": stored_version(source.get("_paramsVersion")),
         })
+        upgrade_project(project)
         catalog["projects"][recovery_id] = project
         project_store.commit(catalog)
         return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}

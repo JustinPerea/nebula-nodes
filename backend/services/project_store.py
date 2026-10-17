@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
+from services.saved_graph_upgrades import PARAMS_VERSION, upgrade_catalog
+
 MAX_PROJECT_BYTES = 16 * 1024 * 1024
 MAX_CATALOG_BYTES = 128 * 1024 * 1024
 MAX_PROJECTS = 500
@@ -125,6 +127,8 @@ def make_project(name: str, snapshot: dict[str, Any] | None = None) -> dict[str,
     project = {
         "id": uuid4().hex, "name": project_name(name), "createdAt": timestamp,
         "updatedAt": timestamp, "lastOpenedAt": timestamp, "snapshot": copy.deepcopy(snapshot or empty_snapshot()),
+        # Made by this code, so its params are current (saved_graph_upgrades).
+        "_paramsVersion": PARAMS_VERSION,
     }
     refresh_metadata(project, touch=False)
     return project
@@ -171,6 +175,10 @@ class ProjectStore:
             active = result.get("activeProjectId")
             if active is not None and active not in result["projects"]:
                 raise ValueError("Invalid active project")
+            # Every reader gets upgraded params (services/saved_graph_upgrades.py).
+            # The version marker is set with them, so the first commit stores
+            # both and a value set after that is never upgraded again.
+            upgrade_catalog(result)
             return result
         except (ValueError, OSError) as exc:
             raise ProjectStoreError("Project catalog could not be read; the existing file was preserved") from exc

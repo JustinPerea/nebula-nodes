@@ -56,16 +56,11 @@ MODEL_EFFORT_LEVELS = {
 # Top P are hidden on the card and never sent (Justin, 2026-10-17).
 NO_SAMPLING_MODELS = ADAPTIVE_EFFORT_MODELS | OPTIONAL_ADAPTIVE_MODELS | frozenset({"claude-fable-5"})
 
-# Max Tokens on every node saved before 2026-10-16 (main's only default). On
-# Opus 4.6-4.8 and Sonnet 4.6 with Extended Thinking on, the toggle now sends
-# adaptive thinking with no budget, and "thinking tokens count toward
-# max_tokens, so a long thinking pass can consume the budget before the text
-# response completes" (Anthropic, thinking-troubleshooting, fetched
-# 2026-10-16). A saved 4096 there is read as the old untouched default and
-# sent as the model's current one (64,000), the same move the Inspector makes
-# on a model switch. A 4096 typed on purpose can't be told apart; see
-# implementation-notes.md.
-LEGACY_MAX_TOKENS = 4096
+# A saved 4096 Max Tokens on Opus 4.6-4.8 / Sonnet 4.6 with Extended Thinking
+# on (main's only default before 2026-10-16) is upgraded to 64,000 once, when
+# the saved graph loads (services/saved_graph_upgrades.py), so the card shows
+# what runs. The handler sends the stored value as it is: a 4096 set after
+# that is the person's choice.
 
 
 async def handle_claude_chat(
@@ -128,11 +123,6 @@ async def handle_claude_chat(
     sampling_adaptive = model in SAMPLING_ADAPTIVE_MODELS
     if adaptive:
         max_tokens = min(max_tokens, ADAPTIVE_MAX_OUTPUT_TOKENS)
-    if (
-        node.params.get("extended_thinking") and (optional_adaptive or sampling_adaptive)
-        and max_tokens == LEGACY_MAX_TOKENS
-    ):
-        max_tokens = int(param_default("claude-chat", "max_tokens", {**node.params, "model": model}) or max_tokens)
 
     request_body: dict[str, Any] = {"model": model, "messages": messages, "max_tokens": max_tokens, "stream": True}
 

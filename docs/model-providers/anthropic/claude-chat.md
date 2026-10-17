@@ -137,11 +137,15 @@ is on"). The handler (`SAMPLING_ADAPTIVE_MODELS`) therefore:
 - otherwise sends `temperature` / `top_p` exactly as before;
 - defaults `max_tokens` to 64,000 (was 4,096): thinking counts toward it, as on
   4.7/4.8. Saved nodes keep their stored value, except one: on Opus 4.6-4.8 and
-  Sonnet 4.6 with Extended Thinking on, a stored 4,096 (main's only default) is
-  sent as 64,000. A saved budget used to cap thinking inside that 4,096; adaptive
+  Sonnet 4.6 with Extended Thinking on, a stored 4,096 (main's only default)
+  becomes 64,000 once, when the saved graph loads
+  (`backend/services/saved_graph_upgrades.py`, 2026-10-17), so the card shows
+  what runs. A saved budget used to cap thinking inside that 4,096; adaptive
   thinking has no cap, and "thinking tokens count toward `max_tokens`, so a long
   thinking pass can consume the budget before the text response completes"
-  (thinking-troubleshooting). A 4,096 set on purpose can't be told apart.
+  (thinking-troubleshooting). The graph records that the upgrade ran, so a
+  4,096 set after that is kept and sent as set. (From 2026-10-16 to 2026-10-17
+  the handler sent a stored 4,096 as 64,000 while the card still showed 4,096.)
 
 On every Claude model, a stream that ends with `stop_reason: "max_tokens"` (read
 from the `message_delta` event) and no text fails the node ("Claude ran out of

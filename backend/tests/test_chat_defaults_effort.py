@@ -25,6 +25,7 @@ import pytest
 from handlers.anthropic_chat import EFFORT_LEVELS, EFFORT_MODELS, MODEL_EFFORT_LEVELS
 from handlers.google_gemini import GEMINI_CHAT_NO_SAMPLING, GEMINI_CHAT_THINKING_LEVELS
 from handlers.openai_chat import REASONING_EFFORTS
+from services.saved_graph_upgrades import upgrade_params
 from tests.test_chat_model_catalog import (
     USER_TURN_CLAUDE,
     USER_TURN_GEMINI,
@@ -275,11 +276,12 @@ async def test_opus_47_48_saved_graph_with_extended_thinking(model):
     # Saved before this change: Effort "" and Extended Thinking on. It used to
     # send thinking.type "enabled" with budget_tokens, which Anthropic says
     # 4.7 and later reject with HTTP 400.
-    # Its untouched 4,096 Max Tokens goes out as 64,000 (review fix, see
-    # test_saved_4096_with_thinking_sends_64000 below).
-    params = {**_saved_defaults("claude-chat"), "model": model, "extended_thinking": True,
-              "thinkingBudget": 2048, "temperature": 0.2}
-    _, _, body = await _claude(params)
+    # Its untouched 4,096 Max Tokens becomes 64,000 when the saved graph loads
+    # (services/saved_graph_upgrades.py, Justin 2026-10-17); see
+    # test_saved_4096_upgraded_at_load_sends_64000 below.
+    saved = {**_saved_defaults("claude-chat"), "model": model, "extended_thinking": True,
+             "thinkingBudget": 2048, "temperature": 0.2}
+    _, _, body = await _claude(upgrade_params("claude-chat", saved, 0))
     assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 64000, "stream": True,
                     "thinking": {"type": "adaptive"}}
 
@@ -400,15 +402,29 @@ async def test_claude_46_xhigh_refused_before_request(model):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model", CLAUDE_46 + OPUS_47_48)
-async def test_saved_4096_with_thinking_sends_64000(model):
+async def test_saved_4096_upgraded_at_load_sends_64000(model):
     # Saved on main: Max Tokens 4,096 (its only default), thinking on with a
     # 2,048 budget. Before item 5 the budget capped thinking inside 4,096; now
     # thinking is adaptive with no cap and "thinking tokens count toward
-    # max_tokens" (thinking-troubleshooting), so the old default goes out as
-    # the model's current one.
-    params = {**_saved_defaults("claude-chat"), "model": model, "extended_thinking": True, "thinkingBudget": 2048}
-    _, _, body = await _claude(params)
+    # max_tokens" (thinking-troubleshooting). Loading the saved graph upgrades
+    # the old default once (Justin, 2026-10-17), and the run sends that.
+    saved = {**_saved_defaults("claude-chat"), "model": model, "extended_thinking": True, "thinkingBudget": 2048}
+    loaded = upgrade_params("claude-chat", saved, 0)
+    assert loaded is not None and loaded["max_tokens"] == 64000
+    _, _, body = await _claude(loaded)
     assert body["max_tokens"] == 64000
+    assert body["thinking"] == {"type": "adaptive"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_46 + OPUS_47_48)
+async def test_deliberate_4096_with_thinking_sent_as_set(model):
+    # After the one-time load upgrade a 4,096 is the person's choice. Until
+    # 2026-10-17 the handler sent it as 64,000 (LEGACY_MAX_TOKENS); now it
+    # goes out as stored.
+    params = {**_saved_defaults("claude-chat"), "model": model, "extended_thinking": True}
+    _, _, body = await _claude(params)
+    assert body["max_tokens"] == 4096
     assert body["thinking"] == {"type": "adaptive"}
 
 
@@ -499,7 +515,9 @@ async def _claude_stream(lines: list[str]):
 
 @pytest.mark.asyncio
 async def test_max_tokens_stop_with_no_text_fails():
-    with pytest.raises(RuntimeError, match=r"ran out of Max Tokens \(64,000\) before it wrote an answer"):
+    # The stored 4,096 goes out as set (no run-time rewrite since 2026-10-17),
+    # and thinking that uses all of it fails with the stop_reason error.
+    with pytest.raises(RuntimeError, match=r"ran out of Max Tokens \(4,096\) before it wrote an answer"):
         await _claude_stream(_stream_lines("", "max_tokens"))
 
 
