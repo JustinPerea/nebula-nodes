@@ -4881,3 +4881,17 @@ Justin asked whether the Jev nodes could take their question straight on the car
 - **Two older tests relied on the leak.** `test_paper_replay.py` and `test_execution_cancellation.py::test_canvas_stop_syncs_recovery_params_before_cancelled_event` synced made-up param keys back to the canvas, which the stricter sync now drops.
   - Paper replay now uses a sticky note's declared `content` and `color` instead of keys a text input doesn't declare.
   - The cancellation test now uses `worldlabs-environment` with its declared `display_name`, the node whose resume ids are the real reason that sync runs on stop. It runs as a person and skips graph validation; the comments say why.
+
+## Autosave flush loop fix (2026-10-16)
+
+- **The bug.** Change a param and change it back within the 600 ms autosave window, and the canvas tab saves itself in an endless loop until the renderer dies. Also on main; it explains the headless Chromium tab crashes after rapid Inspector edits.
+  - The first edit's `markDirty()` sets `dirty: true` and starts the timer. The revert's `markDirty()` sees the snapshot equal to `lastSaved` and returns early, so `dirty` stays true.
+  - The timer's `flush()` finds nothing to send and returns without touching `dirty`. Its tail (`if dirty && saveStatus !== 'error'`) then calls `flush()` again, which finds the same thing, forever. Each round is only microtasks, so timers, input and paint never get a turn.
+- **A second way into the same loop, found while testing.** A save in flight when another window takes over the project: `preserveWorkspaceConflict` sets `initialized: false, dirty: true`, the landed save leaves the newer edit dirty, and every re-flush returns at the "not initialized" check.
+- **Fix (`frontend/src/store/projectStore.ts`, `flush`).** Two small changes, both needed:
+  - The "nothing to send" branch now marks the store clean (`dirty: false, saveStatus: 'saved'`): if the canvas equals the last save, that is true.
+  - The save task returns whether a save landed, and the tail re-flushes only then. An edit made during a save still gets saved (that path returns true), but an exit that saved nothing can't spin. `saveQueue` is now `Promise<unknown>` because it holds that boolean task.
+  - No timeouts or retry caps. `markDirty()` is unchanged: clearing `dirty` there when the canvas matches `lastSaved` would be wrong while a newer save is still in flight (the test "saves the older value when an edit is reverted while a newer one is in flight" covers that).
+- **Tests.** `frontend/src/store/projectStore.autosave.test.ts` (vitest, fake timers, `saveProject` mocked). A wrapper on `flush` counts calls and throws after 20, so a regression fails the test instead of hanging it.
+  - Fail without the fix: change + revert ends clean with at most the one timer flush and no save; the takeover case stops after two flush calls.
+  - Guards that already passed and must keep passing: an edit during an in-flight save is saved afterwards; reverting to the older value during a newer in-flight save still saves it; a failed save shows `saveStatus: 'error'` with the message, and Retry saves it.
