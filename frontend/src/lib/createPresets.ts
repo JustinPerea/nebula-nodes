@@ -10,7 +10,12 @@ export interface Preset {
   modelId: string | null;
   refImages: string[];
   thumbnail: string;
+  /** Edit counter; the backend adds 1 on every update. */
   version: number;
+  /** The params version `params` are at. The backend upgrades older presets
+   * when it reads them (services/preset_store.py), so this is the current
+   * version or newer. */
+  paramsVersion?: number;
   scope: 'global' | 'project';
   projectId: string | null;
   createdAt: string;
@@ -27,6 +32,10 @@ export type PresetCreateInput = {
   scope: 'global' | 'project';
   projectId?: string;
   thumbnail?: string;
+  /** The version `params` were made at (GRAPH_PARAMS_VERSION for the current
+   * draft). A body without it is read as version 0 (a bundle older than the
+   * marker), so the backend would upgrade a 4,096 the user set on purpose. */
+  paramsVersion: number;
 };
 
 export async function fetchPresets(scope: 'global' | 'project', projectId?: string): Promise<Preset[]> {

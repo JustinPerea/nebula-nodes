@@ -301,6 +301,7 @@
     "stop_sequences",
     "extended_thinking",
     "thinkingBudget",
+    "effort",
     "prompt_caching"
    ]
   },
@@ -347,6 +348,26 @@
    ],
    "allParamKeys": [
     "filePath"
+   ]
+  },
+  "elevenlabs-dialogue": {
+   "routes": [
+    {
+     "id": "elevenlabs",
+     "provider": "elevenlabs",
+     "keys": [
+      "ELEVENLABS_API_KEY"
+     ],
+     "paramKeys": []
+    }
+   ],
+   "allParamKeys": [
+    "model_id",
+    "stability",
+    "similarity",
+    "language_code",
+    "output_format",
+    "seed"
    ]
   },
   "elevenlabs-dubbing": {

@@ -116,15 +116,15 @@ Legacy FAL slugs `fal-ai/gemini-25-flash-image` and `fal-ai/gemini-3-pro-image-p
 
 | Param | Values | Default | Notes |
 |---|---|---|---|
-| `model` | `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` | `gemini-2.5-flash` | Note: official docs list `gemini-3-pro-preview` as shut down 2026-03-09; not exposed here, good. |
-| `max_tokens` | 1-65535 | 8192 | Output token cap. |
-| `temperature` | 0-2 | 1 | Keep at `1.0` for Gemini 3 models; lower values cause loops. |
+| `model` | `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.5-flash` (deprecated), `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite` (retiring 2027-05-07), `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` | `gemini-4-argon` | First four added 2026-10-16. `gemini-3.5-flash` was deprecated 2026-10-08 and Google routes it to `gemini-3.6-flash`; the default moved to `gemini-4-argon` the same day. New nodes only; saved graphs keep their model. |
+| `max_tokens` | 1-65536 | 65536 on `gemini-4-argon` (the default); 8192 on the others | Output token cap (65,536 is every listed model's output limit). Thinking uses the same budget, and for standard tasks Google says "Keep the default of 65,536 or don't set any value", so a new Argon node starts there and switching to or from Argon moves an untouched value (`defaultBy`). For `gemini-4-argon` the handler caps it at Argon's 65,536 sync limit. |
+| `temperature` | 0-2 | 1 | Keep at `1.0` for Gemini 3 models; lower values cause loops. Hidden and not sent for the four 2026-10-16 models and the deprecated `gemini-3.5-flash`, which Google routes to 3.6 Flash (Google ignores sampling params from 3.6 Flash on and says future models will return 400). |
 | `system` | textarea | "" | System instructions / persona. |
-| `thinkingLevel` | `""`, `minimal`, `low`, `medium`, `high` | `""` | Visible only on `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite-preview`. |
+| `thinkingLevel` | `""`, `minimal`, `low`, `medium`, `high` | `medium` | Visible on the Gemini 3.x and 4 models. `minimal` is hidden for `gemini-4-argon` and `gemini-3.8-flash`, which reject it; a saved `minimal` on those is refused before the request. On the 2.5 models (hidden there) it is sent only when no `thinkingBudget` is set and the level isn't the default `medium`, so a new 2.5 node sends none (2026-10-16; the hidden default turned thinking on for 2.5 Flash-Lite). Default was `""` before 2026-10-16. |
 | `thinkingBudget` | 0-65536 | unset | Visible only on `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`. Token-count budget. |
-| `top_p` | 0-1 | unset | Optional sampling cap. |
-| `top_k` | integer | unset | Default 64 in placeholder. |
-| `stop_sequences` | string | unset | Comma-separated. |
+| `top_p` | 0-1 | unset | Sent as `generationConfig.topP` when set (since 2026-10-16). Hidden and not sent for the four 2026-10-16 models and `gemini-3.5-flash`. |
+| `top_k` | integer | unset | Default 64 in placeholder. Sent as `generationConfig.topK` when set (since 2026-10-16). Hidden and not sent for the four 2026-10-16 models and `gemini-3.5-flash`. |
+| `stop_sequences` | string | unset | Comma-separated, up to 5. Sent as `generationConfig.stopSequences` when non-empty, on every model (since 2026-10-16); more than 5 is refused before the request. |
 | `response_format` | `text/plain`, `application/json` | `text/plain` | Use `application/json` with a schema in the prompt for structured output. |
 
 Inputs: `messages` (Text, required), `images` (Image, optional, multiple).
@@ -278,9 +278,9 @@ When choosing a Gemini-family node:
 
 | Goal | Node | Model |
 |---|---|---|
-| General text / vision Q&A | `gemini-chat` | `gemini-3-flash-preview` or `gemini-2.5-flash` |
-| Hardest reasoning / planning | `gemini-chat` | `gemini-3.1-pro-preview` with `thinkingLevel: high` |
-| Cheap bulk classification | `gemini-chat` | `gemini-3.1-flash-lite-preview` with `thinkingLevel: minimal` |
+| General text / vision Q&A | `gemini-chat` | `gemini-4-argon` (default), or `gemini-3.6-flash` / `gemini-3.8-flash` for faster, cheaper answers |
+| Hardest reasoning / planning | `gemini-chat` | `gemini-4-argon` with `thinkingLevel: high` and `max_tokens` 65536 (or unset) |
+| Cheap bulk classification | `gemini-chat` | `gemini-3.5-flash-lite` with `thinkingLevel: minimal` |
 | Plain text-to-image (was Imagen 4) | `nano-banana` | `gemini-nano-banana-2.1` |
 | Fast image gen for iteration | `nano-banana` | `gemini-3.1-flash-image` at `1K` |
 | Image with legible text or precise layout | `nano-banana` | `gemini-3-pro-image` |

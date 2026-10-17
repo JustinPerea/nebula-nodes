@@ -4,16 +4,34 @@ Sourced from `/gemini-api/docs/prompting-strategies`, `/gemini-api/docs/structur
 
 ## Model map (text)
 
+Updated 2026-10-16 from Google's models, deprecations and thinking pages. The ids
+are the ones the `gemini-chat` node sends.
+
 | Model ID | Role |
 |---|---|
-| `gemini-3.1-pro-preview` | Advanced reasoning, agentic, hardest problems |
-| `gemini-3-flash-preview` | Frontier cost/performance for everyday use |
-| `gemini-3.1-flash-lite-preview` | Highest throughput, lowest cost |
-| `gemini-2.5-pro` | Previous-gen deep reasoning |
-| `gemini-2.5-flash` | Previous-gen everyday |
-| `gemini-2.5-flash-lite` | Previous-gen budget |
+| `gemini-4-argon` | Gemini 4 Argon (GA 2026-10-13). Nebula's default from 2026-10-16, Thinking Level `medium`. Hardest reasoning. Thinking low/medium/high only (no `minimal`); 65,536 sync output cap. For standard tasks Google says "Keep the default of 65,536 or don't set any value", so a new Argon node starts at 65,536 (8,192 elsewhere); a cleared value sends none |
+| `gemini-3.8-flash` | Gemini 3.8 Flash. Thinking low/medium/high only (no `minimal`) |
+| `gemini-3.6-flash` | Gemini 3.6 Flash. Fast everyday model; replaces the deprecated `gemini-3.5-flash` |
+| `gemini-3.5-flash-lite` | Gemini 3.5 Flash-Lite. Highest throughput, lowest cost; default thinking `minimal`; replaces `gemini-3.1-flash-lite` (shutdown 2027-05-07) |
+| `gemini-3.1-pro-preview` | Previous Pro (preview) |
+| `gemini-3-flash-preview` | Previous Flash (preview); Google's replacement is `gemini-3.6-flash` |
+| `gemini-2.5-pro` | Previous-gen deep reasoning (since 2026-09-18 limited to accounts that used it before) |
+| `gemini-2.5-flash` | Previous-gen everyday (same access limit) |
+| `gemini-2.5-flash-lite` | Previous-gen budget (same access limit) |
 
-Gemini 3 is the current primary tier. Gemini 2.5 remains supported.
+From Gemini 3.6 Flash and 3.5 Flash-Lite on, `temperature`, `top_p` and `top_k` are
+ignored, and Google says future models will return HTTP 400 for them. Nebula hides
+them and doesn't send them for the four newest models, and (since 2026-10-16) for
+the deprecated `gemini-3.5-flash`, which Google routes to `gemini-3.6-flash`. On
+the older models `gemini-chat` sends Top P and Top K as `topP` / `topK` when set
+(2026-10-16).
+
+On the 2.5 models the card shows Thinking Budget, not Thinking Level, so
+`gemini-chat` sends a `thinkingLevel` there only when no budget is set and the
+level isn't the definition default (`medium`), i.e. a saved non-default level.
+Sending the hidden default turned thinking on for 2.5 Flash-Lite, which doesn't
+think by default (2026-10-16).
+Stop sequences (comma-separated, up to 5) go out as `stopSequences` on every model.
 
 ## Core prompt structure
 
