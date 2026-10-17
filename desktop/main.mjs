@@ -16,6 +16,7 @@ import { confineFileScheme } from './renderer-files.mjs';
 import { resolveLaunchOverrides } from './launch-overrides.mjs';
 import { decideWindowAction } from './window-recovery.mjs';
 import { packagedLaunch, treatAsPackaged } from './packaged-launch.mjs';
+import { FrontendBuildError, checkParamsVersions, readBuildParamsVersion } from './frontend-build.mjs';
 import {
   CREDENTIALS_FILE_NAME,
   MIGRATION_STATE_FILE_NAME,
@@ -202,7 +203,7 @@ h1{font-size:18px;color:#ff6b6b;margin-bottom:16px;font-weight:600}
 pre{font-size:13px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;color:#ccc;background:#160a10;padding:16px;border-radius:8px;overflow:auto;max-height:50vh}
 </style></head>
 <body><div class="container">
-<h1>Backend startup failed</h1>
+<h1>${escapeHtml(error?.heading ?? 'Backend startup failed')}</h1>
 <pre>${escapeHtml(message)}</pre>
 </div></body></html>`);
 }
@@ -929,6 +930,12 @@ if (refuseDebugLaunch) {
           'Run `cd frontend && npm run build:desktop`, then start the app again.',
         );
       }
+      // The build's params version (frontend-build.mjs). A build without a
+      // stamp predates it; same answer, same point: before anything spawns.
+      // Compared with the backend's once the sidecar is healthy, below.
+      const frontendParamsVersion = isDevelopment
+        ? null
+        : readBuildParamsVersion(dirname(fileURLToPath(rendererUrl)));
 
       // Compute App Support paths and create the directory tree before
       // spawning the sidecar. The env vars are merged into the child
@@ -1038,8 +1045,6 @@ if (refuseDebugLaunch) {
         personToken: person.token,
         launchSecrets: { injectedKeys, connectorEncryptionKey },
       });
-      sidecarStarting = false;
-      startupError = null;
       const handle = sidecarHandle;
       console.log(
         `Sidecar started: pid=${handle.pid} port=${handle.port} ` +
@@ -1047,6 +1052,20 @@ if (refuseDebugLaunch) {
       );
       console.log(`NEBULA_SIDECAR_PID=${handle.pid}`);
       console.log(`NEBULA_SIDECAR_PORT=${handle.port}`);
+
+      // A bundle built for another params version can't save or run against
+      // this backend (frontend-build.mjs). Stop the sidecar and say which side
+      // is older, before any window loads the renderer. sidecarStarting stays
+      // true while it stops, so a quit in the meantime waits for it.
+      if (frontendParamsVersion !== null) {
+        const mismatch = checkParamsVersions(frontendParamsVersion, handle.health);
+        if (mismatch) {
+          await cleanupSidecar();
+          throw mismatch;
+        }
+      }
+      sidecarStarting = false;
+      startupError = null;
 
       // If the user quit during startup, clean up and exit without mounting
       // the normal renderer.
@@ -1095,7 +1114,7 @@ if (refuseDebugLaunch) {
       showFailure(startupError);
 
       if (isSmokeTest) {
-        const errorDetails = err instanceof SidecarError
+        const errorDetails = err instanceof SidecarError || err instanceof FrontendBuildError
           ? {
               type: err.type,
               message: err.message,
