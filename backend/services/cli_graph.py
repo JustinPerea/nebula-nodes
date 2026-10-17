@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from services.file_access import require_allowed_path, validate_file_references
 from services.retired_nodes import migrate_node
+from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrade_flat_nodes
 
 
 class CLIGraph:
@@ -31,6 +32,12 @@ class CLIGraph:
         self.edges: list[dict[str, str]] = []
         self._counter: int = 0
         self._persist_path: Path | None = persist_path
+        # Nodes whose params ``load`` upgraded (services/saved_graph_upgrades.py),
+        # and whether the file was saved before ``PARAMS_VERSION`` (true even
+        # when no value changed: main's boot step writes the marker and makes
+        # tabs loaded before the restart reload).
+        self.upgraded_on_load = 0
+        self.params_advanced_on_load = False
 
     def _maybe_persist(self) -> None:
         """Best-effort save — swallow errors so a hostile filesystem never
@@ -256,6 +263,8 @@ class CLIGraph:
             "nodes": list(nodes.values()),
             "edges": list(edges),
             "counter": counter,
+            # Everything this code writes already holds upgraded params.
+            "paramsVersion": PARAMS_VERSION,
         }
         temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
         try:
@@ -293,9 +302,19 @@ class CLIGraph:
         source = require_allowed_path(path)
         data = json.loads(source.read_text())
         validate_file_references(data)
-        self.nodes = {n["id"]: _migrate_retired(n) for n in data["nodes"]}
-        self.edges = data["edges"]
-        self._counter = data.get("counter", len(self.nodes))
+        # Build everything first and assign together, so a file that fails
+        # part way leaves the previous graph whole (main keeps it on failure,
+        # and the next save would write new nodes with old edges otherwise).
+        nodes = {n["id"]: _migrate_retired(n) for n in data["nodes"]}
+        # A file written before an upgrade existed gets it once; the next save
+        # records the current version, so a value set afterwards is kept.
+        version = stored_version(data.get("paramsVersion"))
+        upgraded = upgrade_flat_nodes(nodes.values(), version)
+        edges = data["edges"]
+        counter = data.get("counter", len(nodes))
+        self.nodes, self.edges, self._counter = nodes, edges, counter
+        self.upgraded_on_load = upgraded
+        self.params_advanced_on_load = version < PARAMS_VERSION
 
 
 def _migrate_retired(node: dict[str, Any]) -> dict[str, Any]:

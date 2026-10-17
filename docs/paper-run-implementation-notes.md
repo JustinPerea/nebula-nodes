@@ -4,6 +4,7 @@
 - Execution captures the full JSON request before the backend starts, so a run retains its accepted Paper snapshot even when refresh completes during execution.
 - Saved history retains each executed node's immutable output references as well as its source descriptor. Exact historical replay and explicit rerun with the latest Paper snapshot are separate actions.
 - Recipe revision is an adapter-owned fingerprint of canonical saved settings and topology; it is not a Paper revision. Freshness compares full canonical recipe content and source identity/hash rather than trusting fingerprint equality.
+- (2026-10-17) A record saved before a one-time params upgrade is compared, and replayed, as its recipe upgraded to the current version (`currentRunSnapshot`, keyed by the record's `paramsVersion`), because the canvas was upgraded when it loaded. The record and its `recipeRevision` stay as sent; the version stamp sits outside the snapshot so the hash is unchanged.
 - A failed/missing source retains the last good snapshot. Record sequence numbers prevent a late source refresh response from replacing a newer one.
 - Run requests carry only the accepted snapshot in the source's snapshot list. The complete source history remains on the canvas/backend journal, avoiding quadratic duplication in persisted run records.
 - Source execution events and delayed graph sync messages cannot rewind a newer source preview. The live source preview always comes from its highest accepted source sequence.

@@ -13,6 +13,7 @@ import { useGraphStore } from '../../src/store/graphStore';
 import { useUIStore } from '../../src/store/uiStore';
 import { useCinemaMotionStore } from '../../src/store/cinemaMotionStore';
 import { sendCinemaShotToMotion, viewCinemaMotionNode } from '../../src/lib/cinemaMotion';
+import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
 
 const initial = { ...useGraphStore.getState() };
 const uiInitial = { ...useUIStore.getState() };
@@ -146,7 +147,7 @@ describe('Cinema motion handoff', () => {
     const pending = deferred<ReturnType<typeof response>>(); mocks.fetch.mockReturnValueOnce(pending.promise);
     const task = sendCinemaShotToMotion('n1', 'a');
     // Server committed then deleted the pair, and only its latest sync arrived.
-    for (const listener of mocks.listeners) listener({ type: 'graphSync', nodes: [source()], edges: [], empty: false });
+    for (const listener of mocks.listeners) listener({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [source()], edges: [], empty: false });
     pending.resolve(response()); await task;
     expect(handoffs()[0].status).toBe('error');
     expect(useGraphStore.getState().nodes).toHaveLength(1); expect(useGraphStore.getState().edges).toEqual([]);
@@ -156,7 +157,7 @@ describe('Cinema motion handoff', () => {
     mocks.fetch.mockResolvedValueOnce(response()); await sendCinemaShotToMotion('n1', 'a');
     useGraphStore.setState((state) => ({ edges: [...state.edges,
       { id: 'optimistic', source: 'n1', sourceHandle: 'shot_b', target: 'n2', targetHandle: 'prompt' }] }));
-    for (const listener of mocks.listeners) listener({ type: 'graphSync', nodes: [source(), result().node], edges: [], empty: false });
+    for (const listener of mocks.listeners) listener({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [source(), result().node], edges: [], empty: false });
     expect(useGraphStore.getState().nodes).toHaveLength(2);
     expect(useGraphStore.getState().edges.map((edge) => edge.id)).toEqual(['optimistic']);
     expect(handoffs()[0].status).toBe('error');
@@ -183,7 +184,7 @@ describe('Cinema motion handoff', () => {
       if (action === 'retyped') useGraphStore.setState({ nodes: [{ ...source(), data: { ...source().data, definitionId: 'preview' } }] });
       if (action === 'load') useGraphStore.getState().loadGraph([source()], []);
       if (action === 'clear') useGraphStore.getState().clearGraph();
-      if (action === 'tagged import') for (const listener of mocks.listeners) listener({ type: 'graphSync', graphReplaced: true,
+      if (action === 'tagged import') for (const listener of mocks.listeners) listener({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, graphReplaced: true,
         nodes: [source()], edges: [], empty: false });
       expect(signal.aborted).toBe(true); useGraphStore.setState({ nodes: [source()], edges: [] });
       pending.resolve(response()); await task;
@@ -244,7 +245,7 @@ describe('Cinema motion handoff', () => {
     viewCinemaMotionNode('n1', 'a'); expect(useUIStore.getState().canvasFocusRequest?.nodeId).toBe('n2');
     if (action === 'load') useGraphStore.getState().loadGraph([source(), result().node], []);
     if (action === 'clear') useGraphStore.getState().clearGraph();
-    if (action === 'tagged import') for (const listener of mocks.listeners) listener({ type: 'graphSync', graphReplaced: true,
+    if (action === 'tagged import') for (const listener of mocks.listeners) listener({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, graphReplaced: true,
       nodes: [source(), result().node], edges: [], empty: false });
     expect(useUIStore.getState().canvasFocusRequest).toBeNull(); expect(useUIStore.getState().selectedNodeId).toBeNull();
   });

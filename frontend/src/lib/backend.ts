@@ -1,4 +1,6 @@
 import { getProjectContext } from './projectContext';
+import { noteParamsOutdated, PARAMS_VERSION_HEADER } from './paramsOutdated';
+import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';
 import { browserPersonCredential, personCredential, reportPersonRequired } from './personSession';
 import {
   DEFAULT_BACKEND_PORT,
@@ -306,12 +308,14 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   const method = String(init?.method ?? 'GET').toUpperCase();
   const baseUrl = await getBackendBaseUrl();
   const requestUrl = joinBackendPath(baseUrl, path);
-  let requestInit = init;
+  // Every request says which params version this bundle was built for, so the
+  // backend refuses a tab loaded before a one-time upgrade (paramsOutdated.ts).
+  const headers = new Headers(init?.headers);
+  headers.set(PARAMS_VERSION_HEADER, String(GRAPH_PARAMS_VERSION));
   if (project && method !== 'GET' && method !== 'HEAD') {
-    const headers = new Headers(init?.headers);
     headers.set('X-Nebula-Workspace-Revision', project.revision);
-    requestInit = { ...init, headers };
   }
+  let requestInit: RequestInit = { ...init, headers };
   if (wantsPersonHeader(path, method)) {
     const person = await personCredential();
     // Only to the exact backend that issued the token.
@@ -321,7 +325,7 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
       requestInit = { ...requestInit, headers };
     }
   }
-  const send = (url: string) => (requestInit === undefined ? fetch(url) : fetch(url, requestInit));
+  const send = (url: string) => fetch(url, requestInit);
   // Replaying a mutation against another discovered backend is not a retry: it
   // is a second side effect in a different process. This is especially
   // dangerous for paid provider starts, whose public APIs have no idempotency
@@ -331,6 +335,7 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   try {
     const response = await send(requestUrl);
     notePersonRequired(response);
+    noteParamsOutdated(response);
     if (mayReplayAfterDiscovery && shouldRetryWithDiscovery(baseUrl, response)) {
       const retryBaseUrl = await getBackendBaseUrl({ force: true });
       if (retryBaseUrl !== baseUrl) {

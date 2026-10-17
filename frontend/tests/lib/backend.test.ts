@@ -133,13 +133,13 @@ describe('apiFetch rediscovery replay safety', () => {
         .resolves.toMatchObject({ status: 502 });
       expect(fetchMock.mock.calls.filter(([input]) => (
         String(input).endsWith('/api/execute')
-      ))).toEqual([['http://old.example:8000/api/execute', { method: 'POST' }]]);
+      ))).toEqual([['http://old.example:8000/api/execute', { method: 'POST', headers: expect.any(Headers) }]]);
 
       await expect(backend.apiFetch('/api/execute-node', { method: 'POST' }))
         .rejects.toThrow('connection reset after mutation');
       expect(fetchMock.mock.calls.filter(([input]) => (
         String(input).endsWith('/api/execute-node')
-      ))).toEqual([['http://old.example:8000/api/execute-node', { method: 'POST' }]]);
+      ))).toEqual([['http://old.example:8000/api/execute-node', { method: 'POST', headers: expect.any(Headers) }]]);
 
       phase = 'get';
       await expect(backend.apiFetch('/api/read')).resolves.toMatchObject({ status: 200 });

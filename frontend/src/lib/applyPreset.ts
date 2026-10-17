@@ -1,5 +1,6 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildDefaultParamsForUi } from './createParams';
+import { snapParamDefaults } from './paramDefaults';
 import type { Preset } from './createPresets';
 import { kreaModeFor, supportsKreaAccount, type KreaConnectionMode } from './kreaConnection';
 
@@ -34,5 +35,10 @@ export function applyPresetToComposer(
     }
   }
 
-  return { modelId, prompt, params: { ...baseParams, ...preset.params } };
+  // A preset that picks a model moves a per-model default (Max Tokens) that
+  // still holds the old model's default; a value the preset sets wins.
+  const def = modelId ? NODE_DEFINITIONS[modelId] : undefined;
+  const merged = { ...baseParams, ...preset.params };
+  const params = def ? { ...snapParamDefaults(def, baseParams, merged).params, ...preset.params } : merged;
+  return { modelId, prompt, params };
 }
