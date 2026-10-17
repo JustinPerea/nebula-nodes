@@ -13,6 +13,7 @@ vi.mock('../../src/lib/wsClient', () => ({
 }));
 
 import { useGraphStore } from '../../src/store/graphStore';
+import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
 
 const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
 vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -45,7 +46,7 @@ function deferred() {
 }
 
 function graphSync(nodes: Node<NodeData>[], edges: Edge[], graphReplaced = false) {
-  transport.sync?.({ type: 'graphSync', nodes, edges, empty: nodes.length === 0, graphReplaced });
+  transport.sync?.({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, nodes, edges, empty: nodes.length === 0, graphReplaced });
 }
 
 function dispatchedNode(id = 'n3'): Node<NodeData> {

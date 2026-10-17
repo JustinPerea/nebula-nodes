@@ -17,7 +17,7 @@ def store(tmp_path, monkeypatch):
 def test_create_and_get_roundtrip(store):
     p = store.create(name="Cinematic Noir", category="Cinematic",
                      prompt="high-contrast film noir lighting", params={"aspect_ratio": "16:9"},
-                     modelId="nano-banana", refImages=[], scope="global", projectId=None)
+                     modelId="nano-banana", refImages=[], scope="global", projectId=None, params_version=1)
     assert len(p["id"]) == 12
     assert p["name"] == "Cinematic Noir"
     assert p["version"] == 1
@@ -27,8 +27,8 @@ def test_create_and_get_roundtrip(store):
 
 
 def test_list_is_scope_isolated(store):
-    store.create(name="G", category="X", prompt="", params={}, modelId=None, refImages=[], scope="global", projectId=None)
-    store.create(name="P", category="X", prompt="", params={}, modelId=None, refImages=[], scope="project", projectId="proj1")
+    store.create(name="G", category="X", prompt="", params={}, modelId=None, refImages=[], scope="global", projectId=None, params_version=1)
+    store.create(name="P", category="X", prompt="", params={}, modelId=None, refImages=[], scope="project", projectId="proj1", params_version=1)
     glob = store.list("global")
     proj = store.list("project", "proj1")
     assert [p["name"] for p in glob] == ["G"]
@@ -42,12 +42,12 @@ def test_project_scope_requires_project_id(store):
     with pytest.raises(ValueError, match="projectId is required"):
         store.create(
             name="P", category="X", prompt="", params={}, modelId=None,
-            refImages=[], scope="project", projectId=None,
+            refImages=[], scope="project", projectId=None, params_version=1,
         )
 
 
 def test_update_bumps_version_and_keeps_id(store):
-    p = store.create(name="A", category="X", prompt="", params={}, modelId=None, refImages=[], scope="global", projectId=None)
+    p = store.create(name="A", category="X", prompt="", params={}, modelId=None, refImages=[], scope="global", projectId=None, params_version=1)
     updated = store.update(p["id"], name="A2", prompt="new")
     assert updated["id"] == p["id"]
     assert updated["name"] == "A2"
@@ -56,7 +56,7 @@ def test_update_bumps_version_and_keeps_id(store):
 
 
 def test_delete_removes(store):
-    p = store.create(name="A", category="X", prompt="", params={}, modelId=None, refImages=[], scope="global", projectId=None)
+    p = store.create(name="A", category="X", prompt="", params={}, modelId=None, refImages=[], scope="global", projectId=None, params_version=1)
     store.delete(p["id"])
     assert store.get(p["id"]) is None
 
@@ -72,10 +72,10 @@ def test_a_preset_on_a_folded_krea_node_reads_as_the_node_it_became(store, tmp_p
     FLUX 3 Video on its Krea route, billing the way it was saved."""
     old = store.create(name="Comet", category="My Styles", prompt="", scope="global", projectId=None, refImages=[],
                        modelId="krea-video-black-forest-labs-flux-3-video",
-                       params={"_kreaAuth": "api-token", "resolution": "1080p", "duration": 5})
+                       params={"_kreaAuth": "api-token", "resolution": "1080p", "duration": 5}, params_version=1)
     plan = store.create(name="Plan", category="My Styles", prompt="", scope="global", projectId=None, refImages=[],
                         modelId="krea-enhance-black-forest-labs-flux-video-upscale",
-                        params={"_kreaAuth": "mcp", "creativity": "creative"})
+                        params={"_kreaAuth": "mcp", "creativity": "creative"}, params_version=1)
     got = store.get(old["id"])
     assert got["modelId"] == "flux-3-video"
     assert got["params"] == {"_provider": "krea", "_kreaAuth": "api-token", "resolution": "fhd", "duration": 5}
@@ -90,5 +90,5 @@ def test_a_preset_on_a_folded_krea_node_reads_as_the_node_it_became(store, tmp_p
 
 def test_a_preset_on_a_current_node_reads_as_saved(store):
     p = store.create(name="N", category="X", prompt="", params={"_provider": "fal", "aspect_ratio": "16:9"},
-                     modelId="flux-3-image", refImages=[], scope="global", projectId=None)
+                     modelId="flux-3-image", refImages=[], scope="global", projectId=None, params_version=1)
     assert store.get(p["id"]) == p

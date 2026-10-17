@@ -10,6 +10,13 @@ it became, the way saved graphs load (services/retired_nodes.migrate_node):
 the new model id, its renamed values, and ``_provider: krea`` with the saved
 ``_kreaAuth``, so applying it in Create bills the same way it did. The file
 keeps what was saved.
+
+Each file records the params version its ``params`` were saved at
+(``paramsVersion``; a file without it predates the marker: version 0). The
+version is separate from ``version``, which counts edits. Reads upgrade a copy
+of an older preset's params (services/saved_graph_upgrades.py) without writing,
+and every write stores the upgraded params with the current version, so a
+value saved after an upgrade is never upgraded again.
 """
 from __future__ import annotations
 
@@ -22,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from services.retired_nodes import migrate_node
+from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrade_params
 
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _GLOBAL_DIR = "_global"
@@ -68,6 +76,22 @@ def slug_for_preset(name: str) -> str:
     return slug or "preset"
 
 
+def _upgraded(preset: Any) -> Any:
+    """``preset`` as read from disk, with its params upgraded from the version
+    it was saved at. Changes only the in-memory dict, never the file. A partial
+    preset (no model, no Extended Thinking, or not a claude-chat preset) is
+    left as stored: ``upgrade_params`` only matches the full saved shape."""
+    if not isinstance(preset, dict):
+        return preset
+    version = stored_version(preset.get("paramsVersion"))
+    upgraded = upgrade_params(preset.get("modelId"), preset.get("params"), version)
+    if upgraded is not None:
+        preset["params"] = upgraded
+    # A file written by a newer backend keeps its own (higher) version.
+    preset["paramsVersion"] = max(version, PARAMS_VERSION)
+    return preset
+
+
 def _find_file(preset_id: str) -> Path | None:
     if not _ID_RE.fullmatch(preset_id):
         return None
@@ -100,7 +124,14 @@ class PresetStore:
 
     def create(self, *, name: str, category: str, prompt: str, params: dict[str, Any],
                modelId: str | None, refImages: list[str], scope: str, projectId: str | None,
-               thumbnail: str = "") -> dict[str, Any]:
+               params_version: int, thumbnail: str = "") -> dict[str, Any]:
+        """``params_version`` is the version the caller's ``params`` were made
+        at (``PARAMS_VERSION`` for current code); older params are upgraded
+        before they are stored."""
+        params = dict(params or {})
+        upgraded = upgrade_params(modelId, params, params_version)
+        if upgraded is not None:
+            params = upgraded
         preset_id = uuid.uuid4().hex[:12]
         now = _now()
         preset = {
@@ -108,11 +139,14 @@ class PresetStore:
             "name": name,
             "category": category,
             "prompt": prompt,
-            "params": dict(params or {}),
+            "params": params,
             "modelId": modelId,
             "refImages": list(refImages or []),
             "thumbnail": thumbnail,
             "version": 1,
+            # A caller newer than this backend keeps its own version, so a later
+            # backend doesn't upgrade params that are already past its upgrade.
+            "paramsVersion": max(params_version, PARAMS_VERSION),
             "scope": "project" if (scope == "project" and projectId) else "global",
             "projectId": projectId if scope == "project" else None,
             "createdAt": now,
@@ -125,7 +159,7 @@ class PresetStore:
         path = _find_file(preset_id)
         if not path:
             return None
-        return _as_current(json.loads(path.read_text(encoding="utf-8")))
+        return _upgraded(_as_current(json.loads(path.read_text(encoding="utf-8"))))
 
     def list(self, scope: str, projectId: str | None = None) -> list[dict[str, Any]]:
         directory = _scope_dir(scope, projectId)
@@ -134,21 +168,34 @@ class PresetStore:
         items: list[dict[str, Any]] = []
         for p in directory.glob("*.json"):
             try:
-                items.append(_as_current(json.loads(p.read_text(encoding="utf-8"))))
+                items.append(_upgraded(_as_current(json.loads(p.read_text(encoding="utf-8")))))
             except (json.JSONDecodeError, OSError):
                 continue
         items.sort(key=lambda x: x.get("createdAt", ""))
         return items
 
-    def update(self, preset_id: str, **fields: Any) -> dict[str, Any]:
+    def update(self, preset_id: str, *, params_version: int = PARAMS_VERSION,
+               **fields: Any) -> dict[str, Any]:
+        """``params_version`` is the version of ``params`` in ``fields`` (current
+        unless the caller says otherwise). Without new params, the stored params
+        keep the version they were saved at. Either way the merged params are
+        upgraded once against the merged ``modelId`` and the file is stamped,
+        so a thumbnail-only update also stores an older preset upgraded."""
         path = _find_file(preset_id)
         if not path:
             raise KeyError(preset_id)
         preset = json.loads(path.read_text(encoding="utf-8"))
+        stored = stored_version(preset.get("paramsVersion"))
+        new_params = fields.get("params") is not None
         for key, value in fields.items():
-            if key in self._IMMUTABLE or value is None:
+            if key in self._IMMUTABLE or key == "paramsVersion" or value is None:
                 continue
             preset[key] = value
+        version = params_version if new_params else stored
+        upgraded = upgrade_params(preset.get("modelId"), preset.get("params"), version)
+        if upgraded is not None:
+            preset["params"] = upgraded
+        preset["paramsVersion"] = max(version, PARAMS_VERSION)
         preset["version"] = int(preset.get("version", 1)) + 1
         preset["updatedAt"] = _now()
         _write_json(path, preset)

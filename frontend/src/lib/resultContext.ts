@@ -7,7 +7,8 @@ import { isCreateModel } from './createModels';
 import { isRecipeParam } from './billingParams';
 import { allParamDefinitions } from './directRoute';
 import { kreaModeFor, supportsKreaAccount } from './kreaConnection';
-import type { RunRecord, RunSnapshotNode } from './runHistory';
+import { runParamsVersion, type RunRecord, type RunSnapshotNode } from './runHistory';
+import { upgradeSavedParams } from './savedParamsUpgrades';
 
 export interface ResultContext {
   key: string;
@@ -202,8 +203,12 @@ export function resultContextForNode(node: Node<NodeData>, history: readonly Run
     : !isCreateModel(definition) ? 'This model needs Canvas controls. Reuse its saved recipe from Run History.'
       : inputs.unavailable;
   if (!context.reuseUnavailableReason) {
+    // The details above show what the run sent; a reused draft starts from
+    // those values as they would run now (savedParamsUpgrades.ts).
+    const upgraded = upgradeSavedParams(saved.definitionId, saved.params, runParamsVersion(run));
     context.reusableDraft = {
-      modelId: definitionId, prompt: inputs.prompt, params: structuredClone(params), quantity: 1, uploads: [],
+      modelId: definitionId, prompt: inputs.prompt,
+      params: upgraded ? authorParams(upgraded, definition) : structuredClone(params), quantity: 1, uploads: [],
       refs: inputs.reusableRefs.map((filePath) => ({ filePath, previewUrl: backendAssetUrlSync(filePath) })),
     };
   }

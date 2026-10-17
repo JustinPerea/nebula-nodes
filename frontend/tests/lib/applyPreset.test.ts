@@ -8,6 +8,17 @@ function preset(over: Partial<Preset>): Preset {
 }
 
 describe('applyPresetToComposer', () => {
+  it('gives a preset model its per-model Max Tokens unless the preset sets one', () => {
+    const empty = { modelId: null, prompt: '', params: {} };
+    const opus = applyPresetToComposer(preset({ modelId: 'claude-chat', params: { model: 'claude-opus-5-5' } }), empty);
+    expect(opus.params).toMatchObject({ model: 'claude-opus-5-5', max_tokens: 64000 });
+    const set = applyPresetToComposer(preset({ modelId: 'claude-chat', params: { model: 'claude-opus-5-5', max_tokens: 2000 } }), empty);
+    expect(set.params).toMatchObject({ model: 'claude-opus-5-5', max_tokens: 2000 });
+    const edited = applyPresetToComposer(preset({ params: { model: 'claude-opus-5-5' } }),
+      { modelId: 'claude-chat', prompt: '', params: { model: 'claude-sonnet-4-6', max_tokens: 7000 } });
+    expect(edited.params).toMatchObject({ model: 'claude-opus-5-5', max_tokens: 7000 });
+  });
+
   it('retains a saved Krea preset billing choice despite the new-node default', () => {
     const out = applyPresetToComposer(preset({ modelId: 'krea-image-openai-gpt-image-2',
       params: { _kreaAuth: 'mcp' } }), { modelId: null, prompt: '', params: {} }, {}, 'api-token');

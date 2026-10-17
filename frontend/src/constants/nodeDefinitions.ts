@@ -137,9 +137,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'claude-sonnet-4-6',
+        default: 'claude-opus-5-5',
         options: [
-          { label: 'Claude Fable 5 (flagship)', value: 'claude-fable-5' },
+          { label: 'Claude Fable 5.1 (flagship)', value: 'claude-fable-5-1' },
+          { label: 'Claude Opus 5.5', value: 'claude-opus-5-5' },
+          { label: 'Claude Sonnet 5.5', value: 'claude-sonnet-5-5' },
+          { label: 'Claude Haiku 5.5', value: 'claude-haiku-5-5' },
+          { label: 'Claude Fable 5', value: 'claude-fable-5' },
           { label: 'Claude Opus 4.8', value: 'claude-opus-4-8' },
           { label: 'Claude Sonnet 4.6', value: 'claude-sonnet-4-6' },
           { label: 'Claude Haiku 4.5', value: 'claude-haiku-4-5-20251001' },
@@ -152,9 +156,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Max Tokens',
         type: 'integer',
         required: true,
-        default: 4096,
+        // Claude 5.x always think, and Opus 4.6-4.8 / Sonnet 4.6 think adaptively
+        // when Extended Thinking is on; thinking counts toward max_tokens. Anthropic
+        // says to start around 64K at high effort and above; 128K is every listed
+        // model's synchronous output cap except Haiku 4.5 (64K). `default` is the
+        // default model's (Opus 5.5); Fable 5 and Haiku 4.5 keep 4096.
+        default: 64000,
+        defaultBy: { model: { 'claude-fable-5': 4096, 'claude-haiku-4-5-20251001': 4096 } },
         min: 1,
-        max: 200000,
+        max: 128000,
       },
       {
         key: 'temperature',
@@ -165,6 +175,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 0,
         max: 1,
         step: 0.1,
+        // Claude 5.5-generation models, Fable 5.1, Fable 5 and Opus 4.7/4.8 reject non-default sampling params.
+        // Opus 4.6 / Sonnet 4.6 still take them (temperature is forced to 1 while thinking is on).
+        visibleWhen: { model: ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
       },
       {
         key: 'system',
@@ -183,6 +196,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 1,
         step: 0.05,
         placeholder: 'Default',
+        visibleWhen: { model: ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
       },
       {
         key: 'stop_sequences',
@@ -198,6 +212,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: false,
         // Fable/Mythos 5 use always-on adaptive thinking — no extended-thinking param.
+        // On Opus 4.6-4.8 and Sonnet 4.6 (thinking off by default) this turns on
+        // thinking: {type: 'adaptive'} with no budget; Effort sets the depth.
+        // Only Haiku 4.5 still sends a budget_tokens budget.
         visibleWhen: { model: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7', 'claude-opus-4-6'] },
       },
       {
@@ -210,7 +227,28 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 1024,
         max: 200000,
         condition: 'extended_thinking',
-        visibleWhen: { model: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7', 'claude-opus-4-6'] },
+        // Opus 4.7 and later return HTTP 400 for a manual budget_tokens; on the
+        // 4.6 models it is deprecated, so they use adaptive thinking + Effort.
+        visibleWhen: { model: ['claude-haiku-4-5-20251001'] },
+      },
+      {
+        key: 'effort',
+        label: 'Effort',
+        type: 'enum',
+        required: false,
+        default: 'medium',
+        // Sent as output_config.effort, with no thinking budget. Default leaves
+        // each model at its own default effort (medium on Opus 5.5 and Haiku 5.5,
+        // high on the others). Opus 4.6 / Sonnet 4.6 have no X-High.
+        visibleWhen: { model: ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-opus-4-7', 'claude-opus-4-6'] },
+        options: [
+          { label: 'Default', value: '' },
+          { label: 'Low', value: 'low' },
+          { label: 'Medium', value: 'medium' },
+          { label: 'High', value: 'high' },
+          { label: 'X-High', value: 'xhigh', visibleWhen: { model: ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-4-8', 'claude-opus-4-7'] } },
+          { label: 'Max', value: 'max' },
+        ],
       },
       {
         key: 'prompt_caching',
@@ -951,9 +989,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         options: [
           { label: 'v3 (Highest Quality)', value: 'eleven_v3' },
           { label: 'Multilingual v2', value: 'eleven_multilingual_v2' },
-          { label: 'Turbo v2.5 (Low Latency)', value: 'eleven_turbo_v2_5' },
+          { label: 'Turbo v2.5 (deprecated: use Flash v2.5)', value: 'eleven_turbo_v2_5' },
           { label: 'Flash v2.5 (Fastest)', value: 'eleven_flash_v2_5' },
-          { label: 'Turbo v2', value: 'eleven_turbo_v2' },
+          { label: 'Turbo v2 (deprecated: use Flash v2)', value: 'eleven_turbo_v2' },
           { label: 'Flash v2', value: 'eleven_flash_v2' },
         ],
       },
@@ -1033,6 +1071,60 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         placeholder: 'Random',
       },
+    ],
+  },
+
+  // ElevenLabs Text to Dialogue (POST /v1/text-to-dialogue). Eleven v4 runs
+  // only on this endpoint (ElevenLabs models page, read 2026-10-16). The script
+  // is one line per turn, "<voice name>: text"; the backend handler looks the
+  // names up in the person's ElevenLabs voices (handlers/elevenlabs.py
+  // resolve_dialogue_voices) before the paid call.
+  'elevenlabs-dialogue': {
+    id: 'elevenlabs-dialogue',
+    displayName: 'ElevenLabs Text to Dialogue',
+    category: 'audio-gen',
+    apiProvider: 'elevenlabs',
+    apiEndpoint: '/v1/text-to-dialogue',
+    envKeyName: 'ELEVENLABS_API_KEY',
+    executionPattern: 'sync',
+    description: "A conversation between several ElevenLabs voices in one audio file (Eleven v4 by default). The script input is one line per turn, \"<voice name>: <text>\", for example \"Rachel: Hello there.\" then \"Adam: Hi!\". The speaker is everything before the first colon. Use names from the person's ElevenLabs voice library; they match ignoring case, and a voice ID works in place of a name. Before the paid call Nebula looks the names up in their voices (a free call). A name that matches no voice, or more than one, stops the run without generating, and the error lists the candidate voices with their IDs. Up to 10 different voices and 2,000 characters per run. Audio tags such as [whispering] go in the text.",
+    capabilityNote: "Write one line per turn as Name: text, with voice names from your ElevenLabs voices (for example Rachel: Hi there. then Adam: Hey!). Nebula looks the names up before generating. If a name matches no voice, or more than one, the run stops and lists the voices with their IDs; you can write a voice ID in place of the name. Up to 10 voices and 2,000 characters per run.",
+    inputPorts: [
+      { id: 'script', label: 'Script', dataType: 'Text', required: true },
+    ],
+    outputPorts: [
+      { id: 'audio', label: 'Audio', dataType: 'Audio', required: false },
+    ],
+    params: [
+      {
+        key: 'model_id',
+        label: 'Model',
+        type: 'enum',
+        required: false,
+        default: 'eleven_v4',
+        options: [
+          { label: 'Eleven v4', value: 'eleven_v4' },
+          { label: 'Eleven v3', value: 'eleven_v3' },
+        ],
+      },
+      { key: 'stability', label: 'Stability', type: 'float', required: false, default: 0.5, min: 0, max: 1, step: 0.05 },
+      { key: 'similarity', label: 'Similarity', type: 'float', required: false, default: 0.75, min: 0, max: 1, step: 0.05 },
+      { key: 'language_code', label: 'Language Code', type: 'string', required: false, placeholder: 'Auto (e.g. en, es)' },
+      {
+        key: 'output_format',
+        label: 'Output Format',
+        type: 'enum',
+        required: false,
+        default: 'mp3_44100_128',
+        options: [
+          { label: 'MP3 44.1kHz', value: 'mp3_44100_128' },
+          { label: 'MP3 22kHz', value: 'mp3_22050_32' },
+          { label: 'PCM 16kHz', value: 'pcm_16000' },
+          { label: 'PCM 24kHz', value: 'pcm_24000' },
+          { label: 'PCM 44.1kHz', value: 'pcm_44100' },
+        ],
+      },
+      { key: 'seed', label: 'Seed', type: 'integer', required: false, min: 0, max: 4294967295, placeholder: 'Random' },
     ],
   },
 
@@ -2737,17 +2829,24 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gpt-5.4',
+        default: 'gpt-6.1-sol',
         options: [
-          { label: 'GPT-5.5 (flagship)', value: 'gpt-5.5' },
+          { label: 'GPT-6 Astra (flagship)', value: 'gpt-6-astra' },
+          { label: 'GPT-6.1 Sol', value: 'gpt-6.1-sol' },
+          { label: 'GPT-6 Sol', value: 'gpt-6-sol' },
+          { label: 'GPT-6 Luna', value: 'gpt-6-luna' },
+          { label: 'GPT-5.6 Sol', value: 'gpt-5.6-sol' },
+          { label: 'GPT-5.6 Terra', value: 'gpt-5.6-terra' },
+          { label: 'GPT-5.6 Luna', value: 'gpt-5.6-luna' },
+          { label: 'GPT-5.5', value: 'gpt-5.5' },
           { label: 'GPT-5.4', value: 'gpt-5.4' },
           { label: 'GPT-5.4 Mini', value: 'gpt-5.4-mini' },
-          { label: 'GPT-5.4 Nano', value: 'gpt-5.4-nano' },
-          { label: 'GPT-4o (legacy)', value: 'gpt-4o' },
-          { label: 'GPT-4o Mini (legacy)', value: 'gpt-4o-mini' },
-          { label: 'GPT-4.1 (legacy)', value: 'gpt-4.1' },
-          { label: 'GPT-4.1 Mini (legacy)', value: 'gpt-4.1-mini' },
-          { label: 'GPT-4.1 Nano (legacy, sunsets 2026-10-23)', value: 'gpt-4.1-nano' },
+          { label: 'GPT-5.4 nano (retiring 2027-04-01)', value: 'gpt-5.4-nano' },
+          { label: 'GPT-4o (legacy, retiring 2027-01-14)', value: 'gpt-4o' },
+          { label: 'GPT-4o Mini (legacy, retiring 2027-01-14)', value: 'gpt-4o-mini' },
+          { label: 'GPT-4.1 (legacy, retiring 2027-01-14)', value: 'gpt-4.1' },
+          { label: 'GPT-4.1 Mini (legacy, retiring 2027-01-14)', value: 'gpt-4.1-mini' },
+          { label: 'GPT-4.1 nano (legacy, retiring 2026-10-23)', value: 'gpt-4.1-nano' },
         ],
       },
       {
@@ -2757,20 +2856,28 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: 'medium',
         options: [
-          { label: 'None', value: 'none' },
+          // GPT-6 Astra and GPT-6.1 Sol return HTTP 400 for "none".
+          { label: 'None', value: 'none', visibleWhen: { model: ['gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] } },
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
           { label: 'X-High', value: 'xhigh' },
+          // GPT-5.5 and older list no "max" (OpenAI's gpt-5.5 page).
+          { label: 'Max', value: 'max', visibleWhen: { model: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'] } },
         ],
-        visibleWhen: { model: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] },
+        visibleWhen: { model: ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'] },
       },
       {
         key: 'max_completion_tokens',
         label: 'Max Tokens',
         type: 'integer',
         required: false,
-        default: 4096,
+        // Reasoning tokens count toward max_completion_tokens. OpenAI's reasoning
+        // guide recommends reserving at least 25,000 for reasoning and output.
+        // `default` is the GPT-6 and GPT-5.6 value (the default is GPT-6.1 Sol);
+        // the older models keep 4096.
+        default: 25000,
+        defaultBy: { model: { 'gpt-5.5': 4096, 'gpt-5.4': 4096, 'gpt-5.4-mini': 4096, 'gpt-5.4-nano': 4096, 'gpt-4o': 4096, 'gpt-4o-mini': 4096, 'gpt-4.1': 4096, 'gpt-4.1-mini': 4096, 'gpt-4.1-nano': 4096 } },
         min: 1,
         max: 128000,
       },
@@ -2853,12 +2960,17 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Model',
         type: 'enum',
         required: true,
-        default: 'gemini-3.5-flash',
+        default: 'gemini-4-argon',
         options: [
-          { label: 'Gemini 3.5 Flash', value: 'gemini-3.5-flash' },
+          { label: 'Gemini 4 Argon', value: 'gemini-4-argon' },
+          { label: 'Gemini 3.8 Flash', value: 'gemini-3.8-flash' },
+          { label: 'Gemini 3.6 Flash', value: 'gemini-3.6-flash' },
+          { label: 'Gemini 3.5 Flash-Lite', value: 'gemini-3.5-flash-lite' },
+          // Deprecated 2026-10-08; Google routes this id to gemini-3.6-flash.
+          { label: 'Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash)', value: 'gemini-3.5-flash' },
           { label: 'Gemini 3.1 Pro (preview)', value: 'gemini-3.1-pro-preview' },
           { label: 'Gemini 3 Flash (preview)', value: 'gemini-3-flash-preview' },
-          { label: 'Gemini 3.1 Flash-Lite', value: 'gemini-3.1-flash-lite' },
+          { label: 'Gemini 3.1 Flash-Lite (retiring 2027-05-07)', value: 'gemini-3.1-flash-lite' },
           { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
           { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
           { label: 'Gemini 2.5 Flash-Lite', value: 'gemini-2.5-flash-lite' },
@@ -2869,9 +2981,15 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Max Tokens',
         type: 'integer',
         required: false,
-        default: 8192,
+        // Gemini 4 Argon spends more of the limit on thinking; for standard tasks
+        // Google says "Keep the default of 65,536 or don't set any value"
+        // (ai.google.dev/gemini-api/docs/latest-model). 65,536 is also every
+        // Gemini chat model's output cap. `default` is Argon's (the default
+        // model); the other models keep 8192.
+        default: 65536,
+        defaultBy: { model: { 'gemini-3.8-flash': 8192, 'gemini-3.6-flash': 8192, 'gemini-3.5-flash-lite': 8192, 'gemini-3.5-flash': 8192, 'gemini-3.1-pro-preview': 8192, 'gemini-3-flash-preview': 8192, 'gemini-3.1-flash-lite': 8192, 'gemini-2.5-pro': 8192, 'gemini-2.5-flash': 8192, 'gemini-2.5-flash-lite': 8192 } },
         min: 1,
-        max: 65535,
+        max: 65536,
       },
       {
         key: 'temperature',
@@ -2882,6 +3000,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 0,
         max: 2,
         step: 0.1,
+        // Gemini 3.6 Flash, 3.5 Flash-Lite and later ignore sampling params, and
+        // Google says future models will return HTTP 400 for them. Deprecated
+        // 3.5 Flash is routed to 3.6 Flash, so it is hidden there too.
+        visibleWhen: { model: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
       },
       {
         key: 'system',
@@ -2896,11 +3018,14 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Thinking Level',
         type: 'enum',
         required: false,
-        default: '',
-        visibleWhen: { model: ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'] },
+        // Shown for the models listed here (2.5 uses Thinking Budget). On 2.5 a
+        // level is sent only with no budget and a non-default value (a saved one).
+        default: 'medium',
+        visibleWhen: { model: ['gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'] },
         options: [
           { label: 'Default', value: '' },
-          { label: 'Minimal', value: 'minimal' },
+          // Gemini 4 Argon and Gemini 3.8 Flash reject "minimal".
+          { label: 'Minimal', value: 'minimal', visibleWhen: { model: ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'] } },
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
@@ -2925,6 +3050,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 1,
         step: 0.05,
         placeholder: 'Default',
+        visibleWhen: { model: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
       },
       {
         key: 'top_k',
@@ -2932,6 +3058,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'integer',
         required: false,
         placeholder: '64',
+        visibleWhen: { model: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
       },
       {
         key: 'stop_sequences',

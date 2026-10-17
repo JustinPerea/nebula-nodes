@@ -348,7 +348,8 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
 @mcp.tool(annotations=_READ)
 def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, Any]:
     """One node type in detail: input and output ports (ids to wire), params
-    (type, default, options, ranges, `onlyWhen` another param has a value),
+    (type, default, options, ranges, `onlyWhen` another param has a value,
+    and `optionsOnlyWhen` for options offered only for some values of another param),
     whether it runs here, and list prices by the params that set them.
     A node with `routes` (one per provider, in Auto order) has
     `providerChoice` (`_provider`, auto, and the route Auto resolves to

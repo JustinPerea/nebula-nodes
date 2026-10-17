@@ -16,6 +16,7 @@ import { JevResultDetails } from './JevResultDetails';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
 import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
+import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
 import { nodeWiredCounts, nodeWiredPorts } from '../../lib/runScope';
 import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
 import { useProviderNoteStore } from '../../store/providerNoteStore';
@@ -204,6 +205,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
   // Info panel toggle
   const [showInfo, setShowInfo] = useState(false);
+  // What the last model change did to a per-model default, shown under that
+  // param until the next edit on the same node.
+  const [defaultNotes, setDefaultNotes] = useState<{ nodeId: string; notes: DefaultSnapNote[] }>({ nodeId: '', notes: [] });
   const [maskPainterOpen, setMaskPainterOpen] = useState(false);
 
   // Favorites state
@@ -448,23 +452,35 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // the shown provider, at a value another provider would honor (rule H),
   // goes back to its default with one card note (lib/providerSwitch.ts
   // snapHidden): "Safety 5 isn't on fal.ai with FLUX.2 [klein] 9B: back to 2".
-  function writeEdit(params: Record<string, unknown>, key: string) {
+  // Returns the params it wrote.
+  function writeEdit(params: Record<string, unknown>, key: string): Record<string, unknown> {
     if (!definition || !switchable) {
       updateNodeData(activeNode.id, { params });
-      return;
+      return params;
     }
     const routed = withWiredBlockers(definition, params, wiredKey ? wiredKey.split('\n') : []);
     const routeId = shownRouteId(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {});
     const snapped = snapHidden(definition, params, routeId, key);
     updateNodeData(activeNode.id, { params: snapped.params });
     if (snapped.notes.length) useProviderNoteStore.getState().show(activeNode.id, snapped.notes);
+    return snapped.params;
   }
 
   function onParamChange(key: string, value: unknown) {
-    writeEdit({ ...activeNodeData.params, [key]: value }, key);
+    const next = { ...activeNodeData.params, [key]: value };
+    // A model change moves a per-model default (Max Tokens) that wasn't edited,
+    // and says so under that param (lib/paramDefaults.ts). A default the
+    // provider snap then moved again keeps no note.
+    const snap = definition ? snapParamDefaults(definition, activeNodeData.params, next) : { params: next, notes: [] };
+    const written = writeEdit(snap.params, key);
+    setDefaultNotes({
+      nodeId: activeNode.id,
+      notes: snap.notes.filter((note) => Object.is(written[note.param], snap.params[note.param])),
+    });
   }
 
   function clearParam(key: string) {
+    setDefaultNotes({ nodeId: activeNode.id, notes: [] });
     const params = { ...activeNodeData.params };
     delete params[key];
     writeEdit(params, key);
@@ -596,7 +612,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
   }
 
   function renderParamControl(param: InspectorParamDefinition) {
-    const value = activeNodeData.params[param.key] ?? param.default ?? '';
+    // A value the node doesn't store shows its model's default (lib/paramDefaults.ts).
+    const fallback = definition && 'defaultBy' in param && param.defaultBy
+      ? paramDefaultFor(definition, param, activeNodeData.params)
+      : param.default;
+    const value = activeNodeData.params[param.key] ?? fallback ?? '';
 
     if ('disabledReason' in param && param.disabledReason) {
       return <input className="inspector__field" aria-label={param.label} value={String(value)} disabled />;
@@ -933,6 +953,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
         {source === 'definition' && makerSizeNote && param.key === makerSizeNote.param && (
           <div className="inspector__notice" role="note" data-inspector-size-note="true">{makerSizeNote.text}</div>
         )}
+        {source === 'definition' && defaultNotes.nodeId === activeNode.id
+          && defaultNotes.notes.filter((note) => note.param === param.key).map((note) => (
+            <div key={note.text} className="inspector__notice" role="note" data-inspector-default-note="true">{note.text}</div>
+          ))}
         {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && (
           <button
             type="button"

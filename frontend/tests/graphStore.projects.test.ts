@@ -15,6 +15,7 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: {
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
+import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
 function node(value = 'Current', id = 'n1'): Node<NodeData> {
   return { id, type: 'model-node', position: { x: 0, y: 100 },
@@ -89,12 +90,12 @@ describe('project graph replacement', () => {
   it('ignores stale project graph/recovery echoes before they can merge same-ID nodes', () => {
     setProjectContext({ id: 'B', revision: 'b' });
     useGraphStore.getState().loadProjectGraph([node('B')], [], []);
-    transport.sync?.({ type: 'graphSync', workspaceRevision: 'a', graphReplaced: true,
+    transport.sync?.({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, workspaceRevision: 'a', graphReplaced: true,
       nodes: [node('Old A')], edges: [], empty: false,
       providerRecoveries: [{ runId: 'old-run', nodeId: 'n1', resumeOperationId: 'old', existingWorldId: null }] } as ExecutionEvent);
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('B');
     expect(useGraphStore.getState().providerRecoveries).toEqual([]);
-    transport.sync?.({ type: 'graphSync', workspaceRevision: 'b', nodes: [node('Updated B')], edges: [], empty: false } as ExecutionEvent);
+    transport.sync?.({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, workspaceRevision: 'b', nodes: [node('Updated B')], edges: [], empty: false } as ExecutionEvent);
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('Updated B');
   });
 
@@ -145,7 +146,7 @@ describe('project graph replacement', () => {
     expect(useGraphStore.getState().canSwitchProject()).toBe(false);
     expect(useGraphStore.getState().loadProjectGraph([node('B')], [], [])).toBe(false);
     const committed = { ...node('Committed', 'n2'), position };
-    transport.sync?.({ type: 'graphSync', nodes: [node(), committed], edges: [], empty: false });
+    transport.sync?.({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [node(), committed], edges: [], empty: false });
     expect(useGraphStore.getState().canSwitchProject()).toBe(true);
     expect(transport.fetch.mock.calls.filter(([path]) => path === '/api/graph/node')).toHaveLength(1);
   });

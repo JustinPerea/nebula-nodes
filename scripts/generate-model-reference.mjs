@@ -134,6 +134,16 @@ function formatParamRow(param) {
   if (param.default !== undefined && param.default !== null && param.default !== '') {
     defaultVal = escapeCell(String(param.default));
   }
+  // Per-value defaults (defaultBy): "4096; 64000 for model claude-opus-5-5, …".
+  for (const [controller, table] of Object.entries(param.defaultBy ?? {})) {
+    const byValue = new Map();
+    for (const [value, dflt] of Object.entries(table)) {
+      byValue.set(String(dflt), [...(byValue.get(String(dflt)) ?? []), value]);
+    }
+    for (const [dflt, values] of byValue) {
+      defaultVal += `; ${escapeCell(dflt)} for ${escapeCell(controller)} ${values.map(escapeCell).join(', ')}`;
+    }
+  }
 
   let options = '—';
   if (param.type === 'enum' && Array.isArray(param.options)) {
