@@ -28,6 +28,7 @@ import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { requestGraphLoad, requestGraphSave } from '../src/lib/graphFileActions';
 import * as api from '../src/lib/api';
+import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
 const initialGraph = { ...useGraphStore.getState() };
 const initialUI = { ...useUIStore.getState() };
@@ -37,8 +38,9 @@ function node(id: string): Node<NodeData> {
     outputs: { image: { type: 'Image', value: '/api/outputs/fixture.png' } },
   } };
 }
+// paramsVersion 0: a file saved before the marker, which the backend upgrades once.
 const pickedGraph = () => ({ nodes: [node('saved-source')], edges: [], warnings: [],
-  viewport: { x: 12, y: 18, zoom: 0.5 } });
+  viewport: { x: 12, y: 18, zoom: 0.5 }, paramsVersion: 0 });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -130,7 +132,8 @@ describe('workspace-independent graph file actions', () => {
     const [url, request] = mocks.apiFetch.mock.calls[0];
     expect(url).toBe('/api/graph/import');
     expect(JSON.parse(request.body)).toEqual({ nodes: [{ id: 'saved-source', definitionId: 'nano-banana', label: 'saved-source',
-      params: { seed: 7 }, outputs: node('saved-source').data.outputs, position: { x: 15, y: 25 } }], edges: [] });
+      params: { seed: 7 }, outputs: node('saved-source').data.outputs, position: { x: 15, y: 25 } }], edges: [],
+      paramsVersion: 0 });
     await act(async () => { resolveImport(new Response(JSON.stringify({ nodes: [node('n8')], edges: [] }), { status: 200 })); });
     await waitFor(() => expect(useUIStore.getState().viewMode).toBe('canvas'));
     expect(useGraphStore.getState().nodes[0].id).toBe('n8');
@@ -267,7 +270,7 @@ describe('workspace-independent graph file actions', () => {
     // returning HTTP. Exercise the subscribed merge handler, not a setState stub.
     const importedNodes = [node('n8'), node('n9')];
     const importedEdges = [{ id: 'imported-wire', source: 'n8', sourceHandle: 'image', target: 'n9', targetHandle: 'images' }];
-    act(() => mocks.onSync!({ type: 'graphSync', nodes: importedNodes, edges: importedEdges, empty: false }));
+    act(() => mocks.onSync!({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, nodes: importedNodes, edges: importedEdges, empty: false }));
     expect(useGraphStore.getState().nodes.map((entry) => entry.id)).toEqual(['n8', 'n9']);
     expect(useGraphStore.getState().edges).toEqual(importedEdges);
     expect(useGraphStore.getState().isImportingGraph).toBe(true);
