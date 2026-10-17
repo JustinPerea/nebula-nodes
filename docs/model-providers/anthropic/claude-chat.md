@@ -144,7 +144,10 @@ is on"). The handler (`SAMPLING_ADAPTIVE_MODELS`) therefore:
   graph, imported graph files, recovered copies of a stale tab (from the
   version the tab loaded at) and Create drafts kept in the browser
   (`frontend/src/lib/savedParamsUpgrades.ts`). Run records are not rewritten:
-  each keeps the 4,096 it sent, so replaying one sends 4,096. A saved budget used to cap thinking inside that 4,096; adaptive
+  each keeps the 4,096 it sent, and carries the version it was sent at
+  (`paramsVersion`; none means before the upgrade). Replaying one, reusing its
+  settings in Create, or checking a Paper run's freshness uses the recipe
+  upgraded to 64,000; the replay's own record holds what it sent. A saved budget used to cap thinking inside that 4,096; adaptive
   thinking has no cap, and "thinking tokens count toward `max_tokens`, so a long
   thinking pass can consume the budget before the text response completes"
   (thinking-troubleshooting). The graph records that the upgrade ran, so a

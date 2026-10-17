@@ -29,6 +29,7 @@ import {
   paperInputOutOfDateReasons,
   paperRecipeRevision,
   paperRunOutOfDateReasons,
+  currentRunSnapshot,
   recordRunOutput,
   recordRunBatchOutputs,
   recordRunSkip,
@@ -1733,7 +1734,11 @@ async function executeHistoricalRun(
     return;
   }
 
-  const snapshot = freezeRunSnapshot(source.snapshot);
+  // Every replay runs the recipe as it would run now: values saved before a
+  // params upgrade are upgraded here, once for every replay action. The
+  // source record stays as it was sent, and the new record holds what this
+  // replay sends, stamped current.
+  const snapshot = freezeRunSnapshot(currentRunSnapshot(source));
   const targetNodeId = source.targetNodeId;
   if (targetNodeId && !snapshot.nodes.some((node) => node.id === targetNodeId)) return;
   const heldStart = blockedProviderStart(

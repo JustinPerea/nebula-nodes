@@ -1,3 +1,5 @@
+import type { RunGraphSnapshot } from './runHistory';
+
 /**
  * One-time param upgrades of values saved in the browser.
  *
@@ -6,6 +8,12 @@
  * Create drafts are also kept in localStorage, which only the browser reads,
  * so the same rule runs here when those drafts load. A backend test keeps the
  * version, the four models and both numbers equal to the Python ones.
+ *
+ * Run records are never rewritten: each one keeps what that run sent. A record
+ * carries the version its recipe was sent at (`paramsVersion`, missing = 0,
+ * stamped by openRunRecord), and `upgradeRunSnapshot` upgrades a copy of the
+ * recipe when it is used again: replays (executeHistoricalRun), Create's
+ * "Reuse settings" (resultContext.ts) and Paper freshness checks.
  *
  * Version 1 (Justin, 2026-10-17): a claude-chat value on Claude Opus 4.6,
  * Sonnet 4.6, Opus 4.7 or Opus 4.8 with Extended Thinking on, holding Max
@@ -43,4 +51,18 @@ export function upgradeSavedParams(
     return { ...params, max_tokens: UPGRADED_MAX_TOKENS };
   }
   return null;
+}
+
+/** A run recipe saved at `version` as it should run now. Never mutates its
+ * input, and returns the same object when nothing changes. */
+export function upgradeRunSnapshot(snapshot: RunGraphSnapshot, version: number): RunGraphSnapshot {
+  if (version >= GRAPH_PARAMS_VERSION) return snapshot;
+  let changed = false;
+  const nodes = snapshot.nodes.map((node) => {
+    const params = upgradeSavedParams(node.definitionId, node.params, version);
+    if (!params) return node;
+    changed = true;
+    return { ...node, params };
+  });
+  return changed ? { ...snapshot, nodes } : snapshot;
 }

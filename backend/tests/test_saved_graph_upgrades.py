@@ -399,6 +399,25 @@ def test_catalog_read_leaves_run_records_as_they_were_sent(workspace):
     assert entry["snapshot"]["runHistory"] == saved_snapshot()["runHistory"]
 
 
+def test_saved_project_keeps_each_record_s_params_version(workspace):
+    """The canvas stamps each new run record with the version its recipe was
+    sent at (paramsVersion, outside the snapshot) and upgrades a copy when the
+    record is replayed. The backend stores records as sent, stamp included."""
+    client, _, store = workspace
+    created = create(client, "Stamped")
+    project_id = created["project"]["id"]
+    snapshot = saved_snapshot()
+    stamped = copy.deepcopy(snapshot["runHistory"][0])
+    stamped.update({"id": "run-new", "paramsVersion": PARAMS_VERSION})
+    snapshot["runHistory"].append(stamped)
+    save(client, project_id, created["workspaceRevision"], snapshot)
+
+    history = store.read()["projects"][project_id]["snapshot"]["runHistory"]
+    assert history == snapshot["runHistory"]
+    assert "paramsVersion" not in history[0]
+    assert history[1]["paramsVersion"] == PARAMS_VERSION
+
+
 def draft(model_id="claude-chat", **params):
     return {"revision": "r1", "modelId": model_id, "prompt": "Hi", "params": params, "refs": [],
             "quantity": 1, "uploads": []}

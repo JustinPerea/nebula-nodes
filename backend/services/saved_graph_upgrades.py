@@ -19,7 +19,13 @@ once per saved graph, and the graph records that it ran (``PARAMS_VERSION``):
   payload (frontend/src/store/createDraftStore.ts, rule mirrored in
   frontend/src/lib/savedParamsUpgrades.ts).
 
-Run records are never upgraded: each one is what that run sent.
+Run records are never rewritten: each one is what that run sent. The canvas
+stamps each new record with the version it was sent at (``paramsVersion`` on
+the record, outside its snapshot so recipe hashes don't change; a record
+without it predates the stamp: version 0) and upgrades a copy of the recipe
+when it is used again: replays, Create's "Reuse settings" and Paper freshness
+(``upgradeRunSnapshot`` in frontend/src/lib/savedParamsUpgrades.ts). The
+backend only stores records, so it keeps the stamp as sent.
 
 A graph without the marker is version 0, saved before any upgrade existed.
 
