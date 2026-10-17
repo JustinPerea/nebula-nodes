@@ -15,8 +15,37 @@ from services.image_input import load_local_image
 from services.retired_nodes import GEMINI_TTS_PREVIEWS_SHUTDOWN, default_until
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
+from services.param_defaults import param_default
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+# Chat models added 2026-10-16 (ai.google.dev model pages, thinking guide and
+# "What's new in Gemini 4 Argon", checked that day). From Gemini 3.6 Flash and
+# 3.5 Flash-Lite on, temperature/top_p/top_k are ignored and Google says future
+# models will return HTTP 400 for them, so Nebula stops sending them to these.
+# Gemini 4 Argon and Gemini 3.8 Flash return an error for thinkingLevel
+# "minimal". Argon's synchronous output limit is 65,536 tokens; above that
+# generateContent returns HTTP 400. Older models keep the request they sent.
+# gemini-3.5-flash is deprecated and Google routes its requests to
+# gemini-3.6-flash (ai.google.dev/gemini-api/docs/models/gemini-3.5-flash), so
+# its sampling params are ignored too; it joined this list 2026-10-16.
+GEMINI_CHAT_NO_SAMPLING = frozenset({
+    "gemini-4-argon",
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+})
+GEMINI_CHAT_THINKING_LEVELS = {
+    "gemini-4-argon": ("low", "medium", "high"),
+    "gemini-3.8-flash": ("low", "medium", "high"),
+    "gemini-3.6-flash": ("minimal", "low", "medium", "high"),
+    "gemini-3.5-flash-lite": ("minimal", "low", "medium", "high"),
+}
+GEMINI_CHAT_MAX_OUTPUT = {"gemini-4-argon": 65_536}
+# generationConfig.stopSequences takes "up to 5" sequences
+# (https://ai.google.dev/api/generate-content, checked 2026-10-16).
+GEMINI_MAX_STOP_SEQUENCES = 5
 
 
 async def handle_gemini_chat(
@@ -71,15 +100,41 @@ async def handle_gemini_chat(
                     }
                 })
 
-    model = node.params.get("model", "gemini-3.5-flash")
+    model = node.params.get("model", "gemini-4-argon")
 
     generation_config: dict[str, Any] = {}
     temperature = node.params.get("temperature")
-    if temperature is not None:
+    if temperature is not None and model not in GEMINI_CHAT_NO_SAMPLING:
         generation_config["temperature"] = float(temperature)
+    # Missing or cleared sends no maxOutputTokens, so Google applies the model's
+    # own default (65,536 on Argon). The per-model default (defaultBy) is written
+    # by the canvas, not here: a fallback would send a smaller cap than unset.
     max_tokens = node.params.get("max_tokens")
     if max_tokens:
-        generation_config["maxOutputTokens"] = int(max_tokens)
+        output_cap = GEMINI_CHAT_MAX_OUTPUT.get(model)
+        generation_config["maxOutputTokens"] = min(int(max_tokens), output_cap) if output_cap else int(max_tokens)
+
+    # Top P, Top K and stop sequences were on the card but never sent. They go
+    # out only when set (neither sampling param has a default to compare with)
+    # and, for Top P and Top K, only to models Google still takes them from: from
+    # Gemini 3.6 Flash and 3.5 Flash-Lite on they are ignored, and Google says
+    # later models will return HTTP 400. Stop sequences aren't deprecated.
+    if model not in GEMINI_CHAT_NO_SAMPLING:
+        top_p = node.params.get("top_p")
+        if top_p is not None and top_p != "":
+            generation_config["topP"] = float(top_p)
+        top_k = node.params.get("top_k")
+        if top_k is not None and top_k != "":
+            generation_config["topK"] = int(top_k)
+    stop_sequences_raw = node.params.get("stop_sequences")
+    if stop_sequences_raw:
+        sequences = [s.strip() for s in str(stop_sequences_raw).split(",") if s.strip()]
+        if len(sequences) > GEMINI_MAX_STOP_SEQUENCES:
+            raise ValueError(
+                f"Gemini takes up to {GEMINI_MAX_STOP_SEQUENCES} stop sequences; this node has {len(sequences)}."
+            )
+        if sequences:
+            generation_config["stopSequences"] = sequences
 
     # Structured output: response_format carries the MIME type (e.g. application/json).
     # The node exposed this param but the handler previously ignored it.
@@ -97,7 +152,25 @@ async def handle_gemini_chat(
     # Cannot use both — API returns 400
     thinking_level = node.params.get("thinkingLevel")
     thinking_budget = node.params.get("thinkingBudget")
+    if model.startswith("gemini-2.5-") and (
+        (thinking_budget is not None and thinking_budget != "")
+        or thinking_level == param_default("gemini-chat", "thinkingLevel", {"model": model})
+    ):
+        # The 2.5 cards show Thinking Budget, not Thinking Level, so a level
+        # there is hidden: left from another model, or the default "medium" a
+        # new node starts with. It goes out only when no budget is set and it
+        # differs from that default, i.e. a level-only 2.5 node saved with a
+        # level on purpose. Sending the default turned thinking on for 2.5
+        # Flash-Lite, which doesn't think by default (Google's thinking table).
+        thinking_level = None
     if thinking_level and thinking_level != "":
+        levels = GEMINI_CHAT_THINKING_LEVELS.get(model)
+        if levels is not None and thinking_level not in levels:
+            # The card marks a saved level the model lacks as "(unavailable for
+            # selected model)"; refuse it before the request, like a Runway ratio.
+            raise ValueError(
+                f"Thinking level '{thinking_level}' isn't available for {model}. Pick one of: {', '.join(levels)}."
+            )
         request_body["generationConfig"] = request_body.get("generationConfig", {})
         request_body["generationConfig"]["thinkingConfig"] = {"thinkingLevel": thinking_level}
     elif thinking_budget is not None and thinking_budget != "":

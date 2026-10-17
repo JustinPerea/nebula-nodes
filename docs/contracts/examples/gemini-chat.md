@@ -59,7 +59,11 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 
 | Model (registry id) | Typical use |
 |---------------------|-------------|
-| `gemini-3.5-flash` | Default — fast chat |
+| `gemini-4-argon` | Default for new nodes (from 2026-10-16), Thinking Level `medium`. Hardest reasoning; thinking counts against `max_tokens` |
+| `gemini-3.8-flash` | Newer Flash |
+| `gemini-3.6-flash` | Fast chat (the default before 2026-10-16) |
+| `gemini-3.5-flash-lite` | Cheapest |
+| `gemini-3.5-flash` | Deprecated 2026-10-08; Google routes it to `gemini-3.6-flash`, so it gets no sampling params either (2026-10-16) |
 | `gemini-3.1-pro-preview` | Higher quality reasoning |
 | `gemini-2.5-pro` / `gemini-2.5-flash` | Legacy 2.5 family |
 
@@ -73,7 +77,7 @@ Rates from [official pricing](https://ai.google.dev/gemini-api/docs/pricing) as 
 | `thinkingLevel` / `thinkingBudget` | Thinking tokens on supported models |
 | `response_format: application/json` | Same token math; may increase output length |
 
-Draft iterations: use `gemini-3.5-flash` with lower `max_tokens` before Pro models.
+Draft iterations: use `gemini-3.6-flash` or `gemini-3.5-flash-lite` with lower `max_tokens` before Argon or Pro models.
 
 ---
 
@@ -118,15 +122,15 @@ Draft iterations: use `gemini-3.5-flash` with lower `max_tokens` before Pro mode
 
 | `key` | `type` | `default` | Values |
 |-------|--------|-----------|--------|
-| `model` | enum | `gemini-3.5-flash` | `gemini-3.5-flash`, `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
-| `max_tokens` | integer | `8192` | 1–65535 → `maxOutputTokens` |
-| `temperature` | float | `1` | 0–2 |
+| `model` | enum | `gemini-4-argon` | `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
+| `max_tokens` | integer | `65536` (`gemini-4-argon`, the default); `8192` for every other model (`defaultBy`) | 1–65536 → `maxOutputTokens` (every listed model's output limit is 65,536). Argon spends more of the limit on thinking; for standard tasks Google says "Keep the default of 65,536 or don't set any value". The handler caps it at 65,536 on `gemini-4-argon` (Argon's synchronous output limit) |
+| `temperature` | float | `1` | 0–2. Hidden and not sent for `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite` and the deprecated `gemini-3.5-flash` |
 | `system` | textarea | `""` | → `systemInstruction.parts[].text` |
-| `thinkingLevel` | enum | `""` | Gemini 3.x only: `minimal`, `low`, `medium`, `high` → `thinkingConfig.thinkingLevel` |
+| `thinkingLevel` | enum | `medium` | `""` (Default, sends nothing), `minimal`, `low`, `medium`, `high` → `thinkingConfig.thinkingLevel` on Gemini 3.x and 4. No `minimal` on `gemini-4-argon` or `gemini-3.8-flash` (the handler refuses it before the request). On `gemini-2.5-*` (whose card shows `thinkingBudget` instead) it is sent only when no `thinkingBudget` is set and the level isn't the default `medium`; a new 2.5 node, or a saved one holding exactly `medium`, sends none (2026-10-16). The default was `""` before 2026-10-16; saved nodes keep their value |
 | `thinkingBudget` | integer | unset | Gemini 2.5 only → `thinkingConfig.thinkingBudget` |
-| `top_p` | float | unset | **Not forwarded** by handler today |
-| `top_k` | integer | unset | **Not forwarded** by handler today |
-| `stop_sequences` | string | unset | **Not forwarded** by handler today |
+| `top_p` | float | unset | → `generationConfig.topP` when set. Hidden and not sent for the five models in `GEMINI_CHAT_NO_SAMPLING` |
+| `top_k` | integer | unset | → `generationConfig.topK` when set. Same model rule as `top_p` |
+| `stop_sequences` | string | unset | Comma-separated → `generationConfig.stopSequences` (trimmed, empty entries dropped) when non-empty, on every model. More than 5 is refused before the request (Google takes up to 5) |
 | `response_format` | enum | `text/plain` | `application/json` → `responseMimeType` |
 
 **Handler-pinned**
@@ -204,13 +208,14 @@ Content-Type: application/json
 | Local image path | `inline_data` with `mime_type` + base64 `data` |
 | HTTP(S) URL | `file_data.file_uri` |
 | `data:` URI | Split header → `inline_data` |
-| `temperature` param | `generationConfig.temperature` if set |
-| `max_tokens` param | `generationConfig.maxOutputTokens` if truthy |
+| `temperature` param | `generationConfig.temperature` if set, except on the five models in `GEMINI_CHAT_NO_SAMPLING` |
+| `max_tokens` param | `generationConfig.maxOutputTokens` if truthy. When the key is missing or empty, no `maxOutputTokens` is sent on any model, so Google applies the model's own default. `defaultBy` acts only in the canvas (new nodes, model switches) |
 | `response_format` param | `generationConfig.responseMimeType` when ≠ `text/plain` |
 | `system` param | Top-level `systemInstruction` when non-empty |
-| `thinkingLevel` param | `generationConfig.thinkingConfig.thinkingLevel` when set (3.x models) |
-| `thinkingBudget` param | `generationConfig.thinkingConfig.thinkingBudget` when set (2.5 models) — only if `thinkingLevel` absent |
-| `top_p`, `top_k`, `stop_sequences` | **Omitted** — in registry UI but not forwarded |
+| `thinkingLevel` param | `generationConfig.thinkingConfig.thinkingLevel` when set (3.x and 4 models; on `gemini-2.5-*` only when no `thinkingBudget` is set and the level isn't the default `medium`) |
+| `thinkingBudget` param | `generationConfig.thinkingConfig.thinkingBudget` when set (2.5 models) — on 2.5 it wins over any hidden `thinkingLevel` |
+| `top_p`, `top_k` | `generationConfig.topP` / `topK` when set, except on the five models in `GEMINI_CHAT_NO_SAMPLING` (Google ignores them there and says later models will return 400) |
+| `stop_sequences` | `generationConfig.stopSequences` when non-empty, all models |
 
 ### Response parsing
 
@@ -243,6 +248,7 @@ Vision images appended as extra `parts` after the message text (order: text firs
 | Both `thinkingLevel` and `thinkingBudget` set | API 400 — handler sends only one branch |
 | Local image path missing | Skipped silently (no part added) |
 | `response_format: application/json` | Sets `responseMimeType`; model must support JSON mode |
+| More than 5 stop sequences | `ValueError("Gemini takes up to 5 stop sequences; this node has N.")` before the request |
 | Multi-turn chat history | Not exposed — single `messages` string today |
 
 ---
@@ -284,7 +290,7 @@ Assertions on fixture body:
       "id": "n2",
       "definitionId": "gemini-chat",
       "params": {
-        "model": "gemini-3.5-flash",
+        "model": "gemini-3.6-flash",
         "max_tokens": 1024,
         "temperature": 0.7
       },
@@ -326,9 +332,9 @@ Vision: connect upstream `image` port(s) → `images` (multi). System prompt via
 | `systemInstruction` | ✓ | `system` param |
 | `generationConfig.temperature` | ✓ | param |
 | `generationConfig.maxOutputTokens` | ✓ | `max_tokens` param |
-| `generationConfig.topP` | ✓ | **not forwarded** |
-| `generationConfig.topK` | ✓ | **not forwarded** |
-| `generationConfig.stopSequences` | ✓ | **not forwarded** |
+| `generationConfig.topP` | ✓ | `top_p` param, older models only |
+| `generationConfig.topK` | ✓ | `top_k` param, older models only |
+| `generationConfig.stopSequences` | ✓ (up to 5) | `stop_sequences` param |
 | `generationConfig.responseMimeType` | ✓ | `response_format` param |
 | `generationConfig.thinkingConfig` | ✓ | `thinkingLevel` or `thinkingBudget` |
 | `tools` / `toolConfig` | ✓ | omitted |
@@ -358,3 +364,6 @@ Official reference: [Generate content](https://ai.google.dev/api/generate-conten
 |------|--------|
 | 2026-07-01 | Initial exemplar (partial) |
 | 2026-07-01 | Gold upgrade — full Vol 1–4, pricing, parameter matrix |
+| 2026-10-16 | Default model `gemini-4-argon`, Thinking Level default `medium`; `thinkingLevel` no longer sent to 2.5 models when a `thinkingBudget` is set; handler fallback for a missing `model` is `gemini-4-argon` |
+| 2026-10-16 | Top P, Top K and stop sequences forwarded; Argon `max_tokens` default 65,536 (canvas only; a missing value sends none); max 65,536 |
+| 2026-10-16 | Justin's answers: on 2.5 the default `thinkingLevel` (`medium`) is no longer sent; `gemini-3.5-flash` joins `GEMINI_CHAT_NO_SAMPLING` and hides Temperature / Top P / Top K |

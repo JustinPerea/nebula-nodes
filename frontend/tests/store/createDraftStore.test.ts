@@ -6,6 +6,7 @@ import {
   type CreateDraft,
   type CreateDraftSeed,
 } from '../../src/store/createDraftStore';
+import { CLAUDE_THINKING_MODELS, GRAPH_PARAMS_VERSION, upgradeSavedParams } from '../../src/lib/savedParamsUpgrades';
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -167,5 +168,51 @@ describe('Create session drafts', () => {
     } finally {
       network.mockRestore();
     }
+  });
+});
+
+describe('Create drafts saved before a one-time param upgrade', () => {
+  const old = { model: 'claude-opus-4-6', extended_thinking: true, max_tokens: 4096 };
+  const claude = (params: Record<string, unknown>) => savedDraft({ modelId: 'claude-chat', params });
+
+  it('upgrades a draft saved without the marker once, and a later 4,096 is kept', () => {
+    const storage = memoryStorage();
+    storage.setItem(CREATE_DRAFT_STORAGE_KEY, JSON.stringify({ version: 1, drafts: {
+      upgraded: claude(old),
+      sonnet: claude({ ...old, model: 'claude-sonnet-4-6', max_tokens: '4096' }),
+      thinkingOff: claude({ ...old, extended_thinking: false }),
+      fable: claude({ ...old, model: 'claude-fable-5' }),
+      otherValue: claude({ ...old, max_tokens: 8192 }),
+      otherModel: savedDraft({ modelId: 'gpt-4o-chat', params: old }),
+    } }));
+    const store = createCreateDraftStore(storage);
+    const maxTokens = Object.fromEntries(Object.entries(store.getState().drafts)
+      .map(([id, value]) => [id, value.params.max_tokens]));
+    expect(maxTokens).toEqual({ upgraded: 64000, sonnet: 64000, thinkingOff: 4096, fable: 4096, otherValue: 8192, otherModel: 4096 });
+
+    store.getState().updateDraft('upgraded', (current) => ({ params: { ...current.params, max_tokens: 4096 } }));
+    const written = JSON.parse(storage.getItem(CREATE_DRAFT_STORAGE_KEY)!);
+    expect(written.paramsVersion).toBe(GRAPH_PARAMS_VERSION);
+    const reloaded = createCreateDraftStore(storage).getState().drafts;
+    expect(reloaded.upgraded.params.max_tokens).toBe(4096);
+    expect(reloaded.sonnet.params.max_tokens).toBe(64000);
+  });
+
+  it('keeps a 4,096 in a draft saved at the current version', () => {
+    const storage = memoryStorage();
+    storage.setItem(CREATE_DRAFT_STORAGE_KEY, JSON.stringify({ version: 1, paramsVersion: GRAPH_PARAMS_VERSION,
+      drafts: { kept: claude(old) } }));
+    expect(createCreateDraftStore(storage).getState().drafts.kept.params.max_tokens).toBe(4096);
+  });
+
+  it('matches the backend rule', () => {
+    for (const model of CLAUDE_THINKING_MODELS) {
+      expect(upgradeSavedParams('claude-chat', { ...old, model }, 0)).toEqual({ ...old, model, max_tokens: 64000 });
+    }
+    expect(upgradeSavedParams('claude-chat', old, GRAPH_PARAMS_VERSION)).toBeNull();
+    expect(upgradeSavedParams('claude-chat', { ...old, model: ['claude-opus-4-6'] }, 0)).toBeNull();
+    expect(upgradeSavedParams('claude-chat', { ...old, max_tokens: true }, 0)).toBeNull();
+    expect(upgradeSavedParams('claude-chat', ['x'], 0)).toBeNull();
+    expect(upgradeSavedParams(null, old, 0)).toBeNull();
   });
 });
