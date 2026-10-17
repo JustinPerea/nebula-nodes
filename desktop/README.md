@@ -502,7 +502,9 @@ for testing, lives in `desktop/out/validation/` and is refused by
 
 Startup failures are shown in the window with actionable text — the normal
 workspace is never loaded. A loading spinner appears while the sidecar is
-starting; it is replaced by the failure surface on error.
+starting; it is replaced by the failure surface on error. The failure page
+(`failure-surface.mjs`) grows that window to 600x400 so the whole message,
+which ends with the fix, is in view; its text can be scrolled and copied.
 
 - **Invalid Python**: the window shows the attempted absolute path and
   remediation guidance (correct the override or restore the verified runtime).
