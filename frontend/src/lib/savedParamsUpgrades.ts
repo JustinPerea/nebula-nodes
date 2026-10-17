@@ -1,5 +1,3 @@
-import type { RunGraphSnapshot } from './runHistory';
-
 /**
  * One-time param upgrades of values saved in the browser.
  *
@@ -64,9 +62,19 @@ export function upgradeSavedParams(
   return null;
 }
 
+/** The part of a run recipe (runHistory.ts RunGraphSnapshot) an upgrade reads. */
+interface UpgradableSnapshot {
+  nodes: ReadonlyArray<{ definitionId: unknown; params: unknown }>;
+}
+
 /** A run recipe saved at `version` as it should run now. Never mutates its
- * input, and returns the same object when nothing changes. */
-export function upgradeRunSnapshot(snapshot: RunGraphSnapshot, version: number): RunGraphSnapshot {
+ * input, and returns the same object when nothing changes.
+ *
+ * Typed structurally rather than importing RunGraphSnapshot so this module
+ * imports nothing: the build's stamp plugin (vite-plugins/buildStamp.ts)
+ * reads GRAPH_PARAMS_VERSION from here under the Node tsconfig, where the
+ * browser-only runHistory.ts doesn't typecheck. */
+export function upgradeRunSnapshot<T extends UpgradableSnapshot>(snapshot: T, version: number): T {
   if (version >= GRAPH_PARAMS_VERSION) return snapshot;
   let changed = false;
   const nodes = snapshot.nodes.map((node) => {
