@@ -44,6 +44,8 @@ os.environ.pop("NEBULA_COMMONS_ENABLED", None)
 
 import pytest  # noqa: E402
 
+from services.saved_graph_upgrades import PARAMS_VERSION  # noqa: E402  (pure: reads no env)
+
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_teardown(item, nextitem):
@@ -96,10 +98,14 @@ def spending_limits_off(monkeypatch):
 # The person's launch token in tests (services/person_session.py). The
 # `person` fixture installs it; without that fixture it verifies as nothing.
 PERSON_TOKEN = "test-person-token-" + "0" * 25
+# The canvas sends its params version on every request, and a browser request
+# without one is refused as a tab from before the gate (main.py
+# _params_outdated). A local program copying the canvas copies it too.
+CANVAS_PARAMS_VERSION = {"X-Nebula-Params-Version": str(PARAMS_VERSION)}
 # What the person's canvas sends. A real browser also sends Origin, which
 # proves nothing on its own: FORGED_ORIGIN is what any local program can send.
-PERSON = {"Origin": "http://localhost:5173", "X-Nebula-Person": PERSON_TOKEN}
-FORGED_ORIGIN = {"Origin": "http://localhost:5173"}
+PERSON = {"Origin": "http://localhost:5173", "X-Nebula-Person": PERSON_TOKEN, **CANVAS_PARAMS_VERSION}
+FORGED_ORIGIN = {"Origin": "http://localhost:5173", **CANVAS_PARAMS_VERSION}
 PERSON_HELLO = {"type": "hello", "personToken": PERSON_TOKEN}
 
 
@@ -108,7 +114,7 @@ class PersonFixture:
 
     def __init__(self, token: str) -> None:
         self.token = token
-        self.headers = {"Origin": "http://localhost:5173", "X-Nebula-Person": token}
+        self.headers = {"Origin": "http://localhost:5173", "X-Nebula-Person": token, **CANVAS_PARAMS_VERSION}
         self.hello = {"type": "hello", "personToken": token}
 
 

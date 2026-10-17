@@ -9,6 +9,7 @@ import type { SavedProject } from '../src/lib/projects';
 import * as execution from '../src/lib/api';
 import { RUN_HISTORY_STORAGE_KEY } from '../src/lib/runHistory';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
+import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
 vi.mock('../src/lib/projects', async (original) => ({
   ...await original<typeof import('../src/lib/projects')>(),
@@ -44,12 +45,12 @@ beforeEach(() => {
   useCreateDraftStore.setState({ drafts: {} });
   vi.spyOn(execution, 'fetchCLIGraph').mockResolvedValue({ nodes: [], edges: [], empty: true });
   vi.spyOn(execution, 'executeGraph').mockResolvedValue({ status: 'complete' } as never);
-  vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+  vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], activeProjectId: 'alpha', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
   vi.mocked(projects.getProject).mockImplementation(async (id) => project(id));
   vi.mocked(projects.saveProject).mockImplementation(async (id, snapshot) => ({ ...project(id), snapshot }));
-  vi.mocked(projects.openProject).mockResolvedValue({ project: project('beta'), workspaceRevision: 'rev-b' });
+  vi.mocked(projects.openProject).mockResolvedValue({ project: project('beta'), workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION });
   vi.mocked(projects.createProject).mockResolvedValue({ project: { ...project('beta'), nodeCount: 0,
-    snapshot: { nodes: [], edges: [], runHistory: [], viewport: null, createSessionId: null } }, workspaceRevision: 'rev-b' });
+    snapshot: { nodes: [], edges: [], runHistory: [], viewport: null, createSessionId: null } }, workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION });
 });
 afterEach(async () => {
   unsubscribe?.(); unsubscribe = null;
@@ -102,7 +103,7 @@ describe('saved project coordinator', () => {
     expect(execution.executeGraph).not.toHaveBeenCalled();
   });
   it('deletes another project without touching or saving the open canvas', async () => {
-    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project(), project('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project(), project('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
     vi.mocked(projects.deleteProject).mockResolvedValue({ deletedProjectId: 'beta', trashedProject: trashed('beta'), activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
     await useProjectStore.getState().initialize();
     await useProjectStore.getState().remove('beta');
@@ -116,7 +117,7 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().busy).toBe(false);
   });
   it('deleting the open project empties the canvas without saving it first', async () => {
-    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project(), project('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project(), project('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
     vi.mocked(projects.deleteProject).mockResolvedValue({ deletedProjectId: 'alpha', trashedProject: trashed('alpha'), activeProjectId: null, workspaceRevision: 'rev-gone' });
     await useProjectStore.getState().initialize();
     unsubscribe = subscribeProjectAutosave();
@@ -139,7 +140,7 @@ describe('saved project coordinator', () => {
     expect(projects.openProject).toHaveBeenCalledWith('beta', 'rev-gone');
   });
   it('restores from the trash into the list, closed, and clears the Undo offer', async () => {
-    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
     vi.mocked(projects.restoreProject).mockResolvedValue({ ...trashed('beta'), updatedAt: '2026-10-10T09:00:00Z' });
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState().trash.map((p) => p.id)).toEqual(['beta']);
@@ -153,7 +154,7 @@ describe('saved project coordinator', () => {
     expect(projects.openProject).not.toHaveBeenCalled();
   });
   it('drops a trash entry that expired elsewhere when restore 404s', async () => {
-    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta')], activeProjectId: 'alpha', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
     vi.mocked(projects.restoreProject).mockRejectedValue(new projects.ProjectRequestError('That project is no longer in Recently deleted', 404));
     await useProjectStore.getState().initialize();
     useProjectStore.setState({ lastDeleted: { id: 'beta', name: 'beta' } });
@@ -163,7 +164,7 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().error).toBe('That project is no longer in Recently deleted');
   });
   it('purges one trashed project or empties the trash', async () => {
-    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta'), trashed('gamma')], activeProjectId: 'alpha', workspaceRevision: 'rev-a' });
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], trash: [trashed('beta'), trashed('gamma')], activeProjectId: 'alpha', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION });
     vi.mocked(projects.purgeTrashedProject).mockResolvedValue([trashed('gamma')]);
     vi.mocked(projects.emptyProjectTrash).mockResolvedValue([]);
     await useProjectStore.getState().initialize();
@@ -219,7 +220,7 @@ describe('saved project coordinator', () => {
     const history = [{ id: 'old-run', trigger: 'graph', status: 'complete', startedAt: 1,
       snapshot: { nodes: [], edges: [] } }];
     window.localStorage.setItem(RUN_HISTORY_STORAGE_KEY, JSON.stringify({ version: 1, records: history }));
-    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], activeProjectId: 'alpha', workspaceRevision: 'rev-a', migratedProjectId: 'alpha' });
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], activeProjectId: 'alpha', workspaceRevision: 'rev-a', paramsVersion: GRAPH_PARAMS_VERSION, migratedProjectId: 'alpha' });
     await useProjectStore.getState().initialize();
     expect(projects.saveProject).toHaveBeenCalledWith('alpha', expect.objectContaining({ runHistory: history }), 'rev-a');
     expect(useGraphStore.getState().runHistory[0].id).toBe('old-run');
@@ -253,7 +254,7 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().screen).toBe('home');
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
     vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project(), project('beta')],
-      activeProjectId: 'beta', workspaceRevision: 'rev-b' });
+      activeProjectId: 'beta', workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION });
     await useProjectStore.getState().retry();
     expect(projects.createProject).toHaveBeenCalledTimes(1);
     expect(useProjectStore.getState().activeProject?.id).toBe('beta');
@@ -273,7 +274,7 @@ describe('saved project coordinator', () => {
     unsubscribe = subscribeProjectAutosave();
     useGraphStore.setState({ nodes: [{ ...project().snapshot.nodes[0], data: { ...project().snapshot.nodes[0].data,
       params: { value: 'Unsaved alpha edits' } } }] });
-    socketHandler({ type: 'graphSync', workspaceRevision: 'rev-b', nodes: [], edges: [], empty: true });
+    socketHandler({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, workspaceRevision: 'rev-b', nodes: [], edges: [], empty: true });
     expect(useProjectStore.getState().initialized).toBe(false);
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('Unsaved alpha edits');
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(new Error('Recovery disk full'));
@@ -283,13 +284,36 @@ describe('saved project coordinator', () => {
     const firstRecovery = vi.mocked(projects.recoverProject).mock.calls[0];
     vi.mocked(projects.recoverProject).mockResolvedValueOnce(project('recovered-alpha'));
     vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project('beta'), project('recovered-alpha')],
-      activeProjectId: 'beta', workspaceRevision: 'rev-b' });
+      activeProjectId: 'beta', workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION });
     await useProjectStore.getState().retry();
     expect(vi.mocked(projects.recoverProject).mock.calls[1]).toEqual(firstRecovery);
     expect(firstRecovery[0]).toBe('alpha');
     expect(firstRecovery[1].nodes[0].data.params.value).toBe('Unsaved alpha edits');
+    // The canvas was loaded from an upgraded project, so the copy keeps its values.
+    expect(firstRecovery[3]).toBe(GRAPH_PARAMS_VERSION);
     expect(vi.mocked(projects.recoverProject).mock.invocationCallOrder.at(-1)).toBeLessThan(vi.mocked(projects.listProjects).mock.invocationCallOrder.at(-1)!);
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('beta');
     expect(useProjectStore.getState().screen).toBe('home');
+  });
+  it('opens the former project through the backend after Try again found no active project', async () => {
+    // Review round 2: a conflict keeps the old canvas; Try again while the
+    // backend has no active project must also forget activeProject, or Open of
+    // the same id shortcuts to a canvas with no project context.
+    await useProjectStore.getState().initialize();
+    let socketHandler!: (event: ExecutionEvent) => void;
+    vi.spyOn(wsClient, 'subscribe').mockImplementation((handler) => { socketHandler = handler; return () => {}; });
+    unsubscribe = subscribeProjectAutosave();
+    socketHandler({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, workspaceRevision: 'rev-b', nodes: [], edges: [], empty: true });
+    vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], activeProjectId: null,
+      workspaceRevision: 'rev-none', paramsVersion: GRAPH_PARAMS_VERSION });
+    await useProjectStore.getState().retry();
+    expect(getProjectContext()).toBeNull();
+    expect(useProjectStore.getState().activeProject).toBeNull();
+    vi.mocked(projects.openProject).mockResolvedValue({ project: project('alpha'), workspaceRevision: 'rev-c',
+      paramsVersion: GRAPH_PARAMS_VERSION });
+    await useProjectStore.getState().open('alpha');
+    expect(projects.openProject).toHaveBeenCalledWith('alpha', 'rev-none');
+    expect(getProjectContext()).toEqual({ id: 'alpha', revision: 'rev-c' });
+    expect(useProjectStore.getState().screen).toBe('workspace');
   });
 });

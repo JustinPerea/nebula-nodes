@@ -1,6 +1,7 @@
 import type { PaperRunInput, PortValue, VariantScope } from '../types';
 import type { PaperSourceRecord } from './paperSource';
 import { getProjectContext } from './projectContext';
+import { GRAPH_PARAMS_VERSION, upgradeRunSnapshot } from './savedParamsUpgrades';
 
 /** Persistent run-history records for the Run History panel. Records contain the
  * exact JSON graph sent to the backend so a later replay never reads mutable
@@ -85,6 +86,12 @@ export interface RunRecord {
   startedFreshPaidWorldLabs?: boolean;
   createOrigin?: CreateRunOrigin;
   cinemaShot?: CinemaShotRun;
+  /** The saved-params version the recipe was sent at (GRAPH_PARAMS_VERSION).
+   *  Kept outside the snapshot so recipe hashes don't change. Missing means 0:
+   *  every writer before the stamp (main's bundle, legacy localStorage, records
+   *  already in projects) sent version-0 values. Read through
+   *  runParamsVersion. */
+  paramsVersion?: number;
 }
 
 export interface ProviderRecoveryCheckpoint {
@@ -250,7 +257,9 @@ export function paperRunOutOfDateReasons(
   const relevantCurrent = record.trigger === 'cluster'
     ? { ...current, nodes: current.nodes.filter((node) => record.snapshot.nodes.some((saved) => saved.id === node.id)) }
     : current;
-  if (paperRecipeContent(record.snapshot, targetNodeId) !== paperRecipeContent(relevantCurrent, targetNodeId)) {
+  // The canvas was upgraded when it loaded, so compare it with the recipe as
+  // it would run now: a version-0 Max Tokens 4,096 equals the upgraded 64,000.
+  if (paperRecipeContent(currentRunSnapshot(record), targetNodeId) !== paperRecipeContent(relevantCurrent, targetNodeId)) {
     reasons.push('Recipe settings or connections changed after this run was saved.');
   }
   return reasons;
@@ -558,7 +567,23 @@ export function applyProviderRecoveryToLiveParams(
   return paramsWithProviderRecovery({ definitionId, params }, checkpoint);
 }
 
-export type OpenRunRecord = Omit<RunRecord, 'status' | 'durationSec' | 'nodesExecuted'>;
+export type OpenRunRecord = Omit<RunRecord, 'status' | 'durationSec' | 'nodesExecuted' | 'paramsVersion'>;
+
+function isParamsVersion(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+/** The version a record's recipe was sent at. Missing or malformed is 0. */
+export function runParamsVersion(record: Pick<RunRecord, 'paramsVersion'>): number {
+  return isParamsVersion(record.paramsVersion) ? record.paramsVersion : 0;
+}
+
+/** A record's recipe as it should run now (savedParamsUpgrades.ts). The
+ * record itself keeps what was sent; this is the same object when nothing
+ * changes. */
+export function currentRunSnapshot(record: Pick<RunRecord, 'snapshot' | 'paramsVersion'>): RunGraphSnapshot {
+  return upgradeRunSnapshot(record.snapshot, runParamsVersion(record));
+}
 
 export interface RunHistoryStorage {
   getItem(key: string): string | null;
@@ -607,7 +632,9 @@ function cappedRunHistory(history: RunRecord[]): RunRecord[] {
 }
 
 /** Prepend a new running record, capping the list. Pure with respect to history;
- * the incoming snapshot is cloned so later canvas mutations cannot alter it. */
+ * the incoming snapshot is cloned so later canvas mutations cannot alter it.
+ * Fresh runs send the canvas, which is at this bundle's version, and replays
+ * send an upgraded recipe, so every new record is stamped current. */
 export function openRunRecord(history: RunRecord[], rec: OpenRunRecord): RunRecord[] {
   const snapshot = freezeRunSnapshot(rec.snapshot);
   const paperInputs = paperInputsForSnapshot(snapshot, rec.targetNodeId);
@@ -617,7 +644,7 @@ export function openRunRecord(history: RunRecord[], rec: OpenRunRecord): RunReco
     resultOutputs: {},
     outOfDateReasons: [],
   } : {};
-  return cappedRunHistory([{ ...rec, ...contract, snapshot,
+  return cappedRunHistory([{ ...rec, ...contract, snapshot, paramsVersion: GRAPH_PARAMS_VERSION,
     createOrigin: rec.createOrigin ? deepFreeze(JSON.parse(JSON.stringify(rec.createOrigin)) as CreateRunOrigin) : undefined,
     cinemaShot: rec.cinemaShot ? deepFreeze({ ...rec.cinemaShot }) : undefined,
     status: 'running' as const }, ...history]);
@@ -852,6 +879,10 @@ export function loadRunHistory(
     const recovered = validRecords.map((record) => {
       const batchVariants = sanitizeRunBatchVariants(record);
       if (JSON.stringify(record.batchVariants) !== JSON.stringify(batchVariants)) metadataChanged = true;
+      // A malformed stamp is read as 0 and dropped; it never drops the record.
+      const { paramsVersion, ...unstamped } = record;
+      const stamp = isParamsVersion(paramsVersion) ? { paramsVersion } : {};
+      if (paramsVersion !== undefined && !isParamsVersion(paramsVersion)) metadataChanged = true;
       const reconnectingWorldLabs = record.status === 'running'
         && (record.startedFreshPaidWorldLabs === true
           || (record.startedFreshPaidWorldLabs === undefined
@@ -868,7 +899,8 @@ export function loadRunHistory(
           ? (record.statusNote ?? worldLabsFailureNote(record.snapshot, record.targetNodeId))
           : undefined;
       return {
-        ...record,
+        ...unstamped,
+        ...stamp,
         snapshot: freezeRunSnapshot(record.snapshot),
         createOrigin: record.createOrigin ? deepFreeze(record.createOrigin) : undefined,
         cinemaShot: record.cinemaShot ? deepFreeze(record.cinemaShot) : undefined,

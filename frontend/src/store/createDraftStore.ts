@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
+import { GRAPH_PARAMS_VERSION, upgradeSavedParams } from '../lib/savedParamsUpgrades';
 
 export const CREATE_DRAFT_STORAGE_KEY = 'nebula:create:drafts:v1';
 
@@ -112,9 +113,16 @@ function loadDrafts(storage: DraftStorage | null): Record<string, CreateDraft> {
     if (!raw) return {};
     const saved: unknown = JSON.parse(raw);
     if (!isRecord(saved) || saved.version !== 1 || !isRecord(saved.drafts)) return {};
+    // Drafts written before the marker are version 0 and get the one-time
+    // upgrades (lib/savedParamsUpgrades.ts). Every save writes the current
+    // version, so a value set after the upgrade is kept.
+    const paramsVersion = Number.isInteger(saved.paramsVersion) && (saved.paramsVersion as number) >= 0
+      ? saved.paramsVersion as number : 0;
     return Object.fromEntries(Object.entries(saved.drafts).flatMap(([sessionId, value]) => {
       const draft = readDraft(value);
-      return sessionId.trim() && draft ? [[sessionId, draft]] : [];
+      if (!sessionId.trim() || !draft) return [];
+      const params = upgradeSavedParams(draft.modelId, draft.params, paramsVersion);
+      return [[sessionId, params ? { ...draft, params } : draft]];
     }));
   } catch {
     return {};
@@ -156,7 +164,7 @@ export function createCreateDraftStore(storage: DraftStorage | null = browserSto
       set({ drafts });
       try {
         const persisted = Object.fromEntries(Object.entries(drafts).map(([id, value]) => [id, persistedDraft(value)]));
-        storage?.setItem(CREATE_DRAFT_STORAGE_KEY, JSON.stringify({ version: 1, drafts: persisted }));
+        storage?.setItem(CREATE_DRAFT_STORAGE_KEY, JSON.stringify({ version: 1, paramsVersion: GRAPH_PARAMS_VERSION, drafts: persisted }));
       } catch {
         // Quota/private-browsing errors must not discard in-memory edits.
       }
