@@ -4172,7 +4172,7 @@ Nodes: 304 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Model | enum | claude-opus-5-5 | Claude Fable 5.1 (flagship), Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5, Claude Fable 5, Claude Opus 4.8, Claude Sonnet 4.6, Claude Haiku 4.5, … |
-| Max Tokens | int | 64000; 4096 for model claude-fable-5, claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5-20251001, claude-opus-4-7, claude-opus-4-6 | 1–128000 |
+| Max Tokens | int | 64000; 4096 for model claude-fable-5, claude-haiku-4-5-20251001 | 1–128000 |
 | Temperature | float | 1 | 0–1 |
 | System Prompt | textarea | — | — |
 | Top P | float | — | 0–1 |

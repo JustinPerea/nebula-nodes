@@ -15,6 +15,7 @@ from services.image_input import load_local_image
 from services.retired_nodes import GEMINI_TTS_PREVIEWS_SHUTDOWN, default_until
 from services.output import get_run_dir, save_base64_image
 from execution.missing_credential import MissingCredentialError
+from services.param_defaults import param_default
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -25,11 +26,15 @@ GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 # Gemini 4 Argon and Gemini 3.8 Flash return an error for thinkingLevel
 # "minimal". Argon's synchronous output limit is 65,536 tokens; above that
 # generateContent returns HTTP 400. Older models keep the request they sent.
+# gemini-3.5-flash is deprecated and Google routes its requests to
+# gemini-3.6-flash (ai.google.dev/gemini-api/docs/models/gemini-3.5-flash), so
+# its sampling params are ignored too; it joined this list 2026-10-16.
 GEMINI_CHAT_NO_SAMPLING = frozenset({
     "gemini-4-argon",
     "gemini-3.8-flash",
     "gemini-3.6-flash",
     "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
 })
 GEMINI_CHAT_THINKING_LEVELS = {
     "gemini-4-argon": ("low", "medium", "high"),
@@ -147,11 +152,16 @@ async def handle_gemini_chat(
     # Cannot use both — API returns 400
     thinking_level = node.params.get("thinkingLevel")
     thinking_budget = node.params.get("thinkingBudget")
-    if model.startswith("gemini-2.5-") and thinking_budget is not None and thinking_budget != "":
-        # The 2.5 cards show Thinking Budget, not Thinking Level. When a budget
-        # is set, a hidden level (left from another model, or the "medium" a
-        # new node starts with) must not override it. A level-only saved 2.5
-        # node still sends its level, as before 2026-10-16.
+    if model.startswith("gemini-2.5-") and (
+        (thinking_budget is not None and thinking_budget != "")
+        or thinking_level == param_default("gemini-chat", "thinkingLevel", {"model": model})
+    ):
+        # The 2.5 cards show Thinking Budget, not Thinking Level, so a level
+        # there is hidden: left from another model, or the default "medium" a
+        # new node starts with. It goes out only when no budget is set and it
+        # differs from that default, i.e. a level-only 2.5 node saved with a
+        # level on purpose. Sending the default turned thinking on for 2.5
+        # Flash-Lite, which doesn't think by default (Google's thinking table).
         thinking_level = None
     if thinking_level and thinking_level != "":
         levels = GEMINI_CHAT_THINKING_LEVELS.get(model)

@@ -34,7 +34,20 @@ EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 # thinking-troubleshooting (per-model table), /thinking ("Thinking and sampling
 # parameters"), /effort (supportedModels, effort levels) and /extended-thinking.
 OPTIONAL_ADAPTIVE_MODELS = frozenset({"claude-opus-4-8", "claude-opus-4-7"})
-EFFORT_MODELS = ADAPTIVE_EFFORT_MODELS | OPTIONAL_ADAPTIVE_MODELS
+
+# Claude Opus 4.6 and Sonnet 4.6 moved to Effort on 2026-10-16 (Justin's
+# answer, item 5). Thinking is off on them until the request sets
+# thinking: {"type": "adaptive"}; enabled + budget_tokens still works but is
+# deprecated (thinking-troubleshooting per-model table). They take effort with
+# or without thinking, at low/medium/high/max but not xhigh (/effort, fetched
+# 2026-10-16). Unlike 4.7/4.8 they still accept sampling params; while thinking
+# is on, temperature is forced to 1 as it was for budget thinking.
+SAMPLING_ADAPTIVE_MODELS = frozenset({"claude-opus-4-6", "claude-sonnet-4-6"})
+EFFORT_MODELS = ADAPTIVE_EFFORT_MODELS | OPTIONAL_ADAPTIVE_MODELS | SAMPLING_ADAPTIVE_MODELS
+MODEL_EFFORT_LEVELS = {
+    **{model: EFFORT_LEVELS for model in ADAPTIVE_EFFORT_MODELS | OPTIONAL_ADAPTIVE_MODELS},
+    **{model: ("low", "medium", "high", "max") for model in SAMPLING_ADAPTIVE_MODELS},
+}
 
 
 async def handle_claude_chat(
@@ -87,13 +100,14 @@ async def handle_claude_chat(
 
     model = node.params.get("model", "claude-opus-5-5")
     # A node an agent made without max_tokens gets its model's default: 64K for
-    # the 5.x models, which think on every request, and 4096 for the older ones.
+    # the 5.x models and Opus 4.6-4.8 / Sonnet 4.6, 4096 for Fable 5 and Haiku 4.5.
     raw_max_tokens = node.params.get("max_tokens")
     if raw_max_tokens is None or raw_max_tokens == "":
         raw_max_tokens = param_default("claude-chat", "max_tokens", {**node.params, "model": model}) or 4096
     max_tokens = int(raw_max_tokens)
     adaptive = model in ADAPTIVE_EFFORT_MODELS
     optional_adaptive = model in OPTIONAL_ADAPTIVE_MODELS
+    sampling_adaptive = model in SAMPLING_ADAPTIVE_MODELS
     if adaptive:
         max_tokens = min(max_tokens, ADAPTIVE_MAX_OUTPUT_TOKENS)
 
@@ -130,12 +144,16 @@ async def handle_claude_chat(
     # a thinking budget. A stale extended_thinking=True left from another model
     # is dropped here rather than sent.
     supports_extended_thinking = (
-        not adaptive and not optional_adaptive and not model.startswith(("claude-fable", "claude-mythos"))
+        not adaptive and not optional_adaptive and not sampling_adaptive
+        and not model.startswith(("claude-fable", "claude-mythos"))
     )
-    if node.params.get("extended_thinking") and optional_adaptive:
-        # Opus 4.7/4.8: the toggle turns on adaptive thinking. A saved
-        # thinkingBudget is not sent; Effort controls the depth instead.
+    if node.params.get("extended_thinking") and (optional_adaptive or sampling_adaptive):
+        # Opus 4.6-4.8 / Sonnet 4.6: the toggle turns on adaptive thinking. A
+        # saved thinkingBudget is not sent; Effort controls the depth instead.
         request_body["thinking"] = {"type": "adaptive"}
+        if sampling_adaptive:
+            # Same rule the 4.6 models had with budget thinking: temperature 1.
+            request_body["temperature"] = 1
     elif node.params.get("extended_thinking") and supports_extended_thinking:
         budget = int(node.params.get("thinkingBudget", 10000))
         budget = max(1024, budget)
@@ -146,8 +164,9 @@ async def handle_claude_chat(
     if model in EFFORT_MODELS:
         effort = str(node.params.get("effort") or "").strip().lower()
         if effort:
-            if effort not in EFFORT_LEVELS:
-                raise ValueError(f"Effort must be one of {', '.join(EFFORT_LEVELS)} for {model}, got {effort!r}")
+            levels = MODEL_EFFORT_LEVELS[model]
+            if effort not in levels:
+                raise ValueError(f"Effort must be one of {', '.join(levels)} for {model}, got {effort!r}")
             request_body["output_config"] = {"effort": effort}
 
     config = StreamConfig(

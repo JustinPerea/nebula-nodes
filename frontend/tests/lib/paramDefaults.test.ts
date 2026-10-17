@@ -26,7 +26,12 @@ describe('per-model defaults (defaultBy)', () => {
 
   it('resolves the default for the selected model', () => {
     expect(paramDefaultFor(CLAUDE, param(CLAUDE, 'max_tokens'), { model: 'claude-opus-5-5' })).toBe(64000);
-    expect(paramDefaultFor(CLAUDE, param(CLAUDE, 'max_tokens'), { model: 'claude-sonnet-4-6' })).toBe(4096);
+    expect(paramDefaultFor(CLAUDE, param(CLAUDE, 'max_tokens'), { model: 'claude-haiku-4-5-20251001' })).toBe(4096);
+    // Opus 4.6-4.8 and Sonnet 4.6 take the 64,000 default since 2026-10-16.
+    for (const model of ['claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6']) {
+      expect(paramDefaultFor(CLAUDE, param(CLAUDE, 'max_tokens'), { model })).toBe(64000);
+    }
+    expect(paramDefaultFor(CLAUDE, param(CLAUDE, 'max_tokens'), { model: 'claude-fable-5' })).toBe(4096);
     // No model: the default model, Opus 5.5, whose value is the static default.
     expect(paramDefaultFor(CLAUDE, param(CLAUDE, 'max_tokens'), {})).toBe(64000);
     expect(paramDefaultFor(GPT, param(GPT, 'max_completion_tokens'), { model: 'gpt-6-sol' })).toBe(25000);
@@ -38,22 +43,22 @@ describe('per-model defaults (defaultBy)', () => {
     const base = { model: 'claude-opus-5-5', max_tokens: 4096, temperature: 1 };
     expect(withParamDefaults(CLAUDE, base, { model: 'claude-opus-5-5' })).toEqual({ ...base, max_tokens: 64000 });
     expect(withParamDefaults(CLAUDE, base, { model: 'claude-opus-5-5', max_tokens: 4096 })).toBe(base);
-    const plain = { model: 'claude-sonnet-4-6', max_tokens: 4096 };
+    const plain = { model: 'claude-haiku-4-5-20251001', max_tokens: 4096 };
     expect(withParamDefaults(CLAUDE, plain, {})).toBe(plain);
   });
 
   it('moves an untouched value to the new model default and says so', () => {
-    const before = { model: 'claude-sonnet-4-6', max_tokens: 4096 };
+    const before = { model: 'claude-haiku-4-5-20251001', max_tokens: 4096 };
     const up = snapParamDefaults(CLAUDE, before, { ...before, model: 'claude-opus-5-5' });
     expect(up.params).toEqual({ model: 'claude-opus-5-5', max_tokens: 64000 });
     expect(up.notes).toEqual([{ param: 'max_tokens', text: 'Max Tokens moved to 64,000, the Claude Opus 5.5 default.' }]);
-    const back = snapParamDefaults(CLAUDE, up.params, { ...up.params, model: 'claude-sonnet-4-6' });
+    const back = snapParamDefaults(CLAUDE, up.params, { ...up.params, model: 'claude-haiku-4-5-20251001' });
     expect(back.params).toEqual(before);
-    expect(back.notes[0].text).toBe('Max Tokens moved to 4,096, the Claude Sonnet 4.6 default.');
+    expect(back.notes[0].text).toBe('Max Tokens moved to 4,096, the Claude Haiku 4.5 default.');
   });
 
   it('keeps an edited value and says what the new default is', () => {
-    const before = { model: 'claude-sonnet-4-6', max_tokens: 10000 };
+    const before = { model: 'claude-haiku-4-5-20251001', max_tokens: 10000 };
     const snap = snapParamDefaults(CLAUDE, before, { ...before, model: 'claude-fable-5-1' });
     expect(snap.params).toEqual({ model: 'claude-fable-5-1', max_tokens: 10000 });
     // The status suffix "(flagship)" isn't part of the name.
@@ -71,10 +76,20 @@ describe('per-model defaults (defaultBy)', () => {
   });
 
   it('says nothing when the value already equals the new model default', () => {
-    // A node saved before defaultBy existed: Haiku 5.5 at 4096, moving to Sonnet 4.6 (default 4096).
+    // A node saved before defaultBy existed: Haiku 5.5 at 4096, moving to Haiku 4.5 (default 4096).
     const before = { model: 'claude-haiku-5-5', max_tokens: 4096 };
-    expect(snapParamDefaults(CLAUDE, before, { ...before, model: 'claude-sonnet-4-6' }))
-      .toEqual({ params: { model: 'claude-sonnet-4-6', max_tokens: 4096 }, notes: [] });
+    expect(snapParamDefaults(CLAUDE, before, { ...before, model: 'claude-haiku-4-5-20251001' }))
+      .toEqual({ params: { model: 'claude-haiku-4-5-20251001', max_tokens: 4096 }, notes: [] });
+  });
+
+  it('moves an untouched 4,096 to 64,000 when a node switches to Opus 4.7 / 4.8 or a 4.6 model', () => {
+    const before = { model: 'claude-haiku-4-5-20251001', max_tokens: 4096 };
+    const snap = snapParamDefaults(CLAUDE, before, { ...before, model: 'claude-opus-4-7' });
+    expect(snap.params).toEqual({ model: 'claude-opus-4-7', max_tokens: 64000 });
+    expect(snap.notes[0].text).toBe('Max Tokens moved to 64,000, the Claude Opus 4.7 default.');
+    // A node made on Opus 4.8 starts at 64,000.
+    expect(withParamDefaults(CLAUDE, { model: 'claude-opus-4-8', max_tokens: 4096 }, {}))
+      .toEqual({ model: 'claude-opus-4-8', max_tokens: 64000 });
   });
 
   it('fills a missing value on a model change (a Create draft before any edit)', () => {

@@ -156,12 +156,13 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Max Tokens',
         type: 'integer',
         required: true,
-        // Claude 5.x always think, and thinking counts toward max_tokens. Anthropic
-        // says to start around 64K at high effort and above; 128K is every Claude
-        // model's synchronous output cap. `default` is the default model's (Opus
-        // 5.5); the older models keep 4096.
+        // Claude 5.x always think, and Opus 4.6-4.8 / Sonnet 4.6 think adaptively
+        // when Extended Thinking is on; thinking counts toward max_tokens. Anthropic
+        // says to start around 64K at high effort and above; 128K is every listed
+        // model's synchronous output cap except Haiku 4.5 (64K). `default` is the
+        // default model's (Opus 5.5); Fable 5 and Haiku 4.5 keep 4096.
         default: 64000,
-        defaultBy: { model: { 'claude-fable-5': 4096, 'claude-opus-4-8': 4096, 'claude-sonnet-4-6': 4096, 'claude-haiku-4-5-20251001': 4096, 'claude-opus-4-7': 4096, 'claude-opus-4-6': 4096 } },
+        defaultBy: { model: { 'claude-fable-5': 4096, 'claude-haiku-4-5-20251001': 4096 } },
         min: 1,
         max: 128000,
       },
@@ -175,6 +176,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 1,
         step: 0.1,
         // Claude 5.5-generation models, Fable 5.1 and Opus 4.7/4.8 reject non-default sampling params.
+        // Opus 4.6 / Sonnet 4.6 still take them (temperature is forced to 1 while thinking is on).
         visibleWhen: { model: ['claude-fable-5', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
       },
       {
@@ -210,8 +212,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         required: false,
         default: false,
         // Fable/Mythos 5 use always-on adaptive thinking — no extended-thinking param.
-        // On Opus 4.7/4.8 (thinking off by default, adaptive only) this turns on
+        // On Opus 4.6-4.8 and Sonnet 4.6 (thinking off by default) this turns on
         // thinking: {type: 'adaptive'} with no budget; Effort sets the depth.
+        // Only Haiku 4.5 still sends a budget_tokens budget.
         visibleWhen: { model: ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-7', 'claude-opus-4-6'] },
       },
       {
@@ -224,8 +227,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 1024,
         max: 200000,
         condition: 'extended_thinking',
-        // Opus 4.7 and later return HTTP 400 for a manual budget_tokens.
-        visibleWhen: { model: ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
+        // Opus 4.7 and later return HTTP 400 for a manual budget_tokens; on the
+        // 4.6 models it is deprecated, so they use adaptive thinking + Effort.
+        visibleWhen: { model: ['claude-haiku-4-5-20251001'] },
       },
       {
         key: 'effort',
@@ -233,16 +237,16 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'enum',
         required: false,
         default: 'medium',
-        // Sent as output_config.effort. These models reject a thinking budget;
-        // Default leaves each model at its own default effort (medium on
-        // Opus 5.5 and Haiku 5.5, high on the others).
-        visibleWhen: { model: ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-4-8', 'claude-opus-4-7'] },
+        // Sent as output_config.effort, with no thinking budget. Default leaves
+        // each model at its own default effort (medium on Opus 5.5 and Haiku 5.5,
+        // high on the others). Opus 4.6 / Sonnet 4.6 have no X-High.
+        visibleWhen: { model: ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-opus-4-7', 'claude-opus-4-6'] },
         options: [
           { label: 'Default', value: '' },
           { label: 'Low', value: 'low' },
           { label: 'Medium', value: 'medium' },
           { label: 'High', value: 'high' },
-          { label: 'X-High', value: 'xhigh' },
+          { label: 'X-High', value: 'xhigh', visibleWhen: { model: ['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-4-8', 'claude-opus-4-7'] } },
           { label: 'Max', value: 'max' },
         ],
       },
@@ -2997,8 +3001,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 2,
         step: 0.1,
         // Gemini 3.6 Flash, 3.5 Flash-Lite and later ignore sampling params, and
-        // Google says future models will return HTTP 400 for them.
-        visibleWhen: { model: ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
+        // Google says future models will return HTTP 400 for them. Deprecated
+        // 3.5 Flash is routed to 3.6 Flash, so it is hidden there too.
+        visibleWhen: { model: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
       },
       {
         key: 'system',
@@ -3013,7 +3018,8 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         label: 'Thinking Level',
         type: 'enum',
         required: false,
-        // Sent only to the models listed here (2.5 uses Thinking Budget).
+        // Shown for the models listed here (2.5 uses Thinking Budget). On 2.5 a
+        // level is sent only with no budget and a non-default value (a saved one).
         default: 'medium',
         visibleWhen: { model: ['gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'] },
         options: [
@@ -3044,7 +3050,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 1,
         step: 0.05,
         placeholder: 'Default',
-        visibleWhen: { model: ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
+        visibleWhen: { model: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
       },
       {
         key: 'top_k',
@@ -3052,7 +3058,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         type: 'integer',
         required: false,
         placeholder: '64',
-        visibleWhen: { model: ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
+        visibleWhen: { model: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] },
       },
       {
         key: 'stop_sequences',

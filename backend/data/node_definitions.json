@@ -276,11 +276,7 @@
         "defaultBy": {
           "model": {
             "claude-fable-5": 4096,
-            "claude-opus-4-8": 4096,
-            "claude-sonnet-4-6": 4096,
-            "claude-haiku-4-5-20251001": 4096,
-            "claude-opus-4-7": 4096,
-            "claude-opus-4-6": 4096
+            "claude-haiku-4-5-20251001": 4096
           }
         },
         "min": 1,
@@ -365,9 +361,7 @@
         "condition": "extended_thinking",
         "visibleWhen": {
           "model": [
-            "claude-sonnet-4-6",
-            "claude-haiku-4-5-20251001",
-            "claude-opus-4-6"
+            "claude-haiku-4-5-20251001"
           ]
         }
       },
@@ -384,7 +378,9 @@
             "claude-sonnet-5-5",
             "claude-haiku-5-5",
             "claude-opus-4-8",
-            "claude-opus-4-7"
+            "claude-sonnet-4-6",
+            "claude-opus-4-7",
+            "claude-opus-4-6"
           ]
         },
         "options": [
@@ -406,7 +402,17 @@
           },
           {
             "label": "X-High",
-            "value": "xhigh"
+            "value": "xhigh",
+            "visibleWhen": {
+              "model": [
+                "claude-fable-5-1",
+                "claude-opus-5-5",
+                "claude-sonnet-5-5",
+                "claude-haiku-5-5",
+                "claude-opus-4-8",
+                "claude-opus-4-7"
+              ]
+            }
           },
           {
             "label": "Max",
@@ -6556,7 +6562,6 @@
         "step": 0.1,
         "visibleWhen": {
           "model": [
-            "gemini-3.5-flash",
             "gemini-3.1-pro-preview",
             "gemini-3-flash-preview",
             "gemini-3.1-flash-lite",
@@ -6651,7 +6656,6 @@
         "placeholder": "Default",
         "visibleWhen": {
           "model": [
-            "gemini-3.5-flash",
             "gemini-3.1-pro-preview",
             "gemini-3-flash-preview",
             "gemini-3.1-flash-lite",
@@ -6669,7 +6673,6 @@
         "placeholder": "64",
         "visibleWhen": {
           "model": [
-            "gemini-3.5-flash",
             "gemini-3.1-pro-preview",
             "gemini-3-flash-preview",
             "gemini-3.1-flash-lite",

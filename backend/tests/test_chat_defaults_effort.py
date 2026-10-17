@@ -5,6 +5,10 @@
 - gemini-chat defaults to Gemini 4 Argon with Thinking Level "medium".
 - Claude Opus 4.7 and 4.8 take Effort, no thinking budget and no sampling
   params; the Extended Thinking toggle turns on adaptive thinking there.
+- Justin's answers 2026-10-16, items 2-6: Opus 4.6 / Sonnet 4.6 move to Effort
+  (no X-High) and adaptive thinking but keep sampling; Opus 4.6-4.8 and Sonnet
+  4.6 default to 64,000 Max Tokens; a 2.5 Gemini node sends a Thinking Level
+  only when it isn't the default; deprecated Gemini 3.5 Flash sends no sampling.
 
 A default only reaches new nodes (the canvas writes every default into a new
 node's params). Saved graphs keep their own values; the bodies they send are
@@ -18,8 +22,8 @@ from typing import Any
 
 import pytest
 
-from handlers.anthropic_chat import EFFORT_LEVELS, EFFORT_MODELS
-from handlers.google_gemini import GEMINI_CHAT_THINKING_LEVELS
+from handlers.anthropic_chat import EFFORT_LEVELS, EFFORT_MODELS, MODEL_EFFORT_LEVELS
+from handlers.google_gemini import GEMINI_CHAT_NO_SAMPLING, GEMINI_CHAT_THINKING_LEVELS
 from handlers.openai_chat import REASONING_EFFORTS
 from tests.test_chat_model_catalog import (
     USER_TURN_CLAUDE,
@@ -38,7 +42,8 @@ from tests.test_chat_model_catalog import (
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DEFS = (ROOT / "frontend" / "src" / "constants" / "nodeDefinitions.ts").read_text()
 OPUS_47_48 = ["claude-opus-4-8", "claude-opus-4-7"]
-CLAUDE_OLDER = ["claude-fable-5", "claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-6"]
+CLAUDE_46 = ["claude-opus-4-6", "claude-sonnet-4-6"]
+CLAUDE_OLDER = ["claude-fable-5", "claude-haiku-4-5-20251001"]
 
 
 def _visible(option: dict[str, Any], model: str) -> bool:
@@ -170,12 +175,52 @@ async def test_gemini_25_sends_the_budget_not_a_leftover_level(model):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model", ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"])
-@pytest.mark.parametrize("level", ["low", "medium", "high"])
+@pytest.mark.parametrize("level", ["low", "high"])
 async def test_gemini_25_level_only_saved_node_is_unchanged(model, level):
-    # Without a budget, a saved 2.5 node keeps sending its level, byte for byte
-    # what 30109694 sent.
+    # Without a budget, a saved 2.5 node with a non-default level keeps sending
+    # it, byte for byte what 30109694 sent.
     _, _, body = await _gemini({**_saved_defaults("gemini-chat"), "model": model, "thinkingLevel": level})
     assert body["generationConfig"]["thinkingConfig"] == {"thinkingLevel": level}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"])
+async def test_gemini_25_default_level_not_sent(model):
+    # Justin's item 2 (2026-10-16): the 2.5 card hides Thinking Level, so the
+    # default "medium" a new node carries is not a choice. Sending it turned
+    # thinking on for 2.5 Flash-Lite, which doesn't think by default.
+    assert _param("gemini-chat", "thinkingLevel")["default"] == "medium"
+    _, _, body = await _gemini(_fresh("gemini-chat", model))
+    assert body == {"contents": USER_TURN_GEMINI,
+                    "generationConfig": {"temperature": 1.0, "maxOutputTokens": 8192}}
+    # A saved 2.5 node holding exactly the default level now sends none either.
+    _, _, body = await _gemini({**_saved_defaults("gemini-chat"), "model": model, "thinkingLevel": "medium"})
+    assert "thinkingConfig" not in body["generationConfig"]
+
+
+@pytest.mark.asyncio
+async def test_gemini_3_still_sends_the_default_level():
+    # The 2.5 rule doesn't touch models whose card shows Thinking Level.
+    _, _, body = await _gemini(_fresh("gemini-chat", "gemini-3.6-flash"))
+    assert body["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "medium"}
+
+
+def test_gemini_35_flash_hides_and_drops_sampling():
+    # Justin's item 6 (2026-10-16): Google routes gemini-3.5-flash to 3.6 Flash,
+    # which ignores temperature, top_p and top_k.
+    assert "gemini-3.5-flash" in GEMINI_CHAT_NO_SAMPLING
+    for key in ("temperature", "top_p", "top_k"):
+        assert "gemini-3.5-flash" not in _param("gemini-chat", key)["visibleWhen"]["model"], key
+        assert "'gemini-3.5-flash'" not in _frontend_param("gemini-chat", key), key
+    assert "gemini-3.5-flash" in _param("gemini-chat", "thinkingLevel")["visibleWhen"]["model"]
+
+
+@pytest.mark.asyncio
+async def test_gemini_35_flash_new_node_sends_no_sampling():
+    _, url, body = await _gemini({**_fresh("gemini-chat", "gemini-3.5-flash"), "temperature": 0.3})
+    assert url == _gemini_url("gemini-3.5-flash")
+    assert body == {"contents": USER_TURN_GEMINI,
+                    "generationConfig": {"maxOutputTokens": 8192, "thinkingConfig": {"thinkingLevel": "medium"}}}
 
 
 @pytest.mark.asyncio
@@ -198,17 +243,17 @@ def test_opus_47_48_card_shows_effort_and_hides_budget_and_sampling():
             assert f"'{model}'" not in _frontend_param("claude-chat", key), key
         assert f"'{model}'" in _frontend_param("claude-chat", "effort")
         assert f"'{model}'" in _frontend_param("claude-chat", "extended_thinking")
-    # The 4.6 models and Haiku 4.5 keep the budget.
-    for model in ("claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"):
-        assert model in _param("claude-chat", "thinkingBudget")["visibleWhen"]["model"]
-        assert model not in _param("claude-chat", "effort")["visibleWhen"]["model"]
+    # Only Haiku 4.5 keeps the budget (the 4.6 models moved to Effort 2026-10-16).
+    assert _param("claude-chat", "thinkingBudget")["visibleWhen"]["model"] == ["claude-haiku-4-5-20251001"]
+    assert "claude-haiku-4-5-20251001" not in _param("claude-chat", "effort")["visibleWhen"]["model"]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model", OPUS_47_48)
 async def test_opus_47_48_new_node_sends_effort(model):
+    # Max Tokens 64,000 since Justin's item 3 (2026-10-16); was 4096.
     _, _, body = await _claude(_fresh("claude-chat", model))
-    assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 4096, "stream": True,
+    assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 64000, "stream": True,
                     "output_config": {"effort": "medium"}}
 
 
@@ -253,4 +298,93 @@ def test_frontend_effort_options_match_backend():
     backend = [o["value"] for o in _param("claude-chat", "effort")["options"]]
     frontend = re.findall(r"value: '([a-z]*)'", _frontend_param("claude-chat", "effort"))
     assert frontend == backend == ["", "low", "medium", "high", "xhigh", "max"]
+
+
+# --------------------------------------------------------------------------
+# Claude Opus 4.6 / Sonnet 4.6 on Effort (Justin's item 5, 2026-10-16)
+# --------------------------------------------------------------------------
+
+def test_claude_46_card_shows_effort_without_xhigh_and_keeps_sampling():
+    effort = _param("claude-chat", "effort")
+    xhigh = next(o for o in effort["options"] if o["value"] == "xhigh")
+    for model in CLAUDE_46:
+        assert model in effort["visibleWhen"]["model"]
+        assert f"'{model}'" in _frontend_param("claude-chat", "effort")
+        # Anthropic /effort: xhigh isn't available on Opus 4.6 / Sonnet 4.6.
+        assert not _visible(xhigh, model)
+        assert [o["value"] for o in effort["options"] if _visible(o, model)] == ["", "low", "medium", "high", "max"]
+        assert MODEL_EFFORT_LEVELS[model] == ("low", "medium", "high", "max")
+        assert model in _param("claude-chat", "extended_thinking")["visibleWhen"]["model"]
+        assert model not in _param("claude-chat", "thinkingBudget")["visibleWhen"]["model"]
+        assert f"'{model}'" not in _frontend_param("claude-chat", "thinkingBudget")
+        # Sampling params are still accepted without thinking on the 4.6 models.
+        for key in ("temperature", "top_p"):
+            assert model in _param("claude-chat", key)["visibleWhen"]["model"], key
+            assert f"'{model}'" in _frontend_param("claude-chat", key), key
+    # Every other effort model keeps X-High.
+    for model in EFFORT_MODELS - set(CLAUDE_46):
+        assert _visible(xhigh, model), model
+        assert MODEL_EFFORT_LEVELS[model] == EFFORT_LEVELS
+    assert "'xhigh', visibleWhen" in _frontend_param("claude-chat", "effort")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_46)
+async def test_claude_46_new_node_sends_effort_and_sampling(model):
+    _, _, body = await _claude(_fresh("claude-chat", model))
+    assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 64000, "stream": True,
+                    "temperature": 1.0, "output_config": {"effort": "medium"}}
+    _, _, body = await _claude({**_fresh("claude-chat", model), "temperature": 0.3, "effort": "max"})
+    assert body["temperature"] == 0.3 and body["output_config"] == {"effort": "max"}
+    _, _, body = await _claude({**_fresh("claude-chat", model), "temperature": None, "top_p": 0.9, "effort": ""})
+    assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 64000, "stream": True,
+                    "top_p": 0.9}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_46)
+@pytest.mark.parametrize("effort", ["low", "medium", "high", "max"])
+async def test_claude_46_thinking_on_sends_adaptive_not_budget(model, effort):
+    params = {**_fresh("claude-chat", model), "effort": effort, "extended_thinking": True,
+              "thinkingBudget": 5000, "temperature": 0.3}
+    _, _, body = await _claude(params)
+    assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 64000, "stream": True,
+                    "temperature": 1, "thinking": {"type": "adaptive"}, "output_config": {"effort": effort}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_46)
+async def test_claude_46_saved_graph_with_extended_thinking(model):
+    # Saved before 2026-10-16: Effort "" and Extended Thinking on. It used to
+    # send thinking.type "enabled" with budget_tokens (deprecated on 4.6); now
+    # adaptive thinking. Everything else is what it sent before.
+    params = {**_saved_defaults("claude-chat"), "model": model, "extended_thinking": True,
+              "thinkingBudget": 2048, "temperature": 0.2, "max_tokens": 200000}
+    _, _, body = await _claude(params)
+    assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 200000, "stream": True,
+                    "temperature": 1, "thinking": {"type": "adaptive"}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_46)
+async def test_claude_46_saved_graph_without_thinking_unchanged(model):
+    _, _, body = await _claude({**_saved_defaults("claude-chat"), "model": model})
+    assert body == {"model": model, "messages": USER_TURN_CLAUDE, "max_tokens": 4096, "stream": True,
+                    "temperature": 1.0}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_46)
+async def test_claude_46_saved_effort_now_sent(model):
+    # A level left on a node switched from a 5.x model was ignored before; the
+    # 4.6 card now shows Effort, so it goes out.
+    _, _, body = await _claude({**_saved_defaults("claude-chat"), "model": model, "effort": "max"})
+    assert body["output_config"] == {"effort": "max"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", CLAUDE_46)
+async def test_claude_46_xhigh_refused_before_request(model):
+    with pytest.raises(ValueError, match="Effort must be one of low, medium, high, max"):
+        await _claude({**_saved_defaults("claude-chat"), "model": model, "effort": "xhigh"})
 

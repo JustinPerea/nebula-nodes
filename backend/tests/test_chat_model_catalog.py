@@ -132,6 +132,9 @@ def _gemini(params):
 REASONING = ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]
 GPT5_OLD = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"]
 CLAUDE_5 = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
+# Keep Max Tokens 4096 for new nodes (2026-10-16, Justin's items 3 and 5 moved
+# Opus 4.6-4.8 and Sonnet 4.6 to the 64,000 default).
+CLAUDE_4096 = ["claude-fable-5", "claude-haiku-4-5-20251001"]
 
 USER_TURN_CLAUDE = [{"role": "user", "content": [{"type": "text", "text": "Say hi"}]}]
 USER_TURN_OPENAI = [{"role": "user", "content": [{"type": "text", "text": "Say hi"}]}]
@@ -217,7 +220,8 @@ def test_gemini_minimal_hidden_for_argon_and_38_flash():
     assert "gemini-3.1-pro-preview" not in minimal["visibleWhen"]["model"]
     for key in ("temperature", "top_p", "top_k"):
         visible = set(_param("gemini-chat", key)["visibleWhen"]["model"])
-        assert not visible & {"gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"}
+        assert not visible & {"gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite",
+                              "gemini-3.5-flash"}
         assert "gemini-2.5-pro" in visible
 
 
@@ -260,24 +264,32 @@ async def test_claude_5_unknown_effort_refused_before_request():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("with_effort_key", [False, True])
-async def test_claude_existing_model_body_unchanged(with_effort_key):
+@pytest.mark.parametrize("effort", ["missing", ""])
+async def test_claude_existing_model_body_unchanged(effort):
     params = _saved_defaults("claude-chat")
-    if with_effort_key:
-        params["effort"] = "max"  # a stale effort left from a 5.x model is ignored
-    else:
-        params.pop("effort")  # graphs saved before this change have no effort key
+    if effort == "missing":
+        params.pop("effort")  # graphs saved before Effort existed have no effort key
     _, _, body = await _claude(params)
     assert body == {"model": "claude-sonnet-4-6", "messages": USER_TURN_CLAUDE, "max_tokens": 4096,
                     "stream": True, "temperature": 1.0}
 
 
 @pytest.mark.asyncio
-async def test_claude_existing_model_thinking_body_unchanged():
-    params = {**_saved_defaults("claude-chat"), "model": "claude-opus-4-6", "extended_thinking": True,
+async def test_claude_stale_effort_ignored_on_haiku_45():
+    # Haiku 4.5 has no effort; a level left from another model isn't sent.
+    params = {**_saved_defaults("claude-chat"), "model": "claude-haiku-4-5-20251001", "effort": "max"}
+    _, _, body = await _claude(params)
+    assert body == {"model": "claude-haiku-4-5-20251001", "messages": USER_TURN_CLAUDE, "max_tokens": 4096,
+                    "stream": True, "temperature": 1.0}
+
+
+@pytest.mark.asyncio
+async def test_claude_haiku_45_thinking_body_unchanged():
+    # Haiku 4.5 is extended-thinking only and keeps its budget.
+    params = {**_saved_defaults("claude-chat"), "model": "claude-haiku-4-5-20251001", "extended_thinking": True,
               "thinkingBudget": 2048, "temperature": 0.2, "max_tokens": 200000}
     _, _, body = await _claude(params)
-    assert body == {"model": "claude-opus-4-6", "messages": USER_TURN_CLAUDE, "max_tokens": 200000,
+    assert body == {"model": "claude-haiku-4-5-20251001", "messages": USER_TURN_CLAUDE, "max_tokens": 200000,
                     "stream": True, "temperature": 1, "thinking": {"type": "enabled", "budget_tokens": 2048}}
 
 
@@ -404,13 +416,16 @@ async def test_argon_max_output_capped_at_sync_limit():
 
 
 @pytest.mark.asyncio
-async def test_gemini_35_flash_body_unchanged():
+async def test_gemini_35_flash_body_drops_only_sampling():
+    # Deprecated 3.5 Flash runs as 3.6 Flash, which ignores sampling params, so
+    # since 2026-10-16 (Justin's item 6) it sends none; the rest is unchanged.
     params = {**_saved_defaults("gemini-chat"), "model": "gemini-3.5-flash", "thinkingLevel": "minimal",
-              "system": "Be brief", "response_format": "application/json"}
+              "system": "Be brief", "response_format": "application/json", "temperature": 0.4,
+              "top_p": 0.8, "top_k": 40}
     _, url, body = await _gemini(params)
     assert url == _gemini_url("gemini-3.5-flash")
     assert body == {"contents": USER_TURN_GEMINI,
-                    "generationConfig": {"temperature": 1.0, "maxOutputTokens": 8192,
+                    "generationConfig": {"maxOutputTokens": 8192,
                                          "responseMimeType": "application/json",
                                          "thinkingConfig": {"thinkingLevel": "minimal"}},
                     "systemInstruction": {"parts": [{"text": "Be brief"}]}}
@@ -447,8 +462,8 @@ def test_max_token_defaults_by_model():
     # listed at the value they had before.
     claude = _param("claude-chat", "max_tokens")
     assert claude["default"] == 64000
-    assert claude["defaultBy"] == {"model": {m: 4096 for m in _model_values("claude-chat") if m not in CLAUDE_5}}
-    assert claude["max"] == 128000  # every Claude model's synchronous output cap
+    assert claude["defaultBy"] == {"model": {m: 4096 for m in CLAUDE_4096}}
+    assert claude["max"] == 128000  # the synchronous output cap of every Claude model but Haiku 4.5 (64K)
     gpt = _param("gpt-4o-chat", "max_completion_tokens")
     assert gpt["default"] == 25000
     assert gpt["defaultBy"] == {"model": {m: 4096 for m in _model_values("gpt-4o-chat") if m not in REASONING}}
@@ -481,11 +496,13 @@ def test_static_default_covers_the_default_model(node_id):
 def test_listed_default_lookup():
     from services.param_defaults import listed_default, param_default
 
-    assert listed_default("claude-chat", "max_tokens", {"model": "claude-sonnet-4-6"}) == 4096
+    assert listed_default("claude-chat", "max_tokens", {"model": "claude-haiku-4-5-20251001"}) == 4096
+    assert listed_default("claude-chat", "max_tokens", {"model": "claude-sonnet-4-6"}) is None
     assert listed_default("claude-chat", "max_tokens", {"model": "claude-opus-5-5"}) is None
     assert listed_default("claude-chat", "max_tokens", {}) is None  # default model, not listed
     assert param_default("claude-chat", "max_tokens", {"model": "claude-opus-5-5"}) == 64000
-    assert param_default("claude-chat", "max_tokens", {"model": "claude-sonnet-4-6"}) == 4096
+    assert param_default("claude-chat", "max_tokens", {"model": "claude-haiku-4-5-20251001"}) == 4096
+    assert param_default("claude-chat", "max_tokens", {"model": "claude-sonnet-4-6"}) == 64000
     assert param_default("claude-chat", "max_tokens", {}) == 64000
     assert param_default("gemini-chat", "max_tokens", {"model": "gemini-3.6-flash"}) == 8192
     assert param_default("gemini-chat", "max_tokens", {"model": "gemini-4-argon"}) == 65536
@@ -504,7 +521,8 @@ async def test_fresh_claude_5_node_body(model):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("model,expected", [("claude-opus-5-5", 64000), ("claude-sonnet-4-6", 4096),
+@pytest.mark.parametrize("model,expected", [("claude-opus-5-5", 64000), ("claude-sonnet-4-6", 64000),
+                                            ("claude-opus-4-7", 64000), ("claude-haiku-4-5-20251001", 4096),
                                             ("claude-opus-4-1", 4096)])  # off the menu: the old 4096
 @pytest.mark.parametrize("unset", ["missing", None, ""])
 async def test_claude_missing_max_tokens_uses_model_default(model, expected, unset):
@@ -585,7 +603,7 @@ async def test_gemini_missing_max_tokens_sends_no_cap(model, unset):
 # --------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("model", ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-flash-preview",
+@pytest.mark.parametrize("model", ["gemini-3.1-pro-preview", "gemini-3-flash-preview",
                                    "gemini-3.1-flash-lite", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"])
 async def test_gemini_sampling_and_stops_sent_to_older_models(model):
     params = {**_saved_defaults("gemini-chat"), "model": model, "top_p": 0.8, "top_k": 40,
@@ -597,7 +615,8 @@ async def test_gemini_sampling_and_stops_sent_to_older_models(model):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("model", ["gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"])
+@pytest.mark.parametrize("model", ["gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite",
+                                   "gemini-3.5-flash"])
 async def test_gemini_new_models_get_stops_but_no_sampling(model):
     params = {**_fresh("gemini-chat", model), "top_p": 0.8, "top_k": 40, "stop_sequences": "END"}
     _, _, body = await _gemini(params)
@@ -630,7 +649,7 @@ def test_agent_brief_and_cli_show_per_model_defaults():
 
     brief = main._brief_param(_param("claude-chat", "max_tokens"))
     assert brief["default"] == 64000 and brief["max"] == 128000
-    assert brief["defaultBy"] == {"model": {m: 4096 for m in _model_values("claude-chat") if m not in CLAUDE_5}}
+    assert brief["defaultBy"] == {"model": {m: 4096 for m in CLAUDE_4096}}
     detail = format_node_detail(DEFS["gemini-chat"])
     others = [m for m in _model_values("gemini-chat") if m != "gemini-4-argon"]
     assert f"(default by model: 8192 for {', '.join(others)})" in detail

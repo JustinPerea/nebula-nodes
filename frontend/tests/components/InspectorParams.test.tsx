@@ -261,19 +261,19 @@ describe('Inspector per-model Max Tokens', () => {
   }
 
   it('moves an untouched Max Tokens with the model and notes it under the field', () => {
-    renderModel('claude-chat', { model: 'claude-sonnet-4-6', max_tokens: 4096, temperature: 1 });
+    renderModel('claude-chat', { model: 'claude-haiku-4-5-20251001', max_tokens: 4096, temperature: 1 });
     fireEvent.change(model(), { target: { value: 'claude-opus-5-5' } });
     expect(currentParams()).toMatchObject({ model: 'claude-opus-5-5', max_tokens: 64000 });
     expect(maxTokens()).toHaveValue(64000);
     expect(document.querySelector('[data-inspector-param="max_tokens"] [data-inspector-default-note]'))
       .toHaveTextContent('Max Tokens moved to 64,000, the Claude Opus 5.5 default.');
-    fireEvent.change(model(), { target: { value: 'claude-sonnet-4-6' } });
-    expect(currentParams()).toMatchObject({ model: 'claude-sonnet-4-6', max_tokens: 4096 });
-    expect(screen.getByText('Max Tokens moved to 4,096, the Claude Sonnet 4.6 default.')).toBeVisible();
+    fireEvent.change(model(), { target: { value: 'claude-haiku-4-5-20251001' } });
+    expect(currentParams()).toMatchObject({ model: 'claude-haiku-4-5-20251001', max_tokens: 4096 });
+    expect(screen.getByText('Max Tokens moved to 4,096, the Claude Haiku 4.5 default.')).toBeVisible();
   });
 
   it('shows the model\'s default when the node stores no Max Tokens (an agent-made node)', () => {
-    renderModel('claude-chat', { model: 'claude-sonnet-4-6' });
+    renderModel('claude-chat', { model: 'claude-haiku-4-5-20251001' });
     expect(maxTokens()).toHaveValue(4096);
   });
 

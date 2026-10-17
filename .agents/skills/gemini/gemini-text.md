@@ -21,8 +21,16 @@ are the ones the `gemini-chat` node sends.
 
 From Gemini 3.6 Flash and 3.5 Flash-Lite on, `temperature`, `top_p` and `top_k` are
 ignored, and Google says future models will return HTTP 400 for them. Nebula hides
-them and doesn't send them for the four newest models. On the older models
-`gemini-chat` sends Top P and Top K as `topP` / `topK` when set (2026-10-16).
+them and doesn't send them for the four newest models, and (since 2026-10-16) for
+the deprecated `gemini-3.5-flash`, which Google routes to `gemini-3.6-flash`. On
+the older models `gemini-chat` sends Top P and Top K as `topP` / `topK` when set
+(2026-10-16).
+
+On the 2.5 models the card shows Thinking Budget, not Thinking Level, so
+`gemini-chat` sends a `thinkingLevel` there only when no budget is set and the
+level isn't the definition default (`medium`), i.e. a saved non-default level.
+Sending the hidden default turned thinking on for 2.5 Flash-Lite, which doesn't
+think by default (2026-10-16).
 Stop sequences (comma-separated, up to 5) go out as `stopSequences` on every model.
 
 ## Core prompt structure

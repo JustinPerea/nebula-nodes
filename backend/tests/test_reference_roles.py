@@ -316,6 +316,14 @@ _OPUS_47_48 = ["claude-opus-4-8", "claude-opus-4-7"]
 _CLAUDE_SAMPLING = [m for m in _CLAUDE_OLD if m not in _OPUS_47_48]
 _CLAUDE_BUDGET_BASELINE = ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
                            "claude-opus-4-7", "claude-opus-4-6"]
+# Justin's answers 2026-10-16, items 2-6: Opus 4.6 and Sonnet 4.6 move to
+# Effort (no X-High, which Anthropic's effort page doesn't list for them) and
+# leave Thinking Budget; Opus 4.6-4.8 and Sonnet 4.6 leave the 4096 Max Tokens
+# list for the 64,000 default; deprecated Gemini 3.5 Flash (routed to 3.6 Flash)
+# leaves the temperature/top_p/top_k lists.
+_CLAUDE_46 = ["claude-sonnet-4-6", "claude-opus-4-6"]
+_CLAUDE_MAX_4096 = ["claude-fable-5", "claude-haiku-4-5-20251001"]
+_CLAUDE_EFFORT = _CLAUDE_NEW + ["claude-opus-4-8", "claude-sonnet-4-6", "claude-opus-4-7", "claude-opus-4-6"]
 _GPT5 = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"]
 # Follow-ups (2026-10-16): GPT-6 Sol and the GPT-5.6 models join the menu, each
 # chat node's max-token param gets per-model defaults (defaultBy) and a max that
@@ -375,7 +383,7 @@ APPROVED_PARAM_FIELD_CHANGES = {
         "max_tokens": {"max": (200000, 128000), "default": (4096, 64000)},
         "thinkingBudget": {"visibleWhen": (
             {"model": _CLAUDE_BUDGET_BASELINE},
-            {"model": [m for m in _CLAUDE_BUDGET_BASELINE if m not in _OPUS_47_48]})},
+            {"model": [m for m in _CLAUDE_BUDGET_BASELINE if m not in _OPUS_47_48 + _CLAUDE_46]})},
     },
     "gpt-4o-chat": {
         "model": {"default": ("gpt-5.4", "gpt-6.1-sol")},
@@ -394,11 +402,12 @@ APPROVED_PARAM_FIELD_CHANGES = {
 APPROVED_PARAM_FIELD_ADDITIONS.update({
     "claude-chat": {
         **{key: {"visibleWhen": {"model": _CLAUDE_SAMPLING}} for key in ("temperature", "top_p")},
-        "max_tokens": {"defaultBy": {"model": {model: 4096 for model in _CLAUDE_OLD}}},
+        "max_tokens": {"defaultBy": {"model": {model: 4096 for model in _CLAUDE_MAX_4096}}},
     },
     "gpt-4o-chat": {"max_completion_tokens": {"defaultBy": {"model": {model: 4096 for model in _GPT_BEFORE}}}},
     "gemini-chat": {
-        **{key: {"visibleWhen": {"model": _GEM_OLD}} for key in ("temperature", "top_p", "top_k")},
+        **{key: {"visibleWhen": {"model": [m for m in _GEM_OLD if m != "gemini-3.5-flash"]}}
+           for key in ("temperature", "top_p", "top_k")},
         "max_tokens": {"defaultBy": {"model": {model: 8192 for model in _GEM_NEW + _GEM_OLD
                                                if model != "gemini-4-argon"}}},
     },
@@ -417,10 +426,11 @@ APPROVED_APPENDED_OPTIONS["gpt-4o-chat"] = {"reasoning_effort": [
 APPROVED_INSERTED_PARAMS = {
     "claude-chat": [("thinkingBudget", {
         "key": "effort", "label": "Effort", "type": "enum", "required": False, "default": "medium",
-        "visibleWhen": {"model": _CLAUDE_NEW + _OPUS_47_48},
+        "visibleWhen": {"model": _CLAUDE_EFFORT},
         "options": [{"label": "Default", "value": ""}, {"label": "Low", "value": "low"},
                     {"label": "Medium", "value": "medium"}, {"label": "High", "value": "high"},
-                    {"label": "X-High", "value": "xhigh"}, {"label": "Max", "value": "max"}],
+                    {"label": "X-High", "value": "xhigh", "visibleWhen": {"model": _CLAUDE_NEW + _OPUS_47_48}},
+                    {"label": "Max", "value": "max"}],
     })],
 }
 
