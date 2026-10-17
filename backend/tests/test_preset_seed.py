@@ -32,7 +32,7 @@ def test_seed_populates_empty_global_then_is_idempotent(fresh):
 
 
 def test_seed_skips_when_not_empty(fresh):
-    fresh.create(name="Mine", category="X", prompt="", params={}, modelId=None, refImages=[], scope="global", projectId=None)
+    fresh.create(name="Mine", category="X", prompt="", params={}, modelId=None, refImages=[], scope="global", projectId=None, params_version=1)
     m.seed_presets_if_empty()
     names = {p["name"] for p in fresh.list("global")}
     assert names == {"Mine"}  # untouched

@@ -21,10 +21,25 @@ SYSTEM_PROMPT = (
 
 # (provider, api-key name, model). Order = selection priority. Models are the
 # cheap/fast tier of each provider, taken from the verified node registry defaults.
+
+# Claude Haiku 5.5 (platform.claude.com/docs/en/models/haiku-5-5/migration-guide,
+# fetched 2026-10-16) thinks adaptively by default, and "Thinking tokens count
+# toward max_tokens, so a request with a small max_tokens can stop with
+# stop_reason: "max_tokens" after a thinking block and before any text"; it also
+# counts ~30% more tokens than Haiku 4.5. The cap leaves room for both (a cap is
+# not billed, only tokens used). Effort is medium, Haiku 5.5's default, sent
+# explicitly: the prompting guide says reasoning-like text leaks into the reply
+# "more often with thinking off or at low effort", and the reply is used verbatim.
+# No temperature/top_p/top_k (400 on Haiku 5.5) and no assistant prefill.
+ANTHROPIC_ENHANCE_MAX_TOKENS = 16_000
+ANTHROPIC_ENHANCE_EFFORT = "medium"
 _PROVIDERS: list[tuple[str, str, str]] = [
     ("openai", "OPENAI_API_KEY", "gpt-5.4-mini"),
-    ("anthropic", "ANTHROPIC_API_KEY", "claude-haiku-4-5-20251001"),
-    ("google", "GOOGLE_API_KEY", "gemini-3.5-flash"),
+    # Claude Haiku 5.5 replaced Haiku 4.5 on 2026-10-16 (Justin's answer, item 4).
+    ("anthropic", "ANTHROPIC_API_KEY", "claude-haiku-5-5"),
+    # Google deprecated gemini-3.5-flash on 2026-10-08 and routes it to
+    # gemini-3.6-flash (ai.google.dev/gemini-api/docs/deprecations), so call that.
+    ("google", "GOOGLE_API_KEY", "gemini-3.6-flash"),
 ]
 
 
@@ -78,9 +93,10 @@ def build_enhance_request(
             },
             {
                 "model": model,
-                "max_tokens": 1024,
+                "max_tokens": ANTHROPIC_ENHANCE_MAX_TOKENS,
                 "system": SYSTEM_PROMPT,
                 "messages": [{"role": "user", "content": prompt}],
+                "output_config": {"effort": ANTHROPIC_ENHANCE_EFFORT},
             },
         )
     if provider == "google":

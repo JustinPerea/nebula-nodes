@@ -1,6 +1,6 @@
 # Nebula Nodes — Agent Instructions
 
-AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph. 303 nodes, written in `frontend/src/constants/nodeDefinitions.ts` and exported to `backend/data/node_definitions.json` (`scripts/export-node-defs.ts`), which the backend and every script read. `docs/MODEL_REFERENCE.md` is generated from it via `node scripts/generate-model-reference.mjs` — never edit it by hand.
+AI creation studio: FastAPI backend + React 19/Vite frontend around a node graph. 304 nodes, written in `frontend/src/constants/nodeDefinitions.ts` and exported to `backend/data/node_definitions.json` (`scripts/export-node-defs.ts`), which the backend and every script read. `docs/MODEL_REFERENCE.md` is generated from it via `node scripts/generate-model-reference.mjs` — never edit it by hand.
 
 ## Standing task: Flora gap audit
 

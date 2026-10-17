@@ -212,6 +212,7 @@ body.app-slava-restraint .param-pill__number {
 body.app-slava-restraint .param-pill__number { width: 56px; }
 body.app-slava-restraint .param-pill--toggle { cursor: pointer; }
 body.app-slava-restraint .param-pill--on { border-color: var(--sr-accent); color: var(--sr-ink-bold); }
+body.app-slava-restraint .param-pills__note { flex-basis: 100%; margin: 0; font-size: 12px; line-height: 1.4; }
 
 /* Model picker */
 body.app-slava-restraint .model-picker-overlay {
