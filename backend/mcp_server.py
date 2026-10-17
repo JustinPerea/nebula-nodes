@@ -348,7 +348,8 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
 @mcp.tool(annotations=_READ)
 def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, Any]:
     """One node type in detail: input and output ports (ids to wire), params
-    (type, default, options, ranges, `onlyWhen` another param has a value),
+    (type, default, options, ranges, `onlyWhen` another param has a value,
+    and `optionsOnlyWhen` for options offered only for some values of another param),
     whether it runs here, and list prices by the params that set them.
     Dual-route nodes (a fal or Krea copy that also runs on the model maker's
     API with your key) also list `paramsDirect` / `paramsFallback`; `route`

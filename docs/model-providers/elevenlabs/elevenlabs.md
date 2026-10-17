@@ -57,6 +57,7 @@ the SDK stubs and `openapi.json` were used as the authoritative fallback per aud
 | Node | Inputs | Output | Exec pattern |
 |---|---|---|---|
 | `elevenlabs-tts` | `text` (Text) | `audio` (Audio) | sync |
+| `elevenlabs-dialogue` | `script` (Text) | `audio` (Audio) | sync |
 | `elevenlabs-sfx` | `text` (Text) | `audio` (Audio) | sync |
 | `elevenlabs-sts` | `audio` (Audio) | `audio` (Audio) | sync |
 | `elevenlabs-isolation` | `audio` (Audio) | `audio` (Audio) | sync |
@@ -206,6 +207,27 @@ module-level imports per Python convention.
 | `output_format` | enum | no | `mp3_44100_128` | `?output_format=` query | |
 | `seed` | integer | no | — | `seed` | Only sent when set |
 
+### elevenlabs-dialogue (added 2026-10-16)
+
+`POST /v1/text-to-dialogue` ([reference](https://elevenlabs.io/docs/api-reference/text-to-dialogue/convert), read 2026-10-16). The `script` input is one line per turn, `<voice name>: <text>` (the speaker is everything before the first colon, trimmed). The handler checks the script locally first (`parse_dialogue_script`: a line with no speaker, an empty turn, more than 10 different speakers, a total over 2,000 characters), then lists the person's voices once with `GET /v2/voices` ([reference](https://elevenlabs.io/docs/api-reference/voices/search); free; `page_size=100`, following `next_page_token` while `has_more`), and resolves each speaker (`resolve_dialogue_voices`):
+
+- one voice with that name, ignoring case and surrounding spaces: its `voice_id`;
+- no such name: the label itself if it is exactly one of their voices' `voice_id`s, else an error with close matches and their IDs;
+- several voices with that name: an error listing each one's name, category and ID.
+
+Only when every speaker resolves does `POST /v1/text-to-dialogue` run, with `inputs[]` of `{text, voice_id}`. A 403 from the listing (a key without `voices_read`) stops a script written with names, with a message to give the key voices-read access or to write voice IDs; a script of voice IDs still runs.
+
+| Param | Type | Required | Default | API field | Notes |
+|---|---|---|---|---|---|
+| `model_id` | enum | no | `eleven_v4` | `model_id` | `eleven_v4` / `eleven_v3`; always sent (API default is `eleven_v3`) |
+| `stability` | float | no | 0.5 | `settings.stability` | 0–1 |
+| `similarity` | float | no | 0.75 | `settings.similarity` | 0–1; the endpoint's name, not `similarity_boost` |
+| `language_code` | string | no | — | `language_code` | ISO 639-1 (639-3 for ast, yue, ceb, fil); only sent when set |
+| `output_format` | enum | no | `mp3_44100_128` | `?output_format=` query | Same five values as TTS |
+| `seed` | integer | no | — | `seed` | 0–4294967295; only sent when set |
+
+No `speed`, `style` or `use_speaker_boost`: the endpoint has no such fields, and "Style and Speed sliders are not available in Eleven v4" ([Eleven v4 page](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4)).
+
 ### elevenlabs-sfx
 
 | Param | Type | Required | Default | API field | Notes |
@@ -247,10 +269,12 @@ No params. Only input is the audio file; output is always MP3.
 |---|---|---|
 | v3 (Highest Quality) | `eleven_v3` | Best quality |
 | Multilingual v2 | `eleven_multilingual_v2` | Default; best balance |
-| Turbo v2.5 (Low Latency) | `eleven_turbo_v2_5` | ADDED |
+| Turbo v2.5 (deprecated: use Flash v2.5) | `eleven_turbo_v2_5` | ADDED; ElevenLabs lists it under "Deprecated models" (models page, 2026-10-16). Label says so; value kept for saved graphs |
 | Flash v2.5 (Fastest) | `eleven_flash_v2_5` | Fastest generation |
-| Turbo v2 | `eleven_turbo_v2` | ADDED |
+| Turbo v2 (deprecated: use Flash v2) | `eleven_turbo_v2` | ADDED; deprecated, as above |
 | Flash v2 | `eleven_flash_v2` | ADDED |
+
+Eleven v4 isn't on this list: ElevenLabs offers it through Text to Dialogue only ("Eleven v4 is available via the Text to Dialogue API", models page), so it is on `elevenlabs-dialogue`.
 
 ## Output Format / File Extension Mapping
 

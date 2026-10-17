@@ -7,7 +7,7 @@ description: Best practices for prompting Google's Gemini-family APIs — Gemini
 
 ## When to use
 
-- The user asks for image, video, or text generation and the graph is using (or could use) a Google node: `nano-banana`, `veo-3`, `veo-3-flf`, `gemini-omni-flash`, or a `gemini-*-image` model, or `gemini-2.5/3.1-*` text models.
+- The user asks for image, video, or text generation and the graph is using (or could use) a Google node: `nano-banana`, `veo-3`, `veo-3-flf`, `gemini-omni-flash`, or a `gemini-*-image` model, or the `gemini-chat` text models (`gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-2.5/3.x-*`).
 - Editing nodes or handlers that call the Google AI SDK (`google-genai`, `@google/genai`) or hit `generativelanguage.googleapis.com`.
 - Explicit `/skill gemini` or user question about "which Gemini/Veo/Nano Banana model should I use?" (Imagen requests go to Nano Banana 2.1)
 

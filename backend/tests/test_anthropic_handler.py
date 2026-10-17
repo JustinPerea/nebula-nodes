@@ -131,9 +131,10 @@ async def test_max_tokens_always_sent():
         mock_client.__aexit__ = AsyncMock(return_value=False)
         MockClient.return_value = mock_client
 
-        # No max_tokens param — should fall back to default 4096
+        # No max_tokens param — should fall back to the model's default (4096 on Haiku 4.5;
+        # Sonnet 4.6 moved to 64,000 on 2026-10-16)
         await handle_claude_chat(
-            _make_node({"model": "claude-sonnet-4-6"}),
+            _make_node({"model": "claude-haiku-4-5-20251001"}),
             {"messages": PortValueDict(type="Text", value="test")},
             {"ANTHROPIC_API_KEY": "sk-ant-test"},
         )
@@ -238,7 +239,7 @@ async def test_extended_thinking_sends_thinking_block():
         MockClient.return_value = mock_client
 
         await handle_claude_chat(
-            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 16000, "extended_thinking": True, "thinkingBudget": 5000}),
+            _make_node({"model": "claude-haiku-4-5-20251001", "max_tokens": 16000, "extended_thinking": True, "thinkingBudget": 5000}),
             {"messages": PortValueDict(type="Text", value="think hard")},
             {"ANTHROPIC_API_KEY": "sk-ant-test"},
         )
@@ -261,7 +262,7 @@ async def test_extended_thinking_budget_clamps_to_minimum():
         MockClient.return_value = mock_client
 
         await handle_claude_chat(
-            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 8000, "extended_thinking": True, "thinkingBudget": 100}),
+            _make_node({"model": "claude-haiku-4-5-20251001", "max_tokens": 8000, "extended_thinking": True, "thinkingBudget": 100}),
             {"messages": PortValueDict(type="Text", value="test")},
             {"ANTHROPIC_API_KEY": "sk-ant-test"},
         )
@@ -282,7 +283,7 @@ async def test_extended_thinking_overrides_user_temperature():
         MockClient.return_value = mock_client
 
         await handle_claude_chat(
-            _make_node({"model": "claude-sonnet-4-6", "max_tokens": 16000, "temperature": 0.5, "extended_thinking": True, "thinkingBudget": 5000}),
+            _make_node({"model": "claude-haiku-4-5-20251001", "max_tokens": 16000, "temperature": 0.5, "extended_thinking": True, "thinkingBudget": 5000}),
             {"messages": PortValueDict(type="Text", value="think hard")},
             {"ANTHROPIC_API_KEY": "sk-ant-test"},
         )
@@ -335,7 +336,9 @@ async def test_fable5_never_sends_thinking_block():
     body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
     assert body["model"] == "claude-fable-5"
     assert "thinking" not in body, "Fable 5 must never receive an extended-thinking block"
-    assert body.get("temperature") == 0.5, "user temperature must not be overridden for Fable 5"
+    # Fable 5 returns HTTP 400 for any non-default temperature/top_p/top_k
+    # (thinking page, sampling section, fetched 2026-10-17): never sent.
+    assert "temperature" not in body and "top_p" not in body
 
 
 @pytest.mark.asyncio
