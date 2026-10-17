@@ -401,7 +401,10 @@ APPROVED_PARAM_FIELD_CHANGES = {
 }
 APPROVED_PARAM_FIELD_ADDITIONS.update({
     "claude-chat": {
-        **{key: {"visibleWhen": {"model": _CLAUDE_SAMPLING}} for key in ("temperature", "top_p")},
+        # Justin, 2026-10-17: Claude Fable 5 leaves the sampling lists too
+        # (Anthropic: non-default temperature/top_p/top_k are a 400 on it).
+        **{key: {"visibleWhen": {"model": [m for m in _CLAUDE_SAMPLING if m != "claude-fable-5"]}}
+           for key in ("temperature", "top_p")},
         "max_tokens": {"defaultBy": {"model": {model: 4096 for model in _CLAUDE_MAX_4096}}},
     },
     "gpt-4o-chat": {"max_completion_tokens": {"defaultBy": {"model": {model: 4096 for model in _GPT_BEFORE}}}},

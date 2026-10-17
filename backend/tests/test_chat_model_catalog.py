@@ -295,10 +295,15 @@ async def test_claude_haiku_45_thinking_body_unchanged():
 
 @pytest.mark.asyncio
 async def test_claude_fable_5_body_unchanged():
-    params = {**_saved_defaults("claude-chat"), "model": "claude-fable-5", "extended_thinking": True, "temperature": 0.5}
+    # Fable 5 rejects non-default temperature/top_p/top_k with HTTP 400
+    # (Anthropic thinking page, sampling section, fetched 2026-10-17), so
+    # since Justin's answer of 2026-10-17 neither is sent. A saved node
+    # holding temperature 0.5 used to fail; it now runs at the model default.
+    params = {**_saved_defaults("claude-chat"), "model": "claude-fable-5", "extended_thinking": True,
+              "temperature": 0.5, "top_p": 0.9}
     _, _, body = await _claude(params)
     assert body == {"model": "claude-fable-5", "messages": USER_TURN_CLAUDE, "max_tokens": 4096,
-                    "stream": True, "temperature": 0.5}
+                    "stream": True}
 
 
 # --------------------------------------------------------------------------

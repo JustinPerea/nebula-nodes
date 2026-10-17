@@ -51,9 +51,9 @@ against these Anthropic pages, fetched that day:
 |---|---|---|---|---|---|
 | `model` | enum | yes | `claude-opus-5-5` | `model` | See model list below. Was `claude-sonnet-4-6` until 2026-10-16 |
 | `max_tokens` | integer | yes | 64000 (Fable 5.1, the 5.5 generation incl. the default Opus 5.5, Opus 4.8, Opus 4.7, Opus 4.6, Sonnet 4.6); 4096 on Fable 5 and Haiku 4.5 (`defaultBy`). Opus 4.6-4.8 and Sonnet 4.6 were 4096 until 2026-10-16 | `max_tokens` | Required by Anthropic API (unlike OpenAI); always sent. Range 1–128000. When the key is missing (a node an agent made with only a model), the handler sends the model's default |
-| `temperature` | float | no | 1 | `temperature` | 0–1; overridden to 1 when extended_thinking is enabled (budget thinking on Haiku 4.5, adaptive thinking on Opus 4.6 / Sonnet 4.6). Hidden and never sent for Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Opus 4.8 / Opus 4.7 |
+| `temperature` | float | no | 1 | `temperature` | 0–1; overridden to 1 when extended_thinking is enabled (budget thinking on Haiku 4.5, adaptive thinking on Opus 4.6 / Sonnet 4.6). Hidden and never sent for Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5 / Opus 4.8 / Opus 4.7 |
 | `system` | textarea | no | — | `system` | Top-level field, not a messages role |
-| `top_p` | float | no | — | `top_p` | Not forwarded if absent (FIXED). Hidden and never sent for the 5.5 generation, Fable 5.1, Opus 4.8 and Opus 4.7. Dropped while Extended Thinking is on (thinking forces `temperature: 1`) |
+| `top_p` | float | no | — | `top_p` | Not forwarded if absent (FIXED). Hidden and never sent for the 5.5 generation, Fable 5.1, Fable 5, Opus 4.8 and Opus 4.7. Dropped while Extended Thinking is on (thinking forces `temperature: 1`) |
 | `stop_sequences` | string | no | — | `stop_sequences` | Comma-separated → forwarded as string array (FIXED) |
 | `extended_thinking` | boolean | no | false | `thinking.type` | When true, sends `{"type":"enabled","budget_tokens":N}` on Haiku 4.5 (FIXED). On Opus 4.6/4.7/4.8 and Sonnet 4.6 sends `{"type":"adaptive"}` with no budget (4.7/4.8 from 2026-10-16; 4.6 from Justin's answers the same day) |
 | `thinkingBudget` | integer | no | 10000 | `thinking.budget_tokens` | Clamped to min 1024; only sent when extended_thinking=true (FIXED). Shown and sent on Haiku 4.5 only; hidden and never sent on Opus 4.6/4.7/4.8 and Sonnet 4.6 |
@@ -71,7 +71,7 @@ Menu as of 2026-10-16, newest first (Anthropic models overview and deprecations 
 | Claude Opus 5.5 | `claude-opus-5-5` | Node default (from 2026-10-16). Released 2026-09-22. 1M / 128K, default effort `medium` |
 | Claude Sonnet 5.5 | `claude-sonnet-5-5` | Released 2026-09-28. 1M / 128K, default effort `high` |
 | Claude Haiku 5.5 | `claude-haiku-5-5` | Released 2026-10-07. 1M / 128K, default effort `medium` |
-| Claude Fable 5 | `claude-fable-5` | Superseded by Fable 5.1; retirement not sooner than 2027-06-09 |
+| Claude Fable 5 | `claude-fable-5` | Superseded by Fable 5.1; retirement not sooner than 2027-06-09. No sampling params (2026-10-17) |
 | Claude Opus 4.8 | `claude-opus-4-8` | Not sooner than 2027-05-28. Effort, adaptive thinking only (off by default) |
 | Claude Sonnet 4.6 | `claude-sonnet-4-6` | Node default until 2026-10-16. Effort (no `xhigh`, API default `high`) plus an adaptive-thinking toggle; sampling kept |
 | Claude Haiku 4.5 | `claude-haiku-4-5-20251001` | "Not sooner than October 15, 2026"; no deprecation announced yet |
@@ -153,7 +153,17 @@ Sources: `build-with-claude/thinking-troubleshooting.md` (per-model table),
 `build-with-claude/effort.md`, `about-claude/models/overview.md` (footnote on
 `budget_tokens`).
 
-Fable 5 and Haiku 4.5 send exactly the request they sent before.
+Haiku 4.5 sends exactly the request it sent before.
+
+### Claude Fable 5 sampling (2026-10-17)
+
+The thinking page's sampling section (fetched 2026-10-17) lists Claude Fable 5
+among the models where "non-default `temperature`, `top_p`, or `top_k` values
+return a 400 error on every request, regardless of whether thinking is used".
+Justin approved hiding Temperature and Top P for it, so the card hides both
+and the handler never sends them (`NO_SAMPLING_MODELS`). A saved Fable 5 node
+holding a non-default temperature used to fail with a 400; it now runs at the
+model's own default.
 
 Models removed from lineup:
 

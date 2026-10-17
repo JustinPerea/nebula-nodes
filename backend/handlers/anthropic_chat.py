@@ -49,6 +49,13 @@ MODEL_EFFORT_LEVELS = {
     **{model: ("low", "medium", "high", "max") for model in SAMPLING_ADAPTIVE_MODELS},
 }
 
+# Claude Fable 5 thinks adaptively by default and, per Anthropic's thinking
+# page (sampling section, fetched 2026-10-17), "non-default temperature,
+# top_p, or top_k values return a 400 error on every request, regardless of
+# whether thinking is used" on it, as on the models above. Its Temperature and
+# Top P are hidden on the card and never sent (Justin, 2026-10-17).
+NO_SAMPLING_MODELS = ADAPTIVE_EFFORT_MODELS | OPTIONAL_ADAPTIVE_MODELS | frozenset({"claude-fable-5"})
+
 # Max Tokens on every node saved before 2026-10-16 (main's only default). On
 # Opus 4.6-4.8 and Sonnet 4.6 with Extended Thinking on, the toggle now sends
 # adaptive thinking with no budget, and "thinking tokens count toward
@@ -129,7 +136,7 @@ async def handle_claude_chat(
 
     request_body: dict[str, Any] = {"model": model, "messages": messages, "max_tokens": max_tokens, "stream": True}
 
-    if not adaptive and not optional_adaptive:
+    if model not in NO_SAMPLING_MODELS:
         temperature = node.params.get("temperature")
         if temperature is not None:
             request_body["temperature"] = float(temperature)

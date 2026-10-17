@@ -336,7 +336,9 @@ async def test_fable5_never_sends_thinking_block():
     body = mock_client.stream.call_args.kwargs.get("json") or mock_client.stream.call_args[1].get("json")
     assert body["model"] == "claude-fable-5"
     assert "thinking" not in body, "Fable 5 must never receive an extended-thinking block"
-    assert body.get("temperature") == 0.5, "user temperature must not be overridden for Fable 5"
+    # Fable 5 returns HTTP 400 for any non-default temperature/top_p/top_k
+    # (thinking page, sampling section, fetched 2026-10-17): never sent.
+    assert "temperature" not in body and "top_p" not in body
 
 
 @pytest.mark.asyncio

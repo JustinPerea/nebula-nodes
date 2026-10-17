@@ -175,9 +175,9 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         min: 0,
         max: 1,
         step: 0.1,
-        // Claude 5.5-generation models, Fable 5.1 and Opus 4.7/4.8 reject non-default sampling params.
+        // Claude 5.5-generation models, Fable 5.1, Fable 5 and Opus 4.7/4.8 reject non-default sampling params.
         // Opus 4.6 / Sonnet 4.6 still take them (temperature is forced to 1 while thinking is on).
-        visibleWhen: { model: ['claude-fable-5', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
+        visibleWhen: { model: ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
       },
       {
         key: 'system',
@@ -196,7 +196,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         max: 1,
         step: 0.05,
         placeholder: 'Default',
-        visibleWhen: { model: ['claude-fable-5', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
+        visibleWhen: { model: ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'] },
       },
       {
         key: 'stop_sequences',
