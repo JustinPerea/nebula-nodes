@@ -90,6 +90,15 @@ APPROVED_PORT_LABEL_CHANGES = {
 APPROVED_OPTION_FIELD_ADDITIONS = {
     "seedream-4-5": {"image_size": {"auto_3K": {"visibleWhen": {"model": ["5.0-lite"]}}}},
 }
+# ElevenLabs lists eleven_turbo_v2_5 and eleven_turbo_v2 as "Deprecated
+# models" (https://elevenlabs.io/docs/overview/models, read 2026-10-16). The
+# values stay so saved graphs still open; only their labels say so.
+APPROVED_OPTION_LABEL_CHANGES = {
+    "elevenlabs-tts": {"model_id": {
+        "eleven_turbo_v2_5": ("Turbo v2.5 (Low Latency)", "Turbo v2.5 (deprecated: use Flash v2.5)"),
+        "eleven_turbo_v2": ("Turbo v2", "Turbo v2 (deprecated: use Flash v2)"),
+    }},
+}
 # Krea account billing (2026-10-09): the three original Krea nodes that call
 # Krea gained the same `_kreaAuth` choice as the gateway catalog, prepended,
 # and Style Train gained the training models Krea added since the baseline.
@@ -369,6 +378,145 @@ APPROVED_APPENDED_OPTIONS = {
     ]},
 }
 
+# Chat model refresh (2026-10-16): newer Claude, GPT-6 and Gemini models are
+# prepended to the three chat menus, retiring models get a date in their label,
+# gemini-chat's default moves off the deprecated gemini-3.5-flash, and params a
+# new model rejects get exact visibleWhen lists. Claude gains one param, Effort,
+# after thinkingBudget. Every value is pinned here; normalizing restores the
+# baseline, so any other edit to these nodes still fails the fingerprint.
+_CLAUDE_OLD = ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-4-6",
+               "claude-haiku-4-5-20251001", "claude-opus-4-7", "claude-opus-4-6"]
+_CLAUDE_NEW = ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
+# Chat defaults and Opus 4.7/4.8 on Effort (2026-10-16, approved by Justin):
+# claude-chat defaults to Opus 5.5 at Effort "medium", gpt-4o-chat to GPT-6.1
+# Sol, gemini-chat to Gemini 4 Argon at Thinking Level "medium". Opus 4.7/4.8
+# reject a thinking budget and non-default sampling params, so they leave the
+# temperature/top_p/thinkingBudget lists and join Effort's.
+_OPUS_47_48 = ["claude-opus-4-8", "claude-opus-4-7"]
+_CLAUDE_SAMPLING = [m for m in _CLAUDE_OLD if m not in _OPUS_47_48]
+_CLAUDE_BUDGET_BASELINE = ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001",
+                           "claude-opus-4-7", "claude-opus-4-6"]
+# Justin's answers 2026-10-16, items 2-6: Opus 4.6 and Sonnet 4.6 move to
+# Effort (no X-High, which Anthropic's effort page doesn't list for them) and
+# leave Thinking Budget; Opus 4.6-4.8 and Sonnet 4.6 leave the 4096 Max Tokens
+# list for the 64,000 default; deprecated Gemini 3.5 Flash (routed to 3.6 Flash)
+# leaves the temperature/top_p/top_k lists.
+_CLAUDE_46 = ["claude-sonnet-4-6", "claude-opus-4-6"]
+_CLAUDE_MAX_4096 = ["claude-fable-5", "claude-haiku-4-5-20251001"]
+_CLAUDE_EFFORT = _CLAUDE_NEW + ["claude-opus-4-8", "claude-sonnet-4-6", "claude-opus-4-7", "claude-opus-4-6"]
+_GPT5 = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"]
+# Follow-ups (2026-10-16): GPT-6 Sol and the GPT-5.6 models join the menu, each
+# chat node's max-token param gets per-model defaults (defaultBy) and a max that
+# matches the makers' output caps, and OpenAI's "nano" is lowercase as on its
+# model pages.
+_GPT_REASONING = ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna",
+                  "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]
+# Max Tokens' `default` is the default model's value (Opus 5.5, GPT-6.1 Sol,
+# Argon), and the models that had the old default are listed at it.
+_GPT_BEFORE = _GPT5 + ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"]
+_GEM_OLD = ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite",
+            "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+_GEM_NEW = ["gemini-4-argon", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]
+_GEM_THINKING_OLD = ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite"]
+APPROVED_LEADING_OPTIONS = {
+    "claude-chat": {"model": [
+        {"label": "Claude Fable 5.1 (flagship)", "value": "claude-fable-5-1"},
+        {"label": "Claude Opus 5.5", "value": "claude-opus-5-5"},
+        {"label": "Claude Sonnet 5.5", "value": "claude-sonnet-5-5"},
+        {"label": "Claude Haiku 5.5", "value": "claude-haiku-5-5"},
+    ]},
+    "gpt-4o-chat": {"model": [
+        {"label": "GPT-6 Astra (flagship)", "value": "gpt-6-astra"},
+        {"label": "GPT-6.1 Sol", "value": "gpt-6.1-sol"},
+        {"label": "GPT-6 Sol", "value": "gpt-6-sol"},
+        {"label": "GPT-6 Luna", "value": "gpt-6-luna"},
+        {"label": "GPT-5.6 Sol", "value": "gpt-5.6-sol"},
+        {"label": "GPT-5.6 Terra", "value": "gpt-5.6-terra"},
+        {"label": "GPT-5.6 Luna", "value": "gpt-5.6-luna"},
+    ]},
+    "gemini-chat": {"model": [
+        {"label": "Gemini 4 Argon", "value": "gemini-4-argon"},
+        {"label": "Gemini 3.8 Flash", "value": "gemini-3.8-flash"},
+        {"label": "Gemini 3.6 Flash", "value": "gemini-3.6-flash"},
+        {"label": "Gemini 3.5 Flash-Lite", "value": "gemini-3.5-flash-lite"},
+    ]},
+}
+APPROVED_OPTION_LABEL_CHANGES.update({
+    "claude-chat": {"model": {"claude-fable-5": ("Claude Fable 5 (flagship)", "Claude Fable 5")}},
+    "gpt-4o-chat": {"model": {
+        "gpt-5.5": ("GPT-5.5 (flagship)", "GPT-5.5"),
+        "gpt-5.4-nano": ("GPT-5.4 Nano", "GPT-5.4 nano (retiring 2027-04-01)"),
+        "gpt-4o": ("GPT-4o (legacy)", "GPT-4o (legacy, retiring 2027-01-14)"),
+        "gpt-4o-mini": ("GPT-4o Mini (legacy)", "GPT-4o Mini (legacy, retiring 2027-01-14)"),
+        "gpt-4.1": ("GPT-4.1 (legacy)", "GPT-4.1 (legacy, retiring 2027-01-14)"),
+        "gpt-4.1-mini": ("GPT-4.1 Mini (legacy)", "GPT-4.1 Mini (legacy, retiring 2027-01-14)"),
+        "gpt-4.1-nano": ("GPT-4.1 Nano (legacy, sunsets 2026-10-23)", "GPT-4.1 nano (legacy, retiring 2026-10-23)"),
+    }},
+    "gemini-chat": {"model": {
+        "gemini-3.5-flash": ("Gemini 3.5 Flash", "Gemini 3.5 Flash (deprecated, runs Gemini 3.6 Flash)"),
+        "gemini-3.1-flash-lite": ("Gemini 3.1 Flash-Lite", "Gemini 3.1 Flash-Lite (retiring 2027-05-07)"),
+    }},
+})
+APPROVED_PARAM_FIELD_CHANGES = {
+    "claude-chat": {
+        "model": {"default": ("claude-sonnet-4-6", "claude-opus-5-5")},
+        "max_tokens": {"max": (200000, 128000), "default": (4096, 64000)},
+        "thinkingBudget": {"visibleWhen": (
+            {"model": _CLAUDE_BUDGET_BASELINE},
+            {"model": [m for m in _CLAUDE_BUDGET_BASELINE if m not in _OPUS_47_48 + _CLAUDE_46]})},
+    },
+    "gpt-4o-chat": {
+        "model": {"default": ("gpt-5.4", "gpt-6.1-sol")},
+        "max_completion_tokens": {"default": (4096, 25000)},
+        "reasoning_effort": {"visibleWhen": ({"model": _GPT5}, {"model": _GPT_REASONING + _GPT5})},
+    },
+    "gemini-chat": {
+        "model": {"default": ("gemini-3.5-flash", "gemini-4-argon")},
+        "max_tokens": {"max": (65535, 65536), "default": (8192, 65536)},
+        "thinkingLevel": {
+            "visibleWhen": ({"model": _GEM_THINKING_OLD}, {"model": _GEM_NEW + _GEM_THINKING_OLD}),
+            "default": ("", "medium"),
+        },
+    },
+}
+APPROVED_PARAM_FIELD_ADDITIONS.update({
+    "claude-chat": {
+        # Justin, 2026-10-17: Claude Fable 5 leaves the sampling lists too
+        # (Anthropic: non-default temperature/top_p/top_k are a 400 on it).
+        **{key: {"visibleWhen": {"model": [m for m in _CLAUDE_SAMPLING if m != "claude-fable-5"]}}
+           for key in ("temperature", "top_p")},
+        "max_tokens": {"defaultBy": {"model": {model: 4096 for model in _CLAUDE_MAX_4096}}},
+    },
+    "gpt-4o-chat": {"max_completion_tokens": {"defaultBy": {"model": {model: 4096 for model in _GPT_BEFORE}}}},
+    "gemini-chat": {
+        **{key: {"visibleWhen": {"model": [m for m in _GEM_OLD if m != "gemini-3.5-flash"]}}
+           for key in ("temperature", "top_p", "top_k")},
+        "max_tokens": {"defaultBy": {"model": {model: 8192 for model in _GEM_NEW + _GEM_OLD
+                                               if model != "gemini-4-argon"}}},
+    },
+})
+APPROVED_OPTION_FIELD_ADDITIONS.update({
+    "gpt-4o-chat": {"reasoning_effort": {"none": {"visibleWhen": {"model": [
+        "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] + _GPT5}}}},
+    "gemini-chat": {"thinkingLevel": {"minimal": {
+        # Google's thinking table lists gemini-3.1-pro-preview as low/medium/high only.
+        "visibleWhen": {"model": ["gemini-3.6-flash", "gemini-3.5-flash-lite"]
+                        + [m for m in _GEM_THINKING_OLD if m != "gemini-3.1-pro-preview"]}}}},
+})
+APPROVED_APPENDED_OPTIONS["gpt-4o-chat"] = {"reasoning_effort": [
+    {"label": "Max", "value": "max", "visibleWhen": {"model": _GPT_REASONING}},
+]}
+APPROVED_INSERTED_PARAMS = {
+    "claude-chat": [("thinkingBudget", {
+        "key": "effort", "label": "Effort", "type": "enum", "required": False, "default": "medium",
+        "visibleWhen": {"model": _CLAUDE_EFFORT},
+        "options": [{"label": "Default", "value": ""}, {"label": "Low", "value": "low"},
+                    {"label": "Medium", "value": "medium"}, {"label": "High", "value": "high"},
+                    {"label": "X-High", "value": "xhigh", "visibleWhen": {"model": _CLAUDE_NEW + _OPUS_47_48}},
+                    {"label": "Max", "value": "max"}],
+    })],
+}
+
 # The 7 standard roles — mirrors REFERENCE_ROLE_IDS in referenceRoles.ts.
 STANDARD_ROLES = {
     "style",
@@ -530,6 +678,25 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
         port = _sole_entry(normalized["inputPorts"], "id", port_id)
         assert port["label"] == current_label, f"unapproved label: {node_id}.{port_id}"
         port["label"] = baseline_label
+    for after_key, inserted in APPROVED_INSERTED_PARAMS.get(node_id, []):
+        index = next(i for i, param in enumerate(normalized["params"]) if param.get("key") == after_key)
+        assert normalized["params"][index + 1] == inserted, f"unapproved inserted param: {node_id}.{inserted['key']}"
+        del normalized["params"][index + 1]
+    for param_key, leading in APPROVED_LEADING_OPTIONS.get(node_id, {}).items():
+        param = _sole_entry(normalized["params"], "key", param_key)
+        assert param["options"][:len(leading)] == leading, f"unapproved leading options: {node_id}.{param_key}"
+        del param["options"][:len(leading)]
+    for param_key, labels in APPROVED_OPTION_LABEL_CHANGES.get(node_id, {}).items():
+        param = _sole_entry(normalized["params"], "key", param_key)
+        for option_value, (baseline_label, current_label) in labels.items():
+            option = _sole_entry(param["options"], "value", option_value)
+            assert option["label"] == current_label, f"unapproved option label: {node_id}.{param_key}.{option_value}"
+            option["label"] = baseline_label
+    for param_key, fields in APPROVED_PARAM_FIELD_CHANGES.get(node_id, {}).items():
+        param = _sole_entry(normalized["params"], "key", param_key)
+        for field, (baseline_value, current_value) in fields.items():
+            assert param.get(field) == current_value, f"unapproved {field}: {node_id}.{param_key}"
+            param[field] = baseline_value
     leading_param = APPROVED_LEADING_PARAM_ADDITIONS.get(node_id)
     if leading_param is not None:
         assert normalized["params"][0] == leading_param, f"unapproved leading param: {node_id}"

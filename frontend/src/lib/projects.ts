@@ -19,10 +19,17 @@ export interface TrashedProject extends ProjectSummary { deletedAt: string; purg
 export interface ProjectList {
   projects: ProjectSummary[]; trash?: TrashedProject[]; activeProjectId: string | null;
   workspaceRevision: string; migratedProjectId?: string | null;
+  /** The backend's params version (lib/savedParamsUpgrades.ts). */
+  paramsVersion?: number;
 }
-/** ``warnings``: what opening changed that the person should know (a folded
- * Krea node's dropped connections, services/retired_nodes.py MERGED). */
-export interface ProjectActivation { project: SavedProject; workspaceRevision: string; warnings?: string[] }
+export interface ProjectActivation {
+  project: SavedProject; workspaceRevision: string;
+  /** Create and open only: the backend's params version (none = 0, a backend from before the gate). */
+  paramsVersion?: number;
+  /** Open only: what opening changed that the person should know (a folded
+   * Krea node's dropped connections, services/retired_nodes.py MERGED). */
+  warnings?: string[];
+}
 export interface ProjectDeletion {
   deletedProjectId: string; trashedProject: TrashedProject;
   activeProjectId: string | null; workspaceRevision: string;
@@ -65,5 +72,7 @@ export const purgeTrashedProject = (id: string) =>
   request<{ trash: TrashedProject[] }>(`/api/projects/trash/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((result) => result.trash);
 export const emptyProjectTrash = () =>
   request<{ trash: TrashedProject[] }>('/api/projects/trash/empty', { method: 'POST' }).then((result) => result.trash);
-export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string) =>
-  request<ProjectActivation>('/api/projects/recover', json('POST', { sourceProjectId, snapshot, recoveryId })).then((result) => result.project);
+/** `paramsVersion`: the one-time param upgrades the tab's canvas had when it
+ * loaded (lib/savedParamsUpgrades.ts). The backend upgrades the copy from it. */
+export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number) =>
+  request<ProjectActivation>('/api/projects/recover', json('POST', { sourceProjectId, snapshot, recoveryId, paramsVersion })).then((result) => result.project);

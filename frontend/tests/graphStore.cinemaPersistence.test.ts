@@ -9,6 +9,7 @@ vi.mock('../src/lib/backend', async (importOriginal) => ({
 vi.mock('../src/lib/wsClient', () => ({ wsClient: { connect: vi.fn(), subscribe: vi.fn() } }));
 import { clearCinemaScenePersistence, useGraphStore } from '../src/store/graphStore';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
+import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
 function spec(prompt: string): CinemaSceneSpec {
   return { version: 1, base: { model: 'nano-banana' }, aspectRatio: '16:9', shots: [
@@ -25,11 +26,11 @@ function current() { return useGraphStore.getState().nodes[0].data.params.scene 
 function edit(scene: CinemaSceneSpec) { useGraphStore.getState().updateScene('n1', scene); }
 function receive(scene: CinemaSceneSpec) {
   const callback = vi.mocked(wsClient.subscribe).mock.calls[0][0] as (event: ExecutionEvent) => void;
-  callback({ type: 'graphSync', empty: false, nodes: [node(scene)], edges: [] });
+  callback({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, empty: false, nodes: [node(scene)], edges: [] });
 }
 function receiveReplacement(nodes: Node<NodeData>[], edges: Edge[] = []) {
   const callback = vi.mocked(wsClient.subscribe).mock.calls[0][0] as (event: ExecutionEvent) => void;
-  callback({ type: 'graphSync', graphReplaced: true, empty: nodes.length === 0, nodes, edges });
+  callback({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, graphReplaced: true, empty: nodes.length === 0, nodes, edges });
 }
 function deferredResponse() {
   let resolve!: (value: Response) => void;

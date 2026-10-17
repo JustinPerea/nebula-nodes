@@ -16,6 +16,7 @@ import { JevResultDetails } from './JevResultDetails';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
 import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
+import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
 import { nodeWiredCounts, nodeWiredPorts } from '../../lib/runScope';
 import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
 import { useProviderNoteStore } from '../../store/providerNoteStore';
@@ -203,6 +204,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
   // Info panel toggle
   const [showInfo, setShowInfo] = useState(false);
+  // What the last model change did to a per-model default, shown under that
+  // param until the next edit on the same node.
+  const [defaultNotes, setDefaultNotes] = useState<{ nodeId: string; notes: DefaultSnapNote[] }>({ nodeId: '', notes: [] });
   const [maskPainterOpen, setMaskPainterOpen] = useState(false);
 
   // Favorites state
@@ -455,12 +459,16 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const activeNodeData = nodeData;
 
   function onParamChange(key: string, value: unknown) {
-    updateNodeData(activeNode.id, {
-      params: { ...activeNodeData.params, [key]: value },
-    });
+    const next = { ...activeNodeData.params, [key]: value };
+    // A model change moves a per-model default (Max Tokens) that wasn't edited,
+    // and says so under that param (lib/paramDefaults.ts).
+    const snap = definition ? snapParamDefaults(definition, activeNodeData.params, next) : { params: next, notes: [] };
+    setDefaultNotes({ nodeId: activeNode.id, notes: snap.notes });
+    updateNodeData(activeNode.id, { params: snap.params });
   }
 
   function clearParam(key: string) {
+    setDefaultNotes({ nodeId: activeNode.id, notes: [] });
     const params = { ...activeNodeData.params };
     delete params[key];
     updateNodeData(activeNode.id, { params });
@@ -592,7 +600,11 @@ export function Inspector({ embedded = false }: InspectorProps) {
   }
 
   function renderParamControl(param: InspectorParamDefinition) {
-    const value = activeNodeData.params[param.key] ?? param.default ?? '';
+    // A value the node doesn't store shows its model's default (lib/paramDefaults.ts).
+    const fallback = definition && 'defaultBy' in param && param.defaultBy
+      ? paramDefaultFor(definition, param, activeNodeData.params)
+      : param.default;
+    const value = activeNodeData.params[param.key] ?? fallback ?? '';
 
     if ('disabledReason' in param && param.disabledReason) {
       return <input className="inspector__field" aria-label={param.label} value={String(value)} disabled />;
@@ -929,6 +941,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
         {source === 'definition' && makerSizeNote && param.key === makerSizeNote.param && (
           <div className="inspector__notice" role="note" data-inspector-size-note="true">{makerSizeNote.text}</div>
         )}
+        {source === 'definition' && defaultNotes.nodeId === activeNode.id
+          && defaultNotes.notes.filter((note) => note.param === param.key).map((note) => (
+            <div key={note.text} className="inspector__notice" role="note" data-inspector-default-note="true">{note.text}</div>
+          ))}
         {activeNodeData.definitionId === 'replicate-universal' && param.key === 'model_id' && (
           <button
             type="button"

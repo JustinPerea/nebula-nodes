@@ -1,6 +1,7 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { isBillingParam } from './billingParams';
 import { buildDefaultParamsForUi } from './createParams';
+import { snapParamDefaults } from './paramDefaults';
 import type { Preset } from './createPresets';
 import { kreaModeFor, supportsKreaAccount, type KreaConnectionMode } from './kreaConnection';
 
@@ -30,7 +31,7 @@ export function applyPresetToComposer(
     if (supportsKreaAccount(NODE_DEFINITIONS[preset.modelId])) {
       baseParams._kreaAuth = kreaModeFor(NODE_DEFINITIONS[preset.modelId], preset.params);
     }
-    return { modelId: preset.modelId, prompt, params: { ...baseParams, ...preset.params } };
+    return { modelId: preset.modelId, prompt, params: withSnappedDefaults(preset.modelId, baseParams, preset.params ?? {}) };
   }
   // A model this catalog doesn't have: its params belong to that model, so
   // none land on the current one (its billing keys least of all). The backend
@@ -40,5 +41,16 @@ export function applyPresetToComposer(
   // A style-only preset styles the current model; who bills it stays the
   // person's choice there.
   const styled = Object.fromEntries(Object.entries(preset.params ?? {}).filter(([key]) => !isBillingParam(key)));
-  return { modelId: current.modelId, prompt, params: { ...current.params, ...styled } };
+  return { modelId: current.modelId, prompt, params: withSnappedDefaults(current.modelId, current.params, styled) };
+}
+
+/** `base` with `incoming` on top. A model change moves a per-model default
+ * (Max Tokens) that still holds the old model's default; a value `incoming`
+ * sets wins (lib/paramDefaults.ts). */
+function withSnappedDefaults(
+  modelId: string | null, base: Record<string, unknown>, incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged = { ...base, ...incoming };
+  const def = modelId ? NODE_DEFINITIONS[modelId] : undefined;
+  return def ? { ...snapParamDefaults(def, base, merged).params, ...incoming } : merged;
 }

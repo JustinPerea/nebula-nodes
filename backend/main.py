@@ -87,6 +87,7 @@ from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
 from services.cli_graph import CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
+from services.saved_graph_upgrades import PARAMS_VERSION, request_version, upgrade_flat_nodes, upgrade_project
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
     make_project, metadata as project_metadata, now as project_now,
@@ -237,12 +238,43 @@ canvas_pins = CanvasPins(lambda: project_store)
 _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
 _synchronous_workspace_runs: set[str] = set()
+_live_graph_load_failed = False
 if _STATE_PATH is not None and _STATE_PATH.exists():
     try:
         cli_graph.load(_STATE_PATH)
         print(f"[main] restored graph from {_STATE_PATH} — {len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges", flush=True)
+        if cli_graph.params_advanced_on_load:
+            # Write the upgraded params and the version marker now, so the
+            # file matches what the canvas, agents and runs read, and the
+            # next boot doesn't count it as advanced again
+            # (services/saved_graph_upgrades.py).
+            cli_graph._maybe_persist()
+            if cli_graph.upgraded_on_load:
+                print(f"[main] upgraded saved params on {cli_graph.upgraded_on_load} node(s)", flush=True)
     except Exception as exc:
+        _live_graph_load_failed = True
         print(f"[main] failed to restore graph from {_STATE_PATH}: {exc} — starting fresh", flush=True)
+
+
+def _finish_params_upgrade_at_boot(*, live_graph_advanced: bool) -> bool:
+    """A one-time params upgrade ran at this boot: rotate the workspace
+    revision so tabs loaded before it stop writing (ProjectStore.
+    advance_params_version). Best effort: a storage error is printed, and the
+    params-version gate (project_workspace_fence) still refuses stale tabs."""
+    try:
+        rotated = project_store.advance_params_version(live_graph_advanced=live_graph_advanced)
+    except ProjectStoreError as exc:
+        print(f"[main] could not write the params upgrade to the project catalog: {exc}", flush=True)
+        return False
+    if rotated:
+        print(f"[main] saved params are at version {PARAMS_VERSION}; tabs opened before this restart will reload", flush=True)
+    return rotated
+
+
+# Not after a failed state.json load: that boot already started from an empty
+# live graph, and nothing here should build on it.
+if not _live_graph_load_failed:
+    _finish_params_upgrade_at_boot(live_graph_advanced=cli_graph.params_advanced_on_load)
 
 provider_recovery_store = ProviderRecoveryStore(
     _STATE_DIR / "provider-recoveries.json" if _STATE_PATH is not None else None
@@ -448,7 +480,10 @@ async def project_storage_error(request, exc: ProjectStoreError):
 
 def _workspace_context() -> dict[str, Any]:
     catalog = project_store.read()
-    return {"activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"]}
+    # paramsVersion: a tab built for another version reloads (graphSync,
+    # GET /api/projects; services/saved_graph_upgrades.py).
+    return {"activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"],
+            "paramsVersion": PARAMS_VERSION}
 
 
 def _check_workspace_revision(revision: str | None = None) -> None:
@@ -477,8 +512,74 @@ def _track_synchronous_project_run(handler):
     return tracked
 
 
+# Routes where a tab's request stores or runs params. A tab whose bundle was
+# built for another params version gets 409 params_outdated on them, so a tab
+# loaded before a one-time upgrade can't save, run or push its old values
+# (services/saved_graph_upgrades.py). Recovery stays open: it is how such a tab
+# keeps its unsaved work, and it upgrades the copy from the body's version.
+_PARAMS_GATED_PREFIXES = ("/api/graph", "/api/execute", "/api/cinema", "/api/quick", "/api/projects", "/api/presets")
+_PARAMS_GATE_EXEMPT = frozenset({"/api/projects/recover"})
+# Shown verbatim by main's bundle (its project and run errors print `detail`).
+PARAMS_OUTDATED_DETAIL = (
+    "Nebula was updated while this tab was open, so this tab can't save or run until it reloads. "
+    "Reload the tab; your saved work is kept. If this keeps happening after a reload, this window's "
+    "frontend build doesn't match the backend: rebuild the frontend, or restart the backend."
+)
+
+
+def _from_a_browser(request: Request) -> bool:
+    """Whether a browser sent this request (never a proof of who, only of what).
+
+    Every browser sends ``Origin`` on a request that isn't GET or HEAD. The
+    packaged desktop renderer (a file: page) sends no Origin but does send
+    ``Sec-Fetch-Site``. curl, Python (the CLI, MCP, agent tools) send neither,
+    and Node's fetch sends only ``Sec-Fetch-Mode``. Checked 2026-10-17 against
+    Electron 44.3 and Node 22.16."""
+    return request.headers.get("origin") is not None or request.headers.get("sec-fetch-site") is not None
+
+
+def _params_outdated(request: Request) -> bool:
+    """Whether a request comes from a tab built for another params version.
+
+    Every bundle since the gate sends ``X-Nebula-Params-Version`` on every
+    request (frontend/src/lib/backend.ts ``apiFetch``, which every write to a
+    gated route goes through). Older bundles send none. A request without it
+    is version 0 when it came from the canvas or a browser:
+
+    - ``X-Nebula-Workspace-Revision`` is set only by the canvas (the same
+      function, while a project context exists; nothing in the backend, CLI,
+      MCP or agent skills sets it).
+    - A browser request (``_from_a_browser``) without it. Main's bundle can
+      reach the canvas with no project context, so the revision alone doesn't
+      cover it: after its conflict flow, Try again while no project is active
+      clears the context but keeps ``activeProject``, and Open of that same
+      project then takes ``open()``'s shortcut to the canvas without
+      ``applyProject`` (main's projectStore.ts). Its runs, param pushes and
+      saves then carry neither canvas header, but always an Origin (or, from
+      the desktop renderer, Sec-Fetch-Site).
+
+    A request with neither marker is an agent, the CLI, MCP or a script,
+    whose values are set now and pass as sent. A script that writes an Origin
+    is treated as a browser: it is refused until it sends the version."""
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        return False
+    path = request.url.path
+    if path in _PARAMS_GATE_EXEMPT or not path.startswith(_PARAMS_GATED_PREFIXES):
+        return False
+    supplied = request.headers.get("x-nebula-params-version")
+    if supplied is None:
+        return request.headers.get("x-nebula-workspace-revision") is not None or _from_a_browser(request)
+    # Lower (loaded before an upgrade) or higher (a backend older than the
+    # bundle) are both refused: neither side can upgrade the other's values.
+    return supplied.strip() != str(PARAMS_VERSION)
+
+
 @app.middleware("http")
 async def project_workspace_fence(request: Request, call_next):
+    if _params_outdated(request):
+        return JSONResponse(status_code=409, content={
+            "code": "params_outdated", "detail": PARAMS_OUTDATED_DETAIL, "paramsVersion": PARAMS_VERSION,
+        })
     path = request.url.path
     guarded = request.method not in {"GET", "HEAD", "OPTIONS"} and path.startswith((
         "/api/graph", "/api/execute", "/api/cinema", "/api/quick",
@@ -530,6 +631,7 @@ app.add_middleware(LocalRequestGuard)
 _DESKTOP_RENDERER_ORIGINS = frozenset({"null", "file://"})
 _DESKTOP_CORS_HEADERS = ", ".join((
     "Content-Type", "Authorization", "X-Nebula-Person", "X-Nebula-Workspace-Revision", "X-Nebula-Proposal-Key",
+    "X-Nebula-Params-Version",
 ))
 
 
@@ -3481,11 +3583,21 @@ def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
     for field in ("default", "min", "max", "required"):
         if param.get(field) not in (None, False):
             brief[field] = param[field]
-    options = [option.get("value") for option in param.get("options") or [] if isinstance(option, dict)]
+    option_rows = [option for option in param.get("options") or [] if isinstance(option, dict)]
+    options = [option.get("value") for option in option_rows]
     if options:
         brief["options"] = options[:40] + (["…"] if len(options) > 40 else [])
+    # An option the card shows only for some values of another param, e.g.
+    # claude-chat effort "xhigh": {"model": [...]} (not Opus 4.6 / Sonnet 4.6).
+    limited = {str(option.get("value")): option["visibleWhen"] for option in option_rows[:40]
+               if option.get("visibleWhen")}
+    if limited:
+        brief["optionsOnlyWhen"] = limited
     if param.get("visibleWhen"):
         brief["onlyWhen"] = param["visibleWhen"]
+    if param.get("defaultBy"):
+        # e.g. {"model": {"claude-opus-5-5": 64000}}: the default for those values.
+        brief["defaultBy"] = param["defaultBy"]
     return brief
 
 
@@ -8121,7 +8233,18 @@ async def import_graph(body: dict[str, Any]) -> dict:
     candidate = CLIGraph()
     raw_nodes = _graph_ingress_items(body, "nodes")
     raw_edges = _graph_ingress_items(body, "edges")
+    # The canvas forwards the .nebula file's paramsVersion (0 for a file saved
+    # before the marker existed), and an older file gets the one-time upgrades
+    # (services/saved_graph_upgrades.py) once its folded and retired nodes are
+    # on the nodes they became. A body without the key is a graph written now
+    # (an agent or script), so its values are taken as set.
+    try:
+        version = request_version(body, None)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     raw_nodes, raw_edges, warnings, folded = _migrate_ingress(raw_nodes, raw_edges, reference_key="id")
+    if version is not None:
+        upgrade_flat_nodes(raw_nodes, version)
     id_map = _stage_graph_nodes(
         candidate,
         raw_nodes,
@@ -8696,6 +8819,9 @@ async def list_projects() -> dict[str, Any]:
             "projects": sorted((project_metadata(project) for project in catalog["projects"].values()), key=lambda project: project["updatedAt"], reverse=True),
             "trash": _trash_listing(catalog),
             "activeProjectId": catalog["activeProjectId"], "workspaceRevision": catalog["workspaceRevision"],
+            # The canvas reloads instead of loading a project when it differs
+            # from its own (frontend/src/store/projectStore.ts).
+            "paramsVersion": PARAMS_VERSION,
             **({"migratedProjectId": catalog["migratedProjectId"]} if catalog.get("migratedProjectId") else {}),
         }
 
@@ -8722,6 +8848,15 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         validate_project_id(recovery_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Recovery requires a UUID hex recoveryId") from exc
+    # The copy holds the tab's canvas, so the version that canvas was loaded
+    # at decides its one-time upgrades (services/saved_graph_upgrades.py), not
+    # the source project's: the source may be gone, or upgraded after the tab
+    # loaded. The canvas sends it; a body without it came from a bundle older
+    # than the marker, so its canvas predates every upgrade (version 0).
+    try:
+        params_version = request_version(body, 0)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     with project_store.transaction() as catalog:
         source_id = body.get("sourceProjectId")
         try:
@@ -8754,7 +8889,9 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
             "id": recovery_id, "lastOpenedAt": None, "_recoveryFingerprint": fingerprint,
             "_recoverySourceId": source["id"], "_nodeCounter": max(candidate._counter, source.get("_nodeCounter", 0)),
             "_backendNodeIds": [], "_backendEdgeIds": [],
+            "_paramsVersion": params_version,
         })
+        upgrade_project(project)
         catalog["projects"][recovery_id] = project
         project_store.commit(catalog)
         return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
@@ -8787,7 +8924,8 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         _commit_project_workspace(catalog, CLIGraph())
         revision = catalog["workspaceRevision"]
     await _broadcast_graph_sync(graph_replaced=True, reason="project-create")
-    return {"project": public_project(project), "workspaceRevision": revision}
+    # A bundle built for another version doesn't load it (projectStore.ts activate).
+    return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
 
 @app.post("/api/projects/{project_id}/open")
@@ -8812,7 +8950,8 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
     # What opening changed that the person should know (a folded Krea node's
     # dropped job-output connections); the snapshot is saved migrated, so
     # this is said once.
-    return {"project": public_project(project), "workspaceRevision": revision, "warnings": warnings}
+    return {"project": public_project(project), "workspaceRevision": revision, "warnings": warnings,
+            "paramsVersion": PARAMS_VERSION}
 
 
 @app.put("/api/projects/{project_id}")
@@ -9645,6 +9784,10 @@ class PresetCreate(BaseModel):
     scope: str = "global"
     projectId: str | None = None
     thumbnail: str = ""
+    # The params version ``params`` were made at, checked by the shared
+    # request_version rule in the route (Any keeps the raw JSON value, so
+    # "1", true and 1.5 are refused rather than coerced).
+    paramsVersion: Any = None
 
 
 class PresetUpdate(BaseModel):
@@ -9655,6 +9798,16 @@ class PresetUpdate(BaseModel):
     modelId: str | None = None
     refImages: list[str] | None = None
     thumbnail: str | None = None
+    paramsVersion: Any = None
+
+
+def _preset_params_version(body: BaseModel, missing: int) -> int:
+    """The body's ``paramsVersion`` (``missing`` when the key wasn't sent), or 422."""
+    sent = {"paramsVersion": body.paramsVersion} if "paramsVersion" in body.model_fields_set else {}
+    try:
+        return request_version(sent, missing)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _char_store():
@@ -9853,11 +10006,16 @@ async def list_presets(scope: str = "global", projectId: str | None = None) -> l
 @app.post("/api/presets")
 async def create_preset(body: PresetCreate) -> dict:
     _validate_project_id_param(body.projectId)
+    # Create's "Save current" sends the version its draft is at. Main's bundle
+    # (a tab open across an update) POSTs without the key, and nothing else
+    # posts presets (no agent, CLI or MCP tool), so a body without it holds
+    # params from before every upgrade: version 0 (services/saved_graph_upgrades.py).
+    params_version = _preset_params_version(body, 0)
     try:
         return preset_store.create(
             name=body.name, category=body.category, prompt=body.prompt, params=body.params,
             modelId=body.modelId, refImages=body.refImages, scope=body.scope, projectId=body.projectId,
-            thumbnail=body.thumbnail,
+            thumbnail=body.thumbnail, params_version=params_version,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -9891,8 +10049,12 @@ async def get_preset(preset_id: str) -> dict:
 
 @app.put("/api/presets/{preset_id}")
 async def update_preset(preset_id: str, body: PresetUpdate) -> dict:
+    # No bundle sends PUT (old or new), so a caller here is deliberate API use
+    # writing params now: a body without the key is taken as current.
+    params_version = _preset_params_version(body, PARAMS_VERSION)
+    fields = body.model_dump(exclude_none=True, exclude={"paramsVersion"})
     try:
-        return preset_store.update(preset_id, **body.model_dump(exclude_none=True))
+        return preset_store.update(preset_id, params_version=params_version, **fields)
     except KeyError:
         raise HTTPException(status_code=404, detail="preset not found")
     except ValueError as exc:
@@ -9926,7 +10088,7 @@ def seed_presets_if_empty() -> None:
             preset_store.create(
                 name=s["name"], category=s.get("category", "Style"), prompt=s.get("prompt", ""),
                 params=s.get("params", {}), modelId=s.get("modelId"), refImages=s.get("refImages", []),
-                scope="global", projectId=None,
+                scope="global", projectId=None, params_version=PARAMS_VERSION,
             )
     except Exception as exc:  # never let seeding break boot
         print(f"[presets] seed failed: {exc}", flush=True)
