@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 
 import { BriefFields, BriefPanel } from './MoodboardBrief';
+import { overrideAuthor } from './briefAuthor';
 import { BRIEF_LIMITS } from './briefLimits';
 import type { MoodboardBrief } from '../../types';
 
@@ -55,10 +56,34 @@ describe('BriefPanel', () => {
     expect(screen.getByRole('button', { name: 'Use the generated brief' })).toBeTruthy();
   });
 
+  it('says an agent wrote the brief when one did', () => {
+    panel({
+      brief: brief({ styleBrief: 'Theirs.', override: { active: true, stale: true } }),
+      override: { text: 'Theirs.' },
+      author: 'agent',
+    });
+    expect(screen.getByText('Written by an agent')).toBeTruthy();
+    expect(screen.queryByText('Written by you')).toBeNull();
+    expect(screen.getByText("An agent's brief")).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('since an agent wrote this');
+  });
+
   it('says Generated once the hand-written brief is emptied', () => {
     panel({ override: { text: '  ' } });
     expect(screen.getByText('Generated')).toBeTruthy();
     expect(screen.queryByText('Written by you')).toBeNull();
+  });
+});
+
+describe('overrideAuthor', () => {
+  it("is the agent's only while the text is what the agent saved", () => {
+    expect(overrideAuthor({ text: 'Theirs.', by: 'agent' }, { text: 'Theirs. ' })).toBe('agent');
+    // The person started editing it: it becomes theirs (the backend stamps it so on save).
+    expect(overrideAuthor({ text: 'Theirs.', by: 'agent' }, { text: 'Mine now.' })).toBe('person');
+    expect(overrideAuthor({ text: 'Mine.', by: 'person' }, { text: 'Mine.' })).toBe('person');
+    // Older boards have no author: they were the person's.
+    expect(overrideAuthor({ text: 'Mine.' }, { text: 'Mine.' })).toBe('person');
+    expect(overrideAuthor(null, { text: 'New.' })).toBe('person');
   });
 });
 

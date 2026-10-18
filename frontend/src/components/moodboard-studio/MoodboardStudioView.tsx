@@ -18,6 +18,7 @@ import { getCurrentProject } from '../../lib/currentProject';
 import type { AssetScope } from '../../store/uiStore';
 import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardImage, MoodboardPinnedColors } from '../../types';
 import { BriefFields, BriefPanel } from './MoodboardBrief';
+import { overrideAuthor } from './briefAuthor';
 import '../../styles/moodboard-studio.css';
 
 interface MoodboardDraft {
@@ -103,10 +104,13 @@ export function MoodboardStudioView() {
   const [uploading, setUploading] = useState(false);
   // What generators get from the saved board (computed by the backend on
   // every read and save), for the board it belongs to.
-  const [serverBrief, setServerBrief] = useState<{ id: string; brief: MoodboardBrief } | null>(null);
+  // The saved override comes with it, so Studio can say who wrote it.
+  const [serverBrief, setServerBrief] = useState<
+    { id: string; brief: MoodboardBrief; override: Moodboard['briefOverride'] } | null>(null);
   const brief = serverBrief && serverBrief.id === savedId ? serverBrief.brief : null;
+  const savedOverride = serverBrief && serverBrief.id === savedId ? serverBrief.override : null;
   const rememberBrief = useCallback((board: Moodboard) => {
-    if (board.brief) setServerBrief({ id: board.id, brief: board.brief });
+    if (board.brief) setServerBrief({ id: board.id, brief: board.brief, override: board.briefOverride ?? null });
   }, []);
   const analyzing = Boolean(pendingAnalysisId);
   const [railScope, setRailScope] = useState<AssetScope>(moodboardEditorScope);
@@ -512,6 +516,7 @@ export function MoodboardStudioView() {
               <BriefPanel
                 brief={brief}
                 override={draft.briefOverride}
+                author={overrideAuthor(savedOverride, draft.briefOverride)}
                 saving={dirty || Boolean(pendingSaveId)}
                 busy={analyzing}
                 onEdit={(text) => setBriefFields({ briefOverride: { text } })}

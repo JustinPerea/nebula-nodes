@@ -19,6 +19,7 @@ function normalizeHex(value: string): string | null {
 export function BriefPanel({
   brief,
   override,
+  author = 'person',
   saving,
   busy,
   onEdit,
@@ -27,6 +28,7 @@ export function BriefPanel({
 }: {
   brief: MoodboardBrief | null;
   override: { text: string } | null;
+  author?: 'person' | 'agent';
   saving: boolean;
   busy: boolean;
   onEdit: (text: string) => void;
@@ -34,15 +36,16 @@ export function BriefPanel({
   onRegenerate: () => void;
 }) {
   const stale = Boolean(override && brief?.override.active && brief.override.stale);
+  const byAgent = author === 'agent';
   return (
     <div className="moodboard-brief">
       <div className="moodboard-brief__head">
         <span className="moodboard-swatches__label">Brief sent to generators</span>
-        <span className="moodboard-brief__source">{override?.text.trim() ? 'Written by you' : 'Generated'}</span>
+        <span className="moodboard-brief__source">{override?.text.trim() ? (byAgent ? 'Written by an agent' : 'Written by you') : 'Generated'}</span>
       </div>
       {stale && (
         <div className="moodboard-brief__stale" role="status">
-          <span>Board changed since you edited this.</span>
+          <span>{byAgent ? 'Board changed since an agent wrote this.' : 'Board changed since you edited this.'}</span>
           <button type="button" onClick={onKeep} disabled={busy}>Keep</button>
           <button type="button" onClick={onRegenerate} disabled={busy}>Regenerate</button>
         </div>
@@ -50,7 +53,7 @@ export function BriefPanel({
       {override ? (
         <>
           <label className="moodboard-field">
-            <span>Your brief</span>
+            <span>{byAgent ? "An agent's brief" : 'Your brief'}</span>
             <textarea rows={5} value={override.text} maxLength={BRIEF_LIMITS.override}
               onChange={(event) => onEdit(event.target.value)} />
           </label>

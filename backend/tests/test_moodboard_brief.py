@@ -723,3 +723,16 @@ async def test_the_migration_never_stops_the_backend_from_starting(monkeypatch):
 
     monkeypatch.setattr(moodboard_store, "migrate_brief_fields", broken)
     await main_module._moodboard_brief_fields_startup()          # logs and returns
+
+
+def test_a_client_cannot_say_who_wrote_the_brief(client, person):
+    # `by` comes from the person gate only; Studio labels the brief from it.
+    board = _create(client, briefOverride={"text": "Agent draft."})
+    refused = client.put(f"/api/moodboards/{board['id']}",
+                         json={"briefOverride": {"text": "Claimed.", "by": "person"}}, headers=AGENT)
+    assert refused.status_code == 422 and "by" in str(refused.json()["detail"])
+    created = client.post("/api/moodboards", json={"name": "Claimed",
+                                                   "briefOverride": {"text": "Mine?", "by": "person"}},
+                          headers=AGENT)
+    assert created.status_code == 422 and "by" in str(created.json()["detail"])
+    assert client.get(f"/api/moodboards/{board['id']}").json()["briefOverride"]["by"] == "agent"
