@@ -1,11 +1,12 @@
 """Native Nebula Moodboard source node."""
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Awaitable, Callable
 
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
-from services.moodboard_analysis import analyze_moodboard
+from services.moodboard_analysis import analysis_is_current, analyze_moodboard, rank_representative_images
 from services.moodboard_store import MoodboardStore
 
 
@@ -33,14 +34,22 @@ async def handle_moodboard_node(
                          "Pick another board for this node.")
 
     analysis = moodboard.get("analysis")
-    if not isinstance(analysis, dict) or not analysis.get("styleBrief"):
-        analysis = analyze_moodboard(moodboard)
+    if not analysis_is_current(moodboard, analysis):
+        stale = isinstance(analysis, dict) and bool(analysis.get("styleBrief"))
+        # It reads every image file, so it runs off the event loop.
+        analysis = await asyncio.to_thread(analyze_moodboard, moodboard)
+        if stale:
+            analysis["warnings"] = [
+                *analysis.get("warnings", []),
+                "The board changed after its saved analysis, so this run analyzed it again. "
+                "Analyze it in Moodboard Studio to save the new analysis.",
+            ]
 
     images = [
         img for img in moodboard.get("images", [])
         if isinstance(img, dict) and not bool(img.get("excluded"))
     ]
-    representative = analysis.get("representativeImages") or [img.get("url") for img in images if img.get("url")]
+    representative = analysis.get("representativeImages") or rank_representative_images(images)
     bundle = {
         "kind": "nebula_moodboard",
         "moodboardId": moodboard.get("id"),
@@ -53,6 +62,7 @@ async def handle_moodboard_node(
         "styleBrief": analysis.get("styleBrief", ""),
         "negativePrompt": analysis.get("negativePrompt", ""),
         "palette": analysis.get("palette", []),
+        "accents": analysis.get("accents", []),
         "representativeImages": representative,
         "providerHints": analysis.get("providerHints", {}),
     }

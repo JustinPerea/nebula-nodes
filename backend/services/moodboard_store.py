@@ -76,13 +76,15 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
 
 
 def _normalize_images(images: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Images as saved. Only writes call this, so a bad image is refused rather
+    than dropped (a board that silently lost its images looked like a success)."""
     normalized: list[dict[str, Any]] = []
-    for raw in images or []:
+    for index, raw in enumerate(images or []):
         if not isinstance(raw, dict):
-            continue
+            raise ValueError(f"images[{index}] must be an object")
         url = str(raw.get("url") or "").strip()
         if not url:
-            continue
+            raise ValueError(f"images[{index}].url is empty")
         image_id = str(raw.get("id") or uuid4().hex[:12])
         weight_raw = raw.get("weight", 1.0)
         try:
@@ -190,6 +192,8 @@ class MoodboardStore:
         immutable = {"id", "createdAt", "projectId"}
         for key, value in fields.items():
             if key in immutable:
+                if value is not None and value != moodboard.get(key):
+                    raise ValueError(f"{key} can't change: a board stays where it was created")
                 continue
             if key == "images":
                 moodboard[key] = _normalize_images(value)

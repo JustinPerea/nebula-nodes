@@ -358,7 +358,7 @@ Wrapper nodes intentionally emit provider-specific objects on `Any` ports:
 - Image style reference: `{ kind: "krea_image_style_reference", image, strength }`
 - Style: `{ kind: "krea_style", id, strength }`
 - Krea moodboard: `{ kind: "krea_moodboard", id, strength }`
-- Nebula moodboard: `{ kind: "nebula_moodboard", moodboardId, name, mode, strength, images, analysis, styleBrief, negativePrompt, palette, representativeImages, providerHints }`
+- Nebula moodboard: `{ kind: "nebula_moodboard", moodboardId, name, mode, strength, images, analysis, styleBrief, negativePrompt, palette, accents, representativeImages, providerHints }` (`palette` is the dominant colours, ranked by image weight × share; `accents` are small saturated colours kept apart; `representativeImages` are heaviest first)
 
 Do not hand-roll these shapes unless necessary. Prefer the wrapper nodes so the graph is inspectable and users can tune strengths from the UI.
 
