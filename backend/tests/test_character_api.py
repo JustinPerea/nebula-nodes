@@ -164,18 +164,27 @@ class TestCharacterNodePersistViaGraphNode:
     """Regression for the P1 where dropping a Character onto the canvas failed.
 
     `POST /api/graph/node` runs `_validate_params`, which rejects any non-`_`
-    param key the node definition doesn't declare. The character node only
-    declares the 3 override params (override_prompt / override_refs /
-    strength_override), so the runtime references the canvas writes
-    (_characterId / _characterName / _characterThumbnail) MUST be `_`-prefixed
-    to ride through the validator (same allowance as _previewUrl). Before the
-    fix these were bare keys → HTTP 400, so the node could never be dropped.
+    param key the node definition doesn't declare. The canvas now writes the
+    declared ``character`` param. A body with the old internal keys
+    (_characterId / _characterName / _characterThumbnail: a saved graph or a
+    tab built before 2026-10-18) still lands, with the id moved to
+    ``character`` and the display copies dropped (retired_nodes.migrate_params).
 
     These tests run against the FastAPI TestClient. The conftest sandbox sets
     NEBULA_STATE_DIR so cli_graph persistence doesn't touch the real state.
     """
 
-    def test_drop_character_node_persists_with_underscore_keys(self, client):
+    def test_drop_character_node_persists_the_character_param(self, client):
+        char_id = client.post("/api/characters", json=_VALID_BODY).json()["id"]
+        resp = client.post("/api/graph/node", json={
+            "definitionId": "character", "params": {"character": char_id}, "position": {"x": 0, "y": 0}})
+        assert resp.status_code == 200, resp.text
+        try:
+            assert resp.json()["params"]["character"] == char_id
+        finally:
+            client.delete(f"/api/graph/node/{resp.json()['id']}")
+
+    def test_drop_with_old_internal_keys_moves_the_id_to_the_character_param(self, client):
         # Seed a real Character so the id is a plausible, store-resolvable one.
         char_id = client.post("/api/characters", json=_VALID_BODY).json()["id"]
 
@@ -198,19 +207,17 @@ class TestCharacterNodePersistViaGraphNode:
         assert short_id  # got a short id back
 
         try:
-            # The runtime ref must survive into the persisted node params.
-            assert node["params"]["_characterId"] == char_id
-            assert node["params"]["_characterName"] == "Rina"
-            assert node["params"]["_characterThumbnail"] == "/api/outputs/chat-uploads/abc.png"
+            # The reference survives as the public param; the copies are gone.
+            assert node["params"]["character"] == char_id
+            assert not [key for key in node["params"] if key.startswith("_character")]
         finally:
             # Don't leave a stray node behind for other tests / the live canvas.
             client.delete(f"/api/graph/node/{short_id}")
 
     def test_drop_character_node_with_bare_keys_still_rejected(self, client):
-        """Guard: we fixed this by `_`-prefixing the keys, NOT by weakening the
-        validator. The OLD bare `characterId`/`characterName`/`characterThumbnail`
-        keys must still be rejected with 400 — otherwise the validator no longer
-        catches param typos for the character node."""
+        """Guard: the validator still catches undeclared keys. Bare
+        `characterId`/`characterName`/`characterThumbnail` aren't params (the
+        declared one is `character`), so they must still be rejected with 400."""
         resp = client.post(
             "/api/graph/node",
             json={

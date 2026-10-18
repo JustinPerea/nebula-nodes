@@ -4797,6 +4797,7 @@
   "character": {
     "id": "character",
     "displayName": "Character",
+    "description": "A saved character's identity (reference views, frozen traits, seed) for cinematic and edit nodes. Set character to a character id; GET /api/characters lists them.",
     "category": "character",
     "apiProvider": "utility",
     "apiEndpoint": "",
@@ -4812,6 +4813,12 @@
       }
     ],
     "params": [
+      {
+        "key": "character",
+        "label": "Character",
+        "type": "character",
+        "required": true
+      },
       {
         "key": "override_prompt",
         "label": "Override Prompt",
@@ -4843,6 +4850,7 @@
   "nebula-moodboard": {
     "id": "nebula-moodboard",
     "displayName": "Moodboard",
+    "description": "A saved Nebula moodboard as creative direction: its style brief, negative prompt, palette and representative images. Set moodboard to a board id; GET /api/moodboards lists the boards.",
     "category": "moodboard",
     "apiProvider": "utility",
     "apiEndpoint": "",
@@ -4885,9 +4893,8 @@
       {
         "key": "moodboard",
         "label": "Moodboard",
-        "type": "string",
-        "required": false,
-        "hidden": true
+        "type": "moodboard",
+        "required": true
       }
     ]
   },

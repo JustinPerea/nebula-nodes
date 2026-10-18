@@ -67,7 +67,8 @@ const VALID_PORT_TYPES = new Set([
   'PointCloud', 'SensorRig', 'SensorStream', 'SpatialSession',
   'World', 'Any',
 ]);
-const VALID_PARAM_TYPES = new Set(['string', 'integer', 'float', 'boolean', 'enum', 'textarea', 'file', 'palette']);
+// moodboard / character: a saved asset's id (backend services/agent_params.py).
+const VALID_PARAM_TYPES = new Set(['string', 'integer', 'float', 'boolean', 'enum', 'textarea', 'file', 'palette', 'moodboard', 'character']);
 const PARAM_GROUPS = ['params', 'sharedParams', 'falParams', 'directParams'];
 // A route-table node's routes (definition `routes`, docs/PROVIDER-ROUTES.md).
 const ROUTE_HANDLERS = new Set(['bfl', 'fal', 'replicate-model', 'openrouter-images', 'openrouter-videos', 'krea']);

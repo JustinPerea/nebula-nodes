@@ -600,6 +600,19 @@ def _remove_approved_fields(container: dict[str, Any], additions: dict[str, Any]
         del container[key]
 
 
+# Gap 13 (2026-10-18): Moodboard and Character nodes name their saved asset in
+# a public param agents can set (services/agent_params.py). Character gains a
+# leading `character` param; Moodboard's hidden string `moodboard` becomes the
+# required reference. Both gain a description saying where the ids come from.
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["character"] = {"description": "A saved character's identity (reference views, frozen traits, seed) for cinematic and edit nodes. Set character to a character id; GET /api/characters lists them."}
+APPROVED_TOP_LEVEL_FIELD_ADDITIONS["nebula-moodboard"] = {"description": "A saved Nebula moodboard as creative direction: its style brief, negative prompt, palette and representative images. Set moodboard to a board id; GET /api/moodboards lists the boards."}
+APPROVED_LEADING_PARAM_ADDITIONS["character"] = {"key": "character", "label": "Character", "type": "character",
+                                                 "required": True}
+APPROVED_PARAM_FIELD_CHANGES["nebula-moodboard"] = {
+    "moodboard": {"type": ("string", "moodboard"), "required": (False, True), "hidden": (True, None)},
+}
+
+
 def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any]:
     """Normalize exact approved deltas without mutating shared fixture data."""
     normalized = deepcopy(node)

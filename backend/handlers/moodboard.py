@@ -15,16 +15,22 @@ async def handle_moodboard_node(
     api_keys: dict[str, str],
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
-    """Load a saved Moodboard and emit provider-neutral creative direction."""
-    params = node.params or {}
-    moodboard_id = str(params.get("_moodboardId") or "").strip()
-    embedded = params.get("moodboard") if isinstance(params.get("moodboard"), dict) else None
+    """Load the saved Moodboard named by the ``moodboard`` param (a board id)
+    and emit provider-neutral creative direction.
 
-    moodboard = MoodboardStore().get(moodboard_id) if moodboard_id else None
-    if moodboard is None and embedded:
-        moodboard = dict(embedded)
+    A node saved before the id was public kept it in ``_moodboardId``; the
+    engine's ``migrate_params`` has moved it to ``moodboard`` by now."""
+    raw = (node.params or {}).get("moodboard")
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("No moodboard chosen: set moodboard to a board id (GET /api/moodboards lists them)")
+    moodboard_id = raw.strip()
+    try:
+        moodboard = MoodboardStore().get(moodboard_id)
+    except ValueError:  # not an id the store can hold
+        moodboard = None
     if moodboard is None:
-        raise ValueError(f"Moodboard not found: {moodboard_id}")
+        raise ValueError(f"Moodboard {moodboard_id!r} not found; it may have been deleted. "
+                         "Pick another board for this node.")
 
     analysis = moodboard.get("analysis")
     if not isinstance(analysis, dict) or not analysis.get("styleBrief"):

@@ -49,7 +49,7 @@ async def test_moodboard_node_emits_typed_bundle(tmp_path, monkeypatch) -> None:
     )
 
     result = await handle_moodboard_node(
-        GraphNode(id="n1", definitionId="nebula-moodboard", params={"_moodboardId": created["id"]}),
+        GraphNode(id="n1", definitionId="nebula-moodboard", params={"moodboard": created["id"]}),
         {},
         {},
     )
@@ -58,3 +58,19 @@ async def test_moodboard_node_emits_typed_bundle(tmp_path, monkeypatch) -> None:
     assert result["moodboard"]["value"]["kind"] == "nebula_moodboard"
     assert result["style_brief"]["type"] == "Text"
     assert result["representative_images"]["value"] == [url]
+
+
+@pytest.mark.asyncio
+async def test_moodboard_node_without_a_board_says_how_to_choose_one(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
+    with pytest.raises(ValueError, match=r"No moodboard chosen: set moodboard to a board id \(GET /api/moodboards"):
+        await handle_moodboard_node(GraphNode(id="n1", definitionId="nebula-moodboard", params={}), {}, {})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("board_id", ["4df26f93ff63", "not an id/.."])
+async def test_moodboard_node_names_a_missing_board(tmp_path, monkeypatch, board_id) -> None:
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
+    with pytest.raises(ValueError, match="not found; it may have been deleted"):
+        await handle_moodboard_node(
+            GraphNode(id="n1", definitionId="nebula-moodboard", params={"moodboard": board_id}), {}, {})

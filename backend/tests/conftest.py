@@ -30,6 +30,11 @@ os.environ["NEBULA_OUTPUT_ROOT"] = str(_TEST_OUTPUT_DIR)
 _TEST_CHARACTER_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-characters-"))
 os.environ["NEBULA_CHARACTER_ROOT"] = str(_TEST_CHARACTER_DIR)
 
+# Moodboard routes write under ~/.nebula/moodboards otherwise; tests that
+# create boards through the API (not the store) rely on this.
+_TEST_MOODBOARD_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-moodboards-"))
+os.environ["NEBULA_MOODBOARD_ROOT"] = str(_TEST_MOODBOARD_DIR)
+
 _TEST_PRESET_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-presets-"))
 os.environ["NEBULA_PRESET_ROOT"] = str(_TEST_PRESET_DIR)
 

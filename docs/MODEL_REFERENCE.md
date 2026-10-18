@@ -7327,6 +7327,7 @@ No settings.
 
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
+| Character | character | — | — |
 | Override Prompt | textarea | — | — |
 | Override Refs | file | — | — |
 | Strength Override | float | — | Unavailable: current Character consumers use reference images and traits without a consistency-strength control. Your stored value is retained. |
