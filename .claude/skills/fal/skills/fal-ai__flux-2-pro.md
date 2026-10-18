@@ -110,6 +110,6 @@ Standard pricing is **$0.03 per megapixel** for the first megapixel, plus **$0.0
 - **Zero-Config Limitation:** Because Pro is optimized for ease of use, you cannot adjust internal diffusion parameters like "Guidance Scale" — if you find the model is following your prompt *too* strictly or not enough, you must switch to the **Flex** variant.
 
 ## Sources
-- [FAL.ai Flux 2 Pro API Reference](https://fal.ai/models/fal-ai/flux-2-pro/api)
+- [FAL.ai FLUX.2 [pro] API Reference](https://fal.ai/models/fal-ai/flux-2-pro/api)
 - [Black Forest Labs FLUX.2 Technical Documentation](https://docs.bfl.ml/flux_2/flux2_overview)
 - [BFL API Reference](https://docs.bfl.ml/flux_2/flux2_text_to_image)

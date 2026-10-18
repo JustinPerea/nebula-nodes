@@ -890,7 +890,7 @@
     },
     {
       "name": "fal-ai/flux-2/flash",
-      "display_name": "FLUX.2 Flash",
+      "display_name": "FLUX 2 Flash",
       "category": "text-to-image",
       "creator": "Black Forest Labs",
       "fal_docs": "https://fal.ai/models/fal-ai/flux-2/flash",

@@ -1,4 +1,5 @@
 import { apiFetch } from './backend';
+import { hasRoutes, routeUnavailable, usesRoutePlan } from './directRoute';
 import { keysNeeded } from './nodeKeys';
 import type { ModelNodeDefinition } from '../types';
 
@@ -21,8 +22,11 @@ export function normalizeKreaMode(value: unknown): KreaConnectionMode {
   return value === 'mcp' ? 'mcp' : 'api-token';
 }
 
+/** The node's `_kreaAuth` param: on a Krea node, or on a route-table node
+ * with a Krea route that can bill the plan (node_route.krea_auth_param). */
 function kreaAuthParam(def: ModelNodeDefinition | undefined) {
-  return def?.apiProvider === 'krea' ? def.params?.find((param) => param.key === '_kreaAuth') : undefined;
+  const offersPlan = def?.apiProvider === 'krea' || Boolean(hasRoutes(def) && def?.routes?.some((route) => route.plan));
+  return offersPlan ? def?.params?.find((param) => param.key === '_kreaAuth') : undefined;
 }
 
 /** Any Krea node whose definition offers Krea-account billing. */
@@ -41,17 +45,25 @@ export function kreaModeFor(def: ModelNodeDefinition | undefined, params: Record
   return isKreaAccountOnly(def) ? 'mcp' : normalizeKreaMode(params._kreaAuth);
 }
 
+/** A run billed to the signed-in Krea plan. On a route-table node, exactly
+ * when selectRoute returns `plan` (its Krea route chosen with the plan, or
+ * the plan picked on a Krea-maker node under Auto). */
 export function usesKreaAccount(def: ModelNodeDefinition | undefined, params: Record<string, unknown>): boolean {
+  if (def && hasRoutes(def)) return usesRoutePlan(def, params);
   return supportsKreaAccount(def) && kreaModeFor(def, params) === 'mcp';
 }
 
-/** Only call when authoring a new node, never while loading a saved recipe. */
+/** Only call when authoring a new node, never while loading a saved recipe.
+ * The global "use my Krea plan" default only applies where Krea is the
+ * maker (apiProvider 'krea'); a FLUX node with a Krea route starts on the
+ * API token, and the person picks the "Krea · plan" row to bill the plan. */
 export function withNewKreaMode(
   def: ModelNodeDefinition,
   params: Record<string, unknown>,
   mode: KreaConnectionMode = 'api-token',
 ): Record<string, unknown> {
   if (!supportsKreaAccount(def)) return params;
+  if (def.apiProvider !== 'krea') return { ...params, _kreaAuth: 'api-token' };
   return { ...params, _kreaAuth: isKreaAccountOnly(def) ? 'mcp' : normalizeKreaMode(mode) };
 }
 
@@ -80,6 +92,9 @@ function ownKeyStatus(
   if (usesKreaAccount(def, params)) {
     return cache.kreaConnection?.status === 'connected' ? undefined : 'missing';
   }
+  // A route-table node needs its chosen (or Auto's) route to be runnable,
+  // not just any of its keys (lib/directRoute.ts routeUnavailable).
+  if (hasRoutes(def)) return routeUnavailable(def, params, cache.apiKeys) ? 'missing' : undefined;
   const keys = Array.isArray(def.envKeyName) ? def.envKeyName : [def.envKeyName];
   return keys.filter(Boolean).length > 0 && !keys.some((key) => Boolean(cache.apiKeys[key]))
     ? 'missing' : undefined;

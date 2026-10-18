@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { getSettings } from '../../lib/api';
@@ -8,12 +8,40 @@ import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { usePanelFocus } from '../../hooks/usePanelFocus';
 import { ScrollFade } from '../ScrollFade';
 import { SettingsTabs } from './settings/SettingsTabs';
-import { ProvidersTab } from './settings/ProvidersTab';
-import { PreferencesTab } from './settings/PreferencesTab';
-import { StorageTab } from './settings/StorageTab';
 import { SettingsNoticeBar } from './settings/SettingsNoticeBar';
 import '../../styles/panels.css';
 import '../../styles/settings.css';
+
+// The tabs load when the panel first opens, not with the app, which keeps the
+// canvas's startup bundle inside its budget (scripts/check-build-budget.mjs).
+// Opening the panel starts all three loads alongside the settings read.
+const loadProvidersTab = () => import('./settings/ProvidersTab');
+const loadPreferencesTab = () => import('./settings/PreferencesTab');
+const loadStorageTab = () => import('./settings/StorageTab');
+const ProvidersTab = lazy(() => loadProvidersTab().then((module) => ({ default: module.ProvidersTab })));
+const PreferencesTab = lazy(() => loadPreferencesTab().then((module) => ({ default: module.PreferencesTab })));
+const StorageTab = lazy(() => loadStorageTab().then((module) => ({ default: module.StorageTab })));
+
+/** A tab whose code couldn't load (the app was rebuilt while this tab was
+ * open, say) says so instead of taking the canvas down with it. */
+export class TabLoadBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="settings__load-error" role="alert">
+          <p>This part of Settings couldn't load. Reload the tab to try again.</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 /**
  * Settings: Providers, Preferences and Storage. Every change saves on its
@@ -33,6 +61,8 @@ export function Settings() {
   // own confirmation is newer than anything a GET started now could return).
   useEffect(() => {
     if (!visible) return;
+    // A failed load shows in the tab (TabLoadBoundary); nothing to do here.
+    for (const load of [loadProvidersTab, loadPreferencesTab, loadStorageTab]) load().catch(() => {});
     const request = ++loadRequest.current;
     let cancelled = false;
     if (settingsWriteInFlight()) {
@@ -114,9 +144,13 @@ export function Settings() {
           <div className="settings__loading" role="status">Loading settings…</div>
         ) : (
           <div role="tabpanel" id={`settings-panel-${tab}`} aria-labelledby={`settings-tab-${tab}`} className="settings__tabpanel" key={tab}>
-            {tab === 'providers' && <ProvidersTab saved={saved} />}
-            {tab === 'preferences' && <PreferencesTab />}
-            {tab === 'storage' && <StorageTab saved={saved} />}
+            <TabLoadBoundary>
+              <Suspense fallback={<div className="settings__loading" role="status">Loading settings…</div>}>
+                {tab === 'providers' && <ProvidersTab saved={saved} />}
+                {tab === 'preferences' && <PreferencesTab />}
+                {tab === 'storage' && <StorageTab saved={saved} />}
+              </Suspense>
+            </TabLoadBoundary>
           </div>
         )}
       </ScrollFade>

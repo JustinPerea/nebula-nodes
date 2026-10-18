@@ -30,4 +30,13 @@ describe('proposalChanges', () => {
     const unset = proposalChanges(view(), { nodes: {}, params: { n1: { _kreaAuth: { from: null, to: 'mcp' } } } });
     expect(unset[1].lines).toEqual([{ key: 'Billed to', from: 'API token balance', to: 'Krea plan' }]);
   });
+
+  it('names a provider switch plainly, with Auto for a node that never set it', () => {
+    const groups = proposalChanges(view(), {
+      nodes: { '+k': { _provider: 'replicate' } },
+      params: { n1: { _provider: { from: null, to: 'bfl' } } },
+    });
+    expect(groups[0].lines).toEqual([{ key: 'Provider', to: 'replicate' }]);
+    expect(groups[1].lines).toEqual([{ key: 'Provider', from: 'Auto', to: 'bfl' }]);
+  });
 });

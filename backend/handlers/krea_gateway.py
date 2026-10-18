@@ -42,7 +42,7 @@ CATALOG_PATH = Path(__file__).resolve().parents[1] / "data" / "krea_gateway_mode
 MAX_ASSET_BYTES = 75_000_000
 MAX_POLLS = 300
 POLL_INTERVAL = 2.0
-_RUNTIME_PARAMS = {"_sourceDuration", "_sourceFps", "_sourceIsVfr", "_variant", "_kreaAuth"}
+_RUNTIME_PARAMS = {"_sourceDuration", "_sourceFps", "_sourceIsVfr", "_variant", "_kreaAuth", "_provider"}
 _PLACEHOLDER_URL = "https://assets.krea.ai/validated-local-input"
 _ENDPOINT = re.compile(r"^/generate/(?:image|video|audio|enhance|3d)/[A-Za-z0-9_./-]+$")
 _PLURALS = {"Image": "images", "Video": "videos", "Audio": "audios", "Mesh": "meshes"}
@@ -309,6 +309,43 @@ async def handle_krea_gateway(
         raise ValueError("Unknown Krea connection; choose API token or Krea account")
     api_key = _api_key(api_keys) if auth_mode == "api-token" else None
     body = await _request_body(node, inputs, model)
+    return await run_gateway(node, model, body, auth_mode, api_key, emit)
+
+
+def catalog_key_for(endpoint: Any) -> str:
+    """The catalog key a route's ``endpoint`` names: a key of the bundled
+    catalog, or the Krea path one entry serves (``/generate/video/...``)."""
+    models = catalog_models()
+    value = str(endpoint or "")
+    if value in models:
+        return value
+    matches = [key for key, model in models.items() if model.get("endpoint") == value]
+    if len(matches) != 1:
+        raise ValueError(f"No bundled Krea catalog model serves {value!r}")
+    return matches[0]
+
+
+async def handle_krea_catalog(
+    catalog_key: str,
+    node: GraphNode,
+    inputs: dict[str, PortValueDict],
+    api_keys: dict[str, str],
+    emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """A route-table node's Krea route: the catalog model is named
+    explicitly, never looked up by ``node.definition_id`` (the node isn't a
+    catalog node), and so is how the run bills. ``_kreaAuth`` must be set:
+    the router (execution/maker_routes.py multi_route) sets it to "mcp" for a
+    run on the plan, "api-token" otherwise. The plan runs through the same
+    account path as every Krea catalog node (run_gateway)."""
+    model = _model(catalog_key)
+    auth_mode = node.params.get("_kreaAuth")
+    if auth_mode not in {"api-token", "mcp"}:
+        raise ValueError("A Krea route needs its billing mode (_kreaAuth) set by the router")
+    api_key = _api_key(api_keys) if auth_mode == "api-token" else None
+    wired = {port: value for port, value in inputs.items()
+             if value.value is not None and value.value != "" and value.value != []}
+    body = await _request_body(node, wired, model)
     return await run_gateway(node, model, body, auth_mode, api_key, emit)
 
 

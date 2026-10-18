@@ -14,10 +14,13 @@ import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from './MaskPainterModal';
 import { JevResultDetails } from './JevResultDetails';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
-import { paramDefinitionsForRun, selectRoute, withWiredBlockers } from '../../lib/directRoute';
+import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
-import { nodeWiredPorts } from '../../lib/runScope';
+import { nodeWiredCounts, nodeWiredPorts } from '../../lib/runScope';
+import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
+import { useProviderNoteStore } from '../../store/providerNoteStore';
+import { snapHidden } from '../../lib/providerSwitch';
 import { skippedLabel } from '../../lib/gating';
 import '../../styles/panels.css';
 import '../../styles/mask-painter.css';
@@ -266,23 +269,30 @@ export function Inspector({ embedded = false }: InspectorProps) {
     return text ? { param: route.startShape.ratioParam, text } : null;
   }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
 
+  // A route-table node (ProviderSwitcher): the provider whose options the
+  // list shows, for the "not on <provider>" label of a saved value it doesn't
+  // take, and the edges into each port for the switcher's port rules.
+  const switchable = routeSwitch(definition);
+  const shownProvider = useMemo(() => {
+    if (!definition || !switchable) return null;
+    const routed = withWiredBlockers(definition, nodeParams, wiredKey ? wiredKey.split('\n') : []);
+    const route = routeById(definition, shownRouteId(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {}));
+    return route ? providerLabel(route.provider) : null;
+  }, [definition, switchable, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
+  const wiredCounts = useMemo(
+    () => (renderNodeId && switchable ? nodeWiredCounts(renderNodeId, edges) : new Map<string, number>()),
+    [renderNodeId, switchable, edges],
+  );
+
   // Filter params by visibleWhen conditions
+  // Hidden params are editor-managed internal state (e.g. cinema-scene's
+  // `scene` spec, authored via the Cinema Studio): never an editable field
+  // here. The rest follow paramShown (lib/directRoute.ts visibleParams), the
+  // predicate Create's pills and the backend router read too.
   const visibleParams = useMemo(() => {
-    if (!nodeData) return resolvedParams;
-    return resolvedParams.filter((param) => {
-      // Hidden params are editor-managed internal state (e.g. cinema-scene's
-      // `scene` spec, authored via the Cinema Studio). They're declared only so
-      // the backend validator accepts the key — never an editable field here.
-      if (param.hidden) return false;
-      if (!param.visibleWhen) return true;
-      return Object.entries(param.visibleWhen).every(([key, allowedValues]) => {
-        const currentValue = nodeData.params[key] ?? resolvedParams.find((p) => p.key === key)?.default;
-        // If the controlling param isn't set (e.g. model in directParams when using FAL), pass through
-        if (currentValue === undefined || currentValue === null) return true;
-        return allowedValues.includes(currentValue as string | number | boolean);
-      });
-    });
-  }, [resolvedParams, nodeData]);
+    if (!nodeData || !definition) return resolvedParams;
+    return visibleParamsFor(definition, nodeData.params, resolvedParams);
+  }, [resolvedParams, nodeData, definition]);
 
   // Universal-model nodes (OpenRouter, Nous Portal) share the modality-driven
   // model-picker UX. Map definitionId → favorites bucket + loader so we can
@@ -438,20 +448,42 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const activeNode = renderNode;
   const activeNodeData = nodeData;
 
+  // A person's edit. On a route-table node, a setting the edit now hides on
+  // the shown provider, at a value another provider would honor (rule H),
+  // goes back to its default with one card note (lib/providerSwitch.ts
+  // snapHidden): "Safety 5 isn't on fal.ai with FLUX.2 [klein] 9B: back to 2".
+  // Returns the params it wrote.
+  function writeEdit(params: Record<string, unknown>, key: string): Record<string, unknown> {
+    if (!definition || !switchable) {
+      updateNodeData(activeNode.id, { params });
+      return params;
+    }
+    const routed = withWiredBlockers(definition, params, wiredKey ? wiredKey.split('\n') : []);
+    const routeId = shownRouteId(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {});
+    const snapped = snapHidden(definition, params, routeId, key);
+    updateNodeData(activeNode.id, { params: snapped.params });
+    if (snapped.notes.length) useProviderNoteStore.getState().show(activeNode.id, snapped.notes);
+    return snapped.params;
+  }
+
   function onParamChange(key: string, value: unknown) {
     const next = { ...activeNodeData.params, [key]: value };
     // A model change moves a per-model default (Max Tokens) that wasn't edited,
-    // and says so under that param (lib/paramDefaults.ts).
+    // and says so under that param (lib/paramDefaults.ts). A default the
+    // provider snap then moved again keeps no note.
     const snap = definition ? snapParamDefaults(definition, activeNodeData.params, next) : { params: next, notes: [] };
-    setDefaultNotes({ nodeId: activeNode.id, notes: snap.notes });
-    updateNodeData(activeNode.id, { params: snap.params });
+    const written = writeEdit(snap.params, key);
+    setDefaultNotes({
+      nodeId: activeNode.id,
+      notes: snap.notes.filter((note) => Object.is(written[note.param], snap.params[note.param])),
+    });
   }
 
   function clearParam(key: string) {
     setDefaultNotes({ nodeId: activeNode.id, notes: [] });
     const params = { ...activeNodeData.params };
     delete params[key];
-    updateNodeData(activeNode.id, { params });
+    writeEdit(params, key);
   }
 
   // The keys this node needs with its current params: its own, or for a
@@ -462,7 +494,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
       Array.isArray(need.envKeyName) ? need.envKeyName : [need.envKeyName])
     : [];
   const usesKreaMcp = usesKreaAccount(definition, activeNodeData.params);
-  const missingApiKeys = activeNodeData.keyStatus === 'missing' && !usesKreaMcp
+  // A route-table node says what it needs in its Provider section instead.
+  const missingApiKeys = activeNodeData.keyStatus === 'missing' && !usesKreaMcp && !switchable
     ? requiredKeys.filter(Boolean)
     : [];
 
@@ -597,7 +630,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
       const options = getVisibleOptions(param);
       const hasEmptyOption = options.some((opt) => opt.value === '');
       const unavailableChoice = value !== '' && !options.some((opt) => String(opt.value) === String(value));
-      const storedLabel = param.options?.find((opt) => String(opt.value) === String(value))?.label ?? 'Saved choice';
+      // A route-table node's list is cut to the shown provider's values; the
+      // saved one keeps its label from the full list.
+      const storedLabel = (definition ? allParamDefinitions(definition).find((p) => p.key === param.key) : param)
+        ?.options?.find((opt) => String(opt.value) === String(value))?.label
+        ?? param.options?.find((opt) => String(opt.value) === String(value))?.label ?? 'Saved choice';
+      const unavailableNote = switchable && shownProvider ? `not on ${shownProvider}` : 'unavailable for selected model';
       return (
         <select
           className="inspector__field"
@@ -613,7 +651,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             onParamChange(param.key, option?.value ?? e.target.value);
           }}
         >
-          {unavailableChoice && <option value={String(value)} disabled>{storedLabel} (unavailable for selected model)</option>}
+          {unavailableChoice && <option value={String(value)} disabled>{storedLabel} ({unavailableNote})</option>}
           {options.length === 0 ? (
             <option value="">No options available</option>
           ) : (
@@ -990,12 +1028,20 @@ export function Inspector({ embedded = false }: InspectorProps) {
         )}
       </div>
 
+      {definition && switchable && (
+        <ProviderSwitcher definition={definition} params={activeNodeData.params} variant="inspector" wired={wiredCounts}
+          onPick={(next, notes) => {
+            updateNodeData(activeNode.id, { params: next });
+            useProviderNoteStore.getState().show(activeNode.id, notes);
+          }} />
+      )}
+
       {missingApiKeys.length > 0 && (
         <div className="inspector__notice inspector__notice--warning" role="status">
           Missing API key: {missingApiKeys.join(', ')}
         </div>
       )}
-      {usesKreaMcp && activeNodeData.keyStatus === 'missing' && (
+      {usesKreaMcp && activeNodeData.keyStatus === 'missing' && !switchable && (
         <div className="inspector__notice inspector__notice--warning" role="status">
           Krea sign-in required. Connect or check Krea in Settings.
         </div>

@@ -45,7 +45,7 @@ const LAYER_DESC = {
   'local-handler': 'Engine-local execution (no external API)',
   'async-poll': 'Submit job + poll until complete',
   stream: 'SSE / chunked streaming response',
-  'dual-route': 'sharedParams + falParams/directParams routing',
+  'dual-route': 'sharedParams + falParams/directParams routing (or a routes table)',
   keychain: 'BYOK envKeyName → KeychainSettings',
   'media-output': 'Binary output (video/audio/3d/mesh) → MediaAsset',
   ffmpeg: 'Video-edit pipeline (defer to v1.2 / server proxy)',
@@ -257,7 +257,8 @@ function hasDualRoute(def) {
   return Boolean(
     (def.sharedParams?.length ?? 0) > 0 ||
       (def.falParams?.length ?? 0) > 0 ||
-      (def.directParams?.length ?? 0) > 0,
+      (def.directParams?.length ?? 0) > 0 ||
+      (def.routes?.length ?? 0) > 0,
   );
 }
 
@@ -320,10 +321,12 @@ function inferGaps(nodeId, def, site, handlerStems, auditDocs, tests) {
   if (!hasEnvKey(def) && def.apiProvider !== 'utility' && nodeId !== 'nous-portal-universal') {
     gaps.push('no-env-key-declared');
   }
-  const paramGroups = ['params', 'sharedParams', 'falParams', 'directParams'];
-  for (const g of paramGroups) {
-    if (!Array.isArray(def[g])) continue;
-    for (const param of def[g]) {
+  // Every param group, and each route's own params on a route-table node.
+  const paramLists = [...['params', 'sharedParams', 'falParams', 'directParams'].map((g) => def[g]),
+    ...(def.routes ?? []).map((route) => route.params)];
+  for (const list of paramLists) {
+    if (!Array.isArray(list)) continue;
+    for (const param of list) {
       if (param.type === 'file') {
         gaps.push('file-param-ipados');
         break;
@@ -371,7 +374,8 @@ function buildRow(nodeId, def) {
       (def.params?.length ?? 0) +
       (def.sharedParams?.length ?? 0) +
       (def.falParams?.length ?? 0) +
-      (def.directParams?.length ?? 0),
+      (def.directParams?.length ?? 0) +
+      (def.routes ?? []).reduce((total, route) => total + (route.params?.length ?? 0), 0),
     dualRoute: hasDualRoute(def),
   };
 }

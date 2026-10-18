@@ -55,7 +55,9 @@ function echoedText(asked: string | null, fieldText: string | null | undefined):
   return sameQuestion(asked, fieldText ?? '') ? null : { text: asked, earlier: true };
 }
 
-type Tone = JevVerdictLabel['tone'] | 'none';
+// 'brand' is TypeSafe's pink, for results that aren't a verdict (Pick Best's
+// winner). Pass, fail and unsure keep their meaning colours.
+type Tone = JevVerdictLabel['tone'] | 'brand' | 'none';
 
 // Choice rows past this many collapse into "+N more"; the Inspector has them all.
 const CHOICE_ROWS = 4;
@@ -254,7 +256,7 @@ function JevPickBestView({ result, params, candidates, fieldText }: {
   return (
     <div className={`jev-result jev-result--pick-best${close ? ' jev-result--close' : ''}`} data-testid="jev-result" data-kind="pick-best">
       <div className="jev-result__top">
-        <Chip tone={close ? 'unsure' : 'pass'}>{close ? 'Close call' : `Best of ${rows.length}`}</Chip>
+        <Chip tone={close ? 'unsure' : 'brand'}>{close ? 'Close call' : `Best of ${rows.length}`}</Chip>
         {judgedImages(result.report) && <ExperimentalBadge />}
       </div>
       <Question asked={question} fieldText={fieldText} />
@@ -287,7 +289,7 @@ function JevPickBestView({ result, params, candidates, fieldText }: {
                 : <span className="jev-result__thumb jev-result__thumb--empty">#{index + 1}</span>}
               <span className="jev-result__bar-track">
                 <span
-                  className={`jev-result__bar-fill ${winner ? `jev-result__fill--${close ? 'unsure' : 'pass'}` : 'jev-result__fill--rest'}`}
+                  className={`jev-result__bar-fill ${winner ? `jev-result__fill--${close ? 'unsure' : 'brand'}` : 'jev-result__fill--rest'}`}
                   style={{ ['--jev-value' as string]: unit(row.value) }}
                 />
               </span>

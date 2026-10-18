@@ -39,6 +39,7 @@ export const PROVIDER_KEY_LABELS: Readonly<Record<string, string>> = {
   MINIMAX_API_KEY: 'MiniMax', XAI_API_KEY: 'xAI', HIGGSFIELD_API_KEY: 'Higgsfield',
   QUIVER_API_KEY: 'QuiverAI', KREA_API_TOKEN: 'Krea', KREA_USAGE_KEY: 'Krea usage', IDEOGRAM_API_KEY: 'Ideogram',
   WORLDLABS_API_KEY: 'World Labs', TYPESAFE_API_KEY: 'TypeSafe', BYTEPLUS_API_KEY: 'BytePlus',
+  BFL_API_KEY: 'Black Forest Labs',
 };
 
 export function providerCheckIsCurrent(entry: ProviderHealthEntry | undefined, completedAt: number | null, now = Date.now()): entry is ProviderHealthEntry {

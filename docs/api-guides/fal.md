@@ -8,7 +8,7 @@
 
 FAL is a *universal gateway* — a single provider that proxies many different downstream models. In Nebula, that surfaces as 52 ready-to-use nodes spanning five media types:
 
-- **Images** (text-to-image): photoreal and stylized stills with FLUX 1.1 Ultra, FLUX 2 Pro, FLUX Schnell (fast), Fast SDXL, Seedream 4.5, Recraft V4, GPT Image 1.5, GPT Image 2, and Ideogram 4 (Ideogram 4.0, released 2026-06-03 — open weights + hosted, frontier text rendering/typography).
+- **Images** (text-to-image): photoreal and stylized stills with FLUX 1.1 Ultra, FLUX.2, FLUX Schnell (fast), Fast SDXL, Seedream 4.5, Recraft V4, GPT Image 1.5, GPT Image 2, and Ideogram 4 (Ideogram 4.0, released 2026-06-03 — open weights + hosted, frontier text rendering/typography).
 - **Vector art (SVG):** true scalable vector graphics from a text prompt with Recraft V4 SVG — logos, icons, flat illustrations.
 - **Image editing / reference images:** edit or remix existing images with FLUX Kontext, GPT Image 1.5 Edit, and GPT Image 2 Edit (feed one or more reference images + an instruction).
 - **Image editing — inpaint / outpaint (mask-based):** edit only the masked region of an image with FLUX Fill (Inpaint) — feed an image, a mask (white = the region to edit; resized to the image's size if it differs), and a prompt; inpaint to replace objects in a frame or outpaint to extend its borders, while unmasked regions stay untouched.
@@ -25,6 +25,8 @@ FAL is a *universal gateway* — a single provider that proxies many different d
 > FAL's audio catalog is now *partly* wired: Stable Audio 2.5 covers instrumental text-to-music and sound effects, ACE-Step adds music with vocals/lyrics (full songs, up to 60s), MMAudio V2 covers video-to-audio Foley (synchronized SFX/ambient audio for a video), and Demucs covers stem separation (splits a mixed track into vocals/drums/bass/other). The rest of the catalog — TTS, speech-to-text, voice cloning, dubbing, lipsync — is still not exposed through Nebula's FAL nodes. See the coverage section below.
 
 ## Nodes available in Nebula (52) (updated 2026-06-10)
+
+Since 2026-10-15 fal is also a provider you can pick, through the provider switcher on the card, on the FLUX 3 nodes (`flux-3-image`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale`), on Krea 3 (`krea-3`), and as the only provider of `flux-3-image-klein-base`. Those nodes aren't in the table below; see [Black Forest Labs](./bfl.md), the `fal` agent skill's "fal as a route" section and [provider routes](../PROVIDER-ROUTES.md).
 
 Names, node IDs, and parameter keys below are taken directly from `backend/data/node_definitions.json`. "Key inputs" are the node's input ports; "Notable params" are the exposed settings (every node also implicitly takes a `prompt` and/or `image` where listed).
 
@@ -61,7 +63,7 @@ Names, node IDs, and parameter keys below are taken directly from `backend/data/
 | Seedance 2.0 Fast I2V | `seedance-2-fast-i2v` | video-gen | image, prompt, end_image | `aspect_ratio`, `duration`, `resolution`, `generate_audio`, `seed` | Faster/cheaper image-to-video |
 | FLUX Kontext | `flux-kontext` | image-gen | prompt, image | `aspect_ratio`, `num_images`, `guidance_scale`, `enhance_prompt`, `output_format`, `safety_tolerance`, `seed` | Edit/remix an image by instruction |
 | FLUX Fill (Inpaint) | `flux-fill-inpaint` | image-gen | prompt, image, mask | `num_images`, `output_format`, `enhance_prompt`, `seed` | Inpaint/outpaint — edit only the masked region of an image |
-| FLUX 2 Pro | `flux-2-pro` | image-gen | prompt | `image_size`, `output_format`, `safety_tolerance`, `enable_safety_checker`, `seed` | Latest high-end FLUX stills |
+| FLUX.2 | `flux-2-pro` | image-gen | prompt | `model`, `image_size`, `output_format`, `safety_tolerance`, `enable_safety_checker`, `seed`, Flex steps and guidance | FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B (BFL's names), and FLUX 2 Flash (fal's own); Black Forest Labs is the first route (`docs/model-providers/bfl/flux-2.md`) |
 | GPT Image 1.5 | `gpt-image-1-5` | image-gen | prompt | `image_size`, `quality`, `background`, `num_images`, `output_format` | OpenAI GPT Image text-to-image |
 | GPT Image 1.5 Edit | `gpt-image-1-5-edit` | image-gen | prompt, images | `image_size`, `quality`, `input_fidelity`, `background`, `num_images`, `output_format` | Edit with reference image(s) |
 | GPT Image 2 (FAL) | `gpt-image-2-fal-generate` | image-gen | prompt | `image_size`, `quality`, `num_images`, `output_format`, `partial_images` | GPT Image 2 text-to-image (streamed) |

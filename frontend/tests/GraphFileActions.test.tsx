@@ -159,6 +159,16 @@ describe('workspace-independent graph file actions', () => {
     expect(useGraphStore.getState().isImportingGraph).toBe(false);
   });
 
+  it('says what the backend changed while loading (a folded Krea node lost a connection)', async () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const warning = "'Flux 3 Video (Krea)' no longer has its Krea 'Job' output, so its connection to 'Preview' was removed.";
+    mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify({ nodes: [node('n8')], edges: [], warnings: [warning] }), { status: 200 }));
+    render(<GraphFileActions />);
+    await act(async () => { requestGraphLoad(); });
+    expect(useGraphStore.getState().nodes[0].id).toBe('n8');
+    expect(alert).toHaveBeenCalledWith(`Imported.\n• ${warning}`);
+  });
+
   it.each(['navigation', 'return', 'focus', 'replacement'] as const)('a delayed import fit yields to later %s', async (action) => {
     vi.useFakeTimers();
     try {

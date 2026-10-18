@@ -7,7 +7,12 @@ tokens. Connecting or checking the account never generates media.
 
 Use Krea as a direct provider for image, video and audio models, including Krea 2, Nano Banana, GPT Image, Flux, Kling, Veo, Seedance, Hailuo, Runway, and ElevenLabs Music. Each model has its own node and model-specific controls. The catalog is generated from Krea's public OpenAPI document, checked **2026-10-09**: **34 image routes, 41 video routes and 5 audio routes**.
 
-Choose a specific Krea model in the model picker. Canvas supports the full catalog and its advanced inputs. Create exposes models that work with its prompt, image attachments, and simple controls; use Canvas for Runway's tagged references, H3 camera trajectories, and Flux Video Edit's source video. Krea is the provider used for that run, even when the underlying model comes from another company. Nebula does not switch to another provider or use another provider's key automatically.
+Choose a specific Krea model in the model picker. Canvas supports the full catalog and its advanced inputs. Create exposes models that work with its prompt, image attachments, and simple controls; use Canvas for Runway's tagged references, H3 camera trajectories, and FLUX Video Edit [fast]'s source video. Krea is the provider used for that run, even when the underlying model comes from another company. Nebula does not switch to another provider or use another provider's key automatically, except on the copies that run on the model maker's own key when you've saved it (the maker routes in the `krea` agent skill).
+
+**Krea 3 and FLUX 3 video (2026-10-15).** These models are one node each with a provider switcher on the card, and Krea is one of the providers you can pick ([provider routes](../PROVIDER-ROUTES.md)):
+
+- **Krea 3** (`krea-3`): Krea first, then fal. Krea 3 on Krea's API is early access for beta workspaces; if yours isn't in the beta, pick fal in the switcher.
+- **FLUX 3 Video**, **FLUX Video Edit [fast]**, **FLUX Video Upscale** (`flux-3-video`, `flux-video-edit`, `flux-video-upscale`): Black Forest Labs first, then fal, Replicate, OpenRouter and Krea. A saved graph with Krea's old FLUX nodes opens with these nodes set to Krea and the same API-token or plan choice, so nothing bills differently. The Krea plan is used on them only when you pick **Krea · plan** in the switcher.
 
 ## Set up an API token
 

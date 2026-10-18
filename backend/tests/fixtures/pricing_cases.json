@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them.",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES).",
   "definitions": {
     "img": {
       "id": "img",
@@ -278,6 +278,344 @@
           "type": "integer",
           "min": 3000,
           "max": 600000
+        }
+      ]
+    },
+    "table": {
+      "id": "table",
+      "displayName": "Fixture Route Table",
+      "category": "image-gen",
+      "apiProvider": "bfl",
+      "apiEndpoint": "/v1/flux-3-image",
+      "executionPattern": "async-poll",
+      "envKeyName": [
+        "BFL_API_KEY",
+        "FAL_KEY",
+        "REPLICATE_API_TOKEN",
+        "OPENROUTER_API_KEY",
+        "KREA_API_TOKEN"
+      ],
+      "directKeyName": [
+        "BFL_API_KEY"
+      ],
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": true
+        },
+        {
+          "id": "images",
+          "label": "Images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "id": "image",
+          "label": "Image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "params": [
+        {
+          "key": "_provider",
+          "label": "Provider",
+          "type": "enum",
+          "required": false,
+          "default": "auto",
+          "options": [
+            {
+              "label": "auto",
+              "value": "auto"
+            },
+            {
+              "label": "bfl",
+              "value": "bfl"
+            },
+            {
+              "label": "fal",
+              "value": "fal"
+            },
+            {
+              "label": "replicate",
+              "value": "replicate"
+            },
+            {
+              "label": "openrouter",
+              "value": "openrouter"
+            },
+            {
+              "label": "krea",
+              "value": "krea"
+            }
+          ],
+          "hidden": true
+        },
+        {
+          "key": "_kreaAuth",
+          "label": "Krea connection",
+          "type": "enum",
+          "required": false,
+          "default": "api-token",
+          "options": [
+            {
+              "label": "api-token",
+              "value": "api-token"
+            },
+            {
+              "label": "mcp",
+              "value": "mcp"
+            }
+          ]
+        }
+      ],
+      "sharedParams": [
+        {
+          "key": "aspect_ratio",
+          "label": "Aspect ratio",
+          "type": "enum",
+          "required": false,
+          "default": "auto",
+          "options": [
+            {
+              "label": "auto",
+              "value": "auto"
+            },
+            {
+              "label": "1:1",
+              "value": "1:1"
+            },
+            {
+              "label": "16:9",
+              "value": "16:9"
+            },
+            {
+              "label": "9:21",
+              "value": "9:21"
+            }
+          ]
+        },
+        {
+          "key": "resolution",
+          "label": "Resolution",
+          "type": "enum",
+          "required": false,
+          "default": "1k",
+          "options": [
+            {
+              "label": "768sq",
+              "value": "768sq"
+            },
+            {
+              "label": "1k",
+              "value": "1k"
+            },
+            {
+              "label": "1.5k",
+              "value": "1.5k"
+            },
+            {
+              "label": "2k",
+              "value": "2k"
+            },
+            {
+              "label": "4k",
+              "value": "4k"
+            }
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "label": "Safety tolerance",
+          "type": "integer",
+          "required": false,
+          "default": 2,
+          "min": 0,
+          "max": 6
+        }
+      ],
+      "routes": [
+        {
+          "id": "bfl",
+          "provider": "bfl",
+          "maker": true,
+          "keys": [
+            "BFL_API_KEY"
+          ],
+          "handler": "bfl",
+          "endpoint": "/v1/flux-3-image",
+          "params": [
+            {
+              "key": "grounding",
+              "label": "Grounding",
+              "type": "boolean",
+              "required": false,
+              "default": false
+            }
+          ],
+          "rules": {
+            "accepts": {
+              "safety_tolerance": {
+                "min": 0,
+                "max": 4,
+                "integer": true
+              }
+            }
+          }
+        },
+        {
+          "id": "fal",
+          "provider": "fal",
+          "keys": [
+            "FAL_KEY"
+          ],
+          "handler": "fal",
+          "endpoint": "blackforestlabs/flux-3/text-to-image",
+          "endpointWhen": [
+            {
+              "when": {
+                "images": "(set)"
+              },
+              "endpoint": "blackforestlabs/flux-3/edit-image"
+            }
+          ],
+          "valueMap": {
+            "resolution": {
+              "768sq": "square",
+              "1k": "1k",
+              "2k": "2k",
+              "4k": "4k"
+            },
+            "aspect_ratio": {
+              "auto": "auto",
+              "1:1": "1:1",
+              "16:9": "16:9"
+            }
+          }
+        },
+        {
+          "id": "replicate",
+          "provider": "replicate",
+          "keys": [
+            "REPLICATE_API_TOKEN"
+          ],
+          "handler": "replicate-model",
+          "endpoint": "black-forest-labs/flux-3-image",
+          "params": [
+            {
+              "key": "grounding",
+              "label": "Grounding",
+              "type": "boolean",
+              "required": false,
+              "default": false
+            }
+          ],
+          "pricing": "replicate-std"
+        },
+        {
+          "id": "openrouter",
+          "provider": "openrouter",
+          "keys": [
+            "OPENROUTER_API_KEY"
+          ],
+          "handler": "openrouter-images",
+          "endpoint": "black-forest-labs/flux-3-image",
+          "valueMap": {
+            "resolution": {
+              "768sq": "768",
+              "1k": "1K",
+              "1.5k": "1.5K",
+              "2k": "2K",
+              "4k": "4K"
+            }
+          },
+          "rules": {
+            "ports": {
+              "images": {
+                "max": 4
+              }
+            }
+          }
+        },
+        {
+          "id": "krea",
+          "provider": "krea",
+          "keys": [
+            "KREA_API_TOKEN"
+          ],
+          "plan": "optional",
+          "handler": "krea",
+          "endpoint": "/generate/image/black-forest-labs/flux-3-image",
+          "rules": {
+            "rejects": {
+              "resolution": [
+                "4k"
+              ]
+            },
+            "ports": {
+              "images": {
+                "max": 2
+              }
+            },
+            "rejectsWhen": [
+              {
+                "match": {
+                  "resolution": "2k",
+                  "images": "(unset)"
+                },
+                "label": "2k without a reference image"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "moded": {
+      "id": "moded",
+      "apiProvider": "bfl",
+      "params": [
+        {
+          "key": "resolution",
+          "default": "hd",
+          "options": [
+            {
+              "value": "hd"
+            },
+            {
+              "value": "fhd"
+            }
+          ]
+        },
+        {
+          "key": "draft",
+          "default": false
+        },
+        {
+          "key": "duration",
+          "default": 5
+        }
+      ]
+    },
+    "tooled": {
+      "id": "tooled",
+      "apiProvider": "bfl",
+      "params": [
+        {
+          "key": "creativity",
+          "default": 1,
+          "options": [
+            {
+              "value": 0
+            },
+            {
+              "value": 1
+            }
+          ]
         }
       ]
     }
@@ -640,6 +978,175 @@
           }
         ],
         "checked": "2026-10-14"
+      },
+      "table": {
+        "routes": {
+          "bfl": {
+            "currency": "usd",
+            "per": "image",
+            "rows": [
+              {
+                "match": {
+                  "resolution": "1k"
+                },
+                "price": 0.03
+              },
+              {
+                "match": {
+                  "resolution": "2k"
+                },
+                "price": 0.06
+              },
+              {
+                "match": {
+                  "resolution": "4k"
+                },
+                "price": 0.12
+              }
+            ],
+            "sources": [
+              {
+                "url": "https://example.com/pricing",
+                "quote": "fixture"
+              }
+            ],
+            "checked": "2026-10-15"
+          },
+          "fal": {
+            "currency": "usd",
+            "per": "image",
+            "provider": "fal",
+            "unconfirmed": true,
+            "rows": [
+              {
+                "match": {},
+                "price": 0.035
+              }
+            ],
+            "sources": [
+              {
+                "url": "https://example.com/pricing",
+                "quote": "fixture"
+              }
+            ],
+            "checked": "2026-10-15"
+          },
+          "replicate-std": {
+            "currency": "usd",
+            "per": "image",
+            "provider": "replicate",
+            "rows": [
+              {
+                "match": {},
+                "price": 0.04
+              }
+            ],
+            "sources": [
+              {
+                "url": "https://example.com/pricing",
+                "quote": "fixture"
+              }
+            ],
+            "checked": "2026-10-15"
+          },
+          "krea": {
+            "currency": "usd",
+            "per": "image",
+            "provider": "krea",
+            "rows": [
+              {
+                "match": {},
+                "price": 0.05
+              }
+            ],
+            "sources": [
+              {
+                "url": "https://example.com/pricing",
+                "quote": "fixture"
+              }
+            ],
+            "checked": "2026-10-15"
+          }
+        }
+      },
+      "moded": {
+        "currency": "usd",
+        "per": "second",
+        "multiplyBy": [
+          "duration"
+        ],
+        "rows": [
+          {
+            "match": {
+              "draft": true,
+              "(mode)": "v2v"
+            },
+            "price": 0.12
+          },
+          {
+            "match": {
+              "draft": true
+            },
+            "price": 0.06
+          },
+          {
+            "match": {
+              "(mode)": "v2v",
+              "resolution": "hd"
+            },
+            "price": 0.21
+          },
+          {
+            "match": {
+              "(mode)": "i2v",
+              "resolution": "hd"
+            },
+            "price": 0.16
+          },
+          {
+            "match": {
+              "(mode)": "t2v",
+              "resolution": "hd"
+            },
+            "price": 0.15
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-15"
+      },
+      "tooled": {
+        "currency": "usd",
+        "per": "megapixel-second",
+        "multiplyBy": [
+          "(output megapixels)",
+          "(source seconds)"
+        ],
+        "rows": [
+          {
+            "match": {
+              "creativity": 0
+            },
+            "price": 0.07
+          },
+          {
+            "match": {
+              "creativity": 1
+            },
+            "price": 0.1
+          }
+        ],
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "checked": "2026-10-15"
       }
     }
   },
@@ -1078,6 +1585,897 @@
         "currency": "usd",
         "low": 0.15,
         "high": 0.15
+      }
+    },
+    {
+      "name": "route table: the maker route prices by resolution",
+      "nodeId": "table",
+      "params": {},
+      "routeProvider": "bfl",
+      "expected": {
+        "currency": "usd",
+        "low": 0.03,
+        "high": 0.03
+      }
+    },
+    {
+      "name": "route table: the maker route at 4k",
+      "nodeId": "table",
+      "params": {
+        "resolution": "4k"
+      },
+      "routeProvider": "bfl",
+      "expected": {
+        "currency": "usd",
+        "low": 0.12,
+        "high": 0.12
+      }
+    },
+    {
+      "name": "route table: a route priced under its pricing key",
+      "nodeId": "table",
+      "params": {},
+      "routeProvider": "replicate-std",
+      "expected": {
+        "currency": "usd",
+        "low": 0.04,
+        "high": 0.04
+      }
+    },
+    {
+      "name": "route table: a route's provider is not its price key",
+      "nodeId": "table",
+      "params": {},
+      "routeProvider": "replicate",
+      "expected": null
+    },
+    {
+      "name": "route table: a route without an entry is unpriced",
+      "nodeId": "table",
+      "params": {},
+      "routeProvider": "openrouter",
+      "expected": null
+    },
+    {
+      "name": "(mode): nothing wired is text to video",
+      "nodeId": "moded",
+      "params": {},
+      "expected": {
+        "currency": "usd",
+        "low": 0.75,
+        "high": 0.75
+      }
+    },
+    {
+      "name": "(mode): a wired start image is image to video",
+      "nodeId": "moded",
+      "params": {
+        "duration": 6
+      },
+      "wired": [
+        "start_image"
+      ],
+      "expected": {
+        "currency": "usd",
+        "low": 0.96,
+        "high": 0.96
+      }
+    },
+    {
+      "name": "(mode): wired keyframes or an end image are image to video too",
+      "nodeId": "moded",
+      "params": {},
+      "wired": [
+        "keyframes",
+        "prompt"
+      ],
+      "expected": {
+        "currency": "usd",
+        "low": 0.8,
+        "high": 0.8
+      }
+    },
+    {
+      "name": "(mode): a wired start video is video to video, and wins over images",
+      "nodeId": "moded",
+      "params": {},
+      "wired": [
+        "start_video",
+        "start_image"
+      ],
+      "expected": {
+        "currency": "usd",
+        "low": 1.05,
+        "high": 1.05
+      }
+    },
+    {
+      "name": "(mode): rows that don't name the mode still match it",
+      "nodeId": "moded",
+      "params": {
+        "draft": true
+      },
+      "wired": [
+        "start_image"
+      ],
+      "expected": {
+        "currency": "usd",
+        "low": 0.3,
+        "high": 0.3
+      }
+    },
+    {
+      "name": "(mode): a draft video to video run takes its own row",
+      "nodeId": "moded",
+      "params": {
+        "draft": true
+      },
+      "wired": [
+        "start_video"
+      ],
+      "expected": {
+        "currency": "usd",
+        "low": 0.6,
+        "high": 0.6
+      }
+    },
+    {
+      "name": "(mode): a mode with no row is unpriced, never another mode's price",
+      "nodeId": "moded",
+      "params": {
+        "resolution": "fhd"
+      },
+      "expected": null
+    },
+    {
+      "name": "run-time quantities: a price on the source clip is unpriced before the run",
+      "nodeId": "tooled",
+      "params": {
+        "creativity": 0
+      },
+      "wired": [
+        "video"
+      ],
+      "expected": null
+    }
+  ],
+  "runCases": [
+    {
+      "name": "Auto with the maker key prices the maker route",
+      "nodeId": "table",
+      "params": {},
+      "apiKeys": {
+        "BFL_API_KEY": "set",
+        "FAL_KEY": "set"
+      },
+      "expected": {
+        "low": 0.03,
+        "high": 0.03,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Auto with only a fal key prices fal",
+      "nodeId": "table",
+      "params": {
+        "resolution": "2k"
+      },
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "expected": {
+        "low": 0.035,
+        "high": 0.035,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "an explicit route prices that route, whatever else is keyed",
+      "nodeId": "table",
+      "params": {
+        "_provider": "replicate"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "set",
+        "REPLICATE_API_TOKEN": "set"
+      },
+      "expected": {
+        "low": 0.04,
+        "high": 0.04,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "an explicit route without its key is unavailable, not priced elsewhere",
+      "nodeId": "table",
+      "params": {
+        "_provider": "replicate"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "set"
+      },
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": true,
+        "plan": false
+      }
+    },
+    {
+      "name": "Auto blocked by a param is unavailable, never moved",
+      "nodeId": "table",
+      "params": {
+        "safety_tolerance": 6
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "set",
+        "FAL_KEY": "set"
+      },
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": true,
+        "plan": false
+      }
+    },
+    {
+      "name": "Auto with no key is unavailable",
+      "nodeId": "table",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": true,
+        "plan": false
+      }
+    },
+    {
+      "name": "too many wired images block the explicit route",
+      "nodeId": "table",
+      "params": {
+        "_provider": "openrouter"
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "set"
+      },
+      "wiredCounts": {
+        "images": 5
+      },
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": true,
+        "plan": false
+      }
+    },
+    {
+      "name": "the Krea route on the plan is billed to the plan",
+      "nodeId": "table",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {},
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": false,
+        "plan": true
+      }
+    },
+    {
+      "name": "the Krea plan with more wired images than its route takes is unavailable, not a plan run",
+      "nodeId": "table",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wiredCounts": {
+        "images": 3
+      },
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": true,
+        "plan": false
+      }
+    },
+    {
+      "name": "the Krea plan a wired image unblocks is a plan run, not priced in USD",
+      "nodeId": "table",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp",
+        "resolution": "2k"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wiredCounts": {
+        "images": 1
+      },
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": false,
+        "plan": true
+      }
+    }
+  ],
+  "routeEstimateCases": [
+    {
+      "name": "every route at the defaults",
+      "nodeId": "table",
+      "params": {},
+      "expected": {
+        "bfl": 0.03,
+        "fal": 0.035,
+        "replicate": 0.04,
+        "openrouter": null,
+        "krea": 0.05
+      }
+    },
+    {
+      "name": "4k: Krea rejects it, the maker prices it higher",
+      "nodeId": "table",
+      "params": {
+        "resolution": "4k"
+      },
+      "expected": {
+        "bfl": 0.12,
+        "fal": 0.035,
+        "replicate": 0.04,
+        "openrouter": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "1.5k: fal's value map can't take it, the maker has no row",
+      "nodeId": "table",
+      "params": {
+        "resolution": "1.5k"
+      },
+      "expected": {
+        "bfl": null,
+        "fal": null,
+        "replicate": 0.04,
+        "openrouter": null,
+        "krea": 0.05
+      }
+    },
+    {
+      "name": "a safety tolerance above the maker's limit",
+      "nodeId": "table",
+      "params": {
+        "safety_tolerance": 6
+      },
+      "expected": {
+        "bfl": null,
+        "fal": 0.035,
+        "replicate": 0.04,
+        "openrouter": null,
+        "krea": 0.05
+      }
+    }
+  ],
+  "shippedRouteCases": [
+    {
+      "name": "FLUX 3 Image: the cheapest size on each route",
+      "nodeId": "flux-3-image",
+      "params": {
+        "resolution": "768sq"
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.041,
+        "fal": 0.041,
+        "replicate": 0.0205,
+        "openrouter": 0.041
+      }
+    },
+    {
+      "name": "FLUX 3 Image: fal can't take 1.5k",
+      "nodeId": "flux-3-image",
+      "params": {
+        "resolution": "1.5k"
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.07,
+        "fal": null,
+        "replicate": 0.035,
+        "openrouter": 0.07
+      }
+    },
+    {
+      "name": "FLUX 3 Image Klein at its defaults",
+      "nodeId": "flux-3-image-klein",
+      "params": {},
+      "wired": [],
+      "expected": {
+        "bfl": 0.009,
+        "openrouter": 0.009
+      }
+    },
+    {
+      "name": "FLUX 3 Image Klein Base at its defaults (fal, unconfirmed)",
+      "nodeId": "flux-3-image-klein-base",
+      "params": {},
+      "wired": [],
+      "expected": {
+        "fal": 0.0283
+      }
+    },
+    {
+      "name": "FLUX 3 Video: a 5 s text run at hd",
+      "nodeId": "flux-3-video",
+      "params": {},
+      "wired": [],
+      "expected": {
+        "bfl": 0.75,
+        "fal": 0.85,
+        "replicate": 0.85,
+        "openrouter": 0.85,
+        "krea": 0.85
+      }
+    },
+    {
+      "name": "FLUX 3 Video on the Krea plan: the API balance row still shows the API price",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.75,
+        "fal": 0.85,
+        "replicate": 0.85,
+        "openrouter": 0.85,
+        "krea": 0.85
+      }
+    },
+    {
+      "name": "FLUX 3 Video: a 10 s continuation is v2v; OpenRouter takes no start video",
+      "nodeId": "flux-3-video",
+      "params": {
+        "duration": 10
+      },
+      "wired": [
+        "start_video"
+      ],
+      "expected": {
+        "bfl": 2.1,
+        "fal": 4.1,
+        "replicate": 4.1,
+        "openrouter": null,
+        "krea": 4.1
+      }
+    },
+    {
+      "name": "FLUX 3 Video: an image draft; OpenRouter and Krea take no draft",
+      "nodeId": "flux-3-video",
+      "params": {
+        "draft": true
+      },
+      "wired": [
+        "start_image"
+      ],
+      "expected": {
+        "bfl": 0.3,
+        "fal": 0.3,
+        "replicate": 0.3,
+        "openrouter": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "FLUX 3 Video: a continuation draft BFL doesn't price",
+      "nodeId": "flux-3-video",
+      "params": {
+        "draft": true
+      },
+      "wired": [
+        "start_video"
+      ],
+      "expected": {
+        "bfl": null,
+        "fal": 0.6,
+        "replicate": 0.6,
+        "openrouter": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "FLUX 3 Video: 4K is priced on BFL and OpenRouter only",
+      "nodeId": "flux-3-video",
+      "params": {
+        "resolution": "uhd"
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 2.05,
+        "fal": null,
+        "replicate": null,
+        "openrouter": 2.05,
+        "krea": null
+      }
+    },
+    {
+      "name": "FLUX Video Edit [fast]: priced by the source clip, so unpriced before the run",
+      "nodeId": "flux-video-edit",
+      "params": {},
+      "wired": [
+        "start_video"
+      ],
+      "expected": {
+        "bfl": null,
+        "fal": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "FLUX Video Upscale: priced by the source clip, so unpriced before the run",
+      "nodeId": "flux-video-upscale",
+      "params": {},
+      "wired": [
+        "video"
+      ],
+      "expected": {
+        "bfl": null,
+        "fal": null,
+        "replicate": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "Krea 3: a text-only run costs the base price on each route",
+      "nodeId": "krea-3",
+      "params": {},
+      "wired": [],
+      "expected": {
+        "krea": 0.03,
+        "fal": [
+          0.1,
+          0.1006
+        ]
+      }
+    },
+    {
+      "name": "Krea 3: high thinking at 2K on Krea, no references; fal.ai doesn't offer Krea's thinking mode, so it stops there (rule H)",
+      "nodeId": "krea-3",
+      "params": {
+        "thinking_mode": "high",
+        "resolution": "2K"
+      },
+      "wired": [],
+      "expected": {
+        "krea": 0.08,
+        "fal": null
+      }
+    },
+    {
+      "name": "Krea 3: a range over the references each route takes, once images are wired",
+      "nodeId": "krea-3",
+      "params": {},
+      "wired": [
+        "images"
+      ],
+      "expected": {
+        "krea": [
+          0.03,
+          0.59
+        ],
+        "fal": [
+          0.1,
+          0.9056
+        ]
+      }
+    },
+    {
+      "name": "Krea 3 on the Krea plan: the API balance row still shows the API price",
+      "nodeId": "krea-3",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
+      },
+      "wired": [],
+      "expected": {
+        "krea": 0.03,
+        "fal": [
+          0.1,
+          0.1006
+        ]
+      }
+    },
+    {
+      "name": "FLUX.2 at its defaults: Pro's first megapixel on both routes",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "pro",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.03,
+        "fal": 0.03
+      },
+      "unconfirmed": {
+        "bfl": false,
+        "fal": false
+      }
+    },
+    {
+      "name": "FLUX 2 Flash: fal only, at an unconfirmed upper bound",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "flash",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "wired": [],
+      "expected": {
+        "bfl": null,
+        "fal": 0.005
+      },
+      "unconfirmed": {
+        "bfl": false,
+        "fal": true
+      }
+    },
+    {
+      "name": "FLUX.2 [klein] 4B: BFL's card, fal's unconfirmed upper bound",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "klein-4b",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.014,
+        "fal": 0.009
+      },
+      "unconfirmed": {
+        "bfl": false,
+        "fal": true
+      }
+    },
+    {
+      "name": "FLUX.2 [flex] with steps set prices on both routes",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "flex",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true,
+        "num_inference_steps": 30
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.05,
+        "fal": 0.05
+      },
+      "unconfirmed": {
+        "bfl": false,
+        "fal": false
+      }
+    },
+    {
+      "name": "FLUX.2 with the safety checker off: BFL can't take it",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "pro",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": false
+      },
+      "wired": [],
+      "expected": {
+        "bfl": null,
+        "fal": 0.03
+      }
+    },
+    {
+      "name": "FLUX 3 Video: a draft hides Resolution, so a draft saved at Full HD prices at the draft row (PR 5, D1)",
+      "nodeId": "flux-3-video",
+      "params": {
+        "draft": true,
+        "resolution": "fhd"
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.3,
+        "fal": 0.3,
+        "replicate": 0.3,
+        "openrouter": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "FLUX 3 Video: a continuation draft saved at 4K: fal and Replicate price the v2v draft row, BFL publishes no v2v draft price",
+      "nodeId": "flux-3-video",
+      "params": {
+        "draft": true,
+        "resolution": "uhd"
+      },
+      "wired": [
+        "start_video"
+      ],
+      "expected": {
+        "bfl": null,
+        "fal": 0.6,
+        "replicate": 0.6,
+        "openrouter": null,
+        "krea": null
+      }
+    },
+    {
+      "name": "FLUX.2: Flash on fal at Safety 5 still prices (Safety isn't shown or sent there)",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "flash",
+        "safety_tolerance": "5"
+      },
+      "wired": [],
+      "expected": {
+        "bfl": null,
+        "fal": 0.005
+      }
+    }
+  ],
+  "shippedRunCases": [
+    {
+      "name": "FLUX 3 Video on Auto with a Krea plan mode left saved and only a Krea token bills the API token, so it is priced",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "auto",
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.85,
+        "high": 0.85,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "FLUX 3 Video on the Krea plan row is billed to the plan",
+      "nodeId": "flux-3-video",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {},
+      "wired": [],
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": false,
+        "plan": true
+      }
+    },
+    {
+      "name": "Krea 3 text-only on the Krea API token costs the base price",
+      "nodeId": "krea-3",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.03,
+        "high": 0.03,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 3 with references wired on the Krea API token is a range",
+      "nodeId": "krea-3",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "api-token"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [
+        "images"
+      ],
+      "expected": {
+        "low": 0.03,
+        "high": 0.59,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "FLUX.2 saved before PR 4 (no _provider) with only a fal key runs on fal",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "pro",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.03,
+        "high": 0.03,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "FLUX.2 saved on Max with a BFL key added runs on BFL",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "max",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "apiKeys": {
+        "FAL_KEY": "set",
+        "BFL_API_KEY": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.07,
+        "high": 0.07,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "FLUX.2 saved on Flash with a BFL key added stops before billing",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "flash",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "apiKeys": {
+        "FAL_KEY": "set",
+        "BFL_API_KEY": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": true,
+        "plan": false
       }
     }
   ]
