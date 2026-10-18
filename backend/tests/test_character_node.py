@@ -176,3 +176,31 @@ async def test_unknown_id_raises(monkeypatch, tmp_path) -> None:
         await handle_character_node(
             _character_node("doesnotexist"), inputs={}, api_keys={}, emit=None
         )
+
+
+@pytest.mark.asyncio
+async def test_an_edited_character_reaches_the_next_run(monkeypatch, tmp_path) -> None:
+    """The node's params name the character, not its contents, so a cached
+    bundle would replay the old traits after an edit."""
+    from execution.engine import execute_graph
+    from models.events import ExecutedEvent
+    from services.cache import ExecutionCache
+
+    stored = _seed_character(monkeypatch, tmp_path)
+    # Views the cache can see (it drops an entry whose files are gone).
+    views = [f"https://example.com/char/{name}.png" for name in ("front", "side", "back")]
+    CharacterStore().update(stored["id"], referenceViews=views)
+    traits: list[str] = []
+
+    async def emit(event):
+        if isinstance(event, ExecutedEvent) and event.node_id == "char1":
+            traits.append(event.outputs["character"]["value"]["frozenTraitString"])
+
+    cache = ExecutionCache()
+    registry = {"character": handle_character_node}
+    for trait in (_TRAIT, "silver hair, green eyes"):
+        CharacterStore().update(stored["id"], frozenTraitString=trait)
+        await execute_graph(nodes=[_character_node(stored["id"])], edges=[], api_keys={},
+                            handler_registry=registry, emit=emit, cache=cache)
+
+    assert traits == [_TRAIT, "silver hair, green eyes"]

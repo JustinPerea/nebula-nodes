@@ -267,6 +267,12 @@ _PASSTHROUGH_NODE_IDS = frozenset({
 })
 
 
+# Nodes whose params name a saved record (a board, a character) rather than
+# hold its contents. A cached output would hide an edit to the record, so they
+# skip the output cache; reading the record is cheap.
+_READS_SAVED_RECORD = frozenset({"nebula-moodboard", "character"})
+
+
 _UNSET = object()
 
 
@@ -1212,10 +1218,7 @@ async def _execute_graph(
             cache_enabled = (
                 cache is not None
                 and node.definition_id != "paper-source"
-                # A board is read from its saved file: its params name the
-                # board, not its contents, so a cached bundle would hide an
-                # edit to its Direction or Avoid list. Reading it is cheap.
-                and node.definition_id != "nebula-moodboard"
+                and node.definition_id not in _READS_SAVED_RECORD
                 and not bypasses_output_cache(node.definition_id)
             )
             if cache_enabled:
