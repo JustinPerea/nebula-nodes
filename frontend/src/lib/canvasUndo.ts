@@ -74,7 +74,8 @@ export function isOwnEcho(origin: EditOrigin | undefined, tabId: string): boolea
 
 export function foreignSource(origin: EditOrigin): ForeignEdit['source'] {
   if (origin.actor?.kind === 'agent') return 'agent';
-  // The person (or a canvas without the person token) in another tab.
+  // The person in another tab: the backend sends `tab` only for a request
+  // with this launch's person token.
   if (origin.tab) return 'window';
   return 'outside';
 }

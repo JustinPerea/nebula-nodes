@@ -19,7 +19,7 @@ from services.cli_graph import CLIGraph
 from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
 from services.provider_start_guard import ProviderStartGuard
-from tests.conftest import PERSON
+from tests.conftest import CANVAS_PARAMS_VERSION, PERSON
 
 AGENT = {"X-Nebula-Agent": "Claude"}
 TAB = "tab-0123456789abcdef"
@@ -144,6 +144,37 @@ def test_an_agent_cannot_pass_its_edit_off_as_a_tab_echo(api):
     edit = _syncs(api)[-1]["edit"]
     assert edit["actor"]["name"] == "Claude"
     assert "tab" not in edit
+
+
+@pytest.mark.parametrize("headers", [
+    {"X-Nebula-Tab": TAB},
+    {"X-Nebula-Tab": TAB, "Origin": "http://localhost:5173", **CANVAS_PARAMS_VERSION},
+    {"X-Nebula-Tab": TAB, "X-Nebula-Person": "not-this-launch"},
+])
+def test_only_the_person_can_mark_an_edit_as_a_tab_echo(api, headers):
+    # A missing X-Nebula-Agent header, an Origin or a made-up token prove
+    # nothing: without this launch's person token, a script that echoes a
+    # broadcast tab id would hide its edit from that tab's undo.
+    prompt, _ = _seed(api)
+    response = api.client.put(f"/api/graph/node/{prompt}", headers=headers, json={"params": {"value": "x"}})
+    assert response.status_code == 200, response.text
+    edit = _syncs(api)[-1]["edit"]
+    assert edit["actor"]["kind"] != "person"
+    assert "tab" not in edit
+
+
+def test_a_restore_cannot_push_node_ids_out_of_undos_reach(api):
+    _seed(api)
+    # n999999999 would move the counter so far that every later id (10
+    # digits) fails the restore route's id check: nothing created after it
+    # could ever be undone back onto the backend.
+    response = _restore(api, {"nodes": [{"id": "n999999999", "definitionId": "text-input"}]}, headers=AGENT)
+    assert response.status_code == 400
+    assert "n999999999" not in api.graph.nodes
+    created = api.client.post("/api/graph/node", headers=AGENT, json={"definitionId": "text-input"})
+    assert created.json()["id"] == "n3"
+    # Ids above the counter stay restorable (undoing an import that reset it).
+    assert _restore(api, {"nodes": [{"id": "n40", "definitionId": "text-input"}]}).status_code == 200
 
 
 def test_an_agent_import_is_an_edit_the_canvas_can_undo(api):
