@@ -2,6 +2,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
 import { storedAssetId, useStoredAsset } from '../../store/storedAssetsStore';
 import { NodeSettingsAction } from './NodeSettingsAction';
+import { RestoreTrashedAsset } from './RestoreTrashedAsset';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { backendAssetUrlSync } from '../../lib/backend';
 import '../../styles/moodboard-node.css';
@@ -32,8 +33,10 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
   const meta = board
     ? `${board.imageCount ?? 0} ${board.imageCount === 1 ? 'image' : 'images'} · ${board.mode ?? 'look'}`
     : status === 'empty' ? 'Choose one in the Inspector'
-      : status === 'missing' ? `#${boardId} was deleted or never existed`
+      : status === 'missing' ? `#${boardId} was deleted for good or never existed`
         : status === 'error' ? "Couldn't load this board" : 'Loading…';
+  // A board in Recently deleted keeps its name and picture here, with Restore.
+  const trashed = status === 'trashed';
 
   return (
     <div className={`moodboard-node ${selected ? 'moodboard-node--selected' : ''}`} data-moodboard-status={status} data-node-inspector-anchor={id}>
@@ -47,8 +50,9 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
           <span>No images</span>
         )}
       </div>
-      <div className="moodboard-node__meta">{meta}</div>
-      {selected && boardId && status !== 'missing' && (
+      <div className="moodboard-node__meta">{trashed ? 'In Recently deleted' : meta}</div>
+      {trashed && <RestoreTrashedAsset kind="moodboard" id={boardId} className="moodboard-node__open" />}
+      {selected && boardId && status !== 'missing' && !trashed && (
         <button
           type="button"
           className="moodboard-node__open nodrag"

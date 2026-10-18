@@ -55,6 +55,9 @@ The server exposes these tools for building and running (see
 - `view_output`: a node's output as an image (videos as three frames, image
   lists as tiles), or as text.
 - `get_spend_limits`: the limits and what this session has used.
+- `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
+  characters, projects), and bring one back with the same id. See
+  [Recently deleted](#recently-deleted).
 
 And these canvas tools:
 
@@ -253,6 +256,10 @@ Person-only, refused with 403 `person_required` otherwise:
   (`/api/agent/spend/apps`; see Connect your agent below);
 - starting any `/ws/chat` turn (Claude, Codex), so no chat
   workspace or agent token is minted without the person;
+- deleting for good from Recently deleted (`DELETE /api/trash/{kind}/{id}`,
+  `POST /api/trash/empty`, `DELETE /api/projects/trash/{id}`,
+  `POST /api/projects/trash/empty`). It can't be undone. The refusal tells an
+  agent it can restore instead (see Recently deleted below);
 - `POST /api/enhance-prompt`, the Create button's rewrite. The gate comes
   first; then prompts over 4,000 characters get a 413 that says so, and more
   than 20 calls a minute get a 429. Each call logs provider, length and outcome
@@ -815,6 +822,35 @@ the shared outside budget, until the person revokes it, which deletes the
 file. Apps connected before token files keep the token in their config until
 they are revoked and connected again.
 
+### Recently deleted
+
+Deleting a moodboard, a character or a project doesn't remove it. It moves to
+Recently deleted with who deleted it (you, an agent by name, or an unnamed
+client) and when. Agents may delete boards and characters
+(`DELETE /api/moodboards/{id}`, `DELETE /api/characters/{id}`), because anyone
+can undo it:
+
+- `GET /api/trash` lists it, newest first. `kind` (`moodboard`, `character`,
+  `project`) narrows it; `scope` (`global`, or `project` with `projectId`)
+  narrows boards and characters the way their lists do.
+- `POST /api/trash/{kind}/{id}/restore` brings one back with the same id and
+  contents, so a Moodboard or Character node that points at it runs again. A
+  project comes back closed. Agents may restore. MCP: `list_trash`,
+  `restore_from_trash`. CLI: `nebula trash list`, `nebula trash restore [kind] <id>`.
+- Deleting for good is person-only (see the list above). The person does it
+  from Moodboard Studio, Character Studio or Projects.
+
+A board or character in Recently deleted answers `GET` with 404 and
+`code: "in_trash"` plus its trash record. Its node card and the Inspector say
+it's in Recently deleted and offer Restore. Running the node fails with a
+message that says how to restore it, and `edit_canvas` refuses to point a node
+at it.
+
+Boards and characters stay until the person deletes them for good: there is
+no timer. Projects keep their 30-day expiry. Files live in
+`<store>/.trash/<id>.json` with a `<id>.trash.json` record beside them
+(`backend/services/asset_trash.py`).
+
 ### Building and running over MCP
 
 `edit_canvas` and `remove_from_canvas` send one body to `POST /api/graph/apply`
@@ -948,6 +984,8 @@ nebula rename n2 "Hero shot"        # an empty name restores the model's
 nebula move n2=400,120 n3=400,320   # canvas coordinates
 nebula projects                     # saved projects; * is open
 nebula project open <id>            # switch the canvas (not while a run is going)
+nebula trash list                   # Recently deleted boards, characters, projects
+nebula trash restore [kind] <id>    # bring one back with the same id
 ```
 
 `nebula context` lists the definition ids that can run here: with your keys,

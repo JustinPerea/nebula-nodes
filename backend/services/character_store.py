@@ -3,6 +3,7 @@
 On-disk layout:
     CHAR_ROOT/<projectId>/<id>.json   — project-scoped characters
     CHAR_ROOT/_global/<id>.json       — global characters (no projectId)
+    CHAR_ROOT/.trash/                 — deleted characters (services/asset_trash.py)
 
 CHAR_ROOT defaults to ~/.nebula/characters; override via NEBULA_CHARACTER_ROOT
 (the test suite sets this env var so tests never touch the real home directory).
@@ -15,7 +16,7 @@ Identity-correctness contract:
   - frozenTraitString is stored and returned byte-identical (never normalized)
   - version is bumped deterministically on every update call
 
-No external dependencies — stdlib only (json, uuid, pathlib, datetime).
+No external dependencies: stdlib plus services/asset_trash.py (Recently deleted).
 """
 from __future__ import annotations
 
@@ -25,6 +26,9 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
+
+from services import asset_trash
+from services.asset_trash import is_trash_folder
 
 # ---------------------------------------------------------------------------
 # projectId / charId validation (path-traversal defence)
@@ -105,7 +109,8 @@ def _find_char_file(char_root: Path, char_id: str) -> Path | None:
     if not char_root.exists():
         return None
     for sub in char_root.iterdir():
-        if not sub.is_dir():
+        # Skip the trash (``.trash``): a deleted character isn't found until restored.
+        if not sub.is_dir() or is_trash_folder(sub):
             continue
         candidate = sub / f"{char_id}.json"
         if candidate.exists():
@@ -271,8 +276,10 @@ class CharacterStore:
     # delete
     # ------------------------------------------------------------------
 
-    def delete(self, char_id: str) -> None:
-        """Delete a Character by id.
+    def delete(self, char_id: str, deleted_by: dict | None = None) -> dict:
+        """Move a Character to Recently deleted (services/asset_trash.py) and
+        return the trash record. ``deleted_by`` is who asked, as
+        services/canvas_events.actor_record gives it.
 
         Raises KeyError if not found.
         """
@@ -280,4 +287,28 @@ class CharacterStore:
         path = _find_char_file(root, char_id)
         if path is None:
             raise KeyError(f"Character '{char_id}' not found")
-        path.unlink()
+        return asset_trash.move_to_trash(root, path, kind="character", deleted_by=deleted_by)
+
+    # ------------------------------------------------------------------
+    # Recently deleted
+    # ------------------------------------------------------------------
+
+    def trashed(self, char_id: str) -> dict | None:
+        """The trash record when this Character is in Recently deleted, else None."""
+        _validate_char_id(char_id)
+        return asset_trash.trashed(_char_root(), char_id)
+
+    def list_trash(self, scope: str | None = None, projectId: str | None = None) -> list[dict]:
+        if projectId is not None:
+            _validate_project_id(projectId)
+        return asset_trash.list_trashed(_char_root(), scope=scope, project_id=projectId)
+
+    def restore(self, char_id: str) -> dict:
+        """Bring a trashed Character back with the same id and contents."""
+        _validate_char_id(char_id)
+        return asset_trash.restore(_char_root(), char_id)
+
+    def purge(self, char_id: str) -> None:
+        """Delete a trashed Character for good. Only the person may (main.py)."""
+        _validate_char_id(char_id)
+        asset_trash.purge(_char_root(), char_id)

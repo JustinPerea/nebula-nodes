@@ -1,6 +1,7 @@
 import { apiFetch, rewriteBackendAssetUrls } from './backend';
 import { resolveProjectId } from './currentProject';
 import type { Character, Moodboard } from '../types';
+import type { TrashedItem } from './trash';
 import type {
   ProviderRecoveryCheckpoint,
   ProviderStartAmbiguity,
@@ -627,9 +628,11 @@ export async function updateCharacter(id: string, body: CharacterUpdateInput): P
   return response.json();
 }
 
-export async function deleteCharacter(id: string): Promise<void> {
-  const response = await apiFetch(`/api/characters/${id}`, { method: 'DELETE' });
+/** Moves the Character to Recently deleted; the result is its trash record. */
+export async function deleteCharacter(id: string): Promise<TrashedItem> {
+  const response = await apiFetch(`/api/characters/${encodeURIComponent(id)}`, { method: 'DELETE' });
   if (!response.ok) throw new Error(`Delete character failed: ${response.status}`);
+  return ((await response.json()) as { trashed: TrashedItem }).trashed;
 }
 
 // ---------------------------------------------------------------------------
@@ -681,7 +684,35 @@ export async function analyzeMoodboard(id: string): Promise<Moodboard> {
   return response.json();
 }
 
-export async function deleteMoodboard(id: string): Promise<void> {
-  const response = await apiFetch(`/api/moodboards/${id}`, { method: 'DELETE' });
+/** Moves the board to Recently deleted; the result is its trash record. */
+export async function deleteMoodboard(id: string): Promise<TrashedItem> {
+  const response = await apiFetch(`/api/moodboards/${encodeURIComponent(id)}`, { method: 'DELETE' });
   if (!response.ok) throw new Error(`Delete moodboard failed: ${response.status}`);
+  return ((await response.json()) as { trashed: TrashedItem }).trashed;
+}
+
+// ---------------------------------------------------------------------------
+// One saved asset as a card shows it: live, in Recently deleted, or gone
+// ---------------------------------------------------------------------------
+
+export type StoredAssetLookup<T> =
+  | { status: 'ready'; asset: T }
+  | { status: 'trashed'; trashed: TrashedItem }
+  | { status: 'missing' };
+
+/** A moodboard or character by id. A 404 whose body says `in_trash` (backend
+ * main.py _asset_not_found) is in Recently deleted and can be restored. */
+export async function lookupStoredAsset<K extends 'moodboard' | 'character'>(
+  kind: K, id: string,
+): Promise<StoredAssetLookup<K extends 'moodboard' ? Moodboard : Character>> {
+  const response = await apiFetch(`/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/${encodeURIComponent(id)}`);
+  if (response.status === 404) {
+    try {
+      const body = await response.json() as { code?: unknown; trashed?: TrashedItem };
+      if (body?.code === 'in_trash' && body.trashed) return { status: 'trashed', trashed: body.trashed };
+    } catch { /* not JSON: plain not found */ }
+    return { status: 'missing' };
+  }
+  if (!response.ok) throw new Error(`Fetch ${kind} failed: ${response.status}`);
+  return { status: 'ready', asset: await response.json() };
 }

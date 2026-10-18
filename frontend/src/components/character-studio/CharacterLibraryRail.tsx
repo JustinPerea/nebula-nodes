@@ -3,11 +3,14 @@ import { fetchCharacters } from '../../lib/api';
 import { backendAssetUrlSync } from '../../lib/backend';
 import type { Character } from '../../types';
 import type { AssetScope } from '../../store/uiStore';
+import { RecentlyDeletedAssets } from '../asset-trash/AssetTrash';
 
 interface CharacterLibraryRailProps {
   /** Currently-open Character id (or the 'new' sentinel for a fresh draft). */
   activeId: string | null;
   initialScope: AssetScope;
+  /** Changes after a delete or undo, so the list loads again. */
+  refreshKey?: unknown;
   onSelect: (id: string, scope: AssetScope) => void;
   onNew: (scope: AssetScope) => void;
 }
@@ -21,6 +24,7 @@ interface CharacterLibraryRailProps {
 export function CharacterLibraryRail({
   activeId,
   initialScope,
+  refreshKey,
   onSelect,
   onNew,
 }: CharacterLibraryRailProps) {
@@ -53,7 +57,7 @@ export function CharacterLibraryRail({
     return () => {
       cancelled = true;
     };
-  }, [scope, activeId]);
+  }, [scope, activeId, refreshKey]);
 
   return (
     <div className="character-rail">
@@ -115,6 +119,8 @@ export function CharacterLibraryRail({
           </button>
         ))}
       </div>
+      <RecentlyDeletedAssets kind="character" scope={scope} refreshKey={`${String(refreshKey)}:${activeId}`}
+        onRestored={(item) => onSelect(item.id, scope)} />
     </div>
   );
 }

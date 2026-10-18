@@ -117,6 +117,19 @@ def actor_label(actor: Mapping[str, Any] | None) -> str:
     return "Unnamed client"
 
 
+def actor_record(actor: Mapping[str, Any] | None) -> dict[str, str]:
+    """Who did something, as a saved record keeps it: ``{kind, name}``.
+
+    Recently deleted (services/asset_trash.py, project_store) uses it for
+    "deleted by". The person shows as "You"; an agent by its name."""
+    actor = actor or {}
+    kind = str(actor.get("kind") or "")
+    if kind not in ("agent", "person", "system"):
+        kind = "anonymous"
+    name = "You" if kind == "person" else actor_label(actor)[:64]
+    return {"kind": kind, "name": name}
+
+
 # -- payload bounds -------------------------------------------------------
 
 def _cap_strings(value: Any) -> Any:
