@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import io
+import ipaddress
+import os
 import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -21,6 +23,7 @@ from PIL import Image
 
 import mcp_server
 import moodboard_client as boards
+from commons import net
 from cli.__main__ import build_parser
 from cli.client import NebulaClient
 from cli.commands import moodboard as moodboard_cmd
@@ -59,22 +62,38 @@ def app(tmp_path, monkeypatch):
     return client
 
 
+# A public address to resolve test hosts to. Downloads go only to public
+# addresses, so a real server on 127.0.0.1 can't stand in for the web.
+PUBLIC_IP = ipaddress.ip_address("93.184.216.34")
+
+
+def _public_resolver(host: str, port: int):
+    """Like net.resolve_pinned, but every name is public: an address in the
+    link still gets the real check."""
+    if net.parse_literal_host(host) is not None:
+        return net.resolve_pinned(host, port)
+    return PUBLIC_IP
+
+
 @pytest.fixture
-def web(tmp_path):
-    """A real HTTP server on a free port, serving tmp_path/web."""
+def web(tmp_path, monkeypatch):
+    """Links on a made-up public host, served from tmp_path/web."""
     root = tmp_path / "web"
     root.mkdir()
 
-    class Quiet(SimpleHTTPRequestHandler):
-        def log_message(self, *args):
-            pass
+    def serve(request: httpx.Request) -> httpx.Response:
+        # The fetcher connects to the address it checked and names the site in Host.
+        assert request.url.host == str(PUBLIC_IP)
+        assert request.headers["host"] == "images.example.com"
+        file = root / request.url.path.lstrip("/")
+        if not file.is_file():
+            return httpx.Response(404)
+        return httpx.Response(200, content=file.read_bytes(), headers={"content-type": "image/png"})
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=str(root)))
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    yield root, f"http://127.0.0.1:{server.server_address[1]}"
-    server.shutdown()
-    server.server_close()
+    download = boards.download_image
+    monkeypatch.setattr(boards, "download_image", lambda url, transport=None, resolver=None: download(
+        url, transport=httpx.MockTransport(serve), resolver=_public_resolver))
+    return root, "https://images.example.com"
 
 
 def _cli(client: NebulaClient, argv: list[str], capsys) -> str:
@@ -249,19 +268,21 @@ def test_download_refuses_what_isnt_a_small_http_image():
         return httpx.Response(404)
 
     transport = _transport(serve)
-    name, data, content_type = boards.download_image("https://example.com/ok.png", transport=transport)
+    get = partial(boards.download_image, transport=transport, resolver=_public_resolver)
+    name, data, content_type = get("https://example.com/ok.png")
     assert (name, data, content_type) == ("ok.png", png, "image/png")
-    assert boards.download_image("https://example.com/hop", transport=transport)[1] == png
+    assert get("https://example.com/hop")[1] == png
 
     for path, message in (("/page", r"not an image \(text/html\)"), ("/liar.png", "isn't a PNG"),
                           ("/huge-declared.png", "over 20 MB"), ("/huge.png", "over 20 MB"),
-                          ("/to-file", "only http and https"), ("/loop", "more than 5 redirects"),
+                          ("/to-file", r"won't download this link \(scheme not allowed"),
+                          ("/loop", r"won't download this link \(too many redirects\)"),
                           ("/gone", "answered 404")):
         with pytest.raises(boards.MoodboardError, match=message):
-            boards.download_image(f"https://example.com{path}", transport=transport)
+            get(f"https://example.com{path}")
     for url in ("file:///etc/passwd", "ftp://example.com/a.png", "https:///nohost.png"):
         with pytest.raises(boards.MoodboardError, match="only http and https"):
-            boards.download_image(url, transport=transport)
+            get(url)
 
 
 def test_download_times_out():
@@ -269,7 +290,91 @@ def test_download_times_out():
         raise httpx.ReadTimeout("slow", request=request)
 
     with pytest.raises(boards.MoodboardError, match="timed out"):
-        boards.download_image("https://example.com/slow.png", transport=_transport(slow))
+        boards.download_image("https://example.com/slow.png", transport=_transport(slow), resolver=_public_resolver)
+
+
+def test_download_never_reaches_this_computer_or_a_private_network():
+    # The security fix: a link can't make this process (the MCP server runs
+    # outside an in-app agent's sandbox) fetch from this machine, its
+    # network, or a cloud metadata address. No request is sent.
+    sent = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        sent.append(str(request.url))
+        return httpx.Response(200, content=_png_bytes(), headers={"content-type": "image/png"})
+
+    transport = _transport(record)
+    for url in ("http://127.0.0.1/a.png", "http://[::1]/a.png", "http://169.254.169.254/latest/meta-data",
+                "http://10.0.0.5/a.png", "http://192.168.1.1/a.png", "http://[::ffff:127.0.0.1]/a.png",
+                "http://[fe80::1]/a.png", "http://0.0.0.0/a.png"):
+        with pytest.raises(boards.MoodboardError, match="this computer or a private network"):
+            boards.download_image(url, transport=transport)
+    # A name that resolves to a private address, and other spellings of an address.
+    with pytest.raises(boards.MoodboardError, match="this computer or a private network"):
+        boards.download_image("http://internal.example/a.png", transport=transport,
+                              resolver=lambda host, port: ipaddress.ip_address("10.1.2.3"))
+    for url in ("http://2130706433/a.png", "http://0x7f.1/a.png"):
+        with pytest.raises(boards.MoodboardError, match="won't download this link"):
+            boards.download_image(url, transport=transport)
+    # Only the usual web ports, and no user name or password in the link.
+    for url in ("https://example.com:8443/a.png", "https://user:pw@example.com/a.png"):
+        with pytest.raises(boards.MoodboardError, match="won't download this link"):
+            boards.download_image(url, transport=transport, resolver=_public_resolver)
+    assert sent == []
+
+
+def test_a_redirect_to_a_private_address_is_refused_before_it_is_followed():
+    sent = []
+
+    def serve(request: httpx.Request) -> httpx.Response:
+        sent.append(request.url.path)
+        target = {"/to-loopback.png": "http://127.0.0.1/api/settings",
+                  "/to-metadata.png": "http://169.254.169.254/latest/meta-data/"}[request.url.path]
+        return httpx.Response(302, headers={"location": target})
+
+    for path in ("/to-loopback.png", "/to-metadata.png"):
+        with pytest.raises(boards.MoodboardError, match="this computer or a private network"):
+            boards.download_image(f"https://example.com{path}", transport=_transport(serve),
+                                  resolver=_public_resolver)
+    assert sent == ["/to-loopback.png", "/to-metadata.png"]
+
+
+def test_a_real_server_on_this_computer_gets_no_request(tmp_path):
+    # End to end with the real network stack: nothing connects.
+    hits = []
+
+    class Recording(SimpleHTTPRequestHandler):
+        def do_GET(self):
+            hits.append(self.path)
+            super().do_GET()
+
+        def log_message(self, *args):
+            pass
+
+    (tmp_path / "a.png").write_bytes(_png_bytes())
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(Recording, directory=str(tmp_path)))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        for host in ("127.0.0.1", "localhost"):
+            with pytest.raises(boards.MoodboardError, match="won't download this link|this computer or a private"):
+                boards.download_image(f"http://{host}:{server.server_address[1]}/a.png")
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert hits == []
+
+
+def test_download_works_inside_a_running_event_loop():
+    # FastMCP calls sync tools on its event loop; the download still runs.
+    def serve(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=_png_bytes(), headers={"content-type": "image/png"})
+
+    async def inside_a_loop():
+        return boards.download_image("https://example.com/a.png", transport=_transport(serve),
+                                     resolver=_public_resolver)
+
+    assert asyncio.run(inside_a_loop())[2] == "image/png"
 
 
 def test_the_backend_has_no_url_fetching_for_boards(app):
@@ -296,6 +401,64 @@ def test_an_in_app_turn_reads_only_its_own_workspace(app, tmp_path, monkeypatch)
         boards.expand_sources([str(outside)])
 
 
+def _in_app_workspace(tmp_path, monkeypatch):
+    from services import agent_workspaces
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    monkeypatch.setattr(agent_workspaces, "active_workspace", lambda: workspace)
+    monkeypatch.setattr(agent_workspaces, "workspace_deny_roots", lambda workdir=None: [])
+    return workspace
+
+
+def test_a_link_inside_a_folder_cant_reach_past_the_workspace(app, tmp_path, monkeypatch):
+    # The security fix: each image found in a folder gets the same checks as
+    # a file named on its own.
+    workspace = _in_app_workspace(tmp_path, monkeypatch)
+    _png(workspace / "refs" / "1-inside.png")
+    outside = _png(tmp_path / "private" / "photo.png")
+    (workspace / "refs" / "2-link.png").symlink_to(outside)
+    with pytest.raises(boards.MoodboardError, match="outside this chat's workspace"):
+        boards.expand_sources(["refs"])
+    with pytest.raises(boards.MoodboardError, match="outside this chat's workspace"):
+        boards.create_board(app.api, "Nope", ["refs"])
+    assert boards.list_boards(app.api) == []
+    # A link that stays inside the workspace is fine.
+    (workspace / "refs" / "2-link.png").unlink()
+    (workspace / "refs" / "2-link.png").symlink_to(workspace / "refs" / "1-inside.png")
+    assert len(boards.expand_sources(["refs"])) == 2
+
+
+def test_a_file_swapped_for_a_link_after_the_check_is_not_read(app, tmp_path, monkeypatch):
+    workspace = _in_app_workspace(tmp_path, monkeypatch)
+    inside = _png(workspace / "inside.png")
+    outside = _png(tmp_path / "private" / "photo.png", (1, 2, 3))
+    [(kind, checked)] = boards.expand_sources(["inside.png"])
+    inside.unlink()
+    inside.symlink_to(outside)
+    with pytest.raises(boards.MoodboardError, match="outside this chat's workspace"):
+        boards._read_local_image(Path(checked), "inside.png")
+
+
+@pytest.mark.skipif(not hasattr(os, "O_NOFOLLOW"), reason="needs O_NOFOLLOW")
+def test_a_folder_swapped_for_a_link_between_check_and_open_fails_the_read(tmp_path, monkeypatch):
+    # The narrowest race: the path passes its checks, then a folder on it
+    # becomes a link before the open. The open follows no links, so it fails.
+    folder = tmp_path / "refs"
+    picture = _png(folder / "a.png")
+    elsewhere = _png(tmp_path / "elsewhere" / "a.png", (5, 5, 5)).parent
+    checked = picture.resolve()
+
+    def swap_then_return(source):
+        folder.rename(tmp_path / "refs-old")
+        folder.symlink_to(elsewhere)
+        return checked
+
+    monkeypatch.setattr(boards, "_local_path", swap_then_return)
+    with pytest.raises(boards.MoodboardError, match="a link took its place"):
+        boards._read_local_image(checked, "refs/a.png")
+
+
 # -- MCP -----------------------------------------------------------------------------
 
 def _tool(name: str):
@@ -307,11 +470,12 @@ def test_mcp_tools_make_change_analyze_and_delete_a_board(app, web, tmp_path):
     (web_root / "a.png").write_bytes(_png_bytes((9, 9, 9)))
     local = _png(tmp_path / "b.png", (90, 30, 30))
 
-    made = mcp_server.moodboard_create("Agent board", [f"{base}/a.png", str(local)], mode="world", strength=0.5)
+    made = asyncio.run(mcp_server.moodboard_create("Agent board", [f"{base}/a.png", str(local)], mode="world",
+                                                   strength=0.5))
     assert made["mode"] == "world" and len(made["images"]) == 2
     assert all(image["url"].startswith("/api/outputs/chat-uploads/") for image in made["images"])
 
-    added = mcp_server.moodboard_add(made["id"], [str(local)])
+    added = asyncio.run(mcp_server.moodboard_add(made["id"], [str(local)]))
     assert added["added"] == 0 and added["duplicatesSkipped"] == 1
 
     updated = mcp_server.moodboard_update(made["id"], images=[{"image": 2, "weight": 0.25, "excluded": True}])
@@ -447,3 +611,20 @@ def test_add_keeps_an_edit_made_while_it_downloaded(app, tmp_path, monkeypatch):
     updated, added, _ = boards.add_to_board(app.api, board["id"], [str(second)])
     assert added == 1
     assert updated["images"][0]["weight"] == 0.3 and len(updated["images"]) == 2
+
+def test_an_in_app_turns_workspace_reaches_the_mcp_tools_worker_thread(app, tmp_path):
+    # moodboard_create/add work off the event loop; the turn's workspace
+    # scope (a context variable) must still confine what they read.
+    from services.agent_workspaces import workspace_scope
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    outside = _png(tmp_path / "outside.png")
+
+    async def go():
+        return await mcp_server.mcp.call_tool("moodboard_create", {"name": "Scoped", "sources": [str(outside)]})
+
+    with workspace_scope(workspace):
+        with pytest.raises(Exception, match="outside this chat's workspace"):
+            asyncio.run(go())
+    assert boards.list_boards(app.api) == []

@@ -744,35 +744,40 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
-def moodboard_create(name: str, sources: list[str] | None = None, project_id: str | None = None,
-                     mode: str = "look", strength: float = 0.7, notes: str = "",
-                     ctx: Context | None = None) -> dict[str, Any]:
+async def moodboard_create(name: str, sources: list[str] | None = None, project_id: str | None = None,
+                           mode: str = "look", strength: float = 0.7, notes: str = "",
+                           ctx: Context | None = None) -> dict[str, Any]:
     """Make a moodboard (it shows in Moodboard Studio) from image sources.
 
     `sources`: local image files, folders (their images, in name order),
     http(s) image links, or Nebula outputs ("/api/outputs/..."). Links are
     downloaded by this server (PNG, JPEG, GIF or WebP, up to 20 MB each), then
-    uploaded to Nebula. `project_id`: keep the board in one project
+    uploaded to Nebula. Only public web links: not this computer, its local
+    network, or ports other than 80 and 443; save such an image as a file. `project_id`: keep the board in one project
     ("current" = the open one); by default every project can use it. `mode`:
     look, world or subject. `strength` and image weights run 0 to 1. Run
     moodboard_analyze after to get its palette and brief.
     """
     import moodboard_client as boards
 
-    board, skipped = _board_call(boards.create_board, _api(), name, sources or [], project=project_id, mode=mode,
-                                 strength=strength, notes=notes, headers=_board_headers(ctx))
+    headers = _board_headers(ctx)
+    # Off the event loop: downloads can take a while.
+    board, skipped = await anyio.to_thread.run_sync(lambda: _board_call(
+        boards.create_board, _api(), name, sources or [], project=project_id, mode=mode,
+        strength=strength, notes=notes, headers=headers))
     return {**boards.brief(board), "duplicatesSkipped": skipped}
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
-def moodboard_add(board: str, sources: list[str], ctx: Context | None = None) -> dict[str, Any]:
+async def moodboard_add(board: str, sources: list[str], ctx: Context | None = None) -> dict[str, Any]:
     """Add images to a moodboard: files, folders, http(s) image links or Nebula
     outputs, as in moodboard_create. Images already on the board are skipped.
     Adding clears the board's analysis; run moodboard_analyze again."""
     import moodboard_client as boards
 
-    updated, added, skipped = _board_call(boards.add_to_board, _api(), board, sources,
-                                          headers=_board_headers(ctx))
+    headers = _board_headers(ctx)
+    updated, added, skipped = await anyio.to_thread.run_sync(lambda: _board_call(
+        boards.add_to_board, _api(), board, sources, headers=headers))
     return {**boards.brief(updated), "added": added, "duplicatesSkipped": skipped}
 
 

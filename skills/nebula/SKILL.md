@@ -139,6 +139,8 @@ nebula moodboard delete <board>
 - Images can be files, folders (their images in name order), http(s) image
   links, or Nebula outputs (`/api/outputs/...`). Links are downloaded on your
   machine (PNG, JPEG, GIF or WebP, up to 20 MB), then uploaded to Nebula.
+  Only public web links work: not this computer, its local network, or ports
+  other than 80 and 443. For those, save the image and add the file.
 - Name a board by its id or exact name, and an image by its number or id
   from `show`.
 - Weights and strength run from 0 to 1. `--exclude` keeps an image on the

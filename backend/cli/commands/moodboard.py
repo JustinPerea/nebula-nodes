@@ -201,7 +201,8 @@ def add_parser(sub) -> None:
         "moodboard", help="Make and change moodboards (the boards in Moodboard Studio)",
         description=(
             "Images can be files, folders (their images, in name order), http(s) links or Nebula outputs "
-            "(/api/outputs/...). Links are downloaded here, on this machine, then uploaded to Nebula. "
+            "(/api/outputs/...). Links are downloaded here, on this machine, then uploaded to Nebula; "
+            "only public web links work (not this computer or its network; ports 80 and 443). "
             "Name an image on a board by its number or id from `nebula moodboard show`."))
     msub = moodboard_p.add_subparsers(dest="moodboard_cmd", required=True)
 

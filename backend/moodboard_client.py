@@ -10,14 +10,19 @@ A source is one of:
 
 - a local image file, read by this process with its own permissions
   (`require_allowed_path`). With an in-app chat's turn token, only files in
-  that turn's workspace.
+  that turn's workspace. The check runs again when the file is read, and the
+  read follows no links, so a link swapped in between can't leave it.
 - a folder: the images directly inside it, sorted by name the way a person
   reads them ("2.png" before "10.png"). Hidden files and subfolders are
-  skipped.
+  skipped. Each image is checked like a single file, so a link inside the
+  folder can't reach past the workspace.
 - an http(s) URL. This process downloads it (decision D6: the backend never
-  fetches URLs for boards): http and https only, at most MAX_IMAGE_BYTES, an
-  image content type only, and a time limit. The bytes then go through
-  `/api/uploads` like a local file.
+  fetches URLs for boards) through Commons' guarded fetcher (commons/net.py):
+  public internet addresses only, checked on every redirect and connected to
+  the address that was checked (so neither this computer, its network, nor a
+  cloud metadata address), ports 80 and 443, no user name or password in the
+  link, at most MAX_IMAGE_BYTES, an image content type only, and a time
+  limit. The bytes then go through `/api/uploads` like a local file.
 - a Nebula output URL (`/api/outputs/...`), such as a node's result, used as is.
 
 Board edits follow Moodboard Studio: any change to images, notes, mode or
@@ -26,28 +31,32 @@ keeps it.
 """
 from __future__ import annotations
 
+import asyncio
+import contextvars
+import errno
+import os
 import re
-import time
+import stat
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable
-from urllib.parse import quote, unquote, urljoin, urlsplit
+from typing import Any, Callable, Coroutine, Iterable
+from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 
+from commons import net
 from nebula_api import NebulaAPI, NebulaAPIError
 
 # The backend's own cap for an uploaded image (MAX_CHAT_UPLOAD_BYTES).
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 # One download may take this long in all, redirects included.
 DOWNLOAD_SECONDS = 60.0
-DOWNLOAD_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
-MAX_REDIRECTS = 5
 MODES = ("look", "world", "subject")
 # The image types /api/uploads accepts, by content type and by file name.
 IMAGE_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+_ACCEPT = ",".join(IMAGE_TYPES)
 _BOARD_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-_USER_AGENT = "NebulaNodes (moodboard import; +https://github.com/JustinPerea/nebula-nodes)"
 
 
 class MoodboardError(ValueError):
@@ -88,52 +97,62 @@ def _check_web_url(url: str) -> None:
         raise MoodboardError(f"{url}: only http and https links can be added")
 
 
-def download_image(url: str, *, transport: httpx.BaseTransport | None = None) -> tuple[str, bytes, str]:
-    """Download one image: (file name, bytes, content type). Refuses anything
-    but http(s), a non-image content type, bytes that aren't an image, more
-    than MAX_IMAGE_BYTES, and a download slower than DOWNLOAD_SECONDS.
-    Redirects are followed by hand so each hop is checked too."""
+def _run(coroutine: Coroutine[Any, Any, Any]) -> Any:
+    """Run a coroutine from sync code, also when this thread already runs an
+    event loop (FastMCP calls sync tools on its loop)."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coroutine)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(contextvars.copy_context().run, asyncio.run, coroutine).result()
+
+
+def download_image(url: str, *, transport: httpx.AsyncBaseTransport | None = None,
+                   resolver: Callable[[str, int], Any] | None = None) -> tuple[str, bytes, str]:
+    """Download one image: (file name, bytes, content type), through
+    `commons.net.safe_fetch`, the fetcher Commons uses for links. It refuses
+    any address off the public internet (this computer, its local network,
+    link-local addresses such as cloud metadata) on every redirect, connects
+    to the address it checked, and allows ports 80 and 443 only. Here we add:
+    an image content type and image bytes, at most MAX_IMAGE_BYTES, and
+    DOWNLOAD_SECONDS for the whole download. `transport` and `resolver` are
+    for tests."""
     _check_web_url(url)
-    deadline = time.monotonic() + DOWNLOAD_SECONDS
-    current = url
-    with httpx.Client(follow_redirects=False, timeout=DOWNLOAD_TIMEOUT, transport=transport,
-                      headers={"Accept": "image/png,image/jpeg,image/gif,image/webp", "User-Agent": _USER_AGENT}) as http:
-        for _hop in range(MAX_REDIRECTS + 1):
-            try:
-                with http.stream("GET", current) as response:
-                    if response.is_redirect:
-                        location = response.headers.get("location", "")
-                        current = urljoin(current, location)
-                        _check_web_url(current)
-                        continue
-                    if response.status_code >= 400:
-                        raise MoodboardError(f"{url}: the server answered {response.status_code}")
-                    content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
-                    if content_type not in IMAGE_TYPES:
-                        shown = content_type or "no content type"
-                        raise MoodboardError(f"{url}: not an image ({shown}). Link to the image itself, "
-                                             "not the page it's on.")
-                    declared = response.headers.get("content-length", "")
-                    if declared.isdigit() and int(declared) > MAX_IMAGE_BYTES:
-                        raise MoodboardError(f"{url}: the image is over {MAX_IMAGE_BYTES // (1024 * 1024)} MB")
-                    data = bytearray()
-                    for chunk in response.iter_bytes():
-                        data.extend(chunk)
-                        if len(data) > MAX_IMAGE_BYTES:
-                            raise MoodboardError(f"{url}: the image is over {MAX_IMAGE_BYTES // (1024 * 1024)} MB")
-                        if time.monotonic() > deadline:
-                            raise MoodboardError(f"{url}: the download took over {DOWNLOAD_SECONDS:.0f} seconds")
-            except httpx.TimeoutException as exc:
-                raise MoodboardError(f"{url}: the download timed out") from exc
-            except httpx.HTTPError as exc:
-                raise MoodboardError(f"{url}: the download failed ({exc})") from exc
-            sniffed = sniff_image(bytes(data))
-            if sniffed is None:
-                raise MoodboardError(f"{url}: the file isn't a PNG, JPEG, GIF or WebP image")
-            stem = PurePosixPath(unquote(urlsplit(current).path)).stem or "image"
-            name = re.sub(r"[^A-Za-z0-9._-]", "-", stem)[:80] + IMAGE_TYPES[sniffed]
-            return name, bytes(data), sniffed
-    raise MoodboardError(f"{url}: more than {MAX_REDIRECTS} redirects")
+    mb = MAX_IMAGE_BYTES // (1024 * 1024)
+    fetch = net.safe_fetch(url, max_bytes=MAX_IMAGE_BYTES, accept=_ACCEPT,
+                           resolver=resolver or net.resolve_pinned, transport=transport)
+    try:
+        fetched = _run(asyncio.wait_for(fetch, DOWNLOAD_SECONDS))
+    except net.BlockedAddress as exc:
+        raise MoodboardError(f"{url}: the link leads to this computer or a private network ({exc}), which "
+                             "Nebula never downloads from. Save the image and add the file instead.") from exc
+    except net.FetchBlocked as exc:
+        raise MoodboardError(f"{url}: Nebula won't download this link ({exc}). Only public http and https "
+                             "links on ports 80 and 443 work; for anything else, save the image and add "
+                             "the file.") from exc
+    except net.FetchTooLarge as exc:
+        raise MoodboardError(f"{url}: the image is over {mb} MB") from exc
+    except net.FetchStatus as exc:
+        raise MoodboardError(f"{url}: the server answered {exc.status}") from exc
+    except net.FetchError as exc:
+        raise MoodboardError(f"{url}: the download failed ({exc})") from exc
+    except TimeoutError as exc:  # asyncio.wait_for
+        raise MoodboardError(f"{url}: the download took over {DOWNLOAD_SECONDS:.0f} seconds") from exc
+    except httpx.TimeoutException as exc:
+        raise MoodboardError(f"{url}: the download timed out") from exc
+    except httpx.HTTPError as exc:
+        raise MoodboardError(f"{url}: the download failed ({exc})") from exc
+    content_type = fetched.content_type.split(";")[0].strip().lower()
+    if content_type not in IMAGE_TYPES:
+        shown = content_type or "no content type"
+        raise MoodboardError(f"{url}: not an image ({shown}). Link to the image itself, not the page it's on.")
+    sniffed = sniff_image(fetched.data)
+    if sniffed is None:
+        raise MoodboardError(f"{url}: the file isn't a PNG, JPEG, GIF or WebP image")
+    stem = PurePosixPath(unquote(urlsplit(fetched.final_url).path)).stem or "image"
+    name = re.sub(r"[^A-Za-z0-9._-]", "-", stem)[:80] + IMAGE_TYPES[sniffed]
+    return name, fetched.data, sniffed
 
 
 # -- sources -> board image urls ---------------------------------------------
@@ -166,17 +185,50 @@ def _local_path(source: str) -> Path:
     return resolved
 
 
-def _read_local_image(path: Path, shown: str) -> tuple[str, bytes, str]:
-    from services.file_access import ProtectedPathError, require_allowed_path
+_NO_FOLLOW = getattr(os, "O_NOFOLLOW", 0)
+_CLOEXEC = getattr(os, "O_CLOEXEC", 0)
 
+
+def _open_no_follow(path: Path) -> int:
+    """Open a resolved path for reading, one folder at a time, following no
+    links: a link put in place since the path was checked fails the open
+    instead of leading somewhere else. Where the OS can't do this (no
+    O_NOFOLLOW or dir_fd), a plain open of the path just checked."""
+    if not _NO_FOLLOW or os.open not in os.supports_dir_fd:
+        return os.open(path, os.O_RDONLY | _CLOEXEC)
+    folder = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY | _CLOEXEC)
     try:
-        path = require_allowed_path(path)
-    except ProtectedPathError as exc:
-        raise MoodboardError(f"{shown}: {exc}") from exc
-    size = path.stat().st_size
-    if size > MAX_IMAGE_BYTES:
-        raise MoodboardError(f"{shown}: the image is over {MAX_IMAGE_BYTES // (1024 * 1024)} MB")
-    data = path.read_bytes()
+        for part in path.parts[1:-1]:
+            inner = os.open(part, os.O_RDONLY | os.O_DIRECTORY | _NO_FOLLOW | _CLOEXEC, dir_fd=folder)
+            os.close(folder)
+            folder = inner
+        return os.open(path.name, os.O_RDONLY | _NO_FOLLOW | _CLOEXEC, dir_fd=folder)
+    finally:
+        os.close(folder)
+
+
+def _read_local_image(path: Path, shown: str) -> tuple[str, bytes, str]:
+    # Check again at read time: the same rules as when the source was named
+    # (protected storage, and an in-app turn's workspace), on the path as it
+    # resolves now.
+    path = _local_path(str(path))
+    mb = MAX_IMAGE_BYTES // (1024 * 1024)
+    try:
+        descriptor = _open_no_follow(path)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise MoodboardError(f"{shown}: the file changed while it was being read (a link took its place). "
+                                 "Add it again.") from exc
+        raise MoodboardError(f"{shown}: can't read the file ({exc.strerror})") from exc
+    with os.fdopen(descriptor, "rb") as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise MoodboardError(f"{shown}: not a file")
+        if info.st_size > MAX_IMAGE_BYTES:
+            raise MoodboardError(f"{shown}: the image is over {mb} MB")
+        data = handle.read(MAX_IMAGE_BYTES + 1)
+    if len(data) > MAX_IMAGE_BYTES:
+        raise MoodboardError(f"{shown}: the image is over {mb} MB")
     content_type = sniff_image(data)
     if content_type is None:
         raise MoodboardError(f"{shown}: not a PNG, JPEG, GIF or WebP image")
@@ -232,7 +284,10 @@ def expand_sources(sources: Iterable[str]) -> list[tuple[str, str]]:
             images = folder_images(path)
             if not images:
                 raise MoodboardError(f"{source}: no PNG, JPEG, GIF or WebP images in this folder")
-            expanded.extend(("file", str(image)) for image in images)
+            # Each image passes the same checks as a file named on its own:
+            # a link in the folder can't lead past protected storage or the
+            # chat's workspace.
+            expanded.extend(("file", str(_local_path(str(image)))) for image in images)
         elif path.is_file():
             expanded.append(("file", str(path)))
         else:
@@ -241,7 +296,7 @@ def expand_sources(sources: Iterable[str]) -> list[tuple[str, str]]:
 
 
 def source_urls(api: NebulaAPI, sources: Iterable[str], *, headers: dict[str, str] | None = None,
-                transport: httpx.BaseTransport | None = None) -> list[str]:
+                transport: httpx.AsyncBaseTransport | None = None) -> list[str]:
     """Board image URLs for `sources`, in order. Downloads and reads everything
     first, then uploads, so one bad source leaves Nebula untouched."""
     headers = dict(headers or {})
@@ -335,7 +390,7 @@ def _unique_new(existing: list[dict[str, Any]], urls: list[str]) -> tuple[list[s
 def create_board(api: NebulaAPI, name: str, sources: Iterable[str] = (), *, project: str | None = None,
                  mode: str = "look", strength: float = 0.7, notes: str = "",
                  headers: dict[str, str] | None = None,
-                 transport: httpx.BaseTransport | None = None) -> tuple[dict[str, Any], int]:
+                 transport: httpx.AsyncBaseTransport | None = None) -> tuple[dict[str, Any], int]:
     """A new board with `sources`; returns (board, duplicates skipped)."""
     name = str(name or "").strip()
     if not name:
@@ -356,7 +411,7 @@ def create_board(api: NebulaAPI, name: str, sources: Iterable[str] = (), *, proj
 
 
 def add_to_board(api: NebulaAPI, ref: str, sources: Iterable[str], *, headers: dict[str, str] | None = None,
-                 transport: httpx.BaseTransport | None = None) -> tuple[dict[str, Any], int, int]:
+                 transport: httpx.AsyncBaseTransport | None = None) -> tuple[dict[str, Any], int, int]:
     """Append `sources`; returns (board, images added, duplicates skipped)."""
     board = get_board(api, ref, headers)  # fail on a wrong board before downloading anything
     urls = source_urls(api, sources, headers=headers, transport=transport)

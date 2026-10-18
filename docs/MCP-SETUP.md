@@ -976,13 +976,20 @@ nebula moodboard delete <board>
   so `2.png` comes before `10.png`), http(s) links or Nebula outputs
   (`/api/outputs/...`, used as they are).
 - Links are downloaded by the CLI or the MCP server process, never by the
-  backend: http and https only, redirects checked hop by hop (5 at most), a
+  backend, with the guarded fetcher Commons uses for links
+  (`backend/commons/net.py`): public web addresses only, so never this
+  computer, its local network or a cloud metadata address (checked on every
+  redirect, 3 at most, and the connection goes to the address that was
+  checked); ports 80 and 443; no user name or password in the link. Then a
   PNG, JPEG, GIF or WebP content type whose bytes match, 20 MB at most, 60
-  seconds in all. The bytes then go through `POST /api/uploads`, like
-  Moodboard Studio's Add Images. Everything is read and downloaded before
-  the first upload, so one bad source changes nothing.
+  seconds in all. For an image anywhere else, save it and add the file. The
+  bytes go through `POST /api/uploads`, like Moodboard Studio's Add Images.
+  Everything is read and downloaded before the first upload, so one bad
+  source changes nothing.
 - An in-app chat's turn reads local files only from its own workspace (as
-  with Commons); a relative path means that workspace.
+  with Commons); a relative path means that workspace. Every image found in
+  a folder is checked the same way, and the check runs again when the file
+  is read (which follows no links), so a link can't lead outside it.
 - Like Moodboard Studio, any change but a rename clears the board's
   analysis, so run `analyze` again. `--remove` takes an image off the board;
   its file stays, and the command prints the URL to add it back.
