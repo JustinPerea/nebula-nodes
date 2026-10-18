@@ -2124,9 +2124,14 @@ async function reconcilePendingNodeCreation(
 /**
  * The undo step for a graphSync, as store fields, or nothing. A sync becomes
  * one step when a graph edit caused it (`edit`) and this tab didn't send that
- * edit: an agent's, another window's, an outside app's. Not steps: run
- * results and status (no `edit`), this tab's own echoes (they already have
- * their step), and a whole new graph on project open or switch.
+ * edit: an agent's, another window's, an outside app's. That includes an
+ * import into the open project (`nebula graph load`, a file loaded in another
+ * window): the backend marks it an edit, and undoing it puts the whole canvas
+ * back, frontend-only nodes too. Not steps: run results and status (no
+ * `edit`), this tab's own echoes (they already have their step), and a whole
+ * new graph on project open or switch. A replacement that isn't a step
+ * empties both stacks: their steps describe a graph that is gone, and undoing
+ * one would now write that graph into this one.
  */
 function foreignEditStep(
   state: GraphState,
@@ -2136,8 +2141,13 @@ function foreignEditStep(
   graphReplaced: boolean,
   moved: string[],
 ): Partial<GraphState> {
-  if (!origin || graphReplaced || isOwnEcho(origin, TAB_ID)) return {};
-  const change = diffCanvas(state.nodes, state.edges, nextNodes, nextEdges, new Set(moved));
+  if (origin && isOwnEcho(origin, TAB_ID)) return {};
+  if (!origin) return graphReplaced ? { undoStack: [], redoStack: [] } : {};
+  // A replacement puts every node where the new graph has it.
+  const movedIds = graphReplaced
+    ? new Set([...state.nodes, ...nextNodes].map((node) => node.id))
+    : new Set(moved);
+  const change = diffCanvas(state.nodes, state.edges, nextNodes, nextEdges, movedIds);
   if (!change) return {};
   const source = foreignSource(origin);
   const entry: ForeignEdit = {

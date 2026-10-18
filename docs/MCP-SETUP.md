@@ -834,8 +834,8 @@ is the CLI twin (see below).
 #### The person can undo any agent edit
 
 Every graph edit an agent makes (`edit_canvas`, `remove_from_canvas`,
-`nebula apply`, `set`, `create`, `delete`, `wire`, `move`, the layout route)
-is one undo step on each open canvas. The canvas shows "Claude changed the
+`nebula apply`, `set`, `create`, `delete`, `wire`, `move`, `nebula graph
+load`, the layout route) is one undo step on each open canvas. The canvas shows "Claude changed the
 canvas" with an Undo button, and Cmd-Z works too. Undo puts back exactly
 what that edit changed: deleted nodes come back with their params, outputs,
 name and wires, and new nodes go away with their wires. Redo (Cmd-Shift-Z)
@@ -846,8 +846,12 @@ How it works: a graphSync caused by an edit request carries `edit` =
 `{actor, tab?}`. `actor` is the request's journal actor (a named agent, the
 person, or anonymous). `tab` is the canvas tab that sent it (`X-Nebula-Tab`,
 set by the canvas on every write), so that tab skips the echo of its own
-edit. Run results and status syncs carry no `edit`, and a whole new graph
-(project open or switch) is never an undo step. Undo and redo then send what
+edit. An agent never gets a `tab`, even if it sends the header. Run
+results and status syncs carry no `edit`, and opening, creating or switching
+a project is never an undo step. Loading a graph into the open project
+(`nebula graph load`) is: undo puts the whole canvas back, and since a load
+hands out ids from n1 again, the restore swaps any id that now holds a
+different model. Undo and redo then send what
 changed to `POST /api/graph/restore`, so the backend graph, the saved
 project and every other canvas match. The restore is journaled as whoever
 the canvas is (`Person` when the tab is connected as you), with "(undo)" or

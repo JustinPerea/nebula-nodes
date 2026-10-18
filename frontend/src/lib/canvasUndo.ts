@@ -232,6 +232,12 @@ export function applySlice(
       removed.add(node.id);
       continue;
     }
+    if (wanted.data.definitionId !== node.data.definitionId) {
+      // The id holds another model now (an import gave it out again): put the
+      // old node back whole, with its own results.
+      nextNodes.push(keep(wanted));
+      continue;
+    }
     const runtime = Object.fromEntries(RUNTIME_FIELDS.map((field) => [field, node.data[field]]));
     const movedHere = !samePosition(target.nodes[node.id], other.nodes[node.id]);
     nextNodes.push({
@@ -298,7 +304,11 @@ export function restoreRequest(
   for (const [id, now] of nextById) {
     const was = prevById.get(id);
     if (was === now) continue;
-    if (!was) {
+    const swapped = Boolean(was) && was!.data.definitionId !== now.data.definitionId;
+    if (!was || swapped) {
+      // Back whole. A swapped id (it holds another model now, after an
+      // import) is also listed in `remove`, so the backend swaps the two.
+      if (swapped) body.remove.push(id);
       body.nodes.push({ id, definitionId: now.data.definitionId, params: now.data.params, label: now.data.label,
         position: { ...now.position }, outputs: now.data.outputs ?? {} });
       continue;
@@ -315,7 +325,9 @@ export function restoreRequest(
   const nextWires = nextEdges.filter(backendWire);
   const gone = new Set(body.remove);
   for (const edge of nextWires) {
-    if (!prevWires.some((other) => sameEdge(edge, other))) body.wire.push(wire(edge));
+    // A swapped node loses all its wires on the backend, so send its wires even when they look unchanged.
+    const replugged = gone.has(edge.source) || gone.has(edge.target);
+    if (replugged || !prevWires.some((other) => sameEdge(edge, other))) body.wire.push(wire(edge));
   }
   for (const edge of prevWires) {
     if (gone.has(edge.source) || gone.has(edge.target)) continue;

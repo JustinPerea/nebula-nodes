@@ -156,14 +156,48 @@ describe("an agent's edit is one undo step", () => {
   });
 });
 
+describe("an agent's import (nebula graph load) is one undo step", () => {
+  it('undo puts the whole canvas back, swapping ids the import gave to other models', async () => {
+    const { nodes, edges } = start();
+    const sketch = { ...textNode('frontend-sketch', 'kept here'), id: 'b5c0ffee-0000-4000-8000-000000000001' };
+    useGraphStore.setState({ nodes: [...nodes, sketch], edges });
+    // The import restarts ids at n1: n1 is a Nano Banana now.
+    sync([imageNode('n1')], [], { graphReplaced: true, edit: CLAUDE });
+    expect(ids()).toEqual(['n1']);
+    expect(useGraphStore.getState().undoNotice?.text).toBe('Claude changed the canvas');
+
+    useGraphStore.getState().undo();
+    expect(ids()).toEqual(['b5c0ffee-0000-4000-8000-000000000001', 'n1', 'n2']);
+    expect(nodeById('n1')?.data.definitionId).toBe('text-input');
+    expect(nodeById('n1')?.data.outputs).toEqual({ text: { type: 'Text', value: 'a lighthouse' } });
+    expect(useGraphStore.getState().edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual(['n1->n2']);
+    await flush();
+    const [body] = restores();
+    expect(body.remove).toEqual(['n1']);
+    expect(body.nodes.map((node) => [node.id, node.definitionId])).toEqual([['n1', 'text-input'], ['n2', 'nano-banana']]);
+    expect(body.wire).toEqual([{ source: 'n1', sourceHandle: 'text', target: 'n2', targetHandle: 'prompt' }]);
+  });
+});
+
 describe('what is not an undo step', () => {
   it('this tab\'s own echo, run results, and a project switch', () => {
     const { nodes, edges } = start();
     sync([...nodes, textNode('n3', 'mine')], edges, { edit: { actor: { kind: 'person' }, tab: TAB_ID } });
     sync([textNode('n1', 'a lighthouse', { outputs: { text: { type: 'Text', value: 'x' } } }), nodes[1]], edges);
-    sync([textNode('n7', 'other project')], [], { graphReplaced: true, edit: CLAUDE });
+    // The backend never marks a project open or switch as an edit.
+    sync([textNode('n7', 'other project')], [], { graphReplaced: true });
     expect(useGraphStore.getState().undoStack).toHaveLength(0);
     expect(useGraphStore.getState().undoNotice).toBeNull();
+  });
+
+  it('a replacement that is not an edit drops steps that describe the old graph', () => {
+    const { nodes, edges } = start();
+    sync([...nodes, textNode('n3', 'fog')], edges, { edit: CLAUDE });
+    expect(useGraphStore.getState().undoStack).toHaveLength(1);
+    sync([textNode('n1', 'other project')], [], { graphReplaced: true });
+    expect(useGraphStore.getState().undoStack).toHaveLength(0);
+    useGraphStore.getState().undo();
+    expect(restores()).toHaveLength(0);
   });
 
   it('an edit that changed nothing on this canvas', () => {

@@ -6243,7 +6243,10 @@ def _graph_edit_origin() -> dict[str, Any]:
     actor = actor_for_headers(headers)
     origin: dict[str, Any] = {"actor": {key: actor[key] for key in ("kind", "id", "name", "color") if key in actor}}
     tab = next((value for key, value in headers.items() if key.lower() == "x-nebula-tab"), None)
-    if isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab):
+    # A named agent is never a canvas tab: a tab id read off an earlier
+    # graphSync must not let an agent's edit pass as a tab's own echo, which
+    # would keep it off the person's undo stack.
+    if actor.get("kind") != "agent" and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab):
         origin["tab"] = tab
     return origin
 
@@ -6261,7 +6264,10 @@ async def _broadcast_graph_sync(
     it reloaded.
     `edit` marks a sync caused by a graph edit request (not a run's outputs or
     status): the sync carries ``edit`` = {actor, tab?} (_graph_edit_origin),
-    and an open canvas that didn't send it makes it one undo step.
+    and an open canvas that didn't send it makes it one undo step. A
+    replacement carries it only for an import into the open project (``nebula
+    graph load``, a file loaded in another window), which is an edit like any
+    other; opening, creating or deleting a project is not.
     """
     export = await export_graph_for_frontend()
     if graph_replaced:
@@ -6270,7 +6276,8 @@ async def _broadcast_graph_sync(
     await manager.broadcast_raw({"type": "graphSync", **export,
                                  **({"graphReplaced": True} if graph_replaced else {}),
                                  **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
-                                 **({"edit": _graph_edit_origin()} if edit and not graph_replaced else {})})
+                                 **({"edit": _graph_edit_origin()}
+                                    if edit and (not graph_replaced or reason == "import") else {})})
     if graph_replaced:
         # Tag, don't reset: seq stays monotonic, and the new project id rides
         # on this event and every one after it.
@@ -8011,8 +8018,11 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
     A node in ``nodes`` that exists gets the params (replaced, not merged),
     name and position the item carries; a key the item leaves out is left as
     it is, and the node keeps its current outputs. One that doesn't exist
-    comes back under the same id, with the outputs sent. Removing a node that
-    is already gone, or a wire that isn't there, is not an error, so two tabs
+    comes back under the same id, with the outputs sent. An id listed in both
+    ``remove`` and ``nodes`` is swapped: whatever holds it now goes, and the
+    node sent comes back there (undoing an import, which gives ids out
+    again). Without that, an id that now holds a different model is refused
+    (409). Removing a node that is already gone, or a wire that isn't there, is not an error, so two tabs
     undoing the same step agree. Staged on a copy (unwire, remove, nodes,
     wire) with the checks single edits use, then committed at once. Never
     runs anything. Anyone can call it, agents too: it is itself undoable.
@@ -8033,7 +8043,10 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
         node_id = raw.get("id")
         if not isinstance(node_id, str) or SHORT_ID_RE.fullmatch(node_id) is None:
             raise HTTPException(status_code=400, detail=f"nodes[{index}].id must be a node id like n3")
-        if node_id in seen_ids or node_id in raw_remove:
+        # An id in both ``remove`` and ``nodes`` is a swap: the id holds a
+        # different model now (an import gave it out again), so the node
+        # there goes and the one sent comes back in its place.
+        if node_id in seen_ids:
             raise HTTPException(status_code=400, detail=f"{node_id} is listed twice")
         seen_ids.add(node_id)
     note = f" ({action})"
@@ -8670,7 +8683,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
             list(candidate.nodes.values()),
             source="import",
         )
-    exported = await _broadcast_graph_sync(graph_replaced=True)
+    exported = await _broadcast_graph_sync(graph_replaced=True, edit=True)
     publish_action(
         f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
     )

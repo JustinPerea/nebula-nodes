@@ -136,6 +136,50 @@ def test_every_direct_edit_route_marks_its_sync_as_an_edit(api):
         assert _syncs(api)[-1]["edit"]["actor"]["name"] == "Claude"
 
 
+def test_an_agent_cannot_pass_its_edit_off_as_a_tab_echo(api):
+    prompt, _ = _seed(api)
+    # A tab id an agent read off an earlier graphSync, sent with its own name.
+    api.client.put(f"/api/graph/node/{prompt}", headers={**AGENT, "X-Nebula-Tab": TAB},
+                   json={"params": {"value": "x"}})
+    edit = _syncs(api)[-1]["edit"]
+    assert edit["actor"]["name"] == "Claude"
+    assert "tab" not in edit
+
+
+def test_an_agent_import_is_an_edit_the_canvas_can_undo(api):
+    _seed(api)
+    response = api.client.post("/api/graph/import", headers=AGENT, json={
+        "nodes": [{"id": "a", "definitionId": "nano-banana", "params": {}}], "edges": [],
+    })
+    assert response.status_code == 200, response.text
+    sync = _syncs(api)[-1]
+    assert sync["graphReplaced"] is True
+    assert sync["edit"]["actor"]["name"] == "Claude"
+
+
+def test_undoing_an_import_swaps_ids_that_now_hold_another_model(api):
+    prompt, image = _seed(api)
+    api.graph.nodes[prompt]["outputs"] = {"text": {"type": "Text", "value": "a lighthouse"}}
+    api.client.post("/api/graph/import", headers=AGENT, json={
+        "nodes": [{"id": "a", "definitionId": "nano-banana", "params": {}}], "edges": [],
+    })
+    assert api.graph.nodes["n1"]["definitionId"] == "nano-banana"
+    response = _restore(api, {
+        "remove": ["n1"],
+        "nodes": [
+            {"id": prompt, "definitionId": "text-input", "params": {"value": "a lighthouse"},
+             "position": {"x": 0, "y": 0}, "outputs": {"text": {"type": "Text", "value": "a lighthouse"}}},
+            {"id": image, "definitionId": "nano-banana", "params": {}, "position": {"x": 400, "y": 0}},
+        ],
+        "wire": [{"source": prompt, "sourceHandle": "text", "target": image, "targetHandle": "prompt"}],
+    })
+    assert response.status_code == 200, response.text
+    assert api.graph.nodes[prompt]["definitionId"] == "text-input"
+    assert api.graph.nodes[prompt]["params"] == {"value": "a lighthouse"}
+    assert api.graph.nodes[prompt]["outputs"]["text"]["value"] == "a lighthouse"
+    assert _wires(api) == {(prompt, "text", image, "prompt")}
+
+
 def test_a_project_switch_sync_is_not_an_edit(api):
     import asyncio
 
@@ -273,7 +317,8 @@ def test_bad_bodies_are_refused(api):
     assert _restore(api, {"action": "rewind"}).status_code == 400
     assert _restore(api, {"nodes": [{"id": "abc", "definitionId": "text-input"}]}).status_code == 400
     assert _restore(api, {"remove": "n1"}).status_code == 400
-    assert _restore(api, {"nodes": [{"id": "n1", "definitionId": "text-input"}], "remove": ["n1"]}).status_code == 400
+    assert _restore(api, {"nodes": [{"id": "n1", "definitionId": "text-input"},
+                                    {"id": "n1", "definitionId": "text-input"}]}).status_code == 400
 
 
 def test_the_journal_records_the_undo_as_the_person(api):
