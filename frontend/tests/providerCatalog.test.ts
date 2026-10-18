@@ -34,13 +34,13 @@ describe('provider catalog', () => {
     expect(nodesForKey('BYTEPLUS_API_KEY').map((node) => node.id)).toContain('seedream-4-5');
   });
 
-  it('offers the Black Forest Labs key for the FLUX 3 nodes it is the maker route of', () => {
+  it('offers the Black Forest Labs key for the FLUX 3 and FLUX.2 nodes it is the maker route of', () => {
     const bfl = PROVIDER_KEYS.find((spec) => spec.key === 'BFL_API_KEY')!;
     expect(bfl).toMatchObject({ label: 'Black Forest Labs', url: 'https://dashboard.bfl.ai' });
     expect(nodesForKey('BFL_API_KEY').map((node) => node.id).sort()).toEqual([
-      'flux-3-image', 'flux-3-image-klein', 'flux-3-video', 'flux-video-edit', 'flux-video-upscale',
+      'flux-2-pro', 'flux-3-image', 'flux-3-image-klein', 'flux-3-video', 'flux-video-edit', 'flux-video-upscale',
     ]);
-    expect(unlockSummary(bfl, 'add')).toMatch(/^5 nodes: /);
+    expect(unlockSummary(bfl, 'add')).toMatch(/^6 nodes: /);
     expect(PROVIDER_KEY_LABELS.BFL_API_KEY).toBe('Black Forest Labs');
   });
 
@@ -59,8 +59,8 @@ describe('provider catalog', () => {
       for (const name of unlockNames(spec)) expect(name, `${spec.key}: ${name}`).not.toMatch(/^\d/);
     }
     const fal = PROVIDER_KEYS.find((spec) => spec.key === 'FAL_KEY')!;
-    expect(unlockSummary(fal, 'add')).toMatch(new RegExp(`^${unlockCount(fal)} nodes: Kling V3, FLUX 2 Pro`));
-    expect(unlockSummary(fal, 'connected')).toMatch(/^Kling V3, FLUX 2 Pro, .* \+\d+$/);
+    expect(unlockSummary(fal, 'add')).toMatch(new RegExp(`^${unlockCount(fal)} nodes: Kling V3, FLUX\\.2,`));
+    expect(unlockSummary(fal, 'connected')).toMatch(/^Kling V3, FLUX\.2, .* \+\d+$/);
   });
 
   it('finds providers by the models they run', () => {

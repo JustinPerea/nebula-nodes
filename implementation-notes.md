@@ -76,9 +76,13 @@ Added Claude Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5, GPT-6 Astra / GPT-6.
 - **Contract checks.** `scripts/check-node-contracts.mjs` and `tests/test_node_contracts.py` pin the dialogue node's `model_id` default and options and that it has no speed/style/speaker-boost/similarity_boost.
 - **Not live-tested.** No paid or keyed call was made. Request bodies are checked with mocked HTTP only, so whether ElevenLabs accepts every field exactly as sent is unverified until a first real run.
 
+## 2026-10-16 — flux-3-nodes merged into flux-2-bfl (the FLUX Video Edit [fast] rename)
+
+Merged with `--no-ff`. Three conflicts, all one-line overlaps: `AGENTS.md` line 13 kept this branch's FLUX.2 coverage clause and took Krea's own names for the folded entries; `docs/api-guides/bfl.md` kept the PR 4 status line and took "FLUX Video Edit [fast]"; these notes keep both sections. Generated files were regenerated, not hand-merged.
+
 ## 2026-10-16 — "FLUX Video Edit" is now "FLUX Video Edit [fast]" (flux-3-nodes)
 
-Justin approved this on 2026-10-16 ("Yes go ahead and rename Flux video edit"), settling the name held in the section below. The node calls BFL's `/v1/flux-tools/video-edit-v1`, which BFL's pricing card and its docs pricing row call "FLUX Video Edit [fast]". The product page H1, "FLUX Video Edit", is the family name. Ids, ports, endpoints and prices stay the same.
+Justin approved this on 2026-10-16 ("Yes go ahead and rename Flux video edit"), settling the name held in the PR 3 names section below. The node calls BFL's `/v1/flux-tools/video-edit-v1`, which BFL's pricing card and its docs pricing row call "FLUX Video Edit [fast]". The product page H1, "FLUX Video Edit", is the family name. Ids, ports, endpoints and prices stay the same.
 
 Changed:
 
@@ -87,6 +91,32 @@ Changed:
 - AGENTS.md line 13 and the `retired_nodes.py` docstring now give Krea's own names for its catalog entries: "Flux 3 Video", "Flux Video Edit", "Flux Video Upscale".
 
 Left as they are: short forms in lists and tables that already name the family once ("Video Edit, per second", "FLUX 3 Image, Klein, Video or Video Edit bodies", "Krea's Video Edit and Upscale"); Krea's catalog spelling "Flux Video Edit"; the retired Krea node's saved name "Flux Video Edit (Krea)"; the pinned BFL schema fixture (its title "Video Edit" is BFL's schema text); dated sections of these notes; `flux-3-image-klein-base` keeps "FLUX 3 Image Klein Base" (the maker's own name on its Hugging Face card; a host's name applies only to the host's own product).
+
+## 2026-10-16 — PR 4 FLUX.2 option labels match the provider (flux-2-bfl)
+
+Justin, 2026-10-16, asked whether the FLUX.2 labels should stay "FLUX 2 Pro / Max / ..." or follow BFL's "FLUX.2 [pro]": "Let's match the provider every time." `flux-3-nodes` (the PR 3 name pass, 758eaf08) was merged in first with a merge commit; the only conflict, this file, keeps both sections.
+
+Labels (values unchanged: `pro`, `max`, `flash`, `flex`, `klein-9b`, `klein-4b`):
+
+- BFL's names for the five BFL serves: "FLUX.2 [pro]", "FLUX.2 [max]", "FLUX.2 [flex]", "FLUX.2 [klein] 9B", "FLUX.2 [klein] 4B". Source: the operation summaries in https://api.bfl.ai/openapi.json ("Generate or edit an image with FLUX.2 [pro]", and so on), the bfl.ai/pricing card titles and the docs.bfl.ai pricing rows, all of which agree. BFL's Title Case nav tiles ("FLUX.2 Max", "FLUX.2 Klein") are family links and lose to these.
+- fal's name for Flash, which only fal serves: "FLUX 2 Flash" (unchanged). fal's page `<title>FLUX 2 Flash (Text to Image) API on fal</title>` and llms.txt "# FLUX 2 Flash". BFL has no Flash; "FLUX.2 [flash]" appears nowhere, so it wasn't invented.
+- The node displayName "FLUX.2" stays: BFL's family page title is "FLUX.2 - Next Generation Image Generation | Black Forest Labs" (bfl.ai/models/flux-2).
+
+Changed with them: the node description (both twins) now names the models the same way; the BFL route note says "BFL has no FLUX 2 Flash and no safety-checker switch."; the switcher's snap note is built from labels, so it now reads "FLUX 2 Flash isn't on Black Forest Labs: set to FLUX.2 [flex]" (`switch_cases.json` updated, both languages read it). Docs and skills: `docs/model-providers/bfl/flux-2.md` (a label column and a "Names" section with URLs and quotes), `_provider.md`, `docs/model-providers/fal/flux.md` (its node table still said "FLUX 2 Pro"), `docs/api-guides/bfl.md` (also fixed "[klein 9B]" to "[klein] 9B"), `docs/api-guides/fal.md`, `PROVIDER-ROUTES.md`, `flora-gap-audit.md`, both copies of the BFL and fal skills.
+
+Decisions not in the spec:
+
+- **`test_reference_roles.py`:** no approved-option-label mechanism existed, so `APPROVED_ROUTE_TABLE_CONVERSIONS["flux-2-pro"]` gained `optionLabels`, an exact `{value: (baseline label, current label)}` map for the three baseline options, applied after the params are rebuilt and before fingerprinting. It asserts the leading options' values are exactly those three, in order, and each current label exactly. Flash maps to itself so its label is pinned too. `APPROVED_APPENDED_OPTIONS["flux-2-pro"]` carries the three new labels exactly. The drift test gained five cases: a different label on pro, max, flash and klein-9b, and a changed value, all still fail. The baseline wasn't regenerated. Covered by Justin's approval above.
+- **fal's catalog copies in the skills** (`skills/fal/by_category.json`, `categories/text-to-image.md`, `skills/fal-ai__flux-2__flash.md`, both copies) said "FLUX.2 Flash"; fal's own name is "FLUX 2 Flash", so those were changed too. Other models' catalog cards that mention "Flux 2 Flex" or "Flux 2 Max" in passing were left: they are imported fal catalog prose about other models, not Nebula labels.
+- **Left alone:** prose shorthand such as "Flex-only steps" or "on Flex" where it names the `flex` value, not the model; dated snapshots (`docs/research-2026-*`, `docs/ipad-conversion/`, the 2026-08-18 verification matrix, `flora-gap-matrix.md`); the dated Running Log row in `flora-gap-audit.md`; test case names other than the three FLUX.2 pricing cases, which now use the new names.
+- **Not changed (not decided):** the Safety select on fal's Klein.
+
+Live check (isolated backend :8148, Vite :5268, temp HOME and NEBULA_* dirs, placeholder keys, no run started; `flux3/pr4-shots/names-*.png`): library entry "FLUX.2 · BFL · fal"; on BFL the model list shows the five BFL names and no Flash; on fal it shows all six, with "FLUX 2 Flash" third; picking Flash on fal, then BFL, lands on "FLUX.2 [flex]" with the card note "FLUX 2 Flash isn't on Black Forest Labs: set to FLUX.2 [flex]". The native select was expanded in place (`size`) and the Inspector's height cap lifted for the shots.
+
+Review follow-up (same day):
+
+- **AGENTS.md** still said "FLUX.2 Pro / Max / Flex / Klein 9B / Klein 4B ... plus fal's Flash" in the Flora-audit coverage list. It now says "FLUX.2 [pro] / [max] / [flex] / [klein] 9B / [klein] 4B on BFL or fal, plus fal's FLUX 2 Flash".
+- **fal catalog cards for the node's own endpoints** (`skills/fal/skills/fal-ai__flux-2-max.md` and `fal-ai__flux-2-pro.md`, both the `.agents` and `.claude` copies) named the sibling options without brackets ("FLUX.2 pro", "FLUX.2 flex", "FLUX.2 klein", "Flux 2 Max", "Flux 2 Pro"). The earlier pass treated these as other models' catalog prose, but they describe this node's own fal endpoints, so the link texts now use BFL's names. The bare "FLUX.2 klein" links became "FLUX.2 [klein] 4B" or "[klein] 9B", depending on which endpoint the link points to. Only link labels changed; every URL is the same. The nested brackets (`[FLUX.2 [pro]](url)`) are balanced, which CommonMark allows in link text.
 
 ## 2026-10-16 — PR 3 model names match the provider (flux-3-nodes)
 
@@ -108,6 +138,57 @@ Held, not decided (kept the current label):
 - **`flux-3-image-klein-base` displayName** stays "FLUX 3 Image Klein Base". The two research passes disagreed: BFL's own Hugging Face card says "FLUX 3 Image Klein Base" (maker rule); fal, the only host Nebula routes it to (BFL's API doesn't serve it), says "FLUX.3 Klein Base" (one-host rule).
 
 Left alone on purpose: the retired Krea node names ("Flux 3 Video (Krea)" and the rest in `retired_nodes.MERGED`, the fixture and the migration tests) are the old nodes' saved names, which the import alert quotes; `krea_gateway_models.json` is Krea's synced catalog; `model_pricing.json` quotes are verbatim provider text; `docs/research-2026-06/` is a dated snapshot.
+
+## 2026-10-15 — Provider routes, PR 4: FLUX.2 on BFL
+
+Branch `flux-2-bfl` (from `flux-3-nodes`). `flux-2-pro` ("FLUX.2") was a fal-only handler in `sync_runner.py`; it is now a route-table node, BFL (maker) first, then fal. Spec: session scratchpad `flux3/pr4-spec/flux-2-pro.json`. No paid calls; every provider fact is from the provider's own schema, docs or pricing page, fetched 2026-10-15 (`docs/model-providers/bfl/flux-2.md`).
+
+Decisions not in the spec:
+
+- **`model` is a shared select of six** (`pro`, `max`, `flash`, `flex`, `klein-9b`, `klein-4b`); `endpointWhen` picks the path on each route and `model` is never sent (`BFL_FLUX2_SWITCHES`, `FAL_ENDPOINT_DROPS`). BFL rejects `flash` (it has none) and the switcher snaps Flash to Flex on a BFL click, the list-order tie, which is the pricier neighbour. Justin kept Flex (2026-10-16).
+- **Names stay fal's.** Saved graphs carry `image_size`, `num_inference_steps`, `guidance_scale` and string `safety_tolerance`; BFL's route renames and value-maps them (preset → `{width, height}` spread into the body, `"2"` → 2).
+- **BFL default size filled in.** BFL documents FLUX.2 `width`/`height` "default 0" (no default), so `run_bfl` fills the node's default preset (`landscape_4_3`, 1024×768) when none is saved (`flux2_default_size`).
+- **Steps and guidance are Flex-only** on both routes: shown on Flex only (`visibleWhen`), and a value left from Flex isn't sent on the other models (see Review follow-up). Typed `int` and `float` (the contract check rejects `number`). BFL takes steps 1-50, fal 2-50 (`accepts` on fal).
+- **Row-level `unconfirmed` prices** (new, Python and TS; approved by Justin 2026-10-16): fal's Pro/Max/Flex prices are exact, Flash and Klein aren't (no rounding stated below 1 MP; Klein's `endpointBilling` $0.006/$0.005 vs the page's $0.011/$0.009). The higher figure is kept per row. `route_price_unconfirmed` / `routePriceUnconfirmed` now take the saved params and wired ports. The Python validator checks the row flag is a bool; TS has no validator.
+- **The spec's fal price quotes were misattributed**; the sources in `model_pricing.json` quote what each page actually says.
+
+Deviations from the spec (Justin to confirm):
+
+- **fal Flash still gets `safety_tolerance`.** `Flux2FlashInput` has no such field, but the old handler sent it on every Flash run. To keep saved graphs' requests byte-for-byte, the fal route sends it too and there is no Flash safety stop. `tests/fixtures/flux2_legacy_fal_requests.json` pins the old handler's requests for all 6,048 saved combinations (captured from e43c63e6 with `git archive`) and `test_flux2_nodes.py` replays them through the new fal route.
+- **Klein on fal** drops the default `safety_tolerance` and stops a non-default one (Klein's schema has no such field).
+
+Behaviour changes on saved graphs (all from the old handler being loose):
+
+- `model` was matched case-insensitively (`"MAX"` ran Max); now only the lowercase enum values match, and any other value stops the run on both routes before billing (each route's `accepts` lists its models). It never runs Pro in its place (Review follow-up).
+- **An agent can now run a saved FLUX.2 node without asking.** Before PR 4 `flux-2-pro` had no `model_pricing.json` entry, so with any USD limit set (the default per-run threshold is $1.00, `agent_spend.threshold_from_settings`) `agent_spend.decide` refused every agent run of it ("Nebula has no list price…") and the person had to approve. Now it is priced ($0.005-$0.07 a run), so an in-app agent's `nebula run` on a saved FLUX.2 node bills the person's fal key (or BFL key, under Auto) at once, within the spend caps, with no proposal. Approved by Justin on 2026-10-16 (#60).
+- Extra saved params were forwarded to fal; the route sends only declared params.
+
+Tradeoffs and surprises:
+
+- `test_reference_roles.py` needed an exact `APPROVED_ROUTE_TABLE_CONVERSIONS["flux-2-pro"]` entry and `APPROVED_APPENDED_OPTIONS["flux-2-pro"]` (Flex, Klein 9B, Klein 4B), plus a drift test that the conversion still fingerprints every param. Approved by Justin on 2026-10-16 (#60).
+- `fal.json` and `bfl.json` provider schemas gained the FLUX.2 inputs, `$ref`s inlined, from each provider's OpenAPI.
+- The BFL key row in Settings now lists six nodes (FLUX.2 joins the FLUX 3 five), and fal's summary leads "Kling V3, FLUX.2"; `providerCatalog.test.ts` and `Settings.test.tsx` were updated to match.
+- Live check (isolated backend :8146, Vite :5266, placeholder keys, no run started; `flux3/pr4-shots/`): library "FLUX.2 · BFL · fal"; card "Auto · BFL" at $0.03; on BFL the model list has no Flash and no Safety Checker; on fal Flash shows $0.005* and the BFL row "Doesn't take flash"; clicking BFL from fal Flash with the checker off lands on Flex at $0.05 with both notes on the card. Seen and left alone: the stop line names the raw value ("flash isn't on Black Forest Labs"), as PR 3's do; number fields don't render `placeholder`, so "Provider default" for Flex steps/guidance isn't shown (existing Inspector behaviour).
+- Left out: image inputs/editing, preview endpoints, prompt upsampling, `safety_tolerance` 0, exact sizes, Flash/Klein steps on fal, finetunes, FLUX.2 [dev] and Klein Base, other providers.
+
+### Live runs on BFL (PR 4, 2026-10-15)
+
+Two real BFL calls on an isolated backend (only `BFL_API_KEY`, `_provider: bfl`, through `multi_route`): Klein 4B and the all-defaults Pro, each sent `{width 1024, height 768, output_format jpeg, safety_tolerance 2}` and returned a 1024×768 JPEG (4.2 s and 9.3 s). BFL billed 1.4 + 3.0 = 4.40 credits ($0.044), matching the price rows, so the flat first megapixel applies to output under 1 MP. Recorded in `docs/model-providers/bfl/flux-2.md`. Live spend across PR 3 and PR 4: 49.26 credits ($0.493) of the $1.50 Justin approved. The fal route hasn't been run live.
+
+### Review follow-up (PR 4, 2026-10-15)
+
+Four findings, each confirmed on HEAD first (a reproduction, then a test that failed on the old definition: 16 of the new `test_flux2_nodes.py` cases fail with the pre-fix definition and clients).
+
+- **A `model` no route lists ran Pro, unpriced.** `{model: "MAX"}` or `"Flash"` fell through `endpointWhen` to `/v1/flux-2-pro` and `fal-ai/flux-2-pro` on both routes, unblocked and unpriced (`estimate_run` put it in `unpriced`), and `"Flash"` got past BFL's `rejects model [flash]`. Fixed in the definition (both twins): each route's `accepts.model.values` is exactly the models it serves (BFL five, fal six), replacing BFL's `rejects.model`. Any other value now stops through the normal route block ("it doesn't take model MAX") before any request, with no route offered. Lowercasing was not chosen: it would be a translator in both twins for a value the UI can't produce, and it would hide a typo instead of naming it. Pinned by three `route_cases.json` cases (both languages) and `test_a_model_no_route_lists_stops_unbilled_instead_of_running_pro`. Side effect: a model stop now names the route's models ("Pick pro, max, flex, klein-9b or klein-4b, or switch provider."), since the stop message lists a param's `accepts` values. That also listed the models under fal's Klein safety stop, whose `rejectsWhen` match led with `model`, so the eight Klein entries now lead with `safety_tolerance` (the block's `param` is the first match key); that stop says "Change that setting" again. Two existing `route_cases.json` cases were updated for the new wording, and "steps on Pro stop every route" now expects no stop (renamed).
+- **Agents can now spend on saved FLUX.2 nodes without asking.** Confirmed (`agent_spend.decide` refuses unpriced nodes whenever a USD limit is set, and `flux-2-pro` had no price entry on `flux-3-nodes`). No code change: added to "Behaviour changes on saved graphs" above and to the PR body; Justin approved it on 2026-10-16.
+- **Flex-only steps and guidance showed on every model and could dead-end the run.** Set on Flex, then the model changed: the fields stayed visible, and both routes' `rejectsWhen` stopped the run with nothing to switch to. Now both params carry `visibleWhen: {model: ["flex"]}` (the Inspector and `describe_node`'s `onlyWhen` read it), the 18 steps/guidance `rejectsWhen` entries are gone, and the route clients drop a hidden value: BFL sends `steps`/`guidance` on `flux-2-flex` only (`BFL_FLUX2_FLEX_ONLY`), fal drops them on every endpoint but `fal-ai/flux-2-flex` (`FAL_ENDPOINT_DROPS`). That is Nano Banana's rule for its hidden resolution: a hidden, stale value changes nothing on either route. Pinned by `test_steps_and_guidance_left_from_flex_are_hidden_and_not_sent` and a `route_cases.json` case. The legacy fal parity (6,048 combinations) is unchanged: the old node had no steps or guidance.
+  - **Not fixed: Safety on fal Klein.** fal's Klein still lists Safety 1-5 and stops every value but "2". `visibleWhen` is per node, not per route, so it would also hide Safety on BFL's Klein, which takes 1-5. Route narrowing (`_narrowed`) can't cut options by another param's value: `rejectsWhen` stays a run-time block by design. The stop isn't a dead end, because it offers BFL. A per-route, per-model narrowing rule would be a grammar change in both twins, so it's left for a later PR.
+  - **Edge left:** steps 1 saved under BFL Flex, then the model changed and fal picked: fal's `accepts num_inference_steps {min: 2}` still reads the hidden 1 and stops fal (offering BFL). Rules don't know about visibility. Making hidden params count as unset in the rule reader would change `krea-3` too, so it's left out of a review fix.
+- **The fal skill still called FLUX.2 a fal wrapper.** Both copies: `flux-2-pro` left the `sync_runner.py` wrapper tables, gained a row in "fal as a route" (endpoints by `model`, Flash only on fal, Klein drops `safety_tolerance`, Flex-only steps), and `.claude`'s param entry matches `node_definitions.json`. The BFL skill, `docs/model-providers/bfl/flux-2.md` and `PROVIDER-ROUTES.md` describe the new `accepts` and hidden-value rules.
+
+`test_reference_roles.py`: `APPROVED_ROUTE_TABLE_CONVERSIONS["flux-2-pro"]` changed exactly (dated comment): BFL `rules` are `{"accepts": {"model": {"values": [pro, max, flex, klein-9b, klein-4b]}}, "rejects": {"enable_safety_checker": [false]}}`; fal `rules.accepts` gains `model: {values: [pro, max, flash, flex, klein-9b, klein-4b]}` and its `rejectsWhen` keeps only the eight Klein safety entries, each matching `{safety_tolerance, model}` in that order; the two `addedShared` Flex params gain `visibleWhen: {"model": ["flex"]}`. The drift test now also checks adding `flash` to BFL's models and removing a `visibleWhen`. The baseline isn't regenerated. `route_tables.json` was regenerated (generated from the definitions).
+
+Live check (isolated backend :8147, Vite :5267, placeholder keys, no run started): the Inspector on Pro shows Model, Size, Format, Safety and Seed only, and on Flex adds Steps (Flex) and Guidance (Flex) (`flux3/pr4-shots/fixed-flux2-inspector-pro.png` and `-flex.png`, the popover's height cap lifted to show its whole body). Gate after the follow-up: backend 244/244 files, frontend 222 files / 2785 tests, `tsc -b`, lint, node contracts, Krea catalog, route tables and MODEL_REFERENCE checks all pass.
 
 ## 2026-10-15 — PR 3 integration: nodes, merge and docs lanes on flux-3-nodes
 

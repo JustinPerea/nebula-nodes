@@ -285,7 +285,7 @@ describe('Settings — providers list and search', () => {
     expect(toAdd.indexOf('Krea · API token')).toBeLessThan(toAdd.indexOf('fal.ai'));
     expect(toAdd.indexOf('fal.ai')).toBeLessThan(toAdd.indexOf('Ideogram'));
     expect(toAdd.indexOf('Ideogram')).toBeLessThan(toAdd.indexOf('Anthropic'));
-    expect(within(row('fal.ai')).getByText(/^\d+ nodes: Kling V3, FLUX 2 Pro/)).toBeInTheDocument();
+    expect(within(row('fal.ai')).getByText(/^\d+ nodes: Kling V3, FLUX\.2,/)).toBeInTheDocument();
     expect(within(row('Ideogram')).getByText(/Ideogram 4/)).toBeInTheDocument();
   });
 

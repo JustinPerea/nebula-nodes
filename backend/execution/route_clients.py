@@ -194,6 +194,24 @@ def _set(params: Mapping[str, Any]) -> dict[str, Any]:
 # draft_enhance isn't wired (a draft's cache bundle isn't a Nebula port yet).
 
 BFL_IMAGE_PATHS = frozenset({"flux-3-image", "flux-3-image-klein"})
+# FLUX.2 (PR 4), from the same OpenAPI, read 2026-10-15: /v1/flux-2-pro and
+# /v1/flux-2-max take Flux2Inputs, /v1/flux-2-flex Flux2FlexInputs (plus
+# ``steps`` 1-50 and ``guidance`` 1.5-10), /v1/flux-2-klein-9b and
+# /v1/flux-2-klein-4b Flux2KleinInputs. None takes an aspect ratio or a size
+# preset: the size is ``width`` and ``height`` ("integer, minimum 64"), so
+# the route's valueMap turns fal's ``image_size`` preset into
+# {width, height} and the body spreads it. ``model`` only picks the path
+# (endpointWhen) and isn't a field. References would be input_image ..
+# input_image_8 (Klein: 4); the node has no image port, so none are sent.
+# These schemas aren't additionalProperties false; the pinned copies are
+# checked with unknown fields refused anyway.
+BFL_FLUX2_PATHS = frozenset({"flux-2-pro", "flux-2-max", "flux-2-flex", "flux-2-klein-9b", "flux-2-klein-4b"})
+BFL_FLUX2_SWITCHES = frozenset({"model"})
+# Flux2FlexInputs is the only FLUX.2 body with ``steps`` and ``guidance``.
+# The node shows them on Flex only (visibleWhen), so on any other path a
+# value saved under Flex is hidden and isn't sent (PR 4 review follow-up).
+BFL_FLUX2_FLEX_PATH = "flux-2-flex"
+BFL_FLUX2_FLEX_ONLY = frozenset({"steps", "guidance"})
 BFL_VIDEO_PATH = "flux-3-video"
 BFL_VIDEO_EDIT_PATH = "flux-tools/video-edit-v1"
 BFL_VIDEO_UPSCALE_PATH = "flux-tools/video-upscale-v1"
@@ -214,6 +232,16 @@ def bfl_body(path: str, params: Mapping[str, Any], inputs: Mapping[str, Any]) ->
         images = [media_url(v) for v in port_values(inputs, "images")]
         if images:
             body["images"] = images
+    elif path in BFL_FLUX2_PATHS:
+        refuse_unwired(inputs, {"prompt"}, where)
+        dropped = BFL_FLUX2_SWITCHES if path == BFL_FLUX2_FLEX_PATH else BFL_FLUX2_SWITCHES | BFL_FLUX2_FLEX_ONLY
+        for key in dropped:
+            body.pop(key, None)
+        size = body.pop("image_size", None)
+        if size is not None:
+            if not isinstance(size, Mapping) or set(size) != {"width", "height"}:
+                raise ValueError(f"{where} takes a size as width and height, not {size!r}")
+            body.update(width=size["width"], height=size["height"])
     elif path == BFL_VIDEO_PATH:
         refuse_unwired(inputs, {"prompt", "start_image", "keyframes", "end_image", "start_video"}, where)
         start_video = one_value(inputs, "start_video", where)
@@ -247,6 +275,19 @@ def bfl_body(path: str, params: Mapping[str, Any], inputs: Mapping[str, Any]) ->
     return body
 
 
+def flux2_default_size(definition: Mapping[str, Any], route: Mapping[str, Any]) -> Any:
+    """FLUX.2's size when the node has none saved: its ``image_size``
+    default through the route's valueMap. BFL documents no FLUX.2 default
+    size (width and height "default 0"), so the run takes the size its price
+    is read at (model_pricing reads the default too), as fal does by its own
+    default (landscape_4_3)."""
+    from services import node_route
+
+    param = node_route.param_definition(definition, "image_size") or {}
+    sizes = (route.get("valueMap") or {}).get("image_size") or {}
+    return sizes.get(str(param.get("default")))
+
+
 async def run_bfl(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str], *,
                   route: Mapping[str, Any], emit: Any = None, endpoint: Any = None) -> dict[str, Any]:
     from handlers import bfl
@@ -254,7 +295,10 @@ async def run_bfl(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: d
     definition = _definition(node)
     _, data_type = output_port(definition)
     path = bfl_path(endpoint if endpoint is not None else route.get("endpoint"))
-    body = bfl_body(path, node.params, inputs)
+    params = node.params
+    if path in BFL_FLUX2_PATHS and "image_size" not in _set(params):
+        params = {**params, "image_size": flux2_default_size(definition, route)}
+    body = bfl_body(path, params, inputs)
     result = await bfl.run_task(bfl.api_key(api_keys), path, body, media_type=data_type, node_id=node.id, emit=emit)
     return as_output(definition, result.path)
 
@@ -287,6 +331,15 @@ _FAL_FIELDS: dict[str, dict[str, tuple[str, bool]]] = {
     "edit-video": {"start_video": ("video_url", False), "video": ("video_url", False)},
     "blackforestlabs/flux-video-upscale": {"video": ("video_url", False)},
     "krea/v3/edit": {"images": ("image_urls", True)},
+    # FLUX.2 (PR 4), text only: Flux2ProInput, Flux2MaxInput, Flux2FlashInput,
+    # Flux2FlexInput, Flux2Klein9bInput and Flux2Klein4bInput (read
+    # 2026-10-15). Keyed by whole id: "flash", "9b" and "4b" say nothing.
+    "fal-ai/flux-2-pro": {},
+    "fal-ai/flux-2-max": {},
+    "fal-ai/flux-2/flash": {},
+    "fal-ai/flux-2-flex": {},
+    "fal-ai/flux-2/klein/9b": {},
+    "fal-ai/flux-2/klein/4b": {},
 }
 FAL_KEYFRAMES = "keyframes-to-video"
 # A route param that picks the endpoint (endpointWhen) and isn't a request
@@ -296,6 +349,30 @@ FAL_ENDPOINT_SWITCHES = frozenset({"draft"})
 # Fields fal's /draft endpoints don't have: drafts are 720p, so the
 # resolution (a draft is blocked anywhere but hd) isn't sent.
 FAL_DRAFT_DROPS = frozenset({"resolution"})
+# Params that aren't request fields on one endpoint, by endpoint id. FLUX.2's
+# ``model`` only picks the endpoint (endpointWhen), as the fal-only handler
+# before PR 4 dropped it (sync_runner _fal_wrapper_node internal_params).
+# fal's own Klein copies have no ``safety_tolerance`` (Flux2Klein9bInput,
+# Flux2Klein4bInput, read 2026-10-15); the route stops every value but the
+# default "2" before the run (rejectsWhen), so only the default is left out.
+# fal-ai/flux-2/flash has no safety_tolerance either, but still gets it: the
+# fal-only handler sent it, and a saved Flash node sends what it always did
+# (tests/test_flux2_nodes.py pins the parity).
+# Steps and guidance are Flex-only on the node (visibleWhen model flex): on
+# any other model a value saved under Flex is hidden and changes nothing, so
+# it isn't sent (PR 4 review follow-up). Nano Banana treats its hidden
+# resolution the same way (maker_routes _SIZED).
+_FLUX2_FLEX_ONLY = frozenset({"num_inference_steps", "guidance_scale"})
+_FLUX2_DROPS = frozenset({"model"}) | _FLUX2_FLEX_ONLY
+_FLUX2_KLEIN_DROPS = _FLUX2_DROPS | {"safety_tolerance"}
+FAL_ENDPOINT_DROPS: dict[str, frozenset[str]] = {
+    "fal-ai/flux-2-pro": _FLUX2_DROPS,
+    "fal-ai/flux-2-max": _FLUX2_DROPS,
+    "fal-ai/flux-2/flash": _FLUX2_DROPS,
+    "fal-ai/flux-2-flex": frozenset({"model"}),
+    "fal-ai/flux-2/klein/9b": _FLUX2_KLEIN_DROPS,
+    "fal-ai/flux-2/klein/4b": _FLUX2_KLEIN_DROPS,
+}
 
 
 def fal_shape(endpoint: str) -> str:
@@ -364,14 +441,16 @@ async def run_fal(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: d
     """fal forwards every param it is given (handle_fal_universal), so the
     copy it gets holds only this route's translated params, the media fields
     and ``endpoint_id``: never ``_provider`` or another route's params, nor
-    a param that only picks the endpoint (FAL_ENDPOINT_SWITCHES) or one a
-    /draft endpoint doesn't have (FAL_DRAFT_DROPS)."""
+    a param that only picks the endpoint (FAL_ENDPOINT_SWITCHES), one a
+    /draft endpoint doesn't have (FAL_DRAFT_DROPS) or one that isn't a
+    field of this endpoint (FAL_ENDPOINT_DROPS)."""
     from execution.sync_runner import _fal_wrapper_node
     from handlers.fal_universal import handle_fal_universal
 
     definition = _definition(node)
     endpoint_id = str(endpoint if endpoint is not None else route.get("endpoint") or "").strip("/")
-    dropped = FAL_ENDPOINT_SWITCHES | (FAL_DRAFT_DROPS if fal_draft(endpoint_id) else frozenset())
+    dropped = (FAL_ENDPOINT_SWITCHES | (FAL_DRAFT_DROPS if fal_draft(endpoint_id) else frozenset())
+               | FAL_ENDPOINT_DROPS.get(endpoint_id, frozenset()))
     sent = {key: value for key, value in _set(node.params).items() if key not in dropped}
     params = {**sent, **fal_fields(endpoint_id, node.params, inputs)}
     fal_node = _fal_wrapper_node(node.model_copy(update={"params": params}), endpoint_id)

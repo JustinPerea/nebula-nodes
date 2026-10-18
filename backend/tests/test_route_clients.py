@@ -236,8 +236,9 @@ async def test_every_video_route_refuses_an_end_image_alone_before_any_request(m
 @pytest.mark.asyncio
 async def test_bfl_path_without_a_request_shape_is_refused(monkeypatch):
     hosts = bfl_hosts(monkeypatch)
-    with pytest.raises(ValueError, match="no request shape for Black Forest Labs' flux-2-pro"):
-        await run("bfl", "clients-image", "bfl", {}, ports(prompt="p"), endpoint="/v1/flux-2-pro")
+    # FLUX.2 [pro] preview: in BFL's OpenAPI, but no node routes to it yet.
+    with pytest.raises(ValueError, match="no request shape for Black Forest Labs' flux-2-pro-preview"):
+        await run("bfl", "clients-image", "bfl", {}, ports(prompt="p"), endpoint="/v1/flux-2-pro-preview")
     assert not hosts.requests
 
 
@@ -260,7 +261,7 @@ FAL = r"https://queue\.fal\.run/"
 def fal_hosts(monkeypatch, result: dict[str, Any], statuses: list[str] | None = None) -> FakeHosts:
     queue = "https://queue.fal.run/blackforestlabs/flux-3/requests/r1"
     return FakeHosts(monkeypatch, [
-        ("POST", FAL + r"blackforestlabs/.*", httpx.Response(200, json={
+        ("POST", FAL + r"(blackforestlabs|fal-ai)/.*", httpx.Response(200, json={
             "request_id": "r1", "status_url": f"{queue}/status", "response_url": queue, "cancel_url": f"{queue}/cancel"})),
         ("GET", re.escape(f"{queue}/status"), [httpx.Response(200, json={"status": s})
                                                for s in (statuses or ["IN_PROGRESS", "COMPLETED"])]),
@@ -748,8 +749,10 @@ def test_the_fixture_nodes_are_sound_route_tables():
 async def test_each_client_runs_end_to_end_through_multi_route(monkeypatch, definition_id, provider, params, wired,
                                                                hosts_for, request_pattern, check):
     definition = DEFINITIONS[definition_id]
-    defaults = {p["key"]: p["default"] for group in ("params", "sharedParams") for p in definition[group]}
-    defaults.update({p["key"]: p["default"] for r in definition["routes"] for p in r.get("params") or []})
+    defaults = {p["key"]: p["default"] for group in ("params", "sharedParams") for p in definition[group]
+                if "default" in p}
+    defaults.update({p["key"]: p["default"] for r in definition["routes"] for p in r.get("params") or []
+                     if "default" in p})
     or_content = "https://openrouter.ai/api/v1/videos/job-1/content?index=0"
     rep_out = "https://replicate.delivery/x/out.mp4"
     hosts = {
@@ -799,8 +802,10 @@ SWITCH_HOSTS: dict[str, Callable[[pytest.MonkeyPatch, bool], FakeHosts]] = {
 def switch_node(case: dict[str, Any]) -> GraphNode:
     """The node as the switcher leaves it: defaults, the saved values, then what the click wrote."""
     definition = definition_of(case["definition"])
-    defaults = {p["key"]: p["default"] for group in ("params", "sharedParams") for p in definition[group]}
-    defaults.update({p["key"]: p["default"] for r in definition["routes"] for p in r.get("params") or []})
+    defaults = {p["key"]: p["default"] for group in ("params", "sharedParams") for p in definition[group]
+                if "default" in p}
+    defaults.update({p["key"]: p["default"] for r in definition["routes"] for p in r.get("params") or []
+                     if "default" in p})
     return node(case["definition"], **{**defaults, **case["saved"], **case["writes"]})
 
 

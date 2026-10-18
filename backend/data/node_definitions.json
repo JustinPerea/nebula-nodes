@@ -14279,12 +14279,19 @@
   },
   "flux-2-pro": {
     "id": "flux-2-pro",
-    "displayName": "FLUX 2 Pro",
+    "displayName": "FLUX.2",
+    "description": "Black Forest Labs' FLUX.2 family (FLUX.2 [pro], [max], [flex], [klein] 9B and [klein] 4B, plus fal's FLUX 2 Flash): text to image. Runs on BFL or fal.ai.",
     "category": "image-gen",
-    "apiProvider": "fal",
-    "apiEndpoint": "fal-ai/flux-2-pro",
-    "envKeyName": "FAL_KEY",
+    "apiProvider": "bfl",
+    "apiEndpoint": "/v1/flux-2-pro",
     "executionPattern": "async-poll",
+    "envKeyName": [
+      "BFL_API_KEY",
+      "FAL_KEY"
+    ],
+    "directKeyName": [
+      "BFL_API_KEY"
+    ],
     "inputPorts": [
       {
         "id": "prompt",
@@ -14303,6 +14310,30 @@
     ],
     "params": [
       {
+        "key": "_provider",
+        "label": "Provider",
+        "type": "enum",
+        "required": false,
+        "default": "auto",
+        "options": [
+          {
+            "label": "auto",
+            "value": "auto"
+          },
+          {
+            "label": "bfl",
+            "value": "bfl"
+          },
+          {
+            "label": "fal",
+            "value": "fal"
+          }
+        ],
+        "hidden": true
+      }
+    ],
+    "sharedParams": [
+      {
         "key": "model",
         "label": "Model",
         "type": "enum",
@@ -14310,16 +14341,28 @@
         "default": "pro",
         "options": [
           {
-            "label": "FLUX 2 Pro",
+            "label": "FLUX.2 [pro]",
             "value": "pro"
           },
           {
-            "label": "FLUX 2 Max",
+            "label": "FLUX.2 [max]",
             "value": "max"
           },
           {
             "label": "FLUX 2 Flash",
             "value": "flash"
+          },
+          {
+            "label": "FLUX.2 [flex]",
+            "value": "flex"
+          },
+          {
+            "label": "FLUX.2 [klein] 9B",
+            "value": "klein-9b"
+          },
+          {
+            "label": "FLUX.2 [klein] 4B",
+            "value": "klein-4b"
           }
         ]
       },
@@ -14403,18 +14446,264 @@
         ]
       },
       {
-        "key": "enable_safety_checker",
-        "label": "Safety Checker",
-        "type": "boolean",
-        "required": false,
-        "default": true
-      },
-      {
         "key": "seed",
         "label": "Seed",
         "type": "integer",
         "required": false,
         "placeholder": "Random"
+      },
+      {
+        "key": "num_inference_steps",
+        "label": "Steps (Flex)",
+        "type": "integer",
+        "required": false,
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "placeholder": "Provider default",
+        "visibleWhen": {
+          "model": [
+            "flex"
+          ]
+        }
+      },
+      {
+        "key": "guidance_scale",
+        "label": "Guidance (Flex)",
+        "type": "float",
+        "required": false,
+        "min": 1.5,
+        "max": 10,
+        "step": 0.1,
+        "placeholder": "Provider default",
+        "visibleWhen": {
+          "model": [
+            "flex"
+          ]
+        }
+      }
+    ],
+    "routes": [
+      {
+        "id": "bfl",
+        "provider": "bfl",
+        "maker": true,
+        "keys": [
+          "BFL_API_KEY"
+        ],
+        "handler": "bfl",
+        "endpoint": "/v1/flux-2-pro",
+        "endpointWhen": [
+          {
+            "when": {
+              "model": "max"
+            },
+            "endpoint": "/v1/flux-2-max"
+          },
+          {
+            "when": {
+              "model": "flex"
+            },
+            "endpoint": "/v1/flux-2-flex"
+          },
+          {
+            "when": {
+              "model": "klein-9b"
+            },
+            "endpoint": "/v1/flux-2-klein-9b"
+          },
+          {
+            "when": {
+              "model": "klein-4b"
+            },
+            "endpoint": "/v1/flux-2-klein-4b"
+          }
+        ],
+        "rename": {
+          "num_inference_steps": "steps",
+          "guidance_scale": "guidance"
+        },
+        "valueMap": {
+          "safety_tolerance": {
+            "1": 1,
+            "2": 2,
+            "3": 3,
+            "4": 4,
+            "5": 5
+          },
+          "image_size": {
+            "square_hd": {
+              "width": 1024,
+              "height": 1024
+            },
+            "square": {
+              "width": 512,
+              "height": 512
+            },
+            "portrait_4_3": {
+              "width": 768,
+              "height": 1024
+            },
+            "portrait_16_9": {
+              "width": 576,
+              "height": 1024
+            },
+            "landscape_4_3": {
+              "width": 1024,
+              "height": 768
+            },
+            "landscape_16_9": {
+              "width": 1024,
+              "height": 576
+            }
+          }
+        },
+        "rules": {
+          "accepts": {
+            "model": {
+              "values": [
+                "pro",
+                "max",
+                "flex",
+                "klein-9b",
+                "klein-4b"
+              ]
+            }
+          },
+          "rejects": {
+            "enable_safety_checker": [
+              false
+            ]
+          }
+        },
+        "note": "BFL has no FLUX 2 Flash and no safety-checker switch."
+      },
+      {
+        "id": "fal",
+        "provider": "fal",
+        "keys": [
+          "FAL_KEY"
+        ],
+        "handler": "fal",
+        "endpoint": "fal-ai/flux-2-pro",
+        "endpointWhen": [
+          {
+            "when": {
+              "model": "max"
+            },
+            "endpoint": "fal-ai/flux-2-max"
+          },
+          {
+            "when": {
+              "model": "flash"
+            },
+            "endpoint": "fal-ai/flux-2/flash"
+          },
+          {
+            "when": {
+              "model": "flex"
+            },
+            "endpoint": "fal-ai/flux-2-flex"
+          },
+          {
+            "when": {
+              "model": "klein-9b"
+            },
+            "endpoint": "fal-ai/flux-2/klein/9b"
+          },
+          {
+            "when": {
+              "model": "klein-4b"
+            },
+            "endpoint": "fal-ai/flux-2/klein/4b"
+          }
+        ],
+        "params": [
+          {
+            "key": "enable_safety_checker",
+            "label": "Safety Checker",
+            "type": "boolean",
+            "required": false,
+            "default": true
+          }
+        ],
+        "rules": {
+          "accepts": {
+            "model": {
+              "values": [
+                "pro",
+                "max",
+                "flash",
+                "flex",
+                "klein-9b",
+                "klein-4b"
+              ]
+            },
+            "num_inference_steps": {
+              "min": 2,
+              "max": 50,
+              "integer": true
+            }
+          },
+          "rejectsWhen": [
+            {
+              "match": {
+                "safety_tolerance": "1",
+                "model": "klein-9b"
+              },
+              "label": "a safety tolerance other than 2 on Klein"
+            },
+            {
+              "match": {
+                "safety_tolerance": "3",
+                "model": "klein-9b"
+              },
+              "label": "a safety tolerance other than 2 on Klein"
+            },
+            {
+              "match": {
+                "safety_tolerance": "4",
+                "model": "klein-9b"
+              },
+              "label": "a safety tolerance other than 2 on Klein"
+            },
+            {
+              "match": {
+                "safety_tolerance": "5",
+                "model": "klein-9b"
+              },
+              "label": "a safety tolerance other than 2 on Klein"
+            },
+            {
+              "match": {
+                "safety_tolerance": "1",
+                "model": "klein-4b"
+              },
+              "label": "a safety tolerance other than 2 on Klein"
+            },
+            {
+              "match": {
+                "safety_tolerance": "3",
+                "model": "klein-4b"
+              },
+              "label": "a safety tolerance other than 2 on Klein"
+            },
+            {
+              "match": {
+                "safety_tolerance": "4",
+                "model": "klein-4b"
+              },
+              "label": "a safety tolerance other than 2 on Klein"
+            },
+            {
+              "match": {
+                "safety_tolerance": "5",
+                "model": "klein-4b"
+              },
+              "label": "a safety tolerance other than 2 on Klein"
+            }
+          ]
+        }
       }
     ]
   },

@@ -1274,17 +1274,6 @@ def get_handler_registry(
             routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
             return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
 
-        async def _flux2_pro_handler(node, inputs, api_keys):
-            model = node.params.get("model", "pro")
-            if str(model).lower() == "max":
-                endpoint_id = "fal-ai/flux-2-max"
-            elif str(model).lower() == "flash":
-                endpoint_id = "fal-ai/flux-2/flash"
-            else:
-                endpoint_id = "fal-ai/flux-2-pro"
-            routed_node = _fal_wrapper_node(node, endpoint_id, internal_params=("model",))
-            return await handle_fal_universal(routed_node, inputs, api_keys, emit=emit)
-
         async def _gpt_image_15_handler(node, inputs, api_keys):
             node.params.setdefault("endpoint_id", "fal-ai/gpt-image-1.5")
             return await handle_fal_universal(node, inputs, api_keys, emit=emit)
@@ -1556,7 +1545,6 @@ def get_handler_registry(
         registry["seedance-2-fast-t2v"] = _seedance2_fast_t2v_handler
         registry["seedance-2-fast-i2v"] = _seedance2_fast_i2v_handler
         registry["flux-kontext"] = _flux_kontext_handler
-        registry["flux-2-pro"] = _flux2_pro_handler
         # GPT Image's fal copies run on OpenAI's Images API when OPENAI_API_KEY
         # is set (execution/maker_routes_openai.py), else on fal.
         from execution import maker_routes_openai

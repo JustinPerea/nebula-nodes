@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null. `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES).",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES).",
   "definitions": {
     "img": {
       "id": "img",
@@ -2197,6 +2197,103 @@
           0.1006
         ]
       }
+    },
+    {
+      "name": "FLUX.2 at its defaults: Pro's first megapixel on both routes",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "pro",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.03,
+        "fal": 0.03
+      },
+      "unconfirmed": {
+        "bfl": false,
+        "fal": false
+      }
+    },
+    {
+      "name": "FLUX 2 Flash: fal only, at an unconfirmed upper bound",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "flash",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "wired": [],
+      "expected": {
+        "bfl": null,
+        "fal": 0.005
+      },
+      "unconfirmed": {
+        "bfl": false,
+        "fal": true
+      }
+    },
+    {
+      "name": "FLUX.2 [klein] 4B: BFL's card, fal's unconfirmed upper bound",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "klein-4b",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.014,
+        "fal": 0.009
+      },
+      "unconfirmed": {
+        "bfl": false,
+        "fal": true
+      }
+    },
+    {
+      "name": "FLUX.2 [flex] with steps set prices on both routes",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "flex",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true,
+        "num_inference_steps": 30
+      },
+      "wired": [],
+      "expected": {
+        "bfl": 0.05,
+        "fal": 0.05
+      },
+      "unconfirmed": {
+        "bfl": false,
+        "fal": false
+      }
+    },
+    {
+      "name": "FLUX.2 with the safety checker off: BFL can't take it",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "pro",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": false
+      },
+      "wired": [],
+      "expected": {
+        "bfl": null,
+        "fal": 0.03
+      }
     }
   ],
   "shippedRunCases": [
@@ -2269,6 +2366,71 @@
         "low": 0.03,
         "high": 0.59,
         "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "FLUX.2 saved before PR 4 (no _provider) with only a fal key runs on fal",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "pro",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "apiKeys": {
+        "FAL_KEY": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.03,
+        "high": 0.03,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "FLUX.2 saved on Max with a BFL key added runs on BFL",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "max",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "apiKeys": {
+        "FAL_KEY": "set",
+        "BFL_API_KEY": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.07,
+        "high": 0.07,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "FLUX.2 saved on Flash with a BFL key added stops before billing",
+      "nodeId": "flux-2-pro",
+      "params": {
+        "model": "flash",
+        "image_size": "landscape_4_3",
+        "output_format": "jpeg",
+        "safety_tolerance": "2",
+        "enable_safety_checker": true
+      },
+      "apiKeys": {
+        "FAL_KEY": "set",
+        "BFL_API_KEY": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": true,
         "plan": false
       }
     }

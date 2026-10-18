@@ -302,6 +302,24 @@ def test_a_route_price_can_be_marked_unconfirmed():
     assert "x unconfirmed must be true or false" in problems
 
 
+def test_one_row_can_be_marked_unconfirmed_on_its_own():
+    """FLUX.2's fal route states Pro, Max and Flex exactly but not Flash or
+    Klein: the mark follows the row the params price at."""
+    definition = CASES["definitions"]["table"]
+    entry = json.loads(json.dumps(CASES["pricing"]["nodes"]["table"]))
+    bfl = entry["routes"]["bfl"]
+    bfl["rows"][-1]["unconfirmed"] = True
+    last = bfl["rows"][-1]["match"]
+    assert model_pricing.route_price_unconfirmed(entry, definition, "bfl", last) is True
+    others = [row["match"] for row in bfl["rows"][:-1] if row["match"] != last]
+    assert others and all(model_pricing.route_price_unconfirmed(entry, definition, "bfl", match) is False
+                          for match in others)
+    problems: list[str] = []
+    bfl["rows"][0]["unconfirmed"] = "yes"
+    model_pricing._validate_entry("x", bfl, definition, {}, problems, multi_route_ok=True)
+    assert "x row 0 unconfirmed must be true or false" in problems
+
+
 def test_estimate_routes_is_empty_for_a_legacy_node():
     assert model_pricing.estimate_routes(CASES["definitions"]["dual"], {}, (), CASES["pricing"]) == {}
 

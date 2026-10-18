@@ -1,6 +1,6 @@
 ---
 name: fal-ai/flux-2/flash
-display_name: FLUX.2 Flash
+display_name: FLUX 2 Flash
 category: text-to-image
 creator: Black Forest Labs
 fal_docs: https://fal.ai/models/fal-ai/flux-2/flash
@@ -8,7 +8,7 @@ original_source: https://docs.bfl.ml/flux_2/flux2_overview
 summary: A lightning-fast, high-fidelity text-to-image model by Black Forest Labs, optimized for sub-second generation with precise prompt following and 4MP output.
 ---
 
-# FLUX.2 Flash
+# FLUX 2 Flash
 
 ## Overview
 - **Slug:** `fal-ai/flux-2/flash`
@@ -19,7 +19,7 @@ summary: A lightning-fast, high-fidelity text-to-image model by Black Forest Lab
 - **Original source:** [docs.bfl.ml](https://docs.bfl.ml/flux_2/flux2_overview)
 
 ## What it does
-FLUX.2 Flash is a speed-optimized variant of the state-of-the-art FLUX.2 [dev] model from [Black Forest Labs](https://bfl.ai/). It leverages timestep distillation to achieve sub-second inference times while maintaining the exceptional realism, sharp text rendering, and compositional accuracy of the base model. It is capable of generating images up to 4 megapixels (e.g., 2048x2048) and excels at following complex, natural language prompts and specific color requirements (via hex codes).
+FLUX 2 Flash is a speed-optimized variant of the state-of-the-art FLUX.2 [dev] model from [Black Forest Labs](https://bfl.ai/). It leverages timestep distillation to achieve sub-second inference times while maintaining the exceptional realism, sharp text rendering, and compositional accuracy of the base model. It is capable of generating images up to 4 megapixels (e.g., 2048x2048) and excels at following complex, natural language prompts and specific color requirements (via hex codes).
 
 ## When to use this model
 - **Use when:** You need high-quality images in under a second; you require specific text to be rendered within an image; you are building an interactive "AI canvas" or real-time preview feature.
@@ -80,7 +80,7 @@ Black Forest Labs provides a direct API for the FLUX.2 family, including the fas
 - **Official Docs:** [docs.bfl.ml](https://docs.bfl.ml/flux_2/flux2_text_to_image)
 
 ## Prompting best practices
-- **Be Descriptive:** FLUX.2 Flash handles long, complex prompts (up to 512 tokens) very well. Instead of "a car," use "a vintage 1960s red sports car parked on a cobblestone street in Rome at sunset."
+- **Be Descriptive:** FLUX 2 Flash handles long, complex prompts (up to 512 tokens) very well. Instead of "a car," use "a vintage 1960s red sports car parked on a cobblestone street in Rome at sunset."
 - **Use Hex Codes:** You can specify exact colors using hex codes (e.g., "a logo with color #FF5733").
 - **Specify Text:** Use double quotes for text you want rendered (e.g., `a neon sign that says "OPEN"`).
 - **Compositional Control:** Mention camera angles (e.g., "low angle shot," "macro lens") and lighting ("soft volumetric lighting").
@@ -108,7 +108,7 @@ Black Forest Labs provides a direct API for the FLUX.2 family, including the fas
 ## Notes & gotchas
 - **Max Resolution:** While the model supports up to 4MP, the recommended range for consistent quality is up to 2MP.
 - **No Negative Prompt:** FLUX.2 is trained to follow positive instructions. Instead of saying "no people," say "an empty landscape."
-- **Prompt Adherence:** Unlike FLUX.1, FLUX.2 Flash does not include automatic prompt upsampling by default on the FAL endpoint; what you type is exactly what the model processes.
+- **Prompt Adherence:** Unlike FLUX.1, FLUX 2 Flash does not include automatic prompt upsampling by default on the FAL endpoint; what you type is exactly what the model processes.
 
 ## Sources
 - [FAL.ai Flux 2 Flash Documentation](https://fal.ai/models/fal-ai/flux-2/flash/api)

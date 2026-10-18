@@ -273,6 +273,10 @@ def test_each_route_shows_its_own_price(case):
             low, high = round(estimate["low"], 6), round(estimate["high"], 6)
             got[route_id] = low if low == high else [low, high]
     assert got == case["expected"]
+    entry = PRICING["nodes"].get(case["nodeId"])
+    for route_id, marked in (case.get("unconfirmed") or {}).items():
+        assert model_pricing.route_price_unconfirmed(entry, REGISTRY[case["nodeId"]], route_id, case["params"],
+                                                     case["wired"]) is marked, route_id
 
 
 def test_unconfirmed_prices_are_marked_on_the_routes_whose_pages_dont_state_them():
