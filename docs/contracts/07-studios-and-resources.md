@@ -1,0 +1,83 @@
+---
+title: Nebula Contracts — Studios and Resources (Volume 7)
+status: draft
+contract_version: 1
+updated: 2026-10-18
+---
+
+# Studios and resources (Volume 7)
+
+Saved assets that studios edit and bridge nodes read. This volume starts with the Moodboard; Character, Cinema and the video editors are not written up yet.
+
+**Oracle:** `backend/services/moodboard_store.py`, `backend/services/moodboard_brief.py`, `backend/services/moodboard_analysis.py`, `backend/handlers/moodboard.py`, `/api/moodboards/*` in `backend/main.py`
+
+---
+
+## 1. Moodboard
+
+A board is one JSON file under the moodboard root (`NEBULA_MOODBOARD_ROOT`, default `~/.nebula/moodboards/<scope>/<id>.json`; scope is `_global` or a project id).
+
+### 1.1 Saved fields
+
+| Field | Type | Who writes it | Notes |
+|-------|------|---------------|-------|
+| `id`, `createdAt`, `projectId` | string | store | Fixed after create |
+| `name`, `notes`, `mode`, `strength`, `images` | — | person or agent | `mode` is `look`, `world` or `subject`; each image has `weight` and `excluded` |
+| `analysis` | object or null | Analyze | Colour reading of the images. Set to null when the images, weights, mode, strength or notes change |
+| `direction` | string | person or agent | What the board is for, in positive words. Up to 4000 characters |
+| `avoid` | string[] | person or agent | Things to keep out of the image. Trimmed, de-duplicated (case-insensitive), at most 40 items of 200 characters |
+| `pinnedColors` | `{include: hex[], exclude: hex[]}` | person or agent | Colours that must appear or must stay out. Hex is stored as `#rrggbb`; at most 12 per list; a colour can't be in both |
+| `briefOverride` | `{text, basis, updatedAt}` or null | person or agent (text); store (`basis`, `updatedAt`) | A hand-written brief that replaces the generated one |
+| `briefVersion` | integer | store | `1` once the board has the fields above (see 1.5) |
+| `version`, `updatedAt`, `thumbnail` | — | store | |
+
+`direction`, `avoid`, `pinnedColors` and `briefOverride` live on the board, not inside `analysis`, so analyzing again never drops them. Changing them does not clear the analysis.
+
+### 1.2 The brief (`brief`, computed)
+
+Every moodboard API response adds `brief`, computed on each read and never saved (`moodboard_brief.compose`):
+
+| Key | Meaning |
+|-----|---------|
+| `styleBrief` | The override text when there is one, else `generatedStyleBrief` |
+| `generatedStyleBrief` | Direction first, then mode intent, palette (minus kept-out colours), accents, "Make sure these colors appear", visual cues, any reader fields (`motifs`, `materials`, `textures`), notes. Empty until the board is analyzed |
+| `negativePrompt` | `blurry, low-detail artifacts` plus the Avoid list. Defects only: content intent goes in the brief as positive words |
+| `avoid`, `direction`, `pinnedColors` | The saved fields |
+| `avoidPrompt` | `Keep these out of the image: <avoid>, colors close to <kept-out hex>.` or empty |
+| `palette`, `accents` | The analysis colours, minus any within dE00 5 of a kept-out colour |
+| `override` | `{active, stale}`: `stale` is true when the board changed after the override was written |
+| `needsAnalysis` | No saved analysis yet |
+
+### 1.3 API
+
+| Call | Body | Effect |
+|------|------|--------|
+| `POST /api/moodboards` | `name`, `images`, … plus optional `direction`, `avoid`, `pinnedColors`, `briefOverride: {text}` | Create |
+| `PUT /api/moodboards/{id}` | Any subset, including the four brief fields | Update. `briefOverride: {text}` sets the override; `briefOverride: null` removes it (the brief goes back to generated). Send only `text`: `basis` and `updatedAt` are refused (422) |
+| `POST /api/moodboards/{id}/brief-override/keep` | — | Keep the override for the board as it is now (clears `stale`). 409 when there is no override |
+| `POST /api/moodboards/{id}/analyze` | — | Analyze again. Keeps the brief fields and the override |
+
+Sending the same override text again keeps its original `basis`, so a client that saves the whole board on every change doesn't hide the "changed since you edited this" state. New text is stamped with the board as it is after the update.
+
+### 1.4 How a board reaches a generator
+
+The `nebula-moodboard` node emits a `Moodboard` bundle (`kind: "nebula_moodboard"`) carrying `styleBrief`, `negativePrompt`, `avoid`, `avoidPrompt`, `direction`, `pinnedColors`, `briefOverride` (`{active, stale}`), `palette`, `accents`, `images`, `representativeImages`, `analysis` and `providerHints`. A stale override is still used, and the run gets a note saying so. The node is not output-cached: its params name the board, not its contents.
+
+Image generators take it on an optional `moodboard` input port. The engine folds it in before the handler runs (Volume 2, section 7a, "Moodboard fold").
+
+### 1.5 Migration of older boards
+
+Boards saved before the brief fields (no `briefVersion`) are migrated once at backend startup, and in memory on any read before that:
+
+- Negatives in `analysis.negativePrompt` beyond the old defaults move to `avoid`.
+- An `analysis.styleBrief` that differs from what that analysis generated becomes `briefOverride`. If the board changed since that analysis, the override starts out stale.
+- Each changed file is copied first to `<moodboard root>/../moodboard-backups/brief-fields-<UTC time>/<scope>/`, with `migration-log.json` listing what moved. Copying a backup file back undoes that board.
+- The saved `analysis` is left as it was. Running the migration again changes nothing.
+
+---
+
+## Changelog
+
+| Date | Change |
+|------|--------|
+| 2026-10-18 | Moodboard: brief fields, computed `brief`, override and Keep, migration |

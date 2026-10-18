@@ -19,7 +19,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | FAL_KEY |
 | **Endpoint** | `fal-ai/fast-sdxl` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)* |
+| **Inputs** | Prompt (Text)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
 
@@ -81,7 +81,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | BFL_API_KEY, FAL_KEY |
 | **Endpoint** | `/v1/flux-2-pro` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)* |
+| **Inputs** | Prompt (Text)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-10-15 |
 
@@ -333,7 +333,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/gpt-image-1.5` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)* |
+| **Inputs** | Prompt (Text)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
 
@@ -356,7 +356,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/gpt-image-1.5/edit` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Reference Images (Image ×n)* |
+| **Inputs** | Prompt (Text)*, Reference Images (Image ×n)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
 
@@ -380,7 +380,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | OPENAI_API_KEY |
 | **Endpoint** | `/v1/images/edits` |
 | **Execution** | sync |
-| **Inputs** | Image (Image)*, Prompt (Text)*, Mask (Mask) |
+| **Inputs** | Image (Image)*, Prompt (Text)*, Mask (Mask), Moodboard (Moodboard) |
 | **Outputs** | Image (Image), All images (Array) |
 | **Audited** | 2026-06-30 |
 
@@ -404,7 +404,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | OPENAI_API_KEY |
 | **Endpoint** | `/v1/images/generations` |
 | **Execution** | sync |
-| **Inputs** | Prompt (Text)* |
+| **Inputs** | Prompt (Text)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-06-30 |
 
@@ -427,7 +427,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | OPENAI_API_KEY |
 | **Endpoint** | `/v1/images/edits` |
 | **Execution** | stream |
-| **Inputs** | Images (Image ×n)*, Prompt (Text)*, Mask (Mask) |
+| **Inputs** | Images (Image ×n)*, Prompt (Text)*, Mask (Mask), Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
@@ -452,7 +452,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | OPENAI_API_KEY |
 | **Endpoint** | `/v1/images/generations` |
 | **Execution** | stream |
-| **Inputs** | Prompt (Text)* |
+| **Inputs** | Prompt (Text)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | — |
 
@@ -477,7 +477,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | OPENAI_API_KEY |
 | **Endpoint** | `/v1/images/edits` |
 | **Execution** | stream |
-| **Inputs** | Images (Image ×n)*, Prompt (Text)*, Mask (Mask) |
+| **Inputs** | Images (Image ×n)*, Prompt (Text)*, Mask (Mask), Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-06-30 |
 
@@ -500,7 +500,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `openai/gpt-image-2/edit` |
 | **Execution** | stream |
-| **Inputs** | Reference Images (Image ×n)*, Prompt (Text)* |
+| **Inputs** | Reference Images (Image ×n)*, Prompt (Text)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
 
@@ -523,7 +523,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | OPENAI_API_KEY, FAL_KEY |
 | **Endpoint** | `openai/gpt-image-2` |
 | **Execution** | stream |
-| **Inputs** | Prompt (Text)* |
+| **Inputs** | Prompt (Text)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-05-17 |
 
@@ -546,7 +546,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | OPENAI_API_KEY |
 | **Endpoint** | `/v1/images/generations` |
 | **Execution** | stream |
-| **Inputs** | Prompt (Text)* |
+| **Inputs** | Prompt (Text)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-06-30 |
 
@@ -1986,7 +1986,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | GOOGLE_API_KEY |
 | **Endpoint** | `/v1beta/models/{model}:generateContent` |
 | **Execution** | sync |
-| **Inputs** | Prompt (Text)*, Images (Image ×n) |
+| **Inputs** | Prompt (Text)*, Images (Image ×n), Moodboard (Moodboard) |
 | **Outputs** | Image (Image), Text (Text) |
 | **Audited** | 2026-10-10 |
 
@@ -2007,7 +2007,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | GOOGLE_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/nano-banana-2` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)* |
+| **Inputs** | Prompt (Text)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-10-10 |
 
@@ -2040,7 +2040,7 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **API Key** | GOOGLE_API_KEY, FAL_KEY |
 | **Endpoint** | `fal-ai/nano-banana-2/edit` |
 | **Execution** | async-poll |
-| **Inputs** | Prompt (Text)*, Reference Images (Image ×n)* |
+| **Inputs** | Prompt (Text)*, Reference Images (Image ×n)*, Moodboard (Moodboard) |
 | **Outputs** | Image (Image) |
 | **Audited** | 2026-10-10 |
 

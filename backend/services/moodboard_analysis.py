@@ -7,6 +7,10 @@ clustering would absorb. The board's palette ranks colours by image weight ×
 share, merged across images in CIELAB; accents roll up into their own list.
 Notes, mode and brightness fill in the rest. A vision reader can fill the
 empty fields later without changing the saved Moodboard resource.
+
+The brief and negatives are written by services/moodboard_brief.py, which
+also joins in the person's Direction, Avoid and pinned colours (kept on the
+board, not here, so analyzing again can't drop them).
 """
 from __future__ import annotations
 
@@ -25,17 +29,21 @@ from PIL import Image, UnidentifiedImageError
 from commons.colour import delta_e00, hex_to_lab, lab_to_hex
 from commons.measure import MERGE_DELTA_E, measure_image
 from services.file_access import ProtectedPathError, require_allowed_path
+from services.moodboard_brief import DEFECT_NEGATIVES, generated_brief
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT
 
 # 2: colours from Commons' measurement, ranked by weight × share, with accents
 # kept apart; the source hash leaves out the board's name.
-ANALYSIS_VERSION = 2
+# 3: negatives are defects only and the brief states intent positively; the
+# person's Direction, Avoid and pinned colours live on the board
+# (services/moodboard_brief.py).
+ANALYSIS_VERSION = 3
 PALETTE_SIZE = 8
 ACCENT_LIMIT = 4
 REPRESENTATIVE_LIMIT = 10
 
 _MODE_LABELS = {
-    "look": "visual style only; avoid copying specific subjects or identities",
+    "look": "visual style only; the subject comes from the prompt",
     "world": "world, materials, environment, and production design",
     "subject": "subject, silhouette, costume, and identity-adjacent visual cues",
 }
@@ -128,15 +136,11 @@ def analyze_moodboard(moodboard: dict[str, Any]) -> dict[str, Any]:
     representative = rank_representative_images(images, only=analyzed_urls)
     steering = [item for item in per_image if item.get("status") == "analyzed" and steers(item["weight"])]
     keywords = _keywords_from_analysis(mode, notes, steering, palette)
-    avoids = _avoids_for_mode(mode)
-    style_brief = _style_brief(
-        name=str(moodboard.get("name") or "Moodboard"),
-        mode=mode,
-        notes=notes,
-        palette=palette,
-        accents=accents,
-        keywords=keywords,
-        strength=strength,
+    avoids = list(DEFECT_NEGATIVES)
+    style_brief = generated_brief(
+        moodboard,
+        {"mode": mode, "strength": strength, "palette": palette, "accents": accents, "keywords": keywords},
+        with_fields=False,
     )
 
     return {
@@ -476,17 +480,6 @@ def _keywords_from_analysis(
     return keywords[:12]
 
 
-def _avoids_for_mode(mode: str) -> list[str]:
-    avoids = ["unrelated style drift", "conflicting palettes", "random artifacts"]
-    if mode == "look":
-        avoids.extend(["copying exact subjects", "identity transfer", "logo replication"])
-    elif mode == "world":
-        avoids.extend(["generic locations", "mixed eras", "inconsistent materials"])
-    else:
-        avoids.extend(["inconsistent facial features", "unmotivated wardrobe changes"])
-    return avoids
-
-
 def _summary(mode: str, count: int, palette: list[str], accents: list[str], notes: str) -> str:
     if count == 0:
         return "Empty moodboard; add images before using this as a strong creative reference."
@@ -500,30 +493,6 @@ def _taste_profile(mode: str, keywords: list[str], palette: list[str]) -> str:
     key_text = ", ".join(keywords[:6]) if keywords else "balanced visual direction"
     palette_text = ", ".join(palette[:4]) if palette else "source-image palette"
     return f"{_MODE_LABELS.get(mode, _MODE_LABELS['look'])}; cues: {key_text}; colors: {palette_text}."
-
-
-def _style_brief(
-    name: str,
-    mode: str,
-    notes: str,
-    palette: list[str],
-    accents: list[str],
-    keywords: list[str],
-    strength: float,
-) -> str:
-    parts = [
-        f"Use the Nebula moodboard '{name}' as {mode} direction at strength {strength:.2f}.",
-        f"{_MODE_LABELS.get(mode, _MODE_LABELS['look']).capitalize()}.",
-    ]
-    if palette:
-        parts.append(f"Color palette: {', '.join(palette[:PALETTE_SIZE])}.")
-    if accents:
-        parts.append(f"Accent colors, used sparingly: {', '.join(accents)}.")
-    if keywords:
-        parts.append(f"Visual cues: {', '.join(keywords[:10])}.")
-    if notes:
-        parts.append(f"User notes: {notes}")
-    return " ".join(parts)
 
 
 def _lighting_hint(images: list[dict[str, Any]]) -> str:

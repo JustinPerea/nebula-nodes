@@ -42,6 +42,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'sync',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -3144,6 +3145,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'images', label: 'Images', dataType: 'Image', required: false, multiple: true, role: 'identity' },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -3215,6 +3217,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -3340,6 +3343,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true, role: 'identity' },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -3958,6 +3962,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -5406,6 +5411,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'image', label: 'Image', dataType: 'Image', required: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'mask', label: 'Mask', dataType: 'Mask', required: false },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -7462,6 +7468,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     directKeyName: ['BFL_API_KEY'],
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -7642,6 +7649,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'async-poll',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -7719,6 +7727,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -7806,6 +7815,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'stream',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -7888,6 +7898,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'images', label: 'Images', dataType: 'Image', required: true, multiple: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
       { id: 'mask', label: 'Mask', dataType: 'Mask', required: false },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -7973,6 +7984,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         dataType: 'Text',
         required: true,
       },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       {
@@ -8102,6 +8114,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         dataType: 'Mask',
         required: false,
       },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       {
@@ -8215,6 +8228,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     executionPattern: 'stream',
     inputPorts: [
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },
@@ -8294,6 +8308,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
     inputPorts: [
       { id: 'images', label: 'Reference Images', dataType: 'Image', required: true, multiple: true },
       { id: 'prompt', label: 'Prompt', dataType: 'Text', required: true },
+      { id: 'moodboard', label: 'Moodboard', dataType: 'Moodboard', required: false, maxConnections: 1 },
     ],
     outputPorts: [
       { id: 'image', label: 'Image', dataType: 'Image', required: false },

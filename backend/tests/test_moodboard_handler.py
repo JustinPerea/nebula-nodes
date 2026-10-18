@@ -104,8 +104,9 @@ async def test_moodboard_node_keeps_a_current_analysis_and_its_hand_edits(tmp_pa
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
     store = MoodboardStore()
     board = store.create(name="Board", images=[{"url": _write_test_image("kept.png", (210, 90, 30))}])
-    analysis = {**analyze_moodboard(store.get(board["id"])), "styleBrief": "Edited by hand"}
-    store.update(board["id"], analysis=analysis, name="Renamed")
+    store.update(board["id"], analysis=analyze_moodboard(store.get(board["id"])),
+                 briefOverride={"text": "Edited by hand"})
+    store.update(board["id"], name="Renamed")
 
     def must_not_run(moodboard):
         raise AssertionError("a current analysis is used as saved")
@@ -114,6 +115,8 @@ async def test_moodboard_node_keeps_a_current_analysis_and_its_hand_edits(tmp_pa
     result = await handle_moodboard_node(_node(board["id"]), {}, {})
 
     assert result["style_brief"]["value"] == "Edited by hand"
+    # A rename isn't a change to the board, so the edit isn't flagged.
+    assert result["moodboard"]["value"]["briefOverride"] == {"active": True, "stale": False}
 
 
 @pytest.mark.asyncio

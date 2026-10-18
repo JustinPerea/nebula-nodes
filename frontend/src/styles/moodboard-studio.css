@@ -490,3 +490,130 @@ body.app-slava-restraint .panel--moodboard-library {
     grid-template-columns: 1fr;
   }
 }
+
+/* Direction, Avoid and pinned colours (kept on the board) and the brief
+   generators get, with the "board changed since you edited this" notice. */
+body.app-slava-restraint .moodboard-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+body.app-slava-restraint .moodboard-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  padding: 3px 4px 3px 8px;
+  color: var(--sr-ink);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+body.app-slava-restraint .moodboard-chip__swatch {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 2px;
+}
+
+body.app-slava-restraint .moodboard-analysis .moodboard-chip button {
+  border: none;
+  padding: 0 4px;
+  color: var(--sr-ink-meta);
+  font-size: 13px;
+  line-height: 1;
+}
+
+body.app-slava-restraint .moodboard-inline {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+body.app-slava-restraint .moodboard-inline input:not([type="color"]) {
+  flex: 1;
+}
+
+body.app-slava-restraint .moodboard-field .moodboard-inline input[type="color"] {
+  width: 34px;
+  flex: none;
+  padding: 2px;
+}
+
+body.app-slava-restraint .moodboard-inline__error {
+  color: #d9a441;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+body.app-slava-restraint .moodboard-brief {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+body.app-slava-restraint .moodboard-brief__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+body.app-slava-restraint .moodboard-brief__source {
+  color: var(--sr-ink-faint);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .moodboard-brief__text {
+  margin: 0;
+  color: var(--sr-ink);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+body.app-slava-restraint .moodboard-analysis .moodboard-brief__action {
+  align-self: flex-start;
+}
+
+body.app-slava-restraint .moodboard-brief__stale {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  border: 1px solid rgba(217, 164, 65, 0.5);
+  border-radius: 3px;
+  padding: 6px 8px;
+  color: #d9a441;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .moodboard-brief__stale span {
+  flex: 1;
+}
+
+body.app-slava-restraint .moodboard-brief__extras {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  font-size: 12px;
+}
+
+body.app-slava-restraint .moodboard-brief__extras dt {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 6px;
+}
+
+body.app-slava-restraint .moodboard-brief__extras dd {
+  margin: 0;
+  color: var(--sr-ink);
+  line-height: 1.4;
+}

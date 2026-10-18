@@ -636,7 +636,8 @@ export async function deleteCharacter(id: string): Promise<void> {
 // Moodboard CRUD helpers
 // ---------------------------------------------------------------------------
 
-type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'createdAt' | 'updatedAt'>;
+type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'createdAt' | 'updatedAt' | 'brief' | 'briefOverride'>
+  & { briefOverride?: { text: string } | null };
 type MoodboardUpdateInput = Partial<MoodboardCreateInput>;
 
 export async function fetchMoodboards(scope: 'project' | 'global', projectId?: string): Promise<Moodboard[]> {
@@ -678,6 +679,14 @@ export async function updateMoodboard(id: string, body: MoodboardUpdateInput): P
 export async function analyzeMoodboard(id: string): Promise<Moodboard> {
   const response = await apiFetch(`/api/moodboards/${id}/analyze`, { method: 'POST' });
   if (!response.ok) throw new Error(`Analyze moodboard failed: ${response.status}`);
+  return response.json();
+}
+
+/** Keep a board's hand-written brief after the board changed: clears
+ *  "board changed since you edited this" until the next change. */
+export async function keepMoodboardBriefOverride(id: string): Promise<Moodboard> {
+  const response = await apiFetch(`/api/moodboards/${encodeURIComponent(id)}/brief-override/keep`, { method: 'POST' });
+  if (!response.ok) throw new Error(`Keep brief failed: ${response.status}`);
   return response.json();
 }
 

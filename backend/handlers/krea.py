@@ -403,22 +403,6 @@ async def _collect_native_moodboard_style_references(
     return refs
 
 
-def _native_moodboard_prompt_suffix(inputs: dict[str, PortValueDict]) -> str:
-    briefs: list[str] = []
-    for moodboard in _native_moodboard_values(inputs):
-        analysis = moodboard.get("analysis") if isinstance(moodboard.get("analysis"), dict) else {}
-        hints = analysis.get("providerHints") if isinstance(analysis, dict) else {}
-        krea_hints = hints.get("krea") if isinstance(hints, dict) and isinstance(hints.get("krea"), dict) else {}
-        brief = _clean_str(
-            krea_hints.get("styleBrief")
-            or moodboard.get("styleBrief")
-            or (analysis.get("styleBrief") if isinstance(analysis, dict) else "")
-        )
-        if brief:
-            briefs.append(brief)
-    return "\n\n".join(briefs)
-
-
 def _collect_styles(node: GraphNode, inputs: dict[str, PortValueDict]) -> list[dict[str, Any]]:
     styles: list[dict[str, Any]] = []
     default_strength = _float_value(node.params.get("style_strength"), 1.0, -2.0, 2.0)
@@ -513,9 +497,8 @@ async def handle_krea_generate(
         if image_refs:
             body["image_style_references"] = image_refs
 
-        native_prompt_suffix = _native_moodboard_prompt_suffix(inputs)
-        if native_prompt_suffix:
-            body["prompt"] = f"{body['prompt']}\n\nNebula moodboard direction: {native_prompt_suffix}"
+        # A Nebula board's brief and Avoid list are already in the prompt: the
+        # engine adds them for every generator (services/moodboard_brief.py).
 
         styles = _collect_styles(node, inputs)
         if styles:

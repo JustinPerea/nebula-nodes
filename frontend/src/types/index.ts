@@ -546,6 +546,31 @@ export interface MoodboardAnalysis {
   warnings: string[];
 }
 
+/** Hex colours the person pinned: ones that must appear, ones kept out. */
+export interface MoodboardPinnedColors {
+  include: string[];
+  exclude: string[];
+}
+
+/** What generators get from a board (backend services/moodboard_brief.compose).
+ *  The API computes it on every read; it is never saved or sent back. */
+export interface MoodboardBrief {
+  /** The hand-written override when there is one, else the generated brief. */
+  styleBrief: string;
+  generatedStyleBrief: string;
+  /** Defects plus the Avoid list, for a model's negative-prompt field. */
+  negativePrompt: string;
+  avoid: string[];
+  /** The sentence instruction-following models get (GPT Image, Nano Banana, Krea 2). */
+  avoidPrompt: string;
+  direction: string;
+  pinnedColors: MoodboardPinnedColors;
+  palette: string[];
+  accents: string[];
+  override: { active: boolean; stale: boolean };
+  needsAnalysis: boolean;
+}
+
 export interface Moodboard {
   id: string;
   name: string;
@@ -555,6 +580,14 @@ export interface Moodboard {
   mode: 'look' | 'world' | 'subject';
   strength: number;
   analysis: MoodboardAnalysis | null;
+  /** The person's direction, kept on the board so analyzing again keeps it. */
+  direction?: string;
+  avoid?: string[];
+  pinnedColors?: MoodboardPinnedColors;
+  /** A hand-written brief that replaces the generated one. The server stamps
+   *  the basis; clients send only the text. */
+  briefOverride?: { text: string; basis?: string; updatedAt?: string } | null;
+  brief?: MoodboardBrief;
   thumbnail: string;
   projectId?: string;
   createdAt: string;

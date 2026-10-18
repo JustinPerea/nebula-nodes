@@ -7,10 +7,16 @@ On-disk layout mirrors CharacterStore:
 Moodboards are provider-neutral creative-direction assets. They can later be
 adapted to Krea, GPT Image, Gemini, Seedream, etc. without changing the saved
 resource shape.
+
+The person's brief fields (``direction``, ``avoid``, ``pinnedColors``,
+``briefOverride``) sit on the board beside ``analysis``, so analyzing again
+never drops them; services/moodboard_brief.py describes them. A board saved
+before they existed is migrated once (``briefVersion``).
 """
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -101,6 +107,49 @@ def _normalize_images(images: list[dict[str, Any]] | None) -> list[dict[str, Any
     return normalized
 
 
+def _brief():
+    from services import moodboard_brief
+    return moodboard_brief
+
+
+def _migrated(board: dict[str, Any]) -> dict[str, Any]:
+    """A board read from disk, with its brief fields (migrated in memory if
+    the startup migration hasn't written them yet)."""
+    try:
+        result = _brief().migrate_board(board)
+    except Exception:  # an odd old board still opens, without its migrated fields
+        logging.getLogger(__name__).exception("Moodboard %s: brief fields not migrated", board.get("id"))
+        return board
+    return board if result is None else result[0]
+
+
+def _set_override(moodboard: dict[str, Any], value: Any, *, previous: Any) -> None:
+    """Store ``briefOverride`` from ``{"text": ...}`` or None.
+
+    The server keeps ``basis``: new text is stamped with the board as it is
+    now; the same text sent again (Moodboard Studio saves the whole draft)
+    keeps the basis it had, so "changed since you edited this" survives
+    autosave. ``keep_brief_override`` restamps it on purpose.
+    """
+    brief = _brief()
+    if value is None:
+        moodboard["briefOverride"] = None
+        return
+    if not isinstance(value, dict):
+        raise ValueError("briefOverride must be an object with text, or null")
+    unknown = set(value) - {"text"}
+    if unknown:
+        raise ValueError(f"briefOverride has unknown keys: {', '.join(sorted(unknown))}")
+    text = brief.normalize_override_text(value.get("text"))
+    if not text:
+        moodboard["briefOverride"] = None
+        return
+    if isinstance(previous, dict) and str(previous.get("text") or "").strip() == text:
+        moodboard["briefOverride"] = previous
+        return
+    moodboard["briefOverride"] = {"text": text, "basis": brief.brief_basis(moodboard), "updatedAt": _now_iso()}
+
+
 def _normalize_analysis(analysis: dict[str, Any] | None) -> dict[str, Any] | None:
     if analysis is None:
         return None
@@ -121,7 +170,12 @@ class MoodboardStore:
         strength: float = 0.7,
         analysis: dict[str, Any] | None = None,
         projectId: str | None = None,
+        direction: str = "",
+        avoid: list[str] | None = None,
+        pinnedColors: dict[str, Any] | None = None,
+        briefOverride: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        brief = _brief()
         name = str(name or "").strip()
         if not name:
             raise ValueError("name is required")
@@ -144,11 +198,17 @@ class MoodboardStore:
             "mode": mode,
             "strength": strength_value,
             "analysis": _normalize_analysis(analysis),
+            "direction": brief.normalize_direction(direction),
+            "avoid": brief.normalize_avoid(avoid),
+            "pinnedColors": brief.normalize_pinned_colors(pinnedColors),
+            "briefOverride": None,
+            "briefVersion": brief.BRIEF_FIELDS_VERSION,
             "thumbnail": normalized_images[0]["url"] if normalized_images else "",
             "projectId": projectId,
             "createdAt": now,
             "updatedAt": now,
         }
+        _set_override(moodboard, briefOverride, previous=None)
 
         root = _moodboard_root()
         scope_dir = _scope_dir(root, projectId)
@@ -160,7 +220,7 @@ class MoodboardStore:
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
             return None
-        return json.loads(path.read_text(encoding="utf-8"))
+        return _migrated(json.loads(path.read_text(encoding="utf-8")))
 
     def list(self, scope: str, projectId: str | None = None) -> list[dict[str, Any]]:
         root = _moodboard_root()
@@ -178,7 +238,7 @@ class MoodboardStore:
         results: list[dict[str, Any]] = []
         for path in sorted(target_dir.glob("*.json")):
             try:
-                results.append(json.loads(path.read_text(encoding="utf-8")))
+                results.append(_migrated(json.loads(path.read_text(encoding="utf-8"))))
             except (json.JSONDecodeError, OSError):
                 continue
         return results
@@ -187,9 +247,12 @@ class MoodboardStore:
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
             raise KeyError(f"Moodboard '{moodboard_id}' not found")
-        moodboard = json.loads(path.read_text(encoding="utf-8"))
+        moodboard = _migrated(json.loads(path.read_text(encoding="utf-8")))
+        brief = _brief()
 
         immutable = {"id", "createdAt", "projectId"}
+        override_sent = "briefOverride" in fields
+        override_value = fields.pop("briefOverride", None)
         for key, value in fields.items():
             if key in immutable:
                 if value is not None and value != moodboard.get(key):
@@ -206,9 +269,36 @@ class MoodboardStore:
                 moodboard[key] = max(0.0, min(1.0, float(value)))
             elif key == "analysis":
                 moodboard[key] = _normalize_analysis(value)
+            elif key == "direction":
+                moodboard[key] = brief.normalize_direction(value)
+            elif key == "avoid":
+                moodboard[key] = brief.normalize_avoid(value)
+            elif key == "pinnedColors":
+                moodboard[key] = brief.normalize_pinned_colors(value)
+            elif key in {"brief", "briefVersion"}:
+                continue  # computed / owned by the store
             elif value is not None:
                 moodboard[key] = value
+        # Last, so new override text is stamped with the board as updated.
+        if override_sent:
+            _set_override(moodboard, override_value, previous=moodboard.get("briefOverride"))
 
+        moodboard["version"] = int(moodboard.get("version", 1)) + 1
+        moodboard["updatedAt"] = _now_iso()
+        _write_json(path, moodboard)
+        return moodboard
+
+    def keep_brief_override(self, moodboard_id: str) -> dict[str, Any]:
+        """Keep the hand-written brief for the board as it is now: the
+        "changed since you edited this" notice goes until the board changes again."""
+        path = _find_moodboard_file(_moodboard_root(), moodboard_id)
+        if path is None:
+            raise KeyError(f"Moodboard '{moodboard_id}' not found")
+        moodboard = _migrated(json.loads(path.read_text(encoding="utf-8")))
+        override = moodboard.get("briefOverride")
+        if not isinstance(override, dict) or not str(override.get("text") or "").strip():
+            raise ValueError("This board has no hand-written brief to keep")
+        moodboard["briefOverride"] = {**override, "basis": _brief().brief_basis(moodboard), "updatedAt": _now_iso()}
         moodboard["version"] = int(moodboard.get("version", 1)) + 1
         moodboard["updatedAt"] = _now_iso()
         _write_json(path, moodboard)
@@ -219,3 +309,14 @@ class MoodboardStore:
         if path is None:
             raise KeyError(f"Moodboard '{moodboard_id}' not found")
         path.unlink()
+
+
+def migrate_brief_fields() -> dict[str, Any]:
+    """Give every saved board its brief fields, once (decision B7).
+
+    Each board file is backed up to ``<moodboards>/../moodboard-backups/
+    brief-fields-<time>/`` before it changes, with ``migration-log.json``
+    saying what moved. Already-migrated boards are skipped.
+    """
+    root = _moodboard_root()
+    return _brief().migrate_store(root, root.parent / "moodboard-backups")

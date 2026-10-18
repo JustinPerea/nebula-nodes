@@ -62,6 +62,7 @@ from models.events import (
     execution_variant,
 )
 from execution import gating, provider_calls
+from services.moodboard_brief import apply_to_generator as apply_board_to_generator
 from execution.missing_credential import MissingCredentialError
 
 CycleError = _GraphlibCycleError
@@ -264,6 +265,9 @@ _VERBATIM_INPUT_TYPES = frozenset({"Text", *SPATIAL_VALUE_MODELS})
 _PASSTHROUGH_NODE_IDS = frozenset({
     "array-builder", "array-selector", "image-compare", "preview", "router", "reroute", "combine-text",
 })
+
+
+_UNSET = object()
 
 
 def _local_media_inputs(inputs: dict[str, PortValueDict]) -> dict[str, PortValueDict]:
@@ -1182,6 +1186,16 @@ async def _execute_graph(
             validate_file_references({key: port.value for key, port in resolved_inputs.items()})
             if node.definition_id not in _PASSTHROUGH_NODE_IDS:
                 resolved_inputs = _local_media_inputs(resolved_inputs)
+            # A wired Nebula moodboard reaches every generator here, in one
+            # place: its brief joins the prompt, its negatives fill a negative
+            # field, and its Avoid list joins the prompt only for
+            # instruction-following models. The handler (and the cache key)
+            # get these params; the node's own params (its saved recipe)
+            # stay the person's.
+            resolved_inputs, handler_params = apply_board_to_generator(
+                node.definition_id, registered_node_def, resolved_inputs, node.params)
+            handler_node = node if handler_params is node.params else node.model_copy(
+                update={"params": dict(handler_params)})
             if (
                 definition_metadata.get("apiProvider") == "worldlabs"
                 or (
@@ -1198,6 +1212,10 @@ async def _execute_graph(
             cache_enabled = (
                 cache is not None
                 and node.definition_id != "paper-source"
+                # A board is read from its saved file: its params name the
+                # board, not its contents, so a cached bundle would hide an
+                # edit to its Direction or Avoid list. Reading it is cheap.
+                and node.definition_id != "nebula-moodboard"
                 and not bypasses_output_cache(node.definition_id)
             )
             if cache_enabled:
@@ -1205,7 +1223,9 @@ async def _execute_graph(
                     k: {"type": v.type, "value": v.value}
                     for k, v in resolved_inputs.items()
                 }
-                cache_params = dict(node.params)
+                # The params the handler gets: a wired board's negatives
+                # are part of what this call sends.
+                cache_params = dict(handler_params)
                 from services.krea_account import uses_account
                 from services.node_route import filled_counts
                 if uses_account(node, definition_metadata, filled_counts(resolved_inputs)):
@@ -1516,9 +1536,15 @@ async def _execute_graph(
                 handler_calls[nid] = handler_calls.get(nid, 0) + 1
                 notes_token = execution_notes.set(run_notes)
                 try:
-                    node_outputs = await handler(node, resolved_inputs, api_keys)
+                    node_outputs = await handler(handler_node, resolved_inputs, api_keys)
                 finally:
                     execution_notes.reset(notes_token)
+                    if handler_node is not node:
+                        # Settings a handler records on its node (what it
+                        # actually used) still reach the run's record.
+                        for key, value in handler_node.params.items():
+                            if handler_params.get(key, _UNSET) is not value:
+                                node.params[key] = value
 
             node_outputs, withheld = gating.split_outputs(node_outputs, registered_node_def)
             validate_file_references(node_outputs)

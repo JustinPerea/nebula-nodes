@@ -2283,6 +2283,17 @@ async def _personal_agents_shutdown() -> None:
 
 
 @app.on_event("startup")
+async def _moodboard_brief_fields_startup() -> None:
+    """Give boards saved before Direction / Avoid / pinned colours existed those
+    fields, once, backing each file up first (services/moodboard_brief.py)."""
+    from services.moodboard_store import migrate_brief_fields
+    try:
+        await asyncio.to_thread(migrate_brief_fields)
+    except OSError as exc:
+        print(f"[main] moodboard brief migration skipped: {exc}", flush=True)
+
+
+@app.on_event("startup")
 async def _commons_startup() -> None:
     """Scan linked folders. Human authority is the person session, set above."""
     from commons.activation import is_enabled
@@ -9860,6 +9871,19 @@ class MoodboardImageModel(BaseModel):
     excluded: bool = False
 
 
+class MoodboardPinnedColorsModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    include: list[str] = Field(default_factory=list)
+    exclude: list[str] = Field(default_factory=list)
+
+
+class MoodboardBriefOverrideModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+
+
 class MoodboardCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -9870,6 +9894,12 @@ class MoodboardCreate(BaseModel):
     strength: float = 0.7
     analysis: dict[str, Any] | None = None
     projectId: str | None = None
+    # The person's brief fields (services/moodboard_brief.py). They live on
+    # the board, so analyzing again keeps them.
+    direction: str = ""
+    avoid: list[str] = Field(default_factory=list)
+    pinnedColors: MoodboardPinnedColorsModel | None = None
+    briefOverride: MoodboardBriefOverrideModel | None = None
 
 
 class MoodboardUpdate(BaseModel):
@@ -9886,6 +9916,12 @@ class MoodboardUpdate(BaseModel):
     # Moodboard Studio sends the board's own project back; a different one is
     # refused, since a board can't move between projects.
     projectId: str | None = None
+    direction: str | None = None
+    avoid: list[str] | None = None
+    pinnedColors: MoodboardPinnedColorsModel | None = None
+    # {"text": ...} sets a hand-written brief; an explicit null removes it
+    # (the board goes back to the generated brief).
+    briefOverride: MoodboardBriefOverrideModel | None = None
 
 
 class PresetCreate(BaseModel):
@@ -9932,6 +9968,14 @@ def _char_store():
 def _moodboard_store():
     from services.moodboard_store import MoodboardStore
     return MoodboardStore()
+
+
+def _moodboard_out(board: dict) -> dict:
+    """A board as the API returns it: the saved board plus ``brief``, what
+    generators get from it (services/moodboard_brief.compose). ``brief`` is
+    computed on every read and never saved."""
+    from services.moodboard_brief import with_brief
+    return with_brief(board)
 
 
 def _validate_project_id_param(project_id: str | None) -> None:
@@ -10041,7 +10085,7 @@ async def list_moodboards(scope: str = "global", projectId: str | None = None) -
     _validate_project_id_param(projectId)
     store = _moodboard_store()
     try:
-        return store.list(scope=scope, projectId=projectId)
+        return [_moodboard_out(board) for board in store.list(scope=scope, projectId=projectId)]
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -10059,11 +10103,15 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
             strength=body.strength,
             analysis=body.analysis,
             projectId=body.projectId,
+            direction=body.direction,
+            avoid=body.avoid,
+            pinnedColors=body.pinnedColors.model_dump() if body.pinnedColors else None,
+            briefOverride=body.briefOverride.model_dump() if body.briefOverride else None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
-    return moodboard
+    return _moodboard_out(moodboard)
 
 
 @app.get("/api/moodboards/{moodboard_id}")
@@ -10075,7 +10123,7 @@ async def get_moodboard(moodboard_id: str) -> dict:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     if moodboard is None:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
-    return moodboard
+    return _moodboard_out(moodboard)
 
 
 @app.put("/api/moodboards/{moodboard_id}")
@@ -10088,6 +10136,8 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     }
     if "analysis" in body.model_fields_set and body.analysis is None:
         updates["analysis"] = None
+    if "briefOverride" in body.model_fields_set and body.briefOverride is None:
+        updates["briefOverride"] = None
     if "images" in updates:
         updates["images"] = [img.model_dump() if hasattr(img, "model_dump") else img for img in body.images or []]
     try:
@@ -10097,7 +10147,22 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
-    return moodboard
+    return _moodboard_out(moodboard)
+
+
+@app.post("/api/moodboards/{moodboard_id}/brief-override/keep")
+async def keep_moodboard_brief_override(moodboard_id: str) -> dict:
+    """Keep the board's hand-written brief after the board changed: clears
+    "changed since you edited this" until the next change."""
+    store = _moodboard_store()
+    try:
+        moodboard = store.keep_brief_override(moodboard_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    await _broadcast_stored_asset("moodboard", moodboard)
+    return _moodboard_out(moodboard)
 
 
 @app.post("/api/moodboards/{moodboard_id}/analyze")
@@ -10119,7 +10184,7 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     await _broadcast_stored_asset("moodboard", moodboard)
-    return moodboard
+    return _moodboard_out(moodboard)
 
 
 @app.delete("/api/moodboards/{moodboard_id}")

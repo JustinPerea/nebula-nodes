@@ -13,7 +13,7 @@ Platform-neutral contract documentation for Nebula Nodes. Used so **iPad**, **br
 | 4 | `04-graph-and-persistence.md` | Occasional | `.nebula` graph JSON, validation, cache |
 | 5 | `05-api-and-events.md` | Occasional | REST routes, WebSocket execution events |
 | 6 | `06-platform-emission.md` | Occasional | What each platform generates from contracts |
-| 7 | `07-studios-and-resources.md` | Grows with studios | Moodboard, Character, Cinema, Video/Remotion editors — assets + APIs + graph bridges |
+| 7 | [07-studios-and-resources.md](./07-studios-and-resources.md) | Grows with studios | Moodboard, Character, Cinema, Video/Remotion editors — assets + APIs + graph bridges |
 | 8 | [08-model-contract-pipeline.md](./08-model-contract-pipeline.md) | Occasional | Repeatable workflow: inventory → exemplar → fixtures → parity tests |
 
 **Contract pipeline:** `node scripts/contract-inventory.mjs` — gap report for exemplars/fixtures.
