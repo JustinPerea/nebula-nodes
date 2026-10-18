@@ -259,6 +259,30 @@ def test_billing_params_keep_their_own_rule(api):
     assert response.status_code == 403
 
 
+def test_a_loaded_graph_still_meets_the_file_and_billing_guards(api):
+    """`nebula load` now sends the saved file to /api/graph/import, outputs
+    and `_` bookkeeping included, instead of recreating nodes one by one.
+    The import checks every value against protected paths before staging
+    anything, and a billing key still gets the billing refusal."""
+    from services import settings as settings_module
+
+    api.graph.add_node("text-input", {"text": "keep"})
+    before = api.graph.get_state()
+    secret = str(settings_module.SETTINGS_PATH)
+    planted_output = {"nodes": [{"id": "a", "definitionId": "image-input", "params": {},
+                                 "outputs": {"image": {"type": "Image", "value": secret}}}], "edges": []}
+    planted_param = {"nodes": [{"id": "a", "definitionId": "image-input",
+                                "params": {"filePath": secret, "_previewUrl": secret}}], "edges": []}
+    billing = {"nodes": [{"id": "a", "definitionId": "krea-2-generate", "params": {"_kreaAuth": "mcp"}}],
+               "edges": []}
+    for body, status, says in ((planted_output, 400, "Protected"), (planted_param, 400, "Protected"),
+                               (billing, 403, "")):
+        response = api.client.post("/api/graph/import", headers=AGENT, json=body)
+        assert response.status_code == status, response.text
+        assert says in response.json()["detail"]
+    assert api.graph.get_state() == before
+
+
 def test_cli_refuses_internal_params_before_sending(monkeypatch, capsys):
     from cli.client import NebulaClient
 
