@@ -1,7 +1,29 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'node:url'
+import { assertBackendEnvConsistent, devProxyPort, type BackendPortEnv } from './src/lib/devBackendPort'
 import { nebulaBuildStamp } from './vite-plugins/buildStamp.ts'
+
+const configDir = fileURLToPath(new URL('.', import.meta.url))
+
+/** The /api and /ws proxy for the dev server (and `vite preview`).
+ * VITE_NEBULA_BACKEND_PORT moves it and the page's discovery together; unset,
+ * it is 127.0.0.1:8000 as before. See src/lib/devBackendPort.ts. */
+export function devBackendProxy(env: BackendPortEnv) {
+  assertBackendEnvConsistent(env)
+  const port = devProxyPort(env)
+  return {
+    // 127.0.0.1, the address the dev backend binds and prints in its person link.
+    '/api': {
+      target: `http://127.0.0.1:${port}`,
+      changeOrigin: true,
+    },
+    '/ws': {
+      target: `ws://127.0.0.1:${port}`,
+      ws: true,
+    },
+  }
+}
 
 const lottieLightPath = fileURLToPath(
   new URL('./node_modules/lottie-web/build/player/lottie_light.js', import.meta.url),
@@ -32,103 +54,102 @@ function sparkWithoutRuntimeCodegen() {
   }
 }
 
-export default defineConfig({
-  // Electron loads the packaged renderer through file://. Relative asset URLs
-  // keep chunks, styles, and static files resolvable from that origin.
-  base: process.env.NEBULA_DESKTOP_BUILD === '1' ? './' : '/',
-  plugins: [sparkWithoutRuntimeCodegen(), react(), nebulaBuildStamp()],
-  resolve: {
-    // The full player bundles its expression interpreter with runtime code
-    // generation. Nebula only renders SVG Lottie animations, so the light
-    // player removes that unsafe-eval path and its production-build warning.
-    alias: {
-      'lottie-web': lottieLightPath,
+export default defineConfig(({ mode }) => {
+  // The same VITE_NEBULA_* values the page sees: the shell first, then .env files.
+  const env = loadEnv(mode, configDir, 'VITE_NEBULA_')
+  const proxy = devBackendProxy({
+    port: env.VITE_NEBULA_BACKEND_PORT,
+    ports: env.VITE_NEBULA_BACKEND_PORTS,
+    apiBase: env.VITE_NEBULA_API_BASE,
+  })
+  return {
+    // Electron loads the packaged renderer through file://. Relative asset URLs
+    // keep chunks, styles, and static files resolvable from that origin.
+    base: process.env.NEBULA_DESKTOP_BUILD === '1' ? './' : '/',
+    plugins: [sparkWithoutRuntimeCodegen(), react(), nebulaBuildStamp()],
+    resolve: {
+      // The full player bundles its expression interpreter with runtime code
+      // generation. Nebula only renders SVG Lottie animations, so the light
+      // player removes that unsafe-eval path and its production-build warning.
+      alias: {
+        'lottie-web': lottieLightPath,
+      },
     },
-  },
-  build: {
-    // The desktop renderer gets its own folder. Sharing dist/ meant any web
-    // `npm run build` replaced the relative-URL desktop bundle with one whose
-    // absolute /assets/... URLs resolve to file:///assets/... under Electron,
-    // so the window loaded an empty #root.
-    outDir: process.env.NEBULA_DESKTOP_BUILD === '1' ? 'dist-desktop' : 'dist',
-    // Three.js ships as one indivisible ~717 kB module, but it is only fetched
-    // by lazy 3D workspaces. Track the initial entry with a stricter dedicated
-    // budget instead of treating this deferred module as startup payload.
-    chunkSizeWarningLimit: 750,
-    rolldownOptions: {
-      output: {
-        codeSplitting: {
-          includeDependenciesRecursively: false,
-          groups: [
-            {
-              // Stable startup frameworks are shared by Canvas and the lazy
-              // workspaces. Isolating them keeps feature growth measurable in
-              // the entry budget and gives browsers one long-lived vendor
-              // cache instead of rebundling React into index.*.
-              name: 'react-vendor',
-              test: /node_modules[\\/](?:react|react-dom|scheduler|zustand|use-sync-external-store)[\\/]/,
-              priority: 40,
-              maxSize: 450_000,
-            },
-            {
-              name: 'canvas-vendor',
-              test: /node_modules[\\/]@xyflow[\\/]/,
-              priority: 30,
-              maxSize: 450_000,
-            },
-            {
-              name: 'archive-vendor',
-              test: /node_modules[\\/]jszip[\\/]/,
-              priority: 30,
-            },
-            {
-              name: 'remotion-vendor',
-              test: /node_modules[\\/](?:@remotion|remotion)[\\/]/,
-              priority: 20,
-              maxSize: 450_000,
-            },
-            {
-              name: 'timeline-vendor',
-              test: /node_modules[\\/]@xzdarcy[\\/]/,
-              priority: 20,
-              maxSize: 450_000,
-            },
-            {
-              name: 'lottie-vendor',
-              test: /node_modules[\\/]lottie-web[\\/]/,
-              priority: 30,
-            },
-            {
-              name: 'react-three-vendor',
-              test: /node_modules[\\/]@react-three[\\/]/,
-              priority: 20,
-              maxSize: 450_000,
-            },
-            {
-              // Spark's renderer/worker payload is only needed after a user
-              // expands a World. Keep it isolated from both the startup entry
-              // and the reusable React Three Fiber chunk.
-              name: 'spark-vendor',
-              test: /node_modules[\\/]@sparkjsdev[\\/]spark[\\/]/,
-              priority: 30,
-              maxSize: 450_000,
-            },
-          ],
+    build: {
+      // The desktop renderer gets its own folder. Sharing dist/ meant any web
+      // `npm run build` replaced the relative-URL desktop bundle with one whose
+      // absolute /assets/... URLs resolve to file:///assets/... under Electron,
+      // so the window loaded an empty #root.
+      outDir: process.env.NEBULA_DESKTOP_BUILD === '1' ? 'dist-desktop' : 'dist',
+      // Three.js ships as one indivisible ~717 kB module, but it is only fetched
+      // by lazy 3D workspaces. Track the initial entry with a stricter dedicated
+      // budget instead of treating this deferred module as startup payload.
+      chunkSizeWarningLimit: 750,
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            includeDependenciesRecursively: false,
+            groups: [
+              {
+                // Stable startup frameworks are shared by Canvas and the lazy
+                // workspaces. Isolating them keeps feature growth measurable in
+                // the entry budget and gives browsers one long-lived vendor
+                // cache instead of rebundling React into index.*.
+                name: 'react-vendor',
+                test: /node_modules[\\/](?:react|react-dom|scheduler|zustand|use-sync-external-store)[\\/]/,
+                priority: 40,
+                maxSize: 450_000,
+              },
+              {
+                name: 'canvas-vendor',
+                test: /node_modules[\\/]@xyflow[\\/]/,
+                priority: 30,
+                maxSize: 450_000,
+              },
+              {
+                name: 'archive-vendor',
+                test: /node_modules[\\/]jszip[\\/]/,
+                priority: 30,
+              },
+              {
+                name: 'remotion-vendor',
+                test: /node_modules[\\/](?:@remotion|remotion)[\\/]/,
+                priority: 20,
+                maxSize: 450_000,
+              },
+              {
+                name: 'timeline-vendor',
+                test: /node_modules[\\/]@xzdarcy[\\/]/,
+                priority: 20,
+                maxSize: 450_000,
+              },
+              {
+                name: 'lottie-vendor',
+                test: /node_modules[\\/]lottie-web[\\/]/,
+                priority: 30,
+              },
+              {
+                name: 'react-three-vendor',
+                test: /node_modules[\\/]@react-three[\\/]/,
+                priority: 20,
+                maxSize: 450_000,
+              },
+              {
+                // Spark's renderer/worker payload is only needed after a user
+                // expands a World. Keep it isolated from both the startup entry
+                // and the reusable React Three Fiber chunk.
+                name: 'spark-vendor',
+                test: /node_modules[\\/]@sparkjsdev[\\/]spark[\\/]/,
+                priority: 30,
+                maxSize: 450_000,
+              },
+            ],
+          },
         },
       },
     },
-  },
-  server: {
-    proxy: {
-      // 127.0.0.1, the address the dev backend binds and prints in its person link.
-      '/api': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
-      },
-      '/ws': {
-        target: 'ws://127.0.0.1:8000',
-        ws: true,
-      },
+    server: {
+      proxy,
     },
-  },
+  }
 })

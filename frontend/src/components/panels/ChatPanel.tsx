@@ -29,6 +29,7 @@ import { PersonalAgentWarning } from './PersonalAgentWarning';
 import { PERSONAL_AGENTS_CHANGED_EVENT } from './settings/PersonalAgentsSection';
 import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
+import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
 import { chatAuthority } from '../../lib/commonsChatAuthority';
 import { onPersonConnected, reportPersonRequired } from '../../lib/personSession';
 import { normalizeAgentEventSource } from '../../lib/agentEvents';
@@ -66,7 +67,17 @@ function loadChatSelection(): ChatSelection {
   } catch { return empty; }
 }
 
-const BACKEND_START_COMMAND = 'backend/.venv/bin/python backend/devserver.py --port 8000 --open';
+// A dev frontend pinned with VITE_NEBULA_BACKEND_PORT names its own backend's
+// port here, so an unreachable-backend hint never points at the default 8000.
+function chatBackendPort(): number {
+  try {
+    return devProxyPort({ port: import.meta.env.VITE_NEBULA_BACKEND_PORT as string | undefined });
+  } catch {
+    return DEFAULT_BACKEND_PORT;
+  }
+}
+const CHAT_BACKEND_PORT = chatBackendPort();
+const BACKEND_START_COMMAND = `backend/.venv/bin/python backend/devserver.py --port ${CHAT_BACKEND_PORT} --open`;
 const CHAT_PANEL_RESIZE_CURSORS: Record<string, string> = {
   l: 'ew-resize',
   r: 'ew-resize',
@@ -678,7 +689,7 @@ export function ChatPanel() {
           open: true,
           title: 'Start Nebula backend',
           status: 'Backend offline',
-          detail: 'Claude may already be logged in, but Nebula cannot reach FastAPI on port 8000.',
+          detail: `Claude may already be logged in, but Nebula cannot reach FastAPI on port ${CHAT_BACKEND_PORT}.`,
           canStartLogin: false,
           commands: [BACKEND_START_COMMAND],
         };
@@ -713,7 +724,7 @@ export function ChatPanel() {
           open: true,
           title: 'Start Nebula backend',
           status: 'Backend offline',
-          detail: 'Codex may already be logged in, but Nebula cannot reach FastAPI on port 8000.',
+          detail: `Codex may already be logged in, but Nebula cannot reach FastAPI on port ${CHAT_BACKEND_PORT}.`,
           canStartLogin: false,
           commands: [BACKEND_START_COMMAND],
         };

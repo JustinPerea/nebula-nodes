@@ -66,10 +66,19 @@ Key selectors: agent tabs `.chat-panel__agent-btn`, input `.chat-panel textarea`
 
 - **Dev-server port collisions.** Other Vite apps may hold `5173`; Nebula then binds the same port on the other IP stack (`[::1]:5173` vs `127.0.0.1:5173`), so `localhost` is ambiguous. **Start Nebula on a fixed unique port and address it explicitly:**
   ```bash
-  npm --prefix frontend run dev -- --port 5188 --strictPort   # background; then NEBULA_URL=http://localhost:5188
+  VITE_NEBULA_BACKEND_PORT=8155 npm --prefix frontend run dev -- --host 127.0.0.1 --port 5188 --strictPort   # background; then NEBULA_URL=http://127.0.0.1:5188
   ```
+  `8155` is your own isolated backend (next gotcha). Never start a capture Vite without `VITE_NEBULA_BACKEND_PORT`: unset, it proxies to `:8000` and scans 8000-8010.
   The dev server is long-running — run it in the background, and note it gets recycled on session resume (restart it).
-- **Backend on `:8000`** must be up for real chat status (`backend/.venv/bin/python backend/devserver.py --port 8000`; open the link it prints so chats and Settings work). Graph/chat *visuals* only need the frontend + the stores, but the live `Codex · ChatGPT` status needs the backend.
+- **A second Nebula next to Justin's.** If his backend is on `:8000`, a capture frontend will find it (the proxy defaults to 8000 and the page scans 8000-8010) and write into his project. Run your own backend on another port with a temp `HOME` and temp `NEBULA_SETTINGS_PATH` / `NEBULA_STATE_DIR` / `NEBULA_OUTPUT_ROOT`, start Vite with `VITE_NEBULA_BACKEND_PORT=<that port>`, and have the browser abort requests to ports 8000-8010. See `CONTRIBUTING.md` → "Running a second, isolated dev instance".
+- **Your own backend** must be up for real chat status. Agents never use or start one on `:8000`, which is Justin's. Start it isolated, in the background:
+  ```bash
+  TMP=$(mktemp -d); mkdir -p "$TMP/home" "$TMP/state" "$TMP/output"; echo '{}' > "$TMP/settings.json"
+  HOME="$TMP/home" NEBULA_SETTINGS_PATH="$TMP/settings.json" NEBULA_STATE_DIR="$TMP/state" NEBULA_OUTPUT_ROOT="$TMP/output" \
+    backend/.venv/bin/python backend/devserver.py --port 8155 --ui http://127.0.0.1:5188 --no-reload &
+  until curl -fsS http://127.0.0.1:8155/api/health >/dev/null; do sleep 1; done
+  ```
+  Open the link it prints so chats and Settings work. Graph/chat *visuals* only need the frontend + the stores, but the live `Codex · ChatGPT` status needs the backend. (Justin's own interactive session is the only one that runs `devserver.py --port 8000`.)
 - **Render fidelity:** Puppeteer headless renders the app's own fonts (loaded by the app), so captures match across Playwright/Puppeteer. Capture at the video resolution (1920×1080).
 - **"Compose freely" is allowed.** Components don't have to behave like the live app — you can place a chat icon where you want, fake the agent state, etc. The bar is that it *looks* like the real product and reads clearly.
 
