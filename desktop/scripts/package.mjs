@@ -40,6 +40,7 @@ const DESKTOP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = resolve(DESKTOP_DIR, '..');
 const FRONTEND_DIR = join(REPO_ROOT, 'frontend');
 const RENDERER_INDEX = join(FRONTEND_DIR, 'dist-desktop', 'index.html');
+const RENDERER_STAMP = join(FRONTEND_DIR, 'dist-desktop', 'nebula-build.json');
 
 const args = new Set(process.argv.slice(2));
 for (const arg of args) {
@@ -70,9 +71,11 @@ function newestMtime(path) {
 
 function rendererIsStale() {
   if (!existsSync(RENDERER_INDEX)) return 'frontend/dist-desktop is missing';
+  // The app refuses a build without its params-version stamp (frontend-build.mjs).
+  if (!existsSync(RENDERER_STAMP)) return 'frontend/dist-desktop predates nebula-build.json';
   const built = statSync(RENDERER_INDEX).mtimeMs;
   const inputs = ['src', 'public', 'index.html', 'package.json', 'package-lock.json', 'vite.config.ts',
-    'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json'];
+    'vite-plugins', 'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json'];
   const newest = Math.max(...inputs.map((p) => newestMtime(join(FRONTEND_DIR, p))));
   return newest > built ? 'frontend sources changed since the last desktop build' : null;
 }

@@ -493,6 +493,8 @@ describe('startSidecar — readiness identity', () => {
 
     assert.equal(handle.pid, 99999);
     assert.ok(fetchFn.callCount() >= 1);
+    // main.mjs compares health.paramsVersion with the frontend's stamp.
+    assert.deepEqual(handle.health, correctBody);
   });
 
   const negativeCases = [
