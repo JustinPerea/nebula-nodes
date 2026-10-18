@@ -7,6 +7,7 @@ import email
 import io
 import json
 import re
+import ssl
 import uuid
 
 import httpx
@@ -209,6 +210,38 @@ async def test_connection_failures_are_retried_then_reported(monkeypatch):
     calls, _ = _install(monkeypatch, fail)
     with pytest.raises(ts.TypeSafeError, match="Couldn't reach TypeSafe"):
         await _ask()
+    assert len(calls) == 3
+
+
+def _bad_record_mac() -> ssl.SSLError:
+    # What anyio re-raises raw for a TLS error mid-response (seen live 2026-10-15).
+    return ssl.SSLError(1, "[SSL: SSLV3_ALERT_BAD_RECORD_MAC] ssl/tls alert bad record mac (_ssl.c:2559)")
+
+
+@pytest.mark.asyncio
+async def test_a_tls_error_mid_response_is_retried(monkeypatch):
+    def respond(request, n):
+        if n == 1:
+            raise _bad_record_mac()
+        return httpx.Response(200, json=NOUL)
+
+    calls, sleeps = _install(monkeypatch, respond)
+    result = await _ask()
+    assert len(calls) == 2 and len(sleeps) == 1 and result.answers["q"].noul == 0.9
+
+
+@pytest.mark.asyncio
+async def test_a_tls_error_on_every_try_reads_as_a_connection_failure(monkeypatch):
+    def fail(request, n):
+        raise _bad_record_mac()
+
+    calls, _ = _install(monkeypatch, fail)
+    with pytest.raises(ts.TypeSafeError) as caught:
+        await _ask()
+    message = str(caught.value)
+    assert message.startswith("Couldn't reach TypeSafe (connection failed) after 3 tries")
+    assert "_ssl.c" not in message and "SSL" not in message
+    assert caught.value.__cause__ is None and caught.value.__suppress_context__
     assert len(calls) == 3
 
 

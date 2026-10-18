@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import json
+import ssl
 from pathlib import Path
 
 import pytest
@@ -443,3 +444,31 @@ async def test_failed_job_status_surfaces_in_error(tmp_path: Path) -> None:
     msg = str(excinfo.value)
     assert "req-123" in msg
     assert "content policy violation" in msg
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_tls_error_on_the_status_poll_reads_as_a_connection_failure(tmp_path: Path) -> None:
+    # A TLS error mid-response is a raw ssl.SSLError, not an httpx.HTTPError
+    # (services/http_errors.py). It used to escape recovery with OpenSSL's text.
+    sse = _sse({"status": "IN_PROGRESS", "request_id": "req-123"})
+    respx.post(STREAM_URL).mock(
+        return_value=Response(200, content=sse, headers={"content-type": "text/event-stream"})
+    )
+    respx.get(STATUS_URL).mock(side_effect=ssl.SSLError(
+        1, "[SSL: SSLV3_ALERT_BAD_RECORD_MAC] ssl/tls alert bad record mac (_ssl.c:2559)"))
+
+    with pytest.raises(RuntimeError) as excinfo:
+        await stream_execute_image(
+            config=_config(),
+            request_body={"prompt": "hi"},
+            node_id="n1",
+            emit=_Emitter(),
+            run_dir=tmp_path,
+            provider="fal",
+            recovery_poll_interval=0,
+        )
+
+    msg = str(excinfo.value)
+    assert "req-123" in msg and "status request error: connection failed" in msg
+    assert "_ssl.c" not in msg

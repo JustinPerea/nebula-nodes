@@ -11,6 +11,7 @@ from typing import Any, Awaitable, Callable, Literal
 import httpx
 
 from models.events import ExecutionEvent, StreamDeltaEvent, StreamPartialImageEvent
+from services.http_errors import HTTP_ERRORS, describe
 from services.output import save_base64_image_named
 
 logger = logging.getLogger(__name__)
@@ -603,8 +604,8 @@ async def _recover_fal_image(
     for attempt in range(1, max_polls + 1):
         try:
             status_resp = await client.get(status_url, headers=config.headers)
-        except httpx.HTTPError as exc:
-            return None, f"status request error: {exc}"
+        except HTTP_ERRORS as exc:
+            return None, f"status request error: {describe(exc)}"
         if status_resp.status_code == 404:
             return None, f"no request found with ID {request_id} (404)"
         if status_resp.status_code not in (200, 202):
@@ -626,8 +627,8 @@ async def _recover_fal_image(
                 result_url = payload.get("response_url") or f"{base}/requests/{request_id}"
                 try:
                     result_resp = await client.get(str(result_url), headers=config.headers)
-                except httpx.HTTPError as exc:
-                    return None, f"result request error: {exc}"
+                except HTTP_ERRORS as exc:
+                    return None, f"result request error: {describe(exc)}"
                 if result_resp.status_code != 200:
                     return None, f"result endpoint returned {result_resp.status_code}"
                 try:
