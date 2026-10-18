@@ -14,6 +14,7 @@ import httpx
 from models.events import ExecutionEvent, ProgressEvent
 from models.graph import GraphNode, PortValueDict
 from services.file_access import require_allowed_path
+from services.moodboard_analysis import rank_representative_images
 from services.cancellation import schedule_detached_cancel
 from services.output import OUTPUT_ROOT, get_run_dir
 from execution.missing_credential import MissingCredentialError
@@ -382,11 +383,7 @@ async def _collect_native_moodboard_style_references(
         krea_hints = hints.get("krea") if isinstance(hints, dict) and isinstance(hints.get("krea"), dict) else {}
         raw_images = krea_hints.get("representativeImages") or moodboard.get("representativeImages")
         if not raw_images:
-            raw_images = [
-                img.get("url")
-                for img in moodboard.get("images", [])
-                if isinstance(img, dict) and not bool(img.get("excluded")) and img.get("url")
-            ]
+            raw_images = rank_representative_images(moodboard.get("images", []))
         image_weights = {
             str(img.get("url")): _float_value(img.get("weight"), 1.0, 0.0, 1.0)
             for img in moodboard.get("images", [])

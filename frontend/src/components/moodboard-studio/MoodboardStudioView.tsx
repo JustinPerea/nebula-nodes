@@ -458,14 +458,14 @@ export function MoodboardStudioView() {
                       onChange={(event) => updateAnalysis({ negativePrompt: event.target.value })}
                     />
                   </label>
-                  {analysis.palette.length > 0 && (
-                    <div className="moodboard-palette" aria-label="Extracted palette">
-                      {analysis.palette.map((color) => (
-                        <span key={color} className="moodboard-palette__swatch" style={{ backgroundColor: color }} title={color} />
-                      ))}
+                  <Swatches label="Palette" colors={analysis.palette} />
+                  <Swatches label="Accents" colors={analysis.accents ?? []} />
+                  <div className="moodboard-analysis__summary">{analysis.summary}</div>
+                  {analysis.version < 2 && (
+                    <div className="moodboard-analysis__outdated">
+                      Made by the older analyzer, which ignored image weights and dropped small accent colors. Analyze again to update it.
                     </div>
                   )}
-                  <div className="moodboard-analysis__summary">{analysis.summary}</div>
                 </div>
               ) : (
                 <div className="moodboard-analysis__empty">
@@ -476,6 +476,20 @@ export function MoodboardStudioView() {
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function Swatches({ label, colors }: { label: string; colors: string[] }) {
+  if (colors.length === 0) return null;
+  return (
+    <div className="moodboard-swatches">
+      <span className="moodboard-swatches__label">{label}</span>
+      <div className="moodboard-palette" role="list" aria-label={label}>
+        {colors.map((color) => (
+          <span key={color} role="listitem" className="moodboard-palette__swatch" style={{ backgroundColor: color }} title={color} />
+        ))}
+      </div>
     </div>
   );
 }
