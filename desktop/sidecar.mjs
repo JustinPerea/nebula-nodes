@@ -382,6 +382,8 @@ export async function startSidecar(options = {}) {
  * @property {string[]} argv
  * @property {import('node:child_process').ChildProcess} child
  * @property {string} diagnostics
+ * @property {object} health — the /api/health body that confirmed readiness
+ *   (main.mjs reads its paramsVersion; frontend-build.mjs)
  * @property {number} attempts
  * @property {(deps?: object) => Promise<StopResult>} stop
  */
@@ -656,6 +658,7 @@ async function spawnAndAwaitHealth(opts) {
               argv,
               child,
               diagnostics,
+              health: body,
               attempts: 0,
               stop: (stopDeps) => stopSidecar({ child, port }, stopDeps),
             });
