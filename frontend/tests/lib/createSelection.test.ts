@@ -47,6 +47,11 @@ describe('composerStateFromSelection', () => {
     });
   });
 
+  it('keeps a saved provider choice with the billing mode (lib/billingParams.ts)', () => {
+    const saved = makeNode('n', 'nano-banana', true, { _provider: 'fal', _variant: 'old-run', prompt: 'logo' });
+    expect(composerStateFromSelection([saved], []).prefill?.params).toEqual({ _provider: 'fal', prompt: 'logo' });
+  });
+
   it('materializes API billing for an older saved Krea node with no auth field', () => {
     const saved = makeNode('krea', 'krea-video-kling-kling-3-0', true, { duration: 5 });
     expect(composerStateFromSelection([saved], []).prefill?.params).toEqual({

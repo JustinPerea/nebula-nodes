@@ -570,7 +570,8 @@ def _cache_route_tag(
         definition, params = base, nested[1]
         tag = node_route.cache_tag(definition, params, api_keys)
         return f"{nested[0]}={tag}" if tag else None
-    params = node_route.with_wired_blockers(definition, params, node_route.filled_ports(inputs))
+    # Item counts, as maker_routes.multi_route reads a ``ports`` rule.
+    params = node_route.with_wired_blockers(definition, params, node_route.filled_counts(inputs))
     return node_route.cache_tag(definition, params, api_keys)
 
 
@@ -852,14 +853,31 @@ def validate_graph(
         else:
             key_names = []
 
+        # Edges into each port, which a route's ``ports`` rule and a wired
+        # rule param read (node_route.with_wired_blockers). Before the run
+        # an edge counts one input; the router counts the items each port
+        # carries (filled_counts), so one edge bringing a list of images can
+        # still stop there, before that provider is called.
+        wired: dict[str, int] = {}
+        for edge in incoming_edges.get(node.id, []):
+            wired[edge.target_handle] = wired.get(edge.target_handle, 0) + 1
         from services.krea_account import uses_account
-        krea_account = uses_account(node, node_def)
+        krea_account = uses_account(node, node_def, wired)
         if krea_account:
             from services.krea_connector import is_krea_connected
             if not is_krea_connected():
                 errors.append(ValidationErrorDetail(node_id=node.id, port_id="",
                                                    message="Connect your Krea account in Settings before running this recipe"))
-        if key_names and not krea_account and not any(api_keys.get(k) for k in key_names):
+        from services import node_route
+        if node_route.has_routes(node_def) and not krea_account:
+            # A route-table node runs on its chosen route (or Auto's), never
+            # on whichever key happens to be set: fail here, before any spend,
+            # with the router's own words (maker_routes.multi_route).
+            routed = node_route.with_wired_blockers(node_def, node.params, wired)
+            unavailable = node_route.route_unavailable(node_def, routed, api_keys)
+            if unavailable is not None:
+                errors.append(ValidationErrorDetail(node_id=node.id, port_id="", message=unavailable["message"]))
+        elif key_names and not krea_account and not any(api_keys.get(k) for k in key_names):
             key_display = " or ".join(key_names)
             errors.append(
                 ValidationErrorDetail(
@@ -1189,7 +1207,8 @@ async def _execute_graph(
                 }
                 cache_params = dict(node.params)
                 from services.krea_account import uses_account
-                if uses_account(node, definition_metadata):
+                from services.node_route import filled_counts
+                if uses_account(node, definition_metadata, filled_counts(resolved_inputs)):
                     from services.krea_connector import connection_revision
                     cache_params["_kreaConnectionRevision"] = connection_revision()
                 # Which route this run takes (maker key, fal or Krea copy, Krea

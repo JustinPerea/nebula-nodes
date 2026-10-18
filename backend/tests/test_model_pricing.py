@@ -252,3 +252,138 @@ def test_is_local_means_no_provider_call():
     assert model_pricing.is_local(definitions["qc-loop-safety"])
     assert not model_pricing.is_local(definitions["qc-loop-safety"], {"mode": "vision-llm"})
     assert not model_pricing.is_local(definitions["nano-banana"])
+
+
+@pytest.mark.parametrize("case", CASES["runCases"], ids=[c["name"] for c in CASES["runCases"]])
+def test_route_table_run_estimate_matches_shared_cases(case):
+    """A route-table run is priced on the route it takes, or reported
+    unavailable with the reason; never priced on another route."""
+    item = {"id": "n1", "definitionId": case["nodeId"], "params": case["params"], "name": "Node"}
+    wired = {"n1": case["wiredCounts"]} if case.get("wiredCounts") else None
+    result = model_pricing.estimate_run([item], CASES["pricing"], CASES["definitions"], case["apiKeys"], None, wired)
+    expected = case["expected"]
+    if expected["low"] is None:
+        assert "n1" not in result["priced"]
+    else:
+        assert result["priced"]["n1"]["low"] == pytest.approx(expected["low"])
+        assert result["priced"]["n1"]["high"] == pytest.approx(expected["high"])
+    assert ("n1" in result["unavailable"]) is expected["unavailable"]
+    assert ("n1" in result["plan"]) is expected["plan"]
+    if expected["unavailable"]:
+        assert "n1" in result["unpriced"]
+        from services import node_route
+        definition = CASES["definitions"][case["nodeId"]]
+        routed = node_route.with_wired_blockers(definition, case["params"], case.get("wiredCounts") or {})
+        assert result["unavailable"]["n1"] == node_route.route_unavailable(definition, routed, case["apiKeys"])["message"]
+
+
+@pytest.mark.parametrize("case", CASES["routeEstimateCases"], ids=[c["name"] for c in CASES["routeEstimateCases"]])
+def test_estimate_routes_matches_shared_cases(case):
+    definition = CASES["definitions"][case["nodeId"]]
+    result = model_pricing.estimate_routes(definition, case["params"], case.get("wired", []), CASES["pricing"])
+    assert set(result) == set(case["expected"])
+    for route_id, price in case["expected"].items():
+        if price is None:
+            assert result[route_id] is None, route_id
+        else:
+            assert result[route_id] == {"currency": "usd", "low": pytest.approx(price), "high": pytest.approx(price)}
+
+
+def test_a_route_price_can_be_marked_unconfirmed():
+    definition = CASES["definitions"]["table"]
+    entry = CASES["pricing"]["nodes"]["table"]
+    marked = {route["id"]: model_pricing.route_price_unconfirmed(entry, definition, route["id"])
+              for route in definition["routes"]}
+    assert marked == {"bfl": False, "fal": True, "replicate": False, "openrouter": False, "krea": False}
+    assert model_pricing.route_price_unconfirmed(entry, definition, "nope") is False
+    problems: list[str] = []
+    model_pricing._validate_entry("x", {**entry["routes"]["fal"], "unconfirmed": "yes"}, definition, {}, problems,
+                                  multi_route_ok=True)
+    assert "x unconfirmed must be true or false" in problems
+
+
+def test_one_row_can_be_marked_unconfirmed_on_its_own():
+    """FLUX.2's fal route states Pro, Max and Flex exactly but not Flash or
+    Klein: the mark follows the row the params price at."""
+    definition = CASES["definitions"]["table"]
+    entry = json.loads(json.dumps(CASES["pricing"]["nodes"]["table"]))
+    bfl = entry["routes"]["bfl"]
+    bfl["rows"][-1]["unconfirmed"] = True
+    last = bfl["rows"][-1]["match"]
+    assert model_pricing.route_price_unconfirmed(entry, definition, "bfl", last) is True
+    others = [row["match"] for row in bfl["rows"][:-1] if row["match"] != last]
+    assert others and all(model_pricing.route_price_unconfirmed(entry, definition, "bfl", match) is False
+                          for match in others)
+    problems: list[str] = []
+    bfl["rows"][0]["unconfirmed"] = "yes"
+    model_pricing._validate_entry("x", bfl, definition, {}, problems, multi_route_ok=True)
+    assert "x row 0 unconfirmed must be true or false" in problems
+
+
+def test_estimate_routes_is_empty_for_a_legacy_node():
+    assert model_pricing.estimate_routes(CASES["definitions"]["dual"], {}, (), CASES["pricing"]) == {}
+
+
+def test_route_table_price_keys_are_route_pricing_keys():
+    definition = CASES["definitions"]["table"]
+    assert model_pricing.route_price_keys(definition) == {
+        "bfl": "bfl", "fal": "fal", "replicate-std": "replicate", "openrouter": "openrouter", "krea": "krea"}
+    assert model_pricing.route_providers(definition) == {"bfl", "fal", "replicate", "openrouter", "krea"}
+    # A legacy node keeps pricing by provider.
+    assert model_pricing.route_price_keys(CASES["definitions"]["dual"]) == {"google": "google", "fal": "fal"}
+
+
+def test_validation_ties_a_route_table_entry_to_its_route():
+    good = CASES["pricing"]["nodes"]["table"]["routes"]
+    bad_routes = {
+        "replicate": good["replicate-std"],  # the route's provider, not its pricing key
+        "fal": {**good["fal"], "provider": "bfl"},
+    }
+    bad = {"currencies": CASES["pricing"].get("currencies", {}),
+           "nodes": {"table": {"routes": bad_routes}}}
+    problems = "\n".join(model_pricing.validate_pricing(bad, CASES["definitions"]))
+    assert "can't bill 'replicate'" in problems
+    assert "provider must be 'fal' or left out" in problems
+    assert "provider must be 'replicate'" not in problems
+
+
+def test_wired_counts_counts_each_edge_into_a_port():
+    items = [{"id": "k"}]
+    edges = [("a", "k", "images"), ("b", "k", "images"), ("c", "k", "prompt"), ("d", "other", "images"), ("e", "k", None)]
+    assert model_pricing.wired_counts(items, edges) == {"k": {"images": 2, "prompt": 1}}
+    assert model_pricing.wired_ports(items, edges) == {"k": {"images", "prompt"}}
+
+
+def test_price_variables_that_arent_params_are_validated():
+    """(mode) takes only the three video modes; run-time quantities and the
+    megapixel-second unit are known names, any other parenthesised name isn't."""
+    definitions = CASES["definitions"]
+    moded = CASES["pricing"]["nodes"]["moded"]
+    bad = {"nodes": {
+        "moded": {**moded, "rows": [{"match": {"(mode)": "x2v"}, "price": 0.1},
+                                    {"match": {"(frames)": 1}, "price": 0.1},
+                                    {"match": {"(references)": "8"}, "price": 0.1}]},
+        "tooled": {**CASES["pricing"]["nodes"]["tooled"], "per": "megapixel"},
+    }}
+    problems = "\n".join(model_pricing.validate_pricing(bad, definitions))
+    assert "(mode) must be one of ('t2v', 'i2v', 'v2v')" in problems
+    assert "(references) must be one of ('none', 'some')" in problems
+    assert "matches unknown param '(frames)'" in problems
+    assert "per must be one of" in problems
+    assert model_pricing.validate_pricing({"nodes": {"moded": moded, "tooled": CASES["pricing"]["nodes"]["tooled"]}},
+                                          definitions) == []
+
+
+@pytest.mark.parametrize("wired, refs", [
+    ((), "none"), (("prompt",), "none"), (("images",), "some"), (("images", "prompt"), "some"),
+])
+def test_references_reads_the_reference_image_port(wired, refs):
+    assert model_pricing.references(wired) == refs
+
+
+@pytest.mark.parametrize("wired, mode", [
+    ((), "t2v"), (("prompt",), "t2v"), (("start_image",), "i2v"), (("keyframes",), "i2v"),
+    (("end_image", "start_image"), "i2v"), (("start_video",), "v2v"), (("start_video", "keyframes"), "v2v"),
+])
+def test_video_mode_follows_the_wired_ports_like_the_bfl_client(wired, mode):
+    assert model_pricing.video_mode(wired) == mode

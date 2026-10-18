@@ -33,6 +33,10 @@ def test_public_catalog_and_offline_sync_are_pinned(monkeypatch):
 def test_each_model_has_a_valid_request_contract_and_valid_control_defaults(node_id, model):
     schema = model["requestSchema"]
     Draft202012Validator.check_schema(schema)
+    if model.get("foldedInto"):
+        # A route of a hand-built route-table node (FOLDED): no node of its own.
+        assert node_id not in REGISTRY and model["foldedInto"] in REGISTRY
+        return
     definition = REGISTRY[node_id]
     assert definition["apiProvider"] == "krea"
     direct = SYNC.DIRECT_ROUTES.get(model["endpoint"])
@@ -220,3 +224,53 @@ def test_direct_route_models_price_both_routes():
             low, high = row["price"]
             assert low == source_row["price"]
             assert high >= low + SYNC.MAX_REFERENCE_IMAGES * per_image > low
+
+
+# -- models folded into route-table nodes ----------------------------------------
+
+def test_folded_models_are_routes_of_their_nodes_not_nodes():
+    folded = {key: model for key, model in CATALOG["models"].items() if model.get("foldedInto")}
+    assert {model["endpoint"] for model in folded.values()} == set(SYNC.FOLDED)
+    generated = SYNC.definitions(CATALOG)
+    entries, _ = SYNC.pricing_entries(CATALOG)
+    for key, model in folded.items():
+        node_id, route_id, port_fields = SYNC.FOLDED[model["endpoint"]]
+        assert model["foldedInto"] == node_id and model.get("portFields", {}) == port_fields
+        assert key not in generated and key not in entries
+        route = next(route for route in REGISTRY[node_id]["routes"] if route["id"] == route_id)
+        assert route["provider"] == "krea" and route["endpoint"] == model["endpoint"]
+    # Krea 3 came in by itself (--only), stamped with the spec it was read from.
+    krea_3 = CATALOG["models"]["krea-image-krea-krea-3"]
+    assert krea_3["fetchedAt"] == "2026-10-15" and len(krea_3["openapiSha256"]) == 64
+    assert krea_3["displayName"] == "Krea 3 Beta" and "pricing" not in krea_3
+
+
+def _broken(node_id, change):
+    registry = json.loads(json.dumps(REGISTRY))
+    route = next(route for route in registry[node_id]["routes"] if route["provider"] == "krea")
+    change(registry[node_id], route)
+    return SYNC.folded_problems(CATALOG, registry)
+
+
+def test_folded_check_ties_each_krea_route_to_its_request_schema():
+    assert SYNC.folded_problems(CATALOG, REGISTRY) == []
+    # A param the schema lacks, a value outside its enum, a range past its
+    # bounds, a port it can't take, a wrong endpoint, a missing route.
+    assert any("sends 'draft'" in p for p in _broken(
+        "flux-3-video", lambda d, r: r.setdefault("params", []).append(
+            {"key": "draft", "label": "Draft", "type": "boolean", "required": False})))
+    assert any("'uhd'" in p or "uhd" in p for p in _broken(
+        "flux-3-video", lambda d, r: r["valueMap"]["resolution"].update({"uhd": "2160p"})))
+    assert any("max 25" in p for p in _broken(
+        "flux-3-video", lambda d, r: next(p for p in d["sharedParams"] if p["key"] == "duration").update(max=25)))
+    assert any("port keyframes" in p for p in _broken(
+        "flux-3-video", lambda d, r: r["rules"]["ports"].pop("keyframes")))
+    assert any("port images goes as 'images'" in p for p in _broken(
+        "flux-3-video", lambda d, r: d["inputPorts"].append(
+            {"id": "images", "label": "Images", "dataType": "Image", "required": False})))
+    assert any("doesn't name" in p for p in _broken(
+        "flux-video-edit", lambda d, r: r.update(endpoint="/generate/video/black-forest-labs/flux-3-video")))
+    assert any("has no Krea route" in p for p in _broken(
+        "krea-3", lambda d, r: r.update(provider="fal")))
+    assert any("creativity=1 sends 1" in p for p in _broken(
+        "flux-video-upscale", lambda d, r: r.pop("valueMap")))

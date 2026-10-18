@@ -8,11 +8,11 @@ xAI video, Veo on the Gemini API and on Vertex, Gemini Omni) uses the two pieces
 here:
 
 - :func:`poll_request` retries a transient poll error: a transport error
-  (connect, read or write failure, timeout, protocol error) or an HTTP 5xx. The
-  waits are POLL_RETRY_DELAYS, about 30 s in all, so a short outage doesn't
-  cost the run and a long one still fails in bounded time. A 4xx is never
-  retried: it is the maker's answer (bad key, unknown task, rate limit), and the
-  same request gets the same answer.
+  (connect, read or write failure, timeout, protocol error, a TLS error
+  mid-response) or an HTTP 5xx. The waits are POLL_RETRY_DELAYS, about 30 s
+  in all, so a short outage doesn't cost the run and a long one still fails in
+  bounded time. A 4xx is never retried: it is the maker's answer (bad key,
+  unknown task, rate limit), and the same request gets the same answer.
 - :class:`UpstreamTask` cancels the task upstream (best effort, on a detached
   task) when polling ends without the task reaching a terminal state: the run
   was cancelled, a poll error survived the retries, the maker answered 4xx, or
@@ -25,6 +25,8 @@ import asyncio
 from typing import Any, Awaitable, Callable, TypeVar
 
 import httpx
+
+from services.http_errors import is_transport_error
 
 T = TypeVar("T")
 
@@ -45,8 +47,9 @@ def _status_of(value: Any) -> int | None:
 
 
 def is_transient(value: Any) -> bool:
-    """True for a poll failure worth retrying: a transport error or an HTTP 5xx."""
-    if isinstance(value, httpx.TransportError):
+    """True for a poll failure worth retrying: a transport error (a raw
+    mid-response ssl.SSLError included) or an HTTP 5xx."""
+    if is_transport_error(value):
         return True
     status = _status_of(value)
     return status is not None and status >= 500

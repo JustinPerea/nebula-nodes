@@ -14,6 +14,8 @@ The node adapts to the model: choose a text model and you get a text node; choos
 
 ## Nodes available in Nebula (1)
 
+Since 2026-10-15 OpenRouter is also a provider you can pick on three FLUX 3 nodes (`flux-3-image`, `flux-3-image-klein`, `flux-3-video`), through the provider switcher on the card. Those runs use OpenRouter's `/api/v1/images` and `/api/v1/videos` endpoints, not chat completions; the gaps below are about `openrouter-universal`. See [Black Forest Labs](./bfl.md) and [provider routes](../PROVIDER-ROUTES.md).
+
 | Node (as shown in app) | Node ID | Type | Key inputs | Notable params | Use it for |
 |---|---|---|---|---|---|
 | OpenRouter | `openrouter-universal` | Universal gateway (`category: universal`) | `messages` (Text, required); `images` (Image, multiple) appears automatically when you pick a vision/image model | `model` (required — chosen from a live, searchable model list); `temperature` (0–2, default 1); `max_tokens` (1–200000, default 4096); `response_format` (Text / JSON — JSON mode for text models, 2026-06-05) | One node for the whole OpenRouter catalog: chat/reasoning/coding with any text model, asking questions about images, or generating images — depending on the model picked |

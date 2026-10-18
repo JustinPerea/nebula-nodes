@@ -1,6 +1,6 @@
 ---
 name: openrouter
-description: "OpenRouter universal gateway in Nebula for streaming text, reasoning, coding, vision, and model-dependent image generation through openrouter-universal. Use when configuring the node, choosing or searching an OpenRouter model, wiring its dynamic media ports, or debugging its authentication and chat-completions behavior."
+description: "OpenRouter in Nebula: the openrouter-universal gateway for streaming text, reasoning, coding, vision, and model-dependent image generation, and the OpenRouter route of the FLUX 3 route-table nodes (flux-3-image, flux-3-image-klein, flux-3-video) through /api/v1/images and /api/v1/videos. Use when configuring the universal node, choosing or searching an OpenRouter model, wiring its dynamic media ports, choosing OpenRouter in a FLUX 3 node's provider switcher, or debugging its authentication, chat-completions, images or videos behavior."
 ---
 
 # OpenRouter Skill
@@ -14,7 +14,7 @@ description: "OpenRouter universal gateway in Nebula for streaming text, reasoni
 - User wants to generate an image from a prompt via an image-output model on OpenRouter (e.g. Gemini Flash Image, FLUX, Recraft).
 - User asks about OpenRouter auth, the model list, or which model to pick for a job.
 
-It's one node that *reconfigures itself* based on the chosen model. There is no separate "OpenRouter image" or "OpenRouter vision" node — same `openrouter-universal`, different model.
+`openrouter-universal` is one node that *reconfigures itself* based on the chosen model. There is no separate "OpenRouter image" or "OpenRouter vision" node — same `openrouter-universal`, different model. Since 2026-10-15 OpenRouter is also one route of three FLUX 3 route-table nodes, which use OpenRouter's `/images` and `/videos` endpoints instead of chat completions (see **OpenRouter as a route** below).
 
 ## Universal rules
 
@@ -35,7 +35,7 @@ It's one node that *reconfigures itself* based on the chosen model. There is no 
 
 ## Pick the right node
 
-There is exactly one OpenRouter node. The model dropdown is what varies.
+There is exactly one OpenRouter node (`openrouter-universal`). The model dropdown is what varies. The FLUX 3 nodes below reach OpenRouter as a route, not as an OpenRouter node.
 
 | Node (in app) | Node ID | Endpoint / model | Key params | Use it for |
 |---|---|---|---|---|
@@ -76,6 +76,25 @@ The model list is **live and per-account** (backend proxies OpenRouter's `/api/v
 1. Add an **OpenRouter** node and pick an **image-output** model (e.g. a Gemini Flash Image, FLUX, or Recraft variant — one that lists `image` in its output modalities). An **Image** output port appears and the node switches to image mode.
 2. Wire a Text node with your prompt ("a neon-lit crab on a beach at dusk, cinematic") into `messages`. (`temperature`/`max_tokens` don't apply here.)
 3. Run. The handler does one POST, pulls the picture from `choices[0].message.images[]`, saves it as a PNG in the run directory, and emits it on `image` — ready to feed an upscaler, a video node, or a save node.
+
+## OpenRouter as a route (FLUX 3, 2026-10-15)
+
+Three Black Forest Labs nodes list OpenRouter as one route of several (`docs/PROVIDER-ROUTES.md`, the `bfl` skill). The person picks it in the node's provider switcher (`_provider: "openrouter"`), or Auto lands on it when no key earlier in the table is set. Black Forest Labs is OpenRouter's only provider for these models.
+
+| Node | OpenRouter model | Endpoint | What the route takes |
+|---|---|---|---|
+| `flux-3-image` | `black-forest-labs/flux-3-image` | `POST /api/v1/images` | every shared setting; `resolution` sent as `768` / `1K` / `1.5K` / `2K` / `4K`; up to 10 references |
+| `flux-3-image-klein` | `black-forest-labs/flux-3-image-klein` | `POST /api/v1/images` | the shared settings except `seed`: a set seed stops the run on OpenRouter |
+| `flux-3-video` | `black-forest-labs/flux-3-video` | `POST /api/v1/videos`, then poll `GET /api/v1/videos/{id}` | 720p, 1080p, 2K, 4K; only 21:9, 16:9, 4:3, 1:1, 3:4, 9:16; start and end image only (no `keyframes`, no `start_video`, no `draft`) |
+
+The route clients (`backend/handlers/openrouter_media.py`, wired in `backend/execution/route_clients.py`):
+
+- **Images:** wired `images` go as `input_references` (local outputs as data URLs, which `/images` documents). Settings outside OpenRouter's documented request fields go under `provider.options["black-forest-labs"]` (FLUX: `safety_tolerance`). The picture comes back as `data[0].b64_json` and is saved.
+- **Videos:** `start_image` / `end_image` go as `frame_images` (`first_frame` / `last_frame`), and only as public http(s) URLs: OpenRouter documents data URLs for `/images` references but not for `/videos` frames. A Nebula output wired into a frame stops before any request and points to another provider. A source video isn't sent (its request shape isn't documented). The finished clip is downloaded from `unsigned_urls[0]`. Polls every 5 s for up to an hour; OpenRouter has no video cancel, so Stop only stops waiting.
+- **No route for FLUX Video Edit [fast] or Video Upscale.** OpenRouter lists both models, but documents no way to send the source clip.
+- Prices (OpenRouter's model endpoints, read 2026-10-15): images the same as BFL's ($0.041 to $0.607 for FLUX 3 Image, $0.008 to $0.036 for Klein); video $0.17 (720p) / $0.29 (1080p) / $0.28 (2K) / $0.41 (4K) per second.
+
+The "Capability boundaries" table below is about `openrouter-universal` and chat completions. The FLUX 3 routes do send OpenRouter `provider` options and image size and aspect settings, on the `/images` and `/videos` endpoints only.
 
 ## In the nebula_nodes context
 
