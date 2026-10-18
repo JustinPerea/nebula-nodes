@@ -247,8 +247,9 @@ def test_a_refused_step_says_which_and_what_earlier_steps_applied(api, capsys):
     err = capsys.readouterr().err.splitlines()
     assert err[0].startswith("error: step 2 of 2 was refused, so it and the steps after it weren't applied: "
                              "Invalid target handle 'nope' on node '+a'")
-    assert err[1] == "Step 1 was applied. Each is a normal edit the person can undo:"
+    assert err[1] == "Step 1 was applied and stays on the canvas:"
     assert err[2] == "  step 1: added 1 (+p → n1)"
+    assert err[3] == "To finish, fix step 2 and apply step 2 on their own, using the node ids above in place of those +refs."
     # Step 1 stayed; nothing of step 2 landed.
     assert list(api.graph.nodes) == ["n1"] and api.graph.edges == []
 
@@ -281,6 +282,10 @@ def test_a_steps_plan_is_checked_before_anything_is_sent(api, capsys, monkeypatc
         ({"steps": [{"steps": []}]}, "steps don't nest"),
         ({"steps": []}, "non-empty list"),
         ({"steps": [STEPS["steps"][0]], "nodes": []}, "holds only note and steps"),
+        # These would be refused by the server only after step 1 had landed.
+        ({"steps": [STEPS["steps"][0], {"note": "only a note"}]}, "step 2 changes nothing"),
+        ({"steps": [STEPS["steps"][0], {"rename": {"+p": "P"}, "arrange": True}]},
+         "step 2 has arrange but adds no nodes"),
     ):
         assert apply_cmd.run_apply(api.client, _args(file=_plan_file(api, plan))) == 1
         assert words in capsys.readouterr().err, plan

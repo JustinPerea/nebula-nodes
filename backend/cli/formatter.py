@@ -733,11 +733,14 @@ def format_step_stop(number: int, total: int, reason: str, applied: list[dict[st
     if not applied:
         lines.append("Nothing was applied.")
         return "\n".join(lines)
-    done = "Step 1 was" if len(applied) == 1 else f"Steps 1-{len(applied)} were"
-    lines.append(f"{done} applied. Each is a normal edit the person can undo:")
+    done = "Step 1 was applied and stays" if len(applied) == 1 else f"Steps 1-{len(applied)} were applied and stay"
+    lines.append(f"{done} on the canvas:")
     for index, result in enumerate(applied, start=1):
         mapped = ", ".join(f"{ref} → {node_id}" for ref, node_id in (result.get("idMap") or {}).items())
         lines.append(f"  step {index}: {result.get('summary') or 'no change'}" + (f" ({mapped})" if mapped else ""))
+    rest = f"step {number}" if number == total else f"steps {number}-{total}"
+    lines.append(f"To finish, fix step {number} and apply {rest} on their own, "
+                 "using the node ids above in place of those +refs.")
     return "\n".join(lines)
 
 

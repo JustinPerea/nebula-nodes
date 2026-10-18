@@ -9,7 +9,8 @@ A plan of steps ({"steps": [plan, ...]}) is sent one step at a time. Each
 step is a normal edit that lands whole or not at all, and later steps use
 the node ids earlier steps returned for their +refs. If a step is refused,
 the command stops there, says which step and why, and lists what the
-earlier steps applied (each one can be undone like any edit).
+earlier steps applied, with the ids their +refs became, so the agent
+can fix the refused step and send the rest on their own.
 """
 from __future__ import annotations
 

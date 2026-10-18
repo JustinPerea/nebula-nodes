@@ -827,7 +827,7 @@ proposal shape (`nodes` with `+refs`, `edges`, `params`) plus `rename`,
 order (unwire, remove, add and change, rename, move) with the validators the
 single-edit routes use, and commits it at once. A bad wire or a missing node
 leaves the canvas exactly as it was. There is no limit on how much one edit
-does: it can be undone, so the only bound is the most a project can save
+does: the only bound is the most a project can save
 (10,000 nodes and 50,000 wires, the same limits as import). An edit that
 would pass them is refused with 413 and changes nothing. Proposals keep their
 limits because the person reviews them item by item. Nodes with unresolved World Labs paid
@@ -864,7 +864,7 @@ same size-aware layout as Auto-layout, and saves the positions with
 `PUT /api/graph/layout` and `arrangeId`. The first write for an id wins; a
 second open tab gets `already-arranged` and changes nothing, and every tab
 takes the winning positions from the next graphSync. The write is a normal
-move, so it can be undone, and the activity log credits the agent.
+move, and the activity log credits the agent.
 
 The edit's reply has `arrange: {id, nodeIds, direction, gap, status,
 message}`. `status` is `waiting` when a canvas is open, or
@@ -1006,8 +1006,9 @@ swaps in the node ids each step's reply gave in `idMap`, so the backend
 keeps no plan state. A ref names one node across all steps, and the CLI
 checks every step's refs before it sends step 1. If a step is refused, the
 command stops there (exit 1), names the step and the reason, and lists what
-the earlier steps applied; each of those is a normal edit that can be
-undone. `--json` prints `{status, steps, idMap}`, or `{status: "stopped",
+the earlier steps applied, with the ids their `+refs` became. Those steps
+stay on the canvas: fix the refused step and apply it and the rest on their
+own, using those ids in place of the refs. `--json` prints `{status, steps, idMap}`, or `{status: "stopped",
 failedStep, error, applied, idMap}`. `nebula propose` doesn't take steps.
 
 Other graph commands:

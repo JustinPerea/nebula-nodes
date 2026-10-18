@@ -71,7 +71,12 @@ export function ArrangeController() {
         watches.set(request.id, watch);
         if (watch.busy) continue;
         const { all, mine, measured } = placed(request);
-        if (mine.length === 0) continue; // not merged into this canvas yet
+        if (mine.length === 0) {
+          // Not merged into this canvas yet. If they never arrive, stop waiting,
+          // or this tab would keep drawing every node (selectMeasuring) for good.
+          if (now - watch.firstSeen >= MAX_WAIT_MS) finish(request.id);
+          continue;
+        }
         const signature = sizeSignature(mine);
         if (signature !== watch.signature) {
           watch.signature = signature;

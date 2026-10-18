@@ -5,9 +5,9 @@ wires, param changes) plus renames, moves, removals and unwires, and applies
 all of it or none of it. Graph validation happens in main, with the same
 validators as proposals and single edits.
 
-A direct edit has no per-edit caps (decision C1): it can be undone, so its
-only bound is the canvas's own size limit, which main checks on the staged
-graph (RESTORE_MAX_GRAPH_NODES / RESTORE_MAX_GRAPH_EDGES), plus the request
+A direct edit has no per-edit caps (decision C1). Its only bound is the
+canvas's own size limit, which main checks on the staged graph
+(RESTORE_MAX_GRAPH_NODES / RESTORE_MAX_GRAPH_EDGES), plus the request
 complexity limits every graph route has. Proposals keep their caps because
 the person reviews them item by item.
 

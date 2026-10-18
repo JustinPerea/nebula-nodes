@@ -216,6 +216,12 @@ def check_steps(body: dict[str, Any], *, note: str | None = None) -> list[dict[s
         if "run" in step:
             raise BuildError(f"step {number} has run, and apply never runs anything: run the nodes with "
                              "`nebula run` after the plan is applied")
+        if not any(step.get(key) for key in ("nodes", "edges", "params", "rename", "move", "remove", "unwire")):
+            raise BuildError(f"step {number} changes nothing; give it nodes, edges, params, rename, move, "
+                             "remove or unwire, or drop it")
+        if step.get("arrange") and not step.get("nodes"):
+            raise BuildError(f"step {number} has arrange but adds no nodes; arrange lays out the nodes its own "
+                             "step adds, so put it on the step that adds them")
         mine = _declared(step)
         for ref in mine:
             if ref in created:
