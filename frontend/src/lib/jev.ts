@@ -92,6 +92,29 @@ export function isJevNode(definitionId: unknown): definitionId is JevNodeId {
   return typeof definitionId === 'string' && (JEV_NODE_IDS as readonly string[]).includes(definitionId);
 }
 
+/**
+ * TypeSafe's colours, the one place they are defined. Jev nodes wear them on
+ * the canvas so they read as one family: ModelNode sets them as CSS variables
+ * on the node (jevBrandStyle) and styles/jev-result.css uses only the
+ * variables. `accent` is for borders, fills, glows and dark-on-pink labels;
+ * small text on the dark card uses `soft`, which keeps WCAG AA (about 5.7:1
+ * on the tinted header) where `accent` doesn't (about 4:1).
+ */
+export const JEV_BRAND = {
+  accent: '#E551BA',
+  soft: '#F386A1',
+} as const;
+
+/** CSS variables for a Jev node's wrapper. The category colour is the accent,
+ * so the card border, selection ring and entrance glow turn pink too. */
+export function jevBrandStyle(): Record<string, string> {
+  return {
+    '--node-category-color': JEV_BRAND.accent,
+    '--jev-brand': JEV_BRAND.accent,
+    '--jev-brand-soft': JEV_BRAND.soft,
+  };
+}
+
 const NUMBER_RE = /^\d+(?:\.\d+)?$/;
 
 /** Value of one output port, whether given as a PortValue or a bare string. */

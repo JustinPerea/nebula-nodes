@@ -2,6 +2,9 @@
  * generate-model-reference.mjs
  *
  * Reads backend/data/node_definitions.json and emits docs/MODEL_REFERENCE.md.
+ * A route-table node's per-provider settings come from
+ * backend/tests/fixtures/route_tables.json (routeParams), so run
+ * scripts/generate-route-tables.py first when definitions change.
  *
  * Usage:
  *   node scripts/generate-model-reference.mjs          # write the file
@@ -18,6 +21,8 @@ const REPO_ROOT = join(__dirname, '..');
 const NODE_DEFS_PATH = join(REPO_ROOT, 'backend', 'data', 'node_definitions.json');
 const MODEL_PROVIDERS_PATH = join(REPO_ROOT, 'docs', 'model-providers');
 const OUTPUT_PATH = join(REPO_ROOT, 'docs', 'MODEL_REFERENCE.md');
+const ROUTE_TABLES_PATH = join(REPO_ROOT, 'backend', 'tests', 'fixtures', 'route_tables.json');
+const ROUTE_TABLES = JSON.parse(readFileSync(ROUTE_TABLES_PATH, 'utf8'));
 
 // Category display names and sort order
 const CATEGORY_ORDER = [
@@ -208,6 +213,106 @@ function formatPorts(ports) {
 }
 
 /**
+ * What each route of a route-table node offers, as the card shows it on that
+ * provider: backend/tests/fixtures/route_tables.json `routeParams`, which
+ * scripts/generate-route-tables.py writes from node_route.route_param_definitions
+ * (the function describe_node reads) and frontend/tests/lib/routeTables.test.ts
+ * holds equal to directRoute.ts routeParamDefinitions. Reading it here, rather
+ * than a third copy of the rule, keeps this file, the card and describe_node on
+ * one definition (backend/tests/test_route_agent_surfaces.py checks all three).
+ * Regenerate route_tables.json first when the definitions change.
+ */
+function routeParams(nodeId) {
+  const nodes = ROUTE_TABLES.nodes ?? {};
+  const routes = nodes[nodeId]?.routeParams;
+  if (!routes) {
+    throw new Error(`route_tables.json has no routeParams for ${nodeId}: run scripts/generate-route-tables.py first.`);
+  }
+  return routes;
+}
+
+function code(value) {
+  return `\`${escapeCell(typeof value === 'string' ? value : JSON.stringify(value))}\``;
+}
+
+/** A param's options or range on one route: every value it takes there (not cut to 8). */
+function offeredCell(param, offered) {
+  if (Array.isArray(offered.options)) {
+    const labels = new Map((param.options ?? []).map((o) => [JSON.stringify(o.value), o.label]));
+    return offered.options.map((value) => {
+      const label = labels.get(JSON.stringify(value));
+      return label && label !== value ? `${code(value)} ${escapeCell(label)}` : code(value);
+    }).join(', ') || '—';
+  }
+  if (offered.min !== undefined || offered.max !== undefined) {
+    return `${offered.min ?? '…'}–${offered.max ?? '…'}`;
+  }
+  return '—';
+}
+
+/** When the card shows it on this route: its own visibleWhen merged with the route's paramVisibleWhen. */
+function shownWhenCell(offered) {
+  const when = offered.visibleWhen;
+  if (!when || Object.keys(when).length === 0) return 'always';
+  return Object.entries(when).map(([key, values]) => `${code(key)} = ${values.map(code).join(' / ')}`).join('; ');
+}
+
+function typeName(type) {
+  return { integer: 'int', boolean: 'bool' }[type] ?? type;
+}
+
+/**
+ * A route-table node's routes (in Auto order), then one settings table per
+ * provider: what that route offers, as the card shows it there (values cut,
+ * ranges narrowed, conditional visibility). `_provider` and `_kreaAuth` are
+ * the switcher's, so they're named rather than tabled.
+ */
+// A route's provider as the card names it (node_route.PROVIDER_LABELS, "fal.ai").
+function routeProviderLabel(provider) {
+  return ROUTE_TABLES.providerLabels?.[provider] ?? PROVIDER_LABELS[provider] ?? provider;
+}
+
+function renderRoutes(nodeId, node) {
+  const lines = ['**Routes** (Auto tries them in this order; `_provider` picks one)', ''];
+  lines.push('| Route | Provider | Keys | Endpoint | Notes |');
+  lines.push('|---|---|---|---|---|');
+  for (const route of node.routes) {
+    const notes = [route.maker ? 'maker' : null, route.plan ? `Krea plan: ${route.plan}` : null, route.note ?? null]
+      .filter(Boolean).join('; ');
+    lines.push(`| \`${escapeCell(route.id)}\` | ${routeProviderLabel(route.provider)} | `
+      + `${formatEnvKey(route.keys)} | ${route.endpoint ? `\`${escapeCell(route.endpoint)}\`` : '—'} | ${escapeCell(notes || '—')} |`);
+  }
+  lines.push('');
+  const byKey = new Map();
+  for (const param of [...(node.sharedParams ?? []), ...node.routes.flatMap((route) => route.params ?? [])]) {
+    if (!byKey.has(param.key)) byKey.set(param.key, param);
+  }
+  const offeredBy = routeParams(nodeId);
+  for (const route of node.routes) {
+    const offered = (offeredBy[route.id] ?? []).filter((p) => !p.key.startsWith('_') && !byKey.get(p.key)?.hidden);
+    const never = Object.entries(route.paramVisibleWhen ?? {}).filter(([, when]) => when === false)
+      .map(([key]) => `${escapeCell(byKey.get(key)?.label ?? key)} (${code(key)})`);
+    lines.push(`**${routeProviderLabel(route.provider)} (\`${route.id}\`) settings**`
+      + (never.length ? ` · not offered here: ${never.join(', ')}` : ''), '');
+    if (offered.length === 0) {
+      lines.push('No settings.', '');
+      continue;
+    }
+    lines.push('| Parameter | Key | Type | Default | Options/Range | Shown when |');
+    lines.push('|---|---|---|---|---|---|');
+    for (const item of offered) {
+      const param = byKey.get(item.key) ?? { key: item.key };
+      const def = param.default === undefined || param.default === null || param.default === ''
+        ? '—' : escapeCell(String(param.default));
+      lines.push(`| ${escapeCell(param.label ?? item.key)} | ${code(item.key)} | ${typeName(param.type)} | ${def} | `
+        + `${param.disabledReason ? escapeCell(param.disabledReason) : offeredCell(param, item)} | ${shownWhenCell(item)} |`);
+    }
+    lines.push('');
+  }
+  return lines;
+}
+
+/**
  * Build all groups that have non-empty params for a node.
  */
 function getPopulatedParamGroups(node) {
@@ -289,6 +394,15 @@ async function generate() {
       lines.push(metaRow('Outputs', formatPorts(node.outputPorts)));
       lines.push(metaRow('Audited', audited));
       lines.push('');
+
+      // A route-table node (docs/PROVIDER-ROUTES.md): its routes, then its
+      // shared params and each route's own.
+      if (Array.isArray(node.routes) && node.routes.length > 0) {
+        lines.push(...renderRoutes(nodeId, node));
+        lines.push('---');
+        lines.push('');
+        continue;
+      }
 
       // Parameters — handle dual/triple param groups
       const populatedGroups = getPopulatedParamGroups(node);

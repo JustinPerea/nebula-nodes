@@ -1,5 +1,6 @@
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { ModelNodeDefinition, ProviderVia } from '../types';
+import { allParamDefinitions } from './directRoute';
 
 /**
  * What a node needs to run, for the utility nodes that still call a provider
@@ -14,11 +15,7 @@ type Definitions = Record<string, ModelNodeDefinition>;
 type Params = Record<string, unknown>;
 
 function paramDefault(def: ModelNodeDefinition, key: string): unknown {
-  for (const group of [def.params, def.sharedParams, def.directParams, def.falParams]) {
-    const param = group?.find((candidate) => candidate.key === key);
-    if (param) return param.default;
-  }
-  return undefined;
+  return allParamDefinitions(def).find((candidate) => candidate.key === key)?.default;
 }
 
 /** For a `param` node: whether these params pick the provider work. An absent

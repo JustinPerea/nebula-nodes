@@ -32,6 +32,18 @@ describe('deriveVisibleParams', () => {
     expect(withLegacy.some((p) => p.key === 'aspect_ratio')).toBe(true);
   });
 
+  it("keeps the legacy pill rule on a node without a route table: an option whose controller has no value is hidden", () => {
+    // Veo 3.1's 4K option names `model`, which only the direct route takes.
+    // On the fal fallback (or with no key) Create offers 720p and 1080p, as
+    // it did before route tables (PR 5 changed route-table nodes only).
+    const def = NODE_DEFINITIONS['veo-3'];
+    const resolutions = (apiKeys: Record<string, string>, params: Record<string, unknown> = {}) =>
+      deriveVisibleParams(def, params, apiKeys).find((p) => p.key === 'resolution')?.options?.map((o) => o.value);
+    expect(resolutions({ FAL_KEY: 'k' })).toEqual(['720p', '1080p']);
+    expect(resolutions({})).toEqual(['720p', '1080p']);
+    expect(resolutions({ GOOGLE_API_KEY: 'k' })).toEqual(['720p', '1080p', '4k']);
+  });
+
   it('offers each Runway video model only the durations and ratios it takes', () => {
     const def = NODE_DEFINITIONS['runway-video'];
     const values = (model: string, key: string) =>

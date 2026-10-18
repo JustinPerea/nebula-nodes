@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import type { ModelNodeDefinition } from '../../types';
-import { deriveVisibleParams, resolveCreateParamDefinitions } from '../../lib/createParams';
+import { deriveVisibleParams } from '../../lib/createParams';
+import { allParamDefinitions, providerLabel, routeById, routeSwitch, shownRouteId } from '../../lib/directRoute';
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
+import { snapHidden } from '../../lib/providerSwitch';
 import { useUIStore } from '../../store/uiStore';
+import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
 
 interface ParamPillsProps {
   def: ModelNodeDefinition;
@@ -27,26 +30,59 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
     (p) => p.type === 'enum' || p.type === 'integer' || p.type === 'float' || p.type === 'boolean',
   );
 
+  // A route-table model: the provider pill comes first, and the pills show
+  // that provider's options (lib/directRoute.ts routeParamDefinitions).
+  const switchable = routeSwitch(def);
+  const shown = switchable ? routeById(def, shownRouteId(def, params, apiKeys)) : undefined;
+  const [switchNote, setSwitchNote] = useState<{ model: string; text: string } | null>(null);
+  const note = switchNote?.model === def.id ? switchNote.text : null;
+
   // What the last model change did to a per-model default (Max Tokens),
   // shown under the pills until the next edit (lib/paramDefaults.ts). A note
   // belongs to the definition and values it was made for: switching to another
   // node or applying a preset swaps them from outside, and the note goes.
   const [snapNotes, setSnapNotes] = useState<SnapNotes>({ def, params, notes: [] });
   const notes = snapNotes.def === def && sameValues(snapNotes.params, params) ? snapNotes.notes : [];
+  // A person's edit: on a route-table model, a setting it now hides on the
+  // shown provider at a value another provider would honor goes back to its
+  // default, with the note (lib/providerSwitch.ts snapHidden), as in the
+  // Inspector. `defaultNotes` are set()'s per-model default notes; one whose
+  // value that snap moved again is dropped.
+  const edit = (next: Record<string, unknown>, key: string, defaultNotes: DefaultSnapNote[] = []) => {
+    let written = next;
+    if (switchable) {
+      const snapped = snapHidden(def, next, shownRouteId(def, next, apiKeys), key);
+      written = snapped.params;
+      if (snapped.notes.length) setSwitchNote({ model: def.id, text: snapped.notes.join('. ') });
+    }
+    setSnapNotes({ def, params: written, notes: defaultNotes.filter((n) => Object.is(written[n.param], next[n.param])) });
+    onChange(written);
+  };
   const set = (key: string, value: unknown) => {
     const snap = snapParamDefaults(def, params, { ...params, [key]: value });
-    setSnapNotes({ def, params: snap.params, notes: snap.notes });
-    onChange(snap.params);
+    edit(snap.params, key, snap.notes);
   };
   const unset = (key: string) => {
     const next = { ...params };
     delete next[key];
-    setSnapNotes({ def, params: next, notes: [] });
-    onChange(next);
+    edit(next, key);
   };
 
   return (
     <div className="param-pills">
+      {switchable && (
+        <ProviderSwitcher definition={def} params={params} variant="pill" onPick={(next, notes) => {
+          onChange(next);
+          setSwitchNote(notes.length ? { model: def.id, text: notes.join('. ') } : null);
+        }} />
+      )}
+      {note && (
+        <span className="param-pills__note" role="status">
+          {note}
+          <button type="button" className="param-pills__note-dismiss" aria-label="Dismiss provider note"
+            onClick={() => setSwitchNote(null)}>&times;</button>
+        </span>
+      )}
       {visible.map((p) => {
         const optionalWithoutDefault = !p.required && p.default == null;
         // A value the draft doesn't store shows its model's default (lib/paramDefaults.ts).
@@ -64,8 +100,9 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
           const hasEmptyOption = p.options?.some((o) => o.value === '');
           const value = String(params[p.key] ?? fallback ?? '');
           const unavailableChoice = value !== '' && !p.options?.some((o) => String(o.value) === value);
-          const storedLabel = resolveCreateParamDefinitions(def, apiKeys, params).find((param) => param.key === p.key)
+          const storedLabel = allParamDefinitions(def).find((param) => param.key === p.key)
             ?.options?.find((o) => String(o.value) === value)?.label ?? 'Saved choice';
+          const unavailableNote = shown ? `not on ${providerLabel(shown.provider)}` : 'unavailable for selected model';
           return (
             <label key={p.key} className="param-pill" title={p.label}>
               <span className="param-pill__label">{p.label}</span>
@@ -81,7 +118,7 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
                   set(p.key, option?.value ?? e.target.value);
                 }}
               >
-                {unavailableChoice && <option value={value} disabled>{storedLabel} (unavailable for selected model)</option>}
+                {unavailableChoice && <option value={value} disabled>{storedLabel} ({unavailableNote})</option>}
                 {p.default == null && !hasEmptyOption && <option value="">{p.required ? 'Choose…' : 'Default'}</option>}
                 {(p.options ?? []).map((o) => (
                   <option key={String(o.value)} value={String(o.value)}>{o.label}</option>
@@ -147,8 +184,8 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
           </label>
         );
       })}
-      {notes.map((note) => (
-        <p key={note.text} className="param-pills__note" role="note" data-param-default-note={note.param}>{note.text}</p>
+      {notes.map((snapNote) => (
+        <p key={snapNote.text} className="param-pills__note" role="note" data-param-default-note={snapNote.param}>{snapNote.text}</p>
       ))}
     </div>
   );

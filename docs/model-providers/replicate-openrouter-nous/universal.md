@@ -13,6 +13,14 @@ user supplies `model_id` / `model` at runtime. The audit focuses on handler
 request body shape, auth header format, response parsing, and the Nous
 `envKeyName: []` question.
 
+**2026-10-15:** these are no longer the only Replicate and OpenRouter code
+paths. The FLUX 3 route-table nodes reach Replicate through
+`handlers/replicate_model.py` (`POST /v1/models/{owner}/{name}/predictions`,
+local files through `POST /v1/files`) and OpenRouter through
+`handlers/openrouter_media.py` (`POST /api/v1/images`, `POST /api/v1/videos`).
+Those clients are covered in `docs/PROVIDER-ROUTES.md` ("Route clients") and
+`../bfl/flux-3.md`; this audit covers the universal nodes only.
+
 ---
 
 ## replicate-universal

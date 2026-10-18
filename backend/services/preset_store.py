@@ -4,6 +4,13 @@ Presets live in ~/.nebula/presets/_global/<id>.json (global) or
 ~/.nebula/presets/<projectId>/<id>.json (project). Override the root with
 NEBULA_PRESET_ROOT (read on every call so tests can monkeypatch it).
 
+A preset saved on a node that was retired or folded into another (the three
+Krea FLUX nodes, now the Krea routes of the FLUX nodes) is read as the node
+it became, the way saved graphs load (services/retired_nodes.migrate_node):
+the new model id, its renamed values, and ``_provider: krea`` with the saved
+``_kreaAuth``, so applying it in Create bills the same way it did. The file
+keeps what was saved.
+
 Each file records the params version its ``params`` were saved at
 (``paramsVersion``; a file without it predates the marker: version 0). The
 version is separate from ``version``, which counts edits. Reads upgrade a copy
@@ -21,6 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from services.retired_nodes import migrate_node
 from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrade_params
 
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -98,6 +106,19 @@ def _find_file(preset_id: str) -> Path | None:
     return None
 
 
+def _as_current(preset: dict[str, Any]) -> dict[str, Any]:
+    """The preset as the current catalog reads it: a retired or folded
+    ``modelId`` becomes the node it is now, with its params migrated."""
+    model_id = preset.get("modelId")
+    if not isinstance(model_id, str) or not model_id:
+        return preset
+    params = preset.get("params") if isinstance(preset.get("params"), dict) else {}
+    new_id, new_params, _label = migrate_node(model_id, dict(params))
+    if new_id == model_id and new_params == params:
+        return preset
+    return {**preset, "modelId": new_id, "params": new_params}
+
+
 class PresetStore:
     _IMMUTABLE = {"id", "createdAt", "projectId"}
 
@@ -138,7 +159,7 @@ class PresetStore:
         path = _find_file(preset_id)
         if not path:
             return None
-        return _upgraded(json.loads(path.read_text(encoding="utf-8")))
+        return _upgraded(_as_current(json.loads(path.read_text(encoding="utf-8"))))
 
     def list(self, scope: str, projectId: str | None = None) -> list[dict[str, Any]]:
         directory = _scope_dir(scope, projectId)
@@ -147,7 +168,7 @@ class PresetStore:
         items: list[dict[str, Any]] = []
         for p in directory.glob("*.json"):
             try:
-                items.append(_upgraded(json.loads(p.read_text(encoding="utf-8"))))
+                items.append(_upgraded(_as_current(json.loads(p.read_text(encoding="utf-8")))))
             except (json.JSONDecodeError, OSError):
                 continue
         items.sort(key=lambda x: x.get("createdAt", ""))
@@ -178,7 +199,7 @@ class PresetStore:
         preset["version"] = int(preset.get("version", 1)) + 1
         preset["updatedAt"] = _now()
         _write_json(path, preset)
-        return preset
+        return _as_current(preset)
 
     def delete(self, preset_id: str) -> None:
         path = _find_file(preset_id)

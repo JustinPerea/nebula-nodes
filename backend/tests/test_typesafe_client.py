@@ -7,6 +7,7 @@ import email
 import io
 import json
 import re
+import ssl
 import uuid
 
 import httpx
@@ -212,6 +213,38 @@ async def test_connection_failures_are_retried_then_reported(monkeypatch):
     assert len(calls) == 3
 
 
+def _bad_record_mac() -> ssl.SSLError:
+    # What anyio re-raises raw for a TLS error mid-response (seen live 2026-10-15).
+    return ssl.SSLError(1, "[SSL: SSLV3_ALERT_BAD_RECORD_MAC] ssl/tls alert bad record mac (_ssl.c:2559)")
+
+
+@pytest.mark.asyncio
+async def test_a_tls_error_mid_response_is_retried(monkeypatch):
+    def respond(request, n):
+        if n == 1:
+            raise _bad_record_mac()
+        return httpx.Response(200, json=NOUL)
+
+    calls, sleeps = _install(monkeypatch, respond)
+    result = await _ask()
+    assert len(calls) == 2 and len(sleeps) == 1 and result.answers["q"].noul == 0.9
+
+
+@pytest.mark.asyncio
+async def test_a_tls_error_on_every_try_reads_as_a_connection_failure(monkeypatch):
+    def fail(request, n):
+        raise _bad_record_mac()
+
+    calls, _ = _install(monkeypatch, fail)
+    with pytest.raises(ts.TypeSafeError) as caught:
+        await _ask()
+    message = str(caught.value)
+    assert message.startswith("Couldn't reach TypeSafe (connection failed) after 3 tries")
+    assert "_ssl.c" not in message and "SSL" not in message
+    assert caught.value.__cause__ is None and caught.value.__suppress_context__
+    assert len(calls) == 3
+
+
 # -- errors ----------------------------------------------------------------------
 
 
@@ -389,7 +422,7 @@ async def test_max_side_shrinks_further_for_a_retry_and_boxes_still_map_back():
     assert (t.sent_width, t.sent_height) == (768, 384) and (t.width, t.height) == (2000, 1000)
     assert t.to_original_box(top=0.5, bottom=1, left=0.25, right=0.5)["px"] == {"x": 500, "y": 500, "w": 500, "h": 500}
     for bad in (100, 2000):
-        with pytest.raises(ValueError, match="max_side must be from 256 to 1568"):
+        with pytest.raises(ValueError, match="max_side must be from 280 to 1568"):
             await ts.prepare_images([], max_side=bad)
 
 
@@ -405,8 +438,36 @@ async def test_a_small_image_is_padded_never_stretched():
     assert sent.getpixel((0, 0))[3] == 0  # transparent padding
 
 
-@pytest.mark.parametrize(("size", "expected"), [((256, 256), (280, 280)), ((256, 300), (259, 304)),
-                                                ((1568, 40), (1568, 256)), ((300, 300), (300, 300))])
+# docs.typesafe.ai/images: "Width and height 280 to 1568 pixels each. An image
+# with either side under 280 pixels is rejected." Literal 280 here, not
+# ts.MIN_SIDE, so the test catches a wrong constant.
+TYPESAFE_MIN_SIDE = 280
+
+
+@pytest.mark.asyncio
+async def test_a_wide_banner_is_padded_to_the_documented_minimum_side():
+    # 2000x320 shrinks to 1568x251 on the long side; the short side must be
+    # padded back up to 280, or TypeSafe rejects the image.
+    [image] = await ts.prepare_images([_data_uri(Image.new("RGB", (2000, 320), "green"))])
+    t = image.transform
+    assert (t.content_width, t.content_height) == (1568, 251)
+    assert (t.sent_width, t.sent_height) == (1568, TYPESAFE_MIN_SIDE)
+    assert Image.open(io.BytesIO(image.data)).size == (1568, TYPESAFE_MIN_SIDE)
+    # A box over the whole content still maps back to the whole banner.
+    top, bottom = t.pad_top / t.sent_height, (t.pad_top + t.content_height) / t.sent_height
+    assert t.to_original_box(top=top, bottom=bottom, left=0, right=1)["px"] == {"x": 0, "y": 0, "w": 2000, "h": 320}
+
+
+@pytest.mark.asyncio
+async def test_a_three_to_one_image_on_the_768_retry_meets_the_minimum_side():
+    [image] = await ts.prepare_images([_data_uri(Image.new("RGB", (1500, 500), "green"))], max_side=768)
+    t = image.transform
+    assert (t.content_width, t.content_height) == (768, 256)
+    assert (t.sent_width, t.sent_height) == (768, TYPESAFE_MIN_SIDE)
+
+
+@pytest.mark.parametrize(("size", "expected"), [((256, 256), (280, 280)), ((256, 300), (280, 300)),
+                                                ((1568, 40), (1568, 280)), ((300, 300), (300, 300))])
 def test_padding_meets_both_the_side_and_the_area_minimum(size, expected):
     _cw, _ch, width, height = ts._target_size(*size)
     assert (width, height) == expected
@@ -478,10 +539,10 @@ def test_images_are_re_encoded_smaller_to_fit_the_request(monkeypatch):
 def test_boxes_map_back_through_scale_and_padding():
     transform = ts.ImageTransform(
         source_width=3136, source_height=200, exif_orientation=1, width=3136, height=200,
-        scale_x=0.5, scale_y=0.5, content_width=1568, content_height=100, pad_left=0, pad_top=78,
-        sent_width=1568, sent_height=256, source_format="PNG", frames=1, sent_format="png")
-    # The content spans sent rows 78..178; a box over its middle half.
-    mapped = transform.to_original_box(top=103 / 256, bottom=153 / 256, left=0.25, right=0.75)
+        scale_x=0.5, scale_y=0.5, content_width=1568, content_height=100, pad_left=0, pad_top=90,
+        sent_width=1568, sent_height=280, source_format="PNG", frames=1, sent_format="png")
+    # The content spans sent rows 90..190; a box over its middle half.
+    mapped = transform.to_original_box(top=115 / 280, bottom=165 / 280, left=0.25, right=0.75)
     assert mapped["image"] == {"w": 3136, "h": 200}
     assert mapped["px"] == {"x": 784, "y": 50, "w": 1568, "h": 100}
     assert (mapped["top"], mapped["bottom"], mapped["left"], mapped["right"]) == (0.25, 0.75, 0.25, 0.75)

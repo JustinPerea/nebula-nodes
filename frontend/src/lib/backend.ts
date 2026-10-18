@@ -2,9 +2,14 @@ import { getProjectContext } from './projectContext';
 import { noteParamsOutdated, PARAMS_VERSION_HEADER } from './paramsOutdated';
 import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';
 import { browserPersonCredential, personCredential, reportPersonRequired } from './personSession';
-
-const DEFAULT_BACKEND_PORT = 8000;
-const DEFAULT_BACKEND_PORTS = [8000, 8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009, 8010];
+import {
+  DEFAULT_BACKEND_PORT,
+  assertBackendEnvConsistent,
+  backendPortsFor,
+  originAllowedByPin,
+  pinnedBackendPort,
+  type BackendPortEnv,
+} from './devBackendPort';
 const DISCOVERY_TIMEOUT_MS = 650;
 const STORAGE_KEY = 'nebula:backendBaseUrl';
 const TRANSIENT_PROXY_STATUSES = new Set([500, 502, 503, 504]);
@@ -65,16 +70,18 @@ function configuredBackendBaseUrl(): string | null {
   return raw ? normalizeBaseUrl(raw) : null;
 }
 
+function backendPortEnv(): BackendPortEnv {
+  return {
+    port: import.meta.env.VITE_NEBULA_BACKEND_PORT as string | undefined,
+    ports: import.meta.env.VITE_NEBULA_BACKEND_PORTS as string | undefined,
+    apiBase: import.meta.env.VITE_NEBULA_API_BASE as string | undefined,
+  };
+}
+
+// VITE_NEBULA_BACKEND_PORT pins one port (no scan); else VITE_NEBULA_BACKEND_PORTS
+// or 8000-8010. See devBackendPort.ts.
 function configuredBackendPorts(): number[] {
-  const raw = (import.meta.env.VITE_NEBULA_BACKEND_PORTS as string | undefined)?.trim();
-  if (!raw) return DEFAULT_BACKEND_PORTS;
-
-  const parsed = raw
-    .split(',')
-    .map((part: string) => Number(part.trim()))
-    .filter((port: number) => Number.isInteger(port) && port > 0 && port < 65536);
-
-  return parsed.length > 0 ? [...new Set(parsed)] : DEFAULT_BACKEND_PORTS;
+  return backendPortsFor(backendPortEnv());
 }
 
 function normalizeBaseUrl(url: string): string {
@@ -127,7 +134,11 @@ function candidateBaseUrls(): string[] {
     candidates.push(normalized);
   };
 
-  add(readStoredBaseUrl());
+  // A URL stored by an earlier run on this origin may be another backend; a
+  // pinned frontend skips it unless it is on the pinned port.
+  const stored = readStoredBaseUrl();
+  if (stored && originAllowedByPin(stored, backendPortEnv())) add(stored);
+  // Same-origin goes through the Vite proxy, which follows the same pin.
   add(sameOriginCandidate());
 
   for (const host of localHostCandidates()) {
@@ -176,6 +187,10 @@ async function discoverBackendBaseUrl(): Promise<string> {
     return `http://localhost:${DEFAULT_BACKEND_PORT}`;
   }
 
+  // Fail closed: a pin that is invalid, or that contradicts
+  // VITE_NEBULA_API_BASE, throws instead of falling back to the scan.
+  assertBackendEnvConsistent(backendPortEnv());
+
   const explicit = configuredBackendBaseUrl();
   if (explicit) {
     cachedSource = 'explicit';
@@ -186,7 +201,10 @@ async function discoverBackendBaseUrl(): Promise<string> {
   const results = await Promise.all(candidates.map((candidate) => probeBackendBaseUrl(candidate)));
   const found = results.find((candidate): candidate is string => candidate != null);
   if (found == null) {
-    throw new Error(`Nebula backend not found on localhost ports ${configuredBackendPorts().join(', ')}`);
+    const pinned = pinnedBackendPort(backendPortEnv().port);
+    throw new Error(pinned === null
+      ? `Nebula backend not found on localhost ports ${configuredBackendPorts().join(', ')}`
+      : `Nebula backend not found on port ${pinned} (VITE_NEBULA_BACKEND_PORT); not scanning other ports`);
   }
 
   cachedSource = 'discovered';
