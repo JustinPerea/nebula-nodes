@@ -56,6 +56,23 @@ def test_route_matches_shared_cases(case, monkeypatch):
         assert got == case["block"]
     if "paramKeys" in case:
         assert sorted(node_route.route_param_keys(definition, route.route_id or route.kind)) == case["paramKeys"]
+    if "shownRoute" in case:
+        shown = node_route.shown_route_id(definition, params, case["apiKeys"])
+        assert shown == case["shownRoute"]
+        # The options the node offers on that route (enums cut, ranges narrowed).
+        assert [_offered(param) for param in node_route.route_param_definitions(definition, shown)] == case["routeParams"]
+        # The same params the router sends on it.
+        assert {param["key"] for param in node_route.route_param_definitions(definition, shown)} == \
+            node_route.route_param_keys(definition, shown)
+
+
+def _offered(param):
+    """A param as route_cases.json ``routeParams`` spells it: key, option values, range."""
+    shown = {"key": param["key"]}
+    if isinstance(param.get("options"), list):
+        shown["options"] = [option.get("value") if isinstance(option, dict) else option for option in param["options"]]
+    shown.update({bound: param[bound] for bound in ("min", "max") if bound in param})
+    return shown
 
 
 def test_every_dual_route_node_lists_its_maker_key_first_and_splits_params_cleanly():

@@ -6,6 +6,8 @@ import { loadFromFile, saveToFile } from '../lib/graphFile';
 import { canLoadGraph, canSaveGraph, GRAPH_LOAD_EVENT, GRAPH_SAVE_EVENT } from '../lib/graphFileActions';
 import { apiFetch } from '../lib/backend';
 import { computeCanvasFitPadding } from '../lib/canvasFit';
+import { providerKeyWarnings } from '../lib/providerSwitch';
+import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import type { NodeData } from '../types';
 
 /** Mount once inside the app's ReactFlowProvider, independently of Canvas. */
@@ -39,7 +41,12 @@ export function GraphFileActions() {
     try {
       const result = await loadFromFile();
       if (!result || !canLoadGraph(useGraphStore.getState())) return;
-      if (result.warnings.length > 0) console.warn('[nebula] Load warnings:', result.warnings);
+      // Nodes set to a provider with no key here keep their choice and values
+      // (the chip shows the stop); the import summary names them.
+      const keys = useUIStore.getState().settingsCache;
+      const providerWarnings = keys.loaded ? providerKeyWarnings(result.nodes, NODE_DEFINITIONS, keys.apiKeys) : [];
+      const warnings = [...result.warnings, ...providerWarnings];
+      if (warnings.length > 0) console.warn('[nebula] Load warnings:', warnings);
 
       // graphSync can publish the imported graph before this HTTP response.
       // Fence every local generation admission through that entire interval.
@@ -92,6 +99,10 @@ export function GraphFileActions() {
         if (ui.canvasViewportRevision !== viewportRevision) return;
         void fitView({ padding: computeCanvasFitPadding(), duration: 300 });
       }, 120);
+      if (providerWarnings.length > 0) {
+        alert(`Imported. Set to a provider you have no key for:\n${providerWarnings.map((line) => `• ${line}`).join('\n')}`
+          + '\nAdd the key in Settings > Providers, or pick another provider on the node.');
+      }
     } catch (error) {
       console.error('Graph import failed; existing graph preserved:', error);
       alert(error instanceof Error ? error.message : 'Graph import failed. Existing graph was preserved.');

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import shared from '../../../backend/tests/fixtures/pricing_cases.json';
 import shippedTable from '../../../backend/data/model_pricing.json';
 import backendCatalog from '../../../backend/data/node_definitions.json';
-import { estimateNode, estimateRoutes, formatUsd, formatUsdRange, type PriceEntry, type PricingTable } from '../../src/lib/pricing';
+import { estimateNode, estimateRoutes, formatUsd, formatUsdRange, routePriceUnconfirmed, type PriceEntry, type PricingTable } from '../../src/lib/pricing';
 import type { ModelNodeDefinition } from '../../src/types';
 
 type Fixture = {
@@ -103,6 +103,15 @@ describe('estimateRoutes (cases shared with the backend)', () => {
       }
     });
   }
+
+  it('marks a route price the provider page does not state exactly (model_pricing.route_price_unconfirmed)', () => {
+    const definition = fixture.definitions.table as unknown as ModelNodeDefinition;
+    const pricing = fixture.pricing as unknown as PricingTable;
+    expect(Object.fromEntries(definition.routes!.map((route) => [route.id, routePriceUnconfirmed(definition, route.id, pricing)])))
+      .toEqual({ bfl: false, fal: true, replicate: false, openrouter: false, krea: false });
+    expect(routePriceUnconfirmed(definition, 'nope', pricing)).toBe(false);
+    expect(routePriceUnconfirmed(definition, 'fal', null)).toBe(false);
+  });
 
   it('is empty for a node without a route table', () => {
     const definition = fixture.definitions.dual as unknown as ModelNodeDefinition;

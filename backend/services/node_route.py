@@ -812,6 +812,101 @@ def route_param_keys(definition: Mapping[str, Any], route: str | None) -> set[st
             for p in definition.get(name) or [] if isinstance(p, Mapping) and p.get("key")}
 
 
+def _narrowed(param: Mapping[str, Any], rules: Mapping[str, Any]) -> Mapping[str, Any]:
+    """``param`` as one route offers it: an enum's options cut to the values
+    the route takes (its ``accepts``, which a ``valueMap`` implies, and its
+    ``rejects``), a number's ``min``/``max`` narrowed to the route's
+    ``accepts`` range. A param the rules don't name comes back as it is.
+    ``rejectsWhen`` combinations stay a run-time block: no single value is
+    always refused."""
+    key = str(param.get("key") or "")
+    accepts = (rules.get("accepts") or {}).get(key) if isinstance(rules.get("accepts"), Mapping) else None
+    refused = (rules.get("rejects") or {}).get(key) if isinstance(rules.get("rejects"), Mapping) else None
+    accepts = accepts if isinstance(accepts, Mapping) else None
+    refused = {match_value(value) for value in refused} if isinstance(refused, list) else None
+    if accepts is None and refused is None:
+        return param
+    narrowed = dict(param)
+    options = param.get("options")
+    if isinstance(options, list) and options:
+        def takes(option: Any) -> bool:
+            value = option.get("value") if isinstance(option, Mapping) else option
+            return ((accepts is None or value_accepted(value, accepts))
+                    and (refused is None or match_value(value) not in refused))
+        narrowed["options"] = [option for option in options if takes(option)]
+    elif accepts is not None:
+        if isinstance(accepts.get("min"), (int, float)) and not isinstance(accepts.get("min"), bool):
+            low = param.get("min")
+            narrowed["min"] = accepts["min"] if not isinstance(low, (int, float)) else max(low, accepts["min"])
+        if isinstance(accepts.get("max"), (int, float)) and not isinstance(accepts.get("max"), bool):
+            high = param.get("max")
+            narrowed["max"] = accepts["max"] if not isinstance(high, (int, float)) else min(high, accepts["max"])
+    return narrowed
+
+
+def route_param_definitions(definition: Mapping[str, Any], route: str | None) -> list[Mapping[str, Any]]:
+    """The params one route shows: :func:`route_param_keys`, as definitions.
+
+    On a route-table node ``route`` is a route id: ``sharedParams`` plus
+    that route's own ``params``, each as the route offers it (_narrowed: an
+    enum cut to the values the route takes, a number range narrowed to the
+    route's). Other routes' own params are left out. The Inspector, Create's
+    pills and describe_node read this list, so a provider switch changes
+    which options can be picked. directRoute.ts routeParamDefinitions is the
+    same rule (tests/fixtures/route_cases.json ``routeParams`` and
+    route_tables.json pin both).
+
+    Saved values stay flat in ``node.params``, so a save takes any value some
+    route takes (main.py _valid_param_keys reads all_param_definitions), and
+    route_block stays the run-time authority.
+
+    For every other node ``route`` is a route kind or a computed route id
+    (routes_of): ``params`` when the node declares no ``sharedParams``, else
+    ``sharedParams`` plus ``directParams`` on the maker's route or
+    ``falParams`` on any other, unchanged, a later definition of a key
+    winning. That is the list directRoute.ts shows for a dual-route node
+    (route_tables.json ``routeParams`` pins every multi-route node)."""
+    if has_routes(definition):
+        spec = route_by_id(definition, route)
+        rules = _route_rules(spec) if spec is not None else {}
+        groups = [definition.get("sharedParams") or [], (spec or {}).get("params") or []]
+        by_key: dict[str, Mapping[str, Any]] = {}
+        for group in groups:
+            for param in group if isinstance(group, list) else []:
+                if isinstance(param, Mapping) and param.get("key"):
+                    by_key[str(param["key"])] = _narrowed(param, rules)
+        return list(by_key.values())
+    if definition.get("sharedParams") is None:  # an empty list still picks a group, as in TS
+        return [param for param in definition.get("params") or [] if isinstance(param, Mapping)]
+    maker = maker_route(definition) if route not in (DIRECT, FALLBACK, PLAN, ONLY, UNSET, LOCAL) else None
+    direct = route == DIRECT or (maker is not None and route == maker.get("id"))
+    by_key: dict[str, Mapping[str, Any]] = {}
+    for param in [*definition["sharedParams"], *(definition.get("directParams" if direct else "falParams") or [])]:
+        if isinstance(param, Mapping) and param.get("key"):
+            by_key[str(param["key"])] = param
+    return list(by_key.values())
+
+
+def shown_route_id(
+    definition: Mapping[str, Any], params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
+) -> str | None:
+    """Whose options a route-table node shows (route_param_definitions): the
+    chosen route; under Auto, the route Auto resolves to with these keys
+    (even when that route can't take the run yet, so its settings stay
+    editable); with no key set, the maker's (else the first route). None for
+    nodes without ``routes``. directRoute.ts shownRouteId is the same."""
+    if not has_routes(definition):
+        return None
+    choice = provider_choice(params)
+    if choice != AUTO and route_by_id(definition, choice) is not None:
+        return choice
+    route = select_route(definition, params or {}, api_keys)
+    if route.route_id:
+        return route.route_id
+    first = maker_route(definition) or next(iter(routes_of(definition)), None)
+    return str(first.get("id")) if first is not None else None
+
+
 def cache_tag(
     definition: Mapping[str, Any], params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
 ) -> str | None:

@@ -455,6 +455,24 @@ function routeRules(route: RouteSpec): RouteRules {
   return rules;
 }
 
+/** Whether `route` takes this one value of `key` on its own: its `accepts`
+ * rule (which a `valueMap` implies) holds and its `rejects` doesn't list
+ * it. What routeParamDefinitions narrows by, and what a provider switch
+ * snaps (lib/providerSwitch.ts); rejectsWhen combinations aren't per value. */
+export function routeTakesValue(route: RouteSpec, key: string, value: unknown): boolean {
+  const rules = routeRules(route);
+  const accepts = rules.accepts && Object.hasOwn(rules.accepts, key) ? rules.accepts[key] : undefined;
+  if (accepts && !valueAccepted(value, accepts)) return false;
+  const rejected = rules.rejects && Object.hasOwn(rules.rejects, key) ? rules.rejects[key] : undefined;
+  return !(Array.isArray(rejected) && rejected.map(matchValue).includes(matchValue(value)));
+}
+
+/** The accepts rule `route` has for `key`, if any (its own or its valueMap's). */
+export function routeAcceptRule(route: RouteSpec, key: string): DirectAcceptRule | undefined {
+  const accepts = routeRules(route).accepts;
+  return accepts && Object.hasOwn(accepts, key) ? accepts[key] : undefined;
+}
+
 /** Why `route` can't take a run with these params, or null when it can
  * (node_route.route_block). */
 export function routeBlock(definition: RoutedDefinition, route: RouteSpec | undefined, params: Record<string, unknown>): DirectBlock | null {
@@ -681,17 +699,47 @@ export function routeUnavailable(
   };
 }
 
+/** `param` as one route offers it (node_route._narrowed): an enum's options
+ * cut to the values the route takes (its `accepts`, which a `valueMap`
+ * implies, and its `rejects`), a number's min/max narrowed to the route's
+ * `accepts` range. A param the rules don't name comes back as it is.
+ * rejectsWhen combinations stay a run-time block. */
+function narrowed(param: ParamDefinition, rules: RouteRules): ParamDefinition {
+  const accepts = rules.accepts && Object.hasOwn(rules.accepts, param.key) ? rules.accepts[param.key] : undefined;
+  const rejected = rules.rejects && Object.hasOwn(rules.rejects, param.key) ? rules.rejects[param.key] : undefined;
+  if (!accepts && !Array.isArray(rejected)) return param;
+  const refused = Array.isArray(rejected) ? new Set(rejected.map(matchValue)) : null;
+  if (Array.isArray(param.options) && param.options.length) {
+    return {
+      ...param,
+      options: param.options.filter((option) => (!accepts || valueAccepted(option.value, accepts))
+        && (!refused || !refused.has(matchValue(option.value)))),
+    };
+  }
+  if (!accepts) return { ...param };
+  const next: ParamDefinition = { ...param };
+  if (typeof accepts.min === 'number') next.min = typeof param.min === 'number' ? Math.max(param.min, accepts.min) : accepts.min;
+  if (typeof accepts.max === 'number') next.max = typeof param.max === 'number' ? Math.min(param.max, accepts.max) : accepts.max;
+  return next;
+}
+
 /** The params a route shows and sends: sharedParams plus that route's own
  * group (directParams on the maker route, falParams on the fal or Krea copy
  * and on the Krea plan). Nodes without a split keep `params`. On a
  * route-table node `route` may be a route id (NodeRoute.routeId): its
- * sharedParams plus that route's params; `_provider` and `_kreaAuth` are the
- * switcher's, never in this list (node_route.route_param_keys). */
+ * sharedParams plus that route's params, each as the route offers it (an
+ * enum cut to the values it takes, a number range narrowed to its own;
+ * node_route.route_param_definitions), so a provider switch changes what
+ * can be picked. `_provider` and `_kreaAuth` are the switcher's, never in
+ * this list (node_route.route_param_keys). */
 export function routeParamDefinitions(definition: ModelNodeDefinition, route: RouteKind | string | null | undefined): ParamDefinition[] {
   if (hasRoutes(definition)) {
     const spec = routeById(definition, route);
+    const rules = spec ? routeRules(spec) : {};
     const byKey = new Map<string, ParamDefinition>();
-    for (const param of [...(definition.sharedParams ?? []), ...(spec?.params ?? [])]) byKey.set(param.key, param);
+    for (const param of [...(definition.sharedParams ?? []), ...(spec?.params ?? [])]) {
+      if (param?.key) byKey.set(param.key, narrowed(param, rules));
+    }
     return [...byKey.values()];
   }
   if (!definition.sharedParams) return definition.params;
@@ -703,6 +751,35 @@ export function routeParamDefinitions(definition: ModelNodeDefinition, route: Ro
   const byKey = new Map<string, ParamDefinition>();
   for (const param of [...definition.sharedParams, ...group]) byKey.set(param.key, param);
   return [...byKey.values()];
+}
+
+/** Whose options a route-table node shows (routeParamDefinitions;
+ * node_route.shown_route_id): the chosen route; under Auto, the route Auto
+ * resolves to with these keys (even when it can't take the run yet, so its
+ * settings stay editable); with no key set, the maker's (else the first
+ * route). Undefined for nodes without `routes`. */
+export function shownRouteId(
+  definition: ModelNodeDefinition,
+  params: Record<string, unknown> | undefined,
+  apiKeys: ApiKeys,
+): string | undefined {
+  if (!hasRoutes(definition)) return undefined;
+  const choice = providerChoice(params);
+  if (choice !== AUTO && routeById(definition, choice)) return choice;
+  const route = selectRoute(definition, params ?? {}, apiKeys);
+  if (route.routeId) return route.routeId;
+  return (makerRoute(definition) ?? routesOf(definition)[0])?.id;
+}
+
+/** A route-table node gets the provider switcher (components/nodes/ProviderSwitcher):
+ * its definition lists `routes`, and its handler is the backend's
+ * maker_routes.multi_route router, which reads `_provider`. The backend
+ * registers that router for every route-table node
+ * (route_clients.register_route_nodes, pinned by test_maker_routes.py), so
+ * `routes` alone answers it here. Older dual-route nodes, and veo-3 and
+ * Ideogram's hand routers, never show it. */
+export function routeSwitch(definition: Pick<ModelNodeDefinition, 'routes'> | undefined): boolean {
+  return hasRoutes(definition);
 }
 
 /** The params to show for a node's next run: its route's (routeParamDefinitions),
@@ -721,10 +798,8 @@ export function paramDefinitionsForRun(
   { seedOptIn = true }: { seedOptIn?: boolean } = {},
 ): ParamDefinition[] {
   const values = params ?? {};
+  if (hasRoutes(definition)) return routeParamDefinitions(definition, shownRouteId(definition, values, apiKeys));
   const route = selectRoute(definition, values, apiKeys);
-  if (hasRoutes(definition)) {
-    return routeParamDefinitions(definition, route.routeId ?? routesOf(definition)[0]?.id);
-  }
   const shown = routeParamDefinitions(definition, route.kind);
   const block = directBlock(definition, values);
   if (route.kind === 'direct' || block?.reason !== 'requires' || !block.param || !configuredDirectKey(definition, apiKeys)) {

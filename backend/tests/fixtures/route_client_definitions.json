@@ -1,0 +1,538 @@
+{
+ "_note": "Route-table fixture nodes for the route clients (tests/test_route_clients.py). Shaped like the FLUX 3 nodes PR 3 adds, but not production nodes; values and endpoints from the provider schemas in provider_schemas/.",
+ "definitions": {
+  "clients-image": {
+   "id": "clients-image",
+   "displayName": "Client Fixture Image",
+   "category": "image-gen",
+   "apiProvider": "bfl",
+   "apiEndpoint": "/v1/flux-3-image",
+   "executionPattern": "async-poll",
+   "envKeyName": [
+    "BFL_API_KEY",
+    "FAL_KEY",
+    "REPLICATE_API_TOKEN",
+    "OPENROUTER_API_KEY"
+   ],
+   "directKeyName": [
+    "BFL_API_KEY"
+   ],
+   "inputPorts": [
+    {
+     "id": "prompt",
+     "label": "Prompt",
+     "dataType": "Text",
+     "required": true
+    },
+    {
+     "id": "images",
+     "label": "Images",
+     "dataType": "Image",
+     "required": false,
+     "multiple": true
+    }
+   ],
+   "outputPorts": [
+    {
+     "id": "image",
+     "label": "Image",
+     "dataType": "Image",
+     "required": false
+    }
+   ],
+   "params": [
+    {
+     "key": "_provider",
+     "label": "Provider",
+     "type": "enum",
+     "required": false,
+     "default": "auto",
+     "options": [
+      {
+       "label": "auto",
+       "value": "auto"
+      },
+      {
+       "label": "bfl",
+       "value": "bfl"
+      },
+      {
+       "label": "fal",
+       "value": "fal"
+      },
+      {
+       "label": "replicate",
+       "value": "replicate"
+      },
+      {
+       "label": "openrouter",
+       "value": "openrouter"
+      }
+     ],
+     "hidden": true
+    }
+   ],
+   "sharedParams": [
+    {
+     "key": "aspect_ratio",
+     "label": "Aspect ratio",
+     "type": "enum",
+     "required": false,
+     "default": "auto",
+     "options": [
+      {
+       "label": "auto",
+       "value": "auto"
+      },
+      {
+       "label": "1:1",
+       "value": "1:1"
+      },
+      {
+       "label": "16:9",
+       "value": "16:9"
+      },
+      {
+       "label": "9:21",
+       "value": "9:21"
+      }
+     ]
+    },
+    {
+     "key": "resolution",
+     "label": "Resolution",
+     "type": "enum",
+     "required": false,
+     "default": "1k",
+     "options": [
+      {
+       "label": "768sq",
+       "value": "768sq"
+      },
+      {
+       "label": "1k",
+       "value": "1k"
+      },
+      {
+       "label": "1.5k",
+       "value": "1.5k"
+      },
+      {
+       "label": "2k",
+       "value": "2k"
+      },
+      {
+       "label": "4k",
+       "value": "4k"
+      }
+     ]
+    },
+    {
+     "key": "safety_tolerance",
+     "label": "Safety tolerance",
+     "type": "integer",
+     "required": false,
+     "default": 2,
+     "min": 0,
+     "max": 4
+    }
+   ],
+   "routes": [
+    {
+     "id": "bfl",
+     "provider": "bfl",
+     "maker": true,
+     "keys": [
+      "BFL_API_KEY"
+     ],
+     "handler": "bfl",
+     "endpoint": "/v1/flux-3-image",
+     "params": [
+      {
+       "key": "grounding",
+       "label": "Grounding",
+       "type": "boolean",
+       "required": false,
+       "default": false
+      }
+     ]
+    },
+    {
+     "id": "fal",
+     "provider": "fal",
+     "keys": [
+      "FAL_KEY"
+     ],
+     "handler": "fal",
+     "endpoint": "blackforestlabs/flux-3/text-to-image",
+     "endpointWhen": [
+      {
+       "when": {
+        "images": "(set)"
+       },
+       "endpoint": "blackforestlabs/flux-3/edit-image"
+      }
+     ],
+     "valueMap": {
+      "resolution": {
+       "768sq": "768sq",
+       "1k": "1k",
+       "2k": "2k",
+       "4k": "4k"
+      },
+      "aspect_ratio": {
+       "auto": "auto",
+       "1:1": "1:1",
+       "16:9": "16:9"
+      }
+     }
+    },
+    {
+     "id": "replicate",
+     "provider": "replicate",
+     "keys": [
+      "REPLICATE_API_TOKEN"
+     ],
+     "handler": "replicate-model",
+     "endpoint": "black-forest-labs/flux-3-image",
+     "params": [
+      {
+       "key": "grounding",
+       "label": "Grounding",
+       "type": "boolean",
+       "required": false,
+       "default": false
+      }
+     ]
+    },
+    {
+     "id": "openrouter",
+     "provider": "openrouter",
+     "keys": [
+      "OPENROUTER_API_KEY"
+     ],
+     "handler": "openrouter-images",
+     "endpoint": "black-forest-labs/flux-3-image",
+     "valueMap": {
+      "resolution": {
+       "768sq": "768",
+       "1k": "1K",
+       "1.5k": "1.5K",
+       "2k": "2K",
+       "4k": "4K"
+      }
+     },
+     "rules": {
+      "ports": {
+       "images": {
+        "max": 10
+       }
+      }
+     }
+    }
+   ]
+  },
+  "clients-video": {
+   "id": "clients-video",
+   "displayName": "Client Fixture Video",
+   "category": "video-gen",
+   "apiProvider": "bfl",
+   "apiEndpoint": "/v1/flux-3-video",
+   "executionPattern": "async-poll",
+   "envKeyName": [
+    "BFL_API_KEY",
+    "FAL_KEY",
+    "REPLICATE_API_TOKEN",
+    "OPENROUTER_API_KEY",
+    "KREA_API_TOKEN"
+   ],
+   "directKeyName": [
+    "BFL_API_KEY"
+   ],
+   "inputPorts": [
+    {
+     "id": "prompt",
+     "label": "Prompt",
+     "dataType": "Text",
+     "required": true
+    },
+    {
+     "id": "start_image",
+     "label": "Start image",
+     "dataType": "Image",
+     "required": false
+    },
+    {
+     "id": "end_image",
+     "label": "End image",
+     "dataType": "Image",
+     "required": false
+    },
+    {
+     "id": "start_video",
+     "label": "Start video",
+     "dataType": "Video",
+     "required": false
+    },
+    {
+     "id": "keyframes",
+     "label": "Keyframes",
+     "dataType": "Image",
+     "required": false,
+     "multiple": true
+    }
+   ],
+   "outputPorts": [
+    {
+     "id": "video",
+     "label": "Video",
+     "dataType": "Video",
+     "required": false
+    }
+   ],
+   "params": [
+    {
+     "key": "_provider",
+     "label": "Provider",
+     "type": "enum",
+     "required": false,
+     "default": "auto",
+     "options": [
+      {
+       "label": "auto",
+       "value": "auto"
+      },
+      {
+       "label": "bfl",
+       "value": "bfl"
+      },
+      {
+       "label": "fal",
+       "value": "fal"
+      },
+      {
+       "label": "replicate",
+       "value": "replicate"
+      },
+      {
+       "label": "openrouter",
+       "value": "openrouter"
+      },
+      {
+       "label": "krea",
+       "value": "krea"
+      }
+     ],
+     "hidden": true
+    },
+    {
+     "key": "_kreaAuth",
+     "label": "Krea connection",
+     "type": "enum",
+     "required": false,
+     "default": "api-token",
+     "options": [
+      {
+       "label": "api-token",
+       "value": "api-token"
+      },
+      {
+       "label": "mcp",
+       "value": "mcp"
+      }
+     ]
+    }
+   ],
+   "sharedParams": [
+    {
+     "key": "duration",
+     "label": "Duration",
+     "type": "integer",
+     "required": false,
+     "default": 5,
+     "min": 5,
+     "max": 20
+    },
+    {
+     "key": "resolution",
+     "label": "Resolution",
+     "type": "enum",
+     "required": false,
+     "default": "hd",
+     "options": [
+      {
+       "label": "hd",
+       "value": "hd"
+      },
+      {
+       "label": "fhd",
+       "value": "fhd"
+      }
+     ]
+    },
+    {
+     "key": "aspect_ratio",
+     "label": "Aspect ratio",
+     "type": "enum",
+     "required": false,
+     "default": "16:9",
+     "options": [
+      {
+       "label": "16:9",
+       "value": "16:9"
+      },
+      {
+       "label": "9:16",
+       "value": "9:16"
+      },
+      {
+       "label": "1:1",
+       "value": "1:1"
+      }
+     ]
+    },
+    {
+     "key": "generate_audio",
+     "label": "Audio",
+     "type": "boolean",
+     "required": false,
+     "default": true
+    }
+   ],
+   "routes": [
+    {
+     "id": "bfl",
+     "provider": "bfl",
+     "maker": true,
+     "keys": [
+      "BFL_API_KEY"
+     ],
+     "handler": "bfl",
+     "endpoint": "/v1/flux-3-video"
+    },
+    {
+     "id": "fal",
+     "provider": "fal",
+     "keys": [
+      "FAL_KEY"
+     ],
+     "handler": "fal",
+     "endpoint": "blackforestlabs/flux-3/text-to-video",
+     "endpointWhen": [
+      {
+       "when": {
+        "start_video": "(set)"
+       },
+       "endpoint": "blackforestlabs/flux-3/extend-video"
+      },
+      {
+       "when": {
+        "keyframes": "(set)"
+       },
+       "endpoint": "blackforestlabs/flux-3/keyframes-to-video"
+      },
+      {
+       "when": {
+        "end_image": "(set)"
+       },
+       "endpoint": "blackforestlabs/flux-3/first-last-frame-to-video"
+      },
+      {
+       "when": {
+        "start_image": "(set)"
+       },
+       "endpoint": "blackforestlabs/flux-3/image-to-video"
+      }
+     ],
+     "valueMap": {
+      "resolution": {
+       "hd": "720p",
+       "fhd": "1080p"
+      }
+     }
+    },
+    {
+     "id": "replicate",
+     "provider": "replicate",
+     "keys": [
+      "REPLICATE_API_TOKEN"
+     ],
+     "handler": "replicate-model",
+     "endpoint": "black-forest-labs/flux-3",
+     "valueMap": {
+      "resolution": {
+       "hd": "720p",
+       "fhd": "1080p"
+      },
+      "duration": {
+       "5": "5",
+       "6": "6",
+       "7": "7",
+       "8": "8",
+       "9": "9",
+       "10": "10",
+       "11": "11",
+       "12": "12",
+       "13": "13",
+       "14": "14",
+       "15": "15",
+       "16": "16",
+       "17": "17",
+       "18": "18",
+       "19": "19",
+       "20": "20"
+      }
+     }
+    },
+    {
+     "id": "openrouter",
+     "provider": "openrouter",
+     "keys": [
+      "OPENROUTER_API_KEY"
+     ],
+     "handler": "openrouter-videos",
+     "endpoint": "black-forest-labs/flux-3-video",
+     "valueMap": {
+      "resolution": {
+       "hd": "720p",
+       "fhd": "1080p"
+      }
+     },
+     "rules": {
+      "ports": {
+       "keyframes": {
+        "max": 0
+       },
+       "start_video": {
+        "max": 0
+       }
+      }
+     }
+    },
+    {
+     "id": "krea",
+     "provider": "krea",
+     "keys": [
+      "KREA_API_TOKEN"
+     ],
+     "plan": "optional",
+     "handler": "krea",
+     "endpoint": "krea-video-black-forest-labs-flux-3-video",
+     "valueMap": {
+      "resolution": {
+       "hd": "720p",
+       "fhd": "1080p"
+      }
+     },
+     "rules": {
+      "ports": {
+       "keyframes": {
+        "max": 0
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}

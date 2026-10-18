@@ -1,0 +1,219 @@
+{
+ "_read": "2026-10-15",
+ "_source": "https://replicate.com/<model>/api/schema (components.schemas.Input)",
+ "schemas": {
+  "black-forest-labs/flux-3": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Aspect ratio of the generated video. 'auto' picks a ratio from your prompt and any inputs.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "4:3",
+      "1:1",
+      "3:4",
+      "9:16"
+     ],
+     "title": "aspect_ratio",
+     "type": "string",
+     "x-order": 3
+    },
+    "draft": {
+     "default": false,
+     "description": "Generate a fast, low-cost draft preview instead of a full-quality clip. Drafts are 720p.",
+     "title": "Draft",
+     "type": "boolean",
+     "x-order": 7
+    },
+    "duration": {
+     "default": "auto",
+     "description": "Length of the generated clip in seconds. 'auto' lets the model pick to fit the content. Three or more images need an explicit duration.",
+     "enum": [
+      "auto",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20"
+     ],
+     "title": "duration",
+     "type": "string",
+     "x-order": 5
+    },
+    "generate_audio": {
+     "default": true,
+     "description": "Generate synchronized audio (ambient sound, speech, effects). Set to false for a silent clip.",
+     "title": "Generate Audio",
+     "type": "boolean",
+     "x-order": 6
+    },
+    "images": {
+     "default": [],
+     "description": "Optional images to drive the video, placed on screen pixel for pixel. One image opens the clip (image-to-video). Two images start and end it. Three or more (up to 10) become a storyboard \u2014 the first starts it, the last ends it, and the rest fall evenly in between (needs a duration). Leave empty for text-to-video. Must be PNG, JPEG, or WebP.",
+     "items": {
+      "format": "uri",
+      "type": "string"
+     },
+     "title": "Images",
+     "type": "array",
+     "x-order": 1
+    },
+    "prompt": {
+     "description": "Text description of the video to generate. Plain language works \u2014 the prompt is interpreted and expanded before generation. Describe the scene, action, camera moves, and any audio you want.",
+     "title": "Prompt",
+     "type": "string",
+     "x-order": 0
+    },
+    "resolution": {
+     "default": "720p",
+     "description": "Output resolution.",
+     "enum": [
+      "720p",
+      "1080p"
+     ],
+     "title": "resolution",
+     "type": "string",
+     "x-order": 4
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Moderation tolerance for input and output, 0 (strictest) to 4 (most permissive). Requests with image or video inputs are limited to 2.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer",
+     "x-order": 8
+    },
+    "start_video": {
+     "description": "A video to continue from its final frames. Use this to extend a shot or chain generations into a longer sequence. Must be an mp4, at most 50MB and 15 seconds. Can't be combined with images.",
+     "format": "uri",
+     "nullable": true,
+     "title": "Start Video",
+     "type": "string",
+     "x-order": 2
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "Input",
+   "type": "object"
+  },
+  "black-forest-labs/flux-3-image": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Aspect ratio of the generated image. 'auto' picks the ratio from the prompt and the first reference image.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "3:2",
+      "7:5",
+      "4:3",
+      "5:4",
+      "1:1",
+      "4:5",
+      "3:4",
+      "5:7",
+      "2:3",
+      "9:16",
+      "1:2",
+      "9:21"
+     ],
+     "title": "aspect_ratio",
+     "type": "string",
+     "x-order": 2
+    },
+    "grounding": {
+     "default": true,
+     "description": "Let the model research the prompt with web search and image search before generating.",
+     "title": "Grounding",
+     "type": "boolean",
+     "x-order": 4
+    },
+    "images": {
+     "default": [],
+     "description": "Up to 10 reference images the prompt edits or draws from. When present, the request runs as an edit and the first image drives 'auto' aspect ratio. Each image must be at least 256x256 px and at most 16 MP. Must be jpeg, png, gif, or webp.",
+     "items": {
+      "format": "uri",
+      "type": "string"
+     },
+     "title": "Images",
+     "type": "array",
+     "x-order": 1
+    },
+    "output_format": {
+     "default": "webp",
+     "description": "Format of the output images.",
+     "enum": [
+      "webp",
+      "jpg",
+      "png"
+     ],
+     "title": "output_format",
+     "type": "string",
+     "x-order": 6
+    },
+    "output_quality": {
+     "default": 80,
+     "description": "Quality when saving the output images, from 0 to 100. 100 is best quality, 0 is lowest quality. Not relevant for .png outputs",
+     "maximum": 100,
+     "minimum": 0,
+     "title": "Output Quality",
+     "type": "integer",
+     "x-order": 7
+    },
+    "prompt": {
+     "description": "Text description of the image to generate, or of the edit to apply to the reference images.",
+     "title": "Prompt",
+     "type": "string",
+     "x-order": 0
+    },
+    "resolution": {
+     "default": "1k",
+     "description": "Resolution of the output image. Input images are resized to the closest bin, up to 2k.",
+     "enum": [
+      "768sq",
+      "1k",
+      "1.5k",
+      "2k",
+      "4k"
+     ],
+     "title": "resolution",
+     "type": "string",
+     "x-order": 3
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Moderation tolerance for inputs and outputs. 0 is the strictest, 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer",
+     "x-order": 5
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "Input",
+   "type": "object"
+  }
+ }
+}

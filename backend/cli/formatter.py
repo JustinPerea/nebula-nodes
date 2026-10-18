@@ -6,7 +6,7 @@ from typing import Any
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import detail, krea_modes, node_access, provider_via  # noqa: F401 (node_access is re-exported)
 from services.maker_sizes import rule_note
-from services.node_route import all_param_definitions
+from services.node_route import all_param_definitions, route_param_definitions
 
 
 def format_node_table(nodes: list[dict[str, Any]]) -> str:
@@ -42,6 +42,28 @@ def format_node_table(nodes: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _route_takes(node: dict[str, Any], route: dict[str, Any]) -> str:
+    """What one route of a route-table node takes that differs from the
+    PARAMS list (all_param_definitions): its own params, and the shared
+    params it narrows (route_param_definitions), e.g. "resolution
+    768sq|1k|2k|4k; grounding"."""
+    union = {str(p.get("key")): p for p in all_param_definitions(node)}
+    parts: list[str] = []
+    for param in route_param_definitions(node, str(route.get("id"))):
+        key = str(param.get("key"))
+        if key.startswith("_") or param.get("hidden"):
+            continue
+        whole = union.get(key) or {}
+        if param.get("options") != whole.get("options"):
+            parts.append(f"{key} " + "|".join(str(o.get("value") if isinstance(o, dict) else o)
+                                               for o in param.get("options") or []))
+        elif (param.get("min"), param.get("max")) != (whole.get("min"), whole.get("max")):
+            parts.append(f"{key} {param.get('min', '')}-{param.get('max', '')}")
+        elif not any(key == str(p.get("key")) for p in node.get("sharedParams") or []):
+            parts.append(key)
+    return "; ".join(parts)
+
+
 def format_node_detail(node: dict[str, Any]) -> str:
     """Format full detail for a single node (nebula info output)."""
     lines: list[str] = []
@@ -65,6 +87,9 @@ def format_node_detail(node: dict[str, Any]) -> str:
                                     f"Krea plan {route['plan']}" if route.get("plan") else "") if tag]
             lines.append(f"  {str(route.get('id')):<16}{str(route.get('provider')):<14}{keys}"
                          + (f"  ({', '.join(tags)})" if tags else ""))
+            takes = _route_takes(node, route)
+            if takes:
+                lines.append(f"  {'':<16}takes {takes}")
         lines.append("  Changing _provider is the person's call: `nebula propose` it; direct edits are refused.")
     lines.append("")
 
