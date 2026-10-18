@@ -16,6 +16,8 @@ import { confineFileScheme } from './renderer-files.mjs';
 import { resolveLaunchOverrides } from './launch-overrides.mjs';
 import { decideWindowAction } from './window-recovery.mjs';
 import { packagedLaunch, treatAsPackaged } from './packaged-launch.mjs';
+import { FrontendBuildError, checkParamsVersions, readBuildParamsVersion } from './frontend-build.mjs';
+import { FAILURE_WINDOW_SIZE, escapeHtml, failureSurfaceHtml, htmlDataUrl } from './failure-surface.mjs';
 import {
   CREDENTIALS_FILE_NAME,
   MIGRATION_STATE_FILE_NAME,
@@ -157,18 +159,6 @@ let plaintextProviders = [];
 // Startup and failure surfaces
 // ---------------------------------------------------------------------------
 
-function htmlDataUrl(html) {
-  return 'data:text/html;base64,' + Buffer.from(html, 'utf8').toString('base64');
-}
-
-function escapeHtml(text) {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 const LOADING_HTML = htmlDataUrl(`<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Nebula Nodes</title>
 <style>
@@ -185,27 +175,6 @@ p{font-size:14px;color:#777}
 <h1>Nebula Nodes</h1>
 <p>Starting backend\u2026</p>
 </div></body></html>`);
-
-function failureSurfaceHtml(error) {
-  const message = error instanceof SidecarError
-    ? error.message
-    : error instanceof Error
-      ? error.message
-      : String(error);
-  return htmlDataUrl(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Nebula Nodes \u2014 Startup Error</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#0d0608;color:#e0e0e0;font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;user-select:none;-webkit-app-region:drag}
-.container{max-width:560px;padding:40px}
-h1{font-size:18px;color:#ff6b6b;margin-bottom:16px;font-weight:600}
-pre{font-size:13px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;color:#ccc;background:#160a10;padding:16px;border-radius:8px;overflow:auto;max-height:50vh}
-</style></head>
-<body><div class="container">
-<h1>Backend startup failed</h1>
-<pre>${escapeHtml(message)}</pre>
-</div></body></html>`);
-}
 
 /**
  * Mid-session disconnected surface — shown when the sidecar exits after
@@ -498,13 +467,16 @@ function createMainWindow(handle, plaintextKeyWarning = []) {
  */
 function showFailure(error) {
   if (loadingWindow && !loadingWindow.isDestroyed()) {
+    // The loading window is smaller; at its size the message's last line,
+    // the fix, fell out of view (failure-surface.mjs).
+    loadingWindow.setSize(FAILURE_WINDOW_SIZE.width, FAILURE_WINDOW_SIZE.height);
+    loadingWindow.center();
     loadingWindow.loadURL(failureSurfaceHtml(error));
     if (!isSmokeTest) loadingWindow.show();
   } else {
     loadingWindow = new BrowserWindow({
       show: !isSmokeTest,
-      width: 600,
-      height: 400,
+      ...FAILURE_WINDOW_SIZE,
       resizable: false,
       minimizable: true,
       maximizable: false,
@@ -929,6 +901,12 @@ if (refuseDebugLaunch) {
           'Run `cd frontend && npm run build:desktop`, then start the app again.',
         );
       }
+      // The build's params version (frontend-build.mjs). A build without a
+      // stamp predates it; same answer, same point: before anything spawns.
+      // Compared with the backend's once the sidecar is healthy, below.
+      const frontendParamsVersion = isDevelopment
+        ? null
+        : readBuildParamsVersion(dirname(fileURLToPath(rendererUrl)));
 
       // Compute App Support paths and create the directory tree before
       // spawning the sidecar. The env vars are merged into the child
@@ -1038,8 +1016,6 @@ if (refuseDebugLaunch) {
         personToken: person.token,
         launchSecrets: { injectedKeys, connectorEncryptionKey },
       });
-      sidecarStarting = false;
-      startupError = null;
       const handle = sidecarHandle;
       console.log(
         `Sidecar started: pid=${handle.pid} port=${handle.port} ` +
@@ -1047,6 +1023,20 @@ if (refuseDebugLaunch) {
       );
       console.log(`NEBULA_SIDECAR_PID=${handle.pid}`);
       console.log(`NEBULA_SIDECAR_PORT=${handle.port}`);
+
+      // A bundle built for another params version can't save or run against
+      // this backend (frontend-build.mjs). Stop the sidecar and say which side
+      // is older, before any window loads the renderer. sidecarStarting stays
+      // true while it stops, so a quit in the meantime waits for it.
+      if (frontendParamsVersion !== null) {
+        const mismatch = checkParamsVersions(frontendParamsVersion, handle.health);
+        if (mismatch) {
+          await cleanupSidecar();
+          throw mismatch;
+        }
+      }
+      sidecarStarting = false;
+      startupError = null;
 
       // If the user quit during startup, clean up and exit without mounting
       // the normal renderer.
@@ -1095,7 +1085,7 @@ if (refuseDebugLaunch) {
       showFailure(startupError);
 
       if (isSmokeTest) {
-        const errorDetails = err instanceof SidecarError
+        const errorDetails = err instanceof SidecarError || err instanceof FrontendBuildError
           ? {
               type: err.type,
               message: err.message,

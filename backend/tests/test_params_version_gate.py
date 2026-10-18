@@ -349,6 +349,14 @@ def test_listing_and_graph_sync_carry_the_params_version(workspace):
     assert first["paramsVersion"] == PARAMS_VERSION
 
 
+def test_health_reports_the_params_version_and_keeps_its_identity():
+    # The desktop app reads this at launch to catch a frontend built for
+    # another version (desktop/frontend-build.mjs). Health stays open: no
+    # person token, no params header.
+    body = TestClient(main_module.app).get("/api/health").json()
+    assert body == {"status": "ok", "app": "nebula", "version": "0.1.0", "paramsVersion": PARAMS_VERSION}
+
+
 def test_desktop_renderer_may_send_the_params_version_header():
     assert "X-Nebula-Params-Version" in main_module._DESKTOP_CORS_HEADERS
 

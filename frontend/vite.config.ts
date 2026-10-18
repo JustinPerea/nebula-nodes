@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'node:url'
 import { assertBackendEnvConsistent, devProxyPort, type BackendPortEnv } from './src/lib/devBackendPort'
+import { nebulaBuildStamp } from './vite-plugins/buildStamp.ts'
 
 const configDir = fileURLToPath(new URL('.', import.meta.url))
 
@@ -65,7 +66,7 @@ export default defineConfig(({ mode }) => {
     // Electron loads the packaged renderer through file://. Relative asset URLs
     // keep chunks, styles, and static files resolvable from that origin.
     base: process.env.NEBULA_DESKTOP_BUILD === '1' ? './' : '/',
-    plugins: [sparkWithoutRuntimeCodegen(), react()],
+    plugins: [sparkWithoutRuntimeCodegen(), react(), nebulaBuildStamp()],
     resolve: {
       // The full player bundles its expression interpreter with runtime code
       // generation. Nebula only renders SVG Lottie animations, so the light
