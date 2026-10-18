@@ -208,6 +208,9 @@ class NebulaClient:
     def list_projects(self) -> dict[str, Any]:
         return self._request("GET", "/api/projects")
 
+    def create_project(self, name: str, workspace_revision: str) -> dict[str, Any]:
+        return self._request("POST", "/api/projects", json={"name": name, "workspaceRevision": workspace_revision})
+
     def open_project(self, project_id: str, workspace_revision: str) -> dict[str, Any]:
         return self._request("POST", f"/api/projects/{quote(project_id, safe='')}/open",
                              json={"workspaceRevision": workspace_revision})

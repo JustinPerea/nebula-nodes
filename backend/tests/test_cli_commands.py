@@ -92,6 +92,47 @@ def test_projects_open_refuses_an_unknown_project(cli, capsys):
         projects.run_open(client, "no-such-project")
 
 
+def test_project_new_opens_a_fresh_project_and_names_the_way_back(cli, capsys, monkeypatch):
+    client, _ = cli
+    projects.run_new(client, "First")
+    first_id = client.list_projects()["activeProjectId"]
+    _text_node(client)
+    capsys.readouterr()
+    monkeypatch.setenv("NEBULA_AGENT_NAME", "Claude Code")
+    projects.run_new(client, "  Agent sketches ")
+    printed = capsys.readouterr().out
+    listing = client.list_projects()
+    opened = next(p for p in listing["projects"] if p["id"] == listing["activeProjectId"])
+    assert opened["name"] == "Agent sketches" and opened["createdBy"]["name"] == "Claude Code"
+    assert client.get_graph()["nodes"] == []
+    assert "Made and opened Agent sketches" in printed
+    assert f"nebula project open {first_id}" in printed and "First is saved" in printed
+    with pytest.raises(SystemExit):
+        projects.run_new(client, "   ")
+
+
+def test_clear_refuses_a_canvas_with_nodes_unless_forced(cli, capsys, monkeypatch):
+    client, _ = cli
+    _text_node(client)
+    with pytest.raises(SystemExit) as refused:
+        graph.run_clear(client)
+    assert refused.value.code == 1
+    message = capsys.readouterr().err
+    assert "has 1 node" in message and 'nebula project new "<name>"' in message and "--force" in message
+    assert len(client.get_graph()["nodes"]) == 1
+    # An agent is refused by the backend even with --force.
+    monkeypatch.setenv("NEBULA_AGENT_NAME", "Claude Code")
+    with pytest.raises(SystemExit):
+        graph.run_clear(client, force=True)
+    assert "Agents can't clear" in capsys.readouterr().err
+    assert len(client.get_graph()["nodes"]) == 1
+    # The person's --force (no agent name) clears.
+    monkeypatch.delenv("NEBULA_AGENT_NAME")
+    graph.run_clear(client, force=True)
+    assert client.get_graph()["nodes"] == []
+    assert "Canvas cleared." in capsys.readouterr().out
+
+
 def test_spend_shows_the_limits_an_agent_works_under(cli, capsys):
     client, _ = cli
     spend.run(client)

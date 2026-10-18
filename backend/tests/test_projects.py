@@ -194,10 +194,12 @@ def test_invalid_snapshot_and_invalid_name_are_atomic(workspace):
     assert graph.get_state() == before
 
 
-def test_stale_project_tabs_cannot_save_switch_edit_or_execute(workspace):
+def test_stale_project_tabs_cannot_save_switch_edit_or_execute(workspace, person):
     client, graph, _, _ = workspace
     first = create(client, "First")
-    second = create(client, "Second", first["workspaceRevision"])
+    # The person switched in another tab: no handoff save for the stale one.
+    second = client.post("/api/projects", json={"name": "Second", "workspaceRevision": first["workspaceRevision"]},
+                         headers=person.headers).json()
     stale = first["workspaceRevision"]
     assert client.put(f"/api/projects/{first['project']['id']}", json={"workspaceRevision": stale, "snapshot": {"nodes": [], "edges": []}}).status_code == 409
     assert client.post(f"/api/projects/{first['project']['id']}/open", json={"workspaceRevision": stale}).status_code == 409
@@ -464,7 +466,7 @@ def test_deleting_the_open_project_is_blocked_during_a_run(workspace, monkeypatc
                           json={"workspaceRevision": running["workspaceRevision"]}).status_code == 200
 
 
-def test_unsaved_edits_to_a_project_deleted_elsewhere_can_still_be_recovered(workspace):
+def test_unsaved_edits_to_a_project_deleted_elsewhere_can_still_be_recovered(workspace, person):
     from uuid import uuid4
     client, graph, store, _ = workspace
     first = create(client, "Deleted elsewhere")
@@ -480,7 +482,7 @@ def test_unsaved_edits_to_a_project_deleted_elsewhere_can_still_be_recovered(wor
     assert recovered.json()["project"]["snapshot"] == snapshot
     assert client.post("/api/projects/recover", json=body).json() == recovered.json()
     # Gone for good: the copy is still made, under a generic name.
-    assert client.request("DELETE", f"/api/projects/trash/{first['project']['id']}").status_code == 200
+    assert client.request("DELETE", f"/api/projects/trash/{first['project']['id']}", headers=person.headers).status_code == 200
     body["recoveryId"] = uuid4().hex
     gone = client.post("/api/projects/recover", json=body)
     assert gone.status_code == 200, gone.text
@@ -537,21 +539,26 @@ def test_restoring_the_project_that_was_open_brings_it_back_closed(workspace):
     assert opened.status_code == 200, opened.text
 
 
-def test_trash_can_be_purged_one_at_a_time_or_emptied(workspace):
+def test_trash_can_be_purged_one_at_a_time_or_emptied(workspace, person):
     client, graph, store, _ = workspace
     a = create(client, "A")
     b = create(client, "B", a["workspaceRevision"])
     c = create(client, "C", b["workspaceRevision"])
     _trash(client, a["project"]["id"], c["workspaceRevision"])
     _trash(client, b["project"]["id"], c["workspaceRevision"])
-    purged = client.request("DELETE", f"/api/projects/trash/{a['project']['id']}")
+    # Deleting for good can't be undone, so it's the person's alone.
+    for headers in ({"X-Nebula-Agent": "Claude Code"}, {}, {**person.headers, "X-Nebula-Agent": "Claude Code"}):
+        assert client.request("DELETE", f"/api/projects/trash/{a['project']['id']}", headers=headers).status_code == 403
+        assert client.post("/api/projects/trash/empty", headers=headers).status_code == 403
+    assert len(store.read()["trash"]) == 2
+    purged = client.request("DELETE", f"/api/projects/trash/{a['project']['id']}", headers=person.headers)
     assert purged.status_code == 200
     assert [entry["id"] for entry in purged.json()["trash"]] == [b["project"]["id"]]
-    assert client.request("DELETE", f"/api/projects/trash/{a['project']['id']}").status_code == 404
+    assert client.request("DELETE", f"/api/projects/trash/{a['project']['id']}", headers=person.headers).status_code == 404
     # Purging only reaches the trash, never a live project.
-    assert client.request("DELETE", f"/api/projects/trash/{c['project']['id']}").status_code == 404
-    assert client.request("DELETE", "/api/projects/trash/not-an-id").status_code == 400
-    assert client.post("/api/projects/trash/empty").json() == {"trash": []}
+    assert client.request("DELETE", f"/api/projects/trash/{c['project']['id']}", headers=person.headers).status_code == 404
+    assert client.request("DELETE", "/api/projects/trash/not-an-id", headers=person.headers).status_code == 400
+    assert client.post("/api/projects/trash/empty", headers=person.headers).json() == {"trash": []}
     catalog = store.read()
     assert catalog["trash"] == {}
     assert list(catalog["projects"]) == [c["project"]["id"]]

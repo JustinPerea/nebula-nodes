@@ -55,6 +55,13 @@ The server exposes these tools for building and running (see
 - `view_output`: a node's output as an image (videos as three frames, image
   lists as tiles), or as text.
 - `get_spend_limits`: the limits and what this session has used.
+- `list_projects` / `open_project` / `new_project`: list the person's saved
+  projects, switch the canvas to one, or start a new, empty one. The project
+  that was open is saved as it is. The person's canvas follows, shows a note
+  naming the agent, and offers a button back to the project they had open.
+  Start new work in a new project rather than emptying the canvas: clearing
+  a canvas that has nodes can't be undone, so the backend refuses it from
+  agents.
 
 And these canvas tools:
 
@@ -948,7 +955,20 @@ nebula rename n2 "Hero shot"        # an empty name restores the model's
 nebula move n2=400,120 n3=400,320   # canvas coordinates
 nebula projects                     # saved projects; * is open
 nebula project open <id>            # switch the canvas (not while a run is going)
+nebula project new "Logo ideas"     # start a new, empty project and open it
+nebula clear                        # refused when the canvas has nodes
+nebula clear --force                # the person only: clears it anyway
 ```
+
+Opening or starting a project keeps the one that was open as it is. When an
+agent (or any script that isn't the person's own canvas) does it, the
+person's canvas follows, says who switched it, and offers a button back.
+The project's history names the agent.
+
+`nebula clear` can't be undone, so it refuses when the open project has
+nodes and points to `nebula project new` instead. `--force` clears anyway,
+but only for the person: the backend refuses a clear (or a `nebula load`
+over a canvas that has nodes) from anything that names an agent.
 
 `nebula context` lists the definition ids that can run here: with your keys,
 free, on the signed-in Krea account (marked `*`), or with a Nous sign-in.

@@ -238,10 +238,28 @@ def test_view_output_shows_images_and_text(nebula):
         mcp_server.view_output(built["idMap"]["+p"], size="huge")
 
 
+def test_an_agent_starts_a_new_project_and_can_name_the_way_back(nebula):
+    mcp_server.new_project("Before")
+    _build("kept in Before")
+    made = mcp_server.new_project("Agent sketches")
+    assert made["project"]["name"] == "Agent sketches" and made["project"]["nodes"] == 0
+    back = made["previousProject"]
+    assert back["name"] == "Before" and f"open_project('{back['id']}')" in made["note"]
+    listed = mcp_server.list_projects()
+    assert listed["openProjectId"] == made["project"]["id"]
+    assert next(p for p in listed["projects"] if p["id"] == back["id"])["nodes"] == 2
+    returned = mcp_server.open_project(back["id"])
+    assert returned["project"]["nodes"] == 2 and returned["previousProject"]["name"] == "Agent sketches"
+    # Clearing a canvas with nodes isn't for agents: the refusal says what to do.
+    with pytest.raises(NebulaAPIError) as refused:
+        mcp_server._canvas_call("DELETE", "/api/graph", None)
+    assert refused.value.status == 403 and "new_project" in refused.value.detail
+
+
 def test_every_tool_is_annotated_and_the_instructions_name_real_tools():
     tools = {tool.name: tool for tool in asyncio.run(mcp_server.mcp.list_tools())}
     assert {"find_nodes", "describe_node", "edit_canvas", "remove_from_canvas", "run_nodes", "get_run",
-            "cancel_run", "view_output", "get_spend_limits"} <= set(tools)
+            "cancel_run", "view_output", "get_spend_limits", "list_projects", "open_project", "new_project"} <= set(tools)
     assert all(tool.annotations is not None for tool in tools.values())
     assert tools["remove_from_canvas"].annotations.destructiveHint is True
     assert tools["run_nodes"].annotations.openWorldHint is True
