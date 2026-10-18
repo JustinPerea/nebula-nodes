@@ -166,8 +166,8 @@ function createNoSenderEvent() {
 // ---------------------------------------------------------------------------
 
 describe('Published constants', () => {
-  test('ALLOWED_PROVIDERS has exactly 19 entries', () => {
-    assert.equal(ALLOWED_PROVIDERS.length, 19);
+  test('ALLOWED_PROVIDERS has exactly 20 entries', () => {
+    assert.equal(ALLOWED_PROVIDERS.length, 20);
   });
 
   test('ALLOWED_PROVIDERS is frozen', () => {
