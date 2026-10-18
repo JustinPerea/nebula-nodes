@@ -200,8 +200,9 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset()) -> Propo
     """Shape-check and sanitise a proposal body. Graph validation happens in main.
 
     `internal_ok` names underscore params a caller may set anyway: proposals
-    and direct edits name `_kreaAuth`, the Krea billing choice. Only a
-    proposal may change it; direct edits from agents that would are refused."""
+    and direct edits name `_provider` and `_kreaAuth`, who bills a run
+    (node_route.BILLING_PARAMS). Only a proposal may change them; direct
+    edits from agents that would are refused."""
     if not isinstance(body, dict):
         raise ProposalError(422, "the proposal must be a JSON object")
     unknown = sorted(set(body) - _ALLOWED_KEYS)
@@ -291,6 +292,7 @@ def cost_for(
     definition: Mapping[str, Any] | None,
     params: Mapping[str, Any] | None = None,
     definitions: Mapping[str, Mapping[str, Any]] | None = None,
+    api_keys: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """`free` for local utility nodes, else `paid` with the provider. No prices exist.
 
@@ -298,8 +300,33 @@ def cost_for(
     shot, so it is paid, by that model's provider. A utility node whose
     ``providerVia`` param picks provider work (a QC node in vision-llm or jev
     mode) is paid too, by the provider that value calls (``byValue``), and
-    priced only when its own entry has a row for that value (jev)."""
-    from services import model_pricing, node_readiness
+    priced only when its own entry has a row for that value (jev).
+
+    A route-table node is paid by the provider of the route it would take
+    (node_route.select_route with ``api_keys``); when that route can't run,
+    ``provider`` is None, ``unavailable`` says why and, for a setting the
+    route doesn't offer, ``fixes`` lists route_unavailable's one-click
+    param edits ([{param, value}], value None = clear). Without ``api_keys``
+    it names the explicit route's provider, or under Auto the maker's."""
+    from services import model_pricing, node_readiness, node_route
+
+    if definition and node_route.has_routes(definition):
+        if api_keys is not None:
+            route = node_route.select_route(definition, params, api_keys)
+            if route.kind == node_route.UNSET:
+                why = node_route.route_unavailable(definition, params, api_keys) or {}
+                # A stop on a setting the route doesn't offer can be fixed in
+                # place: route_unavailable's one-click param edits.
+                return {"kind": "paid", "provider": None, "label": "paid · can't run as set",
+                        "unavailable": str(why.get("message") or ""),
+                        **({"fixes": list(why["fixes"])} if why.get("fixes") else {})}
+            routed = str(route.provider or "") or None
+        else:
+            choice = node_route.provider_choice(params)
+            spec = (node_route.route_by_id(definition, choice) if choice != node_route.AUTO
+                    else node_route.maker_route(definition) or next(iter(node_route.routes_of(definition)), None))
+            routed = str((spec or {}).get("provider") or "") or None
+        return {"kind": "paid", "provider": routed, "label": f"paid · {routed or 'provider'}"}
 
     if (definition or {}).get("id") == model_pricing.CINEMA_SCENE:
         nested = model_pricing.cinema_scene_base(params or {})

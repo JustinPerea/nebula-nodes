@@ -9,6 +9,15 @@ const NODE_DEFS_PATH = join(REPO_ROOT, 'backend', 'data', 'node_definitions.json
 const FRONTEND_DEFS_PATH = join(REPO_ROOT, 'frontend', 'src', 'constants', 'nodeDefinitions.ts');
 const ENV_EXAMPLE_PATH = join(REPO_ROOT, '.env.example');
 const SETTINGS_EXAMPLE_PATH = join(REPO_ROOT, 'settings.example.json');
+// Inline route-table nodes (route_cases.json) and the key -> provider table
+// (route_tables.json, generated from backend services/node_route.py).
+// NEBULA_CONTRACTS_ROUTE_CASES_PATH: another copy of the fixture nodes (tests
+// check a broken copy with it).
+const ROUTE_CASES_PATH = process.env.NEBULA_CONTRACTS_ROUTE_CASES_PATH || join(REPO_ROOT, 'backend', 'tests', 'fixtures', 'route_cases.json');
+const ROUTE_TABLES_PATH = join(REPO_ROOT, 'backend', 'tests', 'fixtures', 'route_tables.json');
+// NEBULA_CONTRACTS_PRICING_PATH points the check at another pricing table
+// (tests/test_node_contracts.py checks a broken copy with it).
+const PRICING_PATH = process.env.NEBULA_CONTRACTS_PRICING_PATH || join(REPO_ROOT, 'backend', 'data', 'model_pricing.json');
 
 const VALID_CATEGORIES = new Set([
   'image-gen',
@@ -60,6 +69,12 @@ const VALID_PORT_TYPES = new Set([
 ]);
 const VALID_PARAM_TYPES = new Set(['string', 'integer', 'float', 'boolean', 'enum', 'textarea', 'file', 'palette']);
 const PARAM_GROUPS = ['params', 'sharedParams', 'falParams', 'directParams'];
+// A route-table node's routes (definition `routes`, docs/PROVIDER-ROUTES.md).
+const ROUTE_HANDLERS = new Set(['bfl', 'fal', 'replicate-model', 'openrouter-images', 'openrouter-videos', 'krea']);
+const ROUTE_FIELDS = new Set(['id', 'provider', 'maker', 'keys', 'plan', 'handler', 'endpoint', 'endpointWhen',
+  'params', 'rename', 'valueMap', 'rules', 'paramVisibleWhen', 'pricing', 'note']);
+const ROUTE_RULES = new Set(['blockedBy', 'accepts', 'rejects', 'rejectsWhen', 'size', 'ports']);
+const BILLING_PARAMS = ['_provider', '_kreaAuth'];
 const LOCAL_EXECUTION_NODE_IDS = new Set([
   'text-input',
   'image-input',
@@ -85,9 +100,21 @@ const definitions = JSON.parse(await readFile(NODE_DEFS_PATH, 'utf8'));
 const frontendSource = await readFile(FRONTEND_DEFS_PATH, 'utf8');
 const envExample = await readFile(ENV_EXAMPLE_PATH, 'utf8');
 const settingsExample = JSON.parse(await readFile(SETTINGS_EXAMPLE_PATH, 'utf8'));
+const routeFixtures = JSON.parse(await readFile(ROUTE_CASES_PATH, 'utf8')).definitions ?? {};
+const pricing = JSON.parse(await readFile(PRICING_PATH, 'utf8'));
+const keyProviders = JSON.parse(await readFile(ROUTE_TABLES_PATH, 'utf8')).keyProviders ?? {};
+// backend/services/credential_catalog.py KEYS_AHEAD_OF_NODES: keys Settings
+// lists before any node uses them.
+const catalogSource = await readFile(join(REPO_ROOT, 'backend', 'services', 'credential_catalog.py'), 'utf8');
+const keysAheadOfNodes = new Set([
+  ...(catalogSource.match(/KEYS_AHEAD_OF_NODES[^=]*= frozenset\(\{([\s\S]*?)\}\)/)?.[1] ?? '').matchAll(/"([A-Z0-9_]+)"/g),
+].map((match) => match[1]));
 const errors = [];
 
 validateRegistryShape();
+validateRoutes(definitions, '');
+validateRoutes(routeFixtures, 'route_cases.json ');
+validateHiddenPrices(definitions, pricing);
 validateFrontendBackendIdParity();
 validateCredentialExampleCoverage();
 validateGeneratedReference();
@@ -128,6 +155,287 @@ function validateRegistryShape() {
       }
     }
     for (const group of PARAM_GROUPS) validateParams(nodeId, group, definition[group]);
+    for (const [index, route] of (Array.isArray(definition.routes) ? definition.routes : []).entries()) {
+      validateParams(nodeId, `routes[${index}].params`, route?.params);
+    }
+  }
+}
+
+// Route-table nodes: the same rules as backend services/node_route.py
+// routes_problems (test_node_contracts.py runs it over the registry).
+
+function keyNames(value) {
+  return (Array.isArray(value) ? value : [value]).filter((key) => typeof key === 'string' && key);
+}
+
+function validateRoutes(nodes, source) {
+  for (const [nodeId, definition] of Object.entries(nodes)) {
+    if (!('routes' in definition)) continue;
+    const where = `${source}${nodeId}`;
+    const routes = definition.routes;
+    if (!Array.isArray(routes) || !routes.length) {
+      errors.push(`${where}.routes must be a non-empty list`);
+      continue;
+    }
+    for (const field of ['directParams', 'falParams', 'directRoute']) {
+      if (field in definition) errors.push(`${where}.${field} can't sit next to routes`);
+    }
+    const ids = [];
+    const own = new Map();
+    const shared = new Set((definition.sharedParams ?? []).map((param) => param?.key));
+    routes.forEach((route, index) => {
+      const at = `${where}.routes[${index}]`;
+      if (!route || typeof route !== 'object') {
+        errors.push(`${at} must be an object`);
+        return;
+      }
+      const stray = Object.keys(route).filter((key) => !ROUTE_FIELDS.has(key));
+      if (stray.length) errors.push(`${at} has unknown fields ${stray.join(', ')}`);
+      if (typeof route.id !== 'string' || !route.id) errors.push(`${at} needs an id`);
+      else if (route.id === 'auto') errors.push(`${at} id 'auto' is the Auto choice, not a route`);
+      else if (ids.includes(route.id)) errors.push(`${where} has duplicate route id ${route.id}`);
+      ids.push(String(route.id));
+      const keys = Array.isArray(route.keys) && route.keys.every((key) => typeof key === 'string' && key) ? route.keys : null;
+      if (!keys) errors.push(`${at}.keys must be a list of key names`);
+      if (![undefined, 'optional', 'only'].includes(route.plan)) errors.push(`${at}.plan must be 'optional' or 'only'`);
+      if (route.plan && route.provider !== 'krea') errors.push(`${at} only a Krea route can bill the plan`);
+      if (route.plan !== 'only' && !keys?.length) errors.push(`${at} needs keys (only a plan-only route runs without one)`);
+      if (keys?.length && keyProviders[keys[0]] !== route.provider) {
+        errors.push(`${at}.provider must be '${keyProviders[keys[0]]}', who bills ${keys[0]}`);
+      }
+      if (!ROUTE_HANDLERS.has(route.handler)) errors.push(`${at}.handler must be one of ${[...ROUTE_HANDLERS].join(', ')}`);
+      if (![undefined, true].includes(route.maker)) errors.push(`${at}.maker must be true or left out`);
+      if (route.maker && index !== 0) errors.push(`${at} only routes[0] may be the maker`);
+      if (route.rules !== undefined && (typeof route.rules !== 'object' || route.rules === null)) {
+        errors.push(`${at}.rules must be an object`);
+      } else if (route.rules) {
+        const unknown = Object.keys(route.rules).filter((key) => !ROUTE_RULES.has(key));
+        if (unknown.length) errors.push(`${at}.rules has unknown rules ${unknown.join(', ')}`);
+        const inputIds = new Set((definition.inputPorts ?? []).map((port) => port?.id));
+        for (const [port, limit] of Object.entries(route.rules.ports ?? {})) {
+          if (!Number.isInteger(limit?.max) || limit.max < 0) errors.push(`${at}.rules.ports.${port}.max must be a whole number of inputs`);
+          if (!limit || typeof limit !== 'object') continue;
+          const strayLimit = Object.keys(limit).filter((key) => !['max', 'of', 'label'].includes(key));
+          if (strayLimit.length) errors.push(`${at}.rules.ports.${port} has unknown fields ${strayLimit.join(', ')}`);
+          // A group (FLUX 3 Video's ten images in all) caps several ports together.
+          if (limit.of !== undefined && (!Array.isArray(limit.of) || limit.of.length < 2
+            || !limit.of.every((name) => typeof name === 'string' && inputIds.has(name)))) {
+            errors.push(`${at}.rules.ports.${port}.of must list two or more of the node's input ports`);
+          }
+          if (limit.of !== undefined && inputIds.has(port)) {
+            errors.push(`${at}.rules.ports.${port} groups ports, so its key must not be an input port`);
+          }
+          if ('label' in limit && (typeof limit.label !== 'string' || !limit.label.trim())) {
+            errors.push(`${at}.rules.ports.${port}.label must be text`);
+          }
+        }
+      }
+      const routeKeys = new Set((route.params ?? []).map((param) => param?.key));
+      for (const param of route.params ?? []) {
+        if (BILLING_PARAMS.includes(param?.key)) errors.push(`${at}.params: ${param.key} must sit in params, never in a route`);
+        else if (shared.has(param?.key)) errors.push(`${at}.params: ${param.key} is both shared and this route's own`);
+        else if (own.has(param?.key) && JSON.stringify(own.get(param.key)) !== JSON.stringify(param)) {
+          errors.push(`${at}.params: ${param.key} differs from another route's; use a route-prefixed key and rename`);
+        }
+        if (!own.has(param?.key)) own.set(param?.key, param);
+      }
+      for (const field of ['rename', 'valueMap']) {
+        for (const key of Object.keys(route[field] ?? {})) {
+          if (!shared.has(key) && !routeKeys.has(key)) errors.push(`${at}.${field} names ${key}, which isn't one of its params`);
+        }
+      }
+      validateParamVisibleWhen(definition, route, at);
+      validateHideable(definition, route, at);
+    });
+    const union = [...new Set(routes.flatMap((route) => keyNames(route?.keys)))];
+    if (JSON.stringify(keyNames(definition.envKeyName)) !== JSON.stringify(union)) {
+      errors.push(`${where}.envKeyName must be ${JSON.stringify(union)}, the routes' keys in order`);
+    }
+    const first = routes[0] ?? {};
+    if (first.maker && JSON.stringify(keyNames(definition.directKeyName)) !== JSON.stringify(keyNames(first.keys))) {
+      errors.push(`${where}.directKeyName must be the maker route's keys`);
+    }
+    if (!first.maker && keyNames(definition.directKeyName).length) {
+      errors.push(`${where}.directKeyName is only for a node whose routes[0] is the maker`);
+    }
+    for (const param of definition.sharedParams ?? []) {
+      if (BILLING_PARAMS.includes(param?.key)) errors.push(`${where}.sharedParams: ${param.key} must sit in params`);
+    }
+    const top = new Map((definition.params ?? []).map((param) => [param?.key, param]));
+    for (const key of top.keys()) {
+      if (!BILLING_PARAMS.includes(key)) errors.push(`${where}.params: ${key} belongs in sharedParams or a route`);
+    }
+    const choice = top.get('_provider');
+    if (!choice) {
+      errors.push(`${where}: _provider must sit in params`);
+    } else {
+      const values = (choice.options ?? []).map((option) => option?.value);
+      if (JSON.stringify(values) !== JSON.stringify(['auto', ...ids])) {
+        errors.push(`${where}._provider options must be ${JSON.stringify(['auto', ...ids])}`);
+      }
+      if (choice.default !== 'auto' || !choice.hidden) errors.push(`${where}._provider must default to 'auto' and be hidden`);
+    }
+    const plans = routes.some((route) => route?.plan);
+    if (plans && !top.has('_kreaAuth')) errors.push(`${where}: a Krea route that bills the plan needs _kreaAuth in params`);
+    if (!plans && top.has('_kreaAuth') && definition.apiProvider !== 'krea') {
+      errors.push(`${where}._kreaAuth is only for a node with a Krea plan route`);
+    }
+    for (const group of ['params', 'sharedParams']) validateParams(where, group, definition[group]);
+    routes.forEach((route, index) => validateParams(where, `routes[${index}].params`, route?.params));
+  }
+}
+
+// What a route can hide must not pick its endpoint or hide itself
+// (node_route._hideable_problems): an endpointWhen key that is a param must
+// be one the route always shows, and the route's visibility conditions
+// (paramVisibleWhen plus its params' own visibleWhen) may not go in a circle.
+function validateHideable(definition, route, at) {
+  if (!route || typeof route !== 'object') return;
+  const listed = new Map([...(definition.sharedParams ?? []), ...(route.params ?? [])].filter((p) => p?.key).map((p) => [p.key, p]));
+  const conditions = route.paramVisibleWhen && typeof route.paramVisibleWhen === 'object' ? route.paramVisibleWhen : {};
+  const every = new Set([definition.params, definition.sharedParams, ...(definition.routes ?? []).map((r) => r?.params)]
+    .flatMap((group) => (group ?? []).map((p) => p?.key)).filter(Boolean));
+  (route.endpointWhen ?? []).forEach((option, index) => {
+    for (const key of Object.keys(option?.when ?? {})) {
+      if (!every.has(key)) continue;
+      const own = listed.get(key)?.visibleWhen;
+      if (!listed.has(key) || conditions[key] !== undefined || (own && Object.keys(own).length)) {
+        const problem = `${at}.endpointWhen[${index}] reads ${key}, which the route can hide`;
+        if (!errors.includes(problem)) errors.push(problem);
+      }
+    }
+  });
+  const edges = new Map();
+  for (const [key, param] of listed) edges.set(key, new Set(Object.keys(param.visibleWhen ?? {}).filter((c) => listed.has(c))));
+  for (const [key, condition] of Object.entries(conditions)) {
+    if (condition && typeof condition === 'object') {
+      if (!edges.has(key)) edges.set(key, new Set());
+      for (const c of Object.keys(condition)) if (listed.has(c)) edges.get(key).add(c);
+    }
+  }
+  const state = new Map();
+  const visit = (key, path) => {
+    state.set(key, 1);
+    for (const next of [...(edges.get(key) ?? [])].sort()) {
+      if (state.get(next) === 1) {
+        const loop = path.includes(next) ? [...path.slice(path.indexOf(next)), next] : [key, next];
+        errors.push(`${at} visibility conditions go in a circle: ${loop.join(' -> ')}`);
+      } else if (!state.get(next)) visit(next, [...path, next]);
+    }
+    state.set(key, 2);
+  };
+  for (const key of [...edges.keys()].sort()) if (!state.get(key)) visit(key, [key]);
+}
+
+// What a route offers (node_route._visible_when_problems): `paramVisibleWhen`
+// names this route's own params; each is false or {controller: [values]}
+// with controllers from the same list and literal option values, never
+// "(set)"/"(unset)".
+function literalValues(param) {
+  if (Array.isArray(param?.options) && param.options.length) return new Set(param.options.map((o) => String(o?.value ?? o)));
+  if (param?.type === 'boolean') return new Set(['true', 'false']);
+  return null;
+}
+
+function validateParamVisibleWhen(definition, route, at) {
+  if (!('paramVisibleWhen' in route)) return;
+  const conditions = route.paramVisibleWhen;
+  if (!conditions || typeof conditions !== 'object' || Array.isArray(conditions) || !Object.keys(conditions).length) {
+    errors.push(`${at}.paramVisibleWhen must be a non-empty object`);
+    return;
+  }
+  const listed = new Map([...(definition.sharedParams ?? []), ...(route.params ?? [])].filter((p) => p?.key).map((p) => [p.key, p]));
+  for (const [key, condition] of Object.entries(conditions)) {
+    const where = `${at}.paramVisibleWhen.${key}`;
+    if (!listed.has(key)) { errors.push(`${where} isn't one of this route's params`); continue; }
+    if (condition === false) continue;
+    if (!condition || typeof condition !== 'object' || Array.isArray(condition) || !Object.keys(condition).length) {
+      errors.push(`${where} must be false or {controller: [values]}`);
+      continue;
+    }
+    for (const [controller, allowed] of Object.entries(condition)) {
+      if (controller === key || !listed.has(controller)) {
+        errors.push(`${where} names ${controller}, which isn't another of this route's params`);
+        continue;
+      }
+      if (conditions[controller] === false) errors.push(`${where} names ${controller}, which this route never offers`);
+      if (!Array.isArray(allowed) || !allowed.length) { errors.push(`${where}.${controller} must list one or more values`); continue; }
+      if (allowed.some((value) => value === '(set)' || value === '(unset)')) {
+        errors.push(`${where}.${controller} can't use (set)/(unset): visibility never reads wired ports`);
+        continue;
+      }
+      const literal = literalValues(listed.get(controller));
+      if (!literal || allowed.some((value) => !literal.has(String(value)))) {
+        errors.push(`${where}.${controller} values must be options of ${controller}`);
+      }
+    }
+  }
+}
+
+// A route's price may not read a setting where the route hides it
+// (node_route.price_row_problems): over every combination of the values its
+// rows, extras and its params' conditions tell apart, the first row that
+// matches, every extra that matches and every multiplyBy param must not name
+// a param that route doesn't show with those values.
+function validateHiddenPrices(nodes, table) {
+  const asText = (value) => (value === undefined || value === null ? '' : String(value));
+  for (const [nodeId, definition] of Object.entries(nodes)) {
+    if (!Array.isArray(definition.routes) || !definition.routes.length) continue;
+    const entry = table.nodes?.[nodeId];
+    if (!entry?.routes) continue;
+    const all = new Map();
+    for (const group of [definition.params, definition.sharedParams, ...definition.routes.map((r) => r.params)]) {
+      for (const param of group ?? []) if (param?.key && !all.has(param.key)) all.set(param.key, param);
+    }
+    for (const route of definition.routes) {
+      const priced = entry.routes[route.pricing ?? route.id];
+      const rows = priced?.rows;
+      if (!Array.isArray(rows)) continue;
+      const extras = (Array.isArray(priced.extras) ? priced.extras : []).filter((extra) => extra && typeof extra === 'object');
+      const factors = (Array.isArray(priced.multiplyBy) ? priced.multiplyBy : []).map(String).filter((key) => !key.startsWith('('));
+      const matched = [...rows, ...extras];
+      const conditions = route.paramVisibleWhen ?? {};
+      const offered = new Map();
+      for (const param of [...(definition.sharedParams ?? []), ...(route.params ?? [])]) {
+        if (!param?.key || conditions[param.key] === false) continue;
+        const merged = Object.fromEntries(Object.entries(param.visibleWhen ?? {}).map(([k, v]) => [k, [...v]]));
+        for (const [k, v] of Object.entries(conditions[param.key] ?? {})) {
+          merged[k] = merged[k] ? merged[k].filter((x) => v.map(asText).includes(asText(x))) : [...v];
+        }
+        offered.set(param.key, merged);
+      }
+      const named = new Set([...matched.flatMap((row) => Object.keys(row.match ?? {})).filter((key) => !key.startsWith('(')), ...factors]);
+      const keys = new Set([...matched.flatMap((row) => Object.keys(row.match ?? {})), ...factors]);
+      for (const key of named) for (const ctrl of Object.keys(offered.get(key) ?? {})) keys.add(ctrl);
+      const ordered = [...keys].sort();
+      const choices = ordered.map((key) => {
+        const literal = literalValues(all.get(key));
+        if (literal) return [...literal].sort();
+        return [...new Set(matched.filter((row) => key in (row.match ?? {})).map((row) => asText(row.match[key])))].sort().concat(['(other)']);
+      });
+      const combos = choices.reduce((acc, values) => acc.flatMap((combo) => values.map((value) => [...combo, value])), [[]]);
+      for (const combo of combos) {
+        const values = Object.fromEntries(ordered.map((key, i) => [key, combo[i] === '(other)' ? undefined : combo[i]]));
+        for (const [key, param] of all) if (values[key] === undefined && param.default !== undefined && param.default !== null) values[key] = asText(param.default);
+        const matches = (candidate) => Object.entries(candidate.match ?? {}).every(([k, want]) => asText(values[k]) === asText(want));
+        const row = rows.find(matches);
+        if (!row) continue;
+        const listed = new Set(offered.keys());
+        const reads = [[`price row ${rows.indexOf(row)}`, Object.keys(row.match ?? {})],
+          ...extras.map((extra, index) => [`price extra ${index}`, matches(extra) ? Object.keys(extra.match ?? {}) : []]),
+          ['multiplyBy', factors]];
+        for (const [what, read] of reads) for (const key of read) {
+          if (key.startsWith('(')) continue;
+          const condition = offered.get(key);
+          const shown = condition !== undefined && Object.entries(condition).every(([ctrl, allowed]) =>
+            !listed.has(ctrl) || values[ctrl] === undefined || allowed.map(asText).includes(asText(values[ctrl])));
+          if (!shown) {
+            const problem = `${nodeId} (${route.pricing ?? route.id} route): ${what} reads ${key}, which the route doesn't show with ${ordered.map((k, i) => `${k}=${combo[i]}`).join(', ')}`;
+            if (!errors.includes(problem)) errors.push(problem);
+          }
+        }
+      }
+    }
   }
 }
 
@@ -272,7 +580,10 @@ function validateCredentialExampleCoverage() {
     }
   }
   for (const key of [...settingsKeys].sort()) {
-    if (!keys.has(key)) errors.push(`settings.example.json apiKeys has unused key ${key}`);
+    if (!keys.has(key) && !keysAheadOfNodes.has(key)) errors.push(`settings.example.json apiKeys has unused key ${key}`);
+  }
+  for (const key of [...keysAheadOfNodes].sort()) {
+    if (keys.has(key)) errors.push(`${key} is used by a node now; remove it from credential_catalog.py KEYS_AHEAD_OF_NODES`);
   }
 }
 

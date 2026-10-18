@@ -345,3 +345,42 @@ def test_the_walk_fails_closed_on_what_it_cannot_follow():
     # A listed local process module is excused for its own spawn only.
     assert not _reaches_network({"services.ffmpeg"})
     assert _reaches_network({"<opaque:create_subprocess_exec>"})
+
+
+ROUTE_TABLE = json.loads((Path(__file__).parent / "fixtures" / "route_cases.json").read_text())["definitions"]["routes-image"]
+
+
+def test_instance_access_answers_for_the_chosen_route():
+    from services import node_route
+    # Auto runs on the first keyed route.
+    assert node_readiness.instance_access(ROUTE_TABLE, {}, {"FAL_KEY"}) == node_readiness.KEY
+    # An explicit route needs its own key; another route's key doesn't count.
+    assert node_readiness.instance_access(ROUTE_TABLE, {"_provider": "replicate"}, {"FAL_KEY", "BFL_API_KEY"}) is None
+    assert node_readiness.instance_access(ROUTE_TABLE, {"_provider": "replicate"}, {"REPLICATE_API_TOKEN"}) == "key"
+    # A setting Auto's route can't take: not ready, never moved to another route.
+    assert node_readiness.instance_access(ROUTE_TABLE, {"safety_tolerance": 6}, {"BFL_API_KEY", "FAL_KEY"}) is None
+    # An unknown route id fails closed.
+    assert node_readiness.instance_access(ROUTE_TABLE, {"_provider": "nope"}, {"FAL_KEY"}) is None
+    # The Krea route on the plan needs the sign-in, not a key.
+    plan = {"_provider": "krea", "_kreaAuth": "mcp"}
+    assert node_readiness.instance_access(ROUTE_TABLE, plan, set(), krea_signed_in=True) == node_readiness.KREA
+    assert node_readiness.instance_access(ROUTE_TABLE, plan, {"KREA_API_TOKEN"}) is None
+    # The definition stays ready when any route is keyed.
+    assert node_readiness.node_access(ROUTE_TABLE, {"REPLICATE_API_TOKEN"}, False) == node_readiness.KEY
+    assert node_route.has_routes(ROUTE_TABLE)
+
+
+def test_instance_access_for_a_legacy_node_is_node_access():
+    veo = DEFINITIONS["veo-3"]
+    for keys in (set(), {"FAL_KEY"}, {"GOOGLE_API_KEY"}):
+        assert node_readiness.instance_access(veo, {}, keys) == node_readiness.node_access(veo, keys, False, DEFINITIONS)
+
+
+def test_keys_needed_names_only_the_explicit_route():
+    assert node_readiness.keys_needed(ROUTE_TABLE, {}, DEFINITIONS) == [ROUTE_TABLE]
+    assert node_readiness.keys_needed(ROUTE_TABLE, {"_provider": "replicate"}, DEFINITIONS) == [
+        {"id": "routes-image", "apiProvider": "replicate", "envKeyName": ["REPLICATE_API_TOKEN"]}]
+    krea = node_readiness.keys_needed(ROUTE_TABLE, {"_provider": "krea"}, DEFINITIONS)
+    assert krea[0]["envKeyName"] == ["KREA_API_TOKEN"]
+    assert node_readiness.krea_modes(krea[0]) == ["api-token", "mcp"]
+    assert node_readiness.keys_needed(ROUTE_TABLE, {"_provider": "nope"}, DEFINITIONS) is None

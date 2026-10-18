@@ -1,4 +1,5 @@
 import type { ModelNodeDefinition } from '../types';
+import { allParamDefinitions } from '../lib/directRoute';
 import { useUIStore } from '../store/uiStore';
 import { useProviderReadinessStore } from '../store/providerReadinessStore';
 import { modelReadiness } from '../lib/providerReadiness';
@@ -15,10 +16,7 @@ export function ProviderReadinessBadge({ definition, params, onSetup }: {
   const health = useProviderReadinessStore();
   // Catalog rows describe the defaults addNode will save, while existing
   // recipes always use their actual params (including missing legacy fields).
-  const sources = definition.sharedParams
-    ? [...definition.sharedParams, ...(definition.falParams ?? []), ...(definition.directParams ?? [])]
-    : definition.params;
-  const defaults = Object.fromEntries(sources.filter((param) => param.default !== undefined)
+  const defaults = Object.fromEntries(allParamDefinitions(definition).filter((param) => param.default !== undefined)
     .map((param) => [param.key, param.default]));
   const readiness = modelReadiness(definition,
     params ?? withNewKreaMode(definition, defaults, cache.kreaConnectionMode), cache, health);

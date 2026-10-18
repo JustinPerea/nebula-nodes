@@ -1,0 +1,332 @@
+{
+ "about": "What the fal-only flux-2-pro handler (execution/sync_runner.py _flux2_pro_handler, removed in PR 4; last at e43c63e6) sent for every saved param combination: each legacy param absent or set to each of its values (model x image_size x output_format x safety_tolerance x enable_safety_checker x seed in {absent, None, 0, 42}), prompt 'a fox', FAL_KEY only. 'sha256' is over the full list of {params, url, body} (json.dumps sort_keys, separators (',', ':')), in itertools.product order of 'space'; 'cases' are readable rows from it. tests/test_flux2_nodes.py runs the route-table node's fal route over the same space and requires the same digest.",
+ "capturedFrom": "e43c63e6",
+ "space": {
+  "model": [
+   null,
+   "pro",
+   "max",
+   "flash"
+  ],
+  "image_size": [
+   null,
+   "square_hd",
+   "square",
+   "portrait_4_3",
+   "portrait_16_9",
+   "landscape_4_3",
+   "landscape_16_9"
+  ],
+  "output_format": [
+   null,
+   "jpeg",
+   "png"
+  ],
+  "safety_tolerance": [
+   null,
+   "1",
+   "2",
+   "3",
+   "4",
+   "5"
+  ],
+  "enable_safety_checker": [
+   null,
+   true,
+   false
+  ],
+  "seed": [
+   null,
+   "(null)",
+   0,
+   42
+  ]
+ },
+ "count": 6048,
+ "sha256": "b95cee5ddfd9870472675c96e3f55735000802951a1fdeda5314438fab09b569",
+ "cases": [
+  {
+   "body": {
+    "prompt": "a fox"
+   },
+   "params": {},
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "prompt": "a fox"
+   },
+   "params": {
+    "seed": null
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "prompt": "a fox",
+    "seed": 0
+   },
+   "params": {
+    "seed": 0
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "prompt": "a fox",
+    "seed": 42
+   },
+   "params": {
+    "seed": 42
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "enable_safety_checker": true,
+    "prompt": "a fox"
+   },
+   "params": {
+    "enable_safety_checker": true
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "enable_safety_checker": false,
+    "prompt": "a fox"
+   },
+   "params": {
+    "enable_safety_checker": false
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "prompt": "a fox",
+    "safety_tolerance": "1"
+   },
+   "params": {
+    "safety_tolerance": "1"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "prompt": "a fox",
+    "safety_tolerance": "2"
+   },
+   "params": {
+    "safety_tolerance": "2"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "prompt": "a fox",
+    "safety_tolerance": "3"
+   },
+   "params": {
+    "safety_tolerance": "3"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "prompt": "a fox",
+    "safety_tolerance": "4"
+   },
+   "params": {
+    "safety_tolerance": "4"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "prompt": "a fox",
+    "safety_tolerance": "5"
+   },
+   "params": {
+    "safety_tolerance": "5"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "output_format": "jpeg",
+    "prompt": "a fox"
+   },
+   "params": {
+    "output_format": "jpeg"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "output_format": "png",
+    "prompt": "a fox"
+   },
+   "params": {
+    "output_format": "png"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "image_size": "square_hd",
+    "prompt": "a fox"
+   },
+   "params": {
+    "image_size": "square_hd"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "image_size": "square",
+    "prompt": "a fox"
+   },
+   "params": {
+    "image_size": "square"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "image_size": "portrait_4_3",
+    "prompt": "a fox"
+   },
+   "params": {
+    "image_size": "portrait_4_3"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "image_size": "portrait_16_9",
+    "prompt": "a fox"
+   },
+   "params": {
+    "image_size": "portrait_16_9"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "image_size": "landscape_4_3",
+    "prompt": "a fox"
+   },
+   "params": {
+    "image_size": "landscape_4_3"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "image_size": "landscape_16_9",
+    "prompt": "a fox"
+   },
+   "params": {
+    "image_size": "landscape_16_9"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "prompt": "a fox"
+   },
+   "params": {
+    "model": "pro"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "prompt": "a fox"
+   },
+   "params": {
+    "model": "max"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-max"
+  },
+  {
+   "body": {
+    "prompt": "a fox"
+   },
+   "params": {
+    "model": "flash"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2/flash"
+  },
+  {
+   "body": {
+    "enable_safety_checker": true,
+    "image_size": "landscape_4_3",
+    "output_format": "jpeg",
+    "prompt": "a fox",
+    "safety_tolerance": "2"
+   },
+   "params": {
+    "enable_safety_checker": true,
+    "image_size": "landscape_4_3",
+    "model": "pro",
+    "output_format": "jpeg",
+    "safety_tolerance": "2"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-pro"
+  },
+  {
+   "body": {
+    "enable_safety_checker": true,
+    "image_size": "landscape_4_3",
+    "output_format": "jpeg",
+    "prompt": "a fox",
+    "safety_tolerance": "2"
+   },
+   "params": {
+    "enable_safety_checker": true,
+    "image_size": "landscape_4_3",
+    "model": "max",
+    "output_format": "jpeg",
+    "safety_tolerance": "2"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2-max"
+  },
+  {
+   "body": {
+    "enable_safety_checker": true,
+    "image_size": "landscape_4_3",
+    "output_format": "jpeg",
+    "prompt": "a fox",
+    "safety_tolerance": "2"
+   },
+   "params": {
+    "enable_safety_checker": true,
+    "image_size": "landscape_4_3",
+    "model": "flash",
+    "output_format": "jpeg",
+    "safety_tolerance": "2"
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2/flash"
+  },
+  {
+   "body": {
+    "enable_safety_checker": false,
+    "image_size": "landscape_16_9",
+    "output_format": "png",
+    "prompt": "a fox",
+    "safety_tolerance": "5",
+    "seed": 42
+   },
+   "params": {
+    "enable_safety_checker": false,
+    "image_size": "landscape_16_9",
+    "model": "flash",
+    "output_format": "png",
+    "safety_tolerance": "5",
+    "seed": 42
+   },
+   "url": "https://queue.fal.run/fal-ai/flux-2/flash"
+  }
+ ]
+}

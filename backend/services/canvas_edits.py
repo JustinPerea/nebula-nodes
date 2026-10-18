@@ -21,6 +21,7 @@ from services.canvas_proposals import (
     clean_note,
     parse_spec,
 )
+from services.node_route import BILLING_PARAMS
 
 MAX_REMOVE = 24
 MAX_UNWIRE = 24
@@ -28,10 +29,11 @@ MAX_RENAME = 24
 MAX_MOVE = 50
 MAX_LABEL = 80
 _ALLOWED_KEYS = frozenset({"note", "nodes", "edges", "params", "rename", "move", "remove", "unwire"})
-# The Krea billing choice (Krea account vs API token). Proposals carry it so an
-# agent can ask for a switch; main checks the value per node, and refuses a
-# direct edit that would change it (main._refuse_agent_krea_billing_change).
-INTERNAL_OK = frozenset({"_kreaAuth"})
+# Who bills a run: a route-table node's provider choice (_provider) and the
+# Krea billing choice (_kreaAuth, Krea account vs API token). Proposals carry
+# them so an agent can ask for a switch; main checks each value per node, and
+# refuses a direct edit that would change one (main._refuse_agent_billing_change).
+INTERNAL_OK = frozenset(BILLING_PARAMS)
 
 
 @dataclass(frozen=True)

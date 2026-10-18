@@ -3,6 +3,10 @@
   max-width: 240px;
 }
 
+/* A route-table node's header also holds the provider chip, which would
+ * otherwise cut a name like "FLUX 3 Image Klein Base" to "FLUX 3 Image...". */
+.model-node.model-node--switchable { max-width: 300px; }
+
 body:not(.app-slava-restraint) .model-node {
   background: #1c1c1c;
   border: 1px solid #333;

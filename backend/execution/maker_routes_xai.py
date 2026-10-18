@@ -26,6 +26,7 @@ from typing import Any, Awaitable, Callable
 
 from models.events import ExecutionEvent
 from models.graph import GraphNode, PortValueDict
+from services import node_route
 
 Emit = Callable[[ExecutionEvent], Awaitable[None]]
 Translate = Callable[
@@ -190,11 +191,8 @@ def _effective(node: GraphNode, key: str) -> Any:
 
     if _present(node.params.get(key)):
         return node.params[key]
-    for group in ("sharedParams", "falParams", "params"):
-        for param in definition_for(node.definition_id).get(group) or []:
-            if param.get("key") == key:
-                return param.get("default")
-    return None
+    param = node_route.param_definition(definition_for(node.definition_id), key)
+    return param.get("default") if param is not None else None
 
 
 def _whole_seconds(value: Any) -> int:

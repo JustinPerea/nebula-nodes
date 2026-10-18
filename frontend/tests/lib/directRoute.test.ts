@@ -3,10 +3,12 @@ import shared from '../../../backend/tests/fixtures/route_cases.json';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { buildDefaultParamsForUi, resolveCreateParamDefinitions } from '../../src/lib/createParams';
 import {
-  configuredDirectKey, directBlock, directKeyNames, fallbackProvider, paramDefinitionsForRun, routeParamDefinitions,
-  selectRoute, WIRED, withWiredBlockers,
+  blockFields, configuredDirectKey, directBlock, directKeyNames, fallbackProvider, hasRoutes, mergeVisibleWhen,
+  paramDefinitionsForRun, paramShown, routeParamDefinitions, routeSentKeys, routeUnavailable, selectRoute, shownRouteId, usesRoutePlan, WIRED,
+  withWiredBlockers,
 } from '../../src/lib/directRoute';
 import { runRouteProvider } from '../../src/lib/modelDiscovery';
+import type { ModelNodeDefinition } from '../../src/types';
 
 type RouteCase = {
   name: string;
@@ -14,24 +16,56 @@ type RouteCase = {
   today?: string;
   params: Record<string, unknown>;
   apiKeys: Record<string, string>;
-  expected: { kind: string; provider: string | null; key: string | null };
+  expected: {
+    kind: string; provider: string | null; key: string | null;
+    routeId?: string | null; block?: Record<string, unknown> | null; missing?: string[];
+  };
+  unavailable?: Record<string, unknown> | null;
   paramKeys?: string[];
+  shownRoute?: string | null;
+  routeParams?: Record<string, unknown>[];
+  sentKeys?: string[];
   wired?: string[];
+  wiredCounts?: Record<string, number>;
   block?: { reason: string; param: string | null; detail?: string; on?: string } | null;
 };
 
+const fixture = shared as unknown as {
+  defaultToday: string; cases: RouteCase[]; definitions: Record<string, ModelNodeDefinition>;
+};
+/** A param as route_cases.json `routeParams` spells it: key, option values, range. */
+function offered(param: { key: string; options?: { value: unknown }[]; min?: number; max?: number;
+  visibleWhen?: Record<string, unknown[]> }): Record<string, unknown> {
+  const shown: Record<string, unknown> = { key: param.key };
+  if (Array.isArray(param.options)) shown.options = param.options.map((option) => option.value);
+  if (param.min !== undefined) shown.min = param.min;
+  if (param.max !== undefined) shown.max = param.max;
+  if (param.visibleWhen && Object.keys(param.visibleWhen).length) shown.visibleWhen = param.visibleWhen;
+  return shown;
+}
+
+/** The case's node: an inline route-table node, or one from the catalog. */
+const definitionFor = (nodeId: string) => fixture.definitions[nodeId] ?? NODE_DEFINITIONS[nodeId];
+
 describe('selectRoute (cases shared with backend services/node_route.py)', () => {
-  const fixture = shared as { defaultToday: string; cases: RouteCase[] };
   afterEach(() => { vi.useRealTimers(); });
   for (const testCase of fixture.cases) {
     it(testCase.name, () => {
       // Local noon on the case's day, as node_route._today reads date.today().
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(new Date(`${testCase.today ?? fixture.defaultToday}T12:00:00`));
-      const definition = NODE_DEFINITIONS[testCase.nodeId];
-      const params = withWiredBlockers(definition, testCase.params, testCase.wired ?? []);
+      const definition = definitionFor(testCase.nodeId);
+      const wired = testCase.wiredCounts ? new Map(Object.entries(testCase.wiredCounts)) : testCase.wired ?? [];
+      const params = withWiredBlockers(definition, testCase.params, wired);
       const route = selectRoute(definition, params, testCase.apiKeys);
-      expect(route).toEqual(testCase.expected);
+      if (hasRoutes(definition)) {
+        expect({ ...route, block: blockFields(route.block) }).toEqual(testCase.expected);
+        expect(routeUnavailable(definition, params, testCase.apiKeys)).toEqual(testCase.unavailable);
+        // Plan billing reads the same routed values the router does.
+        expect(usesRoutePlan(definition, params)).toBe(route.kind === 'plan');
+      } else {
+        expect(route).toEqual(testCase.expected);
+      }
       expect(runRouteProvider(definition, testCase.apiKeys, params)).toBe(testCase.expected.provider);
       if (testCase.block !== undefined) {
         const block = directBlock(definition, params);
@@ -39,7 +73,18 @@ describe('selectRoute (cases shared with backend services/node_route.py)', () =>
         expect(got).toEqual(testCase.block);
       }
       if (testCase.paramKeys) {
-        expect(routeParamDefinitions(definition, route.kind).map((param) => param.key).sort()).toEqual(testCase.paramKeys);
+        expect(routeParamDefinitions(definition, route.routeId ?? route.kind).map((param) => param.key).sort())
+          .toEqual(testCase.paramKeys);
+      }
+      if (testCase.shownRoute !== undefined) {
+        const shown = shownRouteId(definition, params, testCase.apiKeys);
+        expect(shown ?? null).toBe(testCase.shownRoute);
+        // The options the node offers on that route (enums cut, ranges narrowed).
+        expect(routeParamDefinitions(definition, shown).map(offered)).toEqual(testCase.routeParams);
+      }
+      if (testCase.sentKeys) {
+        // What a run on the shown route sends: a hidden setting never is.
+        expect([...routeSentKeys(definition, testCase.shownRoute, params)].sort()).toEqual(testCase.sentKeys);
       }
     });
   }
@@ -185,5 +230,44 @@ describe('when the direct route can\'t take a run', () => {
       reason: 'unsupported', param: 'resolution', on: null, detail: '1080p at 10 seconds' });
     expect(selectRoute(hailuo, { duration: 8 }, { MINIMAX_API_KEY: 'k', KREA_API_TOKEN: 'k' }))
       .toEqual({ kind: 'fallback', provider: 'krea', key: 'KREA_API_TOKEN' });
+  });
+});
+
+
+// PR 5: hide what the provider doesn't offer. backend test_node_route.py has the same.
+describe('paramVisibleWhen (the Python twins in test_node_route.py)', () => {
+  const HIDE = (shared as unknown as { definitions: Record<string, ModelNodeDefinition> }).definitions['routes-hide'];
+
+  it('ANDs a route condition onto the param\'s own', () => {
+    expect(mergeVisibleWhen(undefined, { mode: ['slow'] })).toEqual({ mode: ['slow'] });
+    expect(mergeVisibleWhen({ mode: ['fast', 'slow', 'best'] }, { mode: ['best', 'slow'] })).toEqual({ mode: ['slow', 'best'] });
+    expect(mergeVisibleWhen({ mode: ['fast'] }, { tone: ['warm'] })).toEqual({ mode: ['fast'], tone: ['warm'] });
+    expect(mergeVisibleWhen({ draft: [true] }, { draft: [false] })).toEqual({ draft: [] });
+  });
+
+  it('drops a never-offered param and merges conditions', () => {
+    const keys = (route: string) => routeParamDefinitions(HIDE, route).map((p) => p.key);
+    expect(keys('a')).toEqual(['mode', 'quality', 'tone', 'seed']);
+    expect(keys('b')).toEqual(['mode', 'quality', 'tone', 'seed', 'sharpen']);
+    expect(keys('c')).toEqual(['mode', 'quality', 'tone']);
+    expect(routeParamDefinitions(HIDE, 'b').find((p) => p.key === 'quality')?.visibleWhen).toEqual({ mode: ['slow', 'best'] });
+  });
+
+  it.each([
+    ['a', {}, ['mode', 'quality', 'seed', 'tone']],
+    ['b', {}, ['mode', 'seed', 'tone']],
+    ['b', { mode: 'slow' }, ['mode', 'quality', 'seed', 'tone']],
+    ['b', { mode: 'best' }, ['mode', 'quality', 'seed', 'sharpen', 'tone']],
+    ['c', { seed: 7 }, ['mode', 'quality', 'tone']],
+  ] as const)('route %s with %j sends %j', (route, saved, sent) => {
+    expect([...routeSentKeys(HIDE, route, { ...saved })].sort()).toEqual(sent);
+  });
+
+  it('paramShown ignores a controller only another route takes', () => {
+    const sharpen = { visibleWhen: { mode: ['best'] } };
+    expect(paramShown(sharpen, { mode: 'best' })).toBe(true);
+    expect(paramShown(sharpen, { mode: 'fast' })).toBe(false);
+    expect(paramShown(sharpen, { mode: 'fast' }, ['sharpen'])).toBe(true);
+    expect(paramShown(sharpen, {})).toBe(true);
   });
 });

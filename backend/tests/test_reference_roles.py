@@ -285,12 +285,96 @@ for _node_id in ("grok-imagine-image", "grok-imagine-image-edit"):
 # runway_sts_to_elevenlabs). The rule is the only new field.
 APPROVED_TOP_LEVEL_FIELD_ADDITIONS["runway-sts"] = {"directRoute": {"rejectsWhen": [
     {"match": {"video": "(set)", "audio": "(unset)"}, "label": "a video input without an audio input"}]}}
+# Provider routes, PR 4 (2026-10-15): FLUX.2 (flux-2-pro, id kept for saved
+# graphs) becomes a route-table node, Black Forest Labs' own API first and the
+# fal route it always ran on second (docs/PROVIDER-ROUTES.md). The approved
+# deltas, each exact: the four top-level values below; the added
+# directKeyName, description and routes (_FLUX2_ROUTES); params holding only
+# the hidden _provider choice; the six baseline params moved, unchanged, to
+# sharedParams and the fal route's own params (enable_safety_checker),
+# rebuilt here in their baseline order; two Flex-only params appended to
+# sharedParams; and three model options appended (APPROVED_APPENDED_OPTIONS).
+# Any other change to a baseline param still fails the fingerprint.
+# PR 4 review follow-up (2026-10-15): each route's ``accepts`` lists exactly
+# the models it serves (any other saved value, "MAX" or "Flash" included,
+# stops instead of running Pro), and the two Flex-only params are shown on
+# Flex only (visibleWhen) and dropped elsewhere by the route clients, so the
+# per-model steps/guidance rejectsWhen entries are gone.
+# PR 5, hide what the provider doesn't offer (2026-10-16). Justin, on the
+# design: "Yes to all 4" (D4: approve this exact new entry). The fal route's
+# eight "a safety tolerance other than 2 on Klein" rejectsWhen entries are
+# replaced by "paramVisibleWhen": {"safety_tolerance": {"model": ["pro",
+# "max", "flex"]}} (fal's Flash and Klein endpoints have no
+# safety_tolerance), and the BFL route's rejects {enable_safety_checker:
+# [false]} is gone (rule H: fal offers the switch, so a saved "off" still
+# stops on BFL). Nothing else in the entry changed.
+_FLUX2_BFL_MODELS = ["pro", "max", "flex", "klein-9b", "klein-4b"]
+_FLUX2_FAL_MODELS = ["pro", "max", "flash", "flex", "klein-9b", "klein-4b"]
+
+
+_FLUX2_SIZES = {"square_hd": (1024, 1024), "square": (512, 512), "portrait_4_3": (768, 1024),
+                "portrait_16_9": (576, 1024), "landscape_4_3": (1024, 768), "landscape_16_9": (1024, 576)}
+_FLUX2_ROUTES = [
+    {"id": "bfl", "provider": "bfl", "maker": True, "keys": ["BFL_API_KEY"], "handler": "bfl",
+     "endpoint": "/v1/flux-2-pro",
+     "endpointWhen": [{"when": {"model": model}, "endpoint": f"/v1/flux-2-{model}"}
+                      for model in ("max", "flex", "klein-9b", "klein-4b")],
+     "rename": {"num_inference_steps": "steps", "guidance_scale": "guidance"},
+     "valueMap": {"safety_tolerance": {str(level): level for level in range(1, 6)},
+                  "image_size": {preset: {"width": w, "height": h} for preset, (w, h) in _FLUX2_SIZES.items()}},
+     "rules": {"accepts": {"model": {"values": _FLUX2_BFL_MODELS}}},
+     "note": "BFL has no FLUX 2 Flash and no safety-checker switch."},
+    {"id": "fal", "provider": "fal", "keys": ["FAL_KEY"], "handler": "fal", "endpoint": "fal-ai/flux-2-pro",
+     "endpointWhen": [{"when": {"model": model}, "endpoint": endpoint} for model, endpoint in (
+         ("max", "fal-ai/flux-2-max"), ("flash", "fal-ai/flux-2/flash"), ("flex", "fal-ai/flux-2-flex"),
+         ("klein-9b", "fal-ai/flux-2/klein/9b"), ("klein-4b", "fal-ai/flux-2/klein/4b"))],
+     "params": [{"key": "enable_safety_checker", "label": "Safety Checker", "type": "boolean", "required": False,
+                 "default": True}],
+     "rules": {"accepts": {"model": {"values": _FLUX2_FAL_MODELS},
+                           "num_inference_steps": {"min": 2, "max": 50, "integer": True}}},
+     "paramVisibleWhen": {"safety_tolerance": {"model": ["pro", "max", "flex"]}}},
+]
+APPROVED_ROUTE_TABLE_CONVERSIONS = {
+    "flux-2-pro": {
+        "top": {"displayName": ("FLUX 2 Pro", "FLUX.2"), "apiProvider": ("fal", "bfl"),
+                "apiEndpoint": ("fal-ai/flux-2-pro", "/v1/flux-2-pro"),
+                "envKeyName": ("FAL_KEY", ["BFL_API_KEY", "FAL_KEY"])},
+        "added": {"directKeyName": ["BFL_API_KEY"],
+                  "description": "Black Forest Labs' FLUX.2 family (FLUX.2 [pro], [max], [flex], [klein] 9B and "
+                                 "[klein] 4B, plus fal's FLUX 2 Flash): text to image. Runs on BFL or fal.ai.",
+                  "routes": _FLUX2_ROUTES,
+                  "params": [{"key": "_provider", "label": "Provider", "type": "enum", "required": False,
+                              "default": "auto", "options": [{"label": v, "value": v} for v in ("auto", "bfl", "fal")],
+                              "hidden": True}]},
+        "addedShared": [
+            {"key": "num_inference_steps", "label": "Steps (Flex)", "type": "integer", "required": False, "min": 1,
+             "max": 50, "step": 1, "placeholder": "Provider default", "visibleWhen": {"model": ["flex"]}},
+            {"key": "guidance_scale", "label": "Guidance (Flex)", "type": "float", "required": False, "min": 1.5,
+             "max": 10, "step": 0.1, "placeholder": "Provider default", "visibleWhen": {"model": ["flex"]}},
+        ],
+        "routeParams": {"fal": ["enable_safety_checker"]},
+        "order": ["model", "image_size", "output_format", "safety_tolerance", "enable_safety_checker", "seed"],
+        # Provider names (2026-10-16). Justin: "Let's match the provider every
+        # time." The baseline options are relabelled to the maker's spelling
+        # (BFL's OpenAPI summaries and pricing cards: "FLUX.2 [pro]",
+        # "FLUX.2 [max]"); Flash keeps fal's own name, "FLUX 2 Flash", since
+        # only fal serves it. Exact {value: (baseline label, current label)};
+        # values never change, and any other label still fails.
+        "optionLabels": {"model": {"pro": ("FLUX 2 Pro", "FLUX.2 [pro]"), "max": ("FLUX 2 Max", "FLUX.2 [max]"),
+                                   "flash": ("FLUX 2 Flash", "FLUX 2 Flash")}},
+    },
+}
 APPROVED_LEADING_PARAM_ADDITIONS = {
     "krea-2-generate": _KREA_AUTH_PARAM,
     "krea-style-search": _KREA_AUTH_PARAM,
     "krea-style-train": _KREA_AUTH_PARAM,
 }
 APPROVED_APPENDED_OPTIONS = {
+    # Labels are BFL's own names (Justin, 2026-10-16: "Let's match the
+    # provider every time."), from api.bfl.ai/openapi.json and bfl.ai/pricing.
+    "flux-2-pro": {"model": [{"label": "FLUX.2 [flex]", "value": "flex"},
+                             {"label": "FLUX.2 [klein] 9B", "value": "klein-9b"},
+                             {"label": "FLUX.2 [klein] 4B", "value": "klein-4b"}]},
     "krea-style-train": {"model": [
         {"label": "Krea 2", "value": "k2"}, {"label": "Krea 2 Large", "value": "k2-large"},
         {"label": "Krea 1 (Krea account)", "value": "k1"},
@@ -543,6 +627,32 @@ def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any
         assert sorted(by_key) == sorted(split["order"]) and len(by_key) == len(shared + fal), (
             f"unapproved route split: {node_id}")
         normalized["params"] = [by_key[key] for key in split["order"]]
+    conversion = APPROVED_ROUTE_TABLE_CONVERSIONS.get(node_id)
+    if conversion is not None:
+        for key, (baseline_value, current_value) in conversion["top"].items():
+            assert normalized.get(key) == current_value, f"unapproved {key}: {node_id}"
+            normalized[key] = baseline_value
+        routes = normalized.get("routes") or []
+        moved = [param for route in routes for param in route.get("params") or []]
+        assert [param["key"] for param in moved] == [key for keys in conversion["routeParams"].values()
+                                                     for key in keys], f"unapproved route params: {node_id}"
+        _remove_approved_fields(normalized, conversion["added"])
+        shared = normalized.pop("sharedParams")
+        added = conversion["addedShared"]
+        assert shared[-len(added):] == added, f"unapproved shared params: {node_id}"
+        by_key = {param["key"]: param for param in shared[:-len(added)] + moved}
+        assert sorted(by_key) == sorted(conversion["order"]) and len(by_key) == len(shared) - len(added) + len(moved), (
+            f"unapproved route table conversion: {node_id}")
+        normalized["params"] = [by_key[key] for key in conversion["order"]]
+        for param_key, labels in conversion.get("optionLabels", {}).items():
+            options = _sole_entry(normalized["params"], "key", param_key)["options"]
+            baseline_options = options[:len(labels)]
+            assert [option["value"] for option in baseline_options] == list(labels), (
+                f"unapproved options: {node_id}.{param_key}")
+            for option in baseline_options:
+                baseline_label, current_label = labels[option["value"]]
+                assert option["label"] == current_label, f"unapproved label: {node_id}.{param_key}.{option['value']}"
+                option["label"] = baseline_label
     added_ports = APPROVED_INPUT_PORT_ADDITIONS.get(node_id, [])
     if added_ports:
         assert normalized["inputPorts"][-len(added_ports):] == added_ports, (
@@ -818,6 +928,45 @@ def test_seedream_route_split_still_fingerprints_every_param(definitions, change
     except AssertionError:
         return
     assert fingerprint != _baseline_fingerprints()["seedream-4-5"]
+
+
+@pytest.mark.parametrize("change", [
+    lambda node: _sole_entry(node["sharedParams"], "key", "image_size").update(default="square_hd"),
+    lambda node: node["routes"][1]["params"][0].update(default=False),
+    lambda node: node["routes"][0]["rules"]["accepts"]["model"]["values"].append("flash"),
+    lambda node: _sole_entry(node["sharedParams"], "key", "guidance_scale").pop("visibleWhen"),
+    # PR 5: dropping, widening or adding a route's paramVisibleWhen still fails.
+    lambda node: node["routes"][1].pop("paramVisibleWhen"),
+    lambda node: node["routes"][1]["paramVisibleWhen"]["safety_tolerance"]["model"].append("flash"),
+    lambda node: node["routes"][0].update(paramVisibleWhen={"seed": False}),
+    lambda node: node["routes"][0]["rules"].update(rejects={"enable_safety_checker": [False]}),
+    lambda node: node["routes"].reverse(),
+    lambda node: node["sharedParams"][-1].update(max=20),
+    lambda node: _sole_entry(node["sharedParams"], "key", "model")["options"].pop(),
+    lambda node: node.update(displayName="FLUX 2"),
+    lambda node: _sole_entry(_sole_entry(node["sharedParams"], "key", "model")["options"], "value", "pro").update(
+        label="FLUX.2 Pro"),
+    lambda node: _sole_entry(_sole_entry(node["sharedParams"], "key", "model")["options"], "value", "max").update(
+        label="FLUX 2 Max"),
+    lambda node: _sole_entry(_sole_entry(node["sharedParams"], "key", "model")["options"], "value", "flash").update(
+        label="FLUX.2 [flash]"),
+    lambda node: _sole_entry(_sole_entry(node["sharedParams"], "key", "model")["options"], "value", "klein-9b").update(
+        label="FLUX.2 Klein 9B"),
+    lambda node: _sole_entry(_sole_entry(node["sharedParams"], "key", "model")["options"], "value", "pro").update(
+        value="pro-v1"),
+])
+def test_flux2_route_table_conversion_still_fingerprints_every_param(definitions, change):
+    """The approved PR 4 conversion rebuilds the baseline params from
+    sharedParams and the fal route, so a param edit, a route edit or another
+    rename still fails."""
+    assert _node_fingerprint("flux-2-pro", definitions["flux-2-pro"]) == _baseline_fingerprints()["flux-2-pro"]
+    changed = deepcopy(definitions["flux-2-pro"])
+    change(changed)
+    try:
+        fingerprint = _node_fingerprint("flux-2-pro", changed)
+    except AssertionError:
+        return
+    assert fingerprint != _baseline_fingerprints()["flux-2-pro"]
 
 
 def test_seedream_auto_3k_approved_visibility_cannot_expand(definitions):

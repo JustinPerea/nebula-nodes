@@ -23,11 +23,11 @@ FLUX.2 [max] is the flagship model in the FLUX.2 family, designed for profession
 
 ## When to use this model
 - **Use when:** You need the highest possible quality for final production assets, accurate rendering of human features (hands, faces), or need to visualize something that happened very recently (via grounding search).
-- **Don't use when:** You need sub-second, real-time generation (use [FLUX.2 klein](https://fal.ai/models/fal-ai/flux-2-klein-4b)) or when you are on a tight budget for high-volume testing.
+- **Don't use when:** You need sub-second, real-time generation (use [FLUX.2 [klein] 4B](https://fal.ai/models/fal-ai/flux-2-klein-4b)) or when you are on a tight budget for high-volume testing.
 - **Alternatives:** 
-    - **[FLUX.2 pro](https://fal.ai/models/fal-ai/flux-2-pro):** Better balance of speed and cost for production at scale.
-    - **[FLUX.2 flex](https://fal.ai/models/fal-ai/flux-2-flex):** Offers granular control over inference steps and guidance scale.
-    - **[FLUX.2 klein](https://fal.ai/models/fal-ai/flux-2-klein-9b):** Extremely fast for real-time applications.
+    - **[FLUX.2 [pro]](https://fal.ai/models/fal-ai/flux-2-pro):** Better balance of speed and cost for production at scale.
+    - **[FLUX.2 [flex]](https://fal.ai/models/fal-ai/flux-2-flex):** Offers granular control over inference steps and guidance scale.
+    - **[FLUX.2 [klein] 9B](https://fal.ai/models/fal-ai/flux-2-klein-9b):** Extremely fast for real-time applications.
 
 ## API — via FAL.ai
 **Endpoint:** `https://fal.run/fal-ai/flux-2-max` (sync) / `https://queue.fal.run/fal-ai/flux-2-max` (queue)
@@ -116,7 +116,7 @@ Black Forest Labs (BFL) provides a direct API for the FLUX model family.
 - **Grounding Latency:** Grounded generation may take slightly longer (up to 10 seconds) as the model performs an internal web search.
 
 ## Sources
-- [FAL.ai Flux 2 Max Documentation](https://fal.ai/models/fal-ai/flux-2-max)
+- [FAL.ai FLUX.2 [max] Documentation](https://fal.ai/models/fal-ai/flux-2-max)
 - [Black Forest Labs Official Documentation](https://docs.bfl.ml/flux_2/flux2_overview)
 - [FAL.ai Pricing Page](https://fal.ai/pricing)
-- [Together AI Flux 2 Max Reference](https://www.together.ai/models/flux-2-max)
+- [Together AI FLUX.2 [max] Reference](https://www.together.ai/models/flux-2-max)

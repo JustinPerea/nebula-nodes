@@ -6,6 +6,7 @@ from typing import Any
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import detail, krea_modes, node_access, provider_via  # noqa: F401 (node_access is re-exported)
 from services.maker_sizes import rule_note
+from services.node_route import all_param_definitions, route_hides, route_param_definitions
 
 
 def format_node_table(nodes: list[dict[str, Any]]) -> str:
@@ -41,6 +42,28 @@ def format_node_table(nodes: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _route_takes(node: dict[str, Any], route: dict[str, Any]) -> str:
+    """What one route of a route-table node takes that differs from the
+    PARAMS list (all_param_definitions): its own params, and the shared
+    params it narrows (route_param_definitions), e.g. "resolution
+    768sq|1k|2k|4k; grounding"."""
+    union = {str(p.get("key")): p for p in all_param_definitions(node)}
+    parts: list[str] = []
+    for param in route_param_definitions(node, str(route.get("id"))):
+        key = str(param.get("key"))
+        if key.startswith("_") or param.get("hidden"):
+            continue
+        whole = union.get(key) or {}
+        if param.get("options") != whole.get("options"):
+            parts.append(f"{key} " + "|".join(str(o.get("value") if isinstance(o, dict) else o)
+                                               for o in param.get("options") or []))
+        elif (param.get("min"), param.get("max")) != (whole.get("min"), whole.get("max")):
+            parts.append(f"{key} {param.get('min', '')}-{param.get('max', '')}")
+        elif not any(key == str(p.get("key")) for p in node.get("sharedParams") or []):
+            parts.append(key)
+    return "; ".join(parts)
+
+
 def format_node_detail(node: dict[str, Any]) -> str:
     """Format full detail for a single node (nebula info output)."""
     lines: list[str] = []
@@ -53,6 +76,25 @@ def format_node_detail(node: dict[str, Any]) -> str:
         key = " or ".join(key)
     pattern = node.get("executionPattern", "?")
     lines.append(f"Provider: {provider} | Key: {key} | Exec: {pattern}")
+    routes = node.get("routes") if isinstance(node.get("routes"), list) else []
+    if routes:
+        # A route-table node (services/node_route.py): one line per provider
+        # route, in Auto order, and how to pick one.
+        lines.append("ROUTES (_provider; auto takes the first with its key set):")
+        for route in routes:
+            keys = " or ".join(str(k) for k in route.get("keys") or []) or "-"
+            tags = [tag for tag in ("maker" if route.get("maker") else "",
+                                    f"Krea plan {route['plan']}" if route.get("plan") else "") if tag]
+            lines.append(f"  {str(route.get('id')):<16}{str(route.get('provider')):<14}{keys}"
+                         + (f"  ({', '.join(tags)})" if tags else ""))
+            takes = _route_takes(node, route)
+            if takes:
+                lines.append(f"  {'':<16}takes {takes}")
+            # What this provider doesn't offer, one line: "no Seed".
+            hides = route_hides(node, str(route.get("id")))
+            if hides:
+                lines.append(f"  {'':<16}{'; '.join(hides)}")
+        lines.append("  Changing _provider is the person's call: `nebula propose` it; direct edits are refused.")
     lines.append("")
 
     inputs = node.get("inputPorts", [])
@@ -73,6 +115,9 @@ def format_node_detail(node: dict[str, Any]) -> str:
         lines.append("")
 
     params = node.get("params", [])
+    if routes:
+        # Shared params and each route's own (services/node_route.py), once each.
+        params = all_param_definitions(node)
     if params:
         lines.append("PARAMS:")
         for p in params:
@@ -317,6 +362,11 @@ def format_context(
         if krea_both:
             lines.append("  Those that also take a token default to it. Moving one to the Krea plan is the person's")
             lines.append("  call: `nebula propose` the _kreaAuth=mcp change; direct edits of it are refused.")
+    multi = [n["id"] for n in nodes if isinstance(n.get("routes"), list) and n.get("routes")]
+    if multi:
+        lines.append(f"{len(multi)} node(s) run on a provider route you choose (_provider; `nebula info <id>` lists")
+        lines.append("  them). Auto takes the first route with its key set; switching is the person's call:")
+        lines.append("  `nebula propose` it.")
     if access_count.get("nous"):
         lines.append("^ needs a local Nous (Hermes) sign-in; not checked here.")
     legends: list[str] = []

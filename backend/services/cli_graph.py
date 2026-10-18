@@ -9,7 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from services.file_access import require_allowed_path, validate_file_references
-from services.retired_nodes import migrate_node
+from services.retired_nodes import migrate_graph, migrate_node
 from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrade_flat_nodes
 
 
@@ -302,16 +302,38 @@ class CLIGraph:
         source = require_allowed_path(path)
         data = json.loads(source.read_text())
         validate_file_references(data)
+        counter = data.get("counter", len(data["nodes"]))
+        taken = {str(n.get("id")) for n in data["nodes"] if isinstance(n, dict)}
+
+        def next_id(_hint: str) -> str:
+            nonlocal counter
+            counter += 1
+            while f"n{counter}" in taken:
+                counter += 1
+            taken.add(f"n{counter}")
+            return f"n{counter}"
+
+        # Folded Krea nodes move onto their new node first (with any typed
+        # prompt or media on an input node), then retired ones.
+        migrated, edges, warnings = migrate_graph(data["nodes"], data["edges"], new_id=next_id)
+        for warning in warnings:
+            print(f"[cli_graph] {warning}", flush=True)
+        edge_ids = {str(e.get("id")) for e in edges if isinstance(e, dict) and e.get("id")}
+        for edge in edges if migrated is not data["nodes"] else ():
+            if isinstance(edge, dict) and not edge.get("id"):
+                n = len(edge_ids) + 1
+                while f"e{n}" in edge_ids:
+                    n += 1
+                edge["id"] = f"e{n}"
+                edge_ids.add(edge["id"])
         # Build everything first and assign together, so a file that fails
         # part way leaves the previous graph whole (main keeps it on failure,
         # and the next save would write new nodes with old edges otherwise).
-        nodes = {n["id"]: _migrate_retired(n) for n in data["nodes"]}
+        nodes = {n["id"]: _migrate_retired(n) for n in migrated}
         # A file written before an upgrade existed gets it once; the next save
         # records the current version, so a value set afterwards is kept.
         version = stored_version(data.get("paramsVersion"))
         upgraded = upgrade_flat_nodes(nodes.values(), version)
-        edges = data["edges"]
-        counter = data.get("counter", len(nodes))
         self.nodes, self.edges, self._counter = nodes, edges, counter
         self.upgraded_on_load = upgraded
         self.params_advanced_on_load = version < PARAMS_VERSION
