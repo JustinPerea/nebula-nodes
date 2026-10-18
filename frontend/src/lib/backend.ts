@@ -1,4 +1,5 @@
 import { getProjectContext } from './projectContext';
+import { TAB_HEADER, TAB_ID } from './tabId';
 import { noteParamsOutdated, PARAMS_VERSION_HEADER } from './paramsOutdated';
 import { GRAPH_PARAMS_VERSION } from './savedParamsUpgrades';
 import { browserPersonCredential, personCredential, reportPersonRequired } from './personSession';
@@ -315,6 +316,9 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   if (project && method !== 'GET' && method !== 'HEAD') {
     headers.set('X-Nebula-Workspace-Revision', project.revision);
   }
+  // Which tab wrote, so this tab can tell its own edits' graphSync echoes
+  // from edits made elsewhere (lib/tabId.ts).
+  if (method !== 'GET' && method !== 'HEAD') headers.set(TAB_HEADER, TAB_ID);
   let requestInit: RequestInit = { ...init, headers };
   if (wantsPersonHeader(path, method)) {
     const person = await personCredential();

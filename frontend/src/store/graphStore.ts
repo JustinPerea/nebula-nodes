@@ -73,6 +73,11 @@ import {
   rewriteExecutionAssetUrls,
 } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
+import {
+  RUNTIME_FIELDS, applySlice, diffCanvas, editArrivedText, foreignSource, isForeignEdit, isOwnEcho,
+  restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit,
+} from '../lib/canvasUndo';
+import { TAB_ID } from '../lib/tabId';
 import { notifyJobComplete } from '../lib/jobNotifications';
 import { useUIStore } from './uiStore';
 import { usePricingStore } from './pricingStore';
@@ -372,34 +377,67 @@ function markNodesWithValidationErrors(
 // Undo/Redo types and helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * The undo stack holds two kinds of step (see lib/canvasUndo.ts):
+ *
+ * - `UndoSnapshot`: the whole canvas before one of the person's own edits in
+ *   this tab. Undo puts the whole canvas back.
+ * - `ForeignEdit`: one graph change that reached this tab as a graphSync from
+ *   somewhere else (an agent, another window, an outside app), as the nodes
+ *   and wires it touched, before and after. Undo puts back only those.
+ *
+ * Both sit on one last-in-first-out stack, so a snapshot is restored only
+ * after every later step, foreign ones included, has been undone. That is
+ * what keeps a whole-canvas snapshot right while agents edit too. Every undo
+ * and redo then sends what changed to POST /api/graph/restore, so the
+ * backend graph (and with it agents, other tabs and the saved project)
+ * matches the canvas again (sendRestore).
+ */
 interface UndoSnapshot {
   nodes: Node<NodeData>[];
   edges: Edge[];
 }
 
+type UndoEntry = UndoSnapshot | ForeignEdit;
+
 const UNDO_CAP = 50;
 
-/** Creates a snapshot with outputs/state stripped — only structure and params are stored. */
+/** What the canvas says after an undo or redo of someone else's edit. */
+export interface UndoNotice {
+  id: number;
+  text: string;
+  agentColor?: string;
+  /** The button the notice offers: Undo when an agent's edit just landed, Redo after it was undone. */
+  offer: 'undo' | 'redo' | null;
+  /** The step the button acts on; it acts only while that step is next in line. */
+  entry?: ForeignEdit;
+}
+
+let undoNoticeSeq = 0;
+
+function settledState(state: NodeData['state']): NodeData['state'] {
+  return state === 'executing' || state === 'queued' ? 'idle' : state;
+}
+
+/** A copy of the canvas for the undo stack: structure, params and the results
+ * nodes had, so undoing a deletion brings a node back with its outputs. A
+ * node that is still on the canvas when the snapshot is restored keeps its
+ * live results instead (restoreWithOutputs). */
 function createSnapshot(nodes: Node<NodeData>[], edges: Edge[]): UndoSnapshot {
   return {
     nodes: nodes.map((n) => ({
       ...n,
       position: { ...n.position },
+      dragging: false,
       data: {
         ...n.data,
         params: { ...n.data.params },
-        // Outputs deliberately excluded — they persist through undo
-        outputs: {},
-        state: 'idle' as const,
-        batchOutputs: undefined,
-        batchVariants: undefined,
-        batchRunId: undefined,
-        runNotes: undefined,
-        error: undefined,
+        state: settledState(n.data.state),
         progress: undefined,
         runStartedAt: undefined,
         streamingText: undefined,
         streamingPartials: undefined,
+        streamingSvg: undefined,
       },
     })),
     edges: edges.map((e) => ({ ...e })),
@@ -407,71 +445,40 @@ function createSnapshot(nodes: Node<NodeData>[], edges: Edge[]): UndoSnapshot {
 }
 
 /**
- * Restores a snapshot but merges back outputs from the current live state.
- * If a node exists in both the snapshot and the live state, its outputs come
- * from the live state. If a node is being restored (was deleted), outputs are empty.
+ * Restores a snapshot but keeps live results. A node that is on the canvas
+ * now keeps its live outputs and run state; a node the snapshot brings back
+ * (it was deleted) comes back with the results it had.
  */
 function restoreWithOutputs(
   snapshot: UndoSnapshot,
   currentNodes: Node<NodeData>[],
 ): Node<NodeData>[] {
-  const currentOutputs = new Map<
-    string,
-    {
-      outputs: NodeData['outputs'];
-      state: NodeData['state'];
-      streamingText?: string;
-      batchOutputs?: NodeData['batchOutputs'];
-      batchVariants?: NodeData['batchVariants'];
-      batchRunId?: string;
-      runNotes?: string[];
-    }
-  >();
-  for (const n of currentNodes) {
-    if (Object.keys(n.data.outputs).length > 0 || n.data.batchOutputs !== undefined) {
-      currentOutputs.set(n.id, {
-        outputs: n.data.outputs,
-        state: n.data.state,
-        streamingText: n.data.streamingText,
-        batchOutputs: n.data.batchOutputs,
-        batchVariants: n.data.batchVariants,
-        batchRunId: n.data.batchRunId,
-        runNotes: n.data.runNotes,
-      });
-    }
-  }
-
+  const live = new Map(currentNodes.map((node) => [node.id, node]));
   return snapshot.nodes.map((n) => {
-    const preserved = currentOutputs.get(n.id);
-    if (preserved) {
-      return {
-        ...n,
-        data: {
-          ...n.data,
-          outputs: preserved.outputs as NodeData['outputs'],
-          state: preserved.state,
-          streamingText: preserved.streamingText,
-          batchOutputs: preserved.batchOutputs,
-          batchVariants: preserved.batchVariants,
-          batchRunId: preserved.batchRunId,
-          runNotes: preserved.runNotes,
-        },
-      };
-    }
-    return n;
+    const current = live.get(n.id);
+    if (!current) return n;
+    const runtime = Object.fromEntries(RUNTIME_FIELDS.map((field) => [field, current.data[field]]));
+    return { ...n, data: { ...n.data, ...runtime } as NodeData };
   });
+}
+
+/** Makes the next param edit start a new undo step instead of joining the last one. */
+function breakUndoDebounce(): void {
+  lastUndoPush = 0;
+  lastUndoNodeId = '';
 }
 
 /** Pushes current state onto the undo stack and clears the redo stack. */
 function pushUndo(
   set: (partial: Partial<GraphState> | ((state: GraphState) => Partial<GraphState>)) => void,
   get: () => GraphState,
-): void {
+): UndoSnapshot {
   const { nodes, edges, undoStack } = get();
   const snapshot = createSnapshot(nodes, edges);
   const newStack = [...undoStack, snapshot];
   if (newStack.length > UNDO_CAP) newStack.shift();
   set({ undoStack: newStack, redoStack: [] });
+  return snapshot;
 }
 
 // Debounce state for updateNodeData undo pushes
@@ -642,10 +649,18 @@ interface GraphState {
   backendFreshStartPending: boolean;
 
   // Undo/Redo
-  undoStack: UndoSnapshot[];
-  redoStack: UndoSnapshot[];
+  undoStack: UndoEntry[];
+  redoStack: UndoEntry[];
   undo: () => void;
   redo: () => void;
+  /** Starts an undo step for an edit this tab sends and the backend makes
+   * (an upload that adds a node, accepting a proposal): the canvas before it.
+   * Pass the step to cancelUndoStep if the request fails. */
+  beginUndoStep: () => object;
+  cancelUndoStep: (step: object) => void;
+  /** The notice for someone else's edit: it landed, or was undone or redone. */
+  undoNotice: UndoNotice | null;
+  dismissUndoNotice: () => void;
 
   // Clipboard
   clipboard: { nodes: Node<NodeData>[]; edges: Edge[] } | null;
@@ -773,7 +788,7 @@ interface GraphState {
     nodes: Node<NodeData>[];
     edges: Edge[];
     updatedNodes: Node<NodeData>[];
-  }) => void;
+  }, options?: { undoStep?: object }) => void;
   deleteGeneration: (modelNodeIds: string[]) => void;
   duplicateNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
@@ -793,7 +808,9 @@ interface GraphState {
   rerunHistoryWithLatestPaperSource: (runId: string) => Promise<void>;
   retryFailedRun: (runId: string) => Promise<void>;
   clearRunHistory: () => void;
-  clearGraph: () => void;
+  /** `undoStep`: the step beginUndoStep made before the backend clear, so the
+   * clear stays one step even when the clear's graphSync landed first. */
+  clearGraph: (options?: { undoStep?: object }) => void;
   configureOpenRouterModel: (nodeId: string, modelId: string, model: OpenRouterModel) => void;
   fetchReplicateSchemaAndConfigure: (nodeId: string, owner: string, name: string) => Promise<void>;
 
@@ -1003,6 +1020,43 @@ function applyShotVariationPromotion(
 // so one node's typing never stalls another node's flush.
 const paramPushTimers: Record<string, number> = {};
 const PARAM_PUSH_DEBOUNCE_MS = 250;
+
+/**
+ * Params the person changed on a backend node that the backend may not have
+ * yet: typed but not sent (the debounce above), or sent and not answered.
+ * A graphSync that lands meanwhile (an agent's edit, a run's result) keeps
+ * these keys as the canvas has them, so it can't wipe what the person is
+ * typing; the rest of the node follows the backend. Cleared once no write
+ * for the node is waiting or in flight.
+ */
+const unsavedParamEdits = new Map<string, { keys: Set<string>; inFlight: number }>();
+
+function noteParamEdit(nodeId: string, before: Record<string, unknown>, after: Record<string, unknown>): void {
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((key) => before[key] !== after[key]);
+  if (keys.length === 0) return;
+  const entry = unsavedParamEdits.get(nodeId) ?? { keys: new Set<string>(), inFlight: 0 };
+  for (const key of keys) entry.keys.add(key);
+  unsavedParamEdits.set(nodeId, entry);
+}
+
+function settleParamEdit(nodeId: string, entry: { keys: Set<string>; inFlight: number }): void {
+  if (unsavedParamEdits.get(nodeId) !== entry) return;
+  entry.inFlight = Math.max(0, entry.inFlight - 1);
+  if (entry.inFlight === 0 && paramPushTimers[nodeId] === undefined) unsavedParamEdits.delete(nodeId);
+}
+
+/** The backend's params for a node, with the keys the person hasn't saved yet kept as the canvas has them. */
+function withUnsavedParams(nodeId: string, incoming: Record<string, unknown>, local: Record<string, unknown>): Record<string, unknown> {
+  const entry = unsavedParamEdits.get(nodeId);
+  if (!entry) return incoming;
+  const params = { ...incoming };
+  for (const key of entry.keys) {
+    if (key in local) params[key] = local[key];
+    else delete params[key];
+  }
+  return params;
+}
 let pendingGraphMutationCount = 0;
 
 async function trackGraphMutation<T>(operation: () => Promise<T>): Promise<T> {
@@ -1026,6 +1080,7 @@ function clearAllParamPushTimers(): void {
     window.clearTimeout(paramPushTimers[id]);
     delete paramPushTimers[id];
   }
+  unsavedParamEdits.clear();
 }
 
 interface CinemaScenePersistence {
@@ -1275,6 +1330,7 @@ function applyCanvasNodeChanges(
   changes: NodeChange[],
   set: GraphSet,
   get: GraphGet,
+  undoStep?: UndoEntry,
 ): void {
   const removedIds = changes
     .filter((change): change is NodeChange & { type: 'remove' } => change.type === 'remove')
@@ -1294,7 +1350,9 @@ function applyCanvasNodeChanges(
     return;
   }
 
-  pushUndo(set, get);
+  // A backend deletion took its step before sending (its graphSync can land first).
+  const stack = get().undoStack;
+  if (!undoStep || stack[stack.length - 1] !== undoStep) pushUndo(set, get);
   set((state) => {
     const nextNodes = applyNodeChanges(changes, state.nodes) as Node<NodeData>[];
     const nextEdges = state.edges.filter(
@@ -2063,6 +2121,158 @@ async function reconcilePendingNodeCreation(
   return matchedId;
 }
 
+/**
+ * The undo step for a graphSync, as store fields, or nothing. A sync becomes
+ * one step when a graph edit caused it (`edit`) and this tab didn't send that
+ * edit: an agent's, another window's, an outside app's. Not steps: run
+ * results and status (no `edit`), this tab's own echoes (they already have
+ * their step), and a whole new graph on project open or switch.
+ */
+function foreignEditStep(
+  state: GraphState,
+  nextNodes: Node<NodeData>[],
+  nextEdges: Edge[],
+  origin: EditOrigin | undefined,
+  graphReplaced: boolean,
+  moved: string[],
+): Partial<GraphState> {
+  if (!origin || graphReplaced || isOwnEcho(origin, TAB_ID)) return {};
+  const change = diffCanvas(state.nodes, state.edges, nextNodes, nextEdges, new Set(moved));
+  if (!change) return {};
+  const source = foreignSource(origin);
+  const entry: ForeignEdit = {
+    kind: 'foreign',
+    agentName: source === 'agent' ? origin.actor?.name ?? 'An agent' : null,
+    ...(origin.actor?.color ? { agentColor: origin.actor.color } : {}),
+    source,
+    at: Date.now(),
+    ...change,
+  };
+  // The person's next keystroke starts its own step, so undoing this edit
+  // never takes their later typing with it.
+  breakUndoDebounce();
+  const text = editArrivedText(entry);
+  return {
+    undoStack: [...state.undoStack, entry].slice(-UNDO_CAP),
+    redoStack: [],
+    ...(text ? { undoNotice: { id: ++undoNoticeSeq, text, agentColor: entry.agentColor, offer: 'undo' as const, entry } } : {}),
+  };
+}
+
+/** Recompute the missing-key badge on nodes whose params an undo or redo changed. */
+function withFreshKeyStatus(nodes: Node<NodeData>[], before: Node<NodeData>[]): Node<NodeData>[] {
+  const previous = new Map(before.map((node) => [node.id, node.data.params]));
+  const { settingsCache } = useUIStore.getState();
+  return nodes.map((node) => previous.get(node.id) === node.data.params ? node : {
+    ...node, data: { ...node.data,
+      keyStatus: nodeKeyStatus(NODE_DEFINITIONS[node.data.definitionId], node.data.params, settingsCache) },
+  });
+}
+
+/**
+ * One undo or redo. The step leaves its stack and its inverse goes on the
+ * other one: a snapshot's inverse is a snapshot of the canvas now; a foreign
+ * edit is its own inverse (undo puts back its `before`, redo its `after`).
+ * Then the backend is told (sendRestore), and an agent's edit says so.
+ */
+function stepHistory(action: 'undo' | 'redo', set: GraphSet, get: GraphGet): void {
+  const state = get();
+  if (state.isExecuting || state.providerRecoveries.length > 0 || state.providerStartAmbiguities.length > 0) return;
+  const from = action === 'undo' ? state.undoStack : state.redoStack;
+  const entry = from[from.length - 1];
+  if (!entry) return;
+  const { nodes, edges } = state;
+  let next: { nodes: Node<NodeData>[]; edges: Edge[] };
+  let inverse: UndoEntry;
+  if (isForeignEdit(entry)) {
+    next = action === 'undo'
+      ? applySlice(nodes, edges, entry.before, entry.after)
+      : applySlice(nodes, edges, entry.after, entry.before);
+    inverse = entry;
+  } else {
+    next = { nodes: restoreWithOutputs(entry, nodes), edges: entry.edges.map((edge) => ({ ...edge })) };
+    inverse = createSnapshot(nodes, edges);
+  }
+  const nextNodes = withFreshKeyStatus(next.nodes, nodes);
+  breakUndoDebounce();
+  set({
+    nodes: nextNodes,
+    edges: next.edges,
+    ...(action === 'undo'
+      ? { undoStack: from.slice(0, -1), redoStack: [...state.redoStack, inverse] }
+      : { redoStack: from.slice(0, -1), undoStack: [...state.undoStack, inverse] }),
+    ...(isForeignEdit(entry) ? { undoNotice: {
+      id: ++undoNoticeSeq, text: undoNoticeText(action, entry), agentColor: entry.agentColor,
+      offer: action === 'undo' ? 'redo' as const : 'undo' as const, entry,
+    } } : {}),
+  });
+  void sendRestore(action, nodes, edges, nextNodes, next.edges, entry, inverse, set);
+}
+
+// Undo and redo reach the backend one at a time, in the order the person
+// pressed them.
+let restoreQueue: Promise<void> = Promise.resolve();
+
+/**
+ * Make the backend graph match the canvas after an undo or redo: one POST
+ * /api/graph/restore with the backend nodes and wires that changed (frontend-
+ * only nodes never leave the canvas). The echo is this tab's own, so it is
+ * not a new step; other tabs and agents see the change. If the backend
+ * refuses (the node became something else, it is running), the step is put
+ * back as it was, when nothing has been stacked on it since.
+ */
+function sendRestore(
+  action: 'undo' | 'redo',
+  prevNodes: Node<NodeData>[],
+  prevEdges: Edge[],
+  nextNodes: Node<NodeData>[],
+  nextEdges: Edge[],
+  entry: UndoEntry,
+  inverse: UndoEntry,
+  set: GraphSet,
+): Promise<void> {
+  const body = restoreRequest(action, prevNodes, prevEdges, nextNodes, nextEdges);
+  if (!body) return restoreQueue;
+  const task = restoreQueue.then(async () => {
+    let response: Response;
+    try {
+      response = await graphMutationFetch('/api/graph/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      // No answer: it may have landed. The next graphSync shows which.
+      console.warn(`[nebula] ${action} didn't reach the backend:`, err);
+      return;
+    }
+    if (response.ok) return;
+    const reason = await backendRejectionReason(response, `Couldn't ${action} that step`);
+    console.warn(`[nebula] ${action} refused: ${reason}`);
+    set((state) => {
+      const stack = action === 'undo' ? state.redoStack : state.undoStack;
+      if (stack[stack.length - 1] !== inverse) return {};
+      // Put the canvas and both stacks back as they were before this step.
+      const undone = isForeignEdit(entry)
+        ? (action === 'undo'
+          ? applySlice(state.nodes, state.edges, entry.after, entry.before)
+          : applySlice(state.nodes, state.edges, entry.before, entry.after))
+        : { nodes: restoreWithOutputs(inverse as UndoSnapshot, state.nodes), edges: prevEdges };
+      return {
+        nodes: withFreshKeyStatus(undone.nodes, state.nodes),
+        edges: undone.edges,
+        ...(action === 'undo'
+          ? { redoStack: state.redoStack.slice(0, -1), undoStack: [...state.undoStack, entry] }
+          : { undoStack: state.undoStack.slice(0, -1), redoStack: [...state.redoStack, entry] }),
+        undoNotice: { id: ++undoNoticeSeq, text: `Couldn't ${action} that. ${reason}`, offer: null,
+          ...(isForeignEdit(entry) ? { agentColor: entry.agentColor, entry } : {}) },
+      };
+    });
+  });
+  restoreQueue = task.catch(() => {});
+  return task;
+}
+
 wsClient.connect();
 wsClient.subscribe((event) => {
   const revision = (event as ExecutionEvent & { workspaceRevision?: string }).workspaceRevision;
@@ -2087,6 +2297,7 @@ wsClient.subscribe((event) => {
       providerRecoveries = [],
       providerStartAmbiguities = [],
       executionStatuses,
+      edit: origin,
     } = event as {
       type: 'graphSync';
       nodes: Node<NodeData>[];
@@ -2094,6 +2305,8 @@ wsClient.subscribe((event) => {
       empty: boolean;
       graphReplaced?: boolean;
       moved?: string[];
+      /** Set when a graph edit caused this sync: who made it, and which tab sent it. */
+      edit?: EditOrigin;
       providerRecoveries?: ProviderRecoveryCheckpoint[];
       providerStartAmbiguities?: ProviderStartAmbiguity[];
       executionStatuses?: ExecutionStatusResult[];
@@ -2101,6 +2314,7 @@ wsClient.subscribe((event) => {
     if (graphReplaced) {
       canvasReplacementRevision += 1;
       pendingConnectedNodeCreationAttempt = null;
+      unsavedParamEdits.clear();
       // The committed import can arrive before, or instead of, its HTTP ack.
       // Revoke old same-ID uploads/writes and suspended drafts before merging.
       clearCinemaScenePersistence();
@@ -2147,6 +2361,7 @@ wsClient.subscribe((event) => {
         nodes: remainingNodes,
         edges: remainingEdges,
         backendFreshStartPending: false,
+        ...foreignEditStep(state, remainingNodes, remainingEdges, origin, graphReplaced, moved),
       });
       useCinemaUploadStore.getState().reconcileTargets(remainingNodes);
       return;
@@ -2166,8 +2381,13 @@ wsClient.subscribe((event) => {
     const keyStatusFor = (definitionId: string, params: Record<string, unknown>): 'missing' | undefined =>
       nodeKeyStatus(NODE_DEFINITIONS[definitionId], params, settingsCache);
 
-    const cliMerged = (cliNodes as Node<NodeData>[]).map((cliNode) => {
-      const existing = existingById.get(cliNode.id);
+    const cliMerged = (cliNodes as Node<NodeData>[]).map((incoming) => {
+      const existing = existingById.get(incoming.id);
+      // Keys the person typed and the backend doesn't have yet stay as typed.
+      const cliNode = existing && unsavedParamEdits.has(incoming.id)
+        ? { ...incoming, data: { ...incoming.data,
+          params: withUnsavedParams(incoming.id, incoming.data.params, existing.data.params) } }
+        : incoming;
       const keyStatus = keyStatusFor(cliNode.data.definitionId, cliNode.data.params);
       if (existing) {
         // Preserve position (unless the backend moved the node; see
@@ -2276,6 +2496,7 @@ wsClient.subscribe((event) => {
       nodes: merged,
       edges: mergedEdges,
       backendFreshStartPending: false,
+      ...foreignEditStep(state, merged, mergedEdges, origin, graphReplaced, moved),
     });
     useCinemaUploadStore.getState().reconcileTargets(merged);
     if (
@@ -2375,52 +2596,23 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   // Undo/Redo actions
   // ---------------------------------------------------------------------------
 
-  undo: () => {
-    const {
-      undoStack,
-      nodes,
-      edges,
-      isExecuting,
-      providerRecoveries,
-      providerStartAmbiguities,
-    } = get();
-    if (isExecuting || providerRecoveries.length > 0 || providerStartAmbiguities.length > 0) return;
-    if (undoStack.length === 0) return;
+  undo: () => stepHistory('undo', set, get),
 
-    const previousSnapshot = undoStack[undoStack.length - 1];
-    const currentSnapshot = createSnapshot(nodes, edges);
-    const restoredNodes = restoreWithOutputs(previousSnapshot, nodes);
+  redo: () => stepHistory('redo', set, get),
 
-    set({
-      nodes: restoredNodes,
-      edges: previousSnapshot.edges,
-      undoStack: undoStack.slice(0, -1),
-      redoStack: [...get().redoStack, currentSnapshot],
-    });
+  beginUndoStep: () => {
+    breakUndoDebounce();
+    return pushUndo(set, get);
   },
 
-  redo: () => {
-    const {
-      redoStack,
-      nodes,
-      isExecuting,
-      providerRecoveries,
-      providerStartAmbiguities,
-    } = get();
-    if (isExecuting || providerRecoveries.length > 0 || providerStartAmbiguities.length > 0) return;
-    if (redoStack.length === 0) return;
-
-    const nextSnapshot = redoStack[redoStack.length - 1];
-    const currentSnapshot = createSnapshot(nodes, get().edges);
-    const restoredNodes = restoreWithOutputs(nextSnapshot, nodes);
-
-    set({
-      nodes: restoredNodes,
-      edges: nextSnapshot.edges,
-      redoStack: redoStack.slice(0, -1),
-      undoStack: [...get().undoStack, currentSnapshot],
-    });
+  cancelUndoStep: (step) => {
+    // Only while nothing was stacked on top of it: a later step depends on it.
+    set((state) => state.undoStack[state.undoStack.length - 1] === step
+      ? { undoStack: state.undoStack.slice(0, -1) } : {});
   },
+
+  undoNotice: null,
+  dismissUndoNotice: () => set({ undoNotice: null }),
 
   // ---------------------------------------------------------------------------
   // Clipboard: copy/paste with UUID regeneration
@@ -2989,6 +3181,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
     // A backend paid-safety rejection must leave the node visibly present.
     // Wait for each authoritative delete rather than optimistically hiding it.
+    // The undo step is the canvas now: each delete's graphSync can remove the
+    // node here before its reply arrives.
+    breakUndoDebounce();
+    const undoStep = pushUndo(set, get);
     void Promise.allSettled(cliRemovedIds.map(deleteCLIOriginNode)).then((results) => {
       const confirmed = new Set<string>();
       const failures: string[] = [];
@@ -3003,7 +3199,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         || !CLI_ID_RE.test(change.id)
         || confirmed.has(change.id)
       ));
-      if (safeChanges.length > 0) applyCanvasNodeChanges(safeChanges, set, get);
+      // Nothing was deleted after all: the step taken above would undo nothing.
+      if (!safeChanges.some((change) => change.type === 'remove')) get().cancelUndoStep(undoStep);
+      if (safeChanges.length > 0) applyCanvasNodeChanges(safeChanges, set, get, undoStep);
       if (failures.length > 0) reportNodeDeletionFailure(failures);
     });
   },
@@ -3243,6 +3441,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (isParamChange) {
       maybePushUndo(set, get, nodeId);
     }
+    const paramsBefore = isParamChange ? get().nodes.find((node) => node.id === nodeId)?.data.params : undefined;
     set((state) => ({
       nodes: state.nodes.map((node) =>
         node.id === nodeId ? { ...node, data: {
@@ -3268,20 +3467,26 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         persistSceneParam(nodeId, currentScene, PARAM_PUSH_DEBOUNCE_MS);
         return;
       }
+      noteParamEdit(nodeId, paramsBefore ?? {}, currentNode?.data.params ?? {});
       if (paramPushTimers[nodeId] !== undefined) {
         window.clearTimeout(paramPushTimers[nodeId]);
       }
       paramPushTimers[nodeId] = window.setTimeout(() => {
         delete paramPushTimers[nodeId];
         const node = useGraphStore.getState().nodes.find((n) => n.id === nodeId);
-        if (!node) return;
+        if (!node) {
+          unsavedParamEdits.delete(nodeId);
+          return;
+        }
+        const edits = unsavedParamEdits.get(nodeId);
+        if (edits) edits.inFlight += 1;
         graphMutationFetch(`/api/graph/node/${nodeId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ params: node.data.params }),
         }).catch((err) => {
           console.warn(`[nebula] Param sync for ${nodeId} failed:`, err);
-        });
+        }).finally(() => { if (edits) settleParamEdit(nodeId, edits); });
       }, PARAM_PUSH_DEBOUNCE_MS);
     }
   },
@@ -4416,11 +4621,14 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     return { modelNodeIds, allNodeIds };
   },
 
-  adoptAcceptedProposal: ({ nodes: incoming, edges: incomingEdges, updatedNodes }) => {
+  adoptAcceptedProposal: ({ nodes: incoming, edges: incomingEdges, updatedNodes }, options) => {
     // The backend already committed these (and broadcast a graphSync); adding
     // them here too means the nodes exist locally before the canvas runs them.
     // Like authorGenerationCluster's merge: one undo step, ids never duplicated.
-    pushUndo(set, get);
+    // The step is usually the one Accept took before sending (its graphSync
+    // can land before this reply); without one, take it now.
+    const stack = get().undoStack;
+    if (options?.undoStep === undefined || stack[stack.length - 1] !== options.undoStep) pushUndo(set, get);
     set((state) => {
       const updates = new Map(updatedNodes.map((node) => [node.id, node]));
       const merged = state.nodes.map((node) => {
@@ -5009,7 +5217,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set({ runHistory: [] });
   },
 
-  clearGraph: () => {
+  clearGraph: (options) => {
     const {
       nodes,
       edges,
@@ -5023,8 +5231,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     useCinemaMotionStore.getState().clear();
     clearReplacedCanvasFocus();
     useCinemaUploadStore.getState().clear();
-    const snapshot = createSnapshot(nodes, edges);
-    const newStack = [...undoStack, snapshot];
+    const stepped = options?.undoStep !== undefined && undoStack[undoStack.length - 1] === options.undoStep;
+    const newStack = stepped ? undoStack : [...undoStack, createSnapshot(nodes, edges)];
     if (newStack.length > UNDO_CAP) newStack.shift();
     set({ nodes: [], edges: [], undoStack: newStack, redoStack: [], backendFreshStartPending: false });
   },

@@ -75,7 +75,7 @@ def test_create_returns_confirmed_frontend_node_and_exact_image_edge_and_persist
     reloaded = CLIGraph()
     reloaded.load(path)
     assert reloaded.get_state() == graph.get_state()
-    broadcast.assert_awaited_once_with()
+    broadcast.assert_awaited_once_with(edit=True)
 
 
 def test_retry_reuses_target_and_preserves_target_authoring_results_and_source_variations(handoff):
@@ -117,7 +117,7 @@ async def test_overlapping_requests_commit_before_broadcast_and_reuse_exact_conn
     _, graph, _, _ = handoff
     entered, release = asyncio.Event(), asyncio.Event()
 
-    async def held_broadcast():
+    async def held_broadcast(**_kwargs):
         entered.set()
         await release.wait()
 
