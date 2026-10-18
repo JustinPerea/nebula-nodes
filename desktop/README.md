@@ -21,8 +21,8 @@ npm run install-app  # copies it to ~/Applications (run this yourself, in a term
 Then open **Nebula** from `~/Applications`, Spotlight or Launchpad. To keep it
 in the Dock, right-click its Dock icon while it runs and choose
 Options > Keep in Dock. `npm run package` rebuilds `frontend/dist-desktop`
-first when it is missing or older than the frontend sources
-(`--rebuild-renderer` forces it).
+first when it is missing, has no `nebula-build.json`, or is older than the
+frontend sources (`--rebuild-renderer` forces it).
 
 **It runs your checkout, not a copy.** The bundle holds Electron, the icon and
 a small bootstrap (`packaging/bootstrap.mjs`) plus `nebula-app.json`, which
@@ -34,7 +34,7 @@ executable `backend/.venv/bin/python`, then runs the checkout's own
 | What changed | What to do |
 |---|---|
 | Backend (`backend/`) or Electron main/preload (`desktop/*.mjs`, `preload.cjs`) | Nothing. Quit and reopen Nebula. |
-| Frontend (`frontend/`) | `cd frontend && npm run build:desktop` (or `cd desktop && npm run package`), then reopen. |
+| Frontend (`frontend/`) | `cd frontend && npm run build:desktop` (or `cd desktop && npm run package`), then reopen. If the pull raised the saved-params version and you forget, the app says so at launch instead of opening (see [Frontend build check](#frontend-build-check)). |
 | Electron version in `desktop/package.json` | `cd desktop && npm install && npm run package && npm run install-app`. The app logs a warning when the checkout pins a different Electron than the bundle runs. |
 | You moved the checkout | Re-run `npm run package && npm run install-app` from the new place. Until then the app shows a dialog naming the missing path and quits. |
 
@@ -191,6 +191,34 @@ overwrite it in `frontend/dist/`, and the window then loaded an empty `#root`.
 If `dist-desktop/index.html` is missing, the window says so and names the
 command before it creates any app data, runs the migration or starts a sidecar. The build's budget check also refuses a
 desktop bundle with root-absolute asset URLs.
+
+### Frontend build check
+
+`git pull` updates the backend at once, but the renderer only changes when
+someone rebuilds it. When a pull raises the saved-params version
+(`PARAMS_VERSION` in `backend/services/saved_graph_upgrades.py`), an old
+bundle can't save or run against the new backend. So the app checks the build
+at launch (`frontend-build.mjs`):
+
+1. Every frontend build writes `nebula-build.json` next to `index.html`
+   (`{"paramsVersion": N}`, from `frontend/vite-plugins/buildStamp.ts`, which
+   reads the bundle's own `GRAPH_PARAMS_VERSION`). With `index.html`, before
+   any app data, migration or sidecar, the app reads it. Missing or damaged
+   means a build from before the stamp: the window says to run
+   `cd frontend && npm run build:desktop` and start again.
+2. Once the sidecar is healthy, the stamp's version must equal
+   `/api/health`'s `paramsVersion` (a backend that reports none is version 0).
+   On a mismatch the app stops the sidecar and shows which side is older:
+   - frontend older: the backend was updated after the build; rebuild and
+     start again.
+   - frontend newer: the build came from newer code (another branch, say)
+     than this checkout's backend; rebuild from this checkout, and don't
+     switch branches between building and starting.
+
+The message stays: a Dock click or second launch shows it again. Dev mode
+(`VITE_DEV_SERVER_URL`) serves current source and skips both checks. The
+in-tab gate (409 `params_outdated`, a reload, then a rebuild message) is still
+the backstop for a tab left open across a backend restart.
 
 Electron acquires the single-instance lock, starts one uvicorn sidecar on an
 OS-assigned loopback port, waits for confirmed Nebula health, injects the
@@ -474,7 +502,9 @@ for testing, lives in `desktop/out/validation/` and is refused by
 
 Startup failures are shown in the window with actionable text — the normal
 workspace is never loaded. A loading spinner appears while the sidecar is
-starting; it is replaced by the failure surface on error.
+starting; it is replaced by the failure surface on error. The failure page
+(`failure-surface.mjs`) grows that window to 600x400 so the whole message,
+which ends with the fix, is in view; its text can be scrolled and copied.
 
 - **Invalid Python**: the window shows the attempted absolute path and
   remediation guidance (correct the override or restore the verified runtime).
@@ -485,6 +515,10 @@ starting; it is replaced by the failure surface on error.
 - **Health timeout**: after the 60-second production budget, the child is
   terminated and the window shows an actionable timeout message naming the
   sidecar and the budget.
+- **Frontend build mismatch**: the healthy sidecar reports another
+  saved-params version than the built frontend's stamp. The sidecar is
+  stopped and the window names the older side and the rebuild command
+  ([Frontend build check](#frontend-build-check)).
 - **Mid-session exit**: if the sidecar exits after the renderer has loaded,
   a "Backend disconnected" overlay appears. No auto-restart occurs and
   reconnect attempts target only the dead injected origin — no rediscovery.
@@ -499,6 +533,7 @@ No child process or listening port remains after any failure path.
 | "Sidecar failed to start" with exit code | Python exits before health (import error, missing dependency) | Check the stderr tail in the failure surface; run `backend/.venv/bin/python -c "import fastapi, uvicorn"` to verify the venv. |
 | Health timeout after 60 s | Cold startup exceeds budget or backend import hangs | First cold import can take ~40 s. If it exceeds 60 s, check for `PYTHONPATH` contamination or missing dependencies. |
 | "The desktop renderer is not built" | `frontend/dist-desktop/` is missing | Run `cd frontend && npm run build:desktop`. |
+| "The desktop frontend needs a rebuild" | The build has no `nebula-build.json`, or was built for another saved-params version than the backend | Run `cd frontend && npm run build:desktop` from this checkout, then start again. See [Frontend build check](#frontend-build-check). |
 | Blank window | Renderer build is stale | Run `cd frontend && npm run build:desktop` to rebuild the packaged renderer. |
 | Port already in use | A previous sidecar did not shut down cleanly | Check `lsof -nP -iTCP -sTCP:LISTEN` for orphaned uvicorn processes and kill them by PID. Sidecars started by this version exit on their own when Electron dies (parent watchdog). |
 | Nebula.app: "Nebula can't find its code." | The checkout named in the bundle's `nebula-app.json` moved or was deleted | From the checkout: `cd desktop && npm run package && npm run install-app`. |
@@ -512,12 +547,13 @@ No child process or listening port remains after any failure path.
 ## Tests
 
 ```bash
-cd desktop && npm test            # 354 Node lifecycle, credential, migration, packaging and integration tests
+cd desktop && npm test            # 373 Node lifecycle, credential, migration, packaging and integration tests
 cd desktop && npm run test:smoke  # end-to-end dynamic endpoint + bridge surface smoke
 ```
 
 The integration and resilience files launch the real Electron binary against a
-real sidecar (they skip if `frontend/dist-desktop/` is not built). Every launch
+real sidecar (they skip if `frontend/dist-desktop/` is not built, or was
+built before `nebula-build.json`). Every launch
 uses its own `NEBULA_DESKTOP_USER_DATA_DIR` under `os.tmpdir()`, its own
 `NEBULA_DESKTOP_APP_ID` and `NEBULA_DESKTOP_TEST=1`; set `TMPDIR` to keep
 those profiles somewhere specific. Process checks compare against a snapshot
@@ -538,7 +574,8 @@ encryption round-trip and persistence, provider allowlist validation, sender
 validation, safeStorage unavailability handling, one-time migration (copy,
 encrypt, idempotent, non-destructive), migration status overlay, plaintext
 key detection, how Nebula.app finds and checks its checkout, when a packaged
-build honours overrides, and the parent lifeline (a real backend exits within
+build honours overrides, the frontend build check (missing, damaged, older
+and newer stamps, and a launch stopped by one with no sidecar left), and the parent lifeline (a real backend exits within
 seconds of its launcher being SIGKILLed).
 
 ## Validation
