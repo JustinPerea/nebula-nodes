@@ -19,6 +19,9 @@ Covered behavior (validation contract VAL-F21-001..004):
 from __future__ import annotations
 
 import json
+import logging
+import os
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -585,6 +588,62 @@ class TestEngineManifest:
         assert observed_a[0] != observed_b[0]
         assert (observed_a[0] / "manifest.json").is_file()
         assert (observed_b[0] / "manifest.json").is_file()
+
+    @pytest.mark.asyncio
+    async def test_files_a_run_passes_along_are_left_out_without_a_warning(self, caplog) -> None:
+        """An Image Input's upload and a moodboard's board images were on disk
+        before the run. They aren't this run's output, so they aren't listed,
+        and that's expected: no warning per file (a 32-image board logged 32)."""
+        uploads = []
+        for _ in range(2):
+            upload = OUTPUT_ROOT / "chat-uploads" / f"{uuid4().hex[:10]}.png"
+            upload.parent.mkdir(parents=True, exist_ok=True)
+            upload.write_bytes(PNG_BYTES)
+            uploaded_at = time.time() - 60
+            os.utime(upload, (uploaded_at, uploaded_at))
+            uploads.append(upload)
+        board_url = "/api/outputs/" + uploads[1].relative_to(OUTPUT_ROOT).as_posix()
+
+        async def board(node, inputs, api_keys):
+            return {"moodboard": {"type": "Moodboard", "value": {"images": [{"url": board_url}]}},
+                    "representative_images": {"type": "Array", "value": [board_url]}}
+
+        observed_dirs: list[Path] = []
+        caplog.set_level(logging.WARNING, logger="execution.engine")
+        await execute_graph(
+            nodes=[_node("img", def_id="image-input", params={"filePath": str(uploads[0])}),
+                   _node("board", def_id="fake-board"), _node("gen", params={"prompt": "p"})],
+            edges=[],
+            api_keys={},
+            handler_registry={"fake-board": board, "fake-image-gen": _file_handler(observed_dirs)},
+            emit=_EventCollector(),
+            run_id="run-passes-along",
+        )
+
+        assert [r["node_id"] for r in _read_manifest(observed_dirs[0])["outputs"]] == ["gen"]
+        assert not [r for r in caplog.records if "escaped run directory" in r.getMessage()]
+
+    @pytest.mark.asyncio
+    async def test_a_file_the_run_writes_outside_its_directory_is_still_reported(self, caplog) -> None:
+        stray = OUTPUT_ROOT / "elsewhere" / f"{uuid4().hex[:10]}.png"
+
+        async def misplaced(node, inputs, api_keys):
+            stray.parent.mkdir(parents=True, exist_ok=True)
+            stray.write_bytes(PNG_BYTES)
+            return {"image": {"type": "Image", "value": str(stray)}}
+
+        caplog.set_level(logging.WARNING, logger="execution.engine")
+        await execute_graph(
+            nodes=[_node("gen")],
+            edges=[],
+            api_keys={},
+            handler_registry={"fake-image-gen": misplaced},
+            emit=_EventCollector(),
+            run_id="run-misplaced",
+        )
+
+        warnings = [r.getMessage() for r in caplog.records if "escaped run directory" in r.getMessage()]
+        assert len(warnings) == 1 and str(stray.resolve()) in warnings[0]
 
 
 # ---------------------------------------------------------------------------

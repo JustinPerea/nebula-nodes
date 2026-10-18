@@ -1702,7 +1702,7 @@ async def _execute_graph(
             }
             manifest_records = _collect_manifest_records(
                 node_map, manifest_outputs, order, run_dir,
-                invocation_results=invocation_results,
+                invocation_results=invocation_results, started_at=started_at,
             )
             write_manifest(
                 run_id=run_id or str(uuid4()), started_at=started_at,
@@ -1777,6 +1777,22 @@ def _nested_output_values(value: Any):
         yield current
 
 
+# Filesystem timestamps come from a coarse clock, so a file written in a run's
+# first moments can carry an mtime a little before `started_at`. The slack keeps
+# such a file counted as written by the run.
+_PREDATES_RUN_SLACK_S = 2.0
+
+
+def _predates_run(path: Path, started_at: datetime | None) -> bool:
+    """True when *path* was on disk before the run started."""
+    if started_at is None:
+        return False
+    try:
+        return path.stat().st_mtime < started_at.timestamp() - _PREDATES_RUN_SLACK_S
+    except OSError:
+        return False
+
+
 def _collect_manifest_records(
     node_map: dict[str, GraphNode],
     outputs_cache: dict[str, dict[str, PortValueDict]],
@@ -1784,11 +1800,16 @@ def _collect_manifest_records(
     run_dir: Path,
     *,
     invocation_results: dict[str, list[_InvocationResult]] | None = None,
+    started_at: datetime | None = None,
 ) -> list[dict[str, Any]]:
     """Build manifest records for files contained by the bound run directory.
 
     Files outside this run are never silently adopted or used to select a
-    different manifest directory.
+    different manifest directory. One that was on disk before the run started
+    is a file the run passed along (an Image Input's upload, a moodboard's
+    board images, a cached result), so leaving it out is expected. One written
+    during the run outside its directory means a handler wrote to the wrong
+    place, and is logged.
     """
     files: list[tuple[str, Path, dict[str, Any], InvocationContext, tuple[str, ...]]] = []
     seen_files: set[tuple[str, Path]] = set()
@@ -1816,10 +1837,14 @@ def _collect_manifest_records(
 
     records: list[dict[str, Any]] = []
     resolved_run_dir = run_dir.resolve()
+    passed_along = 0
     for nid, path, params, context, notes in files:
         try:
             rel = path.relative_to(resolved_run_dir).as_posix()
         except ValueError:
+            if _predates_run(path, started_at):
+                passed_along += 1
+                continue
             logger.warning(
                 "[engine] output %s escaped run directory %s; excluding from manifest",
                 path,
@@ -1847,4 +1872,7 @@ def _collect_manifest_records(
                                       for iterator, index in context]} if context else {}),
             }
         )
+    if passed_along:
+        logger.debug("[engine] %d file(s) this run passed along from outside %s; not in its manifest",
+                     passed_along, run_dir)
     return records
