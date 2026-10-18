@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 
 import { BriefFields, BriefPanel } from './MoodboardBrief';
+import { BRIEF_LIMITS } from './briefLimits';
 import type { MoodboardBrief } from '../../types';
 
 function brief(overrides: Partial<MoodboardBrief> = {}): MoodboardBrief {
@@ -53,6 +54,12 @@ describe('BriefPanel', () => {
     expect(screen.queryByRole('status')).toBeNull();
     expect(screen.getByRole('button', { name: 'Use the generated brief' })).toBeTruthy();
   });
+
+  it('says Generated once the hand-written brief is emptied', () => {
+    panel({ override: { text: '  ' } });
+    expect(screen.getByText('Generated')).toBeTruthy();
+    expect(screen.queryByText('Written by you')).toBeNull();
+  });
 });
 
 describe('BriefFields', () => {
@@ -78,5 +85,28 @@ describe('BriefFields', () => {
       onChange={onChange} />);
     fireEvent.click(screen.getByRole('button', { name: 'Remove #485caa' }));
     expect(onChange).toHaveBeenLastCalledWith({ pinnedColors: { include: [], exclude: [] } });
+  });
+});
+
+describe('BriefFields limits', () => {
+  it('stops at the limits the backend keeps, instead of a refused save', () => {
+    const onChange = vi.fn();
+    const full = Array.from({ length: BRIEF_LIMITS.avoidItems }, (_, i) => `item ${i}`);
+    const pins = Array.from({ length: BRIEF_LIMITS.pinned }, (_, i) => `#0000${(10 + i).toString(16).padStart(2, '0')}`);
+    render(<BriefFields direction="" avoid={full} pinnedColors={{ include: pins, exclude: [] }} onChange={onChange} />);
+    expect((screen.getByLabelText('Add to the avoid list') as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText(`This list holds ${BRIEF_LIMITS.pinned} colors. Remove one to add another.`)).toBeTruthy();
+    const includeHex = screen.getByLabelText('Colors that must appear: hex');
+    fireEvent.change(includeHex, { target: { value: '#ffffff' } });
+    fireEvent.keyDown(includeHex, { key: 'Enter' });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('cuts a long avoid item to the length the backend takes', () => {
+    const onChange = vi.fn();
+    render(<BriefFields direction="" avoid={[]} pinnedColors={{ include: [], exclude: [] }} onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText('Add to the avoid list'), { target: { value: 'x'.repeat(300) } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+    expect(onChange).toHaveBeenLastCalledWith({ avoid: ['x'.repeat(BRIEF_LIMITS.avoidItem)] });
   });
 });

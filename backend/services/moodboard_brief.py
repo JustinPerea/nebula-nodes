@@ -454,6 +454,10 @@ def _brief_was_edited(board: dict[str, Any], analysis: dict[str, Any], brief: st
     for notes in dict.fromkeys(notes_tried):
         if any(p.fullmatch(brief) for p in _old_generated_briefs(board, analysis, notes)):
             return False
+    # An analysis from this analyzer (version 3 on) on a board that somehow
+    # missed the migration, such as a file copied in from an older backup.
+    if brief == generated_brief(board, analysis, with_fields=False):
+        return False
     return True
 
 
@@ -498,8 +502,21 @@ def migrate_board(board: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
             record["overrideFromEditedBrief"] = True
             record["overrideCurrent"] = basis != "migrated"
 
+    # Keep within what the store accepts on the next save, or every Studio
+    # autosave of this board would be refused. The full text stays in the
+    # backup file, the log and the saved analysis.
+    clipped = [item[:AVOID_ITEM_LIMIT].rstrip() for item in avoid]
+    if clipped[:AVOID_LIMIT] != avoid:
+        record["avoidClipped"] = {"original": list(avoid), "kept": clipped[:AVOID_LIMIT]}
+    if override is not None and len(str(override.get("text") or "")) > OVERRIDE_LIMIT:
+        record["overrideClipped"] = True
+        override = {**override, "text": str(override["text"])[:OVERRIDE_LIMIT]}
+    if len(direction) > DIRECTION_LIMIT:
+        record["directionClipped"] = True
+        direction = direction[:DIRECTION_LIMIT]
+
     new["direction"] = direction
-    new["avoid"] = avoid[:AVOID_LIMIT]
+    new["avoid"] = clipped[:AVOID_LIMIT]
     new["pinnedColors"] = pinned
     new["briefOverride"] = override
     new["briefVersion"] = BRIEF_FIELDS_VERSION
@@ -538,11 +555,21 @@ def migrate_store(root: Path, backup_root: Path) -> dict[str, Any]:
                 continue
             new, record = result
             target = backup_dir / scope.name / path.name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, target)
-            _write_json(path, new)
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, target)
+                _write_json(path, new)
+            except OSError as exc:  # no backup, no rewrite; the board still migrates in memory on read
+                logger.exception("Moodboard brief fields: could not back up or write %s", path)
+                report["skipped"].append({"file": str(path), "reason": f"{type(exc).__name__}: {exc}"})
+                continue
             report["migrated"].append({**record, "file": str(path), "backup": str(target)})
-    if report["migrated"] or report["skipped"]:
+    if report["skipped"]:
+        logger.warning("Moodboard brief fields: %d board file(s) not migrated: %s", len(report["skipped"]),
+                       "; ".join(f"{item['file']} ({item['reason']})" for item in report["skipped"]))
+    # A log only when something changed: a file that can't be read would
+    # otherwise leave a new, empty backup folder on every start.
+    if report["migrated"]:
         backup_dir.mkdir(parents=True, exist_ok=True)
         report["backupDir"] = str(backup_dir)
         (backup_dir / "migration-log.json").write_text(json.dumps(report, ensure_ascii=False, indent=2),

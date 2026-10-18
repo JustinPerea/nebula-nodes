@@ -290,14 +290,21 @@ class MoodboardStore:
 
     def keep_brief_override(self, moodboard_id: str) -> dict[str, Any]:
         """Keep the hand-written brief for the board as it is now: the
-        "changed since you edited this" notice goes until the board changes again."""
-        path = _find_moodboard_file(_moodboard_root(), moodboard_id)
+        "changed since you edited this" notice goes until the board changes again.
+
+        KeyError when there is no such board (or the id isn't one a board can
+        have); ValueError when the board has no hand-written brief."""
+        try:
+            path = _find_moodboard_file(_moodboard_root(), moodboard_id)
+        except ValueError:
+            raise KeyError(f"Moodboard '{moodboard_id}' not found") from None
         if path is None:
             raise KeyError(f"Moodboard '{moodboard_id}' not found")
         moodboard = _migrated(json.loads(path.read_text(encoding="utf-8")))
         override = moodboard.get("briefOverride")
         if not isinstance(override, dict) or not str(override.get("text") or "").strip():
-            raise ValueError("This board has no hand-written brief to keep")
+            raise ValueError("This board has no hand-written brief to keep. To write one, send "
+                             "briefOverride: {\"text\": ...} with PUT /api/moodboards/{id}.")
         moodboard["briefOverride"] = {**override, "basis": _brief().brief_basis(moodboard), "updatedAt": _now_iso()}
         moodboard["version"] = int(moodboard.get("version", 1)) + 1
         moodboard["updatedAt"] = _now_iso()

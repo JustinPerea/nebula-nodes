@@ -23,7 +23,7 @@ A board is one JSON file under the moodboard root (`NEBULA_MOODBOARD_ROOT`, defa
 |-------|------|---------------|-------|
 | `id`, `createdAt`, `projectId` | string | store | Fixed after create |
 | `name`, `notes`, `mode`, `strength`, `images` | — | person or agent | `mode` is `look`, `world` or `subject`; each image has `weight` and `excluded` |
-| `analysis` | object or null | Analyze | Colour reading of the images. Set to null when the images, weights, mode, strength or notes change |
+| `analysis` | object or null | Analyze | Colour reading of the images. Set to null when the images, weights, mode, strength or notes change. Its own `styleBrief` and `negativePrompt` are the analyzer's; generators get `brief` (1.2), so change the brief through `briefOverride`, not here |
 | `direction` | string | person or agent | What the board is for, in positive words. Up to 4000 characters |
 | `avoid` | string[] | person or agent | Things to keep out of the image. Trimmed, de-duplicated (case-insensitive), at most 40 items of 200 characters |
 | `pinnedColors` | `{include: hex[], exclude: hex[]}` | person or agent | Colours that must appear or must stay out. Hex is stored as `#rrggbb`; at most 12 per list; a colour can't be in both |
@@ -54,7 +54,7 @@ Every moodboard API response adds `brief`, computed on each read and never saved
 |------|------|--------|
 | `POST /api/moodboards` | `name`, `images`, … plus optional `direction`, `avoid`, `pinnedColors`, `briefOverride: {text}` | Create |
 | `PUT /api/moodboards/{id}` | Any subset, including the four brief fields | Update. `briefOverride: {text}` sets the override; `briefOverride: null` removes it (the brief goes back to generated). Send only `text`: `basis` and `updatedAt` are refused (422) |
-| `POST /api/moodboards/{id}/brief-override/keep` | — | Keep the override for the board as it is now (clears `stale`). 409 when there is no override |
+| `POST /api/moodboards/{id}/brief-override/keep` | — | Keep the override for the board as it is now (clears `stale`). 404 for an unknown board; 409 when there is no override (the message says to set one with `PUT`) |
 | `POST /api/moodboards/{id}/analyze` | — | Analyze again. Keeps the brief fields and the override |
 
 Sending the same override text again keeps its original `basis`, so a client that saves the whole board on every change doesn't hide the "changed since you edited this" state. New text is stamped with the board as it is after the update.
@@ -71,8 +71,10 @@ Boards saved before the brief fields (no `briefVersion`) are migrated once at ba
 
 - Negatives in `analysis.negativePrompt` beyond the old defaults move to `avoid`.
 - An `analysis.styleBrief` that differs from what that analysis generated becomes `briefOverride`. If the board changed since that analysis, the override starts out stale.
-- Each changed file is copied first to `<moodboard root>/../moodboard-backups/brief-fields-<UTC time>/<scope>/`, with `migration-log.json` listing what moved. Copying a backup file back undoes that board.
-- The saved `analysis` is left as it was. Running the migration again changes nothing.
+- Each changed file is copied first to `<moodboard root>/../moodboard-backups/brief-fields-<UTC time>/<scope>/`, with `migration-log.json` listing what moved. A file that can't be backed up is not rewritten.
+- Moved text is kept within the limits in 1.1, so the board can still be saved. Anything cut is in the log (`avoidClipped`, `overrideClipped`) and whole in the backup.
+- Nothing is lost: the saved `analysis` keeps its old `styleBrief` and `negativePrompt`, and the backup holds the file as it was. A backup copied back is migrated again on the next start, with the same result.
+- Running the migration again changes nothing. A file that can't be read is logged and left alone.
 
 ---
 

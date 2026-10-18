@@ -2289,8 +2289,8 @@ async def _moodboard_brief_fields_startup() -> None:
     from services.moodboard_store import migrate_brief_fields
     try:
         await asyncio.to_thread(migrate_brief_fields)
-    except OSError as exc:
-        print(f"[main] moodboard brief migration skipped: {exc}", flush=True)
+    except Exception as exc:  # never block startup; boards still migrate in memory on read
+        print(f"[main] moodboard brief migration skipped: {type(exc).__name__}: {exc}", flush=True)
 
 
 @app.on_event("startup")

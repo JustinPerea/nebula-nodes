@@ -509,3 +509,89 @@ def test_one_board_that_fails_to_migrate_does_not_stop_the_others(tmp_path, monk
     assert report["skipped"] and "odd board" in report["skipped"][0]["reason"]
     # It still opens, as it was saved.
     assert MoodboardStore().get(odd["id"])["analysis"] == odd["analysis"]
+
+
+# -- review fixes ----------------------------------------------------------------
+
+def test_a_migrated_board_with_a_long_old_negative_can_still_be_saved(client, tmp_path):
+    root = tmp_path / "moodboards"
+    (root / "_global").mkdir(parents=True)
+    long_term = "keep the background plain and quiet " * 8          # one 288-character negative
+    board = _old_board(tmp_path, negatives=f"random artifacts, {long_term}")
+    (root / "_global" / f"{board['id']}.json").write_text(json.dumps(board))
+
+    report = migrate_brief_fields()
+    record = report["migrated"][0]
+    assert record["avoidClipped"]["original"] == [long_term.strip()]
+
+    saved = client.get(f"/api/moodboards/{board['id']}").json()
+    assert all(len(item) <= moodboard_brief.AVOID_ITEM_LIMIT for item in saved["avoid"])
+    # What Studio does on every change: send the whole draft back.
+    response = client.put(f"/api/moodboards/{board['id']}", json={"name": "Renamed", "avoid": saved["avoid"]})
+    assert response.status_code == 200, response.text
+
+
+def test_keep_on_an_id_no_board_can_have_is_not_found(client):
+    response = client.post("/api/moodboards/not..an..id/brief-override/keep")
+    assert response.status_code == 404
+
+
+def test_keep_without_an_override_says_how_to_write_one(client):
+    board = _create(client)
+    response = client.post(f"/api/moodboards/{board['id']}/brief-override/keep")
+    assert response.status_code == 409 and "briefOverride" in response.json()["detail"]
+
+
+def test_an_unreadable_board_file_leaves_no_backup_folder_behind(tmp_path, monkeypatch):
+    root = tmp_path / "moodboards"
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(root))
+    (root / "_global").mkdir(parents=True)
+    (root / "_global" / "broken.json").write_text("{not json")
+
+    for _ in range(2):
+        report = migrate_brief_fields()
+        assert len(report["skipped"]) == 1 and report["backupDir"] is None
+    assert not (tmp_path / "moodboard-backups").exists()
+
+
+def test_a_board_written_by_this_analyzer_but_never_migrated_gets_no_override(tmp_path):
+    board = _old_board(tmp_path)
+    board["analysis"] = analyze_moodboard(board)          # version 3, its own brief
+    new, record = migrate_board(board)
+    assert record["overrideFromEditedBrief"] is False and new["briefOverride"] is None
+
+
+def test_a_board_that_cannot_be_written_is_skipped_and_the_rest_migrate(tmp_path, monkeypatch):
+    root = tmp_path / "moodboards"
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(root))
+    (root / "_global").mkdir(parents=True)
+    first, second = _old_board(tmp_path), _old_board(tmp_path)
+    for board in (first, second):
+        (root / "_global" / f"{board['id']}.json").write_text(json.dumps(board))
+    from services import moodboard_store
+    real = moodboard_store._write_json
+
+    def full_disk(path, data):
+        if path.stem == first["id"]:
+            raise OSError(28, "No space left on device")
+        return real(path, data)
+
+    monkeypatch.setattr(moodboard_store, "_write_json", full_disk)
+    report = migrate_brief_fields()
+
+    assert [r["id"] for r in report["migrated"]] == [second["id"]]
+    assert "No space left" in report["skipped"][0]["reason"]
+    assert json.loads((root / "_global" / f"{first['id']}.json").read_text()) == first
+
+
+def test_studio_stops_at_the_same_limits_the_store_keeps():
+    from pathlib import Path
+    import re
+
+    source = (Path(__file__).resolve().parents[2] / "frontend/src/components/moodboard-studio/briefLimits.ts").read_text()
+    limits = {key: int(value) for key, value in re.findall(r"(\w+): (\d+)", source)}
+    assert limits == {
+        "direction": moodboard_brief.DIRECTION_LIMIT, "avoidItems": moodboard_brief.AVOID_LIMIT,
+        "avoidItem": moodboard_brief.AVOID_ITEM_LIMIT, "pinned": moodboard_brief.PINNED_LIMIT,
+        "override": moodboard_brief.OVERRIDE_LIMIT,
+    }

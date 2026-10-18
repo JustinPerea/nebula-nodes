@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { MoodboardBrief, MoodboardPinnedColors } from '../../types';
+import { BRIEF_LIMITS } from './briefLimits';
 
 // The person's side of a board's brief (design-canvas gap 14): Direction,
 // Avoid and pinned colours, plus the brief generators get and its optional
@@ -37,7 +38,7 @@ export function BriefPanel({
     <div className="moodboard-brief">
       <div className="moodboard-brief__head">
         <span className="moodboard-swatches__label">Brief sent to generators</span>
-        <span className="moodboard-brief__source">{override ? 'Written by you' : 'Generated'}</span>
+        <span className="moodboard-brief__source">{override?.text.trim() ? 'Written by you' : 'Generated'}</span>
       </div>
       {stale && (
         <div className="moodboard-brief__stale" role="status">
@@ -50,7 +51,8 @@ export function BriefPanel({
         <>
           <label className="moodboard-field">
             <span>Your brief</span>
-            <textarea rows={5} value={override.text} onChange={(event) => onEdit(event.target.value)} />
+            <textarea rows={5} value={override.text} maxLength={BRIEF_LIMITS.override}
+              onChange={(event) => onEdit(event.target.value)} />
           </label>
           {!stale && (
             <button type="button" className="moodboard-brief__action" onClick={onRegenerate} disabled={busy}>
@@ -101,11 +103,13 @@ export function BriefFields({
   onChange: (fields: { direction?: string; avoid?: string[]; pinnedColors?: MoodboardPinnedColors }) => void;
 }) {
   const [avoidText, setAvoidText] = useState('');
+  const avoidFull = avoid.length >= BRIEF_LIMITS.avoidItems;
   const addAvoid = () => {
-    const items = avoidText.split(',').map((item) => item.trim()).filter(Boolean);
+    const items = avoidText.split(',').map((item) => item.trim().slice(0, BRIEF_LIMITS.avoidItem)).filter(Boolean);
     const known = new Set(avoid.map((item) => item.toLowerCase()));
     const next = [...avoid];
     for (const item of items) {
+      if (next.length >= BRIEF_LIMITS.avoidItems) break;
       if (!known.has(item.toLowerCase())) { next.push(item); known.add(item.toLowerCase()); }
     }
     if (next.length !== avoid.length) onChange({ avoid: next });
@@ -127,6 +131,7 @@ export function BriefFields({
           <textarea
             rows={2}
             value={direction}
+            maxLength={BRIEF_LIMITS.direction}
             placeholder="Say what you want, e.g. warm editorial product shots with soft daylight."
             onChange={(event) => onChange({ direction: event.target.value })}
           />
@@ -148,11 +153,13 @@ export function BriefFields({
             <input
               value={avoidText}
               aria-label="Add to the avoid list"
-              placeholder="Something to keep out, e.g. neon signage"
+              disabled={avoidFull}
+              placeholder={avoidFull ? `The list holds ${BRIEF_LIMITS.avoidItems} items. Remove one to add another.`
+                : 'Something to keep out, e.g. neon signage'}
               onChange={(event) => setAvoidText(event.target.value)}
               onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addAvoid(); } }}
             />
-            <button type="button" onClick={addAvoid} disabled={!avoidText.trim()}>Add</button>
+            <button type="button" onClick={addAvoid} disabled={avoidFull || !avoidText.trim()}>Add</button>
           </div>
         </div>
         <PinnedColorRow
@@ -186,8 +193,9 @@ function PinnedColorRow({
   const [value, setValue] = useState('');
   const hex = normalizeHex(value);
   const conflict = Boolean(hex && other.includes(hex));
+  const full = colors.length >= BRIEF_LIMITS.pinned;
   const add = () => {
-    if (!hex || conflict || colors.includes(hex)) return;
+    if (!hex || conflict || full || colors.includes(hex)) return;
     onChange([...colors, hex]);
     setValue('');
   };
@@ -211,9 +219,10 @@ function PinnedColorRow({
           onChange={(event) => setValue(event.target.value)} />
         <input aria-label={`${label}: hex`} value={value} placeholder="#rrggbb, or pick one" onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); add(); } }} />
-        <button type="button" onClick={add} disabled={!hex || conflict || colors.includes(hex)}>Add</button>
+        <button type="button" onClick={add} disabled={!hex || conflict || full || colors.includes(hex)}>Add</button>
       </div>
       {conflict && <span className="moodboard-inline__error">That color is in the other list.</span>}
+      {full && <span className="moodboard-inline__error">This list holds {BRIEF_LIMITS.pinned} colors. Remove one to add another.</span>}
     </div>
   );
 }

@@ -640,6 +640,22 @@ type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'cr
   & { briefOverride?: { text: string } | null };
 type MoodboardUpdateInput = Partial<MoodboardCreateInput>;
 
+/** The backend's reason a moodboard call was refused (a string, or FastAPI's
+ *  list of field errors), so Studio can say what to fix. */
+async function moodboardError(response: Response, what: string): Promise<Error> {
+  let detail = '';
+  try {
+    const body = (await response.json()).detail;
+    if (typeof body === 'string') detail = body;
+    else if (Array.isArray(body)) {
+      detail = body.map((item: { loc?: unknown[]; msg?: string }) =>
+        [Array.isArray(item.loc) ? item.loc.filter((part) => part !== 'body').join('.') : '', item.msg ?? '']
+          .filter(Boolean).join(': ')).join('; ');
+    }
+  } catch { /* not JSON */ }
+  return new Error(detail ? `${what} failed: ${detail}` : `${what} failed: ${response.status}`);
+}
+
 export async function fetchMoodboards(scope: 'project' | 'global', projectId?: string): Promise<Moodboard[]> {
   const params = new URLSearchParams({ scope });
   if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
@@ -662,7 +678,7 @@ export async function createMoodboard(body: MoodboardCreateInput): Promise<Moodb
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error(`Create moodboard failed: ${response.status}`);
+  if (!response.ok) throw await moodboardError(response, 'Create moodboard');
   return response.json();
 }
 
@@ -672,7 +688,7 @@ export async function updateMoodboard(id: string, body: MoodboardUpdateInput): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error(`Update moodboard failed: ${response.status}`);
+  if (!response.ok) throw await moodboardError(response, 'Save');
   return response.json();
 }
 
@@ -686,7 +702,7 @@ export async function analyzeMoodboard(id: string): Promise<Moodboard> {
  *  "board changed since you edited this" until the next change. */
 export async function keepMoodboardBriefOverride(id: string): Promise<Moodboard> {
   const response = await apiFetch(`/api/moodboards/${encodeURIComponent(id)}/brief-override/keep`, { method: 'POST' });
-  if (!response.ok) throw new Error(`Keep brief failed: ${response.status}`);
+  if (!response.ok) throw await moodboardError(response, 'Keep brief');
   return response.json();
 }
 
