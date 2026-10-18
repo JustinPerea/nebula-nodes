@@ -130,7 +130,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
         {open && items.length > 0 && (
           <ConfirmInline label="Empty" confirmLabel="Delete all" busy={busy}
             prompt={items.length === 1 ? `Delete this ${noun.one} for good?` : `Delete all ${items.length} ${noun.many} for good?`}
-            onConfirm={() => void act(() => emptyTrash({ kind, scope }))} />
+            onConfirm={() => void act(() => emptyTrash({ kind, scope }, items))} />
         )}
       </div>
       {error && <p className="asset-trash__error" role="alert">{error}</p>}

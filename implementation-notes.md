@@ -1,5 +1,13 @@
 # Implementation Notes
 
+## 2026-10-18 — Recently deleted: CI and security fixes
+
+- **CI.** Three frontend tests failed. Two in `tests/components/StoredAssetNodes.test.tsx` still expected a deleted board to read "Board not found"; the PR changed that on purpose (a deleted board is now in Recently deleted, and the card refetches on a delete broadcast). The test now covers both: trashed (name kept, "In Recently deleted", Restore brings it back, no Open) and deleted for good ("Board not found", "deleted for good or never existed"). The Inspector copy check now says "deleted for good". The third (`tests/components/AssetStudioDrafts.test.tsx`, Character uploads) mocked every `apiFetch` as the upload, so the Studio's new Recently deleted fetch got the same `Response` and read its body first ("Body is unusable"). The mock now sends only `/api/uploads` to the upload; the test's assertions are unchanged.
+- **Audit of the backend diff for authorization bugs.** Purge and empty call `require_person`; restore and list are open to agents; nothing authorizes on `deletedBy` or `actor_for_headers`; ids go through the stores' regexes before any path is built; PUT and analyze can't write a trashed board back (lookups skip `.trash`), create always mints a fresh id, and restore refuses when the id is live (409). Two real gaps, fixed:
+  - *Attribution spoofing.* An outside agent names itself (`X-Nebula-Agent`), and the trash UI and CLI print an agent's name as is, so an agent called "You" read as "deleted by you". `canvas_events.actor_record` now adds " (agent)" to an agent name that matches what Nebula calls a non-agent (you, person, Nebula, unnamed client, unknown, system).
+  - *Empty raced an agent's delete.* `POST /api/trash/empty` and `POST /api/projects/trash/empty` deleted for good whatever was in the trash at that moment, so an agent's delete that landed after the person's list loaded was destroyed without the person seeing it. Both now take what the list showed (`{"items": [{kind, id}]}` / `{"ids": [...]}`) and delete only those; the canvas sends it. Without the field they behave as before (person only either way).
+- **Left for Justin.** Projects still expire 30 days after a delete, including projects an agent deleted, so an agent's delete becomes permanent with no person action. Recommendation: no timer for a project an agent or unnamed client deleted (only person-deleted projects expire), or drop the timer as boards and characters did.
+
 ## 2026-10-18 — Recently deleted: review fixes
 
 An adversarial review of the Recently deleted lane found four gaps, all about a delete that happens while someone else is working on the same board.

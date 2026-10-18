@@ -70,9 +70,15 @@ export async function purgeTrashed(kind: TrashKind, id: string): Promise<void> {
   if (!response.ok) throw await failure(response, 'Delete failed');
 }
 
-/** Delete for good everything `fetchTrash(filter)` lists. Person only. */
-export async function emptyTrash(filter: TrashFilter): Promise<void> {
-  const response = await apiFetch(`/api/trash/empty${await query(filter)}`, { method: 'POST' });
+/** Delete for good the `shown` items (what the list showed the person) that
+ * `fetchTrash(filter)` still lists. Person only. Sending `shown` keeps an
+ * agent's delete that landed after the list loaded restorable. */
+export async function emptyTrash(filter: TrashFilter, shown: Array<Pick<TrashedItem, 'kind' | 'id'>>): Promise<void> {
+  const response = await apiFetch(`/api/trash/empty${await query(filter)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: shown.map(({ kind, id }) => ({ kind, id })) }),
+  });
   if (!response.ok) throw await failure(response, 'Emptying Recently deleted failed');
 }
 

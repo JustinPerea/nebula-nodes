@@ -839,7 +839,13 @@ can undo it:
   back is a no-op (200, `alreadyRestored: true`). MCP: `list_trash`,
   `restore_from_trash`. CLI: `nebula trash list`, `nebula trash restore [kind] <id>`.
 - Deleting for good is person-only (see the list above). The person does it
-  from Moodboard Studio, Character Studio or Projects.
+  from Moodboard Studio, Character Studio or Projects. Emptying sends what the
+  person's list showed (`{"items": [{kind, id}]}` to `/api/trash/empty`,
+  `{"ids": [...]}` to `/api/projects/trash/empty`) and only those go, so an
+  agent's delete that lands after the list loaded stays restorable.
+- "Deleted by" is attribution, never permission. An agent names itself, so an
+  agent calling itself "You", "Person" or "Nebula" is recorded as
+  "You (agent)" and so on.
 
 A board or character in Recently deleted answers `GET` and `PUT` with 404 and
 `code: "in_trash"` plus its trash record. Its node card and the Inspector say

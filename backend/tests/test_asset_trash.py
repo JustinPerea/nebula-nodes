@@ -21,7 +21,7 @@ from services import asset_trash
 from services.canvas_events import actor_record
 from services.character_store import CharacterStore
 from services.moodboard_store import MoodboardStore
-from tests.conftest import PERSON
+from tests.conftest import FORGED_ORIGIN, PERSON
 from tests.test_asset_reference_params import AGENT, CHARACTER, MCP, _board, _changed, api  # noqa: F401
 
 
@@ -185,7 +185,8 @@ def test_restoring_twice_is_harmless(api):
     assert never.status_code == 404
 
 
-@pytest.mark.parametrize("headers", [AGENT, MCP, {}])
+# FORGED_ORIGIN: an Origin proves nothing; leaving the agent header off isn't the person either.
+@pytest.mark.parametrize("headers", [AGENT, MCP, {}, FORGED_ORIGIN])
 def test_only_the_person_deletes_for_good(api, headers):
     board = _board(api)
     api.client.delete(f"/api/moodboards/{board['id']}", headers=AGENT)
@@ -219,6 +220,76 @@ def test_the_person_deletes_one_for_good_or_empties_a_scope(api):
     # Cards that showed them "in Recently deleted" hear they're gone for good.
     gone = [m["id"] for m in _changed(api) if m["deleted"]][-2:]
     assert gone == [purge["id"], other["id"]]
+
+
+@pytest.mark.parametrize("headers", [
+    {**AGENT, **PERSON},
+    {**MCP, **PERSON},
+    {"Authorization": "Agent not-a-real-token", **PERSON},
+])
+def test_an_agent_holding_the_person_token_still_cannot_delete_for_good(api, headers):
+    """Agent markers win over the person token: something that says it's an
+    agent never counts as the person, so it can't purge or empty either."""
+    board = _board(api)
+    api.client.delete(f"/api/moodboards/{board['id']}", headers=AGENT)
+    for method, path in (("DELETE", f"/api/trash/moodboard/{board['id']}"), ("POST", "/api/trash/empty")):
+        # An agent token that doesn't check out is refused before the gate (401).
+        assert api.client.request(method, path, headers=headers).status_code in (401, 403)
+    assert MoodboardStore().trashed(board["id"]) is not None
+
+
+def test_emptying_deletes_only_what_the_person_saw(api):
+    """The person's list loaded, then an agent deleted another board before
+    they pressed Empty. Emptying deletes for good only what they were shown;
+    the agent's delete stays restorable."""
+    seen = _board(api, "Seen")
+    api.client.delete(f"/api/moodboards/{seen['id']}", headers=PERSON)
+    shown = api.client.get("/api/trash", params={"kind": "moodboard", "scope": "global"}, headers=PERSON).json()["items"]
+    late = _board(api, "Deleted after the list loaded")
+    api.client.delete(f"/api/moodboards/{late['id']}", headers=AGENT)
+
+    emptied = api.client.post("/api/trash/empty", params={"kind": "moodboard", "scope": "global"}, headers=PERSON,
+                              json={"items": [{"kind": item["kind"], "id": item["id"]} for item in shown]})
+
+    assert emptied.status_code == 200, emptied.text
+    assert emptied.json() == {"purged": 1}
+    assert MoodboardStore().trashed(seen["id"]) is None
+    assert MoodboardStore().trashed(late["id"]) is not None
+    bad = api.client.post("/api/trash/empty", headers=PERSON, json={"items": [{"kind": "moodboard", "id": "../x"}]})
+    assert bad.status_code == 400
+
+
+def test_emptying_project_trash_deletes_only_the_projects_the_person_saw(api):
+    ids = []
+    for name in ("Seen", "Deleted later"):
+        created = api.client.post("/api/projects", json={"name": name}, headers=PERSON).json()
+        ids.append(created["project"]["id"])
+    revision = api.client.get("/api/projects").json()["workspaceRevision"]
+    api.client.request("DELETE", f"/api/projects/{ids[0]}", headers=PERSON, json={"workspaceRevision": revision})
+    revision = api.client.get("/api/projects").json()["workspaceRevision"]
+    api.client.request("DELETE", f"/api/projects/{ids[1]}", headers=AGENT, json={"workspaceRevision": revision})
+
+    for path, body in (("/api/projects/trash/empty", {"ids": [ids[0]]}),
+                       ("/api/trash/empty", {"items": [{"kind": "project", "id": ids[0]}]})):
+        emptied = api.client.post(path, headers=PERSON, json=body)
+        assert emptied.status_code == 200, emptied.text
+        listed = [item["id"] for item in api.client.get("/api/trash", params={"kind": "project"}).json()["items"]]
+        assert listed == [ids[1]], path
+
+
+@pytest.mark.parametrize("name", ["You", "you", "Person", "Nebula", "Unnamed client", "You."])
+def test_an_agent_cannot_pass_off_its_delete_as_the_persons(api, name):
+    """"Deleted by" is shown as "you" for the person and as the name for an
+    agent. An agent that calls itself "You" must not read as the person."""
+    board = _board(api)
+    by = api.client.delete(f"/api/moodboards/{board['id']}", headers={"X-Nebula-Agent": name}).json()["trashed"]["deletedBy"]
+    assert by["kind"] == "agent"
+    assert by["name"].endswith("(agent)"), by
+    assert by["name"].lower().rstrip(".") not in ("you", "person", "nebula", "unnamed client")
+    # A real agent name is kept as it is.
+    other = _board(api)
+    assert api.client.delete(f"/api/moodboards/{other['id']}", headers=AGENT).json()["trashed"]["deletedBy"] == {
+        "kind": "agent", "name": "GM - Design"}
 
 
 def test_projects_share_the_listing_and_record_who_deleted_them(api):

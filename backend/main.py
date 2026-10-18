@@ -9173,13 +9173,36 @@ async def purge_trashed_project(project_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/projects/trash/empty")
-async def empty_project_trash() -> dict[str, Any]:
+async def empty_project_trash(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Delete the trashed projects for good. Person only. With ``{"ids": [...]}``
+    (what the person's list showed) only those go, so a project an agent
+    deleted after the list loaded stays restorable."""
     require_person(current_request_headers(), hint=_RESTORE_HINT)
+    shown = _shown_trash_ids(body, "ids")
     with project_store.transaction() as catalog:
-        if catalog.get("trash"):
-            catalog["trash"] = {}
+        trash = catalog.get("trash") or {}
+        doomed = [project_id for project_id in trash if shown is None or project_id in shown]
+        for project_id in doomed:
+            del trash[project_id]
+        if doomed:
             project_store.commit(catalog)
-        return {"trash": []}
+        return {"trash": _trash_listing(catalog)}
+
+
+def _shown_trash_ids(body: dict[str, Any] | None, key: str) -> set[str] | None:
+    """The ids an empty request says the person was shown, or None when it
+    doesn't say (then everything that matches goes, as before)."""
+    if not body or key not in body:
+        return None
+    raw = body.get(key)
+    if not isinstance(raw, list) or len(raw) > 10_000 or not all(isinstance(value, str) for value in raw):
+        raise HTTPException(status_code=400, detail=f"{key} must be a list of ids")
+    for value in raw:
+        try:
+            validate_project_id(value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return set(raw)
 
 
 def _display_positions(
@@ -10288,18 +10311,25 @@ async def purge_trashed(kind: str, item_id: str) -> dict[str, Any]:
 
 @app.post("/api/trash/empty")
 async def empty_trash(kind: str | None = None, scope: str | None = None,
-                      projectId: str | None = None) -> dict[str, Any]:
+                      projectId: str | None = None, body: dict[str, Any] | None = None) -> dict[str, Any]:
     """Delete for good everything ``GET /api/trash`` lists with the same
-    filters. Only the person may."""
+    filters. Only the person may.
+
+    The canvas sends ``{"items": [{"kind", "id"}, ...]}``, what its list
+    showed, and then only those go: an agent's delete that landed after the
+    list loaded stays restorable. Without ``items`` everything listed goes."""
     if kind is not None:
         _trash_kind(kind)
     _trash_scope(scope, projectId)
     require_person(current_request_headers(), hint=_RESTORE_HINT)
+    shown = _shown_trash_items(body)
     purged = 0
     for asset_kind in ("moodboard", "character"):
         if kind in (None, asset_kind):
             store = _asset_store(asset_kind)
             for record in store.list_trash(scope=scope, projectId=projectId):
+                if shown is not None and (asset_kind, record["id"]) not in shown:
+                    continue
                 try:
                     store.purge(record["id"])
                 except KeyError:
@@ -10308,11 +10338,37 @@ async def empty_trash(kind: str | None = None, scope: str | None = None,
                 await _broadcast_stored_asset(asset_kind, None, record["id"], deleted=True)
     if kind in (None, "project") and scope is None:
         with project_store.transaction() as catalog:
-            if catalog.get("trash"):
-                purged += len(catalog["trash"])
-                catalog["trash"] = {}
+            trash = catalog.get("trash") or {}
+            doomed = [project_id for project_id in trash if shown is None or ("project", project_id) in shown]
+            for project_id in doomed:
+                del trash[project_id]
+            if doomed:
+                purged += len(doomed)
                 project_store.commit(catalog)
     return {"purged": purged}
+
+
+def _shown_trash_items(body: dict[str, Any] | None) -> set[tuple[str, str]] | None:
+    """``items`` from an empty request as {(kind, id)}, or None when absent."""
+    if not body or "items" not in body:
+        return None
+    raw = body.get("items")
+    if not isinstance(raw, list) or len(raw) > 10_000:
+        raise HTTPException(status_code=400, detail="items must be a list of {kind, id}")
+    shown: set[tuple[str, str]] = set()
+    for item in raw:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+            raise HTTPException(status_code=400, detail="items must be a list of {kind, id}")
+        item_kind = _trash_kind(str(item.get("kind")))
+        try:
+            if item_kind == "project":
+                validate_project_id(item["id"])
+            else:
+                asset_trash.validate_id(item["id"])
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        shown.add((item_kind, item["id"]))
+    return shown
 
 
 # ---------- Presets: named styles / prompt fragments + params ----------

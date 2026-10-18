@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import secrets
 import time
 from collections import OrderedDict, deque
@@ -121,13 +122,26 @@ def actor_record(actor: Mapping[str, Any] | None) -> dict[str, str]:
     """Who did something, as a saved record keeps it: ``{kind, name}``.
 
     Recently deleted (services/asset_trash.py, project_store) uses it for
-    "deleted by". The person shows as "You"; an agent by its name."""
+    "deleted by". The person shows as "You"; an agent by its name.
+
+    An outside agent names itself (X-Nebula-Agent), and the canvas and CLI
+    print an agent's name as is, so an agent called "You" or "Person" would
+    read as the person. Such a name gets " (agent)" added. This is
+    attribution only: nothing may authorize on it (services/person_gate.py)."""
     actor = actor or {}
     kind = str(actor.get("kind") or "")
     if kind not in ("agent", "person", "system"):
         kind = "anonymous"
     name = "You" if kind == "person" else actor_label(actor)[:64]
+    if kind == "agent" and re.sub(r"[^a-z]", "", name.lower()) in _NOT_AGENT_NAMES:
+        name = f"{name} (agent)"
     return {"kind": kind, "name": name}
+
+
+# What the canvas, the CLI and actor_label call someone who isn't an agent,
+# letters only and lowercased. An agent can't take one of these as its name.
+_NOT_AGENT_NAMES = frozenset({"you", "person", "theperson", "nebula", "unnamedclient", "anunnamedclient",
+                              "unknown", "system"})
 
 
 # -- payload bounds -------------------------------------------------------

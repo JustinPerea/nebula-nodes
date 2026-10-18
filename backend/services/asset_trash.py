@@ -44,10 +44,12 @@ class AlreadyLive(Exception):
     """Restore found a live asset with the same id; nothing was moved."""
 
 
-def _validate_id(asset_id: str) -> str:
+def validate_id(asset_id: str) -> str:
+    """A board or character id (the stores' own id shape); ValueError otherwise."""
     if not isinstance(asset_id, str) or not _ID_RE.fullmatch(asset_id):
         raise ValueError(f"invalid id: {asset_id!r}")
     return asset_id
+
 
 
 def trash_dir(root: Path) -> Path:
@@ -78,7 +80,7 @@ def move_to_trash(root: Path, live_path: Path, *, kind: str,
     """Move ``live_path`` (``<root>/<scope>/<id>.json``) into the trash and
     return its record. The file itself is moved, not rewritten.
     ``deleted_by`` is ``{kind, name}`` from canvas_events.actor_record."""
-    asset_id = _validate_id(live_path.stem)
+    asset_id = validate_id(live_path.stem)
     asset = json.loads(live_path.read_text(encoding="utf-8"))
     folder = trash_dir(root)
     folder.mkdir(parents=True, exist_ok=True)
@@ -99,7 +101,7 @@ def move_to_trash(root: Path, live_path: Path, *, kind: str,
 
 def trashed(root: Path, asset_id: str) -> dict[str, Any] | None:
     """The trash record for ``asset_id``, or None when it isn't in the trash."""
-    _validate_id(asset_id)
+    validate_id(asset_id)
     folder = trash_dir(root)
     record_path = folder / f"{asset_id}{RECORD_SUFFIX}"
     if not record_path.is_file() or not (folder / f"{asset_id}.json").is_file():

@@ -98,7 +98,10 @@ describe('RecentlyDeletedAssets', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
     expect(screen.getByRole('group', { name: 'Delete all 2 characters for good?' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Delete all' }));
-    await waitFor(() => expect(trash.emptyTrash).toHaveBeenCalledWith({ kind: 'character', scope: 'project' }));
+    await waitFor(() => expect(trash.emptyTrash).toHaveBeenCalledWith(
+      { kind: 'character', scope: 'project' },
+      [expect.objectContaining({ id: 'b1' }), expect.objectContaining({ id: 'b2' })],
+    ));
   });
 });
 
