@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
-import { CATEGORY_LABELS, matchesModelProvider, matchesModelSearch, matchesSearch, modelInputSummary, modelSearchText, providerLabel, supportedModelProviders } from '../../src/lib/modelDiscovery';
+import { CATEGORY_LABELS, libraryProviderLine, matchesModelProvider, matchesModelSearch, matchesSearch, modelInputSummary, modelSearchText, providerLabel, supportedModelProviders } from '../../src/lib/modelDiscovery';
 import { searchModels } from '../../src/lib/createModels';
 import { buildCommands, filterCommands, type PaletteContext } from '../../src/lib/commandPalette';
 import type { ModelNodeDefinition } from '../../src/types';
@@ -18,6 +18,15 @@ describe('shared model discovery', () => {
     expect(providerLabel('future-provider')).toBe('future-provider');
     expect(matchesModelSearch(NODE_DEFINITIONS['meshy-text-to-3d'], '3d-gen')).toBe(true);
     expect(matchesModelSearch(NODE_DEFINITIONS['meshy-text-to-3d'], '3D generation')).toBe(true);
+  });
+
+  it('names every provider a route-table node runs on in the library, in Auto order', () => {
+    expect(libraryProviderLine(NODE_DEFINITIONS['flux-3-video'])).toBe('BFL · fal · Replicate · OpenRouter · Krea');
+    expect(libraryProviderLine(NODE_DEFINITIONS['krea-3'])).toBe('Krea · fal');
+    expect(libraryProviderLine(NODE_DEFINITIONS['flux-3-image-klein-base'])).toBe('fal');
+    // Any other node keeps its own provider's full name.
+    expect(libraryProviderLine(NODE_DEFINITIONS['meshy-text-to-3d'])).toBe(providerLabel(NODE_DEFINITIONS['meshy-text-to-3d'].apiProvider));
+    expect(libraryProviderLine(NODE_DEFINITIONS['claude-chat'])).toBe('Anthropic');
   });
 
   it('matches each token in any order and trims insignificant task words', () => {

@@ -1,5 +1,5 @@
 import type { APIProvider, ModelNodeDefinition, NodeCategory, PortDefinition } from '../types';
-import { allParamDefinitions, directKeyNames, PROVIDER_LABELS, routesOf, selectRoute } from './directRoute';
+import { allParamDefinitions, directKeyNames, hasRoutes, PROVIDER_LABELS, routesOf, selectRoute } from './directRoute';
 
 export const CATEGORY_LABELS: Record<NodeCategory, string> = {
   'image-gen': 'Image Generation',
@@ -20,6 +20,18 @@ export const CATEGORY_LABELS: Record<NodeCategory, string> = {
  * (lib/directRoute.ts PROVIDER_LABELS, the backend's node_route.PROVIDER_LABELS). */
 export function providerLabel(provider: string): string {
   return PROVIDER_LABELS[provider as APIProvider] ?? provider;
+}
+
+/** Short names for the library's provider line, where several sit side by
+ * side ("BFL · fal · Replicate · OpenRouter · Krea"). */
+const SHORT_PROVIDER_LABELS: Partial<Record<APIProvider, string>> = { bfl: 'BFL', fal: 'fal' };
+
+/** The node library's provider line: a route-table node names each provider
+ * it runs on, in Auto order; any other node names its own provider. */
+export function libraryProviderLine(definition: ModelNodeDefinition): string {
+  if (!hasRoutes(definition)) return providerLabel(definition.apiProvider);
+  const providers = [...new Set(routesOf(definition).map((route) => route.provider))];
+  return providers.map((provider) => SHORT_PROVIDER_LABELS[provider] ?? providerLabel(provider)).join(' · ');
 }
 
 /** Discovery includes every declared provider route, regardless of which

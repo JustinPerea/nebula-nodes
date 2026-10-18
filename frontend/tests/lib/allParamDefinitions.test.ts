@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
-import { allParamDefinitions } from '../../src/lib/directRoute';
+import { allParamDefinitions, hasRoutes } from '../../src/lib/directRoute';
 import type { ModelNodeDefinition, ParamDefinition } from '../../src/types';
 
 /** allParamDefinitions replaced hand-written group lists; for every catalog
  * node it must give each of them the same answer (backend
  * test_node_route.py pins node_route.all_param_definitions the same way). */
-const definitions = Object.values(NODE_DEFINITIONS) as ModelNodeDefinition[];
+// A route-table node (definition `routes`) had no hand-written list to
+// replace; route_cases.json and route_tables.json pin its params.
+const definitions = (Object.values(NODE_DEFINITIONS) as ModelNodeDefinition[]).filter((def) => !hasRoutes(def));
 
 function firstWins(groups: (ParamDefinition[] | undefined)[]): Map<string, ParamDefinition> {
   const found = new Map<string, ParamDefinition>();

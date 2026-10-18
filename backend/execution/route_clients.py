@@ -89,14 +89,27 @@ def refuse_end_alone(inputs: Mapping[str, Any], where: str) -> None:
         raise ValueError(f"{where} needs a start image (or keyframes) to end on an end image")
 
 
+# The most images BFL, fal and Replicate take for one FLUX 3 video, start
+# image, keyframes and end image together: BFL "one to ten total"
+# (api.bfl.ai/openapi.json Flux3VideoI2VInputs.keyframes), fal keyframes
+# maxItems 10, Replicate images "up to 10" (all read 2026-10-15). The route
+# rule (rules.ports "frames") stops it before the run; this keeps a list that
+# arrives on one edge from reaching the provider.
+VIDEO_MAX_FRAMES = 10
+
+
 def video_frames(inputs: Mapping[str, Any], where: str) -> list[Any]:
     """A video node's images in time order: start, keyframes, end
-    (refuse_end_alone)."""
+    (refuse_end_alone), at most VIDEO_MAX_FRAMES of them."""
     refuse_end_alone(inputs, where)
     start = port_values(inputs, "start_image")[:1]
     frames = [*start, *port_values(inputs, "keyframes")]
     end = port_values(inputs, "end_image")[:1]
-    return [*frames, *end]
+    frames = [*frames, *end]
+    if len(frames) > VIDEO_MAX_FRAMES:
+        raise ValueError(f"{where} takes at most {VIDEO_MAX_FRAMES} images in all (start image, keyframes and end "
+                         f"image), but {len(frames)} are wired. Disconnect {len(frames) - VIDEO_MAX_FRAMES}.")
+    return frames
 
 
 def local_media_path(value: Any) -> Path | None:
@@ -255,12 +268,16 @@ async def run_bfl(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: d
 # frame_index}] ("Frame position of this keyframe in the generated 24 fps
 # video. Must be unique and at most ``duration * 24``"; duration an integer
 # 5-20, default 5); extend-video and edit-video ``video_url``. The /draft
-# variants take the same media. Keyed by the endpoint's last path segment.
+# variants take the same media. Keyed by the endpoint's last path segment
+# (the FLUX 3 family, Klein and Klein Base included), or by the whole id for
+# an endpoint outside it, whose last segment says nothing about its shape:
+# blackforestlabs/flux-video-upscale ``video_url`` (FluxVideoUpscaleInput)
+# and krea/v3/edit ``image_urls`` (V3EditInput, 1-8), read 2026-10-15.
 
 FAL_FPS = 24
 FAL_DEFAULT_KEYFRAME_DURATION = 5
 _FAL_FIELDS: dict[str, dict[str, tuple[str, bool]]] = {
-    # segment -> {port: (fal field, a list)}
+    # segment, or endpoint id -> {port: (fal field, a list)}
     "text-to-image": {},
     "edit-image": {"images": ("image_urls", True)},
     "text-to-video": {},
@@ -268,15 +285,31 @@ _FAL_FIELDS: dict[str, dict[str, tuple[str, bool]]] = {
     "first-last-frame-to-video": {"start_image": ("start_image_url", False), "end_image": ("end_image_url", False)},
     "extend-video": {"start_video": ("video_url", False)},
     "edit-video": {"start_video": ("video_url", False), "video": ("video_url", False)},
+    "blackforestlabs/flux-video-upscale": {"video": ("video_url", False)},
+    "krea/v3/edit": {"images": ("image_urls", True)},
 }
 FAL_KEYFRAMES = "keyframes-to-video"
+# A route param that picks the endpoint (endpointWhen) and isn't a request
+# field: FLUX 3 Video's ``draft`` chooses fal's /draft endpoint, and none of
+# fal's FLUX 3 video schemas has a draft field.
+FAL_ENDPOINT_SWITCHES = frozenset({"draft"})
+# Fields fal's /draft endpoints don't have: drafts are 720p, so the
+# resolution (a draft is blocked anywhere but hd) isn't sent.
+FAL_DRAFT_DROPS = frozenset({"resolution"})
 
 
 def fal_shape(endpoint: str) -> str:
     segments = [s for s in str(endpoint).strip("/").split("/") if s]
     if segments and segments[-1] == "draft":
         segments = segments[:-1]
+    whole = "/".join(segments)
+    if whole in _FAL_FIELDS:
+        return whole
     return segments[-1] if segments else ""
+
+
+def fal_draft(endpoint: str) -> bool:
+    return str(endpoint).strip("/").endswith("/draft")
 
 
 def keyframe_indexes(count: int, duration: int) -> list[int]:
@@ -330,13 +363,17 @@ async def run_fal(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: d
                   route: Mapping[str, Any], emit: Any = None, endpoint: Any = None) -> dict[str, Any]:
     """fal forwards every param it is given (handle_fal_universal), so the
     copy it gets holds only this route's translated params, the media fields
-    and ``endpoint_id``: never ``_provider`` or another route's params."""
+    and ``endpoint_id``: never ``_provider`` or another route's params, nor
+    a param that only picks the endpoint (FAL_ENDPOINT_SWITCHES) or one a
+    /draft endpoint doesn't have (FAL_DRAFT_DROPS)."""
     from execution.sync_runner import _fal_wrapper_node
     from handlers.fal_universal import handle_fal_universal
 
     definition = _definition(node)
     endpoint_id = str(endpoint if endpoint is not None else route.get("endpoint") or "").strip("/")
-    params = {**_set(node.params), **fal_fields(endpoint_id, node.params, inputs)}
+    dropped = FAL_ENDPOINT_SWITCHES | (FAL_DRAFT_DROPS if fal_draft(endpoint_id) else frozenset())
+    sent = {key: value for key, value in _set(node.params).items() if key not in dropped}
+    params = {**sent, **fal_fields(endpoint_id, node.params, inputs)}
     fal_node = _fal_wrapper_node(node.model_copy(update={"params": params}), endpoint_id)
     prompt = prompt_of(inputs)
     fal_inputs = {"prompt": PortValueDict(type="Text", value=prompt)} if prompt is not None else {}
@@ -353,11 +390,29 @@ async def run_fal(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: d
 # to 10; "presence switches to edit"); flux-3 (video) takes ``images`` ("One
 # image opens the clip ... Two images start and end it. Three or more (up to
 # 10) become a storyboard") and ``start_video`` ("Can't be combined with
-# images").
+# images"). black-forest-labs/flux-video-upscale/api/schema (read
+# 2026-10-15) takes its source as ``input_video`` (required) and an optional
+# ``prompt`` (default "").
+
+# Models whose one media input is a source video, under its field name.
+REPLICATE_SOURCE_VIDEO: dict[str, str] = {"black-forest-labs/flux-video-upscale": "input_video"}
 
 
-def replicate_input(params: Mapping[str, Any], inputs: Mapping[str, Any], where: str) -> tuple[dict[str, Any], set[str]]:
+def replicate_input(params: Mapping[str, Any], inputs: Mapping[str, Any], where: str,
+                    model: str = "") -> tuple[dict[str, Any], set[str]]:
     """The prediction input and which of its fields are media."""
+    if model in REPLICATE_SOURCE_VIDEO:
+        field = REPLICATE_SOURCE_VIDEO[model]
+        refuse_unwired(inputs, {"prompt", "video"}, where)
+        source = one_value(inputs, "video", where)
+        if source is None:
+            raise ValueError(f"{where} needs a video")
+        body = _set(params)
+        prompt = prompt_of(inputs)
+        if prompt is not None:
+            body["prompt"] = prompt
+        body[field] = source
+        return body, {field}
     refuse_unwired(inputs, {"prompt", "images", "start_image", "keyframes", "end_image", "start_video"}, where)
     body = _set(params)
     prompt = prompt_of(inputs)
@@ -382,7 +437,7 @@ async def run_replicate_model(node: GraphNode, inputs: dict[str, PortValueDict],
     definition = _definition(node)
     _, data_type = output_port(definition)
     model = str(endpoint if endpoint is not None else route.get("endpoint") or "")
-    body, media = replicate_input(node.params, inputs, f"Replicate's {model}")
+    body, media = replicate_input(node.params, inputs, f"Replicate's {model}", model)
     path = await replicate_model.run_model(model, body, replicate_model.api_key(api_keys), media_type=data_type,
                                            media_fields=media, node_id=node.id, emit=emit)
     return as_output(definition, path)
@@ -456,19 +511,32 @@ async def run_openrouter_videos(node: GraphNode, inputs: dict[str, PortValueDict
 # -- Krea catalog (handlers/krea_gateway.py) -----------------------------------
 
 
+def krea_inputs(model: Mapping[str, Any], inputs: Mapping[str, Any]) -> dict[str, Any]:
+    """The wired ports under the catalog model's request fields. A catalog
+    entry folded into a route-table node (scripts/sync-krea-catalog.py
+    FOLDED) names the fields whose port has another id in ``portFields``
+    (Krea 3's ``images`` -> ``image_urls``, FLUX Video Upscale's ``video``
+    -> ``video_url``; the script's --check ties each to the request schema).
+    Every other port goes by name; a name the schema lacks stops the run
+    (krea_gateway._request_body)."""
+    fields = model.get("portFields") if isinstance(model.get("portFields"), Mapping) else {}
+    return {str(fields.get(port, port)): value for port, value in inputs.items()}
+
+
 async def run_krea(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str], *,
                    route: Mapping[str, Any], emit: Any = None, endpoint: Any = None) -> dict[str, Any]:
     """Krea's catalog models name their request fields after their ports
     (the gateway checks each body against the catalog's request schema), so
-    the wired ports go through by name. ``_kreaAuth`` is the router's."""
-    from handlers.krea_gateway import catalog_key_for, handle_krea_catalog
+    the wired ports go through by name, or by the folded entry's
+    ``portFields`` (krea_inputs). ``_kreaAuth`` is the router's."""
+    from handlers.krea_gateway import catalog_key_for, catalog_models, handle_krea_catalog
 
     definition = _definition(node)
     key = catalog_key_for(endpoint if endpoint is not None else route.get("endpoint"))
     if output_port(definition)[1] == "Video":
         # Krea's catalog schema leaves end_image optional on its own.
         refuse_end_alone(inputs, f"Krea's {key}")
-    result = await handle_krea_catalog(key, node, inputs, api_keys, emit=emit)
+    result = await handle_krea_catalog(key, node, krea_inputs(catalog_models()[key], inputs), api_keys, emit=emit)
     return rekey(definition, result, "Krea")
 
 

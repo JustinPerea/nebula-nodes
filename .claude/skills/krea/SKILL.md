@@ -12,7 +12,7 @@ description: Krea API in Nebula — generate images with Krea's own Krea 2 model
 - User wants to **train a custom LoRA style/object/character** on Krea and reuse its `style_id`.
 - User wants to **search the Krea style library** to find a `style_id` to plug into a generation.
 - User asks which Krea model/param to pick, about `KREA_API_TOKEN`, or about chaining styles into a generation.
-- **Boundary check:** if the user asks for Krea *video*, *image editing / image-to-image*, *upscaling*, *Krea 2 Turbo*, or any third-party model behind Krea's gateway (Flux, Imagen, Ideogram, Nano Banana, etc.), this provider does **not** expose them — see Capability boundaries and route elsewhere.
+- **Boundary check:** if the user asks for Krea *video*, *image editing / image-to-image*, *upscaling*, *Krea 2 Turbo*, or any third-party model behind Krea's gateway (Flux, Imagen, Ideogram, Nano Banana, etc.), this older Krea 2 skill doesn't cover them. Since 2026-10-03 the Krea gateway catalog nodes do (video, editing, enhance, 3D), and since 2026-10-15 Krea 3 and FLUX 3 video are routes on the `krea-3` and FLUX 3 nodes: use `.agents/skills/krea/SKILL.md` for those.
 
 ## Universal rules
 
@@ -168,6 +168,19 @@ The other Krea maker routes (Nano Banana and Veo/Omni on Google, GPT Image on
 OpenAI, Grok Imagine on xAI, Ideogram and Runway, Seedream and Seedance on
 BytePlus) and the shared rule set that keeps a run on Krea are in
 `.agents/skills/krea/SKILL.md` (this file is the older Krea 2 skill, not a mirror).
+
+### Krea 3 and the FLUX 3 nodes (2026-10-15)
+
+Two kinds of node now reach Krea as one route of several, through a provider
+switcher (`_provider`, `docs/PROVIDER-ROUTES.md`): `krea-3` "Krea 3" (Krea is
+the maker; routes krea, then fal `krea/v3/text-to-image` / `krea/v3/edit`;
+Krea 3 on Krea's API is early access for beta workspaces) and the FLUX 3 video
+nodes `flux-3-video`, `flux-video-edit` and `flux-video-upscale` (BFL is the
+maker; Krea is their last route). Krea's three synced FLUX nodes
+(`krea-video-black-forest-labs-flux-3-video`, `-flux-video-edit`,
+`krea-enhance-black-forest-labs-flux-video-upscale`) are folded into those
+nodes: a saved one loads with `_provider: "krea"` and its `_kreaAuth` kept.
+Details: the `krea` skill in `.agents/skills/krea/SKILL.md` and the `bfl` skill.
 
 ## In the nebula_nodes context
 

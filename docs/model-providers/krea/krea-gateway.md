@@ -53,6 +53,15 @@ python3 scripts/sync-krea-catalog.py          # Offline regeneration
 python3 scripts/sync-krea-catalog.py --refresh # Fetch the public OpenAPI and regenerate
 ```
 
+**Folded endpoints (2026-10-15).** Four catalog endpoints are not `krea-*` nodes. Each is the `krea` route of a route-table node (one node per model with a provider switcher, `docs/PROVIDER-ROUTES.md`), listed in `FOLDED` in `sync-krea-catalog.py`, so a refresh can't bring a separate node back. Their catalog entries stay, marked `foldedInto`, and `--check` verifies the route's Krea params against that entry's request schema.
+
+| API path | Folded into | Old node id (saved graphs migrate, `_provider: "krea"`, `_kreaAuth` kept; not in backticks so the model reference doesn't count this note as their audit) |
+|---|---|---|
+| `/generate/video/black-forest-labs/flux-3-video` | `flux-3-video` | krea-video-black-forest-labs-flux-3-video |
+| `/generate/video/black-forest-labs/flux-video-edit` | `flux-video-edit` | krea-video-black-forest-labs-flux-video-edit |
+| `/generate/enhance/black-forest-labs/flux-video-upscale` | `flux-video-upscale` | krea-enhance-black-forest-labs-flux-video-upscale |
+| `/generate/image/krea/krea-3` | `krea-3` | none (new; see `krea-3.md`) |
+
 `--openapi /path/to/openapi.json` refreshes from a supplied local document. None of these commands submits a provider job or uses a token. Regenerate `docs/MODEL_REFERENCE.md` through its existing script after changing the node registry.
 
 ## Model-specific inputs

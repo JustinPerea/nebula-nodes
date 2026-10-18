@@ -1,5 +1,15 @@
 # Implementation Notes
 
+## 2026-10-17 — Merging main (#63) down the provider-routes stack
+
+#63 (newer chat models, per-model Max Tokens, the params-version upgrade and the stale-tab gate) merged into main, and main was merged into #57, then each branch into the next. Most conflicts were notes files and node counts. The real ones:
+
+- **Create's param pills (#58, `ParamPills.tsx`).** Both sides rewrote `set()`: #58 added the provider pill and its switch note, #63 made `set()` snap a per-model default (Max Tokens) when the model changes, with its own notes. Kept both: `set()` snaps as on main, and the provider pill and its note sit above the pills. The snap notes' map variable is `snapNote`, so it doesn't shadow the switch note. `Inspector.tsx` only needed both imports.
+- **Applying a preset (#59, `applyPreset.ts`).** #59 returns early for a preset on a model in the catalog, ignores a preset on a model it couldn't map, and drops billing keys from a style-only preset. #63 snapped per-model defaults after the merge. Combined in `withSnappedDefaults`: a preset that switches models snaps the new model's defaults against its fresh defaults, and a style-only preset (billing keys dropped) snaps against the current params. A value the preset sets always wins.
+- **Reading saved graphs and presets (#59, `cli_graph.py`, `preset_store.py`, `main.py` import).** #59 moves retired and folded Krea FLUX nodes onto the nodes they became, and #63 upgrades params by the stored version. Both now run, migration first: `CLIGraph.load` migrates, then builds everything and assigns together (#63's all-or-nothing load) and upgrades; preset reads are `_upgraded(_as_current(raw))`; `/api/graph/import` parses `paramsVersion` first (a bad one is still a 400 before any work), migrates, then upgrades. A stored project goes the other way round (upgraded when the catalog is read, migrated on open). Version 1 and the fold touch different nodes, so the order changes nothing today; `saved_graph_upgrades.py`'s header now says a later rule for a retired or folded node must match both ids.
+- **Open replies carry both** `warnings` (#59: what folding dropped) and `paramsVersion` (#63: the stale-tab check), and `ProjectActivation` types both.
+- **Test churn.** `test_preset_store.py`'s two FLUX preset tests now pass `params_version`, which #63 made required on `PresetStore.create`. Node counts: 304 on #57/#58, 308 from #59 (`AGENTS.md`, `test_video_qc_nodes.py`). `route_tables.json` regenerated on #57 for the dialogue node and Claude's `effort`; it carried down without conflicts. `MODEL_REFERENCE.md` regenerated, not hand-merged. `scripts/export-node-defs.ts` was not used: it rewrites four nodes' JSON-only fixes, as `AGENTS.md` warns.
+
 ## 2026-10-16 — Text to Dialogue: speakers are voice names
 
 Justin approved (2026-10-16): write the voice's name in the script (`Rachel: Hi there`), look it up in the person's ElevenLabs voices at run time, and drop the Speaker 1-4 fields.
@@ -65,6 +75,181 @@ Added Claude Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5, GPT-6 Astra / GPT-6.
 - **TTS Turbo labels.** `eleven_turbo_v2_5` and `eleven_turbo_v2` are in ElevenLabs' "Deprecated models" table (replacements Flash v2.5 / Flash v2). Their labels now say "deprecated: use Flash ...". The values stay so saved graphs open. The reference-roles fingerprint test gained `APPROVED_OPTION_LABEL_CHANGES` for exactly these two labels, rather than a new baseline hash.
 - **Contract checks.** `scripts/check-node-contracts.mjs` and `tests/test_node_contracts.py` pin the dialogue node's `model_id` default and options and that it has no speed/style/speaker-boost/similarity_boost.
 - **Not live-tested.** No paid or keyed call was made. Request bodies are checked with mocked HTTP only, so whether ElevenLabs accepts every field exactly as sent is unverified until a first real run.
+
+## 2026-10-16 — "FLUX Video Edit" is now "FLUX Video Edit [fast]" (flux-3-nodes)
+
+Justin approved this on 2026-10-16 ("Yes go ahead and rename Flux video edit"), settling the name held in the section below. The node calls BFL's `/v1/flux-tools/video-edit-v1`, which BFL's pricing card and its docs pricing row call "FLUX Video Edit [fast]". The product page H1, "FLUX Video Edit", is the family name. Ids, ports, endpoints and prices stay the same.
+
+Changed:
+
+- `flux-video-edit` displayName in both definition files, so the card, the node library, the "needs a key" message (`route_cases.json`) and the label a folded Krea node takes on load (`test_retired_nodes.py`) all read "FLUX Video Edit [fast]".
+- Every full mention of the model in the skills (`.agents` and `.claude`: bfl, openrouter, replicate, and the krea skill, which has the line only in `.agents`), `docs/PROVIDER-ROUTES.md`, `docs/api-guides/` (README, bfl, krea), `docs/model-providers/bfl/flux-3.md`, the `model_pricing.py` comment, a pricing-case name and the test comments. The bfl skill heading is now "FLUX Video Edit [fast] and FLUX Video Upscale".
+- AGENTS.md line 13 and the `retired_nodes.py` docstring now give Krea's own names for its catalog entries: "Flux 3 Video", "Flux Video Edit", "Flux Video Upscale".
+
+Left as they are: short forms in lists and tables that already name the family once ("Video Edit, per second", "FLUX 3 Image, Klein, Video or Video Edit bodies", "Krea's Video Edit and Upscale"); Krea's catalog spelling "Flux Video Edit"; the retired Krea node's saved name "Flux Video Edit (Krea)"; the pinned BFL schema fixture (its title "Video Edit" is BFL's schema text); dated sections of these notes; `flux-3-image-klein-base` keeps "FLUX 3 Image Klein Base" (the maker's own name on its Hugging Face card; a host's name applies only to the host's own product).
+
+## 2026-10-16 — PR 3 model names match the provider (flux-3-nodes)
+
+Justin, 2026-10-16: "Let's match the provider every time." Every model name a person sees uses the provider's own spelling: the maker's (BFL, Krea) for a model several hosts carry, the only host's for a one-host model. Ids, param keys and values, endpoints and prices are unchanged.
+
+Already matching, left as they are: `flux-3-image` "FLUX 3 Image" (docs.bfl.ai H1, pricing card), `flux-3-image-klein` "FLUX 3 Image Klein" (H1, OpenAPI summary, pricing card), `flux-3-video` "FLUX 3 Video" (H1, pricing card), `flux-video-upscale` "FLUX Video Upscale" (docs and bfl.ai/video-upscaler H1; its Precise/Creative labels match the docs pricing rows), `krea-3` "Krea 3" (docs.krea.ai, blog; "Krea 3 Beta" in the OpenAPI is a status tag).
+
+Changed:
+
+- `flux-3-image-klein` description: "FLUX 3 Klein" → "FLUX 3 Image Klein" (both definition files).
+- `flux-3-image-klein-base` description: "FLUX 3 Klein Base" → "FLUX 3 Image Klein Base", matching its displayName.
+- `docs/api-guides/bfl.md` price line: "Video Edit [fast]" / "Video Upscale" → "FLUX Video Edit [fast]" / "FLUX Video Upscale".
+- `.agents/skills/fal/SKILL.md`: "BFL's Video Edit [fast]" → "BFL's FLUX Video Edit [fast]". (The `.claude` copy differs from the `.agents` copy before this change and has no such line.)
+- `docs/model-providers/bfl/flux-3.md`: fal's title for `blackforestlabs/flux-3/edit-video` is "Flux 3 FAST Edit Video" (page `<title>`); "FLUX.3 Edit Video [FAST]" is its description. The note had them swapped.
+
+Held, not decided (kept the current label):
+
+- **`flux-video-edit` displayName** stays "FLUX Video Edit". BFL uses two names: the product H1 "FLUX Video Edit" and the tier "FLUX Video Edit [fast]" (pricing card, docs pricing row). The description already says "[fast]".
+- **`flux-3-image-klein-base` displayName** stays "FLUX 3 Image Klein Base". The two research passes disagreed: BFL's own Hugging Face card says "FLUX 3 Image Klein Base" (maker rule); fal, the only host Nebula routes it to (BFL's API doesn't serve it), says "FLUX.3 Klein Base" (one-host rule).
+
+Left alone on purpose: the retired Krea node names ("Flux 3 Video (Krea)" and the rest in `retired_nodes.MERGED`, the fixture and the migration tests) are the old nodes' saved names, which the import alert quotes; `krea_gateway_models.json` is Krea's synced catalog; `model_pricing.json` quotes are verbatim provider text; `docs/research-2026-06/` is a dated snapshot.
+
+## 2026-10-15 — PR 3 integration: nodes, merge and docs lanes on flux-3-nodes
+
+Branch `flux-3-nodes` (from `provider-switcher`): `flux3-lane-merge` (which holds `flux3-lane-nodes`) and `flux3-lane-docs` merged with merge commits.
+
+Merge decisions:
+
+- **Two conflicts, both kept.** `docs/api-guides/bfl.md`: the docs lane's nodes table and Auto notes, with the nodes lane's status details (`BFL_API_KEY`, the stop-and-offer, `draft_enhance` not offered). `implementation-notes.md`: the three PR 3 sections side by side.
+- **Generated files regenerated, not merged:** `MODEL_REFERENCE.md`, `route_tables.json` (unchanged), `provider_knowledge_manifest.json` (unchanged, 290 paths). `node_definitions.json` was left as the nodes lane wrote it: `scripts/export-node-defs.ts` reproduces the seven new nodes exactly, but would also undo the JSON-only fixes on `gemini-tts`, `veo-3`, `gemini-omni-flash` and `quiver-arrow-generate`, so its output was checked and discarded. AGENTS.md now says so.
+- **Krea 3's audit date.** The regenerated reference gave `krea-3` "Audited 2026-10-09", taken from `krea-2.md`, which mentions `krea-3` in backticks (the same trap the docs lane hit for `flux-2-pro`). `krea-2.md` now names it without backticks; the date comes from `krea-3.md` (2026-10-15).
+- **AGENTS.md** gives the counted 307 (`node_definitions.json` and `NODE_DEFINITIONS` agree), and its Flora line lists all three folded Krea FLUX nodes.
+
+Fixed after the live check (isolated backend :8144 and Vite :5264, placeholder keys only, no run started; screenshots in the session scratchpad `flux3/pr3-shots/`):
+
+- **Krea 3's "Early access" note showed nowhere.** `RouteSpec.note` was declared ("readiness copy") but nothing rendered it. `providerSwitchState` now gives the route's API row an `info` line, shown under the name and price in the card menu and the Inspector; a "Doesn't take ..." block replaces it. It goes on the API row only: the note is about Krea's API, and whether the plan reaches Krea 3 isn't documented.
+- **Klein Base's name was cut** to "FLUX 3 Image..." by the chip at the 240 px card limit. Cards with a provider chip (`model-node--switchable`) may grow to 300 px.
+- **FLUX 3 Video's last port was hidden.** The preview's -32 px pull-up (meant for a header floating over the preview) covered "Keyframes +" once the node had an output. Below input ports the preview no longer pulls up. This touches every default-skin model node with inputs and a preview: they get 32 px taller, and their last input row shows.
+- **Migrated input nodes landed on other nodes.** `migrate_graph` put them 360 px left of the folded node, which is on top of the previous node in a graph laid out 400 px apart (the fixture's own layout). `_free_spot` now moves an added node down past any positioned node within 320 x 400 px. Tradeoff: node sizes aren't saved in the graph, so the clearance is a fixed box sized for a five-port video card with a preview.
+- **Library rows:** a long readiness line wrapped the Settings button to the left edge; it stays right now.
+
+Seen and left alone:
+
+- The import alert names a folded node by its saved label, so an unrenamed one reads "Flux Video Upscale (Krea)" while the canvas shows "FLUX Video Upscale". That's the merge lane's choice (the name the person knows from the file).
+- No `FORjustin.md` exists in this repo to update.
+
+### Review follow-up (PR 3, 2026-10-15)
+
+Six review findings; five distinct (the two Krea 3 price findings are one). Each was confirmed on HEAD first (a failing test or a reproduction), then fixed with a regression test.
+
+- **Krea 3 priced as if 8 references were wired (confirmed: `estimate_routes('krea-3', {}, [])` gave Krea 0.03-0.59 and fal 0.10-0.9056).** New wired-port price variable `(references)` (`model_pricing.REFERENCES` / `pricing.ts REFERENCES`): `some` with an edge into `images`, else `none`, the same kind as `(mode)`. Krea 3's `none` rows are the exact base price from Krea's pricing table ($0.03 / $0.06, plus the thinking extra) and fal's output-only $0.10-0.1006. Decision: with references wired the range still starts at the base price, not base plus one reference, because an edge can carry an empty list; the low end stays a run Nebula can't rule out. Pinned in `pricing_cases.json` (`shippedRouteCases`, new `shippedRunCases`) for both languages.
+- **The Krea route rows matched `_kreaAuth: api-token` (confirmed: `{_provider: krea, _kreaAuth: mcp}` priced Krea at None, and Auto + mcp with only a Krea token was unpriced while the router billed the token).** Dropped the match from the two route-table Krea entries. A plan run is sent to the plan before any row is read (`uses_krea_account`), so the rows are now the API balance's price and the switcher's API row shows it whatever mode is saved. The legacy Krea nodes' entries keep their `_kreaAuth` matches; they have no route table and price differently.
+- **FLUX 3 Video sent more than 10 frames (confirmed from the request builders and the providers' schemas: BFL "one to ten total", fal keyframes maxItems 10, Replicate "up to 10").** The `ports` rule grammar gained groups: `{"frames": {"max": 10, "of": ["start_image", "keyframes", "end_image"], "label": "..."}}` on BFL, fal and Replicate (`port_limit_count` / `portLimitCount`, checked in `routes_problems` and `check-node-contracts.mjs`). Messages use the label: "it takes at most 10 wired images (start + keyframes + end)". `route_clients.video_frames` also refuses more than 10 (`VIDEO_MAX_FRAMES`), for a list arriving on one edge. Tradeoff: the label is long, so the switcher's row note truncates; the menu's footer message gives it in full.
+- **A click on Krea or OpenRouter kept a BFL Draft it can't show (confirmed: a new `switch_cases.json` case failed).** `snapForRoute` now also resets another route's own param that the target route refuses and doesn't offer, to its default, with a card note ("Draft (fast preview) isn't on Krea: turned off"). Also fixed while there: a row's block said "Doesn't take true"; a boolean block now names the setting ("Doesn't take draft").
+- **Create presets saved on the folded Krea nodes (confirmed: `applyPresetToComposer` kept the current model and spread the old `_kreaAuth` over it).** `preset_store` reads each preset through `retired_nodes.migrate_node`, so an old preset becomes the new node on the Krea route with its saved `_kreaAuth` (and a retired node's preset its replacement). The file on disk keeps what was saved. In Create, a preset whose model the catalog doesn't have applies only its prompt, and a style-only preset never changes `_provider` or `_kreaAuth`. Behavior change: a style-only preset with billing keys used to overwrite them.
+- Screenshots (isolated backend :8145, Vite :5265, placeholder keys, no run): `pr3-shots/fixed-krea3-inspector.png` (Krea $0.03, fal $0.10*), `fixed-flux3-video-frames.png` (12 frames stop every route), `fixed-flux3-video-draft-snap.png` (the card note after the Krea click). `pr3-live-plan.md` rows 8 and 9 updated.
+- Gate after the fixes: backend 243/243 files green (run per file); frontend 222 files / 2,761 tests, `tsc -b`, lint; `check-node-contracts`, `sync-krea-catalog --check`, `generate-route-tables --check`, `generate-model-reference --check` all pass.
+
+### Security follow-up: a malformed saved graph hung or crashed the migration (PR 3, 2026-10-15)
+
+A background security review flagged a denial-of-service in `retired_nodes.py`. `migrate_graph` runs on unvalidated graphs (imports, project files, the boot state file), before staging can refuse anything. Probes confirmed four problems:
+
+- **It hung.** `_free_spot` searched for a free spot by adding 40 px to y. With a saved y of 1e18 next to another node, `y + 40 == y`, so the loop never returned. It now makes one pass over the nodes in its column, top to bottom, and lands on the same 40 px grid as before. There is no open-ended loop.
+- **A position too big for a float raised OverflowError, and NaN or inf wasn't refused.** `_spot` now catches OverflowError and accepts finite numbers only. Otherwise the added input node is placed without a position, as it is when the node has no position.
+- **A list or dict as `definitionId` or as an edge handle raised TypeError (unhashable) in the `MERGED` lookups.** This happened in `migrate_graph` and in main.py's `_migrate_ingress`, `_migrate_rf_graph` and `_snapshot_nodes`. A new `folded_entry()` checks the type before every lookup. Handles are looked up only when they are strings. Such an import now gets staging's 4xx instead of a 500.
+- **A node or edge that isn't a dict** now passes through untouched for staging to refuse. `_migrate_rf_graph` leaves a project file with one alone, and `CLIGraph.load` skips non-dict edges when it numbers new edges.
+
+Why it mattered: the boot path catches a load error and starts with an empty graph, and the next save would then overwrite the saved state file. Four tests in `test_retired_nodes.py` cover these cases (one waits on a thread so a regression fails instead of hanging). Each one fails on the code before 82d9176f.
+
+### Live runs on BFL (PR 3, 2026-10-15)
+
+These used Justin's BFL key, loaded from `~/.config/bfl/bfl.env` and never printed. Each run went through the registry's `multi_route` handler with `_provider: bfl`, in an isolated temp env with only `BFL_API_KEY` set, so nothing else could bill. Rows 1, 4, 10, 13 and 15 of the live plan:
+
+| Node | Settings | Output | Time |
+|---|---|---|---|
+| FLUX 3 Image Klein | 768sq | 768×768 JPEG | 5 s |
+| FLUX 3 Image | 768sq, aspect auto | 1024×576 PNG (BFL chose the frame) | 18 s |
+| FLUX 3 Video | t2v, draft, hd, 5 s | 1280×704, 5.04 s, with an audio track | 25 s |
+| FLUX Video Edit | 2 s 480×270 local clip (sent as a data URI) | 480×256, 2.04 s | 30 s |
+| FLUX Video Upscale | the same clip, precise, 1.5× | 720×404, 2.04 s | 36 s |
+
+What BFL billed, from `GET /v1/credits` before and after (1 credit = $0.01): 44.86 credits ($0.449) in all.
+- The two images plus the draft came to exactly 34.9 credits, which is $0.008 + $0.041 + 5 × $0.06, our price rows.
+- The edit and the upscale showed up later, together 9.96 credits. That fits a $0.06 edit (2 s × $0.03) plus a $0.0396 upscale: 720×404 px, divided by 1,048,576 for megapixels, × 2.04 s × $0.07. So BFL counts a megapixel as 1,048,576 pixels, as our Upscale price assumes.
+- Charges post with a delay, so credits read right after a run can be stale.
+
+Not run yet: the fal, Replicate, OpenRouter and Krea routes (their keys aren't saved for an isolated run), the Krea plan rows, keyframes and v2v.
+
+## 2026-10-15 — Provider routes, PR 3: the FLUX 3 and Krea 3 nodes
+
+Branch `flux3-lane-nodes` (from `provider-switcher`). Seven route-table nodes ship: `flux-3-image`, `flux-3-image-klein`, `flux-3-image-klein-base`, `flux-3-video`, `flux-video-edit`, `flux-video-upscale`, `krea-3`. The three generated Krea FLUX nodes fold into them. Guide: `docs/PROVIDER-ROUTES.md`, "The nodes". No paid call was made: every request is checked against a mocked transport and the providers' schemas.
+
+Decisions that weren't in the spec:
+
+- **`(mode)` is a built-in price variable, not a param.** FLUX 3 Video prices by t2v / i2v / v2v, which only the wired ports say. `model_pricing.VIDEO_MODE` and `pricing.ts` `videoMode` derive it the way the route clients pick BFL's `mode` (a start video wins, then any image port), pinned by `pricing_cases.json` `moded`.
+- **Edit and Upscale prices wait for the run.** They read the source clip's length and frame size (`(source seconds)`, `(output megapixels)`, `(output tier)`: `RUN_TIME_VARIABLES`), and nothing knows those before upstream nodes run (`_sourceDuration` is probed only after, and no width or height is). So those entries are unpriced before the run instead of guessed. `per: "megapixel-second"` is new for BFL's and Replicate's upscale unit.
+- **Port names for Krea live in the catalog entry.** A Krea field that a port names another way (`images` → `image_urls`, `video` → `video_url`) is the entry's `portFields`, written by `scripts/sync-krea-catalog.py` from `FOLDED` and read by `route_clients.krea_inputs`. A `RouteSpec` field was the other option. The catalog was chosen because `--check` can then tie the mapping to the entry's own request schema, and `rename` stays params-only as `routes_problems` expects.
+- **fal shapes keyed by whole id where the last segment is ambiguous.** `blackforestlabs/flux-video-upscale` and `krea/v3/edit` (an `edit` segment alone could mean anything). `draft` picks fal's `/draft` endpoints and is never sent; a `/draft` endpoint gets no `resolution` (the draft-only-hd rule means the dropped value was `hd`).
+- **Krea routes name the Krea path** (`/generate/video/black-forest-labs/flux-3-video`), not the catalog key, so the route reads the same as the other providers' endpoints. `catalog_key_for` takes either.
+- **Krea 3's catalog entry came in alone.** `--only ENDPOINT` (with `--openapi` or `--refresh`) builds one entry with the script's own `refresh()` and stamps it with its own `fetchedAt` (2026-10-15) and `openapiSha256`, leaving the file-level ones and every other entry alone. A full `--refresh` against today's spec would also add and drop Topaz models and change `krea-image-bfl-flux-1-dev`, unrelated drift that saved graphs depend on.
+- **`FOLDED` annotations apply on every run, not only on refresh.** So a change to `FOLDED` shows as `--check` drift on the pinned file. `folded_problems` runs before any write and stops the script when a node's Krea route sends a param, an option (after `valueMap`), a range or a port the entry's schema doesn't take.
+- **Stop labels reworded.** The spec's `rejectsWhen` labels ("Drafts render at hd only", "Video continuation runs 5-15 s on Black Forest Labs") read inside "it doesn't take ...". They're noun phrases now ("a draft above hd", "a video continuation longer than 15 s", "a start video together with images", "an end image without a start image or keyframes").
+- **Klein Base:** `apiProvider: fal` (BFL's API doesn't serve it; the maker isn't a route), and its size labels drop the pixel sizes ("Square HD", "Portrait 4:3"), which fal's Klein Base schema doesn't state. Its prices still assume fal's standard preset sizes and are marked `unconfirmed`.
+- **No `docUrl` on the new nodes.** `registry_source` treats `docs/model-providers/krea/krea-gateway.md` as "generated by the Krea sync" and would drop a hand-built node carrying it.
+- **Library line.** `libraryProviderLine` (modelDiscovery.ts) joins the route providers with short names (`BFL`, `fal`, else the shared label); other nodes keep the full provider name.
+- **Krea route prices** match `_kreaAuth: api-token` like the generated Krea entries, so plan runs stay unpriced. Krea's Video Edit and Upscale routes have no entry (Krea lists no price for them).
+- **Sources rewritten.** The specs' video price entries had only free-text `source` strings with scratchpad paths. Each entry now has `sources` with an `https` URL and the quoted price line from the dumps (BFL's pricing doc and CMS cards, fal's `llms.txt`, Replicate's billing tiers, OpenRouter's `pricing_skus`, Krea's `x-krea-pricing`). The dump paths are gone.
+
+Changes outside the spec's list:
+
+- `KEYS_AHEAD_OF_NODES` is empty now that nodes list `BFL_API_KEY`.
+- `execution/sync_runner.py` skips folded catalog entries when it registers Krea handlers; `route_clients.register_route_nodes` registers the node.
+- Tests that walk every registry node assuming the legacy rule (`test_node_route.py` dual-route split, cache tags, the param-list equivalences) skip route-table nodes. `test_maker_routes.py`'s dual-route census leaves out multi-route routers (they also set `dual_route`). The node count is 307.
+- The pricing test that every entry resolves at its defaults allows exactly the five run-time entries (Edit bfl/fal, Upscale bfl/fal/replicate).
+- `test_route_clients.py`'s `quick` fixture and the switch-case harnesses (Python and TS) fall back to the registry, so a case can name a real node.
+- `createModels.ts` excludes `flux-video-edit` in place of the Krea id. It would be excluded anyway (its source video is a required non-image port); the explicit entry keeps the intent visible.
+
+Tradeoffs and surprises:
+
+- **Route-table routers are only registered with an event sink.** `get_handler_registry()` without `emit` (some tests) has no handler for them; the engine always passes one. Left as PR 2 built it.
+- **Auto with the Krea plan doesn't reach a Krea route that isn't first.** On FLUX 3 Video with `_kreaAuth: mcp` and no keys, Auto stops and names the keys; the person picks the "Krea · plan" row. On Krea 3, Krea is the maker and first, so Auto bills the plan. That is the PR 2 rule ("Auto never moves"); a route case pins each.
+- The old Krea node ids leave the registry in this branch. Saved graphs naming them load through the migration below.
+- fal's FLUX 3 prices disagree between its model pages and its pricing API; the higher (page) price is kept, marked `unconfirmed`. Replicate's upscale megapixel size isn't stated (binary or decimal), so that route is `unconfirmed` too.
+
+## 2026-10-15 — Provider routes, PR 3: saved graphs with the folded Krea FLUX nodes
+
+Branch `flux3-lane-merge` (fast-forwarded onto `flux3-lane-nodes`). A saved graph, project, restore bundle or state file that names `krea-video-black-forest-labs-flux-3-video`, `krea-video-black-forest-labs-flux-video-edit` or `krea-enhance-black-forest-labs-flux-video-upscale` loads as `flux-3-video`, `flux-video-edit` or `flux-video-upscale` on the Krea route. `services/retired_nodes.py` `MERGED` holds the map; `migrate_node` and the new `migrate_graph` apply it. Guide: `docs/PROVIDER-ROUTES.md`, "Saved graphs with the old Krea nodes".
+
+Decisions that weren't in the spec:
+
+- **Typed prompt and media move to input nodes.** The old Krea nodes had `prompt` and every media field as both a param and a port (a wired port won, `krea_gateway._request_body`); the new nodes read them only from ports. The prompt textarea was where people typed, so dropping it would lose work, and a hidden fallback param would need route-client changes in every provider. `migrate_graph` puts a typed value with nothing wired into a Text Input (`value`), Image Input or Video Input (`filePath`) node wired to the port, 360 px to the left (moved down past any saved node it would cover; see the integration notes). Both input nodes pass an https URL through unchanged (`engine._image_input_output`, the video-input branch). A typed value under a wired port was never sent, so it is dropped. A blank one is skipped.
+- **`MERGED` entries have `inputs` and `outputs` maps, not one `ports` map.** Upscale's old input `video_url` becomes `video`, and its output `video` stays `video`; one map keyed by port id couldn't say both. `typed` lists the params that move to input nodes.
+- **Unrenamed nodes take the new node's name** ("FLUX 3 Video"), not a "was ..." title like the retired nodes. It is the same model on the same provider, and the switcher chip shows Krea. A renamed node keeps its title.
+- **`_kreaAuth` is written explicitly** (`api-token` when the old node saved none, which is what the old handler used), so a later change to the new node's default can't move billing.
+- **Dropped connections are warned about.** An edge from All videos, All artifacts or Job is dropped (DESIGN section 6; remapping All videos to the single `video` would hand a list consumer one item). `/api/graph/import` and `/api/projects/{id}/open` return `warnings`, and the canvas shows them in its import/open alert. A boot-time state file only logs them (`[cli_graph]`). Saved outputs keep only the `video` port, since the import validator refuses undeclared output handles.
+- **Agent billing rule unchanged by the fold.** `_refuse_agent_billing_change` would count `_provider: "krea"` on a new node as an agent's provider switch. A folded node is checked against the old node's baseline (Krea route, API-token mode, `_folded_billing_baseline`): an agent may import it on the API token, as before, but not on the plan (`mcp`), as before. `_snapshot_nodes` reads a pre-fold project node as what it loads as, so an autosave of the migrated canvas isn't a billing change.
+- **Spend limits fold at read time, lower wins.** `agent_spend._fold_models` moves an old id's per-model limits to the new id, keeping the lower of each limit where both exist. It runs in `caps_from_settings` and `validate_caps` (which now accepts an old id, so Settings can save back what it read). `GET /api/settings` shows the folded view (`saved_caps_view`), so the Settings list names the new node. Per-model spend recorded under an old id in the ledger counts toward the new id too. settings.json is rewritten only when the person next saves.
+
+Changes outside the spec's list:
+
+- `_stage_project_snapshot` labels a migrated node with the registry's display name when it has no title of its own (before, a migrated node's label could be `None` in the RF snapshot; retired nodes always had one).
+- `GraphFileActions` builds the provider-key warnings from the nodes the backend returned, not the file's, so a folded node set to Krea with no Krea token is named too.
+
+Tradeoffs and surprises:
+
+- Run-history recipes in a project keep the old ids. They are the record of what ran.
+- Proposals and clusters migrate too (they share `_stage_graph_nodes`), so an agent naming an old id gets the new node plus any input node. `/api/graph/node` and `/api/quick` refuse the old id with "is now part of 'flux-3-video' (provider: Krea)".
+- A migrated FLUX 3 Video node with no Krea token stops and names `KREA_API_TOKEN`; it doesn't move to BFL even with a BFL key ("Stop and offer a switch").
+- Favorites and other settings that store node ids weren't touched.
+
+## 2026-10-15 — PR 3: provider docs and agent skills (docs lane)
+
+Branch `flux3-lane-docs`, written in parallel with the nodes and merge lanes, from the verified PR 3 specs (`pr3-spec/*.json` in the session scratchpad) and the provider dumps. No code, node definitions, pricing or MODEL_REFERENCE.md changed here.
+
+- **Written against the specs, not merged code.** No PR 3 lane had committed when this was written, so the skills and notes describe the specs: node ids, ports, route order, per-route params, rules and prices. Re-read them against the integrated `nodeDefinitions.ts` and `model_pricing.json` before PR 3 ships. The places most likely to drift are Klein Base's `apiProvider` (the spec's open question), the `MERGED` / `FOLDED` names and the Krea 3 catalog insertion (spec builder steps), and the fal and Krea price ranges.
+- **Node count in AGENTS.md** says 307 "once the FLUX 3 PR is integrated" (303 + 7 − 3), because there was no merged registry to count. Recount after the merge and drop the qualifier.
+- **New BFL skill** at `.agents/skills/bfl/SKILL.md`, shaped like the BytePlus skill (hard facts, nodes, per-route table, prices, errors, code, not wired). It adds BFL's prompting rules (no negative prompts; bounding boxes as a JSON array in the prompt, `[top, left, bottom, right]` on a 0-1000 grid), from docs.bfl.ai `guides/prompting_unified_technical` and `flux_3/flux3_image_bounding_boxes` (dumps fetched 2026-10-15).
+- **Mirroring.** DESIGN section 10 says to mirror the skill into `.claude/skills`. Only some skills are mirrored there (worldlabs and byteplus aren't), and several mirrors are older, separate documents. Identical mirrors (`bfl`, `replicate`, `openrouter`) are copied byte for byte. The separate `.claude` `krea` and `fal` docs got a short pointer section instead of a full rewrite. The stale "Krea video ... not exposed" boundary line in `.claude/skills/krea` now points to the current skill; the rest of that older Krea 2 doc wasn't rewritten.
+- **Claims fixed.** Replicate ("the ONLY Replicate node"; "no Files API", "no official-model route" are now scoped to `replicate-universal`), OpenRouter ("exactly one OpenRouter node", the chat-only boundary table now scoped), Krea ("FAL Krea endpoints and automatic routing ... not part of this integration"; the 108-node count now notes the folded endpoints), `krea-2.md` ("FAL Krea routes intentionally out of scope" now scoped to Krea 2), the user guides' node sections, and `bfl.md`'s "no node uses BFL yet".
+- **New per-model notes:** `docs/model-providers/bfl/flux-3.md` (all six FLUX 3 nodes on every host, with sources, left-outs and open checks) and `docs/model-providers/krea/krea-3.md`. `krea-gateway.md` lists the four folded endpoints.
+- **Model reference audit dates (surprise).** `generate-model-reference.mjs` gives a node the `verified` date of the first `docs/model-providers/` note whose body mentions its id in backticks. Listing `flux-2-pro` in the BFL note's node table moved flux-2-pro's "Audited" date to 2026-10-15, and listing the old Krea FLUX ids in `krea-gateway.md` gave them 2026-10-09, though neither note audits those nodes. Both are written without backticks so the check stays clean. The new FLUX 3 and Krea 3 ids are backticked on purpose: those notes do audit them, so the regenerated reference will show 2026-10-15.
+- **Flora gap audit.** Neither FLUX 3 nor Krea 3 was logged from Flora, so nothing could be checked off. A Running log row records them as added, and the FLUX.2 breadth row says it stays open for PR 4. Turbo isn't in BFL's OpenAPI (checked 2026-10-15).
+- **Not touched:** FORjustin.md (left to the integration step) and MODEL_REFERENCE.md (regenerated at integration). `provider_knowledge_manifest.json` was regenerated after staging the new files (the script reads `git ls-files`, so an unstaged new file is missed).
 
 ## 2026-10-15 — PR 2 integration: switcher-clients and switcher-ui merged into provider-switcher
 

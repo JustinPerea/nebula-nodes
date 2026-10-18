@@ -16,7 +16,7 @@ from services.node_registry import NodeRegistry
 
 CASES = json.loads((Path(__file__).parent / "fixtures" / "route_cases.json").read_text())
 DEFINITIONS = NodeRegistry().get_all()
-# Inline route-table nodes (definition `routes`): none ship in the registry yet.
+# Inline route-table nodes (definition `routes`), next to the registry's own (PR 3).
 FIXTURE_DEFINITIONS = CASES["definitions"]
 
 
@@ -78,7 +78,7 @@ def _offered(param):
 def test_every_dual_route_node_lists_its_maker_key_first_and_splits_params_cleanly():
     for node_id, definition in DEFINITIONS.items():
         direct = node_route.direct_keys(definition)
-        if not direct:
+        if not direct or node_route.has_routes(definition):
             continue
         env = node_route.env_keys(definition)
         assert env[: len(direct)] == direct, node_id
@@ -229,6 +229,34 @@ def test_routes_problems_names_each_broken_rule():
         assert expected in problems, (expected, problems)
 
 
+def test_routes_problems_checks_a_ports_group():
+    """A ``ports`` entry with ``of`` caps several input ports together
+    (FLUX 3 Video's ten images in all); check-node-contracts.mjs is the same."""
+    broken = json.loads(json.dumps(FIXTURE_DEFINITIONS["routes-image"]))
+    rules = broken["routes"][0].setdefault("rules", {})
+    rules["ports"] = {
+        "images": {"max": 4, "of": ["images", "prompt"]},
+        "pair": {"max": 4, "of": ["images", "nope"]},
+        "solo": {"max": 4, "of": ["images"], "label": " "},
+        "odd": {"max": 4, "most": 2},
+    }
+    problems = "\n".join(node_route.routes_problems(broken))
+    for expected in ("ports.images groups ports, so its key must not be an input port",
+                     "ports.pair.of must list two or more of the node's input ports",
+                     "ports.solo.of must list two or more", "ports.solo.label must be text",
+                     "ports.odd has unknown fields ['most']"):
+        assert expected in problems, (expected, problems)
+
+
+def test_a_ports_group_counts_its_ports_together():
+    limit = {"max": 10, "of": ["start_image", "keyframes", "end_image"], "label": "images (start + keyframes + end)"}
+    counts = {"start_image": 1, "keyframes": 10, "end_image": 1, "prompt": 1}
+    assert node_route.port_limit_count("frames", limit, counts) == 12
+    assert node_route.port_limit_count("keyframes", {"max": 10}, counts) == 10
+    assert node_route.port_limit_name("frames", limit) == "images (start + keyframes + end)"
+    assert node_route.port_limit_name("keyframes", {"max": 10}) == "keyframes"
+
+
 @pytest.mark.parametrize("node_id", sorted(FIXTURE_DEFINITIONS))
 def test_every_route_takes_every_default(node_id, monkeypatch):
     """A switch is always one click from runnable: no route's rules refuse
@@ -275,6 +303,8 @@ def test_cache_tags_of_every_node_without_routes_keep_their_old_spelling():
     key_sets = [{}, {"FAL_KEY": "k"}, {"KREA_API_TOKEN": "k"},
                 {key: "k" for key in node_route.KEY_PROVIDERS}]
     for node_id, definition in DEFINITIONS.items():
+        if node_route.has_routes(definition):
+            continue
         for keys in key_sets:
             for params in ({}, {"_kreaAuth": "mcp"}, {"_provider": "fal"}):
                 route = node_route.select_route(definition, params, keys)
@@ -387,7 +417,8 @@ def test_all_param_definitions_matches_every_list_it_replaced(site):
     order, maker_key = _LEGACY_ORDERS[site]
     checked = 0
     for node_id, definition in DEFINITIONS.items():
-        if maker_key and maker_key not in node_route.direct_keys(definition):
+        # A route-table node had no hand-written list to replace.
+        if node_route.has_routes(definition) or (maker_key and maker_key not in node_route.direct_keys(definition)):
             continue
         new = {p["key"]: p for p in node_route.all_param_definitions(definition)}
         old = _legacy_lookup(definition, order, last_wins="last one wins" in site)
@@ -399,7 +430,7 @@ def test_all_param_definitions_matches_every_list_it_replaced(site):
         else:
             assert old == new, (site, node_id, set(old) ^ set(new))
         checked += 1
-    assert checked > (5 if maker_key else 300)
+    assert checked > (5 if maker_key else 290)
 
 
 def test_all_param_definitions_keeps_the_graph_defaults_and_create_lists():
@@ -407,6 +438,8 @@ def test_all_param_definitions_keeps_the_graph_defaults_and_create_lists():
     read sharedParams + falParams + directParams when there are shared
     params (else `params`), the last one winning: the same keys and defaults."""
     for node_id, definition in DEFINITIONS.items():
+        if node_route.has_routes(definition):
+            continue
         sources = ([*definition["sharedParams"], *(definition.get("falParams") or []),
                     *(definition.get("directParams") or [])] if "sharedParams" in definition
                    else definition.get("params") or [])

@@ -26,6 +26,9 @@ export interface ProjectActivation {
   project: SavedProject; workspaceRevision: string;
   /** Create and open only: the backend's params version (none = 0, a backend from before the gate). */
   paramsVersion?: number;
+  /** Open only: what opening changed that the person should know (a folded
+   * Krea node's dropped connections, services/retired_nodes.py MERGED). */
+  warnings?: string[];
 }
 export interface ProjectDeletion {
   deletedProjectId: string; trashedProject: TrashedProject;

@@ -317,3 +317,32 @@ describe('run estimate for a route-table node (cases shared with the backend)', 
     });
   }
 });
+
+describe('run estimate for a shipped route-table node (cases shared with the backend)', () => {
+  // pricing_cases.json shippedRunCases; test_flux3_nodes.py runs them too.
+  type ShippedRunCase = {
+    name: string; nodeId: string; params: Record<string, unknown>; apiKeys: Record<string, string>; wired: string[];
+    expected: { low: number | null; high: number | null; unavailable: boolean; plan: boolean };
+  };
+  const cases = (pricingCases as unknown as { shippedRunCases: ShippedRunCase[] }).shippedRunCases;
+  for (const testCase of cases) {
+    it(testCase.name, () => {
+      const target: Node<NodeData> = {
+        id: 'n1', position: { x: 0, y: 0 },
+        data: { definitionId: testCase.nodeId, label: 'Node', params: testCase.params } as unknown as NodeData,
+      };
+      const sources = testCase.wired.map((port) => node(`${port}-0`, 'image-input'));
+      const wires: Edge[] = testCase.wired.map((port) => ({ id: port, source: `${port}-0`, target: 'n1', targetHandle: port }));
+      const { cost } = summarizeRunScope([...sources, target], wires, { kind: 'graph' },
+        { pricing: shippedTable as unknown as PricingTable, apiKeys: testCase.apiKeys });
+      const line = cost!.lines.find((candidate) => candidate.name === 'Node');
+      if (testCase.expected.low === null) expect(line).toBeUndefined();
+      else {
+        expect(line!.low).toBeCloseTo(testCase.expected.low, 6);
+        expect(line!.high).toBeCloseTo(testCase.expected.high!, 6);
+      }
+      expect(Boolean(cost!.unavailable?.Node)).toBe(testCase.expected.unavailable);
+      expect(cost!.plan.includes('Node')).toBe(testCase.expected.plan);
+    });
+  }
+});

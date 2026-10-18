@@ -1,5 +1,6 @@
 import type {
-  APIProvider, DirectAcceptRule, DirectSizeLimits, ModelNodeDefinition, ParamDefinition, RouteRules, RouteSpec,
+  APIProvider, DirectAcceptRule, DirectSizeLimits, ModelNodeDefinition, ParamDefinition, RoutePortLimit, RouteRules,
+  RouteSpec,
 } from '../types';
 import { usesKreaAccount } from './kreaConnection';
 
@@ -280,10 +281,30 @@ function ruleSets(definition: Pick<ModelNodeDefinition, 'directRoute' | 'routes'
   return definition.directRoute ? [definition.directRoute] : [];
 }
 
+/** The input ports one `ports` entry counts: its `of` list for a group,
+ * else the port it is keyed by (node_route._limit_ports). */
+function limitPorts(port: string, limit: RoutePortLimit | undefined): string[] {
+  return Array.isArray(limit?.of) ? limit.of.map(String) : [port];
+}
+
+/** How many inputs one `ports` entry counts: the sum over its ports
+ * (node_route.port_limit_count). FLUX 3 Video's providers take at most ten
+ * images in all, start image, keyframes and end image together. */
+export function portLimitCount(port: string, limit: RoutePortLimit | undefined, counts: Record<string, number>): number {
+  return limitPorts(port, limit).reduce((sum, name) => sum + (typeof counts[name] === 'number' ? counts[name] : 0), 0);
+}
+
+/** How a message names one `ports` entry: its `label`, else its key
+ * (node_route.port_limit_name). */
+export function portLimitName(port: string, limit: RoutePortLimit | undefined): string {
+  return typeof limit?.label === 'string' && limit.label ? limit.label : port;
+}
+
 /** The ports a route's `ports` rule counts (route-table nodes only). */
 function countedPorts(definition: Pick<ModelNodeDefinition, 'directRoute' | 'routes'>): Set<string> {
   if (!hasRoutes(definition)) return new Set();
-  return new Set(ruleSets(definition).flatMap((rules) => Object.keys(rules.ports ?? {})));
+  return new Set(ruleSets(definition).flatMap((rules) =>
+    Object.entries(rules.ports ?? {}).flatMap(([port, limit]) => limitPorts(port, limit))));
 }
 
 /** `params` plus a WIRED marker for each param a rule reads as set
@@ -425,7 +446,7 @@ function rulesBlock(definition: RoutedDefinition, params: Record<string, unknown
   }
   const counts = (params[PORT_COUNTS] ?? {}) as Record<string, number>;
   for (const [port, limit] of Object.entries(rules.ports ?? {})) {
-    const count = typeof counts[port] === 'number' ? counts[port] : 0;
+    const count = portLimitCount(port, limit, counts);
     if (Number.isInteger(limit?.max) && count > limit.max) {
       return { reason: 'ports', param: port, on: null, detail: `${port} ${count}` };
     }
@@ -619,8 +640,9 @@ function why(route: RouteSpec, block: DirectBlock): string {
   if (block.reason === 'size') return `it can't render that ${block.param} exactly`;
   if (block.reason === 'retired') return `the maker retired this model on ${block.on}`;
   if (block.reason === 'ports') {
-    const most = route.rules?.ports?.[block.param ?? '']?.max;
-    return most ? `it takes at most ${most} wired ${block.param}` : `it doesn't take wired ${block.param}`;
+    const limit = route.rules?.ports?.[block.param ?? ''];
+    const name = portLimitName(block.param ?? '', limit);
+    return limit?.max ? `it takes at most ${limit.max} wired ${name}` : `it doesn't take wired ${name}`;
   }
   return String(block.detail ?? block.reason);
 }

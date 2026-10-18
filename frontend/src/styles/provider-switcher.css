@@ -94,19 +94,29 @@
 
 .provider-switcher__block { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* A route's note is a sentence the person needs whole ("Early access: ..."),
+ * so it gets its own line under the name and price, and wraps there. */
+.provider-switcher__info { grid-column: 2 / -1; white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
+
 /* The Inspector column is narrow (about 234px): names wrap there instead of
  * cutting "Black Forest Labs" to "Black Forest La...". */
 .provider-switcher--inspector .provider-switcher__label,
 .provider-switcher--inspector .provider-switcher__block { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
 
 .provider-switcher--inspector .provider-switcher__row,
-.provider-switcher--inspector .provider-switcher__item { align-items: start; }
+.provider-switcher--inspector .provider-switcher__item,
+.provider-switcher__row--info,
+.provider-switcher__row--info .provider-switcher__item { align-items: start; }
 
 .provider-switcher--inspector .provider-switcher__key,
-.provider-switcher--inspector .provider-switcher__setup { margin-top: 4px; }
+.provider-switcher--inspector .provider-switcher__setup,
+.provider-switcher__row--info .provider-switcher__key,
+.provider-switcher__row--info .provider-switcher__setup { margin-top: 4px; }
 
 .provider-switcher--inspector .provider-switcher__check,
-.provider-switcher--inspector .provider-switcher__price { padding-top: 1px; }
+.provider-switcher--inspector .provider-switcher__price,
+.provider-switcher__row--info .provider-switcher__check,
+.provider-switcher__row--info .provider-switcher__price { padding-top: 1px; }
 
 .provider-switcher__price { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
@@ -218,6 +228,11 @@ body.app-slava-restraint .provider-switcher__block {
   font-size: var(--sr-type-meta);
 }
 
+body.app-slava-restraint .provider-switcher__info {
+  color: var(--sr-ink-meta);
+  font-size: var(--sr-type-meta);
+}
+
 body.app-slava-restraint .provider-switcher__price,
 body.app-slava-restraint .provider-switcher__key {
   color: var(--sr-ink-meta);
@@ -316,6 +331,7 @@ body:not(.app-slava-restraint) .provider-switcher__item:hover,
 body:not(.app-slava-restraint) .provider-switcher__item:focus-visible { background: #2a2a2d; outline: none; }
 
 body:not(.app-slava-restraint) .provider-switcher__block { color: #f5c518; font-size: 10px; }
+body:not(.app-slava-restraint) .provider-switcher__info { color: #888; font-size: 10px; }
 
 body:not(.app-slava-restraint) .provider-switcher__price,
 body:not(.app-slava-restraint) .provider-switcher__key { color: #888; font-size: 10px; }

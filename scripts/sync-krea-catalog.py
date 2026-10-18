@@ -842,6 +842,22 @@ def _seedance_routes():
 DIRECT_ROUTES.update(_seedance_routes())
 
 
+# Krea models folded into a hand-built route-table node (one node per model,
+# docs/PROVIDER-ROUTES.md): Krea endpoint -> (node id, its Krea route id, the
+# node's ports Krea names another way). No node is generated for these and no
+# Krea price either: the node's own model_pricing.json entry prices its Krea
+# route. Each catalog entry keeps "foldedInto" (and "portFields", which the
+# Krea route client reads, backend execution/route_clients.py krea_inputs), and
+# --check ties the node's Krea route to the entry's request schema
+# (folded_problems).
+FOLDED = {
+    "/generate/video/black-forest-labs/flux-3-video": ("flux-3-video", "krea", {}),
+    "/generate/video/black-forest-labs/flux-video-edit": ("flux-video-edit", "krea", {}),
+    "/generate/enhance/black-forest-labs/flux-video-upscale": ("flux-video-upscale", "krea", {"video": "video_url"}),
+    "/generate/image/krea/krea-3": ("krea-3", "krea", {"images": "image_urls"}),
+}
+
+
 def _node_route():
     """backend/services/node_route.py (stdlib only), for the rule checks below."""
     import importlib.util
@@ -1124,9 +1140,95 @@ def refresh(raw, checked_on):
             "openapiSha256": hashlib.sha256(raw).hexdigest(), "models": models}
 
 
+def annotate_folded(model):
+    """Mark a catalog entry FOLDED names (in place): the node it folds into
+    and the ports it names another way."""
+    model.pop("foldedInto", None)
+    model.pop("portFields", None)
+    folded = FOLDED.get(model["endpoint"])
+    if folded:
+        model["foldedInto"] = folded[0]
+        if folded[2]:
+            model["portFields"] = dict(folded[2])
+    return model
+
+
+def folded_problems(catalog, registry):
+    """Every way a folded entry's node fails its Krea request schema: the node
+    or its Krea route is missing, the route's endpoint doesn't name the entry,
+    a param it sends (after ``rename``) isn't a request field, an option it
+    offers (after ``valueMap``) is outside the field's enum or range, or a
+    port it takes isn't a field (after ``portFields``)."""
+    node_route = _node_route()
+    problems = []
+    seen = set()
+    for key, model in catalog["models"].items():
+        folded = FOLDED.get(model["endpoint"])
+        if not folded:
+            continue
+        seen.add(model["endpoint"])
+        node_id, route_id, port_fields = folded
+        where = f"{key} (folded into {node_id}):"
+        definition = registry.get(node_id)
+        route = node_route.route_by_id(definition, route_id) if definition else None
+        if not route or route.get("provider") != "krea" or route.get("handler") != "krea":
+            problems.append(f"{where} {node_id} has no Krea route {route_id!r}")
+            continue
+        if route.get("endpoint") not in (key, model["endpoint"]):
+            problems.append(f"{where} route endpoint {route.get('endpoint')!r} doesn't name {model['endpoint']}")
+        properties = model["requestSchema"].get("properties", {})
+        rename = route.get("rename") or {}
+        value_map = route.get("valueMap") or {}
+        for param in node_route.route_param_definitions(definition, route_id):
+            name = param["key"]
+            if name in node_route.BILLING_PARAMS:
+                continue
+            field = rename.get(name, name)
+            if field not in properties:
+                problems.append(f"{where} param {name} sends {field!r}, which the request schema lacks")
+                continue
+            schema = simple_schema(properties[field])
+            mapped = value_map.get(name)
+            for option in param.get("options") or []:
+                value = option.get("value") if isinstance(option, dict) else option
+                sent = mapped.get(str(value), mapped.get(value)) if mapped else value
+                if "enum" in schema and sent not in schema["enum"]:
+                    problems.append(f"{where} {name}={value!r} sends {sent!r}, not in {schema['enum']}")
+            for bound, compare in (("min", "minimum"), ("max", "maximum")):
+                limit = param.get(bound)
+                if isinstance(limit, (int, float)) and compare in schema and (
+                        limit < schema[compare] if bound == "min" else limit > schema[compare]):
+                    problems.append(f"{where} {name} {bound} {limit} is outside {compare} {schema[compare]}")
+        refused = {port for port, rule in ((route.get("rules") or {}).get("ports") or {}).items()
+                   if isinstance(rule, dict) and rule.get("max") == 0}
+        for port in definition.get("inputPorts") or []:
+            if port["id"] in refused:
+                continue
+            field = port_fields.get(port["id"], port["id"])
+            if field not in properties:
+                problems.append(f"{where} port {port['id']} goes as {field!r}, which the request schema lacks")
+    for endpoint in sorted(set(FOLDED) - seen):
+        problems.append(f"FOLDED names {endpoint}, which the catalog doesn't have")
+    return problems
+
+
+def refresh_one(pinned, fresh, endpoint):
+    """``pinned`` with one entry, ``endpoint``'s, taken from ``fresh`` (a
+    refresh() result), stamped with the spec it came from. A full refresh
+    also drops and adds unrelated models, which saved graphs depend on."""
+    matches = [key for key, model in fresh["models"].items() if model["endpoint"] == endpoint]
+    if len(matches) != 1:
+        raise SystemExit(f"Krea's OpenAPI has no generation model at {endpoint}")
+    key = matches[0]
+    entry = {**fresh["models"][key], "fetchedAt": fresh["fetchedAt"], "openapiSha256": fresh["openapiSha256"]}
+    return {**pinned, "models": {**pinned["models"], key: entry}}
+
+
 def definitions(catalog):
     result = {}
     for node_id, model in catalog["models"].items():
+        if model.get("foldedInto"):
+            continue
         media_type = model["mediaType"]
         params, ports, json_params = fields_for(model["requestSchema"])
         params.insert(0, {"key": "_kreaAuth", "label": "Krea connection", "type": "enum",
@@ -1166,6 +1268,8 @@ def pricing_entries(catalog):
     onto its own request fields. Returns (entries, skipped reasons)."""
     entries, skipped = {}, {}
     for node_id, model in catalog["models"].items():
+        if model.get("foldedInto"):
+            continue  # its route-table node's own entry prices the Krea route
         krea_entry(node_id, model, catalog, entries, skipped)
         direct = direct_route_pricing(model["endpoint"])
         if direct or (model["endpoint"] in DIRECT_ROUTES and node_id in entries):
@@ -1309,9 +1413,14 @@ def main():
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--openapi", type=Path)
     parser.add_argument("--date", default=datetime.date.today().isoformat())
+    parser.add_argument("--only", metavar="ENDPOINT",
+                        help="with --refresh or --openapi: refresh just this Krea endpoint's entry, which keeps "
+                             "its own fetchedAt and openapiSha256; every other entry stays as pinned")
     args = parser.parse_args()
     if args.check and (args.refresh or args.openapi):
         parser.error("--check is offline; refresh separately")
+    if args.only and not (args.refresh or args.openapi):
+        parser.error("--only needs --refresh or --openapi")
     if args.refresh or args.openapi:
         if args.openapi:
             raw = args.openapi.read_bytes()
@@ -1319,8 +1428,16 @@ def main():
             with urllib.request.urlopen(SOURCE_URL, timeout=30) as response:
                 raw = response.read()
         catalog = refresh(raw, args.date)
+        if args.only:
+            catalog = refresh_one(json.loads(CATALOG.read_text()), catalog, args.only)
     else:
         catalog = json.loads(CATALOG.read_text())
+    # A change to FOLDED reaches the pinned entries too (--check: drift).
+    for model in catalog["models"].values():
+        annotate_folded(model)
+    problems = folded_problems(catalog, json.loads(REGISTRY.read_text()))
+    if problems:
+        raise SystemExit("Folded Krea models don't match their nodes:\n  " + "\n  ".join(problems))
     generated = definitions(catalog)
     prices, unpriced = pricing_entries(catalog)
     expected = {

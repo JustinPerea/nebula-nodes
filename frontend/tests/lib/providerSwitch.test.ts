@@ -3,6 +3,7 @@ import pricingCases from '../../../backend/tests/fixtures/pricing_cases.json';
 import routeCases from '../../../backend/tests/fixtures/route_cases.json';
 import { applyProviderPick, providerKeyWarnings, providerSwitchState, snapForRoute, type SwitchContext } from '../../src/lib/providerSwitch';
 import type { PricingTable } from '../../src/lib/pricing';
+import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import type { ModelNodeDefinition } from '../../src/types';
 
 /** The five-route fixture with its prices (pricing_cases.json `table`) and
@@ -103,6 +104,31 @@ describe('providerSwitchState', () => {
     const four = providerSwitchState(TABLE, { _provider: 'openrouter' }, context(keys, { wired: new Map([['images', 4]]) }));
     expect(four.blocked).toBe(false);
   });
+
+  it('counts FLUX 3 Video\'s start image, keyframes and end image against one ten-image cap', () => {
+    const video = (NODE_DEFINITIONS as Record<string, ModelNodeDefinition>)['flux-3-video'];
+    const keys = { BFL_API_KEY: KEY, FAL_KEY: KEY, REPLICATE_API_TOKEN: KEY };
+    const twelve = new Map([['start_image', 1], ['keyframes', 10], ['end_image', 1]]);
+    const state = providerSwitchState(video, {}, context(keys, { wired: twelve }));
+    expect(state.blocked).toBe(true);
+    expect(state.rows[0].label).toBe("Auto · can't run: too many images (start + keyframes + end) for Black Forest Labs");
+    for (const id of ['bfl', 'fal', 'replicate']) {
+      expect(state.rows.find((row) => row.id === id)?.block).toBe('Takes at most 10 images (start + keyframes + end)');
+    }
+    const ten = new Map([['start_image', 1], ['keyframes', 8], ['end_image', 1]]);
+    expect(providerSwitchState(video, {}, context(keys, { wired: ten })).blocked).toBe(false);
+  });
+
+  it("shows a route's note on its API row (Krea 3's early access), not on the plan row", () => {
+    const krea3 = (NODE_DEFINITIONS as Record<string, ModelNodeDefinition>)['krea-3'];
+    const state = providerSwitchState(krea3, {}, context({ KREA_API_TOKEN: KEY }));
+    expect(state.rows.map((row) => [row.id, row.info])).toEqual([
+      ['auto', undefined],
+      ['krea', "Early access: Krea 3 on Krea's API is for beta workspaces"],
+      ['krea:plan', undefined],
+      ['fal', undefined],
+    ]);
+  });
 });
 
 describe('snapForRoute (a person switching provider)', () => {
@@ -122,6 +148,19 @@ describe('snapForRoute (a person switching provider)', () => {
     expect(snapForRoute(TABLE, { resolution: '2k', safety_tolerance: 3 }, 'bfl')).toEqual({
       params: { resolution: '2k', safety_tolerance: 3 }, notes: [],
     });
+  });
+
+  it("turns off another route's setting the new route refuses and shows no control for (FLUX 3 Video's Draft)", () => {
+    const video = (NODE_DEFINITIONS as Record<string, ModelNodeDefinition>)['flux-3-video'];
+    expect(snapForRoute(video, { _provider: 'openrouter', draft: true }, 'openrouter')).toEqual({
+      params: { _provider: 'openrouter', draft: false }, notes: ["Draft (fast preview) isn't on OpenRouter: turned off"],
+    });
+    // Before the click the rows name the setting, not its value.
+    const before = providerSwitchState(video, { _provider: 'bfl', draft: true }, context({ BFL_API_KEY: KEY }));
+    expect(before.rows.find((row) => row.id === 'krea')?.block).toBe("Doesn't take draft");
+    // A route that offers the param keeps it, and an unset one is left alone.
+    expect(snapForRoute(video, { draft: true }, 'fal')).toEqual({ params: { draft: true }, notes: [] });
+    expect(snapForRoute(video, {}, 'krea')).toEqual({ params: {}, notes: [] });
   });
 
   it('snaps onto the route Auto takes when the person picks Auto', () => {
