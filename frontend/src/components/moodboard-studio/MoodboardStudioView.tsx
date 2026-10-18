@@ -4,6 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import {
   analyzeMoodboard,
   createMoodboard,
+  fetchMoodboard,
   fetchMoodboards,
   updateMoodboard,
 } from '../../lib/api';
@@ -99,26 +100,33 @@ export function MoodboardStudioView() {
     const current = () => !cancelled && isCurrent()
       && useAssetStudioDraftStore.getState().entries[key]?.revision === revision;
     patch({ loadError: null, saveError: null });
-    if (isDraftId) {
+    if (isDraftId || !moodboardEditorId) {
       initialize(moodboardEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft());
     } else {
-      void Promise.all([fetchMoodboards('global'), fetchMoodboards('project')]).then(([globalBoards, projectBoards]) => {
+      // Load the board by id. The scope it was opened with is only a hint (a
+      // node's Open button doesn't know it, and a list can be stale); the
+      // board's own projectId says where it lives.
+      void fetchMoodboard(moodboardEditorId).then((found) => {
         if (!current()) return;
-        const found = (moodboardEditorScope === 'project' ? projectBoards : globalBoards)
-          .find((candidate) => candidate.id === moodboardEditorId && (moodboardEditorScope !== 'project' || candidate.projectId === projectId));
-        if (found) {
-          setRailScope(found.projectId ? 'project' : 'global');
-          initialize(moodboardToDraft(found), found.id, found.thumbnail);
-        } else {
+        if (!found) {
           initialize(moodboardEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft(),
             null, '', 'Moodboard not found. Add images to save a new one.');
+          return;
         }
+        const scope: AssetScope = found.projectId ? 'project' : 'global';
+        if (scope !== moodboardEditorScope) {
+          enterMoodboardEditor(found.id, scope);
+          return;
+        }
+        setRailScope(scope);
+        initialize(moodboardToDraft(found), found.id, found.thumbnail);
       }).catch((err) => {
         if (current()) patch({ loadError: err instanceof Error ? err.message : 'Failed to load Moodboard.' });
       });
     }
     return () => { cancelled = true; };
-  }, [key, revision, loaded, projectReady, projectId, moodboardEditorId, moodboardEditorScope, initialize, patch, isDraftId, isCurrent]);
+  }, [key, revision, loaded, projectReady, projectId, moodboardEditorId, moodboardEditorScope, initialize, patch, isDraftId, isCurrent,
+    enterMoodboardEditor]);
 
   useEffect(() => {
     if (isDraftId && loaded && savedId && isCurrent()) enterMoodboardEditor(savedId, moodboardEditorScope);

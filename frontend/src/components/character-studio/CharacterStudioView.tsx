@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import {
   createCharacter,
-  fetchCharacters,
+  fetchCharacter,
   updateCharacter,
 } from '../../lib/api';
 import type { Character } from '../../types';
@@ -64,7 +64,8 @@ const AUTOSAVE_DEBOUNCE_MS = 600;
  *  uiStore.characterEditorId is set (viewMode === 'character-editor') — mirrors
  *  CinemaStudioView's mount pattern. Owns the load + draft/persist lifecycle:
  *
- *  - Existing id  → load via fetchCharacters + find → edit locally →
+ *  - Existing id  → load via fetchCharacter(id), in the scope its projectId
+ *    gives → edit locally →
  *    debounced updateCharacter(id, …) once valid.
  *  - 'new' / unresolved id → fresh local DRAFT. The first time it becomes valid
  *    (≥3 views + name) we createCharacter(…), get the real id, and switch
@@ -99,26 +100,33 @@ export function CharacterStudioView() {
     const current = () => !cancelled && isCurrent()
       && useAssetStudioDraftStore.getState().entries[key]?.revision === revision;
     patch({ loadError: null, saveError: null });
-    if (isDraftId) {
+    if (isDraftId || !characterEditorId) {
       initialize(characterEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft());
     } else {
-      void Promise.all([fetchCharacters('global'), fetchCharacters('project')]).then(([globalChars, projectChars]) => {
+      // Load the character by id. The scope it was opened with is only a hint
+      // (a node's Open button doesn't know it, and a list can be stale); the
+      // character's own projectId says where it lives.
+      void fetchCharacter(characterEditorId).then((found) => {
         if (!current()) return;
-        const found = (characterEditorScope === 'project' ? projectChars : globalChars)
-          .find((candidate) => candidate.id === characterEditorId && (characterEditorScope !== 'project' || candidate.projectId === projectId));
-        if (found) {
-          setRailScope(found.projectId ? 'project' : 'global');
-          initialize(characterToDraft(found), found.id, found.thumbnail);
-        } else {
+        if (!found) {
           initialize(characterEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft(),
             null, '', 'Character not found — it may have been deleted. Add ≥3 reference views to save a new one.');
+          return;
         }
+        const scope: AssetScope = found.projectId ? 'project' : 'global';
+        if (scope !== characterEditorScope) {
+          enterCharacterEditor(found.id, scope);
+          return;
+        }
+        setRailScope(scope);
+        initialize(characterToDraft(found), found.id, found.thumbnail);
       }).catch((err) => {
         if (current()) patch({ loadError: err instanceof Error ? err.message : 'Failed to load Character.' });
       });
     }
     return () => { cancelled = true; };
-  }, [key, revision, loaded, projectReady, projectId, characterEditorId, characterEditorScope, initialize, patch, isDraftId, isCurrent]);
+  }, [key, revision, loaded, projectReady, projectId, characterEditorId, characterEditorScope, initialize, patch, isDraftId, isCurrent,
+    enterCharacterEditor]);
 
   useEffect(() => {
     if (isDraftId && loaded && savedId && isCurrent()) enterCharacterEditor(savedId, characterEditorScope);

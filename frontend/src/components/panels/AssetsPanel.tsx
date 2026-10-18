@@ -54,10 +54,19 @@ export function AssetsPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading gate before async fetch; not derived state, does not cascade
     setLoading(true);
     setError(null);
+    // A list that arrives after the tab or scope changed is dropped: shown
+    // under the new tab, its items would open with the wrong scope.
     const load = async () => {
-      if (tab === 'characters') setCharacters(await fetchCharacters(scope));
-      else if (tab === 'moodboards') setMoodboards(await fetchMoodboards(scope));
-      else setPresets(await fetchPresets(scope));
+      if (tab === 'characters') {
+        const list = await fetchCharacters(scope);
+        if (!cancelled) setCharacters(list);
+      } else if (tab === 'moodboards') {
+        const list = await fetchMoodboards(scope);
+        if (!cancelled) setMoodboards(list);
+      } else {
+        const list = await fetchPresets(scope);
+        if (!cancelled) setPresets(list);
+      }
     };
     load()
       .catch((err) => {

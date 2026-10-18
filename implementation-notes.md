@@ -1,5 +1,13 @@
 # Implementation Notes
 
+## 2026-10-18 — Studios open a board or character in the scope it lives in
+
+- **What a lane saw.** Double-clicking a board under the Assets panel's Project tab, in a tab without the person link, left Moodboard Studio on "Loading Moodboard...". An isolated repro (backend 8793, Vite 5793, 8000-8010 and the Vite proxy blocked, zero hits) didn't show a spinner that stays. The same trigger was worse: the studio said "Moodboard not found. Add images to save a new one." over an empty board, and adding images there would have made a second board. A tab with the person link behaved the same way.
+- **Cause.** The studios looked the record up in the list for the scope they were opened with, so a record opened under the other scope looked missing. Two ways in: the Moodboard and Character nodes' open buttons (and the stored-asset picker) pass no scope, which defaults to Global, so every project board or character opened from its node showed as missing; and the Assets panel set a list even after the tab or scope changed, so a slow Global list could land under the Project tab.
+- **Fix.** Both studios load the record by id (`fetchMoodboard` / `fetchCharacter`), and its `projectId` decides the scope: on a mismatch the studio re-enters itself in the right scope, which picks the right draft key. A record from another project opens too (the node in this project uses it). The Assets panel drops a list that arrives after its tab or scope changed. The studio rails already did this.
+- **Not done.** Callers still pass a scope. It's now only a hint, so a wrong one costs one extra load.
+- **Tests.** `AssetStudioDrafts.test.tsx` gets four new tests: a project board and a project character opened from their node, a global board opened as project, and a deleted board still showing not found. The first three fail on main. `AssetsPanel.test.tsx` is new: a late Global list is dropped, and it fails on main. `MoodboardStudioAnalysis.test.tsx` mocks the by-id fetch. Live, in both tab kinds: each board and the project character open as themselves.
+
 ## 2026-10-18 — Files a run passes along no longer log "escaped run directory"
 
 GM - Design saw a Moodboard run log `[engine] output …/chat-uploads/<hash> escaped run directory …; excluding from manifest` once per board image (32 lines). An Image Input pointing at an upload logs it too.
