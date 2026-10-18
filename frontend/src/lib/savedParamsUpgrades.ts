@@ -1,5 +1,3 @@
-import type { RunGraphSnapshot } from './runHistory';
-
 /**
  * One-time param upgrades of values saved in the browser.
  *
@@ -25,6 +23,12 @@ import type { RunGraphSnapshot } from './runHistory';
  * backend (one that reports no version is 0) stops and loads nothing from it
  * (lib/paramsOutdated.ts, store/projectStore.ts). So no tab saves or runs
  * values from before an upgrade with rules that don't know about it.
+ *
+ * Builds also carry the version: vite-plugins/buildStamp.ts writes it to
+ * nebula-build.json, and the desktop app refuses at launch to open a build
+ * whose stamp differs from /api/health's `paramsVersion`
+ * (desktop/frontend-build.mjs). Keep this module free of imports; the stamp
+ * plugin reads it under the Node tsconfig.
  *
  * Version 1 (Justin, 2026-10-17): a claude-chat value on Claude Opus 4.6,
  * Sonnet 4.6, Opus 4.7 or Opus 4.8 with Extended Thinking on, holding Max
@@ -64,9 +68,19 @@ export function upgradeSavedParams(
   return null;
 }
 
+/** The part of a run recipe (runHistory.ts RunGraphSnapshot) an upgrade reads. */
+interface UpgradableSnapshot {
+  nodes: ReadonlyArray<{ definitionId: unknown; params: unknown }>;
+}
+
 /** A run recipe saved at `version` as it should run now. Never mutates its
- * input, and returns the same object when nothing changes. */
-export function upgradeRunSnapshot(snapshot: RunGraphSnapshot, version: number): RunGraphSnapshot {
+ * input, and returns the same object when nothing changes.
+ *
+ * Typed structurally rather than importing RunGraphSnapshot so this module
+ * imports nothing: the build's stamp plugin (vite-plugins/buildStamp.ts)
+ * reads GRAPH_PARAMS_VERSION from here under the Node tsconfig, where the
+ * browser-only runHistory.ts doesn't typecheck. */
+export function upgradeRunSnapshot<T extends UpgradableSnapshot>(snapshot: T, version: number): T {
   if (version >= GRAPH_PARAMS_VERSION) return snapshot;
   let changed = false;
   const nodes = snapshot.nodes.map((node) => {
