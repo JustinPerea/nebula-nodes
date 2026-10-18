@@ -34,7 +34,7 @@ on and what to re-check. Written in our own words from the vendor docs
 | Price | input tokens only, $0.042 / Mtok; images billed as input tokens. Measured: ~305 tokens for a short text question, ~2,750 more per 1024 x 1024 image |
 | Context | 64k per request / 32k per question; 262k with the long-context header |
 | Headers | `TypeSafe-Danger-Zone-Images: true` with images or Box; `TypeSafe-Danger-Zone-Long-Context: true` for long context |
-| Retries | 408, 429, 5xx (529 included), max 2, Retry-After honoured |
+| Retries | 408, 429, 5xx (529 included) and connection failures (a mid-response TLS error included), max 2, Retry-After honoured |
 | Request id | `x-typesafe-request-id` response header |
 
 ## Nodes

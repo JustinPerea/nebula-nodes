@@ -4,6 +4,8 @@ import { apiFetch } from './backend';
 import { formatUsd, formatUsdRange } from './pricing';
 import { resolveAnchor, type Point } from './agentCursorMotion';
 import type { ProposalPersonValues, ProposalView } from './wsClient';
+import { BILLING_PARAM_LABELS, providerChoiceLabel } from './billingParams';
+import { PROVIDER_PARAM } from './directRoute';
 
 export type { ProposalPersonValues, ProposalView } from './wsClient';
 
@@ -232,12 +234,18 @@ export function fullValue(value: unknown): string {
   return JSON.stringify(value) ?? String(value);
 }
 
-/** A Krea node's billing mode is the one internal param a proposal may change
- * (backend main._refuse_agent_krea_billing_change), so the bar names it plainly. */
+/** Who bills a run (lib/billingParams.ts) is the only internal state a
+ * proposal may change (backend main._refuse_agent_billing_change), so the bar
+ * names it plainly: a route-table node's provider, a Krea node's billing mode. */
 const KREA_BILLING_KEY = '_kreaAuth';
 const KREA_BILLING_VALUES: Record<string, string> = { 'api-token': 'API token balance', mcp: 'Krea plan' };
 
 function changeLine(key: string, to: unknown, from?: unknown, hasFrom = false): ChangeLine {
+  if (key === PROVIDER_PARAM) {
+    // A node that never set it runs on Auto, the default.
+    return { key: BILLING_PARAM_LABELS[PROVIDER_PARAM], to: providerChoiceLabel(to),
+      ...(hasFrom ? { from: providerChoiceLabel(from) } : {}) };
+  }
   if (key === KREA_BILLING_KEY) {
     // A node that never set it bills the API token, the default.
     const name = (value: unknown) => (value === null || value === undefined || value === ''

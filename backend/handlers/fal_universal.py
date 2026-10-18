@@ -140,7 +140,13 @@ async def handle_fal_universal(
     inputs: dict[str, PortValueDict],
     api_keys: dict[str, str],
     emit: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
+    *,
+    max_polls: int = 300,
+    poll_interval: float = 2.0,
 ) -> dict[str, Any]:
+    """Run one fal queue job. The poll budget defaults to 10 minutes;
+    callers with longer jobs (FLUX 3 video, execution/route_clients.py
+    run_fal) pass their own."""
     api_key = api_keys.get("FAL_KEY")
     if not api_key:
         raise MissingCredentialError("FAL_KEY is required")
@@ -302,9 +308,6 @@ async def handle_fal_universal(
         status_url = submit_data.get("status_url") or f"{FAL_QUEUE_BASE}/{endpoint_id}/requests/{request_id}/status"
         result_url = submit_data.get("response_url") or f"{FAL_QUEUE_BASE}/{endpoint_id}/requests/{request_id}"
 
-        max_polls = 300
-        poll_interval = 2.0
-
         for poll_num in range(1, max_polls + 1):
             try:
                 await asyncio.sleep(poll_interval)
@@ -330,6 +333,9 @@ async def handle_fal_universal(
                 raise RuntimeError(f"FAL job failed: {error_msg}")
             # IN_QUEUE or IN_PROGRESS — keep polling
         else:
+            # Out of polls: stop the job upstream so it doesn't finish and
+            # bill a result Nebula has stopped waiting for.
+            _schedule_fal_cancel(_fal_cancel_url(submit_data, endpoint_id, request_id), api_key)
             raise RuntimeError(f"FAL job timed out after {max_polls} polls")
 
         # Step 3: Fetch result
@@ -496,6 +502,7 @@ async def _fal_queue_run(
             if status in ("FAILED", "CANCELLED"):
                 raise RuntimeError(f"FAL job failed: {status_data.get('error', status)}")
         else:
+            _schedule_fal_cancel(_fal_cancel_url(submit_data, endpoint_id, request_id), api_key)
             raise RuntimeError(f"FAL job timed out after {max_polls} polls")
 
         result_resp = await client.get(result_url, headers=headers)

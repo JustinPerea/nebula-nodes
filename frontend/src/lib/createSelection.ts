@@ -1,6 +1,7 @@
 import type { Node, Edge } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
+import { isRecipeParam } from './billingParams';
 import { kreaModeFor, supportsKreaAccount } from './kreaConnection';
 
 const RAW_INPUT_TYPES = ['text-input', 'image-input', 'reroute'];
@@ -50,10 +51,10 @@ export function composerStateFromSelection(
 
   const modelNode = modelNodes[0];
 
-  // Billing choice is recipe data; strip only the other private/runtime keys.
+  // Who bills the run is recipe data; strip only the other private/runtime keys.
   const params: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(modelNode.data.params ?? {})) {
-    if (!k.startsWith('_') || k === '_kreaAuth') params[k] = v;
+    if (isRecipeParam(k)) params[k] = v;
   }
   if (supportsKreaAccount(NODE_DEFINITIONS[modelNode.data.definitionId])) {
     params._kreaAuth = kreaModeFor(NODE_DEFINITIONS[modelNode.data.definitionId], modelNode.data.params);

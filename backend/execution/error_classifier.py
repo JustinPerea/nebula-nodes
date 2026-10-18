@@ -86,6 +86,12 @@ _NETWORK_MARKERS = (
     "failed to establish a new connection",
     "max retries exceeded",
     "network is unreachable",
+    # A TLS error mid-response reaches a handler as a raw ssl.SSLError
+    # (services/http_errors.py), e.g. "[SSL: SSLV3_ALERT_BAD_RECORD_MAC] ...".
+    "bad record mac",
+    "decryption failed",
+    "ssl/tls alert",
+    "record layer failure",
 )
 _INVALID_MARKERS = (
     "must be",

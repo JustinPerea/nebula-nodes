@@ -1,0 +1,79 @@
+{
+  "version": 2,
+  "name": "Krea FLUX nodes before the fold (saved 2026-10-14)",
+  "createdAt": "2026-10-14T18:00:00.000Z",
+  "nodes": [
+    {
+      "id": "prompt-1",
+      "type": "model-node",
+      "position": { "x": 0, "y": 0 },
+      "data": { "label": "Text Input", "definitionId": "text-input", "params": { "value": "A comet over a frozen lake" }, "state": "idle" }
+    },
+    {
+      "id": "video-1",
+      "type": "model-node",
+      "position": { "x": 400, "y": 0 },
+      "data": {
+        "label": "Comet shot",
+        "definitionId": "krea-video-black-forest-labs-flux-3-video",
+        "params": {
+          "_kreaAuth": "mcp",
+          "prompt": "typed but overridden by the wired prompt",
+          "start_image": "https://example.com/start.png",
+          "duration": 8,
+          "resolution": "1080p",
+          "aspect_ratio": "21:9",
+          "generate_audio": false
+        },
+        "outputs": {
+          "video": { "type": "Video", "value": "https://example.com/comet.mp4" },
+          "videos": { "type": "Array", "value": ["https://example.com/comet.mp4"] },
+          "job": { "type": "Any", "value": { "id": "job-1" } }
+        },
+        "state": "complete"
+      }
+    },
+    {
+      "id": "edit-1",
+      "type": "model-node",
+      "position": { "x": 800, "y": 0 },
+      "data": {
+        "label": "Flux Video Edit (Krea)",
+        "definitionId": "krea-video-black-forest-labs-flux-video-edit",
+        "params": { "prompt": "Make it night" },
+        "state": "idle"
+      }
+    },
+    {
+      "id": "upscale-1",
+      "type": "model-node",
+      "position": { "x": 1200, "y": 0 },
+      "data": {
+        "label": "Flux Video Upscale (Krea)",
+        "definitionId": "krea-enhance-black-forest-labs-flux-video-upscale",
+        "params": { "_kreaAuth": "api-token", "creativity": "precise", "upscale_factor": 2.5, "prompt": "" },
+        "state": "idle"
+      }
+    },
+    {
+      "id": "pick-1",
+      "type": "model-node",
+      "position": { "x": 800, "y": 300 },
+      "data": { "label": "Array Selector", "definitionId": "array-selector", "params": {}, "state": "idle" }
+    },
+    {
+      "id": "preview-1",
+      "type": "model-node",
+      "position": { "x": 1600, "y": 0 },
+      "data": { "label": "Preview", "definitionId": "preview", "params": {}, "state": "idle" }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "prompt-1", "sourceHandle": "text", "target": "video-1", "targetHandle": "prompt", "type": "typed-edge", "data": { "dataType": "Text" } },
+    { "id": "e2", "source": "video-1", "sourceHandle": "video", "target": "edit-1", "targetHandle": "start_video", "type": "typed-edge", "data": { "dataType": "Video" } },
+    { "id": "e3", "source": "edit-1", "sourceHandle": "video", "target": "upscale-1", "targetHandle": "video_url", "type": "typed-edge", "data": { "dataType": "Video" } },
+    { "id": "e4", "source": "video-1", "sourceHandle": "videos", "target": "pick-1", "targetHandle": "array", "type": "typed-edge", "data": { "dataType": "Array" } },
+    { "id": "e5", "source": "upscale-1", "sourceHandle": "job", "target": "preview-1", "targetHandle": "input", "type": "typed-edge", "data": { "dataType": "Any" } }
+  ],
+  "viewport": { "x": 0, "y": 0, "zoom": 1 }
+}

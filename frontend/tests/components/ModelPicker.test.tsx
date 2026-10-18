@@ -4,7 +4,7 @@ import { ModelPicker } from '../../src/components/create-studio/ModelPicker';
 import { CreateComposer } from '../../src/components/create-studio/CreateComposer';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { getCreateModels } from '../../src/lib/createModels';
-import { CATEGORY_LABELS, providerLabel } from '../../src/lib/modelDiscovery';
+import { CATEGORY_LABELS, matchesModelProvider, providerLabel } from '../../src/lib/modelDiscovery';
 
 // A Krea-only copy: GPT Image 2 (Krea) also runs on OpenAI with an OpenAI key.
 const KREA_IMAGE = 'krea-image-openai-gpt-image';
@@ -41,7 +41,9 @@ describe('Create model picker provider filter', () => {
     expect(modelRow(KREA_VIDEO)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: modelName('nano-banana') })).not.toBeInTheDocument();
     expect(screen.getAllByRole('button').filter((button) => button.hasAttribute('aria-pressed')))
-      .toHaveLength(getCreateModels().filter((model) => model.apiProvider === 'krea').length);
+      .toHaveLength(getCreateModels().filter((model) => matchesModelProvider(model, 'krea')).length);
+    // A route-table node with a Krea route is a Krea model too (FLUX 3 Video).
+    expect(modelRow('flux-3-video')).toBeInTheDocument();
   });
 
   it('combines search with provider filtering and retains the query when switching providers', () => {

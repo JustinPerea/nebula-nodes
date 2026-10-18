@@ -30,6 +30,10 @@ from execution.error_classifier import classify_error
         # --- network ---
         ("Connection refused (ECONNREFUSED)", "network", True),
         ("Max retries exceeded with url", "network", True),
+        ("[SSL: SSLV3_ALERT_BAD_RECORD_MAC] ssl/tls alert bad record mac (_ssl.c:2559)", "network", True),
+        ("[SSL: DECRYPTION_FAILED_OR_BAD_RECORD_MAC] decryption failed or bad record mac (_ssl.c:2559)",
+         "network", True),
+        ("[SSL] record layer failure (_ssl.c:2559)", "network", True),
         # --- invalid input (generic 4xx WITHOUT a moderation marker) ---
         ("Parameter 'aspect_ratio' must be one of 16:9, 1:1", "invalid_input", False),
         ("422 Unprocessable Entity: validation error", "invalid_input", False),

@@ -1,0 +1,3260 @@
+{
+ "_read": "2026-10-15",
+ "_source": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<endpoint>",
+ "schemas": {
+  "blackforestlabs/flux-3/draft-enhance": {
+   "properties": {
+    "draft_cache_url": {
+     "description": "URL or data URI of the encrypted draft cache bundle to enhance.",
+     "title": "Draft Cache URL",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "The safety tolerance level for the generated video. 0 is the strictest and 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    }
+   },
+   "required": [
+    "draft_cache_url"
+   ],
+   "title": "Flux3DraftEnhanceInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/edit-image": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Output aspect ratio. Auto uses the first reference image when editing.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "3:2",
+      "7:5",
+      "4:3",
+      "5:4",
+      "1:1",
+      "4:5",
+      "3:4",
+      "5:7",
+      "2:3",
+      "9:16",
+      "1:2"
+     ],
+     "title": "Aspect Ratio",
+     "type": "string"
+    },
+    "enable_prompt_expansion": {
+     "default": false,
+     "description": "Expand the prompt while preserving its intent and reference roles.",
+     "title": "Enable Prompt Expansion",
+     "type": "boolean"
+    },
+    "image_urls": {
+     "description": "Reference image URLs or data URIs, in image 1 through image 10 order. Each must be at least 256 pixels per dimension. Oversized images are automatically downscaled to at most 4 megapixels while preserving aspect ratio. The first controls auto aspect ratio.",
+     "items": {
+      "type": "string"
+     },
+     "maxItems": 10,
+     "minItems": 1,
+     "title": "Image Urls",
+     "type": "array"
+    },
+    "output_format": {
+     "default": "jpeg",
+     "description": "The format of the generated image.",
+     "enum": [
+      "jpeg",
+      "png"
+     ],
+     "title": "Output Format",
+     "type": "string"
+    },
+    "prompt": {
+     "description": "The prompt to generate an image from.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "resolution": {
+     "default": "1k",
+     "description": "Output resolution tier. 4k can take several minutes.",
+     "enum": [
+      "512sq",
+      "768sq",
+      "1k",
+      "2k",
+      "4k"
+     ],
+     "title": "Resolution",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Safety tolerance, from 0 (strictest) to 4.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "sync_mode": {
+     "default": false,
+     "description": "Return the image as a data URI instead of storing it in request history.",
+     "title": "Sync Mode",
+     "type": "boolean"
+    },
+    "version": {
+     "const": "latest",
+     "default": "latest",
+     "description": "The model version.",
+     "title": "Version",
+     "type": "string"
+    }
+   },
+   "required": [
+    "prompt",
+    "image_urls"
+   ],
+   "title": "Flux3ImageEditInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/edit-video": {
+   "properties": {
+    "prompt": {
+     "description": "The text prompt describing how to change the input video. The clip is re-rendered preserving motion, timing, and framing.",
+     "maxLength": 4096,
+     "title": "Prompt",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "The safety tolerance level for the generated video. 0 is the strictest and 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "video_url": {
+     "description": "URL of the input video. MP4, under 50 MB and under 15 seconds.",
+     "title": "Video URL",
+     "type": "string"
+    }
+   },
+   "required": [
+    "prompt",
+    "video_url"
+   ],
+   "title": "Flux3EditVideoInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/extend-video": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Aspect ratio of the generated video. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "4:3",
+      "1:1",
+      "3:4",
+      "9:16"
+     ],
+     "title": "Aspect Ratio",
+     "type": "string"
+    },
+    "duration": {
+     "default": "auto",
+     "description": "Duration of the generated video in seconds. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+     ],
+     "title": "Duration"
+    },
+    "generate_audio": {
+     "default": true,
+     "description": "Whether to generate audio for the video.",
+     "title": "Generate Audio",
+     "type": "boolean"
+    },
+    "prompt": {
+     "description": "The text prompt describing how the video continues from the source clip's final frames.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "resolution": {
+     "default": "720p",
+     "description": "Resolution of the generated video. `1080p`, `1440p` (2K) and `2160p` (4K) are finished by the video upsampler; exact dimensions depend on the aspect ratio.",
+     "enum": [
+      "720p",
+      "1080p",
+      "1440p",
+      "2160p"
+     ],
+     "title": "Resolution",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "The safety tolerance level for the generated video. 0 is the strictest and 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "video_url": {
+     "description": "URL of the input video. MP4, under 50 MB and under 15 seconds.",
+     "title": "Video URL",
+     "type": "string"
+    }
+   },
+   "required": [
+    "prompt",
+    "video_url"
+   ],
+   "title": "Flux3ExtendVideoInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/extend-video/draft": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Aspect ratio of the generated draft. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "4:3",
+      "1:1",
+      "3:4",
+      "9:16"
+     ],
+     "title": "Aspect Ratio",
+     "type": "string"
+    },
+    "duration": {
+     "default": "auto",
+     "description": "Draft duration in whole seconds from 5 through 20, or `auto`.",
+     "enum": [
+      "auto",
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+     ],
+     "title": "Duration"
+    },
+    "generate_audio": {
+     "default": true,
+     "description": "Whether to generate audio for the draft video.",
+     "title": "Generate Audio",
+     "type": "boolean"
+    },
+    "prompt": {
+     "description": "The text prompt describing the draft video.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "The safety tolerance level for the generated video. 0 is the strictest and 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "video_url": {
+     "description": "URL or data URI of the source MP4, at most 50 MiB.",
+     "title": "Video URL",
+     "type": "string"
+    }
+   },
+   "required": [
+    "prompt",
+    "video_url"
+   ],
+   "title": "Flux3ExtendVideoDraftInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/first-last-frame-to-video": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Aspect ratio of the generated video. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "4:3",
+      "1:1",
+      "3:4",
+      "9:16"
+     ],
+     "title": "Aspect Ratio",
+     "type": "string"
+    },
+    "duration": {
+     "default": 5,
+     "description": "Duration of the generated video in seconds. An explicit duration is required to place the end frame.",
+     "enum": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+     ],
+     "title": "Duration",
+     "type": "integer"
+    },
+    "end_image_url": {
+     "description": "URL of the image used as the last frame of the video (PNG, JPEG, or WebP).",
+     "title": "End Image URL",
+     "type": "string"
+    },
+    "generate_audio": {
+     "default": true,
+     "description": "Whether to generate audio for the video.",
+     "title": "Generate Audio",
+     "type": "boolean"
+    },
+    "prompt": {
+     "description": "The text prompt describing the video you want to generate.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "resolution": {
+     "default": "720p",
+     "description": "Resolution of the generated video. `1080p`, `1440p` (2K) and `2160p` (4K) are finished by the video upsampler; exact dimensions depend on the aspect ratio.",
+     "enum": [
+      "720p",
+      "1080p",
+      "1440p",
+      "2160p"
+     ],
+     "title": "Resolution",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "The safety tolerance level for the generated video. 0 is the strictest and 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "start_image_url": {
+     "description": "URL of the image used as the first frame of the video (PNG, JPEG, or WebP).",
+     "title": "Start Image URL",
+     "type": "string"
+    }
+   },
+   "required": [
+    "prompt",
+    "start_image_url",
+    "end_image_url"
+   ],
+   "title": "Flux3FirstLastFrameToVideoInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/first-last-frame-to-video/draft": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Aspect ratio of the generated draft. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "4:3",
+      "1:1",
+      "3:4",
+      "9:16"
+     ],
+     "title": "Aspect Ratio",
+     "type": "string"
+    },
+    "duration": {
+     "default": 5,
+     "description": "Draft duration in whole seconds from 5 through 20. An explicit duration pins the two images to the video boundaries.",
+     "enum": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+     ],
+     "title": "Duration",
+     "type": "integer"
+    },
+    "end_image_url": {
+     "description": "URL or data URI of the image used as the last frame of the draft.",
+     "title": "End Image URL",
+     "type": "string"
+    },
+    "generate_audio": {
+     "default": true,
+     "description": "Whether to generate audio for the draft video.",
+     "title": "Generate Audio",
+     "type": "boolean"
+    },
+    "prompt": {
+     "description": "The text prompt describing the draft video.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "The safety tolerance level for the generated video. 0 is the strictest and 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "start_image_url": {
+     "description": "URL or data URI of the image used as the first frame of the draft.",
+     "title": "Start Image URL",
+     "type": "string"
+    }
+   },
+   "required": [
+    "prompt",
+    "start_image_url",
+    "end_image_url"
+   ],
+   "title": "Flux3FirstLastFrameToVideoDraftInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/image-to-video": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Aspect ratio of the generated video. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "4:3",
+      "1:1",
+      "3:4",
+      "9:16"
+     ],
+     "title": "Aspect Ratio",
+     "type": "string"
+    },
+    "duration": {
+     "default": "auto",
+     "description": "Duration of the generated video in seconds. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+     ],
+     "title": "Duration"
+    },
+    "generate_audio": {
+     "default": true,
+     "description": "Whether to generate audio for the video.",
+     "title": "Generate Audio",
+     "type": "boolean"
+    },
+    "image_url": {
+     "description": "URL of the image the video starts from (PNG, JPEG, or WebP).",
+     "title": "Image URL",
+     "type": "string"
+    },
+    "prompt": {
+     "description": "The text prompt describing the video you want to generate.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "resolution": {
+     "default": "720p",
+     "description": "Resolution of the generated video. `1080p`, `1440p` (2K) and `2160p` (4K) are finished by the video upsampler; exact dimensions depend on the aspect ratio.",
+     "enum": [
+      "720p",
+      "1080p",
+      "1440p",
+      "2160p"
+     ],
+     "title": "Resolution",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "The safety tolerance level for the generated video. 0 is the strictest and 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    }
+   },
+   "required": [
+    "prompt",
+    "image_url"
+   ],
+   "title": "Flux3ImageToVideoInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/image-to-video/draft": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Aspect ratio of the generated draft. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "4:3",
+      "1:1",
+      "3:4",
+      "9:16"
+     ],
+     "title": "Aspect Ratio",
+     "type": "string"
+    },
+    "duration": {
+     "default": "auto",
+     "description": "Draft duration in whole seconds from 5 through 20, or `auto`.",
+     "enum": [
+      "auto",
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+     ],
+     "title": "Duration"
+    },
+    "generate_audio": {
+     "default": true,
+     "description": "Whether to generate audio for the draft video.",
+     "title": "Generate Audio",
+     "type": "boolean"
+    },
+    "image_url": {
+     "description": "URL or data URI of the opening keyframe image.",
+     "title": "Image URL",
+     "type": "string"
+    },
+    "prompt": {
+     "description": "The text prompt describing the draft video.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "The safety tolerance level for the generated video. 0 is the strictest and 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    }
+   },
+   "required": [
+    "prompt",
+    "image_url"
+   ],
+   "title": "Flux3ImageToVideoDraftInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/keyframes-to-video": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Aspect ratio of the generated video. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "4:3",
+      "1:1",
+      "3:4",
+      "9:16"
+     ],
+     "title": "Aspect Ratio",
+     "type": "string"
+    },
+    "duration": {
+     "default": 5,
+     "description": "Duration of the generated video in seconds. An explicit duration is required to validate keyframe positions.",
+     "enum": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+     ],
+     "title": "Duration",
+     "type": "integer"
+    },
+    "generate_audio": {
+     "default": true,
+     "description": "Whether to generate audio for the video.",
+     "title": "Generate Audio",
+     "type": "boolean"
+    },
+    "keyframes": {
+     "description": "Keyframe images pinned to frame positions in the generated video. Up to 10 keyframes with unique `frame_index` values.",
+     "items": {
+      "properties": {
+       "frame_index": {
+        "description": "Frame position of this keyframe in the generated 24 fps video. Must be unique and at most `duration * 24`.",
+        "minimum": 0,
+        "title": "Frame Index",
+        "type": "integer"
+       },
+       "image_url": {
+        "description": "URL of the keyframe image (PNG, JPEG, or WebP).",
+        "title": "Image URL",
+        "type": "string"
+       }
+      },
+      "required": [
+       "image_url",
+       "frame_index"
+      ],
+      "title": "Flux3Keyframe",
+      "type": "object"
+     },
+     "maxItems": 10,
+     "minItems": 1,
+     "title": "Keyframes",
+     "type": "array"
+    },
+    "prompt": {
+     "description": "The text prompt describing the video you want to generate.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "resolution": {
+     "default": "720p",
+     "description": "Resolution of the generated video. `1080p`, `1440p` (2K) and `2160p` (4K) are finished by the video upsampler; exact dimensions depend on the aspect ratio.",
+     "enum": [
+      "720p",
+      "1080p",
+      "1440p",
+      "2160p"
+     ],
+     "title": "Resolution",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "The safety tolerance level for the generated video. 0 is the strictest and 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    }
+   },
+   "required": [
+    "prompt",
+    "keyframes"
+   ],
+   "title": "Flux3KeyframesToVideoInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/keyframes-to-video/draft": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Aspect ratio of the generated draft. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "4:3",
+      "1:1",
+      "3:4",
+      "9:16"
+     ],
+     "title": "Aspect Ratio",
+     "type": "string"
+    },
+    "duration": {
+     "default": 5,
+     "description": "Draft duration in whole seconds from 5 through 20. An explicit duration is required to validate keyframe positions.",
+     "enum": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+     ],
+     "title": "Duration",
+     "type": "integer"
+    },
+    "generate_audio": {
+     "default": true,
+     "description": "Whether to generate audio for the draft video.",
+     "title": "Generate Audio",
+     "type": "boolean"
+    },
+    "keyframes": {
+     "description": "Keyframe images pinned to frame positions in the generated draft. Up to 10 keyframes with unique `frame_index` values.",
+     "items": {
+      "properties": {
+       "frame_index": {
+        "description": "Frame position of this keyframe in the generated 24 fps video. Must be unique and at most `duration * 24`.",
+        "minimum": 0,
+        "title": "Frame Index",
+        "type": "integer"
+       },
+       "image_url": {
+        "description": "URL of the keyframe image (PNG, JPEG, or WebP).",
+        "title": "Image URL",
+        "type": "string"
+       }
+      },
+      "required": [
+       "image_url",
+       "frame_index"
+      ],
+      "title": "Flux3Keyframe",
+      "type": "object"
+     },
+     "maxItems": 10,
+     "minItems": 1,
+     "title": "Keyframes",
+     "type": "array"
+    },
+    "prompt": {
+     "description": "The text prompt describing the draft video.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "The safety tolerance level for the generated video. 0 is the strictest and 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    }
+   },
+   "required": [
+    "prompt",
+    "keyframes"
+   ],
+   "title": "Flux3KeyframesToVideoDraftInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/klein/base/edit-image": {
+   "properties": {
+    "bounding_boxes": {
+     "anyOf": [
+      {
+       "items": {
+        "properties": {
+         "box": {
+          "anyOf": [
+           {
+            "properties": {
+             "x_max": {
+              "description": "Right edge as a fraction of the image width (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "X Max",
+              "type": "number"
+             },
+             "x_min": {
+              "description": "Left edge as a fraction of the image width (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "X Min",
+              "type": "number"
+             },
+             "y_max": {
+              "description": "Bottom edge as a fraction of the image height (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Y Max",
+              "type": "number"
+             },
+             "y_min": {
+              "description": "Top edge as a fraction of the image height (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Y Min",
+              "type": "number"
+             }
+            },
+            "required": [
+             "x_min",
+             "y_min",
+             "x_max",
+             "y_max"
+            ],
+            "title": "Box",
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "description": "Where the object goes in the output image, as on text-to-image. Use instead of `source_box`/`target_box`."
+         },
+         "description": {
+          "description": "What to draw in this box: the object and its look.",
+          "maxLength": 500,
+          "title": "Description",
+          "type": "string"
+         },
+         "label": {
+          "anyOf": [
+           {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "description": "Short name for the object in this box, e.g. `dragon`. Write `<dragon>` in the prompt to tie the box to those words; a box the prompt doesn't name is added to the scene. Defaults to `obj_<n>`.",
+          "title": "Label"
+         },
+         "source_box": {
+          "anyOf": [
+           {
+            "properties": {
+             "x_max": {
+              "description": "Right edge as a fraction of the image width (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "X Max",
+              "type": "number"
+             },
+             "x_min": {
+              "description": "Left edge as a fraction of the image width (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "X Min",
+              "type": "number"
+             },
+             "y_max": {
+              "description": "Bottom edge as a fraction of the image height (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Y Max",
+              "type": "number"
+             },
+             "y_min": {
+              "description": "Top edge as a fraction of the image height (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Y Min",
+              "type": "number"
+             }
+            },
+            "required": [
+             "x_min",
+             "y_min",
+             "x_max",
+             "y_max"
+            ],
+            "title": "Box",
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "description": "Where the object is in the reference image. Requires `source_image_index`."
+         },
+         "source_image_index": {
+          "anyOf": [
+           {
+            "minimum": 0,
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "description": "0-based index into `image_urls` of the reference the object comes from. Leave unset for a new object.",
+          "title": "Source Image Index"
+         },
+         "target_box": {
+          "anyOf": [
+           {
+            "properties": {
+             "x_max": {
+              "description": "Right edge as a fraction of the image width (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "X Max",
+              "type": "number"
+             },
+             "x_min": {
+              "description": "Left edge as a fraction of the image width (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "X Min",
+              "type": "number"
+             },
+             "y_max": {
+              "description": "Bottom edge as a fraction of the image height (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Y Max",
+              "type": "number"
+             },
+             "y_min": {
+              "description": "Top edge as a fraction of the image height (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Y Min",
+              "type": "number"
+             }
+            },
+            "required": [
+             "x_min",
+             "y_min",
+             "x_max",
+             "y_max"
+            ],
+            "title": "Box",
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "description": "Where the object goes in the output image. Leave unset to remove a referenced object; set both boxes to move or resize it."
+         }
+        },
+        "required": [
+         "description"
+        ],
+        "title": "EditBoundingBox",
+        "type": "object"
+       },
+       "maxItems": 32,
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional layout, with (0, 0) at the top-left of each image: keep, move, resize or remove objects from the references, or place new ones. Name boxes in the prompt by label, e.g. `<dragon>`.",
+     "title": "Bounding Boxes"
+    },
+    "enable_prompt_expansion": {
+     "default": true,
+     "description": "If set to true, the prompt is expanded into a detailed caption (grounded in the reference images when editing) before generation.",
+     "title": "Enable Prompt Expansion",
+     "type": "boolean"
+    },
+    "enable_safety_checker": {
+     "default": true,
+     "description": "If set to true, the safety checker will be enabled.",
+     "title": "Enable Safety Checker",
+     "type": "boolean"
+    },
+    "image_size": {
+     "anyOf": [
+      {
+       "properties": {
+        "height": {
+         "default": 512,
+         "description": "The height of the generated image.",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "title": "Height",
+         "type": "integer"
+        },
+        "width": {
+         "default": 512,
+         "description": "The width of the generated image.",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "title": "Width",
+         "type": "integer"
+        }
+       },
+       "title": "ImageSize",
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The size of the generated image, 256 to 4096 pixels per side. If not set, a single reference image's own size (scaled to at most 4 megapixels) is used, or the first reference image's size (at most 1 megapixel) when several are given.",
+     "title": "Image Size",
+     "x-fal": {
+      "max_area": 16777216,
+      "max_height": 4096,
+      "max_width": 4096,
+      "min_height": 256,
+      "min_width": 256,
+      "multiple_of": 16
+     }
+    },
+    "image_urls": {
+     "description": "The reference images to edit or compose from (up to 10).",
+     "items": {
+      "type": "string"
+     },
+     "maxItems": 10,
+     "minItems": 1,
+     "title": "Image URLs",
+     "type": "array"
+    },
+    "num_images": {
+     "default": 1,
+     "description": "The number of images to generate.",
+     "maximum": 4,
+     "minimum": 1,
+     "title": "Number of Images",
+     "type": "integer"
+    },
+    "output_format": {
+     "default": "png",
+     "description": "The format of the generated image.",
+     "enum": [
+      "jpeg",
+      "png",
+      "webp"
+     ],
+     "title": "Output Format",
+     "type": "string"
+    },
+    "prompt": {
+     "description": "A complete caption of the target image with the edit folded in. Refer to the references by their order: the first image, the second image.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The same seed and the same prompt given to the same version of the model will output the same image every time.",
+     "title": "Seed"
+    },
+    "sync_mode": {
+     "default": false,
+     "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history.",
+     "title": "Sync Mode",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "prompt",
+    "image_urls"
+   ],
+   "title": "EditInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/klein/base/text-to-image": {
+   "properties": {
+    "bounding_boxes": {
+     "anyOf": [
+      {
+       "items": {
+        "properties": {
+         "box": {
+          "description": "Where the object goes in the output image.",
+          "properties": {
+           "x_max": {
+            "description": "Right edge as a fraction of the image width (0-1).",
+            "maximum": 1,
+            "minimum": 0,
+            "title": "X Max",
+            "type": "number"
+           },
+           "x_min": {
+            "description": "Left edge as a fraction of the image width (0-1).",
+            "maximum": 1,
+            "minimum": 0,
+            "title": "X Min",
+            "type": "number"
+           },
+           "y_max": {
+            "description": "Bottom edge as a fraction of the image height (0-1).",
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Y Max",
+            "type": "number"
+           },
+           "y_min": {
+            "description": "Top edge as a fraction of the image height (0-1).",
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Y Min",
+            "type": "number"
+           }
+          },
+          "required": [
+           "x_min",
+           "y_min",
+           "x_max",
+           "y_max"
+          ],
+          "title": "Box",
+          "type": "object"
+         },
+         "description": {
+          "description": "What to draw in this box: the object and its look.",
+          "maxLength": 500,
+          "title": "Description",
+          "type": "string"
+         },
+         "label": {
+          "anyOf": [
+           {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "description": "Short name for the object in this box, e.g. `fox`. Write `<fox>` in the prompt to tie the box to those words; a box the prompt doesn't name is added to the scene. Defaults to `obj_<n>`.",
+          "title": "Label"
+         }
+        },
+        "required": [
+         "description",
+         "box"
+        ],
+        "title": "BoundingBox",
+        "type": "object"
+       },
+       "maxItems": 32,
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional layout: draw each described object inside its box. Box edges are fractions of the image size, with (0, 0) at the top-left. Name boxes in the prompt by label, e.g. `A red fox <fox> sits under a red umbrella <umbrella>`.",
+     "title": "Bounding Boxes"
+    },
+    "enable_prompt_expansion": {
+     "default": true,
+     "description": "If set to true, the prompt is expanded into a detailed caption (grounded in the reference images when editing) before generation.",
+     "title": "Enable Prompt Expansion",
+     "type": "boolean"
+    },
+    "enable_safety_checker": {
+     "default": true,
+     "description": "If set to true, the safety checker will be enabled.",
+     "title": "Enable Safety Checker",
+     "type": "boolean"
+    },
+    "image_size": {
+     "anyOf": [
+      {
+       "properties": {
+        "height": {
+         "default": 512,
+         "description": "The height of the generated image.",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "title": "Height",
+         "type": "integer"
+        },
+        "width": {
+         "default": 512,
+         "description": "The width of the generated image.",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "title": "Width",
+         "type": "integer"
+        }
+       },
+       "title": "ImageSize",
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ],
+       "type": "string"
+      }
+     ],
+     "default": "square_hd",
+     "description": "The size of the generated image. Each side can be 256 to 4096 pixels (native 4K).",
+     "title": "Image Size",
+     "x-fal": {
+      "max_area": 16777216,
+      "max_height": 4096,
+      "max_width": 4096,
+      "min_height": 256,
+      "min_width": 256,
+      "multiple_of": 16
+     }
+    },
+    "num_images": {
+     "default": 1,
+     "description": "The number of images to generate.",
+     "maximum": 4,
+     "minimum": 1,
+     "title": "Number of Images",
+     "type": "integer"
+    },
+    "output_format": {
+     "default": "png",
+     "description": "The format of the generated image.",
+     "enum": [
+      "jpeg",
+      "png",
+      "webp"
+     ],
+     "title": "Output Format",
+     "type": "string"
+    },
+    "prompt": {
+     "description": "The prompt to generate an image from. The model is trained on detailed captions: describe framing, subject, background and lighting.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The same seed and the same prompt given to the same version of the model will output the same image every time.",
+     "title": "Seed"
+    },
+    "sync_mode": {
+     "default": false,
+     "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history.",
+     "title": "Sync Mode",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "TextToImageInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/klein/edit-image": {
+   "properties": {
+    "bounding_boxes": {
+     "anyOf": [
+      {
+       "items": {
+        "properties": {
+         "box": {
+          "anyOf": [
+           {
+            "properties": {
+             "x_max": {
+              "description": "Right edge as a fraction of the image width (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "X Max",
+              "type": "number"
+             },
+             "x_min": {
+              "description": "Left edge as a fraction of the image width (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "X Min",
+              "type": "number"
+             },
+             "y_max": {
+              "description": "Bottom edge as a fraction of the image height (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Y Max",
+              "type": "number"
+             },
+             "y_min": {
+              "description": "Top edge as a fraction of the image height (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Y Min",
+              "type": "number"
+             }
+            },
+            "required": [
+             "x_min",
+             "y_min",
+             "x_max",
+             "y_max"
+            ],
+            "title": "Box",
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "description": "Where the object goes in the output image, as on text-to-image. Use instead of `source_box`/`target_box`."
+         },
+         "description": {
+          "description": "What to draw in this box: the object and its look.",
+          "maxLength": 500,
+          "title": "Description",
+          "type": "string"
+         },
+         "label": {
+          "anyOf": [
+           {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "description": "Short name for the object in this box, e.g. `dragon`. Write `<dragon>` in the prompt to tie the box to those words; a box the prompt doesn't name is added to the scene. Defaults to `obj_<n>`.",
+          "title": "Label"
+         },
+         "source_box": {
+          "anyOf": [
+           {
+            "properties": {
+             "x_max": {
+              "description": "Right edge as a fraction of the image width (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "X Max",
+              "type": "number"
+             },
+             "x_min": {
+              "description": "Left edge as a fraction of the image width (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "X Min",
+              "type": "number"
+             },
+             "y_max": {
+              "description": "Bottom edge as a fraction of the image height (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Y Max",
+              "type": "number"
+             },
+             "y_min": {
+              "description": "Top edge as a fraction of the image height (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Y Min",
+              "type": "number"
+             }
+            },
+            "required": [
+             "x_min",
+             "y_min",
+             "x_max",
+             "y_max"
+            ],
+            "title": "Box",
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "description": "Where the object is in the reference image. Requires `source_image_index`."
+         },
+         "source_image_index": {
+          "anyOf": [
+           {
+            "minimum": 0,
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "description": "0-based index into `image_urls` of the reference the object comes from. Leave unset for a new object.",
+          "title": "Source Image Index"
+         },
+         "target_box": {
+          "anyOf": [
+           {
+            "properties": {
+             "x_max": {
+              "description": "Right edge as a fraction of the image width (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "X Max",
+              "type": "number"
+             },
+             "x_min": {
+              "description": "Left edge as a fraction of the image width (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "X Min",
+              "type": "number"
+             },
+             "y_max": {
+              "description": "Bottom edge as a fraction of the image height (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Y Max",
+              "type": "number"
+             },
+             "y_min": {
+              "description": "Top edge as a fraction of the image height (0-1).",
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Y Min",
+              "type": "number"
+             }
+            },
+            "required": [
+             "x_min",
+             "y_min",
+             "x_max",
+             "y_max"
+            ],
+            "title": "Box",
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "description": "Where the object goes in the output image. Leave unset to remove a referenced object; set both boxes to move or resize it."
+         }
+        },
+        "required": [
+         "description"
+        ],
+        "title": "EditBoundingBox",
+        "type": "object"
+       },
+       "maxItems": 32,
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional layout, with (0, 0) at the top-left of each image: keep, move, resize or remove objects from the references, or place new ones. Name boxes in the prompt by label, e.g. `<dragon>`.",
+     "title": "Bounding Boxes"
+    },
+    "enable_prompt_expansion": {
+     "default": true,
+     "description": "If set to true, the prompt is expanded into a detailed caption (grounded in the reference images when editing) before generation.",
+     "title": "Enable Prompt Expansion",
+     "type": "boolean"
+    },
+    "enable_safety_checker": {
+     "default": true,
+     "description": "If set to true, the safety checker will be enabled.",
+     "title": "Enable Safety Checker",
+     "type": "boolean"
+    },
+    "image_size": {
+     "anyOf": [
+      {
+       "properties": {
+        "height": {
+         "default": 512,
+         "description": "The height of the generated image.",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "title": "Height",
+         "type": "integer"
+        },
+        "width": {
+         "default": 512,
+         "description": "The width of the generated image.",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "title": "Width",
+         "type": "integer"
+        }
+       },
+       "title": "ImageSize",
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The size of the generated image, 256 to 4096 pixels per side. If not set, a single reference image's own size (scaled to at most 4 megapixels) is used, or the first reference image's size (at most 1 megapixel) when several are given.",
+     "title": "Image Size",
+     "x-fal": {
+      "max_area": 16777216,
+      "max_height": 4096,
+      "max_width": 4096,
+      "min_height": 256,
+      "min_width": 256,
+      "multiple_of": 16
+     }
+    },
+    "image_urls": {
+     "description": "The reference images to edit or compose from (up to 10).",
+     "items": {
+      "type": "string"
+     },
+     "maxItems": 10,
+     "minItems": 1,
+     "title": "Image URLs",
+     "type": "array"
+    },
+    "num_images": {
+     "default": 1,
+     "description": "The number of images to generate.",
+     "maximum": 4,
+     "minimum": 1,
+     "title": "Number of Images",
+     "type": "integer"
+    },
+    "output_format": {
+     "default": "png",
+     "description": "The format of the generated image.",
+     "enum": [
+      "jpeg",
+      "png",
+      "webp"
+     ],
+     "title": "Output Format",
+     "type": "string"
+    },
+    "prompt": {
+     "description": "A complete caption of the target image with the edit folded in. Refer to the references by their order: the first image, the second image.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The same seed and the same prompt given to the same version of the model will output the same image every time.",
+     "title": "Seed"
+    },
+    "sync_mode": {
+     "default": false,
+     "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history.",
+     "title": "Sync Mode",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "prompt",
+    "image_urls"
+   ],
+   "title": "DistilledEditInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/klein/text-to-image": {
+   "properties": {
+    "bounding_boxes": {
+     "anyOf": [
+      {
+       "items": {
+        "properties": {
+         "box": {
+          "description": "Where the object goes in the output image.",
+          "properties": {
+           "x_max": {
+            "description": "Right edge as a fraction of the image width (0-1).",
+            "maximum": 1,
+            "minimum": 0,
+            "title": "X Max",
+            "type": "number"
+           },
+           "x_min": {
+            "description": "Left edge as a fraction of the image width (0-1).",
+            "maximum": 1,
+            "minimum": 0,
+            "title": "X Min",
+            "type": "number"
+           },
+           "y_max": {
+            "description": "Bottom edge as a fraction of the image height (0-1).",
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Y Max",
+            "type": "number"
+           },
+           "y_min": {
+            "description": "Top edge as a fraction of the image height (0-1).",
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Y Min",
+            "type": "number"
+           }
+          },
+          "required": [
+           "x_min",
+           "y_min",
+           "x_max",
+           "y_max"
+          ],
+          "title": "Box",
+          "type": "object"
+         },
+         "description": {
+          "description": "What to draw in this box: the object and its look.",
+          "maxLength": 500,
+          "title": "Description",
+          "type": "string"
+         },
+         "label": {
+          "anyOf": [
+           {
+            "maxLength": 64,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "description": "Short name for the object in this box, e.g. `fox`. Write `<fox>` in the prompt to tie the box to those words; a box the prompt doesn't name is added to the scene. Defaults to `obj_<n>`.",
+          "title": "Label"
+         }
+        },
+        "required": [
+         "description",
+         "box"
+        ],
+        "title": "BoundingBox",
+        "type": "object"
+       },
+       "maxItems": 32,
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Optional layout: draw each described object inside its box. Box edges are fractions of the image size, with (0, 0) at the top-left. Name boxes in the prompt by label, e.g. `A red fox <fox> sits under a red umbrella <umbrella>`.",
+     "title": "Bounding Boxes"
+    },
+    "enable_prompt_expansion": {
+     "default": true,
+     "description": "If set to true, the prompt is expanded into a detailed caption (grounded in the reference images when editing) before generation.",
+     "title": "Enable Prompt Expansion",
+     "type": "boolean"
+    },
+    "enable_safety_checker": {
+     "default": true,
+     "description": "If set to true, the safety checker will be enabled.",
+     "title": "Enable Safety Checker",
+     "type": "boolean"
+    },
+    "image_size": {
+     "anyOf": [
+      {
+       "properties": {
+        "height": {
+         "default": 512,
+         "description": "The height of the generated image.",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "title": "Height",
+         "type": "integer"
+        },
+        "width": {
+         "default": 512,
+         "description": "The width of the generated image.",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "title": "Width",
+         "type": "integer"
+        }
+       },
+       "title": "ImageSize",
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ],
+       "type": "string"
+      }
+     ],
+     "default": "square_hd",
+     "description": "The size of the generated image. Each side can be 256 to 4096 pixels (native 4K).",
+     "title": "Image Size",
+     "x-fal": {
+      "max_area": 16777216,
+      "max_height": 4096,
+      "max_width": 4096,
+      "min_height": 256,
+      "min_width": 256,
+      "multiple_of": 16
+     }
+    },
+    "num_images": {
+     "default": 1,
+     "description": "The number of images to generate.",
+     "maximum": 4,
+     "minimum": 1,
+     "title": "Number of Images",
+     "type": "integer"
+    },
+    "output_format": {
+     "default": "png",
+     "description": "The format of the generated image.",
+     "enum": [
+      "jpeg",
+      "png",
+      "webp"
+     ],
+     "title": "Output Format",
+     "type": "string"
+    },
+    "prompt": {
+     "description": "The prompt to generate an image from. The model is trained on detailed captions: describe framing, subject, background and lighting.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The same seed and the same prompt given to the same version of the model will output the same image every time.",
+     "title": "Seed"
+    },
+    "sync_mode": {
+     "default": false,
+     "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history.",
+     "title": "Sync Mode",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "DistilledTextToImageInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/text-to-image": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Output aspect ratio. Auto uses the first reference image when editing.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "3:2",
+      "7:5",
+      "4:3",
+      "5:4",
+      "1:1",
+      "4:5",
+      "3:4",
+      "5:7",
+      "2:3",
+      "9:16",
+      "1:2"
+     ],
+     "title": "Aspect Ratio",
+     "type": "string"
+    },
+    "enable_prompt_expansion": {
+     "default": false,
+     "description": "Expand the prompt while preserving its intent and reference roles.",
+     "title": "Enable Prompt Expansion",
+     "type": "boolean"
+    },
+    "output_format": {
+     "default": "jpeg",
+     "description": "The format of the generated image.",
+     "enum": [
+      "jpeg",
+      "png"
+     ],
+     "title": "Output Format",
+     "type": "string"
+    },
+    "prompt": {
+     "description": "The prompt to generate an image from.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "resolution": {
+     "default": "1k",
+     "description": "Output resolution tier. 4k can take several minutes.",
+     "enum": [
+      "512sq",
+      "768sq",
+      "1k",
+      "2k",
+      "4k"
+     ],
+     "title": "Resolution",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "Safety tolerance, from 0 (strictest) to 4.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    },
+    "sync_mode": {
+     "default": false,
+     "description": "Return the image as a data URI instead of storing it in request history.",
+     "title": "Sync Mode",
+     "type": "boolean"
+    },
+    "version": {
+     "const": "latest",
+     "default": "latest",
+     "description": "The model version.",
+     "title": "Version",
+     "type": "string"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux3ImageInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/text-to-video": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Aspect ratio of the generated video. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "4:3",
+      "1:1",
+      "3:4",
+      "9:16"
+     ],
+     "title": "Aspect Ratio",
+     "type": "string"
+    },
+    "duration": {
+     "default": "auto",
+     "description": "Duration of the generated video in seconds. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+     ],
+     "title": "Duration"
+    },
+    "generate_audio": {
+     "default": true,
+     "description": "Whether to generate audio for the video.",
+     "title": "Generate Audio",
+     "type": "boolean"
+    },
+    "prompt": {
+     "description": "The text prompt describing the video you want to generate.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "resolution": {
+     "default": "720p",
+     "description": "Resolution of the generated video. `1080p`, `1440p` (2K) and `2160p` (4K) are finished by the video upsampler; exact dimensions depend on the aspect ratio.",
+     "enum": [
+      "720p",
+      "1080p",
+      "1440p",
+      "2160p"
+     ],
+     "title": "Resolution",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "The safety tolerance level for the generated video. 0 is the strictest and 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux3TextToVideoInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-3/text-to-video/draft": {
+   "properties": {
+    "aspect_ratio": {
+     "default": "auto",
+     "description": "Aspect ratio of the generated draft. `auto` lets the model choose.",
+     "enum": [
+      "auto",
+      "21:9",
+      "2:1",
+      "16:9",
+      "4:3",
+      "1:1",
+      "3:4",
+      "9:16"
+     ],
+     "title": "Aspect Ratio",
+     "type": "string"
+    },
+    "duration": {
+     "default": "auto",
+     "description": "Draft duration in whole seconds from 5 through 20, or `auto`.",
+     "enum": [
+      "auto",
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+     ],
+     "title": "Duration"
+    },
+    "generate_audio": {
+     "default": true,
+     "description": "Whether to generate audio for the draft video.",
+     "title": "Generate Audio",
+     "type": "boolean"
+    },
+    "prompt": {
+     "description": "The text prompt describing the draft video.",
+     "title": "Prompt",
+     "type": "string"
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "description": "The safety tolerance level for the generated video. 0 is the strictest and 4 is the most permissive.",
+     "maximum": 4,
+     "minimum": 0,
+     "title": "Safety Tolerance",
+     "type": "integer"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux3TextToVideoDraftInput",
+   "type": "object"
+  },
+  "blackforestlabs/flux-video-upscale": {
+   "required": [
+    "video_url"
+   ],
+   "x-fal-order-properties": [
+    "video_url",
+    "upscale_factor",
+    "creativity",
+    "prompt",
+    "safety_tolerance"
+   ],
+   "title": "FluxVideoUpscaleInput",
+   "type": "object",
+   "properties": {
+    "upscale_factor": {
+     "default": 2,
+     "minimum": 1.5,
+     "description": "Output scaling factor. The source aspect ratio is preserved.",
+     "title": "Upscale Factor",
+     "maximum": 3,
+     "type": "number"
+    },
+    "video_url": {
+     "examples": [
+      "https://v3b.fal.media/files/b/0a93a27d/-iFpecUCsSdwXVMevsZa3_output_5s_448x256.mp4"
+     ],
+     "description": "URL of the MP4 video to upscale. The video must be at most 20 seconds and 50 MB.",
+     "title": "Video Url",
+     "type": "string"
+    },
+    "creativity": {
+     "default": 1,
+     "enum": [
+      0,
+      1
+     ],
+     "description": "Use 0 for a source-faithful upscale or 1 for creative detail enhancement.",
+     "title": "Creativity",
+     "type": "integer"
+    },
+    "prompt": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Prompt",
+     "description": "Optional description used to guide creative detail enhancement."
+    },
+    "safety_tolerance": {
+     "default": 2,
+     "minimum": 0,
+     "description": "Moderation strictness. Lower values are stricter.",
+     "title": "Safety Tolerance",
+     "maximum": 4,
+     "type": "integer"
+    }
+   }
+  },
+  "krea/v3/edit": {
+   "title": "EditInput",
+   "required": [
+    "prompt",
+    "image_urls"
+   ],
+   "x-fal-order-properties": [
+    "prompt",
+    "image_urls",
+    "model",
+    "image_size",
+    "reasoning_level",
+    "negative_prompt",
+    "seed",
+    "output_format",
+    "sync_mode",
+    "enable_safety_checker"
+   ],
+   "properties": {
+    "reasoning_level": {
+     "title": "Reasoning Level",
+     "default": "low",
+     "description": "How much effort the harness spends reasoning about the given editing task. Higher reasoning effort means slower generation time. high plans the edit with segmentation, web search and reference photos, keeps unedited areas of a single input image, corrects required text, and bills 5 megapixels more per request.",
+     "enum": [
+      "low",
+      "medium",
+      "high"
+     ],
+     "type": "string"
+    },
+    "output_format": {
+     "title": "Output Format",
+     "default": "png",
+     "description": "Output image format.",
+     "enum": [
+      "png",
+      "jpeg"
+     ],
+     "type": "string"
+    },
+    "image_size": {
+     "title": "Image Size",
+     "default": "auto",
+     "x-fal": {
+      "max_area": 4220160,
+      "multiple_of": 16,
+      "max_height": 3200,
+      "min_height": 256,
+      "min_width": 256,
+      "max_width": 3200
+     },
+     "anyOf": [
+      {
+       "title": "ImageSize",
+       "properties": {
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The width of the generated image.",
+         "type": "integer"
+        },
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The height of the generated image.",
+         "type": "integer"
+        }
+       },
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9",
+        "auto"
+       ],
+       "type": "string"
+      }
+     ],
+     "description": "Output size, rounded up to multiples of 16, at most 4,220,160 total pixels (1680×2512). auto lets the prompt expander pick the aspect ratio at about 2048×2048."
+    },
+    "seed": {
+     "title": "Seed",
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Latent noise seed. Use a new seed when editing a previous output again."
+    },
+    "negative_prompt": {
+     "maxLength": 1024,
+     "default": "",
+     "title": "Negative Prompt",
+     "description": "What to keep out of the image. Used by berry only.",
+     "type": "string"
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "default": false,
+     "description": "Return images as data URIs instead of saving them in request history.",
+     "type": "boolean"
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "default": true,
+     "description": "Check output images for unsafe content. Disabling requires account authorization.",
+     "type": "boolean"
+    },
+    "model": {
+     "title": "Model",
+     "default": "berry",
+     "description": "Model variant: berry favors quality, jam favors speed.",
+     "enum": [
+      "berry",
+      "jam"
+     ],
+     "type": "string"
+    },
+    "image_urls": {
+     "title": "Image Urls",
+     "minItems": 1,
+     "description": "Reference images to edit or combine (1-8). Order sets the <image-N> tags.",
+     "examples": [
+      [
+       "https://v3b.fal.media/files/b/0a90b2a1/i89tMXz0SmiwL0ZvbnUvS_image_00240.png"
+      ]
+     ],
+     "items": {
+      "_fal_ui_field": "image",
+      "type": "string"
+     },
+     "maxItems": 8,
+     "type": "array"
+    },
+    "prompt": {
+     "title": "Prompt",
+     "maxLength": 5000,
+     "minLength": 1,
+     "examples": [
+      "A red fox curled up asleep in fresh snow at dawn, soft pink light on the pine trees behind it"
+     ],
+     "description": "Description of the image to generate.",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "krea/v3/text-to-image": {
+   "title": "TextToImageInput",
+   "required": [
+    "prompt"
+   ],
+   "x-fal-order-properties": [
+    "prompt",
+    "model",
+    "image_size",
+    "reasoning_level",
+    "negative_prompt",
+    "seed",
+    "output_format",
+    "sync_mode",
+    "enable_safety_checker"
+   ],
+   "properties": {
+    "output_format": {
+     "title": "Output Format",
+     "default": "png",
+     "description": "Output image format.",
+     "enum": [
+      "png",
+      "jpeg"
+     ],
+     "type": "string"
+    },
+    "image_size": {
+     "title": "Image Size",
+     "default": "auto",
+     "x-fal": {
+      "max_area": 4220160,
+      "multiple_of": 16,
+      "max_height": 3200,
+      "min_height": 256,
+      "min_width": 256,
+      "max_width": 3200
+     },
+     "anyOf": [
+      {
+       "title": "ImageSize",
+       "properties": {
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The width of the generated image.",
+         "type": "integer"
+        },
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The height of the generated image.",
+         "type": "integer"
+        }
+       },
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9",
+        "auto"
+       ],
+       "type": "string"
+      }
+     ],
+     "description": "Output size, rounded up to multiples of 16, at most 4,220,160 total pixels (1680×2512). auto lets the prompt expander pick the aspect ratio at about 2048×2048."
+    },
+    "seed": {
+     "title": "Seed",
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Latent noise seed. Use a new seed when editing a previous output again."
+    },
+    "negative_prompt": {
+     "maxLength": 1024,
+     "default": "",
+     "title": "Negative Prompt",
+     "description": "What to keep out of the image. Used by berry only.",
+     "type": "string"
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "default": false,
+     "description": "Return images as data URIs instead of saving them in request history.",
+     "type": "boolean"
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "default": true,
+     "description": "Check output images for unsafe content. Disabling requires account authorization.",
+     "type": "boolean"
+    },
+    "model": {
+     "title": "Model",
+     "default": "berry",
+     "description": "Model variant: berry favors quality, jam favors speed.",
+     "enum": [
+      "berry",
+      "jam"
+     ],
+     "type": "string"
+    },
+    "reasoning_level": {
+     "title": "Reasoning Level",
+     "default": "low",
+     "description": "How much effort the harness spends reasoning about the given prompt. Higher reasoning effort means slower generation time.",
+     "enum": [
+      "low",
+      "medium"
+     ],
+     "type": "string"
+    },
+    "prompt": {
+     "title": "Prompt",
+     "maxLength": 5000,
+     "minLength": 1,
+     "examples": [
+      "A red fox curled up asleep in fresh snow at dawn, soft pink light on the pine trees behind it"
+     ],
+     "description": "Description of the image to generate.",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "fal-ai/flux-2-pro": {
+   "x-fal-order-properties": [
+    "prompt",
+    "image_size",
+    "seed",
+    "safety_tolerance",
+    "enable_safety_checker",
+    "output_format",
+    "sync_mode"
+   ],
+   "properties": {
+    "output_format": {
+     "type": "string",
+     "enum": [
+      "jpeg",
+      "png"
+     ],
+     "default": "jpeg",
+     "description": "The format of the generated image.",
+     "title": "Output Format"
+    },
+    "prompt": {
+     "type": "string",
+     "examples": [
+      "An intense close-up of knight's visor reflecting battle, sword raised, flames in background, chiaroscuro helmet shadows, hyper-detailed armor, square medieval, cinematic lighting"
+     ],
+     "description": "The prompt to generate an image from.",
+     "title": "Prompt"
+    },
+    "sync_mode": {
+     "type": "boolean",
+     "default": false,
+     "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history.",
+     "title": "Sync Mode"
+    },
+    "safety_tolerance": {
+     "description": "The safety tolerance level for the generated image. 1 being the most strict and 5 being the most permissive.",
+     "type": "string",
+     "enum": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+     ],
+     "default": "2",
+     "title": "Safety Tolerance"
+    },
+    "image_size": {
+     "x-fal": {
+      "max_area": 4194304,
+      "multiple_of": 16,
+      "min_width": 256,
+      "min_height": 256,
+      "max_height": 2560,
+      "max_width": 2560
+     },
+     "description": "The size of the generated image.",
+     "anyOf": [
+      {
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "properties": {
+        "height": {
+         "exclusiveMinimum": 0,
+         "type": "integer",
+         "maximum": 14142,
+         "default": 512,
+         "description": "The height of the generated image.",
+         "title": "Height"
+        },
+        "width": {
+         "exclusiveMinimum": 0,
+         "type": "integer",
+         "maximum": 14142,
+         "default": 512,
+         "description": "The width of the generated image.",
+         "title": "Width"
+        }
+       },
+       "type": "object",
+       "title": "ImageSize"
+      },
+      {
+       "type": "string",
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ]
+      }
+     ],
+     "default": "landscape_4_3",
+     "title": "Image Size"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The seed to use for the generation.",
+     "title": "Seed"
+    },
+    "enable_safety_checker": {
+     "type": "boolean",
+     "default": true,
+     "description": "Whether to enable the safety checker. Disabling it requires account authorization; unauthorized requests are always checked.",
+     "title": "Enable Safety Checker"
+    }
+   },
+   "type": "object",
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux2ProTextToImageInput"
+  },
+  "fal-ai/flux-2-max": {
+   "title": "Flux2MaxTextToImageInput",
+   "x-fal-order-properties": [
+    "prompt",
+    "image_size",
+    "seed",
+    "safety_tolerance",
+    "enable_safety_checker",
+    "output_format",
+    "sync_mode"
+   ],
+   "required": [
+    "prompt"
+   ],
+   "properties": {
+    "image_size": {
+     "title": "Image Size",
+     "default": "landscape_4_3",
+     "x-fal": {
+      "max_area": 4194304,
+      "min_width": 256,
+      "multiple_of": 16,
+      "min_height": 256,
+      "max_height": 2560,
+      "max_width": 2560
+     },
+     "description": "The size of the generated image.",
+     "anyOf": [
+      {
+       "title": "ImageSize",
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "properties": {
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "description": "The height of the generated image.",
+         "maximum": 14142,
+         "type": "integer",
+         "exclusiveMinimum": 0
+        },
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "description": "The width of the generated image.",
+         "maximum": 14142,
+         "type": "integer",
+         "exclusiveMinimum": 0
+        }
+       },
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ],
+       "type": "string"
+      }
+     ]
+    },
+    "prompt": {
+     "title": "Prompt",
+     "examples": [
+      "A lavish, baroque-style image of a powerful sorceress in her arcane study. She is dressed in robes of deep emerald velvet embroidered with gold thread and shimmering beetle wings, holding a staff topped with a glowing, swirling galaxy trapped in a crystal orb.She stands before a massive oak desk covered in open grimoires with illuminated pages showing alchemical diagrams, bubbling potions in glass alembics, and a sleeping pseudodragon curled around a stack of scrolls. The room is filled with curiosities: shelves of leather-bound books, celestial globes, and dried magical herbs hanging from the ceiling. The lighting is chiaroscuro, from a large fireplace with green flames and a magical candelabra floating in mid-air. The brushwork is visible and textured, with rich, deep colors. The style is reminiscent of Rembrandt meets classic fantasy art. The words 'Flux 2 Max is available on fal' are written in elegant cursive font on the top of the image."
+     ],
+     "description": "The prompt to generate an image from.",
+     "type": "string"
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "default": true,
+     "description": "Whether to enable the safety checker. Disabling it requires account authorization; unauthorized requests are always checked.",
+     "type": "boolean"
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "default": false,
+     "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history.",
+     "type": "boolean"
+    },
+    "seed": {
+     "title": "Seed",
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The seed to use for the generation."
+    },
+    "safety_tolerance": {
+     "title": "Safety Tolerance",
+     "default": "2",
+     "enum": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+     ],
+     "description": "The safety tolerance level for the generated image. 1 being the most strict and 5 being the most permissive.",
+     "type": "string"
+    },
+    "output_format": {
+     "title": "Output Format",
+     "default": "jpeg",
+     "enum": [
+      "jpeg",
+      "png"
+     ],
+     "description": "The format of the generated image.",
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "fal-ai/flux-2/flash": {
+   "required": [
+    "prompt"
+   ],
+   "title": "Flux2FlashTextToImageInput",
+   "x-fal-order-properties": [
+    "prompt",
+    "guidance_scale",
+    "seed",
+    "image_size",
+    "num_images",
+    "enable_prompt_expansion",
+    "sync_mode",
+    "enable_safety_checker",
+    "output_format"
+   ],
+   "type": "object",
+   "properties": {
+    "enable_prompt_expansion": {
+     "title": "Enable Prompt Expansion",
+     "default": false,
+     "type": "boolean",
+     "description": "If set to true, the prompt will be expanded for better results."
+    },
+    "output_format": {
+     "title": "Output Format",
+     "default": "png",
+     "type": "string",
+     "enum": [
+      "jpeg",
+      "png",
+      "webp"
+     ],
+     "description": "The format of the generated image."
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "default": true,
+     "type": "boolean",
+     "description": "If set to true, the safety checker will be enabled. Disabling it requires account authorization; unauthorized requests are always checked, and images flagged as unsafe are returned as black images."
+    },
+    "prompt": {
+     "title": "Prompt",
+     "type": "string",
+     "examples": [
+      "An army of ants battles for a sugar cube in a giant sandbox, with tiny plastic soldier toys caught in the melee. Ant bodies shine against gritty beige sand and the glossy, crystalline cube. Fiery sunrise spills golden highlights, throwing dramatic shadows, amplifying the excitement. Shot macro (100mm), aperture f/2.8 for soft background, centered composition with ground-level POV, mixing organic and manufactured textures."
+     ],
+     "description": "The prompt to generate an image from."
+    },
+    "num_images": {
+     "title": "Number of Images",
+     "default": 1,
+     "type": "integer",
+     "maximum": 4,
+     "minimum": 1,
+     "description": "The number of images to generate."
+    },
+    "guidance_scale": {
+     "title": "Guidance Scale",
+     "default": 2.5,
+     "type": "number",
+     "maximum": 20,
+     "minimum": 0,
+     "description": "Guidance Scale is a measure of how close you want the model to stick to your prompt when looking for a related image to show you."
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Seed",
+     "description": "The seed to use for the generation. If not provided, a random seed will be used."
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "default": false,
+     "type": "boolean",
+     "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history."
+    },
+    "image_size": {
+     "anyOf": [
+      {
+       "properties": {
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The width of the generated image."
+        },
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The height of the generated image."
+        }
+       },
+       "title": "ImageSize",
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "type": "object"
+      },
+      {
+       "type": "string",
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ]
+      }
+     ],
+     "title": "Image Size",
+     "default": "landscape_4_3",
+     "description": "The size of the image to generate. The width and height must be between 512 and 2048 pixels."
+    }
+   }
+  },
+  "fal-ai/flux-2-flex": {
+   "title": "Flux2FlexTextToImageInput",
+   "x-fal-order-properties": [
+    "prompt",
+    "image_size",
+    "seed",
+    "safety_tolerance",
+    "enable_safety_checker",
+    "output_format",
+    "sync_mode",
+    "guidance_scale",
+    "num_inference_steps"
+   ],
+   "properties": {
+    "image_size": {
+     "title": "Image Size",
+     "anyOf": [
+      {
+       "title": "ImageSize",
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "properties": {
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "maximum": 14142,
+         "description": "The width of the generated image.",
+         "type": "integer",
+         "exclusiveMinimum": 0
+        },
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "maximum": 14142,
+         "description": "The height of the generated image.",
+         "type": "integer",
+         "exclusiveMinimum": 0
+        }
+       },
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ],
+       "type": "string"
+      }
+     ],
+     "x-fal": {
+      "max_area": 4194304,
+      "min_width": 256,
+      "multiple_of": 16,
+      "min_height": 256,
+      "max_height": 2560,
+      "max_width": 2560
+     },
+     "description": "The size of the generated image.",
+     "default": "landscape_4_3"
+    },
+    "prompt": {
+     "title": "Prompt",
+     "examples": [
+      "A high-quality 3D render of a cute fluffy monster eating a giant donut; the fur simulation is incredibly detailed, the donut glaze is sticky and reflective, bright daylight lighting, shallow depth of field."
+     ],
+     "description": "The prompt to generate an image from.",
+     "type": "string"
+    },
+    "num_inference_steps": {
+     "title": "Number of Inference Steps",
+     "default": 28,
+     "maximum": 50,
+     "description": "The number of inference steps to perform.",
+     "type": "integer",
+     "minimum": 2
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "default": false,
+     "description": "If `True`, the media will be returned as a data URI and the output data won't be available in the request history.",
+     "type": "boolean"
+    },
+    "seed": {
+     "title": "Seed",
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The seed to use for the generation."
+    },
+    "output_format": {
+     "enum": [
+      "jpeg",
+      "png"
+     ],
+     "default": "jpeg",
+     "title": "Output Format",
+     "description": "The format of the generated image.",
+     "type": "string"
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "default": true,
+     "description": "Whether to enable the safety checker. Disabling it requires account authorization; unauthorized requests are always checked.",
+     "type": "boolean"
+    },
+    "guidance_scale": {
+     "title": "Guidance Scale",
+     "default": 3.5,
+     "maximum": 10,
+     "description": "The guidance scale to use for the generation.",
+     "type": "number",
+     "minimum": 1.5
+    },
+    "safety_tolerance": {
+     "enum": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+     ],
+     "default": "2",
+     "title": "Safety Tolerance",
+     "description": "The safety tolerance level for the generated image. 1 being the most strict and 5 being the most permissive.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "type": "object"
+  },
+  "fal-ai/flux-2/klein/9b": {
+   "x-fal-order-properties": [
+    "prompt",
+    "seed",
+    "num_inference_steps",
+    "image_size",
+    "num_images",
+    "sync_mode",
+    "enable_safety_checker",
+    "output_format"
+   ],
+   "title": "Klein9BDistilledInput",
+   "properties": {
+    "num_inference_steps": {
+     "title": "Number of Inference Steps",
+     "maximum": 8,
+     "minimum": 4,
+     "description": "The number of inference steps to perform.",
+     "default": 4,
+     "type": "integer"
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "description": "If `True`, the media will be returned as a data URI. Output is not stored when this is True.",
+     "default": false,
+     "type": "boolean"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The seed to use for the generation. If not provided, a random seed will be used.",
+     "title": "Seed"
+    },
+    "num_images": {
+     "title": "Number of Images",
+     "maximum": 4,
+     "minimum": 1,
+     "description": "The number of images to generate.",
+     "default": 1,
+     "type": "integer"
+    },
+    "output_format": {
+     "title": "Output Format",
+     "enum": [
+      "jpeg",
+      "png",
+      "webp"
+     ],
+     "description": "The format of the generated image.",
+     "default": "png",
+     "type": "string"
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "description": "If set to true, the safety checker will be enabled. Disabling it requires account authorization; unauthorized requests are always checked, and images flagged as unsafe are returned as black images.",
+     "default": true,
+     "type": "boolean"
+    },
+    "prompt": {
+     "title": "Prompt",
+     "description": "The prompt to generate an image from.",
+     "examples": [
+      "A bright, surreal scene on a vast white salt flat under a clear blue sky, featuring two fluffy white alpacas standing in the foreground. Behind them sits a sleek white supercar with its scissor doors open, creating a dramatic futuristic silhouette. The sunlight is strong and crisp, casting sharp shadows on the ground and giving the image a clean, high-contrast cinematic look. Minimalist composition, playful luxury vibe, ultra sharp detail, wide-angle perspective, high resolution."
+     ],
+     "type": "string"
+    },
+    "image_size": {
+     "anyOf": [
+      {
+       "properties": {
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The width of the generated image."
+        },
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The height of the generated image."
+        }
+       },
+       "title": "ImageSize",
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ],
+       "type": "string"
+      }
+     ],
+     "description": "The size of the image to generate.",
+     "default": "landscape_4_3",
+     "title": "Image Size"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "type": "object"
+  },
+  "fal-ai/flux-2/klein/4b": {
+   "x-fal-order-properties": [
+    "prompt",
+    "seed",
+    "num_inference_steps",
+    "image_size",
+    "num_images",
+    "sync_mode",
+    "enable_safety_checker",
+    "output_format"
+   ],
+   "title": "KleinDistilledInput",
+   "properties": {
+    "num_inference_steps": {
+     "title": "Number of Inference Steps",
+     "maximum": 8,
+     "minimum": 4,
+     "description": "The number of inference steps to perform.",
+     "default": 4,
+     "type": "integer"
+    },
+    "sync_mode": {
+     "title": "Sync Mode",
+     "description": "If `True`, the media will be returned as a data URI. Output is not stored when this is True.",
+     "default": false,
+     "type": "boolean"
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The seed to use for the generation. If not provided, a random seed will be used.",
+     "title": "Seed"
+    },
+    "num_images": {
+     "title": "Number of Images",
+     "maximum": 4,
+     "minimum": 1,
+     "description": "The number of images to generate.",
+     "default": 1,
+     "type": "integer"
+    },
+    "output_format": {
+     "title": "Output Format",
+     "enum": [
+      "jpeg",
+      "png",
+      "webp"
+     ],
+     "description": "The format of the generated image.",
+     "default": "png",
+     "type": "string"
+    },
+    "enable_safety_checker": {
+     "title": "Enable Safety Checker",
+     "description": "If set to true, the safety checker will be enabled. Disabling it requires account authorization; unauthorized requests are always checked, and images flagged as unsafe are returned as black images.",
+     "default": true,
+     "type": "boolean"
+    },
+    "prompt": {
+     "title": "Prompt",
+     "description": "The prompt to generate an image from.",
+     "examples": [
+      "Cheetah in pre-sprint crouch, muscles tensed, gazelle visible in distance, African savanna golden grass, dust particles in air, National Geographic wildlife photography"
+     ],
+     "type": "string"
+    },
+    "image_size": {
+     "anyOf": [
+      {
+       "properties": {
+        "width": {
+         "title": "Width",
+         "default": 512,
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The width of the generated image."
+        },
+        "height": {
+         "title": "Height",
+         "default": 512,
+         "type": "integer",
+         "exclusiveMinimum": 0,
+         "maximum": 14142,
+         "description": "The height of the generated image."
+        }
+       },
+       "title": "ImageSize",
+       "x-fal-order-properties": [
+        "width",
+        "height"
+       ],
+       "type": "object"
+      },
+      {
+       "enum": [
+        "square_hd",
+        "square",
+        "portrait_4_3",
+        "portrait_16_9",
+        "landscape_4_3",
+        "landscape_16_9"
+       ],
+       "type": "string"
+      }
+     ],
+     "description": "The size of the image to generate.",
+     "default": "landscape_4_3",
+     "title": "Image Size"
+    }
+   },
+   "required": [
+    "prompt"
+   ],
+   "type": "object"
+  }
+ },
+ "_note": "blackforestlabs/flux-video-upscale (FluxVideoUpscaleInput), krea/v3/text-to-image (V3TextToImageInput) and krea/v3/edit (V3EditInput) added for PR 3 from the same per-endpoint queue OpenAPI, read 2026-10-15, with $refs inlined. fal-ai/flux-2-pro, fal-ai/flux-2-max, fal-ai/flux-2/flash, fal-ai/flux-2-flex, fal-ai/flux-2/klein/9b and fal-ai/flux-2/klein/4b added for PR 4 the same way (read 2026-10-15)."
+}

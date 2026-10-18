@@ -63,7 +63,7 @@ from execution.byteplus_seedance_prices import (
 )
 from models.events import add_run_note
 from models.graph import GraphNode, PortValueDict
-from services import maker_sizes
+from services import maker_sizes, node_route
 
 # The fal nodes -> their ModelArk model. seedance-v1-5 picks by its model param.
 FAL_NODE_MODELS: dict[str, str] = {
@@ -88,11 +88,8 @@ RESOLUTIONS: dict[str, tuple[str, ...]] = {
 # -- prices for the fal copies --------------------------------------------------
 
 def _options(definition: Mapping[str, Any], key: str) -> list[str]:
-    for group in ("sharedParams", "falParams", "directParams", "params"):
-        for param in definition.get(group) or []:
-            if param.get("key") == key:
-                return [str(o.get("value") if isinstance(o, Mapping) else o) for o in param.get("options") or []]
-    return []
+    param = node_route.param_definition(definition, key)
+    return [str(o.get("value") if isinstance(o, Mapping) else o) for o in (param or {}).get("options") or []]
 
 
 def fal_price_entry(definition: Mapping[str, Any]) -> dict[str, Any]:
@@ -187,12 +184,8 @@ def _setting(node: GraphNode, key: str) -> Any:
         return value
     from execution.maker_routes import definition_for
 
-    definition = definition_for(node.definition_id)
-    for group in ("sharedParams", "falParams", "directParams", "params"):
-        for param in definition.get(group) or []:
-            if isinstance(param, Mapping) and param.get("key") == key:
-                return param.get("default")
-    return None
+    param = node_route.param_definition(definition_for(node.definition_id), key)
+    return param.get("default") if param is not None else None
 
 
 def _whole_seconds(value: Any, model: str) -> int:

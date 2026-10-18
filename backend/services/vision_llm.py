@@ -15,6 +15,7 @@ import httpx
 from PIL import Image, ImageOps
 
 from execution.missing_credential import MissingCredentialError
+from services.http_errors import HTTP_ERRORS, describe
 
 VISION_TIMEOUT_SECONDS = 45.0
 MAX_VISION_IMAGES = 13  # 12 sampled frames plus one optional reference image.
@@ -257,8 +258,8 @@ async def call_vision_llm(
         parsed["vision_provider"] = provider.name
         parsed["vision_model"] = provider.model
         return parsed
-    except httpx.HTTPError as exc:
-        raise VisionProviderError(f"{provider.name} vision request failed: {exc}") from exc
+    except HTTP_ERRORS as exc:
+        raise VisionProviderError(f"{provider.name} vision request failed: {describe(exc)}") from exc
     finally:
         if owns_client:
             await active_client.aclose()

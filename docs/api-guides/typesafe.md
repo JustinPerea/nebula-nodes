@@ -212,6 +212,7 @@ Every message names the fix and never contains the key. TypeSafe's request id is
 | 413 | Request too large (32 MiB per request, 16 MiB per image) |
 | 415 / 422 | Encoding problem / the field TypeSafe says is invalid |
 | 408, 429, 5xx (incl. 529) | Retried twice with backoff (Retry-After honoured, up to 10 s), then a clear rate-limit, overloaded or server-error message |
+| Connection failure or timeout (a TLS error mid-response included) | Retried twice with backoff, then `Couldn't reach TypeSafe (connection failed) after 3 tries` (or `timed out`) |
 
 ## Images
 

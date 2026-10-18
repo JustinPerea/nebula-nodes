@@ -166,8 +166,8 @@ function createNoSenderEvent() {
 // ---------------------------------------------------------------------------
 
 describe('Published constants', () => {
-  test('ALLOWED_PROVIDERS has exactly 20 entries', () => {
-    assert.equal(ALLOWED_PROVIDERS.length, 20);
+  test('ALLOWED_PROVIDERS has exactly 21 entries', () => {
+    assert.equal(ALLOWED_PROVIDERS.length, 21);
   });
 
   test('ALLOWED_PROVIDERS is frozen', () => {
@@ -177,6 +177,7 @@ describe('Published constants', () => {
   test('ALLOWED_PROVIDERS contains all documented providers', () => {
     const expected = [
       'ANTHROPIC_API_KEY',
+      'BFL_API_KEY',
       'BYTEPLUS_API_KEY',
       'ELEVENLABS_API_KEY',
       'FAL_KEY',

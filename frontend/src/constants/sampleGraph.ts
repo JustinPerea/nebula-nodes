@@ -2,19 +2,17 @@ import { v4 as uuidv4 } from 'uuid';
 import type { Node, Edge } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { NODE_DEFINITIONS } from './nodeDefinitions';
+import { allParamDefinitions } from '../lib/directRoute';
 
 /** A friendly starter prompt for the onboarding sample pipeline. */
 const DEMO_PROMPT = 'a neon koi swimming through a nebula, cinematic, volumetric light';
 
-/** Build a node's default params from its definition (mirrors graphStore.addNode). */
+/** Build a node's default params from its definition (mirrors graphStore.buildDefaultParams). */
 function defaultsFor(definitionId: string): Record<string, unknown> {
   const def = NODE_DEFINITIONS[definitionId];
   if (!def) return {};
   const out: Record<string, unknown> = {};
-  const sources = def.sharedParams
-    ? [...def.sharedParams, ...(def.falParams ?? []), ...(def.directParams ?? [])]
-    : def.params;
-  for (const p of sources) if (p.default !== undefined) out[p.key] = p.default;
+  for (const p of allParamDefinitions(def)) if (p.default !== undefined) out[p.key] = structuredClone(p.default);
   return out;
 }
 

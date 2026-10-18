@@ -25,6 +25,14 @@ once per saved graph, and the graph records that it ran (``PARAMS_VERSION``):
   Create posts without it), ``PUT`` the same (missing = current: no bundle
   sends PUT).
 
+Order with ``services/retired_nodes.py``: the live graph's load, an import and
+a preset read move retired and folded nodes onto the node they became first,
+and these upgrades see the result. A stored project is upgraded when the
+catalog is read and migrated when it opens, so the other way round. Version 1
+and the Krea FLUX fold touch different nodes, so the order changes nothing
+today; a later rule for a node that is retired or folded must match it under
+both ids.
+
 Run records are never rewritten: each one is what that run sent. The canvas
 stamps each new record with the version it was sent at (``paramsVersion`` on
 the record, outside its snapshot so recipe hashes don't change; a record

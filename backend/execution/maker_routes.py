@@ -16,6 +16,10 @@ a node. Each run:
 4. on the direct route, translates the copy's params (fal's or Krea's names)
    into the maker handler's.
 
+A route-table node (definition ``routes``) gets :func:`multi_route` instead:
+the same rule picks one of its N routes (the saved ``_provider``, or Auto),
+and that route's client runs it (execution/route_clients.py).
+
 The translators here are pinned to the maker's documentation; each says what
 it drops. Prices are written in the node's own param names
 (data/model_pricing.json ``routes``), so they don't depend on the translation.
@@ -103,6 +107,68 @@ def dual_route(*, direct: Handler, fallback: Handler, translate: Translate | Non
         return await fallback(routed, dict(inputs), api_keys)
 
     _route.dual_route = True  # type: ignore[attr-defined]  # lets tests find every router
+    return _route
+
+
+def translate_params(route: Mapping[str, Any], params: Mapping[str, Any]) -> dict[str, Any]:
+    """A route-table run's params in the provider's names and values: first
+    ``rename`` (our key -> theirs), then ``valueMap`` (our value -> theirs,
+    looked up by our key). A value the map doesn't list never gets here:
+    route_block refuses it (the map is the route's ``accepts``)."""
+    rename = route.get("rename") if isinstance(route.get("rename"), Mapping) else {}
+    value_map = route.get("valueMap") if isinstance(route.get("valueMap"), Mapping) else {}
+    translated: dict[str, Any] = {}
+    for key, value in params.items():
+        mapped = value_map.get(key)
+        if isinstance(mapped, Mapping) and node_route.match_value(value) in {str(k) for k in mapped}:
+            value = copy.deepcopy(next(v for k, v in mapped.items() if str(k) == node_route.match_value(value)))
+        translated[str(rename.get(key, key))] = value
+    return translated
+
+
+def multi_route(clients: Mapping[str, Handler]) -> Handler:
+    """The registry handler for a route-table node (definition ``routes``):
+    one handler, many providers. ``clients`` maps a route id to the handler
+    that runs it (execution/route_clients.py clients_for).
+
+    Each run picks its route with node_route.select_route, as pricing, the
+    spend gate, readiness, the engine's preflight and the cache key do (the
+    saved ``_provider``, or Auto). A run that can't start (UNSET: the chosen
+    route's key isn't set, or the route can't take these params) raises
+    before any provider is called, with route_unavailable's message, and no
+    other client runs. Otherwise the client gets a copy of the node with only
+    the params that route shows with these values (node_route.route_sent_keys:
+    a setting it hides is never sent), translated into the provider's names
+    (translate_params); a Krea route's copy carries ``_kreaAuth`` set to how
+    the run bills. The client is also told the route's ``endpoint``,
+    resolved here from ``endpointWhen`` on the routed values (our names, the
+    wired ports marked), since its copy only has the provider's names."""
+
+    async def _route(node: GraphNode, inputs: dict[str, PortValueDict], api_keys: dict[str, str]) -> dict[str, Any]:
+        definition = definition_for(node.definition_id)
+        routed_params = node_route.with_wired_blockers(definition, node.params, node_route.filled_counts(inputs))
+        route = node_route.select_route(definition, routed_params, api_keys)
+        if route.kind == node_route.UNSET:
+            unavailable = node_route.route_unavailable(definition, routed_params, api_keys) or {}
+            raise MissingCredentialError(str(unavailable.get("message") or "This node has no route it can run on"))
+        spec = node_route.route_by_id(definition, route.route_id) or {}
+        client = clients.get(str(route.route_id))
+        if client is None:
+            name = definition.get("displayName") or node.definition_id
+            raise MissingCredentialError(
+                f"{name} can't run on {node_route.provider_label(spec.get('provider'))} in this version of Nebula yet. "
+                "Choose another provider.")
+        extra = ({"_kreaAuth": "mcp" if route.kind == node_route.PLAN else "api-token"}
+                 if spec.get("provider") == "krea" else None)
+        # Only the settings this route shows with these values: one it hides
+        # (paramVisibleWhen, or a param's own visibleWhen) is never sent.
+        routed = route_node(node, node_route.route_sent_keys(definition, route.route_id, routed_params))
+        routed = routed.model_copy(update={"params": {**translate_params(spec, routed.params), **(extra or {})}})
+        endpoint = node_route.route_endpoint(definition, spec, routed_params)
+        return await client(routed, dict(inputs), api_keys, endpoint=endpoint)
+
+    _route.multi_route = True  # type: ignore[attr-defined]  # a route-table node's router
+    _route.dual_route = True  # type: ignore[attr-defined]  # so the router walks in tests find it too
     return _route
 
 

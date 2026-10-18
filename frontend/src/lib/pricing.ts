@@ -1,15 +1,21 @@
 import type { ModelNodeDefinition } from '../types';
+import { allParamDefinitions, hasRoutes, routeBlock, routeById, routesOf, withWiredBlockers } from './directRoute';
 
 /** One curated price entry from backend/data/model_pricing.json. The format
  * and its rules live in backend/services/model_pricing.py; this file mirrors
  * that estimate, and both are tested against the same shared cases. */
 export type PriceValue = number | [number, number];
 
-export interface PriceRow { match?: Record<string, unknown>; price: PriceValue }
+export interface PriceRow {
+  match?: Record<string, unknown>;
+  price: PriceValue;
+  /** Only this row's price isn't stated exactly (model_pricing.route_price_unconfirmed). */
+  unconfirmed?: boolean;
+}
 
 export interface PriceEntry {
   currency: string;
-  per: 'image' | 'video' | 'second' | 'request';
+  per: 'image' | 'video' | 'second' | 'request' | 'megapixel-second';
   rows: PriceRow[];
   /** A node that can run on more than one provider prices each route on its
    * own: provider -> a single-route entry (model_pricing.py). The run prices
@@ -21,6 +27,9 @@ export interface PriceEntry {
   defaults?: Record<string, unknown>;
   provider?: string;
   plus?: string;
+  /** The provider's page doesn't state this price exactly (a higher page
+   * price kept until the exact one is published); the switcher marks it "*". */
+  unconfirmed?: boolean;
   notes?: string;
   sources?: Array<{ url: string; quote: string }>;
   checked?: string;
@@ -54,10 +63,8 @@ function asMatchValue(value: unknown): string {
   return String(value);
 }
 
-function definitionParams(definition: Partial<ModelNodeDefinition>) {
-  const record = definition as Record<string, unknown>;
-  return ['params', 'sharedParams', 'directParams', 'falParams'].flatMap((key) =>
-    Array.isArray(record[key]) ? (record[key] as Array<{ key?: string; default?: unknown }>) : []);
+function definitionParams(definition: Partial<ModelNodeDefinition>): Array<{ key?: string; default?: unknown }> {
+  return allParamDefinitions(definition as ModelNodeDefinition);
 }
 
 /** Node params over the definition's defaults over the entry's handler defaults. */
@@ -80,6 +87,36 @@ export function effectiveParams(
 
 function matches(values: Record<string, unknown>, match: Record<string, unknown> | undefined): boolean {
   return Object.entries(match ?? {}).every(([key, want]) => asMatchValue(values[key]) === asMatchValue(want));
+}
+
+/** A FLUX 3 Video run's mode, a price variable read from the wired ports, not
+ * a saved param: v2v with start_video wired, i2v with start_image, keyframes
+ * or end_image, else t2v (model_pricing.VIDEO_MODE, the rule the backend's
+ * route clients pick BFL's `mode` by). */
+export const VIDEO_MODE = '(mode)';
+const IMAGE_PORTS = ['start_image', 'keyframes', 'end_image'];
+/** Whether a run has reference images wired, a price variable read from the
+ * wired ports: `some` with an edge into `images`, else `none`
+ * (model_pricing.REFERENCES). Krea 3 prices a run without references at the
+ * exact base price. */
+export const REFERENCES = '(references)';
+const REFERENCE_PORTS = ['images'];
+/** Price variables known only once the run's source clip is (its length,
+ * its output frame size): an entry that reads one is unpriced before the run
+ * (model_pricing.RUN_TIME_VARIABLES). */
+export const RUN_TIME_VARIABLES: readonly string[] = ['(source seconds)', '(output megapixels)', '(output tier)'];
+
+/** A video run's mode from its wired ports (VIDEO_MODE); a source video wins. */
+export function videoMode(wired: Iterable<string>): 't2v' | 'i2v' | 'v2v' {
+  const ports = new Set(wired);
+  if (ports.has('start_video')) return 'v2v';
+  return IMAGE_PORTS.some((port) => ports.has(port)) ? 'i2v' : 't2v';
+}
+
+/** Whether a run has reference images wired (REFERENCES). */
+export function references(wired: Iterable<string>): 'none' | 'some' {
+  const ports = new Set(wired);
+  return REFERENCE_PORTS.some((port) => ports.has(port)) ? 'some' : 'none';
 }
 
 /** Every setting an entry's price reads: row and extra matches, multiplyBy. */
@@ -115,9 +152,26 @@ export function entryForRoute(entry: PriceEntry | undefined, provider: string | 
 }
 
 /** One run of this node, or null when it's unpriced (no entry, no matching
- * row, the run bills a different provider than the entry prices, or a
- * setting the price reads arrives by wire, so it's only known at run time).
- * A `routes` entry prices the route `routeProvider` names. */
+ * row, the run bills a different provider than the entry prices, a setting
+ * the price reads arrives by wire, so it's only known at run time, or the
+ * price reads a RUN_TIME_VARIABLES quantity). The wired ports also give the
+ * VIDEO_MODE and REFERENCES a row may match. A `routes` entry prices the route
+ * `routeProvider` names. */
+/** The values an entry's rows are matched against: the effective params
+ * plus the price variables read from the wired ports (model_pricing._price_values). */
+function priceValues(
+  entry: PriceEntry,
+  definition: Partial<ModelNodeDefinition>,
+  params: Record<string, unknown> | undefined,
+  ports: string[],
+): Record<string, unknown> {
+  const priced = pricedKeys(entry);
+  const values = effectiveParams(entry, definition, params);
+  if (priced.has(VIDEO_MODE)) values[VIDEO_MODE] = videoMode(ports);
+  if (priced.has(REFERENCES)) values[REFERENCES] = references(ports);
+  return values;
+}
+
 export function estimateNode(
   priceEntry: PriceEntry | undefined,
   definition: Partial<ModelNodeDefinition>,
@@ -127,10 +181,13 @@ export function estimateNode(
 ): NodeEstimate | null {
   const entry = entryForRoute(priceEntry, routeProvider);
   if (!entry) return null;
-  if (entry.provider && routeProvider && entry.provider !== routeProvider) return null;
+  // A route's entry was picked by its key, which the pricing check ties to
+  // the provider that bills it (a route-table node keys by route id).
+  if (entry === priceEntry && entry.provider && routeProvider && entry.provider !== routeProvider) return null;
   const priced = pricedKeys(entry);
-  for (const port of wired) if (priced.has(port)) return null;
-  const values = effectiveParams(entry, definition, params);
+  const ports = [...wired];
+  if (ports.some((port) => priced.has(port)) || RUN_TIME_VARIABLES.some((key) => priced.has(key))) return null;
+  const values = priceValues(entry, definition, params, ports);
   const row = (entry.rows ?? []).find((candidate) => matches(values, candidate.match));
   if (!row) return null;
   const base = bounds(row.price);
@@ -170,4 +227,48 @@ export function formatUsd(amount: number): string {
 export function formatUsdRange(low: number, high: number): string {
   if (formatUsd(low) === formatUsd(high)) return formatUsd(high);
   return `${formatUsd(low)}–${formatUsd(high).slice(1)}`;
+}
+
+/** {route id: the estimate on that route, or null} for a route-table node:
+ * what each row of the provider switcher shows at these params. Null when
+ * the route can't take the run (routeBlock) or has no list price. Keys don't
+ * matter here: a row shows its price whether or not its key is set
+ * (model_pricing.estimate_routes). */
+export function estimateRoutes(
+  definition: ModelNodeDefinition,
+  params: Record<string, unknown> | undefined,
+  wired: Iterable<string> | ReadonlyMap<string, number> = [],
+  pricing?: PricingTable | null,
+): Record<string, NodeEstimate | null> {
+  if (!hasRoutes(definition)) return {};
+  const entry = pricing?.nodes[definition.id];
+  const routed = withWiredBlockers(definition, params, wired);
+  const ports = wired instanceof Map ? [...wired.keys()] : [...(wired as Iterable<string>)];
+  const estimates: Record<string, NodeEstimate | null> = {};
+  for (const route of routesOf(definition)) {
+    estimates[route.id] = routeBlock(definition, route, routed)
+      ? null
+      : estimateNode(entry, definition, params, route.pricing ?? route.id, ports);
+  }
+  return estimates;
+}
+
+/** A route's price that its provider's page doesn't state exactly (its
+ * entry's `unconfirmed`), or, at these params (the defaults when left out),
+ * the row they price at says so (FLUX.2's Flash and Klein on fal);
+ * model_pricing.route_price_unconfirmed. */
+export function routePriceUnconfirmed(
+  definition: ModelNodeDefinition,
+  routeId: string,
+  pricing?: PricingTable | null,
+  params?: Record<string, unknown>,
+  wired: Iterable<string> = [],
+): boolean {
+  const spec = routeById(definition, routeId);
+  if (!spec) return false;
+  const entry = entryForRoute(pricing?.nodes[definition.id], spec.pricing ?? spec.id);
+  if (!entry) return false;
+  if (entry.unconfirmed === true) return true;
+  const values = priceValues(entry, definition, params, [...wired]);
+  return (entry.rows ?? []).find((candidate) => matches(values, candidate.match))?.unconfirmed === true;
 }
