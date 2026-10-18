@@ -1,5 +1,14 @@
 # Implementation Notes
 
+## 2026-10-18 — Files a run passes along no longer log "escaped run directory"
+
+GM - Design saw a Moodboard run log `[engine] output …/chat-uploads/<hash> escaped run directory …; excluding from manifest` once per board image (32 lines). An Image Input pointing at an upload logs it too.
+
+- **Leaving those files out of the manifest is right.** The manifest lists files this run generated, each with the node, model, prompt and params that made it, and an `output_path` relative to the run folder (`find_output_record` and `/api/outputs/{path}/meta` rely on that). A board image or an upload was made earlier. Listing it would credit the Moodboard node with making it. Downstream nodes get port values straight from the run, never from the manifest, so they're unaffected.
+- **The warning was the bug.** It was added (db3f6f90) to catch a handler writing a new file outside its run folder, which leaves that file with no record. It also fired for every file a run passes along. Now a file outside the run folder whose mtime is more than 2 s before the run started counts as passed along. Those are counted in one debug line, and the warning stays for files written during the run. The 2 s slack covers coarse filesystem clocks. A file uploaded under 2 s before the run still warns, which is harmless. `started_at` is optional, so direct callers keep the old behavior.
+- **Not in this change.** A manifest section recording what a run consumed (inputs, board images) would be a new feature for reproducibility, not a fix.
+- **Tests.** Two in `test_output_manifest.py`: an Image Input upload plus a board's images (60 s old) are left out with no warning while the generated file is listed, and a file a handler writes to another folder during the run still warns once. The first failed on main's code. All 41 test files that drive the engine pass (1,800 tests).
+
 ## 2026-10-18 — `nebula apply`: the CLI twin of edit_canvas (design-canvas gap 8)
 
 GM - Design built the Good Machines canvas through the CLI one call per node and per wire: not atomic (a refused wire left half a graph), many calls, and no `+refs`, so each step had to read back the ids the last one made. `POST /api/graph/apply` already did the whole thing atomically for the MCP server's `edit_canvas`; the CLI never called it.
