@@ -79,6 +79,45 @@ describe('SelectionToolbar', () => {
     expect(useUIStore.getState().panels.chat.visible).toBe(true);
   });
 
+  it('focuses the chat box once the panel has opened', () => {
+    vi.useFakeTimers();
+    try {
+      useGraphStore.setState({ nodes: [selectedNode('n1')] });
+      render(<SelectionToolbar />);
+      const box = document.createElement('textarea');
+      box.className = 'chat-panel__textarea';
+      document.body.append(box);
+      fireEvent.click(screen.getByTitle('Ask agent about selection'));
+      vi.advanceTimersByTime(180);
+      expect(document.activeElement).toBe(box);
+      box.remove();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The focus waits for the panel. A toolbar that unmounts first (the test
+  // ended, or the selection cleared) cancels it, so the timer never runs
+  // after its page is gone (CI: "document is not defined" after teardown).
+  it('cancels the pending chat focus when the toolbar unmounts', () => {
+    vi.useFakeTimers();
+    try {
+      useGraphStore.setState({ nodes: [selectedNode('n1')] });
+      const { unmount } = render(<SelectionToolbar />);
+      const box = document.createElement('textarea');
+      box.className = 'chat-panel__textarea';
+      document.body.append(box);
+      fireEvent.click(screen.getByTitle('Ask agent about selection'));
+      unmount();
+      vi.advanceTimersByTime(1000);
+      expect(document.activeElement).not.toBe(box);
+      expect(vi.getTimerCount()).toBe(0);
+      box.remove();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('runs one selected downstream node through target execution, not an isolated cluster', () => {
     const executeNode = vi.fn().mockResolvedValue(undefined);
     const executeCluster = vi.fn().mockResolvedValue(undefined);
