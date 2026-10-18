@@ -28,9 +28,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import secrets
 import time
+import unicodedata
 from collections import OrderedDict, deque
 from typing import Any, Callable, Mapping
 
@@ -122,26 +122,32 @@ def actor_record(actor: Mapping[str, Any] | None) -> dict[str, str]:
     """Who did something, as a saved record keeps it: ``{kind, name}``.
 
     Recently deleted (services/asset_trash.py, project_store) uses it for
-    "deleted by". The person shows as "You"; an agent by its name.
-
-    An outside agent names itself (X-Nebula-Agent), and the canvas and CLI
-    print an agent's name as is, so an agent called "You" or "Person" would
-    read as the person. Such a name gets " (agent)" added. This is
-    attribution only: nothing may authorize on it (services/person_gate.py)."""
+    "deleted by". Only ``kind`` says who it was: the person is ``person``
+    (named "You"), an agent is ``agent`` with the name it gave. An outside
+    agent picks its own name, so a name proves nothing; every display labels
+    an agent from ``kind`` ("Claude (agent)", frontend lib/trash.ts
+    actorLabel, cli/commands/trash.py), and only ``kind == "person"`` reads
+    as "you". This is attribution, never permission (services/person_gate.py)."""
     actor = actor or {}
     kind = str(actor.get("kind") or "")
     if kind not in ("agent", "person", "system"):
         kind = "anonymous"
-    name = "You" if kind == "person" else actor_label(actor)[:64]
-    if kind == "agent" and re.sub(r"[^a-z]", "", name.lower()) in _NOT_AGENT_NAMES:
-        name = f"{name} (agent)"
-    return {"kind": kind, "name": name}
+    if kind == "person":
+        return {"kind": kind, "name": "You"}
+    name = clean_actor_name(actor_label(actor))
+    return {"kind": kind, "name": name or ("Agent" if kind == "agent" else actor_label({"kind": kind}))}
 
 
-# What the canvas, the CLI and actor_label call someone who isn't an agent,
-# letters only and lowercased. An agent can't take one of these as its name.
-_NOT_AGENT_NAMES = frozenset({"you", "person", "theperson", "nebula", "unnamedclient", "anunnamedclient",
-                              "unknown", "system"})
+_HIDDEN_CATEGORIES = frozenset({"Cc", "Cf", "Co", "Cs"})
+
+
+def clean_actor_name(raw: Any, limit: int = 64) -> str:
+    """A name as attribution stores it: NFKC (fullwidth letters become
+    plain ones), no control, format (zero-width, bidi override), private-use
+    or surrogate characters, whitespace collapsed, at most ``limit`` chars."""
+    text = unicodedata.normalize("NFKC", str(raw or ""))
+    text = "".join(ch for ch in text if unicodedata.category(ch) not in _HIDDEN_CATEGORIES)
+    return " ".join(text.split())[:limit].strip()
 
 
 # -- payload bounds -------------------------------------------------------

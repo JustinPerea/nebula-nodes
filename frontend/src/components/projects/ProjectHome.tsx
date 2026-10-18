@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpRight, Check, ChevronRight, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { actorLabel } from '../../lib/trash';
 import { CrabMark } from '../brand/CrabMark';
 import '../../styles/project-home.css';
 
@@ -158,7 +159,7 @@ function deletedDate(value: string): string {
 function deletedByNote(entry: TrashedProject): string {
   const by = entry.deletedBy;
   if (!by || by.kind === 'person') return '';
-  return by.kind === 'anonymous' ? ' by an unnamed client' : ` by ${by.name}`;
+  return ` by ${actorLabel(by)}`;
 }
 
 /** Two-step button for the irreversible actions: first press arms, second confirms. */

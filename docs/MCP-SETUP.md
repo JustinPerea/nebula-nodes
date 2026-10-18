@@ -843,9 +843,12 @@ can undo it:
   person's list showed (`{"items": [{kind, id}]}` to `/api/trash/empty`,
   `{"ids": [...]}` to `/api/projects/trash/empty`) and only those go, so an
   agent's delete that lands after the list loaded stays restorable.
-- "Deleted by" is attribution, never permission. An agent names itself, so an
-  agent calling itself "You", "Person" or "Nebula" is recorded as
-  "You (agent)" and so on.
+- "Deleted by" is attribution, never permission. `deletedBy.kind` says who:
+  `person`, `agent`, `system` or `anonymous`. An agent names itself, so its
+  `name` proves nothing; the canvas and CLI label every agent from `kind`
+  ("Claude (agent)") and only `kind: "person"` reads as "you". Names are
+  stored NFKC-normalized, without control, format (zero-width, bidi),
+  private-use or surrogate characters.
 
 A board or character in Recently deleted answers `GET` and `PUT` with 404 and
 `code: "in_trash"` plus its trash record. Its node card and the Inspector say

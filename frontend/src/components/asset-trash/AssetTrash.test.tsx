@@ -51,7 +51,7 @@ describe('RecentlyDeletedAssets', () => {
     render(<RecentlyDeletedAssets kind="moodboard" scope="global" onRestored={onRestored} />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     expect(screen.getByText('Warm editorial')).toBeTruthy();
-    expect(screen.getByText(/by GM - Design/)).toBeTruthy();
+    expect(screen.getByText(/by GM - Design \(agent\)/)).toBeTruthy();
     expect(screen.getByText('Deleted boards stay here until you delete them for good.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
     await waitFor(() => expect(onRestored).toHaveBeenCalledWith(board()));
@@ -75,6 +75,19 @@ describe('RecentlyDeletedAssets', () => {
     act(() => ws.handlers.forEach((handler) => handler({ type: 'storedAssetChanged', kind: 'moodboard', id: 'b2', deleted: false })));
     await waitFor(() => expect(trash.fetchTrash).toHaveBeenCalledTimes(3));
     expect(onTrashChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('labels an agent from its kind, so a name that looks like "You" never reads as the person', async () => {
+    const names = ['You', 'Y\u043eu', 'Y\u200bou', '\u202euoY\u202c', '\uff39\uff4f\uff55'];
+    trash.fetchTrash.mockResolvedValue(names.map((name, i) => board({
+      id: `b${i}`, name: `Board ${i}`, deletedBy: { kind: 'agent', name } })));
+    render(<RecentlyDeletedAssets kind="moodboard" scope="global" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
+    names.forEach((name, i) => {
+      const row = screen.getByRole('listitem', { name: `Board ${i}` });
+      expect(row.textContent).toContain(`by ${name} (agent)`);
+      expect(row.textContent).not.toMatch(/by you\b/);
+    });
   });
 
   it('asks before deleting for good, and shows the refusal when the backend says no', async () => {

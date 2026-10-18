@@ -17,10 +17,19 @@ KINDS = ("moodboard", "character", "project")
 
 
 def _who(item: dict[str, Any]) -> str:
+    """Who deleted it, from ``kind`` alone: an agent picks its own name, so a
+    name never reads as the person (services/canvas_events.actor_record)."""
     by = item.get("deletedBy")
-    if isinstance(by, dict) and by.get("name"):
-        return "you" if by.get("kind") == "person" else str(by["name"])
-    return "unknown"
+    if not isinstance(by, dict):
+        return "unknown"
+    kind = by.get("kind")
+    if kind == "person":
+        return "you"
+    if kind == "agent":
+        return f"{by.get('name') or 'Agent'} (agent)"
+    if kind == "system":
+        return "Nebula"
+    return "an unnamed client"
 
 
 def _when(item: dict[str, Any]) -> str:

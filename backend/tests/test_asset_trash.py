@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import json
+import unicodedata
 from contextlib import redirect_stdout
 
 import pytest
@@ -277,19 +278,42 @@ def test_emptying_project_trash_deletes_only_the_projects_the_person_saw(api):
         assert listed == [ids[1]], path
 
 
-@pytest.mark.parametrize("name", ["You", "you", "Person", "Nebula", "Unnamed client", "You."])
-def test_an_agent_cannot_pass_off_its_delete_as_the_persons(api, name):
-    """"Deleted by" is shown as "you" for the person and as the name for an
-    agent. An agent that calls itself "You" must not read as the person."""
-    board = _board(api)
-    by = api.client.delete(f"/api/moodboards/{board['id']}", headers={"X-Nebula-Agent": name}).json()["trashed"]["deletedBy"]
+LOOKALIKE_YOU = {
+    "homoglyph": "Y\u043eu",            # Cyrillic o
+    "zero-width": "Y\u200bo\u200du",
+    "bidi-override": "\u202euoY\u202c",
+    "fullwidth": "\uff39\uff4f\uff55",
+    "plain": "You",
+}
+
+
+@pytest.mark.parametrize("name", LOOKALIKE_YOU.values(), ids=LOOKALIKE_YOU.keys())
+def test_an_agent_named_like_the_person_is_still_recorded_as_an_agent(name):
+    """Only ``kind`` says who did it; an agent named "You" (or something
+    that renders as "You") stays an agent, with its name cleaned up."""
+    by = actor_record({"kind": "agent", "id": "ext:x", "name": name})
     assert by["kind"] == "agent"
-    assert by["name"].endswith("(agent)"), by
-    assert by["name"].lower().rstrip(".") not in ("you", "person", "nebula", "unnamed client")
-    # A real agent name is kept as it is.
+    assert not any(unicodedata.category(ch) in ("Cc", "Cf", "Co", "Cs") for ch in by["name"])
+    assert by["name"] in ("You", "Y\u043eu", "uoY")
+    assert actor_record({"kind": "person"}) == {"kind": "person", "name": "You"}
+    assert actor_record({"kind": "agent", "name": "\u200b\u202e"})["name"] == "Agent"
+
+
+def test_cli_labels_who_deleted_it_from_kind_not_name():
+    from cli.commands.trash import _who
+
+    assert _who({"deletedBy": {"kind": "agent", "name": "You"}}) == "You (agent)"
+    assert _who({"deletedBy": {"kind": "person", "name": "You"}}) == "you"
+    assert _who({"deletedBy": {"kind": "anonymous", "name": "You"}}) == "an unnamed client"
+
+
+def test_an_agent_calling_itself_you_is_recorded_as_an_agent(api):
+    board = _board(api)
+    by = api.client.delete(f"/api/moodboards/{board['id']}", headers={"X-Nebula-Agent": "You"}).json()["trashed"]["deletedBy"]
+    assert by == {"kind": "agent", "name": "You"}
     other = _board(api)
-    assert api.client.delete(f"/api/moodboards/{other['id']}", headers=AGENT).json()["trashed"]["deletedBy"] == {
-        "kind": "agent", "name": "GM - Design"}
+    by = api.client.delete(f"/api/moodboards/{other['id']}", headers=PERSON).json()["trashed"]["deletedBy"]
+    assert by == {"kind": "person", "name": "You"}
 
 
 def test_projects_share_the_listing_and_record_who_deleted_them(api):

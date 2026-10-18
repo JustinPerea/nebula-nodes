@@ -588,7 +588,8 @@ def list_trash(kind: str | None = None, ctx: Context | None = None) -> dict[str,
 
     `kind` ("moodboard", "character" or "project") narrows the list. Each item
     has its id, name, when it was deleted and who deleted it (`deletedBy`:
-    the person, an agent by name, or an unnamed client). Projects also have
+    `kind` is person, agent, system or anonymous; an agent's `name` is the
+    one it gave itself, so only kind "person" means the person). Projects also have
     `purgeAt`, when they are removed for good; boards and characters stay
     until the person deletes them for good."""
     params = {"kind": kind} if kind else None

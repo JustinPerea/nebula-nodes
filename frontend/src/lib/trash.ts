@@ -82,11 +82,20 @@ export async function emptyTrash(filter: TrashFilter, shown: Array<Pick<TrashedI
   if (!response.ok) throw await failure(response, 'Emptying Recently deleted failed');
 }
 
-/** "you", an agent's name, or "an unnamed client". */
-export function deletedByLabel(item: Pick<TrashedItem, 'deletedBy'>): string | null {
-  const by = item.deletedBy;
+/**
+ * Who did it, from `kind` alone: "you" only for the person, "<name> (agent)"
+ * for an agent, "Nebula", or "an unnamed client". An agent picks its own
+ * name, so a name (even "You", or letters that look like it) never reads as
+ * the person (backend services/canvas_events.actor_record).
+ */
+export function actorLabel(by: { kind?: string; name?: string } | null | undefined): string | null {
   if (!by) return null;
   if (by.kind === 'person') return 'you';
-  if (by.kind === 'anonymous') return 'an unnamed client';
-  return by.name;
+  if (by.kind === 'agent') return `${by.name?.trim() || 'Agent'} (agent)`;
+  if (by.kind === 'system') return 'Nebula';
+  return 'an unnamed client';
+}
+
+export function deletedByLabel(item: Pick<TrashedItem, 'deletedBy'>): string | null {
+  return actorLabel(item.deletedBy);
 }

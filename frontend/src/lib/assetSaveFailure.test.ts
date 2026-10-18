@@ -19,7 +19,7 @@ describe('saving an asset someone moved to Recently deleted', () => {
       detail: 'x', code: 'in_trash', trashed: { deletedBy: { kind: 'agent', name: 'GM - Design' } },
     }));
     await expect(updateMoodboard('b1', { name: 'Edited' })).rejects.toThrow(
-      'This board was moved to Recently deleted by GM - Design. Restore it from the list on the left, then Retry to save your changes.');
+      'This board was moved to Recently deleted by GM - Design (agent). Restore it from the list on the left, then Retry to save your changes.');
   });
 
   it('leaves out who when it was the person, and keeps the plain error otherwise', async () => {

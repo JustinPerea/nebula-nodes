@@ -1,7 +1,7 @@
 import { apiFetch, rewriteBackendAssetUrls } from './backend';
 import { resolveProjectId } from './currentProject';
 import type { Character, Moodboard } from '../types';
-import type { TrashedItem } from './trash';
+import { actorLabel, type TrashedItem } from './trash';
 import type {
   ProviderRecoveryCheckpoint,
   ProviderStartAmbiguity,
@@ -627,7 +627,7 @@ async function saveFailure(response: Response, kind: 'moodboard' | 'character', 
       const body = await response.json() as { code?: unknown; trashed?: { deletedBy?: { kind?: string; name?: string } } };
       if (body?.code === 'in_trash') {
         const by = body.trashed?.deletedBy;
-        const who = !by || by.kind === 'person' ? '' : by.kind === 'anonymous' ? ' by an unnamed client' : ` by ${by.name}`;
+        const who = !by || by.kind === 'person' ? '' : ` by ${actorLabel(by)}`;
         const noun = kind === 'moodboard' ? 'board' : 'Character';
         return new Error(`This ${noun} was moved to Recently deleted${who}. Restore it from the list on the left, then Retry to save your changes.`);
       }
