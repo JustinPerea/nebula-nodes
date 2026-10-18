@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { fetchCharacters } from '../../lib/api';
 import { backendAssetUrlSync } from '../../lib/backend';
 import type { Character } from '../../types';
@@ -29,6 +29,9 @@ export function CharacterLibraryRail({
   onNew,
 }: CharacterLibraryRailProps) {
   const [scope, setScope] = useState<AssetScope>(initialScope);
+  // Bumped when Recently deleted changes (a delete or restore elsewhere), to list again.
+  const [relistKey, setRelistKey] = useState(0);
+  const relist = useCallback(() => setRelistKey((value) => value + 1), []);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +60,7 @@ export function CharacterLibraryRail({
     return () => {
       cancelled = true;
     };
-  }, [scope, activeId, refreshKey]);
+  }, [scope, activeId, refreshKey, relistKey]);
 
   return (
     <div className="character-rail">
@@ -120,7 +123,7 @@ export function CharacterLibraryRail({
         ))}
       </div>
       <RecentlyDeletedAssets kind="character" scope={scope} refreshKey={`${String(refreshKey)}:${activeId}`}
-        onRestored={(item) => onSelect(item.id, scope)} />
+        onRestored={(item) => onSelect(item.id, scope)} onTrashChanged={relist} />
     </div>
   );
 }

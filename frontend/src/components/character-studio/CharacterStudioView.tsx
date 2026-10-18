@@ -199,6 +199,12 @@ export function CharacterStudioView() {
     if (!savedId || !isCurrent()) return;
     const scope = characterEditorScope;
     const deletedKey = key;
+    // Save edits made since the last autosave first, so Undo and Restore
+    // bring back what the person last saw. If that save fails, don't delete.
+    if (dirty && isValid) {
+      await persist();
+      if (!mounted.current || useAssetStudioDraftStore.getState().entries[deletedKey]?.dirty) return;
+    }
     const removed = await deleting.remove({ id: savedId, name: draft.name.trim(), scope });
     if (!removed || !mounted.current) return;
     const store = useAssetStudioDraftStore.getState();

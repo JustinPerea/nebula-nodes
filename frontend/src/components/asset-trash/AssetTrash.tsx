@@ -6,6 +6,7 @@ import {
   type TrashedItem,
 } from '../../lib/trash';
 import type { AssetScope } from '../../store/uiStore';
+import { wsClient } from '../../lib/wsClient';
 import '../../styles/asset-trash.css';
 
 /**
@@ -64,9 +65,12 @@ export interface RecentlyDeletedAssetsProps {
   /** Change it to list again (after a delete in the Studio). */
   refreshKey?: unknown;
   onRestored?: (item: TrashedItem) => void;
+  /** Something came into or left this list (often an agent's delete or
+   * restore elsewhere), so the library above it should list again. */
+  onTrashChanged?: () => void;
 }
 
-export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored }: RecentlyDeletedAssetsProps) {
+export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onTrashChanged }: RecentlyDeletedAssetsProps) {
   const [items, setItems] = useState<TrashedItem[]>([]);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -74,13 +78,31 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored }: R
   const [reload, setReload] = useState(0);
   const noun = NOUNS[kind];
 
+  // The ids last listed for this scope, to tell when the list changed.
+  const listed = useRef<{ scope: AssetScope; ids: string } | null>(null);
+  const trashChanged = useRef(onTrashChanged);
+  useEffect(() => { trashChanged.current = onTrashChanged; }, [onTrashChanged]);
+
   useEffect(() => {
     let cancelled = false;
     fetchTrash({ kind, scope })
-      .then((list) => { if (!cancelled) { setItems(list); setError(null); } })
+      .then((list) => {
+        if (cancelled) return;
+        setItems(list);
+        setError(null);
+        const ids = list.map((item) => item.id).join(',');
+        const before = listed.current;
+        listed.current = { scope, ids };
+        if (before && before.scope === scope && before.ids !== ids) trashChanged.current?.();
+      })
       .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Couldn’t load Recently deleted.'); });
     return () => { cancelled = true; };
   }, [kind, scope, refreshKey, reload]);
+
+  // A delete or restore elsewhere (another tab, an agent) shows up here too.
+  useEffect(() => wsClient.subscribe((event) => {
+    if (event.type === 'storedAssetChanged' && event.kind === kind) setReload((value) => value + 1);
+  }), [kind]);
 
   const act = useCallback(async (work: () => Promise<void>, after?: () => void) => {
     setBusy(true);

@@ -268,6 +268,12 @@ export function MoodboardStudioView() {
     if (!savedId || !isCurrent()) return;
     const scope = moodboardEditorScope;
     const deletedKey = key;
+    // Save edits made since the last autosave first, so Undo and Restore
+    // bring back what the person last saw. If that save fails, don't delete.
+    if (dirty && canSave) {
+      await persist();
+      if (!mounted.current || useAssetStudioDraftStore.getState().entries[deletedKey]?.dirty) return;
+    }
     const removed = await deleting.remove({ id: savedId, name: draft.name.trim(), scope });
     if (!removed || !mounted.current) return;
     const store = useAssetStudioDraftStore.getState();
@@ -555,6 +561,9 @@ function MoodboardRail({
   onNew: (scope: AssetScope) => void;
 }) {
   const [scope, setScope] = useState<AssetScope>(initialScope);
+  // Bumped when Recently deleted changes (a delete or restore elsewhere), to list again.
+  const [relistKey, setRelistKey] = useState(0);
+  const relist = useCallback(() => setRelistKey((value) => value + 1), []);
   const [moodboards, setMoodboards] = useState<Moodboard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -580,7 +589,7 @@ function MoodboardRail({
     return () => {
       cancelled = true;
     };
-  }, [scope, activeId, refreshKey]);
+  }, [scope, activeId, refreshKey, relistKey]);
 
   return (
     <div className="moodboard-rail">
@@ -627,7 +636,7 @@ function MoodboardRail({
         ))}
       </div>
       <RecentlyDeletedAssets kind="moodboard" scope={scope} refreshKey={`${String(refreshKey)}:${activeId}`}
-        onRestored={(item) => onSelect(item.id, scope)} />
+        onRestored={(item) => onSelect(item.id, scope)} onTrashChanged={relist} />
     </div>
   );
 }

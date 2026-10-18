@@ -835,12 +835,13 @@ can undo it:
   narrows boards and characters the way their lists do.
 - `POST /api/trash/{kind}/{id}/restore` brings one back with the same id and
   contents, so a Moodboard or Character node that points at it runs again. A
-  project comes back closed. Agents may restore. MCP: `list_trash`,
+  project comes back closed. Agents may restore. Restoring one that is already
+  back is a no-op (200, `alreadyRestored: true`). MCP: `list_trash`,
   `restore_from_trash`. CLI: `nebula trash list`, `nebula trash restore [kind] <id>`.
 - Deleting for good is person-only (see the list above). The person does it
   from Moodboard Studio, Character Studio or Projects.
 
-A board or character in Recently deleted answers `GET` with 404 and
+A board or character in Recently deleted answers `GET` and `PUT` with 404 and
 `code: "in_trash"` plus its trash record. Its node card and the Inspector say
 it's in Recently deleted and offer Restore. Running the node fails with a
 message that says how to restore it, and `edit_canvas` refuses to point a node

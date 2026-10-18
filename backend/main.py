@@ -10035,7 +10035,11 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     try:
         character = store.update(char_id, **updates)
-    except (KeyError, ValueError):
+    except KeyError:
+        # In Recently deleted (an agent may have deleted it): say so, so the
+        # Studio can tell the person to restore it and keep their edits.
+        return _asset_not_found("character", char_id)
+    except ValueError:
         raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
     await _broadcast_stored_asset("character", character)
     return character
@@ -10113,7 +10117,9 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     try:
         moodboard = store.update(moodboard_id, **updates)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        # In Recently deleted (an agent may have deleted it): say so, so the
+        # Studio can tell the person to restore it and keep their edits.
+        return _asset_not_found("moodboard", moodboard_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
@@ -10251,6 +10257,11 @@ async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=409, detail=(
             f"{_asset_noun(kind)} '{item_id}' is already back; nothing to restore"))
     except KeyError:
+        # Already restored (another tab, an agent, or a retry): nothing to do,
+        # and the caller gets what it asked for.
+        live = _stored_asset(kind, item_id)
+        if live is not None:
+            return {"restored": kind, "id": item_id, "asset": live, "alreadyRestored": True}
         raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
     await _broadcast_stored_asset(kind, asset)
     return {"restored": kind, "id": item_id, "asset": asset}

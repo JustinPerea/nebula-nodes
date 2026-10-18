@@ -150,6 +150,41 @@ def test_an_agent_pointing_a_node_at_a_trashed_board_is_told_to_restore_it(api):
     assert f"nebula trash restore moodboard {board['id']}" in response.json()["detail"]
 
 
+def test_saving_a_board_or_character_someone_trashed_says_it_is_in_recently_deleted(api):
+    """The person has a board open in Studio and an agent deletes it. Their
+    next save must say where it went (so they can restore and save again),
+    not a bare "not found", and must not bring it back on its own."""
+    board = _board(api, "Open in Studio")
+    api.client.delete(f"/api/moodboards/{board['id']}", headers=AGENT)
+    saved = api.client.put(f"/api/moodboards/{board['id']}", headers=PERSON, json={"name": "Edited"})
+    assert saved.status_code == 404
+    assert saved.json()["code"] == "in_trash"
+    assert saved.json()["trashed"]["deletedBy"]["name"] == "GM - Design"
+    assert MoodboardStore().get(board["id"]) is None
+    api.client.post(f"/api/trash/moodboard/{board['id']}/restore", headers=PERSON)
+    again = api.client.put(f"/api/moodboards/{board['id']}", headers=PERSON, json={"name": "Edited"})
+    assert again.status_code == 200 and again.json()["name"] == "Edited"
+
+    character = api.client.post("/api/characters", json=CHARACTER).json()
+    api.client.delete(f"/api/characters/{character['id']}", headers=AGENT)
+    saved = api.client.put(f"/api/characters/{character['id']}", headers=PERSON, json={"name": "Edited"})
+    assert saved.status_code == 404 and saved.json()["code"] == "in_trash"
+    missing = api.client.put("/api/characters/nope", headers=PERSON, json={"name": "Edited"})
+    assert missing.status_code == 404 and "code" not in missing.json()
+
+
+def test_restoring_twice_is_harmless(api):
+    """Two tabs (or an agent and the person's Undo) restore the same board."""
+    board = _board(api, "Twice")
+    api.client.delete(f"/api/moodboards/{board['id']}")
+    first = api.client.post(f"/api/trash/moodboard/{board['id']}/restore", headers=PERSON)
+    second = api.client.post(f"/api/trash/moodboard/{board['id']}/restore", headers=AGENT)
+    assert first.status_code == 200 and second.status_code == 200, second.text
+    assert second.json()["alreadyRestored"] is True and second.json()["asset"] == board
+    never = api.client.post("/api/trash/moodboard/neverexisted/restore", headers=AGENT)
+    assert never.status_code == 404
+
+
 @pytest.mark.parametrize("headers", [AGENT, MCP, {}])
 def test_only_the_person_deletes_for_good(api, headers):
     board = _board(api)

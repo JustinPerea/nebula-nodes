@@ -13,6 +13,10 @@ const api = vi.hoisted(() => ({ lookupStoredAsset: vi.fn() }));
 vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `http://127.0.0.1:8822${url}` }));
 vi.mock('../../lib/trash', async (importOriginal) => ({ ...(await importOriginal<object>()), ...trash }));
 vi.mock('../../lib/api', () => api);
+const ws = vi.hoisted(() => ({ handlers: new Set<(event: unknown) => void>() }));
+vi.mock('../../lib/wsClient', () => ({
+  wsClient: { subscribe: (handler: (event: unknown) => void) => { ws.handlers.add(handler); return () => ws.handlers.delete(handler); } },
+}));
 
 import { RecentlyDeletedAssets, UndoDeleteToast, UNDO_VISIBLE_MS } from './AssetTrash';
 import { RestoreTrashedAsset } from '../nodes/RestoreTrashedAsset';
@@ -53,6 +57,24 @@ describe('RecentlyDeletedAssets', () => {
     await waitFor(() => expect(onRestored).toHaveBeenCalledWith(board()));
     expect(trash.restoreTrashed).toHaveBeenCalledWith('moodboard', 'b1');
     expect(trash.purgeTrashed).not.toHaveBeenCalled();
+  });
+
+  it('lists again when a board is deleted elsewhere, and tells the library to list again', async () => {
+    trash.fetchTrash.mockResolvedValueOnce([]).mockResolvedValue([board()]);
+    const onTrashChanged = vi.fn();
+    render(<RecentlyDeletedAssets kind="moodboard" scope="global" onTrashChanged={onTrashChanged} />);
+    await waitFor(() => expect(trash.fetchTrash).toHaveBeenCalledTimes(1));
+    expect(onTrashChanged).not.toHaveBeenCalled();
+    // An agent deletes a board: the backend broadcasts storedAssetChanged.
+    act(() => ws.handlers.forEach((handler) => handler({ type: 'storedAssetChanged', kind: 'character', id: 'c1', deleted: true })));
+    act(() => ws.handlers.forEach((handler) => handler({ type: 'storedAssetChanged', kind: 'moodboard', id: 'b1', deleted: true })));
+    expect(await screen.findByRole('button', { name: /Recently deleted/ })).toBeTruthy();
+    expect(trash.fetchTrash).toHaveBeenCalledTimes(2);
+    expect(onTrashChanged).toHaveBeenCalledTimes(1);
+    // A save that changes nothing in the trash doesn't make the library list again.
+    act(() => ws.handlers.forEach((handler) => handler({ type: 'storedAssetChanged', kind: 'moodboard', id: 'b2', deleted: false })));
+    await waitFor(() => expect(trash.fetchTrash).toHaveBeenCalledTimes(3));
+    expect(onTrashChanged).toHaveBeenCalledTimes(1);
   });
 
   it('asks before deleting for good, and shows the refusal when the backend says no', async () => {
