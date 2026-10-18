@@ -54,6 +54,15 @@ export interface Pin {
   } | null;
 }
 
+/** A saved moodboard or character changed (backend main.py
+ *  _broadcast_stored_asset), so a card that shows it fetches it again. */
+export interface StoredAssetChangedEvent {
+  type: 'storedAssetChanged';
+  kind: 'moodboard' | 'character';
+  id: string;
+  deleted: boolean;
+}
+
 /** The active project's pins, sent after graphSync and on every pin change. */
 export interface CanvasPinsEvent {
   type: 'canvasPins';
@@ -212,6 +221,7 @@ export type ExecutionEvent = (
     }
   | AgentPresenceEvent
   | CanvasPinsEvent
+  | StoredAssetChangedEvent
   | ProposalOpenedEvent
   | ProposalSyncEvent
   | ProposalClosedEvent

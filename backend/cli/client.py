@@ -8,6 +8,7 @@ from urllib.parse import quote
 import httpx
 
 from nebula_api import NebulaAPI, NebulaAPIError
+from services.agent_params import internal_keys, internal_refusal
 
 
 DEFAULT_BASE = "http://localhost:8000"
@@ -87,7 +88,17 @@ class NebulaClient:
         return self._request("GET", "/api/agent/spend")
 
     # -- Graph --
+    @staticmethod
+    def _refuse_internal(label: str, params: dict[str, Any]) -> None:
+        """Agents don't write the canvas's internal (``_``) params; apply and
+        proposals refuse them too (services/agent_params.py). Checked here
+        because a CLI run without a name or token carries no agent marker."""
+        for key in internal_keys(params):
+            print(f"error: {internal_refusal(label, key)}", file=sys.stderr)
+            sys.exit(1)
+
     def create_node(self, definition_id: str, params: dict[str, Any]) -> dict[str, Any]:
+        self._refuse_internal(definition_id, params)
         return self._request("POST", "/api/graph/node", json={
             "definitionId": definition_id,
             "params": params,
@@ -150,6 +161,7 @@ class NebulaClient:
         return self._request("POST", "/api/canvas/cursor", json=body, headers=headers)
 
     def update_node(self, node_id: str, params: dict[str, Any]) -> dict[str, Any]:
+        self._refuse_internal(node_id, params)
         return self._request("PUT", f"/api/graph/node/{node_id}", json={"params": params})
 
     def get_node_image_path(self, node_id: str) -> dict[str, Any]:
@@ -167,6 +179,10 @@ class NebulaClient:
 
     def clear_graph(self) -> dict[str, Any]:
         return self._request("DELETE", "/api/graph")
+
+    def import_graph(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Replace the graph with a saved one in one step (POST /api/graph/import)."""
+        return self._request("POST", "/api/graph/import", json=body)
 
     def delete_node(self, node_id: str) -> dict[str, Any]:
         return self._request("DELETE", f"/api/graph/node/{quote(node_id, safe='')}")

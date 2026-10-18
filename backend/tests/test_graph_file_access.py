@@ -107,11 +107,12 @@ def test_cli_ordinary_export_and_import_roundtrip(tmp_path):
 
     assert json.loads(path.read_text()) == graph.get_state()
     client.reset_mock()
-    client.create_node.side_effect = [{"id": "n3"}, {"id": "n4"}]
+    client.import_graph.return_value = {"nodeCount": 2, "edgeCount": 1, "warnings": []}
     run_load(client, str(path))
-    client.clear_graph.assert_called_once_with()
-    assert client.create_node.call_count == 2
-    client.connect.assert_called_once_with("n3", "image", "n4", "image")
+    # One atomic import of the file as saved; no clear-then-recreate.
+    client.import_graph.assert_called_once_with(graph.get_state())
+    client.clear_graph.assert_not_called()
+    client.create_node.assert_not_called()
     assert list(tmp_path.iterdir()) == [path]
 
 

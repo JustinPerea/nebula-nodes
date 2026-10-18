@@ -76,6 +76,7 @@ import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import { notifyJobComplete } from '../lib/jobNotifications';
 import { useUIStore } from './uiStore';
 import { usePricingStore } from './pricingStore';
+import { useStoredAssetsStore } from './storedAssetsStore';
 import { runCostConfirmMessage, shouldConfirmRunCost, summarizeRunScope, type RunScope } from '../lib/runScope';
 import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
@@ -815,9 +816,10 @@ interface GraphState {
   removeShot: (nodeId: string, shotId: string) => void;
   updateScene: (nodeId: string, spec: CinemaSceneSpec | ((current: CinemaSceneSpec) => CinemaSceneSpec | null)) => void;
 
-  // Character node helper. Creates a `character` static node with
-  // params._characterId set, plus denormalized name/thumbnail for canvas
-  // rendering. Mirrors addNode's static path.
+  // Character and Moodboard node helpers. Create the static node with its
+  // asset id in the public `character` / `moodboard` param; `meta` (what the
+  // panel already shows) fills the card until its own fetch lands.
+  // Mirror addNode's static path.
   addCharacterNode: (
     characterId: string,
     position: { x: number; y: number },
@@ -4712,12 +4714,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     persistSceneParam(nodeId, spec);
   },
 
-  // Character node — mirrors addNode's static path. Writes _characterId +
-  // denormalized name/thumbnail so CharacterNode.tsx renders without fetching.
-  // These are `_`-prefixed runtime references (which Character the node points
-  // at), NOT declared model params — the prefix lets them pass the backend's
-  // _validate_params on the /api/graph/node persist path (same mechanism as
-  // _previewUrl) without polluting the Inspector.
+  // Character node — mirrors addNode's static path. The node keeps only the
+  // id (the `character` param, which the Inspector picker and agents set);
+  // CharacterNode.tsx shows the Character itself (storedAssetsStore).
   addCharacterNode: async (characterId, position, meta) => {
     if (get().isImportingGraph) return null;
     const definition = NODE_DEFINITIONS['character'];
@@ -4728,12 +4727,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     for (const param of definition.params) {
       if (param.default !== undefined) defaults[param.key] = param.default;
     }
-    const params: Record<string, unknown> = {
-      ...defaults,
-      _characterId: characterId,
-      _characterName: meta?.name ?? '',
-      _characterThumbnail: meta?.thumbnail ?? '',
-    };
+    const params: Record<string, unknown> = { ...defaults, character: characterId };
+    if (meta) {
+      useStoredAssetsStore.getState().prime('character', {
+        id: characterId, name: meta.name ?? '', thumbnail: meta.thumbnail ?? '',
+      });
+    }
 
     const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
 
@@ -4764,8 +4763,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   // Moodboard node — mirrors Character node but points at a provider-neutral
-  // saved Moodboard asset. The canvas card uses denormalized fields for instant
-  // rendering; execution resolves the canonical resource from MoodboardStore.
+  // saved Moodboard asset (the `moodboard` param). Execution resolves it from
+  // MoodboardStore; the card from storedAssetsStore.
   addMoodboardNode: async (moodboardId, position, meta) => {
     if (get().isImportingGraph) return null;
     const definition = NODE_DEFINITIONS['nebula-moodboard'];
@@ -4775,14 +4774,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     for (const param of definition.params) {
       if (param.default !== undefined) defaults[param.key] = param.default;
     }
-    const params: Record<string, unknown> = {
-      ...defaults,
-      _moodboardId: moodboardId,
-      _moodboardName: meta?.name ?? '',
-      _moodboardThumbnail: meta?.thumbnail ?? '',
-      _moodboardImageCount: meta?.imageCount ?? 0,
-      _moodboardMode: meta?.mode ?? 'look',
-    };
+    const params: Record<string, unknown> = { ...defaults, moodboard: moodboardId };
+    if (meta) {
+      useStoredAssetsStore.getState().prime('moodboard', {
+        id: moodboardId,
+        name: meta.name ?? '',
+        thumbnail: meta.thumbnail ?? '',
+        imageCount: meta.imageCount ?? 0,
+        mode: meta.mode === 'world' || meta.mode === 'subject' ? meta.mode : 'look',
+      });
+    }
 
     const localCanvasWasEmpty = get().nodes.length === 0 && get().edges.length === 0;
 

@@ -1,17 +1,15 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
+import { storedAssetId, useStoredAsset } from '../../store/storedAssetsStore';
+import { NodeSettingsAction } from './NodeSettingsAction';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { backendAssetUrlSync } from '../../lib/backend';
 import '../../styles/moodboard-node.css';
 
+// The node stores only the board's id (its `moodboard` param, which agents
+// set too); the card shows the board as it is now (storedAssetsStore).
 interface MoodboardNodeData {
-  params?: {
-    _moodboardId?: string;
-    _moodboardName?: string;
-    _moodboardThumbnail?: string;
-    _moodboardImageCount?: number;
-    _moodboardMode?: string;
-  };
+  params?: Record<string, unknown>;
 }
 
 const OUTPUTS = [
@@ -22,32 +20,39 @@ const OUTPUTS = [
   { id: 'palette', label: 'Palette', color: PORT_COLORS.Array },
 ];
 
-export function MoodboardNode({ data, selected }: NodeProps) {
+export function MoodboardNode({ id, data, selected }: NodeProps) {
   const enterMoodboardEditor = useUIStore((s) => s.enterMoodboardEditor);
-  const params = (data as MoodboardNodeData).params ?? {};
-  const id = params._moodboardId ?? '';
-  const name = params._moodboardName?.trim() || 'Moodboard';
-  const thumbnail = params._moodboardThumbnail || '';
-  const imageCount = Number(params._moodboardImageCount ?? 0);
-  const mode = params._moodboardMode || 'look';
+  const boardId = storedAssetId('moodboard', (data as MoodboardNodeData).params);
+  const entry = useStoredAsset('moodboard', boardId);
+  const board = entry?.summary ?? null;
+  const status = boardId ? entry?.status ?? 'loading' : 'empty';
+
+  const name = board?.name.trim()
+    || (status === 'empty' ? 'No board chosen' : status === 'missing' ? 'Board not found' : 'Moodboard');
+  const meta = board
+    ? `${board.imageCount ?? 0} ${board.imageCount === 1 ? 'image' : 'images'} · ${board.mode ?? 'look'}`
+    : status === 'empty' ? 'Choose one in the Inspector'
+      : status === 'missing' ? `#${boardId} was deleted or never existed`
+        : status === 'error' ? "Couldn't load this board" : 'Loading…';
 
   return (
-    <div className={`moodboard-node ${selected ? 'moodboard-node--selected' : ''}`}>
+    <div className={`moodboard-node ${selected ? 'moodboard-node--selected' : ''}`} data-moodboard-status={status} data-node-inspector-anchor={id}>
       <div className="moodboard-node__title">Moodboard</div>
+      <NodeSettingsAction id={id} />
       <div className="moodboard-node__name">{name}</div>
       <div className="moodboard-node__preview">
-        {thumbnail ? (
-          <img src={backendAssetUrlSync(thumbnail)} alt="" draggable={false} />
+        {board?.thumbnail ? (
+          <img src={backendAssetUrlSync(board.thumbnail)} alt="" draggable={false} />
         ) : (
           <span>No images</span>
         )}
       </div>
-      <div className="moodboard-node__meta">{imageCount} images · {mode}</div>
-      {selected && id && (
+      <div className="moodboard-node__meta">{meta}</div>
+      {selected && boardId && status !== 'missing' && (
         <button
           type="button"
           className="moodboard-node__open nodrag"
-          onClick={() => enterMoodboardEditor(id)}
+          onClick={() => enterMoodboardEditor(boardId)}
         >
           Open Moodboard
         </button>

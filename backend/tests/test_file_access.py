@@ -248,7 +248,7 @@ def test_graph_import_content_is_checked_before_clearing_graph(tmp_path, protect
     client = Mock()
     with pytest.raises(SystemExit):
         run_load(client, str(path))
-    client.clear_graph.assert_not_called()
+    assert client.mock_calls == []
     graph = CLIGraph()
     graph.add_node("text-input", {"value": "keep"})
     before = graph.get_state()

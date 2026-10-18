@@ -5,6 +5,7 @@ from typing import Any
 
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import detail, krea_modes, node_access, provider_via  # noqa: F401 (node_access is re-exported)
+from services.agent_params import ASSET_PARAM_TYPES
 from services.maker_sizes import rule_note
 from services.node_route import all_param_definitions, route_hides, route_param_definitions
 
@@ -154,6 +155,9 @@ def format_node_detail(node: dict[str, Any]) -> str:
             if vis:
                 conds = [f"{k}={v}" for k, vals in vis.items() for v in vals]
                 detail += f"  (when {', '.join(conds[:3])})"
+            source = ASSET_PARAM_TYPES.get(str(ptype))
+            if source:
+                detail += f"  (a {source['noun']} id; {source['list']} lists them)"
             lines.append(f"  {detail}")
         lines.append("")
 

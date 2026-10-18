@@ -36,6 +36,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping
 
+from services.agent_params import internal_refusal
 from services.agent_presence import AgentIdentity
 from services.canvas_pins import PinError, clean_text
 from services.selection_context import _SECRET_KEY_RE
@@ -192,7 +193,7 @@ def _params(raw: Any, label: str, internal_ok: frozenset[str] = frozenset()) -> 
             raise ProposalError(422, f"{label} keys must be text")
         # Underscore keys are the editor's own bookkeeping (_previewUrl, ...).
         if key.startswith("_") and key not in internal_ok:
-            raise ProposalError(422, f"{label}.{key[:40]} is internal and can't be proposed")
+            raise ProposalError(422, internal_refusal(label, key))
     return dict(raw)
 
 

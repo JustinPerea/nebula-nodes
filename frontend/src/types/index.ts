@@ -107,7 +107,9 @@ export interface ParamOption {
 export interface ParamDefinition {
   key: string;
   label: string;
-  type: 'string' | 'integer' | 'float' | 'boolean' | 'enum' | 'textarea' | 'file' | 'palette';
+  /** `moodboard` / `character`: the id of a saved asset, chosen in the
+   *  Inspector's picker (backend services/agent_params.py). */
+  type: 'string' | 'integer' | 'float' | 'boolean' | 'enum' | 'textarea' | 'file' | 'palette' | 'moodboard' | 'character';
   required: boolean;
   default?: unknown;
   /** A different default for some values of one other param, e.g.

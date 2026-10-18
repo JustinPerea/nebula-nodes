@@ -599,6 +599,14 @@ export async function fetchCharacters(scope: 'project' | 'global', projectId?: s
   return response.json();
 }
 
+/** One Character by id, or null when there's none (deleted, or never existed). */
+export async function fetchCharacter(id: string): Promise<Character | null> {
+  const response = await apiFetch(`/api/characters/${encodeURIComponent(id)}`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Fetch character failed: ${response.status}`);
+  return response.json();
+}
+
 export async function createCharacter(body: CharacterCreateInput): Promise<Character> {
   const response = await apiFetch('/api/characters', {
     method: 'POST',
@@ -636,6 +644,14 @@ export async function fetchMoodboards(scope: 'project' | 'global', projectId?: s
   if (scope === 'project') params.append('projectId', await resolveProjectId(projectId));
   const response = await apiFetch(`/api/moodboards?${params.toString()}`);
   if (!response.ok) throw new Error(`Fetch moodboards failed: ${response.status}`);
+  return response.json();
+}
+
+/** One Moodboard by id, or null when there's none (deleted, or never existed). */
+export async function fetchMoodboard(id: string): Promise<Moodboard | null> {
+  const response = await apiFetch(`/api/moodboards/${encodeURIComponent(id)}`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Fetch moodboard failed: ${response.status}`);
   return response.json();
 }
 

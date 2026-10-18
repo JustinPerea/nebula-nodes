@@ -2288,19 +2288,21 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'character': {
     id: 'character',
     displayName: 'Character',
+    description: "A saved character's identity (reference views, frozen traits, seed) for cinematic and edit nodes. Set character to a character id; GET /api/characters lists them.",
     category: 'character',
     apiProvider: 'utility',
     apiEndpoint: '',
     envKeyName: [],
     executionPattern: 'sync',
-    // No inputs — the identity asset is loaded from the project Character store
-    // by id (params._characterId, a `_`-prefixed runtime ref, not a declared
-    // model param), not wired in on a port.
+    // No inputs — the identity asset is loaded from the Character store by the
+    // id in the `character` param (picked in the Inspector, or set by an
+    // agent), not wired in on a port.
     inputPorts: [],
     outputPorts: [
       { id: 'character', label: 'Character', dataType: 'Character', required: false },
     ],
     params: [
+      { key: 'character', label: 'Character', type: 'character', required: true },
       {
         key: 'override_prompt',
         label: 'Override Prompt',
@@ -2320,6 +2322,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'nebula-moodboard': {
     id: 'nebula-moodboard',
     displayName: 'Moodboard',
+    description: 'A saved Nebula moodboard as creative direction: its style brief, negative prompt, palette and representative images. Set moodboard to a board id; GET /api/moodboards lists the boards.',
     category: 'moodboard',
     apiProvider: 'utility',
     apiEndpoint: '',
@@ -2334,7 +2337,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       { id: 'palette', label: 'Palette', dataType: 'Array', required: false },
     ],
     params: [
-      { key: 'moodboard', label: 'Moodboard', type: 'string', required: false, hidden: true },
+      { key: 'moodboard', label: 'Moodboard', type: 'moodboard', required: true },
     ],
   },
 
