@@ -358,8 +358,11 @@ def create_board(api: NebulaAPI, name: str, sources: Iterable[str] = (), *, proj
 def add_to_board(api: NebulaAPI, ref: str, sources: Iterable[str], *, headers: dict[str, str] | None = None,
                  transport: httpx.BaseTransport | None = None) -> tuple[dict[str, Any], int, int]:
     """Append `sources`; returns (board, images added, duplicates skipped)."""
-    board = get_board(api, ref, headers)
+    board = get_board(api, ref, headers)  # fail on a wrong board before downloading anything
     urls = source_urls(api, sources, headers=headers, transport=transport)
+    # Downloads can take a while; read the board again so an edit made in
+    # Moodboard Studio meanwhile isn't overwritten by the old image list.
+    board = api.request("GET", f"/api/moodboards/{board['id']}", headers=headers)
     images = list(board.get("images") or [])
     fresh, skipped = _unique_new(images, urls)
     if not fresh:
@@ -394,10 +397,11 @@ def find_image(images: list[dict[str, Any]], ref: Any) -> int:
 def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: str | None = None,
                  mode: str | None = None, strength: float | None = None,
                  images: list[dict[str, Any]] | None = None, remove: list[Any] | None = None,
-                 headers: dict[str, str] | None = None) -> tuple[dict[str, Any], list[str]]:
+                 headers: dict[str, str] | None = None) -> tuple[dict[str, Any], list[str], dict[str, Any]]:
     """Change a board. `images` is a list of {"image": number or id, "weight",
     "notes", "excluded"}; `remove` takes images off the board (their files
-    stay, and the returned URLs can be added back). Returns (board, removed URLs)."""
+    stay, and the returned URLs can be added back). Returns (board, removed
+    URLs, the settings before the change), so any change can be put back."""
     board = get_board(api, ref, headers)
     current = [dict(image) for image in board.get("images") or []]
     body: dict[str, Any] = {}
@@ -446,7 +450,20 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
     if content_changed:
         body["analysis"] = None
     updated = api.request("PUT", f"/api/moodboards/{board['id']}", json=body, headers=headers)
-    return updated, removed
+    return updated, removed, previous_settings(board)
+
+
+def previous_settings(board: dict[str, Any]) -> dict[str, Any]:
+    """What `update_board` takes to put a board back the way it was: its
+    settings and each image's weight, notes and excluded, by image id (pass
+    them as update_board's name, notes, mode, strength and images)."""
+    return {
+        "name": board.get("name"), "notes": board.get("notes"), "mode": board.get("mode"),
+        "strength": board.get("strength"),
+        "images": [{"image": image.get("id"), "weight": image.get("weight"), "notes": image.get("notes"),
+                    "excluded": image.get("excluded")}
+                   for image in board.get("images") or []],
+    }
 
 
 def analyze_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
@@ -454,10 +471,40 @@ def analyze_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = Non
     return api.request("POST", f"/api/moodboards/{board['id']}/analyze", headers=headers, timeout=300.0)
 
 
-def delete_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
+def deletes_are_restorable(api: NebulaAPI, headers: dict[str, str] | None = None) -> bool:
+    """True when this Nebula moves a deleted board to Recently deleted
+    (`/api/trash` exists), so a delete can be undone. Older backends delete
+    boards for good."""
+    try:
+        api.request("GET", "/api/trash", params={"kind": "moodboard"}, headers=headers)
+    except NebulaAPIError as exc:
+        if exc.status in (404, 405):
+            return False
+        raise
+    return True
+
+
+PERMANENT_DELETE_REFUSED = (
+    "deleting a board can't be undone in this version of Nebula, so only the person can delete it "
+    "(in Moodboard Studio). You can still take images off it or rename it (`nebula moodboard set "
+    "{id} --remove N`, or moodboard_update), or ask the person to delete it."
+)
+
+
+def delete_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None, *,
+                 allow_permanent: bool = False) -> dict[str, Any]:
+    """Delete a board. Where Nebula keeps deleted boards in Recently deleted,
+    anyone may (a restore undoes it). Where a delete is for good, only with
+    `allow_permanent`: the person confirming it themselves. Agents never are."""
     board = get_board(api, ref, headers)
+    restorable = deletes_are_restorable(api, headers)
+    if not restorable and not allow_permanent:
+        raise MoodboardError(PERMANENT_DELETE_REFUSED.format(id=board.get("id")))
     result = api.request("DELETE", f"/api/moodboards/{board['id']}", headers=headers)
-    return {**(result if isinstance(result, dict) else {}), "name": board.get("name")}
+    result = result if isinstance(result, dict) else {}
+    trashed = result.get("status") == "trashed"
+    return {**result, "name": board.get("name"), "restorable": trashed,
+            "previous": brief(board) if not trashed else None}
 
 
 def brief(board: dict[str, Any]) -> dict[str, Any]:

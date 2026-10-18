@@ -986,6 +986,14 @@ nebula moodboard delete <board>
 - Like Moodboard Studio, any change but a rename clears the board's
   analysis, so run `analyze` again. `--remove` takes an image off the board;
   its file stays, and the command prints the URL to add it back.
+- `moodboard_update` (and `set --json`) returns `previous`: the settings
+  before the change. Passing them back undoes it.
+- Deleting: where Nebula keeps deleted boards in Recently deleted, anyone
+  may delete one, agents included, because it can be restored. Where a
+  delete is for good (a Nebula without Recently deleted), only the person
+  can: `nebula moodboard delete` asks them to type the board's name in their
+  own terminal, and refuses agents (no terminal, or `NEBULA_AGENT_NAME` /
+  `NEBULA_AGENT_TOKEN` set). `moodboard_delete` always refuses then.
 - `moodboard_create` and `moodboard_add` are marked open-world because they
   fetch links; `moodboard_delete` is marked destructive.
 

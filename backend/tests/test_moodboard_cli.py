@@ -83,7 +83,7 @@ def _cli(client: NebulaClient, argv: list[str], capsys) -> str:
     return capsys.readouterr().out
 
 
-def test_new_from_a_folder_and_a_link_then_set_analyze_and_delete(app, web, tmp_path, capsys):
+def test_new_from_a_folder_and_a_link_then_set_analyze_and_delete(app, web, tmp_path, capsys, monkeypatch):
     folder = tmp_path / "refs"
     for name, color in (("10-last.png", (0, 0, 255)), ("2-second.png", (0, 255, 0)), ("1-first.png", (255, 0, 0))):
         _png(folder / name, color)
@@ -126,10 +126,18 @@ def test_new_from_a_folder_and_a_link_then_set_analyze_and_delete(app, web, tmp_
     out = _cli(app, ["moodboard", "list", "--global"], capsys)
     assert board["id"] in out and "Renamed" in out
 
+    # This backend deletes for good, so the person confirms at their terminal.
+    _person_at_a_terminal(monkeypatch, typed="Renamed")
     out = _cli(app, ["moodboard", "delete", "Renamed"], capsys)
-    assert "Deleted Renamed" in out
+    assert "Deleted Renamed" in out and "for good" in out
     with pytest.raises(SystemExit):
         _cli(app, ["moodboard", "show", board["id"]], capsys)
+
+
+def _person_at_a_terminal(monkeypatch, typed: str) -> None:
+    monkeypatch.setattr(moodboard_cmd.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(moodboard_cmd.sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr("builtins.input", lambda prompt="": typed)
 
 
 def _cli_hash(path: Path) -> str:
@@ -317,9 +325,10 @@ def test_mcp_tools_make_change_analyze_and_delete_a_board(app, web, tmp_path):
     with pytest.raises(RuntimeError, match="no image '9'"):
         mcp_server.moodboard_update(made["id"], remove=["9"])
 
-    assert mcp_server.moodboard_delete(made["id"])["status"] == "deleted"
-    with pytest.raises(RuntimeError, match="no board"):
-        mcp_server.moodboard_get(made["id"])
+    # This backend has no Recently deleted, so a delete would be for good: agents are refused.
+    with pytest.raises(RuntimeError, match="only the person can delete it"):
+        mcp_server.moodboard_delete(made["id"])
+    assert mcp_server.moodboard_get(made["id"])["id"] == made["id"]
 
 
 def test_mcp_tool_annotations_say_what_each_one_does():
@@ -349,3 +358,92 @@ def test_mcp_tools_run_off_the_event_loop_without_errors(app, tmp_path):
 
     result = asyncio.run(go())
     assert "Via call_tool" in str(result)
+
+
+# -- agents may do what can be undone -------------------------------------------------
+
+def test_an_agent_cannot_delete_a_board_for_good(app, tmp_path, capsys, monkeypatch):
+    board, _ = boards.create_board(app.api, "Keep me", [str(_png(tmp_path / "a.png"))])
+    # No terminal to confirm at (an agent's shell): refused, with what it can do instead.
+    with pytest.raises(SystemExit):
+        _cli(app, ["moodboard", "delete", board["id"]], capsys)
+    err = capsys.readouterr().err
+    assert "only the person can delete it" in err and "--remove" in err
+    # A named agent is refused even at a terminal.
+    _person_at_a_terminal(monkeypatch, typed="Keep me")
+    monkeypatch.setenv("NEBULA_AGENT_NAME", "Claude Code")
+    with pytest.raises(SystemExit):
+        _cli(app, ["moodboard", "delete", board["id"]], capsys)
+    monkeypatch.delenv("NEBULA_AGENT_NAME")
+    # The person typing the wrong name deletes nothing.
+    _person_at_a_terminal(monkeypatch, typed="something else")
+    with pytest.raises(SystemExit):
+        _cli(app, ["moodboard", "delete", board["id"]], capsys)
+    assert "nothing was deleted" in capsys.readouterr().err
+    assert boards.get_board(app.api, board["id"])["name"] == "Keep me"
+
+
+class _TrashAPI:
+    """A Nebula with Recently deleted: DELETE moves a board there."""
+
+    def __init__(self, board):
+        self.board = board
+        self.calls = []
+
+    def request(self, method, path, **kwargs):
+        self.calls.append((method, path))
+        if method == "GET" and path == "/api/trash":
+            return {"items": []}
+        if method == "GET" and path == f"/api/moodboards/{self.board['id']}":
+            return self.board
+        if method == "DELETE":
+            return {"status": "trashed", "id": self.board["id"], "trashed": {"id": self.board["id"]}}
+        raise AssertionError((method, path))
+
+
+def test_where_deletes_can_be_undone_agents_may_delete(capsys, monkeypatch):
+    board = {"id": "mb_1", "name": "Old refs", "images": []}
+    api = _TrashAPI(board)
+    result = boards.delete_board(api, "mb_1")
+    assert result["restorable"] is True and ("DELETE", "/api/moodboards/mb_1") in api.calls
+
+    # An agent's CLI (no terminal, agent name set) may too: a restore undoes it.
+    monkeypatch.setenv("NEBULA_AGENT_NAME", "Claude Code")
+    monkeypatch.setattr(NebulaClient, "api", property(lambda self: api))
+    moodboard_cmd.run(NebulaClient("http://testserver"), build_parser().parse_args(["moodboard", "delete", "mb_1"]))
+    out = capsys.readouterr().out
+    assert "Recently deleted" in out and "nebula trash restore moodboard mb_1" in out
+
+
+def test_a_change_hands_back_what_puts_it_back(app, tmp_path):
+    board, _ = boards.create_board(app.api, "Undo me", [str(_png(tmp_path / "a.png")), str(_png(tmp_path / "b.png", (1, 1, 1)))],
+                                   notes="the person's notes", strength=0.7)
+    before = boards.get_board(app.api, board["id"])
+    _, _, previous = boards.update_board(app.api, board["id"], notes="agent notes", strength=0.2, mode="world",
+                                         images=[{"image": 2, "weight": 0.1, "excluded": True, "notes": "x"}])
+    boards.update_board(app.api, board["id"], name=previous["name"], notes=previous["notes"], mode=previous["mode"],
+                        strength=previous["strength"], images=previous["images"])
+    after = boards.get_board(app.api, board["id"])
+    for key in ("name", "notes", "mode", "strength"):
+        assert after[key] == before[key]
+    strip = lambda images: [{k: image[k] for k in ("id", "url", "weight", "notes", "excluded")} for image in images]
+    assert strip(after["images"]) == strip(before["images"])
+
+
+def test_add_keeps_an_edit_made_while_it_downloaded(app, tmp_path, monkeypatch):
+    first = _png(tmp_path / "a.png", (1, 2, 3))
+    second = _png(tmp_path / "b.png", (4, 5, 6))
+    board, _ = boards.create_board(app.api, "Busy", [str(first)])
+    original = boards.source_urls
+
+    def slow_download(api, sources, **kwargs):
+        # Meanwhile the person sets a weight in Moodboard Studio.
+        image = boards.get_board(app.api, board["id"])["images"][0]
+        app.api.request("PUT", f"/api/moodboards/{board['id']}",
+                        json={"images": [{**image, "weight": 0.3}]})
+        return original(api, sources, **kwargs)
+
+    monkeypatch.setattr(boards, "source_urls", slow_download)
+    updated, added, _ = boards.add_to_board(app.api, board["id"], [str(second)])
+    assert added == 1
+    assert updated["images"][0]["weight"] == 0.3 and len(updated["images"]) == 2

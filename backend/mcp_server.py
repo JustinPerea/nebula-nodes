@@ -784,13 +784,15 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
     {"image": its number or id, "weight": 0-1, "notes": "...", "excluded": true}
     (excluded images stay on the board but stop steering). `remove` takes
     images off the board by number or id; their files stay, and the result's
-    `removed` URLs can be added back with moodboard_add. Any change but a
-    rename clears the analysis; run moodboard_analyze again."""
+    `removed` URLs can be added back with moodboard_add. `previous` holds the
+    settings before the change; pass them back to moodboard_update to undo it.
+    Any change but a rename clears the analysis; run moodboard_analyze again."""
     import moodboard_client as boards
 
-    updated, removed = _board_call(boards.update_board, _api(), board, name=name, notes=notes, mode=mode,
-                                   strength=strength, images=images, remove=remove, headers=_board_headers(ctx))
-    return {**boards.brief(updated), "removed": removed}
+    updated, removed, previous = _board_call(boards.update_board, _api(), board, name=name, notes=notes,
+                                             mode=mode, strength=strength, images=images, remove=remove,
+                                             headers=_board_headers(ctx))
+    return {**boards.brief(updated), "removed": removed, "previous": previous}
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
@@ -806,10 +808,16 @@ def moodboard_analyze(board: str, ctx: Context | None = None) -> dict[str, Any]:
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,
                                       openWorldHint=False))
 def moodboard_delete(board: str, ctx: Context | None = None) -> dict[str, Any]:
-    """Delete a moodboard by id or exact name. Its image files stay in Nebula."""
+    """Delete a moodboard by id or exact name. Its image files stay in Nebula.
+
+    The board goes to Recently deleted, and restore_from_trash brings it back
+    with the same id. On a Nebula without Recently deleted a delete is for
+    good, so this refuses: only the person can delete then, in Moodboard
+    Studio. You can still take images off a board or rename it with
+    moodboard_update."""
     import moodboard_client as boards
 
-    return _board_call(boards.delete_board, _api(), board, _board_headers(ctx))
+    return _board_call(boards.delete_board, _api(), board, _board_headers(ctx), allow_permanent=False)
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

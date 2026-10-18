@@ -148,6 +148,12 @@ nebula moodboard delete <board>
   you use the board.
 - Without `--project` a board belongs to no project, so every project can
   use it.
+- `set --json` returns `previous`, the settings before your change. Pass
+  them back to undo it.
+- `delete` moves a board to Recently deleted, and
+  `nebula trash restore moodboard <id>` brings it back. If this Nebula has no
+  Recently deleted, a delete would be for good, so it's refused: ask the
+  person, or take images off the board instead.
 - `--json` on any of them prints the board as JSON.
 
 ## Watch and answer the person
