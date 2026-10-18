@@ -5477,3 +5477,47 @@ Seven findings (two were the same docstring). Each was reproduced as a failing t
 - **sessionStorage blocked (low): fixed.** `reloadOnceFor` now returns `'reload' | 'reloaded' | 'unmarked'`. With storage blocked, the tab says "Nebula was updated while this tab was open. Reload the tab to use the update." It still doesn't reload by itself, because without the mark a stale build would loop. The rebuild wording stays for a tab that already reloaded once. Test: "with sessionStorage blocked, asks for a reload instead of a rebuild" (failed first).
 - **claude-chat doc omitted presets (low): fixed.** `docs/model-providers/anthropic/claude-chat.md` now lists saved style presets among the things the upgrade covers. It also says a tab with no project open is refused too, and that a current tab connected to an older backend stops. `docs/projects-implementation-notes.md` describes the browser rule and the version-0 backend.
 - **Same bug in the new bundle: fixed too (not in the findings).** This bundle's `initialize` had the same else branch, which cleared the context but kept `activeProject`, and the same `open()` shortcut. With the version header that no longer let old params through, but such a tab sat on a canvas with no project context, and its edits went unsaved. The else branch now also clears `activeProject`, so Open goes through the backend and `applyProject`. Test: `projectStore.test.ts` "opens the former project through the backend after Try again found no active project" (failed first).
+
+## 2026-10-17 — SelectionToolbar's chat-focus timer outlived the toolbar
+
+CI failed three of ten PR runs on 2026-10-17 (#57, #59, #64) with "ReferenceError: document is not defined" from `SelectionToolbar.tsx`, after every test had passed. "Ask agent about selection" opens the chat panel and focuses its text box 180 ms later, on a timer nothing cleared. When `SelectionToolbar.test.tsx` finished within those 180 ms, the timer fired after jsdom was torn down. Load-dependent, so it showed up only sometimes.
+
+- **Fix in the component, not the test.** The timer lives in a ref and the toolbar clears it on unmount, so a toolbar that disappears first (the selection cleared) no longer moves focus afterwards. A second click restarts the wait instead of stacking timers.
+- **Tests:** "focuses the chat box once the panel has opened" and "cancels the pending chat focus when the toolbar unmounts" (fake timers). The second failed before the fix.
+- **Not changed:** the 180 ms wait itself. Focus requested by the panel when it mounts would avoid a fixed delay, but that is a separate change to `ChatPanel`.
+
+## Desktop launch params check (2026-10-17)
+
+Justin approved "Desktop launch check" (after #63). The desktop app runs the checkout's backend but a frontend someone built earlier, so a `git pull` that raises `PARAMS_VERSION` used to open an old bundle that failed only at its first save or Run. Now the app checks at launch. Branch `desktop-params-check`.
+
+**What was built**
+- `frontend/vite-plugins/buildStamp.ts`: a Vite plugin (build only) that emits `nebula-build.json` = `{"paramsVersion": GRAPH_PARAMS_VERSION}` next to `index.html` in both `dist/` and `dist-desktop/`. It imports the constant from `savedParamsUpgrades.ts`, the same import the bundle uses.
+- `/api/health` adds `"paramsVersion": PARAMS_VERSION`; the other fields are unchanged. Still unauthenticated.
+- `desktop/frontend-build.mjs` (pure, Electron-free): `readBuildParamsVersion` (missing stamp: `build_stamp_missing`; unreadable or no non-negative integer: `build_stamp_unreadable`) and `checkParamsVersions` (`frontend_older`, `frontend_newer`, `backend_version_unreadable`). Errors are `FrontendBuildError` with a `heading` the failure surface shows.
+- `desktop/main.mjs`: stamp read right after the "renderer is not built" check, before app data, migration or spawn; the comparison after `startSidecar` resolves and before `createMainWindow`. A mismatch runs `cleanupSidecar()` and throws into the existing catch (`startupError` + `showFailure`), so a Dock click or second launch shows it again. Both are skipped in dev mode.
+
+**Decisions not in the spec**
+- **`savedParamsUpgrades.ts` imports nothing now.** Importing it from `vite.config.ts` pulled `runHistory.ts` (a type import) into the Node tsconfig program, where `window` and `import.meta.env` don't exist: 60 tsc errors. Instead of moving the constant (the backend test reads it from this file by regex), `upgradeRunSnapshot` is typed structurally (`<T extends { nodes: { definitionId, params }[] }>`). Callers still pass and get `RunGraphSnapshot`. The header asks to keep the module import-free.
+- **The plugin lives in `frontend/vite-plugins/`**, added to `tsconfig.node.json`, not in `src/` (which is browser-typed with no Node types).
+- **The sidecar handle carries `health`** (the body that confirmed readiness), so main.mjs compares without a second request. The `sidecarStarting` flag stays true until the comparison passes, so a Cmd-Q while a mismatched sidecar is stopping waits for the stop, like a quit during cold start.
+- **The comparison runs after the `NEBULA_SIDECAR_PID/PORT` log lines.** The integration test reads the PID to prove the sidecar is gone afterwards.
+- **A non-integer `paramsVersion` in health** (no real backend sends one) gets its own `backend_version_unreadable` message under the usual "Backend startup failed" heading, instead of blaming the frontend.
+- **Failure-surface heading.** The page always said "Backend startup failed"; it now uses `error.heading` when there is one ("The desktop frontend needs a rebuild").
+- **Smoke JSON includes `type`** for `FrontendBuildError` as for `SidecarError`.
+- **`npm run package` rebuilds a renderer with no stamp** (its mtime check alone would call a fresh pre-stamp build up to date and package an app that refuses to start), and `vite-plugins/` counts as a build input.
+- **Electron integration tests now skip unless `dist-desktop` has the stamp**, not just `index.html`: a pre-stamp build would stop every launch at the stamp check and the old tests would fail with a confusing error.
+
+**Tests**
+- Desktop unit: `tests/frontend-build.test.mjs` (17: missing, unreadable, seven damaged shapes, equal, older, newer, health without the field, a bad backend value, heading). `sidecar.test.mjs` asserts the handle's `health`.
+- Desktop integration (`integration.test.mjs`): two launches against the `serve-health` fixture, one at `stamp + 1` (frontend older), one with no field (frontend newer). Each checks the smoke error type and message, a non-zero exit, that the logged sidecar PID is gone and its port has no listener, and that no renderer loaded. The existing smoke run (real backend, stamp 1 = health 1) still passes.
+- Also checked by hand: a launch with the stamp removed reports `build_stamp_missing` and creates no `Nebula Nodes` app-data folder.
+- Backend: `/api/health` body equality in `test_params_version_gate.py`. Frontend: `tests/buildStamp.test.ts`.
+
+**Surprises**
+- `cd desktop && npm test` had three failures on main before this branch. Two pinned 19 provider keys, but both lists have held 20 since TypeSafe joined (#53): `credential-service.test.mjs` and `sidecar.test.mjs` ("the provider-key list"). The pins now say 20. The provider stack (#57) raises them to 21 with BFL, so expect that one-line conflict there. The third, the parent-lifeline test, runs the checkout's own `backend/.venv`, which a fresh worktree lacks; it passes with one. Whole suite with a venv in place: 378/378, none skipped.
+- The in-tab gate from #63 is unchanged; it still covers browser tabs (the web build's stamp is written but nothing reads it).
+
+**Live check with real Electron (2026-10-17), and one fix**
+- Launched the app three ways in smoke mode (isolated user data, app id and HOME, mock keychain, flux2-bfl venv), capturing each window through `webContents` (`capturePage`, `executeJavaScript`) from a scratch harness that wraps `main.mjs`. A matching build opened a new project on the canvas ("Saved"); an edited stamp (0) and a removed stamp each stopped with the rebuild message, and the version-mismatch sidecar was gone afterwards.
+- **Bug found: the fix line was cut off.** `showFailure` reuses the 480x320 loading window when it exists (it always does at launch), and the message box was capped at `50vh` (160px), so the frontend-older message ended at "Run `cd frontend && npm run build:desktop`" half out of view; the box sat inside the window's drag region, so it couldn't be scrolled or selected either. The old sidecar errors had the same limit, but these are the first messages whose last line is the whole point.
+- **Fix:** the failure page moved to `desktop/failure-surface.mjs` (with `htmlDataUrl`/`escapeHtml`, which the other inline pages also use). `showFailure` grows the reused loading window to `FAILURE_WINDOW_SIZE` (600x400, the size a fresh failure window already had) and centres it; the box is `max-height: calc(100vh - 140px)`, selectable and `no-drag`. Re-captured: all three launch-check messages (older, newer, no stamp) show in full. Test: `desktop/tests/failure-surface.test.mjs`.

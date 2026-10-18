@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   Copy,
   Download,
@@ -54,11 +54,19 @@ export function SelectionToolbar() {
     { pricing, apiKeys }), [nodes, edges, ids, pricing, apiKeys]);
   const runChip = runChipLabel(runScope);
   const runScopeId = useId();
+  // "Ask agent" focuses the chat box once the panel has opened. A toolbar
+  // that unmounts first (the selection cleared) cancels that focus.
+  const focusTimer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (focusTimer.current !== null) window.clearTimeout(focusTimer.current);
+  }, []);
   if (ids.length === 0) return null;
 
   function openAgent() {
     if (!chatVisible) togglePanel('chat');
-    window.setTimeout(() => {
+    if (focusTimer.current !== null) window.clearTimeout(focusTimer.current);
+    focusTimer.current = window.setTimeout(() => {
+      focusTimer.current = null;
       document.querySelector<HTMLTextAreaElement>('.chat-panel__textarea')?.focus();
     }, chatVisible ? 0 : 180);
   }
