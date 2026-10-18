@@ -213,6 +213,8 @@ export type ExecutionEvent = (
       empty: boolean;
       /** Explicit committed graph import; ordinary updates remain merges. */
       graphReplaced?: boolean;
+      /** Existing nodes this change put somewhere new; the canvas takes their positions. */
+      moved?: string[];
       activeProjectId?: string | null;
       workspaceRevision?: string;
       providerRecoveries?: ProviderRecoveryCheckpoint[];

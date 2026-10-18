@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { computeLayout } from '../src/lib/autoLayout';
 
-const opts = { colGap: 360, rowGap: 220, x0: 0, y0: 0 };
+const opts = { gapX: 120, gapY: 40, x0: 0, y0: 0 };
 
 describe('computeLayout', () => {
   it('lays a chain out in increasing columns, same row', () => {
@@ -67,5 +67,38 @@ describe('computeLayout', () => {
       opts,
     );
     expect(pos.a).toEqual({ x: 0, y: 0 });
+  });
+
+  it('stacks a column by each node\'s measured height', () => {
+    // Image cards size to their image: 236, 497 and 300 px tall in the GM session.
+    const pos = computeLayout(
+      [{ id: 'a', width: 280, height: 236 }, { id: 'b', width: 280, height: 497 }, { id: 'c', width: 280, height: 300 }],
+      [],
+      opts,
+    );
+    expect([pos.a.y, pos.b.y, pos.c.y]).toEqual([0, 276, 813]);
+  });
+
+  it('starts the next column after the widest node in the previous one', () => {
+    const pos = computeLayout(
+      [{ id: 'wide', width: 520, height: 300 }, { id: 'narrow', width: 200, height: 100 }, { id: 'next' }],
+      [{ source: 'wide', target: 'next' }, { source: 'narrow', target: 'next' }],
+      opts,
+    );
+    expect(pos.next).toEqual({ x: 640, y: 0 });
+  });
+
+  it('keeps the old fixed steps for nodes the canvas has not measured', () => {
+    const pos = computeLayout([{ id: 'a' }, { id: 'b', width: 0, height: Number.NaN }], [], {});
+    expect(pos.b).toEqual({ x: 0, y: 220 });
+  });
+
+  it('never overlaps measured boxes in a column', () => {
+    const heights = [236, 497, 300, 120, 410];
+    const nodes = heights.map((height, i) => ({ id: `n${i}`, width: 300, height }));
+    const pos = computeLayout(nodes, [], opts);
+    for (let i = 1; i < nodes.length; i++) {
+      expect(pos[`n${i}`].y).toBeGreaterThanOrEqual(pos[`n${i - 1}`].y + heights[i - 1] + 40);
+    }
   });
 });
