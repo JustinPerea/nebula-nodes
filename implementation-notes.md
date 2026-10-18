@@ -5156,6 +5156,14 @@ Seven findings (two were the same docstring). Each was reproduced as a failing t
 - **claude-chat doc omitted presets (low): fixed.** `docs/model-providers/anthropic/claude-chat.md` now lists saved style presets among the things the upgrade covers. It also says a tab with no project open is refused too, and that a current tab connected to an older backend stops. `docs/projects-implementation-notes.md` describes the browser rule and the version-0 backend.
 - **Same bug in the new bundle: fixed too (not in the findings).** This bundle's `initialize` had the same else branch, which cleared the context but kept `activeProject`, and the same `open()` shortcut. With the version header that no longer let old params through, but such a tab sat on a canvas with no project context, and its edits went unsaved. The else branch now also clears `activeProject`, so Open goes through the backend and `applyProject`. Test: `projectStore.test.ts` "opens the former project through the backend after Try again found no active project" (failed first).
 
+## 2026-10-17 — SelectionToolbar's chat-focus timer outlived the toolbar
+
+CI failed three of ten PR runs on 2026-10-17 (#57, #59, #64) with "ReferenceError: document is not defined" from `SelectionToolbar.tsx`, after every test had passed. "Ask agent about selection" opens the chat panel and focuses its text box 180 ms later, on a timer nothing cleared. When `SelectionToolbar.test.tsx` finished within those 180 ms, the timer fired after jsdom was torn down. Load-dependent, so it showed up only sometimes.
+
+- **Fix in the component, not the test.** The timer lives in a ref and the toolbar clears it on unmount, so a toolbar that disappears first (the selection cleared) no longer moves focus afterwards. A second click restarts the wait instead of stacking timers.
+- **Tests:** "focuses the chat box once the panel has opened" and "cancels the pending chat focus when the toolbar unmounts" (fake timers). The second failed before the fix.
+- **Not changed:** the 180 ms wait itself. Focus requested by the panel when it mounts would avoid a fixed delay, but that is a separate change to `ChatPanel`.
+
 ## Desktop launch params check (2026-10-17)
 
 Justin approved "Desktop launch check" (after #63). The desktop app runs the checkout's backend but a frontend someone built earlier, so a `git pull` that raises `PARAMS_VERSION` used to open an old bundle that failed only at its first save or Run. Now the app checks at launch. Branch `desktop-params-check`.
