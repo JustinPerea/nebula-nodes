@@ -68,6 +68,21 @@ const keyOf = (kind: StoredAssetKind, id: string) => `${kind}:${id}`;
 const latestRequest = new Map<string, number>();
 let requestCounter = 0;
 
+// Listen for changes from the first time a card asks for an asset, not on
+// import: nothing needs refreshing until then, and importing the store (graphStore
+// does) shouldn't register a socket handler.
+let listening = false;
+function listen() {
+  if (listening) return;
+  listening = true;
+  wsClient.subscribe((event) => {
+    const store = useStoredAssetsStore.getState();
+    if (event.type === 'storedAssetChanged') store.applyChange(event);
+    // Another project (or an import) arrived; anything may have changed meanwhile.
+    else if (event.type === 'graphSync' && event.graphReplaced) void store.refreshAll();
+  });
+}
+
 interface StoredAssetsState {
   entries: Record<string, StoredAssetEntry>;
   /** Fetch unless it's already known or on its way. */
@@ -85,6 +100,7 @@ export const useStoredAssetsStore = create<StoredAssetsState>((set, get) => {
     set((state) => ({ entries: { ...state.entries, [key]: entry } }));
 
   const load = async (kind: StoredAssetKind, id: string) => {
+    listen();
     const key = keyOf(kind, id);
     const request = ++requestCounter;
     latestRequest.set(key, request);
@@ -144,9 +160,3 @@ export function useStoredAsset(kind: StoredAssetKind, id: string): StoredAssetEn
   }, [kind, id]);
   return entry;
 }
-
-wsClient.subscribe((event) => {
-  if (event.type === 'storedAssetChanged') useStoredAssetsStore.getState().applyChange(event);
-  // Another project (or an import) arrived; anything may have changed meanwhile.
-  else if (event.type === 'graphSync' && event.graphReplaced) void useStoredAssetsStore.getState().refreshAll();
-});
