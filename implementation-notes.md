@@ -5713,3 +5713,15 @@ Justin approved "Desktop launch check" (after #63). The desktop app runs the che
 - **Tradeoff.** Retrying a mid-response read failure can re-send a billed request (TypeSafe charges per request). The code already did this for `httpx.ReadError`, so this keeps the behaviour consistent rather than adding a new risk; a poll retry is a GET and isn't billed.
 - **Tests.** 12 new test cases across `test_typesafe_client.py`, `test_poll_retry.py` (helper, BytePlus ride-out, BytePlus gives up and DELETEs), `test_stream_runner_fal_recovery.py`, `test_prompt_enhance.py`, `test_error_classifier.py` and new `test_http_errors.py` (incl. vision). All 12 fail with the source changes stashed and pass with them.
 - **Reproduced locally, not only read.** A scratch TLS server on 127.0.0.1 (self-signed cert, TLS 1.2) sent a garbage application-data record after the handshake. A real `httpx.AsyncClient` raised `ssl.SSLError: [SSL] record layer failure (_ssl.c:2559)` and `isinstance(exc, httpx.HTTPError)` was False. OpenSSL words the same failure differently by version, which is why "record layer failure" is a classifier marker too.
+
+## TypeSafe minimum image side: 256 -> 280 (2026-10-16)
+
+- **Source.** docs.typesafe.ai/images, fetched 2026-10-16: "Width and height 280 to 1568 pixels each. An image with either side under 280 pixels is rejected." and "Total pixels (width × height) 78,400 to 2,458,624, the area of a 280 × 280 to a 1568 × 1568 square." The page also says "Scale up, or pad, an image smaller than the minimum."
+- **The old value was wrong, not stale.** `MIN_SIDE = 256` didn't match the page; the Jev integration entry above ("Image limits (256 to 1568 px a side ...) match") was mistaken. `MIN_PIXELS = 78_400` was already right (it is 280 x 280), which is why square images were padded to 280 x 280 and only thin images went out under the limit.
+- **What broke.** Any image whose short side came out between 256 and 279 after shrinking was sent short and TypeSafe would refuse it. Two cases now have tests that fail on 256 and pass on 280:
+  - a 2000 x 320 banner shrinks to 1568 x 251 and was padded to 1568 x 256 (now 1568 x 280);
+  - a 3:1 candidate on Pick Best's 768 px retry is 768 x 256 and was sent as is (now padded to 768 x 280).
+- **Every use checked.** `_target_size` pads (never refuses) up to `MIN_SIDE`, so the one constant fixes Decide, Box, Pick Best (both passes) and `qc_jev` (frames thumbnailed to 768, then fitted by `prepare_images`). The `max_side` check in `prepare_images` now reads 280 to 1568; the only caller with a smaller `max_side` is Pick Best's 768 retry, which is inside it.
+- **Kept on purpose.** The `MIN_PIXELS` grow step in `_target_size` can't trigger any more (280 x 280 is exactly 78,400), but stays in case TypeSafe moves the two limits apart.
+- **Tests updated to the documented value:** the `_target_size` table, the `max_side` error message, and the hand-built `ImageTransform` box-mapping case (now a realistic 280 px sent height).
+- **Docs:** `docs/api-guides/typesafe.md` and both copies of the typesafe skill say 280-1568 px.

@@ -221,7 +221,7 @@ Nebula prepares every image before sending, because TypeSafe rejects images outs
 - Loads local files, `/api/outputs/...` references, data URIs and public https URLs through Nebula's usual path and URL checks. A remote image gets 120 s in total to download.
 - Reads PNG, JPEG, WebP and GIF only. Pillow is never asked to guess at other formats (it would hand EPS to Ghostscript, for one).
 - Applies EXIF rotation, takes the first frame of an animation, and converts WebP and GIF to PNG (when there is transparency, or the input was PNG) or JPEG.
-- Shrinks the long side to 1568 px, and pads (never stretches) small images up to 256 px a side and 78,400 px in total.
+- Shrinks the long side to 1568 px, and pads (never stretches) small images up to 280 px a side and 78,400 px in total (TypeSafe rejects either side under 280 px).
 - Keeps each image under 16 MiB and the whole request under 32 MiB, re-encoding as smaller JPEGs if it must. Inputs over 64 MiB or 64 megapixels are refused, and so are a request's images when they add up to more than 256 MiB as read.
 
 ## Cost

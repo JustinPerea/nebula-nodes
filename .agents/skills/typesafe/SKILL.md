@@ -64,7 +64,7 @@ Use `claude-chat` or another LLM node when you need words back (captions, critiq
 
 ## Images are experimental
 
-TypeSafe says image input and Box aren't production-ready: format, limits and accuracy can change. Say so when you rely on an image judgment, and prefer text checks where a text check is enough. Nebula prepares images itself (EXIF rotation, PNG/JPEG, 256-1568 px, padding, size caps), up to 16 images per Decide node and 10 per Pick Best.
+TypeSafe says image input and Box aren't production-ready: format, limits and accuracy can change. Say so when you rely on an image judgment, and prefer text checks where a text check is enough. Nebula prepares images itself (EXIF rotation, PNG/JPEG, 280-1568 px, padding, size caps), up to 16 images per Decide node and 10 per Pick Best.
 
 ## Pick Best
 
