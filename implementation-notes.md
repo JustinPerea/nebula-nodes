@@ -1,5 +1,28 @@
 # Implementation Notes
 
+## 2026-10-18 — `nebula apply`: the CLI twin of edit_canvas (design-canvas gap 8)
+
+GM - Design built the Good Machines canvas through the CLI one call per node and per wire: not atomic (a refused wire left half a graph), many calls, and no `+refs`, so each step had to read back the ids the last one made. `POST /api/graph/apply` already did the whole thing atomically for the MCP server's `edit_canvas`; the CLI never called it.
+
+- **One plan, two commands.** The builder moved from `cli/commands/proposals.py` to `cli/plan.py`, and `nebula propose` and `nebula apply` both use it (`proposals.py` re-exports `build_body` and `BuildError`). A file of `nodes`, `edges` and `params` works with both. `propose` adds `run`; `apply` adds `rename`, `move`, `remove` and `unwire`.
+- **Builder flags.** `apply` takes `propose`'s `--add`, `--param`, `--set`, `--wire` and `--at`, plus `--rename REF=name`, `--move REF=x,y`, `--remove nX` and `--unwire SRC:port DST:port`. `--rename` and `--move` take an existing id or a `+ref` from `--add`. `--file -` reads standard input (both commands).
+- **Refused before sending.**
+  - A plan with `run` given to `apply`: "apply never runs anything: send the same plan to `nebula propose` so the person runs it, or apply it without `run` and then `nebula run <node id>`." Refusing beats dropping `run` silently: an agent that asked for a run should know it didn't happen.
+  - A plan with `rename`/`move`/`remove`/`unwire` given to `propose` says to use `nebula apply`. The backend already refused those keys with "unknown proposal field".
+- **Output.** "Applied: added 3, wired 2, renamed 1." then one line per new node, `+ref → nN  Name`, so the next command can use the ids. `--json` prints the backend's result. Exit 0 on success, 1 on any refusal, with the backend's message.
+- **Name.** `--as` or `$NEBULA_AGENT_NAME`, like proposals. The route already refuses an unnamed caller with "Name yourself with NEBULA_AGENT_NAME or --as".
+- **Out of scope but needed: staging errors name new nodes by their ref.** A bad wire on a new node said "Invalid target handle 'nope' on node 'n12'": n12 was the id the node had on the staged copy, which the agent never saw and which doesn't exist after the refusal. `_stage_proposal` now maps staged ids back to the plan's refs in the wire validators' message ("on node '+b'"). It covers proposals, apply, `edit_canvas` and `nebula apply` alike.
+- **Docs.** `docs/MCP-SETUP.md`: the apply route's section names `nebula apply` as its twin, and "Long runs and graph edits from the CLI" has the builder example. That example's output was copied from a live run, not written by hand.
+- **Not done here.** The `nebula` skill in `~/.claude/skills/nebula` lists the CLI commands. Editing it is design-canvas gap 1, which is Justin's call, so it doesn't mention `apply` yet. `nebula --help` and `nebula apply --help` do.
+- **Checked live** on an isolated backend (8792; temp HOME, state, settings and output; no keys):
+  - the documented example ran on a seeded canvas;
+  - a bad port changed nothing, and the error named `+b`;
+  - `run` was refused before sending;
+  - an unnamed call was told to name itself;
+  - one file was proposed and then applied from stdin;
+  - `--set n2._moodboardId=x` got the internal-param message from gap 13.
+- **Tests.** `backend/tests/test_cli_apply.py` (10). They drive `run_apply` / `run_propose` through `NebulaClient` with its HTTP routed into the app. They cover: the atomic file apply and its output; a refused plan changing nothing, with the ref in the error; `run` refused client-side; the unnamed caller; builder flags equal to the file; editing existing nodes and the builder's own refusals; flags-or-file; stdin with `--json`; one file proposed and applied; and propose pointing at apply.
+
 ## 2026-10-18 — Moodboard and Character nodes take a public asset id (design-canvas gap 13)
 
 GM - Design (an agent building Justin's Good Machines canvas) couldn't point a Moodboard node at a board. The node kept the board in hidden `_moodboardId` / `_moodboardName` / `_moodboardThumbnail` params: the proposal and apply paths refuse `_` keys, `nebula set` sent them but the card and the run then disagreed, and the card showed whatever copy of the name was written when the node was made. Fix: one public param per node, and the card reads the asset itself.
