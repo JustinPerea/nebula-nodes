@@ -74,3 +74,64 @@ async def test_moodboard_node_names_a_missing_board(tmp_path, monkeypatch, board
     with pytest.raises(ValueError, match="not found; it may have been deleted"):
         await handle_moodboard_node(
             GraphNode(id="n1", definitionId="nebula-moodboard", params={"moodboard": board_id}), {}, {})
+
+
+def _node(board_id: str) -> GraphNode:
+    return GraphNode(id="n1", definitionId="nebula-moodboard", params={"moodboard": board_id})
+
+
+@pytest.mark.asyncio
+async def test_moodboard_node_analyzes_again_when_the_board_changed(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
+    first, second = _write_test_image("first.png", (30, 40, 90)), _write_test_image("second.png", (235, 225, 205))
+    store = MoodboardStore()
+    board = store.create(name="Board", images=[{"url": first, "weight": 1.0}, {"url": second, "weight": 0.3}])
+    store.update(board["id"], analysis=analyze_moodboard(store.get(board["id"])))
+    # An agent re-weights the board through the API and doesn't analyze it again.
+    store.update(board["id"], images=[{"url": first, "weight": 0.3}, {"url": second, "weight": 1.0}])
+
+    result = await handle_moodboard_node(_node(board["id"]), {}, {})
+
+    assert result["representative_images"]["value"] == [second, first]
+    bundle = result["moodboard"]["value"]
+    assert bundle["analysis"]["warnings"][-1].startswith("The board changed after its saved analysis")
+    assert bundle["palette"] == bundle["analysis"]["palette"] and bundle["accents"] == []
+    assert store.get(board["id"])["analysis"]["representativeImages"] == [first, second]
+
+
+@pytest.mark.asyncio
+async def test_moodboard_node_keeps_a_current_analysis_and_its_hand_edits(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
+    store = MoodboardStore()
+    board = store.create(name="Board", images=[{"url": _write_test_image("kept.png", (210, 90, 30))}])
+    analysis = {**analyze_moodboard(store.get(board["id"])), "styleBrief": "Edited by hand"}
+    store.update(board["id"], analysis=analysis, name="Renamed")
+
+    def must_not_run(moodboard):
+        raise AssertionError("a current analysis is used as saved")
+
+    monkeypatch.setattr("handlers.moodboard.analyze_moodboard", must_not_run)
+    result = await handle_moodboard_node(_node(board["id"]), {}, {})
+
+    assert result["style_brief"]["value"] == "Edited by hand"
+
+
+@pytest.mark.asyncio
+async def test_moodboard_node_analyzes_off_the_event_loop(tmp_path, monkeypatch) -> None:
+    import asyncio
+
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path))
+    board = MoodboardStore().create(name="Board", images=[{"url": _write_test_image("loop.png", (20, 140, 190))}])
+    loops = []
+
+    def record(moodboard):
+        try:
+            loops.append(asyncio.get_running_loop())
+        except RuntimeError:
+            loops.append(None)
+        return analyze_moodboard(moodboard)
+
+    monkeypatch.setattr("handlers.moodboard.analyze_moodboard", record)
+    await handle_moodboard_node(_node(board["id"]), {}, {})
+
+    assert loops == [None]

@@ -529,7 +529,11 @@ export interface MoodboardAnalysis {
   negativePrompt: string;
   keywords: string[];
   avoids: string[];
+  /** Dominant colours, ranked by image weight × share of pixels. */
   palette: string[];
+  /** Small saturated colours kept apart from the palette (analysis version 2 on). */
+  accents?: string[];
+  colors?: Array<{ hex: string; share: number; role: 'dominant' | 'accent'; images: number }>;
   lighting: string;
   composition: string;
   materials: string[];

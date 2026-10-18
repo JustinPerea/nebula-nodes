@@ -161,6 +161,49 @@ async def test_generate_adapts_native_nebula_moodboard_to_krea_style_refs() -> N
 
 
 @pytest.mark.asyncio
+async def test_an_unanalyzed_native_moodboard_sends_its_heaviest_images_first() -> None:
+    captured: dict[str, object] = {}
+
+    def capture_generate(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content.decode())
+        return httpx.Response(200, json={
+            "job_id": "job-ranked", "status": "completed", "created_at": "2026-05-30T00:00:00Z",
+            "completed_at": "2026-05-30T00:00:02Z", "result": {"urls": ["https://cdn.krea.ai/ranked.png"]},
+        })
+
+    native_moodboard = {
+        "kind": "nebula_moodboard",
+        "name": "Unanalyzed",
+        "strength": 1.0,
+        "images": [
+            {"url": "https://assets.example/a.png", "weight": 0.5},
+            {"url": "https://assets.example/b.png", "weight": 1.0},
+            {"url": "https://assets.example/kept.png", "weight": 0.0},
+            {"url": "https://assets.example/off.png", "weight": 1.0, "excluded": True},
+        ],
+    }
+
+    with respx.mock:
+        respx.post(f"{KREA_BASE_URL}/generate/image/krea/krea-2/medium").mock(side_effect=capture_generate)
+        respx.get("https://cdn.krea.ai/ranked.png").mock(
+            return_value=httpx.Response(200, content=b"png", headers={"Content-Type": "image/png"})
+        )
+        await handle_krea_generate(
+            _node("krea-2-generate"),
+            {
+                "prompt": PortValueDict(type="Text", value="A product photograph"),
+                "moodboard": PortValueDict(type="Moodboard", value=native_moodboard),
+            },
+            {"KREA_API_TOKEN": "krea-token"},
+        )
+
+    assert captured["body"]["image_style_references"] == [
+        {"url": "https://assets.example/b.png", "strength": 1.0},
+        {"url": "https://assets.example/a.png", "strength": 0.5},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_generate_supports_manual_style_and_moodboard_params() -> None:
     captured: dict[str, object] = {}
 

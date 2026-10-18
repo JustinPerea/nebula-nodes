@@ -9748,7 +9748,7 @@ async def quick_execute(body: dict[str, Any]) -> dict:
 
 # ---------- Characters: project-scoped & global character store ----------
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from services.prompt_enhance import (
     enhance_prompt,
@@ -9848,7 +9848,11 @@ class CharacterUpdate(BaseModel):
     consistencyStrength: float | None = None
 
 
+# Moodboard bodies refuse unknown fields: an image list sent under any other
+# key used to make a board with no images and a 200.
 class MoodboardImageModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: str | None = None
     url: str
     weight: float = 1.0
@@ -9857,6 +9861,8 @@ class MoodboardImageModel(BaseModel):
 
 
 class MoodboardCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     images: list[MoodboardImageModel] = Field(default_factory=list)
     notes: str = ""
@@ -9867,12 +9873,19 @@ class MoodboardCreate(BaseModel):
 
 
 class MoodboardUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = None
     images: list[MoodboardImageModel] | None = None
     notes: str | None = None
     mode: str | None = None
     strength: float | None = None
+    # An explicit null clears the saved analysis (Moodboard Studio sends one
+    # when the board changes); leaving the field out keeps it.
     analysis: dict[str, Any] | None = None
+    # Moodboard Studio sends the board's own project back; a different one is
+    # refused, since a board can't move between projects.
+    projectId: str | None = None
 
 
 class PresetCreate(BaseModel):
@@ -10073,6 +10086,8 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
         for key, value in body.model_dump().items()
         if value is not None
     }
+    if "analysis" in body.model_fields_set and body.analysis is None:
+        updates["analysis"] = None
     if "images" in updates:
         updates["images"] = [img.model_dump() if hasattr(img, "model_dump") else img for img in body.images or []]
     try:
@@ -10097,7 +10112,8 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
 
     from services.moodboard_analysis import analyze_moodboard
 
-    analysis = analyze_moodboard(moodboard)
+    # It reads every image file, so it runs off the event loop.
+    analysis = await asyncio.to_thread(analyze_moodboard, moodboard)
     try:
         moodboard = store.update(moodboard_id, analysis=analysis)
     except (KeyError, ValueError):
