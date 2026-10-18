@@ -36,7 +36,7 @@ import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
 import { JevResultView, type JevResultInputs } from './JevResult';
 import { JevCardField } from './JevCardField';
-import { isJevNode, parseJevOutputs, JEV_BOX, JEV_DECIDE, JEV_PICK_BEST } from '../../lib/jev';
+import { isJevNode, jevBrandStyle, parseJevOutputs, JEV_BOX, JEV_BRAND, JEV_DECIDE, JEV_PICK_BEST } from '../../lib/jev';
 import { JEV_CARD_FIELDS, jevCardText, jevResultKey, upstreamPortValues } from '../../lib/jevView';
 
 // Trigger a browser download for a URL produced by the backend. We fetch the
@@ -227,7 +227,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
   if (!definition) return <div className="model-node model-node--error">Unknown node type</div>;
 
-  const categoryColor = CATEGORY_COLORS[definition.category] ?? '#424242';
+  // Jev nodes wear TypeSafe's pink in place of their category colour, with or
+  // without a result (styles/jev-result.css, .model-node--jev).
+  const isJev = isJevNode(nodeData.definitionId);
+  const categoryColor = isJev ? JEV_BRAND.accent : CATEGORY_COLORS[definition.category] ?? '#424242';
   const stateClass = `model-node--${nodeData.state}`;
   // A mask is drawn like an image when there's no regular image, so a Preview
   // wired to Jev Box's mask shows it instead of an empty card.
@@ -378,9 +381,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
   return (
     <div
-      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''}${showJevResult ? ' model-node--jev-surface' : ''} ${switchable ? ' model-node--switchable' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''}${isJev ? ' model-node--jev' : ''}${showJevResult ? ' model-node--jev-surface' : ''} ${switchable ? ' model-node--switchable' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
       onClick={() => selectNode(id)}
-      style={{ ['--node-category-color' as string]: categoryColor }}
+      style={isJev ? jevBrandStyle() : { ['--node-category-color' as string]: categoryColor }}
     >
       {/* Settings bar — floats above the card when selected; renders model
        * name + an "Edit" affordance that opens the node panel settings. When
