@@ -997,10 +997,10 @@ nebula moodboard delete <board>
   before the change. Passing them back undoes it.
 - Deleting: where Nebula keeps deleted boards in Recently deleted, anyone
   may delete one, agents included, because it can be restored. Where a
-  delete is for good (a Nebula without Recently deleted), only the person
-  can: `nebula moodboard delete` asks them to type the board's name in their
-  own terminal, and refuses agents (no terminal, or `NEBULA_AGENT_NAME` /
-  `NEBULA_AGENT_TOKEN` set). `moodboard_delete` always refuses then.
+  delete is for good (a Nebula without Recently deleted), `nebula moodboard
+  delete` and `moodboard_delete` refuse for everyone; the person deletes the
+  board in Moodboard Studio. The client never decides who is the person:
+  that would be a check any client could skip.
 - `moodboard_create` and `moodboard_add` are marked open-world because they
   fetch links; `moodboard_delete` is marked destructive.
 

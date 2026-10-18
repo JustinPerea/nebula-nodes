@@ -540,20 +540,21 @@ def deletes_are_restorable(api: NebulaAPI, headers: dict[str, str] | None = None
 
 
 PERMANENT_DELETE_REFUSED = (
-    "deleting a board can't be undone in this version of Nebula, so only the person can delete it "
-    "(in Moodboard Studio). You can still take images off it or rename it (`nebula moodboard set "
-    "{id} --remove N`, or moodboard_update), or ask the person to delete it."
+    "this version of Nebula deletes boards for good, so `nebula moodboard delete` and moodboard_delete "
+    "don't: the person can delete it in Moodboard Studio. You can still take images off it or rename it "
+    "(`nebula moodboard set {id} --remove N`, or moodboard_update), or ask the person to delete it."
 )
 
 
-def delete_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None, *,
-                 allow_permanent: bool = False) -> dict[str, Any]:
-    """Delete a board. Where Nebula keeps deleted boards in Recently deleted,
-    anyone may (a restore undoes it). Where a delete is for good, only with
-    `allow_permanent`: the person confirming it themselves. Agents never are."""
+def delete_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
+    """Move a board to Recently deleted, where a restore brings it back with
+    the same id. Anyone may, agents included. On a Nebula without Recently
+    deleted the DELETE route is for good, and this never calls it, for
+    anyone: there the person deletes in Moodboard Studio. Deciding here who
+    the caller is would be a check any client could skip; who may empty
+    Recently deleted is the backend's call (services/person_gate.py)."""
     board = get_board(api, ref, headers)
-    restorable = deletes_are_restorable(api, headers)
-    if not restorable and not allow_permanent:
+    if not deletes_are_restorable(api, headers):
         raise MoodboardError(PERMANENT_DELETE_REFUSED.format(id=board.get("id")))
     result = api.request("DELETE", f"/api/moodboards/{board['id']}", headers=headers)
     result = result if isinstance(result, dict) else {}

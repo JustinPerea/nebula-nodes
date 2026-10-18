@@ -145,18 +145,11 @@ def test_new_from_a_folder_and_a_link_then_set_analyze_and_delete(app, web, tmp_
     out = _cli(app, ["moodboard", "list", "--global"], capsys)
     assert board["id"] in out and "Renamed" in out
 
-    # This backend deletes for good, so the person confirms at their terminal.
-    _person_at_a_terminal(monkeypatch, typed="Renamed")
-    out = _cli(app, ["moodboard", "delete", "Renamed"], capsys)
-    assert "Deleted Renamed" in out and "for good" in out
+    # This backend deletes for good, so the CLI doesn't delete: Studio does.
     with pytest.raises(SystemExit):
-        _cli(app, ["moodboard", "show", board["id"]], capsys)
-
-
-def _person_at_a_terminal(monkeypatch, typed: str) -> None:
-    monkeypatch.setattr(moodboard_cmd.sys.stdin, "isatty", lambda: True, raising=False)
-    monkeypatch.setattr(moodboard_cmd.sys.stdout, "isatty", lambda: True, raising=False)
-    monkeypatch.setattr("builtins.input", lambda prompt="": typed)
+        _cli(app, ["moodboard", "delete", "Renamed"], capsys)
+    assert "Moodboard Studio" in capsys.readouterr().err
+    assert boards.get_board(app.api, board["id"])["name"] == "Renamed"
 
 
 def _cli_hash(path: Path) -> str:
@@ -489,8 +482,8 @@ def test_mcp_tools_make_change_analyze_and_delete_a_board(app, web, tmp_path):
     with pytest.raises(RuntimeError, match="no image '9'"):
         mcp_server.moodboard_update(made["id"], remove=["9"])
 
-    # This backend has no Recently deleted, so a delete would be for good: agents are refused.
-    with pytest.raises(RuntimeError, match="only the person can delete it"):
+    # This backend has no Recently deleted, so a delete would be for good: refused.
+    with pytest.raises(RuntimeError, match="the person can delete it in Moodboard Studio"):
         mcp_server.moodboard_delete(made["id"])
     assert mcp_server.moodboard_get(made["id"])["id"] == made["id"]
 
@@ -526,24 +519,30 @@ def test_mcp_tools_run_off_the_event_loop_without_errors(app, tmp_path):
 
 # -- agents may do what can be undone -------------------------------------------------
 
-def test_an_agent_cannot_delete_a_board_for_good(app, tmp_path, capsys, monkeypatch):
+def test_nothing_in_the_client_deletes_a_board_for_good(app, tmp_path, capsys, monkeypatch):
+    # Where a delete can't be undone, the CLI and MCP refuse for everyone,
+    # with what to do instead. The client never decides who the person is
+    # (a terminal, a typed name or an unset agent name proves nothing).
     board, _ = boards.create_board(app.api, "Keep me", [str(_png(tmp_path / "a.png"))])
-    # No terminal to confirm at (an agent's shell): refused, with what it can do instead.
-    with pytest.raises(SystemExit):
-        _cli(app, ["moodboard", "delete", board["id"]], capsys)
-    err = capsys.readouterr().err
-    assert "only the person can delete it" in err and "--remove" in err
-    # A named agent is refused even at a terminal.
-    _person_at_a_terminal(monkeypatch, typed="Keep me")
-    monkeypatch.setenv("NEBULA_AGENT_NAME", "Claude Code")
-    with pytest.raises(SystemExit):
-        _cli(app, ["moodboard", "delete", board["id"]], capsys)
-    monkeypatch.delenv("NEBULA_AGENT_NAME")
-    # The person typing the wrong name deletes nothing.
-    _person_at_a_terminal(monkeypatch, typed="something else")
-    with pytest.raises(SystemExit):
-        _cli(app, ["moodboard", "delete", board["id"]], capsys)
-    assert "nothing was deleted" in capsys.readouterr().err
+    deletes = []
+    original = app.api.request
+    monkeypatch.setattr(app.api, "request", lambda method, path, **kw: (
+        deletes.append(path) if method == "DELETE" else None) or original(method, path, **kw))
+    monkeypatch.setattr(moodboard_cmd.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(moodboard_cmd.sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "Keep me")
+    for agent in (None, "Claude Code"):
+        if agent:
+            monkeypatch.setenv("NEBULA_AGENT_NAME", agent)
+        with pytest.raises(SystemExit):
+            _cli(app, ["moodboard", "delete", board["id"]], capsys)
+        err = capsys.readouterr().err
+        assert "Moodboard Studio" in err and "--remove" in err
+    with pytest.raises(boards.MoodboardError, match="Moodboard Studio"):
+        boards.delete_board(app.api, board["id"])
+    with pytest.raises(Exception, match="Moodboard Studio"):
+        asyncio.run(mcp_server.mcp.call_tool("moodboard_delete", {"board": board["id"]}))
+    assert deletes == []
     assert boards.get_board(app.api, board["id"])["name"] == "Keep me"
 
 

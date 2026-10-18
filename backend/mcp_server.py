@@ -822,7 +822,7 @@ def moodboard_delete(board: str, ctx: Context | None = None) -> dict[str, Any]:
     moodboard_update."""
     import moodboard_client as boards
 
-    return _board_call(boards.delete_board, _api(), board, _board_headers(ctx), allow_permanent=False)
+    return _board_call(boards.delete_board, _api(), board, _board_headers(ctx))
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

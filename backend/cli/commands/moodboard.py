@@ -7,7 +7,6 @@ parses arguments and prints.
 from __future__ import annotations
 
 import json
-import os
 import sys
 from typing import Any
 
@@ -76,28 +75,6 @@ def _added_line(count: int, skipped: int) -> str:
     if skipped:
         line += f" ({skipped} already on the board, skipped)"
     return line
-
-
-def _person_confirms_permanent_delete(board: dict[str, Any]) -> bool:
-    """On a Nebula that deletes boards for good, only the person may, and
-    only by typing the board's name at their own terminal. A command run by
-    an agent (an agent name or token set, or no terminal to type in) is
-    refused with what it can do instead."""
-    if os.environ.get("NEBULA_AGENT_NAME") or os.environ.get("NEBULA_AGENT_TOKEN"):
-        return False
-    if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        print("This delete can't be undone. If you're the person, run it in your own terminal to confirm.",
-              file=sys.stderr)
-        return False
-    name = str(board.get("name") or "")
-    print(f"Deleting {name} ({board.get('id')}) can't be undone in this version of Nebula.")
-    try:
-        typed = input("Type the board's name to delete it for good: ")
-    except EOFError:
-        return False
-    if typed.strip() != name.strip():
-        _fail("the name didn't match, so nothing was deleted")
-    return True
 
 
 def run(client: NebulaClient, args) -> None:
@@ -176,16 +153,12 @@ def run(client: NebulaClient, args) -> None:
             else:
                 _print_board(board)
         elif verb == "delete":
-            board = boards.get_board(api, args.board, headers)
-            allow_permanent = False
-            if not boards.deletes_are_restorable(api, headers):
-                allow_permanent = _person_confirms_permanent_delete(board)
-            result = boards.delete_board(api, board["id"], headers, allow_permanent=allow_permanent)
+            result = boards.delete_board(api, args.board, headers)
             if result.get("restorable"):
                 print(f"Deleted {result.get('name')} ({result.get('id')}). It's in Recently deleted: "
                       f"`nebula trash restore moodboard {result.get('id')}` brings it back.")
             else:
-                print(f"Deleted {result.get('name')} ({result.get('id')}) for good.")
+                print(f"Deleted {result.get('name')} ({result.get('id')}).")
     except boards.MoodboardError as exc:
         _fail(str(exc))
     except NebulaAPIError as exc:
@@ -256,7 +229,7 @@ def add_parser(sub) -> None:
 
     delete_p = msub.add_parser(
         "delete", help="Delete a board (it goes to Recently deleted where Nebula has it)",
-        description=("Where Nebula keeps deleted boards in Recently deleted, anyone may delete one, and "
-                     "`nebula trash restore moodboard <id>` brings it back. Where a delete is for good, only "
-                     "the person can, by typing the board's name in their own terminal; agents are refused."))
+        description=("The board goes to Recently deleted, and `nebula trash restore moodboard <id>` brings it "
+                     "back. On a Nebula without Recently deleted a delete would be for good, so this refuses: "
+                     "delete the board in Moodboard Studio instead."))
     delete_p.add_argument("board", help=board_help)
