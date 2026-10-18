@@ -4270,7 +4270,16 @@ def _stage_proposal(
     new_ids = set(id_map.values())
     refs: dict[str, str] = {node_id: node_id for node_id in candidate.nodes if node_id not in new_ids}
     refs.update(id_map)
-    edge_ids = _stage_graph_edges(candidate, raw_edges, refs)
+    try:
+        edge_ids = _stage_graph_edges(candidate, raw_edges, refs)
+    except HTTPException as exc:
+        # The validators name nodes by id; a new node's staged id (n12) means
+        # nothing to the agent, which wrote +img.
+        ref_for = {new_id: ref for ref, new_id in id_map.items()}
+        detail = exc.detail
+        if isinstance(detail, str) and ref_for:
+            detail = re.sub(r"\bn\d+\b", lambda match: ref_for.get(match.group(0), match.group(0)), detail)
+        raise HTTPException(status_code=exc.status_code, detail=detail) from exc
     run_ids: list[str] = []
     for item in spec.run:
         if item not in refs:

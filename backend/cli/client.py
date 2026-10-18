@@ -137,10 +137,15 @@ class NebulaClient:
         return self._request("POST", f"/api/canvas/pins/{quote(pin_id, safe='')}/resolve",
                              json={"reply": reply}, headers=headers)
 
-    # -- Proposals (agents propose; only the person accepts, in Nebula) --
+    # -- Plans: proposals (only the person accepts, in Nebula) and direct edits --
     def propose(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None
         return self._request("POST", "/api/canvas/proposals", json=body, headers=headers)
+
+    def apply(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
+        """Edit the canvas directly, all of it or none of it (POST /api/graph/apply)."""
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("POST", "/api/graph/apply", json=body, headers=headers)
 
     def get_proposal(self, proposal_id: str, wait: float = 0.0, agent_name: str | None = None) -> dict[str, Any]:
         """GET one proposal; `wait` (≤25 s) blocks until the person decides."""
