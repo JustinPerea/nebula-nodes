@@ -846,7 +846,9 @@ How it works: a graphSync caused by an edit request carries `edit` =
 `{actor, tab?}`. `actor` is the request's journal actor (a named agent, the
 person, or anonymous). `tab` is the canvas tab that sent it (`X-Nebula-Tab`,
 set by the canvas on every write), so that tab skips the echo of its own
-edit. An agent never gets a `tab`, even if it sends the header. Run
+edit. Only the person's canvas (this launch's person token) gets a `tab`:
+an agent, or a script without the token, never does, even if it sends the
+header. Run
 results and status syncs carry no `edit`, and opening, creating or switching
 a project is never an undo step. Loading a graph into the open project
 (`nebula graph load`) is: undo puts the whole canvas back, and since a load

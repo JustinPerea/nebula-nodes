@@ -6243,10 +6243,13 @@ def _graph_edit_origin() -> dict[str, Any]:
     actor = actor_for_headers(headers)
     origin: dict[str, Any] = {"actor": {key: actor[key] for key in ("kind", "id", "name", "color") if key in actor}}
     tab = next((value for key, value in headers.items() if key.lower() == "x-nebula-tab"), None)
-    # A named agent is never a canvas tab: a tab id read off an earlier
-    # graphSync must not let an agent's edit pass as a tab's own echo, which
-    # would keep it off the person's undo stack.
-    if actor.get("kind") != "agent" and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab):
+    # Only the person's canvas is a tab (services/person_gate.py: no agent
+    # marker AND this launch's person token). A tab id is broadcast on every
+    # graphSync, so an agent, or a script that leaves out X-Nebula-Agent,
+    # could send one back to pass its edit off as that tab's own echo and
+    # keep it off the person's undo stack. A tab without the person token
+    # gets no echo match either; it can't be told apart from a script.
+    if is_person(headers) and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab):
         origin["tab"] = tab
     return origin
 

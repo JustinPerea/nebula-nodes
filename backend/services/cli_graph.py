@@ -15,6 +15,13 @@ from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrad
 
 
 SHORT_ID_RE = re.compile(r"n([0-9]{1,9})")
+# How far an explicit id (add_node's node_id) may sit above the counter. The
+# counter moves past a restored id, so an unbounded one (n999999999) would
+# make every later id too long for SHORT_ID_RE, and undo could never put
+# those nodes back. Ids above the counter are legitimate after an import or
+# Clear resets it (undoing them brings the old ids back), so this is a
+# ceiling, not "no higher than the counter".
+MAX_ID_JUMP = 1_000_000
 
 
 class CLIGraph:
@@ -74,7 +81,8 @@ class CLIGraph:
 
         *node_id* puts a removed node back under its old id (undo on the
         canvas, POST /api/graph/restore). It must be a short id that isn't in
-        use; the counter moves past it so no later node can reuse it.
+        use, and no higher than the counter or MAX_ID_JUMP; the counter moves
+        past it so no later node can reuse it.
         """
         if node_id is None:
             self._counter += 1
@@ -85,6 +93,8 @@ class CLIGraph:
                 raise ValueError(f"'{node_id}' is not a short node id like n3")
             if node_id in self.nodes:
                 raise ValueError(f"Node '{node_id}' already exists")
+            if int(match.group(1)) > max(self._counter, MAX_ID_JUMP):
+                raise ValueError(f"'{node_id}' is higher than any id this graph has handed out")
             short_id = node_id
             self._counter = max(self._counter, int(match.group(1)))
         node: dict[str, Any] = {
