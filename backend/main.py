@@ -3739,7 +3739,10 @@ async def agent_describe_node(definition_id: str) -> dict[str, Any]:
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"status": "ok", "app": "nebula", "version": "0.1.0"}
+    # paramsVersion: the desktop app compares it with its built frontend's
+    # stamp (nebula-build.json) at launch and refuses to open a bundle built
+    # for another version (desktop/frontend-build.mjs). Not a secret.
+    return {"status": "ok", "app": "nebula", "version": "0.1.0", "paramsVersion": PARAMS_VERSION}
 
 
 @app.get("/api/capabilities/worldlabs")

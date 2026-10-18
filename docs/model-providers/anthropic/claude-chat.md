@@ -154,7 +154,10 @@ is on"). The handler (`SAMPLING_ADAPTIVE_MODELS`) therefore:
   without a project open: the backend refuses it (409 `params_outdated`) and a
   current tab reloads, keeping unsaved edits as a recovered project. A current
   tab connected to a backend from before the update stops instead and asks
-  for a backend restart. A saved budget used to cap thinking inside that 4,096; adaptive
+  for a backend restart. The desktop app also checks at launch: a built
+  frontend whose version differs from the backend's (`/api/health`
+  `paramsVersion`, the build's `nebula-build.json`) doesn't open, and the
+  window says to rebuild it (`desktop/frontend-build.mjs`). A saved budget used to cap thinking inside that 4,096; adaptive
   thinking has no cap, and "thinking tokens count toward `max_tokens`, so a long
   thinking pass can consume the budget before the text response completes"
   (thinking-troubleshooting). The graph records that the upgrade ran, so a
