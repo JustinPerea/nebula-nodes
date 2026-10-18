@@ -42,6 +42,8 @@ import { PinComposer } from './canvas/PinComposer';
 import { ProposalLayer } from './canvas/ProposalLayer';
 import { ProposalBar } from './canvas/ProposalBar';
 import { CanvasViewReporter } from './canvas/CanvasViewReporter';
+import { ArrangeController } from './canvas/ArrangeController';
+import { selectMeasuring, useArrangeStore } from '../store/arrangeStore';
 import { CrabMarkAnimated } from './brand/CrabMarkAnimated';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
 import { apiFetch } from '../lib/backend';
@@ -280,6 +282,9 @@ export function Canvas() {
   const isValidConnection = useIsValidConnection();
   const skin = useUIStore((s) => s.skin);
   const canvasPerfMode = useUIStore((s) => s.canvasPerfMode);
+  // While an agent's arrange waits to measure its new nodes, render them all:
+  // a node culled off screen has no size to lay out by (ArrangeController).
+  const arrangeMeasuring = useArrangeStore(selectMeasuring);
   const canvasLowDetail = useUIStore((s) => s.canvasLowDetail);
   const onboardingActive = useUIStore((s) => s.onboardingActive);
   const leftDock = useUIStore((s) => s.leftDock);
@@ -735,7 +740,7 @@ export function Canvas() {
         proOptions={{ hideAttribution: true }}
         deleteKeyCode={isExecuting ? null : ['Backspace', 'Delete']}
         {...CANVAS_INTERACTION_PROPS}
-        onlyRenderVisibleElements={canvasPerfMode}
+        onlyRenderVisibleElements={canvasPerfMode && !arrangeMeasuring}
       >
         <Background
           variant={isSlavaSkin ? BackgroundVariant.Dots : BackgroundVariant.Lines}
@@ -752,6 +757,7 @@ export function Canvas() {
         </Panel>
         <CanvasNavigation />
         <CanvasViewReporter />
+        <ArrangeController />
         <AgentCursorLayer />
         <PinLayer />
         <ProposalLayer />

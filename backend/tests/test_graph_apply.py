@@ -13,7 +13,8 @@ from services.agent_presence import AgentPresence
 from services.canvas_edits import parse_edit
 from services.canvas_events import CanvasEventJournal
 from services.canvas_pins import CanvasPins
-from services.canvas_proposals import MAX_NODES, ProposalBook, ProposalError
+from services.canvas_arrange import ArrangeBook
+from services.canvas_proposals import MAX_NODES, ProposalBook, ProposalError, parse_spec
 from services.cli_graph import CLIGraph
 from services.project_store import ProjectStore, make_project
 from services.provider_recovery import ProviderRecoveryStore
@@ -46,6 +47,8 @@ def api(tmp_path, monkeypatch, person):
     monkeypatch.setattr(main_module, "project_store", store)
     monkeypatch.setattr(main_module, "canvas_pins", CanvasPins(lambda: main_module.project_store))
     monkeypatch.setattr(main_module, "canvas_proposals", book)
+    arrange = ArrangeBook()
+    monkeypatch.setattr(main_module, "canvas_arrange", arrange)
     monkeypatch.setattr(main_module, "agent_presence", AgentPresence())
     monkeypatch.setattr(main_module, "canvas_events", journal)
     monkeypatch.setattr(main_module, "provider_recovery_store", ProviderRecoveryStore(None))
@@ -63,6 +66,7 @@ def api(tmp_path, monkeypatch, person):
     ctx.journal = journal
     ctx.guard = guard
     ctx.book = book
+    ctx.arrange = arrange
     ctx.sent = sent
     return ctx
 
@@ -288,14 +292,183 @@ def test_an_agent_cant_add_a_dual_mode_krea_node_on_the_plan(api):
     assert mine.status_code == 200, mine.text
 
 
-def test_limits_match_proposals():
+def test_a_direct_edit_has_no_per_edit_caps_but_a_proposal_does():
+    # Decision C1: an edit can be undone, so only the canvas's own size limit bounds it.
+    many = [{"ref": f"+n{i}", "definitionId": "text-input"} for i in range(MAX_NODES * 4)]
+    assert len(parse_edit({"nodes": many}).additions.nodes) == MAX_NODES * 4
+    assert len(parse_edit({"remove": [f"n{i}" for i in range(80)]}).remove) == 80
+    assert len(parse_edit({"move": {f"n{i}": {"x": i, "y": 0} for i in range(80)}}).move) == 80
+    # The person reviews a proposal item by item, so it keeps its caps.
     with pytest.raises(ProposalError) as too_many:
-        parse_edit({"nodes": [{"ref": f"+n{i}", "definitionId": "text-input"} for i in range(MAX_NODES + 1)]})
+        parse_spec({"note": "x", "nodes": many})
     assert too_many.value.status == 422
-    with pytest.raises(ProposalError):
-        parse_edit({"remove": [f"n{i}" for i in range(30)]})
     with pytest.raises(ProposalError) as clash:
         parse_edit({"remove": ["n2"], "rename": {"n2": "x"}})
     assert "removed in this edit" in clash.value.detail
     with pytest.raises(ProposalError):
         parse_edit({})
+
+
+def test_a_large_edit_lands_in_one_call(api):
+    nodes = [{"ref": f"+t{i}", "definitionId": "text-input", "params": {"value": f"take {i}"}} for i in range(30)]
+    nodes += [{"ref": f"+c{i}", "definitionId": "combine-text"} for i in range(15)]
+    edges = [{"source": f"+t{2 * i + side}", "sourceHandle": "text", "target": f"+c{i}",
+              "targetHandle": "text1" if side == 0 else "text2"} for i in range(15) for side in (0, 1)]
+    response = _apply(api, {"nodes": nodes, "edges": edges})
+    assert response.status_code == 200, response.text
+    assert response.json()["summary"] == "added 45, wired 30"
+    assert len(api.graph.nodes) == 45 and len(api.graph.edges) == 30
+
+
+def test_the_canvas_size_limit_still_bounds_an_edit(api, monkeypatch):
+    import main as main_module
+
+    monkeypatch.setattr(main_module, "RESTORE_MAX_GRAPH_NODES", 3)
+    _seed(api)
+    before = _state(api)
+    response = _apply(api, {"nodes": [{"ref": "+a", "definitionId": "text-input"},
+                                      {"ref": "+b", "definitionId": "text-input"}]})
+    assert response.status_code == 413
+    assert "at most 3 nodes" in response.json()["detail"] and "nothing changed" in response.json()["detail"]
+    assert _state(api) == before
+
+
+# -- arrange (decision C3) ------------------------------------------------------
+
+def _arrange_plan(count: int = 3, **arrange) -> dict:
+    return {
+        "nodes": [{"ref": f"+i{n}", "definitionId": "image-input", "position": {"x": 1000, "y": 200 * n}}
+                  for n in range(count)],
+        "arrange": arrange or True,
+    }
+
+
+def test_an_edit_can_ask_the_canvas_to_arrange_its_new_nodes(api):
+    prompt, image = _seed(api)
+    response = _apply(api, _arrange_plan(direction="down", gap=80))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    new = [body["idMap"][f"+i{n}"] for n in range(3)]
+    # No canvas is connected in the test, so the reply says the first one to open does it.
+    assert body["arrange"]["status"] == "waiting-for-canvas"
+    assert body["arrange"]["nodeIds"] == new
+    assert (body["arrange"]["direction"], body["arrange"]["gap"]) == ("down", 80.0)
+    assert "stay where they were placed" in body["arrange"]["message"]
+    # Positions stay as placed until a canvas measures them.
+    assert api.graph.nodes[new[1]]["position"] == {"x": 1000.0, "y": 200.0}
+    # Every graphSync carries the request, so a canvas that opens later sees it too.
+    assert _last_sync(api)["arrange"] == [{"id": body["arrange"]["id"], "nodeIds": new,
+                                            "direction": "down", "gap": 80.0}]
+    import asyncio
+    import main as main_module
+    assert asyncio.run(main_module.export_graph_for_frontend())["arrange"] == _last_sync(api)["arrange"]
+
+
+def test_the_arrange_reply_counts_any_canvas_but_not_agent_listeners(api, monkeypatch):
+    import main as main_module
+
+    class Socket:
+        def __init__(self, headers):
+            self.headers = headers
+
+    agent = Socket({"x-nebula-agent": "Codex"})
+    monkeypatch.setattr(main_module.manager, "active_connections", [agent])
+    monkeypatch.setattr(main_module.manager, "browser_connections", set())
+    assert _apply(api, _arrange_plan(count=1)).json()["arrange"]["status"] == "waiting-for-canvas"
+    # A tab opened without the person link still draws the graph and lays the nodes out.
+    monkeypatch.setattr(main_module.manager, "active_connections", [agent, Socket({"origin": "http://localhost:5173"})])
+    assert _apply(api, _arrange_plan(count=1)).json()["arrange"]["status"] == "waiting"
+
+
+def test_the_first_arrange_write_wins_and_a_second_tab_changes_nothing(api):
+    prompt, image = _seed(api)
+    api.client.put("/api/graph/layout", headers=PERSON, json={"positions": {prompt: {"x": 0, "y": 0}}})
+    body = _apply(api, _arrange_plan()).json()
+    arrange_id, new = body["arrange"]["id"], body["arrange"]["nodeIds"]
+    first = {node_id: {"x": 1000, "y": 300 * n} for n, node_id in enumerate(new)}
+    response = api.client.put("/api/graph/layout", headers=PERSON, json={"positions": first, "arrangeId": arrange_id})
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "arranged"
+    sync = _last_sync(api)
+    assert sync["moved"] == sorted(new) and sync["arrange"] == []
+    # Another open tab measured too and sends its own result: it is told it lost, and nothing moves.
+    second = {node_id: {"x": 5, "y": 5} for node_id in new}
+    again = api.client.put("/api/graph/layout", headers=PERSON, json={"positions": second, "arrangeId": arrange_id})
+    assert again.json() == {"status": "already-arranged", "count": 0}
+    assert {node_id: api.graph.nodes[node_id]["position"] for node_id in new} == {
+        node_id: {"x": float(point["x"]), "y": float(point["y"])} for node_id, point in first.items()}
+    assert api.graph.nodes[prompt]["position"] == {"x": 0.0, "y": 0.0}
+    arranged = [e for e in api.journal.read(after=0, limit=50)["events"] if e["kind"] == "node.moved"][-1]
+    assert arranged["summary"].startswith("arranged") and arranged["actor"]["name"] == "Claude Desktop"
+
+
+def test_an_arrange_write_can_only_move_that_edits_new_nodes(api):
+    prompt, image = _seed(api)
+    api.client.put("/api/graph/layout", headers=PERSON, json={"positions": {image: {"x": 50, "y": 50}}})
+    body = _apply(api, _arrange_plan(count=2)).json()
+    arrange_id, new = body["arrange"]["id"], body["arrange"]["nodeIds"]
+    response = api.client.put("/api/graph/layout", headers=PERSON, json={
+        "positions": {new[0]: {"x": 1, "y": 1}, image: {"x": 900, "y": 900}}, "arrangeId": arrange_id})
+    assert response.status_code == 400
+    assert "never moves other nodes" in response.json()["detail"]
+    assert api.graph.nodes[image]["position"] == {"x": 50.0, "y": 50.0}
+    assert api.arrange.get(arrange_id) is not None  # still open for a correct write
+
+
+def test_an_explicit_position_wins_over_a_waiting_arrange(api):
+    body = _apply(api, _arrange_plan(count=3)).json()
+    arrange_id, new = body["arrange"]["id"], body["arrange"]["nodeIds"]
+    # The person drags one before any canvas arranged them.
+    api.client.put("/api/graph/layout", headers=PERSON, json={"positions": {new[0]: {"x": 7, "y": 7}}})
+    # An agent moves another.
+    _apply(api, {"move": {new[1]: {"x": 9, "y": 9}}})
+    assert _last_sync(api)["arrange"][0]["nodeIds"] == [new[2]]
+    refused = api.client.put("/api/graph/layout", headers=PERSON,
+                             json={"positions": {new[0]: {"x": 0, "y": 0}}, "arrangeId": arrange_id})
+    assert refused.status_code == 400
+    assert api.graph.nodes[new[0]]["position"] == {"x": 7.0, "y": 7.0}
+
+
+def test_arrange_needs_new_nodes_and_a_known_shape(api):
+    prompt, image = _seed(api)
+    for body, words in (
+        ({"move": {image: {"x": 1, "y": 1}}, "arrange": True}, "adds none"),
+        ({**_arrange_plan(), "arrange": {"direction": "left"}}, "direction"),
+        ({**_arrange_plan(), "arrange": {"gap": -5}}, "gap"),
+        ({**_arrange_plan(), "arrange": {"spacing": 5}}, "unknown arrange field"),
+        ({**_arrange_plan(), "arrange": "yes"}, "arrange must be"),
+    ):
+        response = _apply(api, body)
+        assert response.status_code == 422, body
+        assert words in response.json()["detail"]
+    assert len(api.arrange) == 0
+    # Asking for no arrange is the same as leaving it out.
+    plain = _apply(api, {**_arrange_plan(count=1), "arrange": False}).json()
+    assert "arrange" not in plain and len(api.arrange) == 0
+
+
+def test_a_replaced_or_cleared_canvas_drops_waiting_arranges(api):
+    import asyncio
+    import main as main_module
+
+    _apply(api, _arrange_plan(count=2))
+    assert len(api.arrange) == 1
+    asyncio.run(main_module._broadcast_graph_sync(graph_replaced=True, reason="project-open"))
+    assert len(api.arrange) == 0 and _last_sync(api).get("arrange", []) == []
+
+    body = _apply(api, _arrange_plan(count=1)).json()
+    assert body["arrange"]["nodeIds"]
+    api.graph.clear()
+    # An empty canvas's export has no arrange list (the canvas clears its own).
+    assert "arrange" not in asyncio.run(main_module.export_graph_for_frontend())
+    assert len(api.arrange) == 0
+
+
+def test_the_arrange_book_keeps_only_live_nodes():
+    book = ArrangeBook()
+    entry = book.add(["n1", "n2"], direction="right", gap=120)
+    assert book.pending({"n1", "n2"})[0]["nodeIds"] == ["n1", "n2"]
+    assert book.pending({"n2"})[0]["nodeIds"] == ["n2"]
+    assert book.pending(set()) == [] and book.get(entry.id) is None
+    other = book.add(["n3"], direction="down", gap=0)
+    assert book.complete(other.id) is other and book.complete(other.id) is None

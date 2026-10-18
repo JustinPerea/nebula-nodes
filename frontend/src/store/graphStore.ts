@@ -14,6 +14,7 @@ import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildSampleGraph } from '../constants/sampleGraph';
 import { computeLayout, type LayoutNode } from '../lib/autoLayout';
+import { useArrangeStore } from './arrangeStore';
 import {
   clearPersistedRunHistory,
   clearRunReconnectingNote,
@@ -1266,6 +1267,29 @@ function persistNodePositions(positions: Record<string, { x: number; y: number }
   });
 }
 
+/**
+ * Finish an agent's arrange request (lib/arrangeEdit.ts) with the positions
+ * this canvas measured. The backend applies only the first write per id;
+ * a tab that lost gets 'already-arranged' and changes nothing. Positions
+ * reach every tab, this one included, through the graphSync `moved` list,
+ * so this tab doesn't apply them first: two tabs can't end up disagreeing.
+ */
+export async function completeArrange(
+  arrangeId: string,
+  positions: Record<string, { x: number; y: number }>,
+): Promise<'arranged' | 'already-arranged' | 'refused'> {
+  const persisted = Object.fromEntries(Object.entries(positions).filter(([nodeId]) => CLI_ID_RE.test(nodeId)));
+  if (Object.keys(persisted).length === 0) return 'refused';
+  const response = await graphMutationFetch('/api/graph/layout', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ positions: persisted, arrangeId }),
+  });
+  if (!response.ok) return 'refused';
+  const body = await response.json().catch(() => ({})) as { status?: string };
+  return body.status === 'already-arranged' ? 'already-arranged' : 'arranged';
+}
+
 type GraphSet = (
   partial: Partial<GraphState> | ((state: GraphState) => Partial<GraphState>),
 ) => void;
@@ -2084,6 +2108,7 @@ wsClient.subscribe((event) => {
       empty,
       graphReplaced = false,
       moved = [],
+      arrange = [],
       providerRecoveries = [],
       providerStartAmbiguities = [],
       executionStatuses,
@@ -2094,6 +2119,7 @@ wsClient.subscribe((event) => {
       empty: boolean;
       graphReplaced?: boolean;
       moved?: string[];
+      arrange?: unknown;
       providerRecoveries?: ProviderRecoveryCheckpoint[];
       providerStartAmbiguities?: ProviderStartAmbiguity[];
       executionStatuses?: ExecutionStatusResult[];
@@ -2149,6 +2175,7 @@ wsClient.subscribe((event) => {
         backendFreshStartPending: false,
       });
       useCinemaUploadStore.getState().reconcileTargets(remainingNodes);
+      useArrangeStore.getState().setPending([]);
       return;
     }
 
@@ -2278,6 +2305,8 @@ wsClient.subscribe((event) => {
       backendFreshStartPending: false,
     });
     useCinemaUploadStore.getState().reconcileTargets(merged);
+    // After the merge, so the nodes an arrange names are already on the canvas.
+    useArrangeStore.getState().setPending(arrange);
     if (
       observedPendingNodeId
       && pendingNodeCreationAttempt?.phase === 'uncertain'

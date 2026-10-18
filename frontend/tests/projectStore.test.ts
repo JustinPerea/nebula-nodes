@@ -3,6 +3,7 @@ import { useProjectStore, captureProjectSnapshot, subscribeProjectAutosave } fro
 import { useGraphStore } from '../src/store/graphStore';
 import { useUIStore } from '../src/store/uiStore';
 import { useCreateDraftStore } from '../src/store/createDraftStore';
+import { useArrangeStore } from '../src/store/arrangeStore';
 import { getProjectContext, setProjectContext } from '../src/lib/projectContext';
 import * as projects from '../src/lib/projects';
 import type { SavedProject } from '../src/lib/projects';
@@ -69,6 +70,13 @@ describe('saved project coordinator', () => {
     expect(useUIStore.getState().canvasViewport).toEqual({ x: 20, y: 30, zoom: 0.8 });
     expect(execution.executeGraph).not.toHaveBeenCalled();
     expect(projects.openProject).not.toHaveBeenCalled();
+  });
+  it('picks up an agent arrange that waited for a canvas, which the connect-time graphSync can\'t deliver', async () => {
+    useArrangeStore.setState({ pending: [] });
+    vi.mocked(execution.fetchCLIGraph).mockResolvedValueOnce({ nodes: [], edges: [], empty: false,
+      arrange: [{ id: 'a_1', nodeIds: ['n1'], direction: 'down', gap: 60 }] });
+    await useProjectStore.getState().initialize();
+    expect(useArrangeStore.getState().pending).toEqual([{ id: 'a_1', nodeIds: ['n1'], direction: 'down', gap: 60 }]);
   });
   it('saves outgoing edits before opening another project with independent history and draft identity', async () => {
     await useProjectStore.getState().initialize();

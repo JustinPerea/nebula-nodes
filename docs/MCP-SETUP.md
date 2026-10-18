@@ -46,7 +46,9 @@ The server exposes these tools for building and running (see
   `propose_change`. See
   [Provider routes](PROVIDER-ROUTES.md#hidden-settings-paramvisiblewhen).
 - `edit_canvas`: adds nodes, wires, param changes, renames and moves in one
-  call, all or nothing. Same shape as `propose_change`.
+  call, all or nothing. Same shape as `propose_change`, with no limit on how
+  much one call adds. `arrange: true` has the canvas lay out the new nodes by
+  their real size.
 - `remove_from_canvas`: deletes nodes or single wires, all or nothing.
 - `run_nodes`: runs a node and what feeds it (or the whole canvas) under the
   person's spending limits. Returns outputs with small inline previews, or
@@ -382,7 +384,8 @@ Rules:
   something that can't be added. Cinema scene params and World Labs
   durable-recovery nodes can't be proposed.
 - Limits: 12 new nodes, 24 wires, 12 param changes and 6 run targets per
-  proposal; 3 open per agent and 12 in total (429 beyond); a 160-character
+  proposal (the person reviews each item; direct edits have no such limit);
+  3 open per agent and 12 in total (429 beyond); a 160-character
   note. Proposals expire after 15 minutes.
 - Deleting a node a proposal refers to invalidates it; so do import, opening
   another project and Clear canvas. If the canvas changed so that a
@@ -823,13 +826,53 @@ proposal shape (`nodes` with `+refs`, `edges`, `params`) plus `rename`,
 `move`, `remove` and `unwire`, stages all of it on a copy of the graph in that
 order (unwire, remove, add and change, rename, move) with the validators the
 single-edit routes use, and commits it at once. A bad wire or a missing node
-leaves the canvas exactly as it was. Limits match proposals (12 new nodes, 24
-wires, 12 param changes, 24 removals). Nodes with unresolved World Labs paid
+leaves the canvas exactly as it was. There is no limit on how much one edit
+does: it can be undone, so the only bound is the most a project can save
+(10,000 nodes and 50,000 wires, the same limits as import). An edit that
+would pass them is refused with 413 and changes nothing. Proposals keep their
+limits because the person reviews them item by item. Nodes with unresolved World Labs paid
 state can't be removed. Krea nodes may name `_kreaAuth` only to keep the mode
 they have: a change is refused with 403 and must be proposed (see Spending
 limits). Other `_` params are refused. The route never runs anything and
 is for agents only (the canvas edits through its own routes). `nebula apply`
 is the CLI twin (see below).
+
+#### Arrange: let the canvas lay out new nodes
+
+An agent can't know how tall a node will be on screen (an image card sizes
+to its image), so an edit can leave the layout to the canvas. Add `arrange`
+to the edit:
+
+- `"arrange": true` lays the new nodes out left to right, following their
+  wires: each step of the wiring is a column, 120 px apart, and nodes in the
+  same column stack 40 px apart.
+- `"arrange": {"direction": "down", "gap": 80}` flows top to bottom instead:
+  each step is a row, and nodes in the same row sit side by side.
+  `direction` is `right` (default) or `down`; `gap` is 0 to 2000 px.
+
+Only that edit's new nodes move. The block starts at the top-left of where
+they were placed, and shifts right or down only if it would cover another
+node. The person's nodes never move. An edit with `arrange` must add nodes.
+
+How it works (`services/canvas_arrange.py`, `components/canvas/ArrangeController.tsx`):
+the backend keeps the request and sends open requests with every graphSync
+(`arrange: [{id, nodeIds, direction, gap}]`), and in `GET /api/graph/export`
+for a tab that loads a project. An open canvas waits until those nodes have
+their real size (it draws every node meanwhile, even off screen, and loads
+their images), lays them out with the
+same size-aware layout as Auto-layout, and saves the positions with
+`PUT /api/graph/layout` and `arrangeId`. The first write for an id wins; a
+second open tab gets `already-arranged` and changes nothing, and every tab
+takes the winning positions from the next graphSync. The write is a normal
+move, so it can be undone, and the activity log credits the agent.
+
+The edit's reply has `arrange: {id, nodeIds, direction, gap, status,
+message}`. `status` is `waiting` when a canvas is open, or
+`waiting-for-canvas` when none is: the nodes stay where they were placed and
+the first canvas that opens lays them out. If someone moves one of the nodes
+first (a drag, or an agent's `move`), that position wins and the arrange
+leaves it alone. Opening another project, Clear canvas or a backend restart
+drops open requests; the nodes keep the positions they were placed at.
 
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
 it gets the same spending check and the same long-run handling. It waits 45
@@ -929,6 +972,7 @@ nebula apply --note "Two takes" \
 #   +wide → n9  Wide
 #   +tight → n10  Nano Banana
 nebula apply --file plan.json       # or --file - to read standard input
+nebula apply --file plan.json --arrange        # or --arrange down
 ```
 
 The plan is the one `nebula propose` takes (`nodes` with `+refs`, `edges`,
@@ -937,7 +981,34 @@ edges and params can be proposed or applied as it is. `nebula apply` never
 runs anything: a plan with `run` is refused before it's sent (propose it, or
 apply it and then `nebula run`). Like proposals, it needs your agent name
 (`$NEBULA_AGENT_NAME` or `--as`). `--json` prints the backend's result,
-including `idMap`.
+including `idMap`. There's no limit on how much one plan adds. `--arrange`
+(or `"arrange"` in the file) has the canvas lay out the new nodes by their
+real size; see Arrange above.
+
+A plan file can also hold steps, for a build where later parts wire into
+nodes earlier parts made:
+
+```json
+{"note": "Moodboard, then takes",
+ "steps": [
+   {"nodes": [{"ref": "+mood", "definitionId": "image-input"}]},
+   {"nodes": [{"ref": "+p", "definitionId": "text-input"},
+              {"ref": "+img", "definitionId": "nano-banana"}],
+    "edges": [{"source": "+p", "sourceHandle": "text", "target": "+img", "targetHandle": "prompt"},
+              {"source": "+mood", "sourceHandle": "image", "target": "+img", "targetHandle": "images"}],
+    "arrange": true}
+ ]}
+```
+
+`nebula apply` sends the steps in order. Each is its own edit that lands
+whole or not at all. A step can use the `+refs` earlier steps made: the CLI
+swaps in the node ids each step's reply gave in `idMap`, so the backend
+keeps no plan state. A ref names one node across all steps, and the CLI
+checks every step's refs before it sends step 1. If a step is refused, the
+command stops there (exit 1), names the step and the reason, and lists what
+the earlier steps applied; each of those is a normal edit that can be
+undone. `--json` prints `{status, steps, idMap}`, or `{status: "stopped",
+failedStep, error, applied, idMap}`. `nebula propose` doesn't take steps.
 
 Other graph commands:
 

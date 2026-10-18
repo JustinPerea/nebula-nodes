@@ -147,6 +147,14 @@ class NebulaClient:
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None
         return self._request("POST", "/api/graph/apply", json=body, headers=headers)
 
+    def apply_step(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
+        """Like apply(), but a refusal raises NebulaAPIError instead of exiting.
+
+        `nebula apply` with steps needs it to say which step stopped and what
+        earlier steps already applied."""
+        headers = self._identity_headers({"X-Nebula-Agent": agent_name} if agent_name else None)
+        return self.api.request("POST", "/api/graph/apply", json=body, headers=headers)
+
     def get_proposal(self, proposal_id: str, wait: float = 0.0, agent_name: str | None = None) -> dict[str, Any]:
         """GET one proposal; `wait` (≤25 s) blocks until the person decides."""
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None
