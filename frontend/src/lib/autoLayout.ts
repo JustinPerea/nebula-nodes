@@ -1,22 +1,38 @@
 /**
  * Dependency-aware graph layout. Assigns each node to a column by its longest
- * dependency depth (topological layering via Kahn's algorithm) and spreads nodes
+ * dependency depth (topological layering via Kahn's algorithm) and stacks nodes
  * vertically within a column. Replaces the naive "everything in one row" placement
  * used for agent/Create-authored graphs. Pure + unit-tested; cycle-safe.
+ *
+ * Spacing goes by each node's size, so a tall image card doesn't run into the
+ * node under it. A node the canvas hasn't measured counts as DEFAULT_WIDTH x
+ * DEFAULT_HEIGHT, which with the default gaps gives the old fixed 360 x 220 steps.
  */
+
+export const DEFAULT_WIDTH = 240;
+export const DEFAULT_HEIGHT = 180;
 
 export interface LayoutNode {
   id: string;
+  /** The rendered size, when the canvas has measured the node. */
+  width?: number;
+  height?: number;
 }
 export interface LayoutEdge {
   source: string;
   target: string;
 }
 export interface LayoutOptions {
-  colGap?: number;
-  rowGap?: number;
+  /** Space between a column's widest node and the next column. */
+  gapX?: number;
+  /** Space between nodes stacked in a column. */
+  gapY?: number;
   x0?: number;
   y0?: number;
+}
+
+function extent(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 export function computeLayout(
@@ -24,8 +40,8 @@ export function computeLayout(
   edges: LayoutEdge[],
   opts: LayoutOptions = {},
 ): Record<string, { x: number; y: number }> {
-  const colGap = opts.colGap ?? 360;
-  const rowGap = opts.rowGap ?? 220;
+  const gapX = opts.gapX ?? 120;
+  const gapY = opts.gapY ?? 40;
   const x0 = opts.x0 ?? 0;
   const y0 = opts.y0 ?? 0;
 
@@ -63,11 +79,22 @@ export function computeLayout(
     byLayer.get(L)!.push(id);
   }
 
+  const sizes = new Map(nodes.map((n) => [n.id, {
+    width: extent(n.width, DEFAULT_WIDTH),
+    height: extent(n.height, DEFAULT_HEIGHT),
+  }]));
   const pos: Record<string, { x: number; y: number }> = {};
-  for (const [L, members] of byLayer) {
-    members.forEach((id, i) => {
-      pos[id] = { x: x0 + L * colGap, y: y0 + i * rowGap };
-    });
+  let x = x0;
+  for (const L of [...byLayer.keys()].sort((a, b) => a - b)) {
+    let y = y0;
+    let widest = 0;
+    for (const id of byLayer.get(L)!) {
+      const size = sizes.get(id)!;
+      pos[id] = { x, y };
+      y += size.height + gapY;
+      widest = Math.max(widest, size.width);
+    }
+    x += widest + gapX;
   }
   return pos;
 }

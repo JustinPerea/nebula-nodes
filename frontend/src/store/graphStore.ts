@@ -13,7 +13,7 @@ import type { NodeData, DynamicNodeData, DynamicPortDefinition, DynamicParamDefi
 import { shotPortId } from '../constants/ports';
 import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { buildSampleGraph } from '../constants/sampleGraph';
-import { computeLayout } from '../lib/autoLayout';
+import { computeLayout, type LayoutNode } from '../lib/autoLayout';
 import {
   clearPersistedRunHistory,
   clearRunReconnectingNote,
@@ -1231,11 +1231,23 @@ function mergePendingCinemaScene(nodeId: string, local: CinemaSceneSpec, incomin
   }) };
 }
 
+/** A node for computeLayout, with the size the canvas measured if it has rendered. */
+function layoutNode(node: Node<NodeData>): LayoutNode {
+  return { id: node.id, width: node.measured?.width ?? node.width, height: node.measured?.height ?? node.height };
+}
+
+// Layout writes this tab has sent and not heard back from, per node. A graphSync
+// that moved one of these nodes is the echo of an earlier write (or loses to the
+// one in flight), so the canvas keeps the position it has.
+const layoutWritesInFlight = new Map<string, number>();
+
 function persistNodePositions(positions: Record<string, { x: number; y: number }>): void {
   const persisted = Object.fromEntries(
     Object.entries(positions).filter(([nodeId]) => CLI_ID_RE.test(nodeId)),
   );
-  if (Object.keys(persisted).length === 0) return;
+  const nodeIds = Object.keys(persisted);
+  if (nodeIds.length === 0) return;
+  for (const nodeId of nodeIds) layoutWritesInFlight.set(nodeId, (layoutWritesInFlight.get(nodeId) ?? 0) + 1);
 
   graphMutationFetch('/api/graph/layout', {
     method: 'PUT',
@@ -1243,6 +1255,12 @@ function persistNodePositions(positions: Record<string, { x: number; y: number }
     body: JSON.stringify({ positions: persisted }),
   }).catch((err) => {
     console.warn('[nebula] Layout sync failed:', err);
+  }).finally(() => {
+    for (const nodeId of nodeIds) {
+      const left = (layoutWritesInFlight.get(nodeId) ?? 1) - 1;
+      if (left > 0) layoutWritesInFlight.set(nodeId, left);
+      else layoutWritesInFlight.delete(nodeId);
+    }
   });
 }
 
@@ -2063,6 +2081,7 @@ wsClient.subscribe((event) => {
       edges: cliEdges,
       empty,
       graphReplaced = false,
+      moved = [],
       providerRecoveries = [],
       providerStartAmbiguities = [],
       executionStatuses,
@@ -2072,6 +2091,7 @@ wsClient.subscribe((event) => {
       edges: Edge[];
       empty: boolean;
       graphReplaced?: boolean;
+      moved?: string[];
       providerRecoveries?: ProviderRecoveryCheckpoint[];
       providerStartAmbiguities?: ProviderStartAmbiguity[];
       executionStatuses?: ExecutionStatusResult[];
@@ -2132,6 +2152,11 @@ wsClient.subscribe((event) => {
 
     const existingById = new Map((graphReplaced ? [] : state.nodes).map((n) => [n.id, n]));
     const frontendOnlyNodes = graphReplaced ? [] : state.nodes.filter((n) => !CLI_ID_RE.test(n.id));
+    // Nodes the backend put somewhere new (an agent's move, or another tab's
+    // drag). The rest keep the position this canvas has, as do nodes being
+    // dragged here and nodes this tab's own layout write hasn't settled.
+    const takesBackendPosition = (node: Node<NodeData>, existing: Node<NodeData>) =>
+      moved.includes(node.id) && !existing.dragging && !layoutWritesInFlight.has(node.id) && Boolean(node.position);
 
     // Compute keyStatus for a node given its definition. Used for both new and
     // existing cli nodes so the "missing API key" badge shows up consistently.
@@ -2143,8 +2168,9 @@ wsClient.subscribe((event) => {
       const existing = existingById.get(cliNode.id);
       const keyStatus = keyStatusFor(cliNode.data.definitionId, cliNode.data.params);
       if (existing) {
-        // Preserve position (user may have dragged) and existing outputs when
-        // the CLI side doesn't have newer ones. Spread existing.data FIRST so
+        // Preserve position (unless the backend moved the node; see
+        // takesBackendPosition) and existing outputs when the CLI side doesn't
+        // have newer ones. Spread existing.data FIRST so
         // frontend-only fields (dynamicInputPorts, dynamicParams, providerMeta,
         // modelId on universal nodes) survive the merge — cliNode.data then
         // overrides common keys like label/definitionId/params.
@@ -2178,7 +2204,7 @@ wsClient.subscribe((event) => {
           ...cliNode,
           type: isPaperSource ? 'paperSourceNode' : cliNode.data.definitionId === 'batch'
             ? 'batchNode' : existing.type ?? cliNode.type,
-          position: existing.position,
+          position: takesBackendPosition(cliNode, existing) ? cliNode.position : existing.position,
           data: {
             ...existing.data,
             ...cliNode.data,
@@ -2567,7 +2593,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const internalEdges = edges.filter(
       (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target),
     );
-    const positions = computeLayout(selected, internalEdges);
+    const positions = computeLayout(selected.map(layoutNode), internalEdges);
     const currentMinX = Math.min(...selected.map((node) => node.position.x));
     const currentMinY = Math.min(...selected.map((node) => node.position.y));
     const layoutValues = Object.values(positions);
@@ -4937,9 +4963,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const { nodes, edges } = get();
     if (nodes.length === 0) return;
     pushUndo(set, get);
-    // Dependency-aware layered positions (frontend-only; graphSync preserves
-    // existing.position, and saves round-trip it, so this sticks like a drag).
-    const pos = computeLayout(nodes, edges);
+    // Dependency-aware layered positions, spaced by each node's rendered size.
+    // Persisted like a drag: other open canvases take them from the graphSync.
+    const pos = computeLayout(nodes.map(layoutNode), edges);
     set((state) => ({
       nodes: state.nodes.map((n) => (pos[n.id] ? { ...n, position: pos[n.id] } : n)),
     }));

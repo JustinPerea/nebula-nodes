@@ -6211,17 +6211,25 @@ async def get_node(node_id: str) -> dict:
 _REPLACE_REASONS = ("import", "project-open", "project-create", "project-delete")
 
 
-async def _broadcast_graph_sync(*, graph_replaced: bool = False, reason: str = "import") -> dict[str, Any]:
+async def _broadcast_graph_sync(
+    *, graph_replaced: bool = False, reason: str = "import", moved: Iterable[str] = (),
+) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket.
 
     `reason` (import, project-open, project-create) only matters when the
     graph was replaced: watchers are told node ids restarted, and why.
+    `moved` names existing nodes this change put somewhere new. A canvas keeps
+    its own position for nodes it already shows (the person may be mid-drag),
+    so without the list an agent's move didn't show on an open canvas until
+    it reloaded.
     """
     export = await export_graph_for_frontend()
     if graph_replaced:
         agent_presence.forget_graph()
+    moved_ids = sorted({str(node_id) for node_id in moved if node_id in cli_graph.nodes})
     await manager.broadcast_raw({"type": "graphSync", **export,
-                                 **({"graphReplaced": True} if graph_replaced else {})})
+                                 **({"graphReplaced": True} if graph_replaced else {}),
+                                 **({"moved": moved_ids} if moved_ids and not graph_replaced else {})})
     if graph_replaced:
         # Tag, don't reset: seq stays monotonic, and the new project id rides
         # on this event and every one after it.
@@ -7363,7 +7371,7 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
         cli_graph.update_positions(normalized)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(moved=normalized)
     publish_action(f"Updated layout for {len(normalized)} node(s)")
     # This route is the authoritative move signal (drag end, auto-layout,
     # paste).
@@ -7766,7 +7774,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             source="agent-edit",
         )
 
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(moved=moves)
     note = f" ({additions.note})" if additions.note != "edit" else ""
     for edge in spec.unwire:
         _journal_edge("edge.removed", edge.as_dict())
