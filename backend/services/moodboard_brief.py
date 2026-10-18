@@ -164,7 +164,8 @@ def normalize_override_text(value: Any) -> str:
 
 
 def board_fields(board: dict[str, Any]) -> tuple[str, list[str], dict[str, list[str]]]:
-    """The board's direction, avoid list and pinned colours, read leniently."""
+    """The board's direction, avoid list and pinned colours, read leniently:
+    a board file edited by hand (``"avoid": 5``) still opens."""
     try:
         direction = normalize_direction(board.get("direction"))
     except ValueError:
@@ -172,7 +173,9 @@ def board_fields(board: dict[str, Any]) -> tuple[str, list[str], dict[str, list[
     try:
         avoid = normalize_avoid(board.get("avoid"))
     except ValueError:
-        avoid = [str(item) for item in board.get("avoid") or [] if isinstance(item, str) and item.strip()]
+        raw_avoid = board.get("avoid")
+        avoid = [item for item in raw_avoid if isinstance(item, str) and item.strip()] \
+            if isinstance(raw_avoid, list) else []
     try:
         pinned = normalize_pinned_colors(board.get("pinnedColors"))
     except ValueError:
@@ -189,7 +192,9 @@ def brief_basis(board: dict[str, Any]) -> str:
     from services.moodboard_analysis import source_hash
 
     direction, avoid, pinned = board_fields(board)
-    payload = {"source": source_hash(board), "direction": direction, "avoid": avoid, "pinned": pinned}
+    images = board.get("images")
+    readable = board if isinstance(images, list) else {**board, "images": []}
+    payload = {"source": source_hash(readable), "direction": direction, "avoid": avoid, "pinned": pinned}
     encoded = json.dumps(payload, sort_keys=True, ensure_ascii=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:16]
 
@@ -298,11 +303,21 @@ def compose(board: dict[str, Any], analysis: dict[str, Any] | None = None) -> di
     }
 
 
-def with_brief(board: dict[str, Any] | None) -> dict[str, Any] | None:
-    """A board as the API returns it: the stored board plus its composed ``brief``."""
-    if board is None:
-        return None
-    return {**board, "brief": compose(board)}
+def with_brief(board: Any) -> Any:
+    """A board as the API returns it: the stored board plus its composed ``brief``.
+
+    A board file that isn't a board (edited by hand, or cut short) comes back
+    as it is, and one whose brief can't be composed gets ``brief: None``, so
+    it never takes the board list down with it.
+    """
+    if not isinstance(board, dict):
+        return board
+    try:
+        brief = compose(board)
+    except Exception:  # noqa: BLE001 - one odd board must not break listing the rest
+        logger.exception("Moodboard %s: brief not composed", board.get("id"))
+        brief = None
+    return {**board, "brief": brief}
 
 
 # -- reaching a generator ----------------------------------------------------
@@ -469,7 +484,12 @@ def migrate_board(board: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
     board and a record of what moved, or None when the board is already
     migrated. The saved analysis is left as it was.
     """
-    if not isinstance(board, dict) or board.get("briefVersion") == BRIEF_FIELDS_VERSION:
+    if not isinstance(board, dict):
+        return None
+    version = board.get("briefVersion")
+    # A board saved by a newer Nebula (after a downgrade) is left alone, not
+    # migrated back down.
+    if isinstance(version, int) and not isinstance(version, bool) and version >= BRIEF_FIELDS_VERSION:
         return None
     from services.moodboard_analysis import analysis_is_current
 

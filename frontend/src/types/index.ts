@@ -585,8 +585,10 @@ export interface Moodboard {
   avoid?: string[];
   pinnedColors?: MoodboardPinnedColors;
   /** A hand-written brief that replaces the generated one. The server stamps
-   *  the basis; clients send only the text. */
-  briefOverride?: { text: string; basis?: string; updatedAt?: string } | null;
+   *  the basis and who wrote it (`by`, from the person gate); clients send
+   *  only the text. Only the person may replace, remove or Keep text the
+   *  person wrote (a missing `by` counts as the person's). */
+  briefOverride?: { text: string; basis?: string; updatedAt?: string; by?: 'person' | 'agent' } | null;
   brief?: MoodboardBrief;
   thumbnail: string;
   projectId?: string;

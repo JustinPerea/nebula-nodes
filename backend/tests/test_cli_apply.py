@@ -125,7 +125,7 @@ def test_a_refused_plan_changes_nothing_and_says_why(api, capsys):
     err = capsys.readouterr().err
     # The new node is named as the plan named it, not by a staged id it never saw.
     assert err == "error: Invalid target handle 'nope' on node '+wide' (definition 'nano-banana'). " \
-                  "Valid inputPorts: ['prompt', 'images']\n"
+                  "Valid inputPorts: ['prompt', 'images', 'moodboard']\n"
     assert api.graph.get_state() == before
 
 

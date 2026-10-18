@@ -595,3 +595,131 @@ def test_studio_stops_at_the_same_limits_the_store_keeps():
         "avoidItem": moodboard_brief.AVOID_ITEM_LIMIT, "pinned": moodboard_brief.PINNED_LIMIT,
         "override": moodboard_brief.OVERRIDE_LIMIT,
     }
+
+
+# -- CI and security pass: who may change a hand-written brief -------------------
+#
+# The board keeps no history, so replacing or removing the person's
+# hand-written brief can't be put back. Agents may do anything undoable; this
+# isn't, so only the person (services/person_gate.py: no agent marker AND this
+# launch's person token) may replace, remove or Keep text the person wrote.
+
+AGENT = {"X-Nebula-Agent": "Claude Code"}
+
+
+def _override_of(client, board_id):
+    return client.get(f"/api/moodboards/{board_id}").json()["briefOverride"]
+
+
+def test_an_agent_cannot_replace_remove_or_keep_the_persons_brief(client, person):
+    from tests.conftest import FORGED_ORIGIN
+
+    board = _create(client)
+    written = client.put(f"/api/moodboards/{board['id']}", json={"briefOverride": {"text": "Mine."}},
+                         headers=person.headers)
+    assert written.status_code == 200 and written.json()["briefOverride"]["by"] == "person"
+    saved = _override_of(client, board["id"])
+
+    refused = [
+        (AGENT, {"briefOverride": {"text": "The agent's."}}, "agent_refused"),
+        (AGENT, {"briefOverride": None}, "agent_refused"),
+        (AGENT, {"briefOverride": {"text": "   "}}, "agent_refused"),
+        ({**person.headers, **AGENT}, {"briefOverride": None}, "agent_refused"),
+        ({}, {"briefOverride": {"text": "curl's."}}, "person_required"),
+        (FORGED_ORIGIN, {"briefOverride": None, "direction": "Cooler"}, "person_required"),
+    ]
+    for headers, body, code in refused:
+        response = client.put(f"/api/moodboards/{board['id']}", json=body, headers=headers)
+        assert response.status_code == 403, (headers, body, response.text)
+        assert response.json()["code"] == code
+        assert "wrote this board's brief by hand" in response.json()["detail"]
+    keep = client.post(f"/api/moodboards/{board['id']}/brief-override/keep", headers=AGENT)
+    assert keep.status_code == 403 and keep.json()["code"] == "agent_refused"
+    # Nothing changed, not even the Direction sent beside a refused override.
+    after = client.get(f"/api/moodboards/{board['id']}").json()
+    assert after["briefOverride"] == saved and after["direction"] == ""
+
+    # An agent can still change the rest of the board; the person sees the badge.
+    redirected = client.put(f"/api/moodboards/{board['id']}",
+                            json={"direction": "Cooler", "briefOverride": {"text": "Mine."}}, headers=AGENT)
+    assert redirected.status_code == 200
+    assert redirected.json()["briefOverride"] == saved
+    assert redirected.json()["brief"]["override"] == {"active": True, "stale": True}
+
+    # The person decides.
+    assert client.post(f"/api/moodboards/{board['id']}/brief-override/keep",
+                       headers=person.headers).status_code == 200
+    cleared = client.put(f"/api/moodboards/{board['id']}", json={"briefOverride": None}, headers=person.headers)
+    assert cleared.status_code == 200 and cleared.json()["briefOverride"] is None
+
+
+def test_an_agent_may_change_a_brief_an_agent_wrote(client, person):
+    board = _create(client, briefOverride={"text": "Agent draft."})
+    assert board["briefOverride"]["by"] == "agent"
+    replaced = client.put(f"/api/moodboards/{board['id']}", json={"briefOverride": {"text": "Second draft."}},
+                          headers=AGENT)
+    assert replaced.status_code == 200 and replaced.json()["briefOverride"]["text"] == "Second draft."
+    assert client.post(f"/api/moodboards/{board['id']}/brief-override/keep", headers=AGENT).status_code == 200
+    cleared = client.put(f"/api/moodboards/{board['id']}", json={"briefOverride": None}, headers=AGENT)
+    assert cleared.status_code == 200 and cleared.json()["briefOverride"] is None
+
+    # Once the person rewrites it, it's theirs.
+    client.put(f"/api/moodboards/{board['id']}", json={"briefOverride": {"text": "Mine now."}},
+               headers=person.headers)
+    assert client.put(f"/api/moodboards/{board['id']}", json={"briefOverride": None},
+                      headers=AGENT).status_code == 403
+
+
+def test_a_brief_the_migration_moved_counts_as_the_persons(client, person, tmp_path):
+    root = tmp_path / "moodboards"
+    (root / "_global").mkdir(parents=True)
+    board = _old_board(tmp_path, edited_brief="Hand edit from before the fields.")
+    (root / "_global" / f"{board['id']}.json").write_text(json.dumps(board))
+    migrate_brief_fields()
+
+    response = client.put(f"/api/moodboards/{board['id']}", json={"briefOverride": None}, headers=AGENT)
+    assert response.status_code == 403
+    assert _override_of(client, board["id"])["text"] == "Hand edit from before the fields."
+    assert client.put(f"/api/moodboards/{board['id']}", json={"briefOverride": None},
+                      headers=person.headers).status_code == 200
+
+
+# -- CI and security pass: the migration on real boards --------------------------
+
+def test_a_hand_edited_board_file_still_lists_and_opens(client, tmp_path):
+    root = tmp_path / "moodboards"
+    (root / "_global").mkdir(parents=True)
+    good = _create(client)
+    odd = {**_old_board(tmp_path), "avoid": 5, "pinnedColors": "red", "direction": ["x"]}
+    no_images = {**_old_board(tmp_path), "images": None,
+                 "briefOverride": {"text": "Kept anyway.", "basis": "x"}, "briefVersion": 1}
+    for board in (odd, no_images):
+        (root / "_global" / f"{board['id']}.json").write_text(json.dumps(board))
+
+    report = migrate_brief_fields()
+    assert {r["id"] for r in report["migrated"]} == {odd["id"]}
+
+    listed = client.get("/api/moodboards")
+    assert listed.status_code == 200, listed.text
+    assert {b["id"] for b in listed.json()} == {good["id"], odd["id"], no_images["id"]}
+    opened = client.get(f"/api/moodboards/{no_images['id']}")
+    assert opened.status_code == 200 and opened.json()["brief"]["styleBrief"] == "Kept anyway."
+    assert client.get(f"/api/moodboards/{odd['id']}").json()["avoid"] == []
+
+
+def test_a_board_from_a_newer_nebula_is_not_migrated_back(tmp_path):
+    board = {**_old_board(tmp_path, negatives="random artifacts, chrome text"), "briefVersion": 2,
+             "avoid": ["kept as the newer version wrote it"]}
+    assert migrate_board(board) is None
+
+
+@pytest.mark.asyncio
+async def test_the_migration_never_stops_the_backend_from_starting(monkeypatch):
+    import main as main_module
+    from services import moodboard_store
+
+    def broken():
+        raise PermissionError(13, "Permission denied", "moodboards")
+
+    monkeypatch.setattr(moodboard_store, "migrate_brief_fields", broken)
+    await main_module._moodboard_brief_fields_startup()          # logs and returns

@@ -123,16 +123,49 @@ def _migrated(board: dict[str, Any]) -> dict[str, Any]:
     return board if result is None else result[0]
 
 
-def _set_override(moodboard: dict[str, Any], value: Any, *, previous: Any) -> None:
+OVERRIDE_AUTHORS = ("person", "agent")
+
+
+class BriefOverrideProtected(Exception):
+    """An agent tried to replace, clear or Keep the person's hand-written brief.
+
+    The board keeps no history, so the person's text would be gone for good;
+    that is the person's call (services/person_gate.py decides who that is)."""
+
+
+def person_wrote(override: Any) -> bool:
+    """Whether a saved override is the person's: anything not stamped
+    ``by: "agent"``, including overrides the migration moved from an edited
+    brief, which predate the stamp."""
+    return (isinstance(override, dict) and bool(str(override.get("text") or "").strip())
+            and override.get("by") != "agent")
+
+
+def _guard_override(previous: Any, by: str, action: str) -> None:
+    if by != "person" and person_wrote(previous):
+        raise BriefOverrideProtected(
+            f"The person wrote this board's brief by hand, so an agent can't {action} it: the board keeps no "
+            "history, and their text would be lost. Leave briefOverride out of the request, or ask the person "
+            "to change it in Moodboard Studio.")
+
+
+def _set_override(moodboard: dict[str, Any], value: Any, *, previous: Any, by: str) -> None:
     """Store ``briefOverride`` from ``{"text": ...}`` or None.
 
     The server keeps ``basis``: new text is stamped with the board as it is
     now; the same text sent again (Moodboard Studio saves the whole draft)
     keeps the basis it had, so "changed since you edited this" survives
     autosave. ``keep_brief_override`` restamps it on purpose.
+
+    ``by`` ("person" or "agent", decided by the route through the person
+    gate) is stamped on new text. Only the person may replace or clear text
+    the person wrote (BriefOverrideProtected).
     """
     brief = _brief()
+    if by not in OVERRIDE_AUTHORS:
+        raise ValueError(f"briefOverride author must be one of {OVERRIDE_AUTHORS}")
     if value is None:
+        _guard_override(previous, by, "remove")
         moodboard["briefOverride"] = None
         return
     if not isinstance(value, dict):
@@ -142,12 +175,15 @@ def _set_override(moodboard: dict[str, Any], value: Any, *, previous: Any) -> No
         raise ValueError(f"briefOverride has unknown keys: {', '.join(sorted(unknown))}")
     text = brief.normalize_override_text(value.get("text"))
     if not text:
+        _guard_override(previous, by, "remove")
         moodboard["briefOverride"] = None
         return
     if isinstance(previous, dict) and str(previous.get("text") or "").strip() == text:
         moodboard["briefOverride"] = previous
         return
-    moodboard["briefOverride"] = {"text": text, "basis": brief.brief_basis(moodboard), "updatedAt": _now_iso()}
+    _guard_override(previous, by, "replace")
+    moodboard["briefOverride"] = {"text": text, "basis": brief.brief_basis(moodboard), "updatedAt": _now_iso(),
+                                  "by": by}
 
 
 def _normalize_analysis(analysis: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -174,6 +210,7 @@ class MoodboardStore:
         avoid: list[str] | None = None,
         pinnedColors: dict[str, Any] | None = None,
         briefOverride: dict[str, Any] | None = None,
+        by: str = "agent",
     ) -> dict[str, Any]:
         brief = _brief()
         name = str(name or "").strip()
@@ -208,7 +245,7 @@ class MoodboardStore:
             "createdAt": now,
             "updatedAt": now,
         }
-        _set_override(moodboard, briefOverride, previous=None)
+        _set_override(moodboard, briefOverride, previous=None, by=by)
 
         root = _moodboard_root()
         scope_dir = _scope_dir(root, projectId)
@@ -243,7 +280,9 @@ class MoodboardStore:
                 continue
         return results
 
-    def update(self, moodboard_id: str, **fields: Any) -> dict[str, Any]:
+    def update(self, moodboard_id: str, *, by: str = "agent", **fields: Any) -> dict[str, Any]:
+        """Change a board's fields. ``by`` is who asked ("person" only when the
+        route's person gate says so); it matters only for ``briefOverride``."""
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
             raise KeyError(f"Moodboard '{moodboard_id}' not found")
@@ -281,19 +320,21 @@ class MoodboardStore:
                 moodboard[key] = value
         # Last, so new override text is stamped with the board as updated.
         if override_sent:
-            _set_override(moodboard, override_value, previous=moodboard.get("briefOverride"))
+            _set_override(moodboard, override_value, previous=moodboard.get("briefOverride"), by=by)
 
         moodboard["version"] = int(moodboard.get("version", 1)) + 1
         moodboard["updatedAt"] = _now_iso()
         _write_json(path, moodboard)
         return moodboard
 
-    def keep_brief_override(self, moodboard_id: str) -> dict[str, Any]:
+    def keep_brief_override(self, moodboard_id: str, *, by: str = "agent") -> dict[str, Any]:
         """Keep the hand-written brief for the board as it is now: the
         "changed since you edited this" notice goes until the board changes again.
 
         KeyError when there is no such board (or the id isn't one a board can
-        have); ValueError when the board has no hand-written brief."""
+        have); ValueError when the board has no hand-written brief;
+        BriefOverrideProtected when an agent asks to keep the person's text
+        (Keep or Regenerate is the person's answer to that notice)."""
         try:
             path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         except ValueError:
@@ -305,6 +346,7 @@ class MoodboardStore:
         if not isinstance(override, dict) or not str(override.get("text") or "").strip():
             raise ValueError("This board has no hand-written brief to keep. To write one, send "
                              "briefOverride: {\"text\": ...} with PUT /api/moodboards/{id}.")
+        _guard_override(override, by, "mark as kept")
         moodboard["briefOverride"] = {**override, "basis": _brief().brief_basis(moodboard), "updatedAt": _now_iso()}
         moodboard["version"] = int(moodboard.get("version", 1)) + 1
         moodboard["updatedAt"] = _now_iso()

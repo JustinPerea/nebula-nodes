@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, BinaryIO, Callable, Iterable, Mapping
+from typing import Any, BinaryIO, Callable, Iterable, Mapping, NoReturn
 from urllib.parse import quote, unquote_to_bytes, urlsplit
 
 from uuid import uuid4
@@ -9970,6 +9970,23 @@ def _moodboard_store():
     return MoodboardStore()
 
 
+def _moodboard_author() -> str:
+    """Who is changing a board's hand-written brief: "person" only when the
+    person gate says so (services/person_gate.py), else "agent"."""
+    return "person" if _is_person_request() else "agent"
+
+
+def _refuse_override_change(exc: Exception) -> NoReturn:
+    """Turn the store's BriefOverrideProtected into the person gate's refusal
+    (403, ``agent_refused`` or ``person_required``) with the store's reason."""
+    try:
+        require_person(current_request_headers())
+    except PersonGateError as gate:
+        gate.detail = f"{exc} {gate.detail}"
+        raise
+    raise HTTPException(status_code=403, detail=str(exc))  # unreachable: only non-persons are refused
+
+
 def _moodboard_out(board: dict) -> dict:
     """A board as the API returns it: the saved board plus ``brief``, what
     generators get from it (services/moodboard_brief.compose). ``brief`` is
@@ -10107,6 +10124,7 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
             avoid=body.avoid,
             pinnedColors=body.pinnedColors.model_dump() if body.pinnedColors else None,
             briefOverride=body.briefOverride.model_dump() if body.briefOverride else None,
+            by=_moodboard_author(),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -10140,10 +10158,13 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
         updates["briefOverride"] = None
     if "images" in updates:
         updates["images"] = [img.model_dump() if hasattr(img, "model_dump") else img for img in body.images or []]
+    from services.moodboard_store import BriefOverrideProtected
     try:
-        moodboard = store.update(moodboard_id, **updates)
+        moodboard = store.update(moodboard_id, by=_moodboard_author(), **updates)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    except BriefOverrideProtected as exc:
+        _refuse_override_change(exc)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
@@ -10153,12 +10174,16 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
 @app.post("/api/moodboards/{moodboard_id}/brief-override/keep")
 async def keep_moodboard_brief_override(moodboard_id: str) -> dict:
     """Keep the board's hand-written brief after the board changed: clears
-    "changed since you edited this" until the next change."""
+    "changed since you edited this" until the next change. Only the person
+    may keep text the person wrote; an agent may keep its own."""
+    from services.moodboard_store import BriefOverrideProtected
     store = _moodboard_store()
     try:
-        moodboard = store.keep_brief_override(moodboard_id)
+        moodboard = store.keep_brief_override(moodboard_id, by=_moodboard_author())
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    except BriefOverrideProtected as exc:
+        _refuse_override_change(exc)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
