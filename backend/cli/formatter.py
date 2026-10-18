@@ -714,6 +714,16 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
     return "\n".join(lines)
 
 
+def format_applied(result: dict[str, Any]) -> str:
+    """`nebula apply`'s result: what changed, then each new node's id for the next command."""
+    lines = [f"Applied: {result.get('summary') or 'no change'}."]
+    refs = {node_id: ref for ref, node_id in (result.get("idMap") or {}).items()}
+    for node in result.get("added") or []:
+        node_id = str(node.get("id") or "")
+        lines.append(f"  {refs.get(node_id, '?')} → {node_id}  {node.get('name') or node.get('definitionId') or ''}".rstrip())
+    return "\n".join(lines)
+
+
 def format_proposal_outcome(view: dict[str, Any]) -> str:
     """The person's decision in one line, for `--wait`."""
     status = view.get("status")

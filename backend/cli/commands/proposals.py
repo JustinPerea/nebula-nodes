@@ -9,13 +9,14 @@ import argparse
 import json
 import sys
 import time
-from pathlib import Path
 from typing import Any, Callable, TextIO
 
 import httpx
 
 from ..client import NebulaClient
 from ..formatter import format_proposal, format_proposal_outcome
+# The plan builder is shared with `nebula apply` (cli/plan.py); re-exported here.
+from ..plan import BuildError, body_from_args, build_body  # noqa: F401
 
 POLL_SECONDS = 25.0
 
@@ -24,117 +25,6 @@ EXIT_ACCEPTED = 0
 EXIT_TIMEOUT = 2
 EXIT_REJECTED = 3
 EXIT_CLOSED = 4
-
-
-class BuildError(ValueError):
-    """A builder flag the CLI can't turn into a proposal."""
-
-
-def _flatten(items: list) -> list[str]:
-    out: list[str] = []
-    for item in items or []:
-        if isinstance(item, list):
-            out.extend(item)
-        else:
-            out.append(item)
-    return out
-
-
-def _endpoint(text: str, flag: str) -> tuple[str, str]:
-    """`n4:image` or `+up:image` → ("n4", "image")."""
-    node, sep, port = (text or "").partition(":")
-    if not sep or not node or not port:
-        raise BuildError(f"{flag} needs node:port (e.g. n4:image or +up:image), got '{text}'")
-    return node, port
-
-
-def build_body(
-    *,
-    note: str | None = None,
-    add: list[str] | None = None,
-    param: list | None = None,
-    set_params: list[str] | None = None,
-    wire: list[list[str]] | None = None,
-    run: list[str] | None = None,
-    at: list[str] | None = None,
-) -> dict[str, Any]:
-    """Turn builder flags into a proposal body. Values stay strings; the backend coerces them."""
-    nodes: dict[str, dict[str, Any]] = {}
-    for item in add or []:
-        ref, sep, definition_id = item.partition("=")
-        if not sep or not ref.startswith("+") or not definition_id:
-            raise BuildError(f"--add needs +ref=definitionId (e.g. +up=topaz-image-upscale), got '{item}'")
-        if ref in nodes:
-            raise BuildError(f"--add uses {ref} twice")
-        nodes[ref] = {"ref": ref, "definitionId": definition_id, "params": {}}
-    for item in _flatten(param or []):
-        target, sep, value = item.partition("=")
-        ref, dot, key = target.partition(".")
-        if not sep or not dot or not key:
-            raise BuildError(f"--param needs +ref.key=value (e.g. +up.upscale_factor=2), got '{item}'")
-        if ref not in nodes:
-            raise BuildError(f"--param names {ref}, which no --add created")
-        nodes[ref]["params"][key] = value
-    for item in at or []:
-        ref, sep, coords = item.partition("=")
-        x, comma, y = coords.partition(",")
-        if not sep or not comma or ref not in nodes:
-            raise BuildError(f"--at needs +ref=x,y for a node from --add, got '{item}'")
-        try:
-            nodes[ref]["position"] = {"x": float(x), "y": float(y)}
-        except ValueError as exc:
-            raise BuildError(f"--at needs numbers, got '{coords}'") from exc
-
-    changes: dict[str, dict[str, Any]] = {}
-    for item in set_params or []:
-        target, sep, value = item.partition("=")
-        node_id, dot, key = target.partition(".")
-        if not sep or not dot or not key or node_id.startswith("+"):
-            raise BuildError(f"--set needs nX.key=value for an existing node (e.g. n4.prompt=warmer), got '{item}'")
-        changes.setdefault(node_id, {})[key] = value
-
-    edges = []
-    for pair in wire or []:
-        if len(pair) != 2:
-            raise BuildError("--wire takes two arguments: SRC:port DST:port")
-        source, source_handle = _endpoint(pair[0], "--wire")
-        target, target_handle = _endpoint(pair[1], "--wire")
-        edges.append({"source": source, "sourceHandle": source_handle,
-                      "target": target, "targetHandle": target_handle})
-
-    body: dict[str, Any] = {"note": note or ""}
-    if nodes:
-        body["nodes"] = [
-            {key: value for key, value in node.items() if key != "params" or value}
-            for node in nodes.values()
-        ]
-    if edges:
-        body["edges"] = edges
-    if changes:
-        body["params"] = [{"nodeId": node_id, "params": params} for node_id, params in changes.items()]
-    if run:
-        body["run"] = list(run)
-    return body
-
-
-def _body_from_args(args: argparse.Namespace) -> dict[str, Any]:
-    builder_used = any([args.add, _flatten(args.param), args.set_params, args.wire, args.run, args.at])
-    if args.file:
-        if builder_used:
-            raise BuildError("use --file or the builder flags, not both")
-        try:
-            body = json.loads(Path(args.file).read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            raise BuildError(f"can't read {args.file}: {exc}") from exc
-        if not isinstance(body, dict):
-            raise BuildError(f"{args.file} must hold a JSON object")
-        if args.note:
-            body["note"] = args.note
-        return body
-    if not args.note:
-        raise BuildError("--note is required: one line telling the person what this does")
-    return build_body(note=args.note, add=args.add, param=args.param, set_params=args.set_params,
-                      wire=args.wire, run=args.run, at=args.at)
 
 
 def wait_for_decision(
@@ -188,7 +78,7 @@ def run_propose(
 ) -> int:
     out = out or sys.stdout
     try:
-        body = _body_from_args(args)
+        body = body_from_args(args, command="propose")
     except BuildError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
