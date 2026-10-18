@@ -37,6 +37,12 @@ describe('applyPresetToComposer', () => {
     expect(out.params._kreaAuth).toBe('mcp');
   });
 
+  it('keeps a saved provider choice from the preset', () => {
+    const out = applyPresetToComposer(preset({ modelId: 'nano-banana', params: { _provider: 'fal' } }),
+      { modelId: null, prompt: '', params: {} }, {});
+    expect(out.params._provider).toBe('fal');
+  });
+
   it('appends the preset prompt fragment to the existing prompt', () => {
     const out = applyPresetToComposer(preset({ prompt: 'film noir lighting' }), { modelId: 'nano-banana', prompt: 'a cat', params: {} });
     expect(out.prompt).toBe('a cat, film noir lighting');

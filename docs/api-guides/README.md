@@ -1,6 +1,6 @@
 # Nebula Nodes - API Guides
 
-Nebula integrates **19 external AI/media API families** (image, video, audio, 3D/world, text/LLM, SVG, and typed decisions). This directory holds the **user-facing guide** for each provider plus a **coverage + agent-skill audit** measuring how much of each provider's API surface Nebula actually wires up, and whether an agent skill exists to drive those nodes.
+Nebula integrates **20 external AI/media API families** (image, video, audio, 3D/world, text/LLM, SVG, and typed decisions). This directory holds the **user-facing guide** for each provider plus a **coverage + agent-skill audit** measuring how much of each provider's API surface Nebula actually wires up, and whether an agent skill exists to drive those nodes.
 
 Per-provider guides live alongside this file at `./<provider>.md` (e.g. [`./fal.md`](./fal.md)).
 
@@ -29,6 +29,7 @@ Sorted by node count (desc). **API coverage** = share of the provider's publishe
 | [Higgsfield](./higgsfield.md) | 1 | ~25% | complete | DoP motion/camera presets (getMotions()) — Higgsfield's headline feature — not surfaced |
 | [Anthropic (Claude)](./anthropic.md) | 1 | ~20% | complete | Tool use / function calling — both custom client tools and Anthropic server tools entirely unexposed |
 | [TypeSafe (Jev)](./typesafe.md) | 3 | ~75% | complete | Several questions in one Decide request; Box edge-check questions and several targets per image |
+| [Black Forest Labs (FLUX)](./bfl.md) | 0 (client and key only, 2026-10-15) | Submit, poll and download for every FLUX endpoint; key check | none yet (comes with the nodes) | The FLUX 3 nodes themselves (next PRs of the routing series) |
 
 ## Agent skill gaps
 

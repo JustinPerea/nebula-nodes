@@ -3,10 +3,11 @@ import shared from '../../../backend/tests/fixtures/route_cases.json';
 import { NODE_DEFINITIONS } from '../../src/constants/nodeDefinitions';
 import { buildDefaultParamsForUi, resolveCreateParamDefinitions } from '../../src/lib/createParams';
 import {
-  configuredDirectKey, directBlock, directKeyNames, fallbackProvider, paramDefinitionsForRun, routeParamDefinitions,
-  selectRoute, WIRED, withWiredBlockers,
+  blockFields, configuredDirectKey, directBlock, directKeyNames, fallbackProvider, hasRoutes, paramDefinitionsForRun,
+  routeParamDefinitions, routeUnavailable, selectRoute, usesRoutePlan, WIRED, withWiredBlockers,
 } from '../../src/lib/directRoute';
 import { runRouteProvider } from '../../src/lib/modelDiscovery';
+import type { ModelNodeDefinition } from '../../src/types';
 
 type RouteCase = {
   name: string;
@@ -14,24 +15,42 @@ type RouteCase = {
   today?: string;
   params: Record<string, unknown>;
   apiKeys: Record<string, string>;
-  expected: { kind: string; provider: string | null; key: string | null };
+  expected: {
+    kind: string; provider: string | null; key: string | null;
+    routeId?: string | null; block?: Record<string, unknown> | null; missing?: string[];
+  };
+  unavailable?: Record<string, unknown> | null;
   paramKeys?: string[];
   wired?: string[];
+  wiredCounts?: Record<string, number>;
   block?: { reason: string; param: string | null; detail?: string; on?: string } | null;
 };
 
+const fixture = shared as unknown as {
+  defaultToday: string; cases: RouteCase[]; definitions: Record<string, ModelNodeDefinition>;
+};
+/** The case's node: an inline route-table node, or one from the catalog. */
+const definitionFor = (nodeId: string) => fixture.definitions[nodeId] ?? NODE_DEFINITIONS[nodeId];
+
 describe('selectRoute (cases shared with backend services/node_route.py)', () => {
-  const fixture = shared as { defaultToday: string; cases: RouteCase[] };
   afterEach(() => { vi.useRealTimers(); });
   for (const testCase of fixture.cases) {
     it(testCase.name, () => {
       // Local noon on the case's day, as node_route._today reads date.today().
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(new Date(`${testCase.today ?? fixture.defaultToday}T12:00:00`));
-      const definition = NODE_DEFINITIONS[testCase.nodeId];
-      const params = withWiredBlockers(definition, testCase.params, testCase.wired ?? []);
+      const definition = definitionFor(testCase.nodeId);
+      const wired = testCase.wiredCounts ? new Map(Object.entries(testCase.wiredCounts)) : testCase.wired ?? [];
+      const params = withWiredBlockers(definition, testCase.params, wired);
       const route = selectRoute(definition, params, testCase.apiKeys);
-      expect(route).toEqual(testCase.expected);
+      if (hasRoutes(definition)) {
+        expect({ ...route, block: blockFields(route.block) }).toEqual(testCase.expected);
+        expect(routeUnavailable(definition, params, testCase.apiKeys)).toEqual(testCase.unavailable);
+        // Plan billing reads the same routed values the router does.
+        expect(usesRoutePlan(definition, params)).toBe(route.kind === 'plan');
+      } else {
+        expect(route).toEqual(testCase.expected);
+      }
       expect(runRouteProvider(definition, testCase.apiKeys, params)).toBe(testCase.expected.provider);
       if (testCase.block !== undefined) {
         const block = directBlock(definition, params);
@@ -39,7 +58,8 @@ describe('selectRoute (cases shared with backend services/node_route.py)', () =>
         expect(got).toEqual(testCase.block);
       }
       if (testCase.paramKeys) {
-        expect(routeParamDefinitions(definition, route.kind).map((param) => param.key).sort()).toEqual(testCase.paramKeys);
+        expect(routeParamDefinitions(definition, route.routeId ?? route.kind).map((param) => param.key).sort())
+          .toEqual(testCase.paramKeys);
       }
     });
   }

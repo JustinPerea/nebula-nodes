@@ -1,4 +1,5 @@
 import type { ModelNodeDefinition } from '../types';
+import { allParamDefinitions, hasRoutes, routeBlock, routesOf, withWiredBlockers } from './directRoute';
 
 /** One curated price entry from backend/data/model_pricing.json. The format
  * and its rules live in backend/services/model_pricing.py; this file mirrors
@@ -54,10 +55,8 @@ function asMatchValue(value: unknown): string {
   return String(value);
 }
 
-function definitionParams(definition: Partial<ModelNodeDefinition>) {
-  const record = definition as Record<string, unknown>;
-  return ['params', 'sharedParams', 'directParams', 'falParams'].flatMap((key) =>
-    Array.isArray(record[key]) ? (record[key] as Array<{ key?: string; default?: unknown }>) : []);
+function definitionParams(definition: Partial<ModelNodeDefinition>): Array<{ key?: string; default?: unknown }> {
+  return allParamDefinitions(definition as ModelNodeDefinition);
 }
 
 /** Node params over the definition's defaults over the entry's handler defaults. */
@@ -127,7 +126,9 @@ export function estimateNode(
 ): NodeEstimate | null {
   const entry = entryForRoute(priceEntry, routeProvider);
   if (!entry) return null;
-  if (entry.provider && routeProvider && entry.provider !== routeProvider) return null;
+  // A route's entry was picked by its key, which the pricing check ties to
+  // the provider that bills it (a route-table node keys by route id).
+  if (entry === priceEntry && entry.provider && routeProvider && entry.provider !== routeProvider) return null;
   const priced = pricedKeys(entry);
   for (const port of wired) if (priced.has(port)) return null;
   const values = effectiveParams(entry, definition, params);
@@ -170,4 +171,28 @@ export function formatUsd(amount: number): string {
 export function formatUsdRange(low: number, high: number): string {
   if (formatUsd(low) === formatUsd(high)) return formatUsd(high);
   return `${formatUsd(low)}–${formatUsd(high).slice(1)}`;
+}
+
+/** {route id: the estimate on that route, or null} for a route-table node:
+ * what each row of the provider switcher shows at these params. Null when
+ * the route can't take the run (routeBlock) or has no list price. Keys don't
+ * matter here: a row shows its price whether or not its key is set
+ * (model_pricing.estimate_routes). */
+export function estimateRoutes(
+  definition: ModelNodeDefinition,
+  params: Record<string, unknown> | undefined,
+  wired: Iterable<string> | ReadonlyMap<string, number> = [],
+  pricing?: PricingTable | null,
+): Record<string, NodeEstimate | null> {
+  if (!hasRoutes(definition)) return {};
+  const entry = pricing?.nodes[definition.id];
+  const routed = withWiredBlockers(definition, params, wired);
+  const ports = wired instanceof Map ? [...wired.keys()] : [...(wired as Iterable<string>)];
+  const estimates: Record<string, NodeEstimate | null> = {};
+  for (const route of routesOf(definition)) {
+    estimates[route.id] = routeBlock(definition, route, routed)
+      ? null
+      : estimateNode(entry, definition, params, route.pricing ?? route.id, ports);
+  }
+  return estimates;
 }

@@ -1,6 +1,607 @@
 {
-  "about": "Route selection cases shared by backend/services/node_route.py select_route and frontend/src/lib/directRoute.ts selectRoute, against the real node catalog. paramKeys (when given) are the params that route shows and sends, sorted. wired (when given) are input ports with a value, added to params as with_wired_blockers / withWiredBlockers do before routing. block (when given) is direct_block / directBlock for those params: null, or its reason, param, and detail / on when set. Each case runs on its 'today' (YYYY-MM-DD), else on defaultToday, so date-gated routes (node_route.DIRECT_RETIRES) don't flip when the calendar does.",
+  "about": "Route selection cases shared by backend/services/node_route.py select_route and frontend/src/lib/directRoute.ts selectRoute, against the real node catalog. paramKeys (when given) are the params that route shows and sends, sorted. wired (when given) are input ports with a value, added to params as with_wired_blockers / withWiredBlockers do before routing. block (when given) is direct_block / directBlock for those params: null, or its reason, param, and detail / on when set. Each case runs on its 'today' (YYYY-MM-DD), else on defaultToday, so date-gated routes (node_route.DIRECT_RETIRES) don't flip when the calendar does. definitions are inline route-table nodes (definition `routes`, docs/PROVIDER-ROUTES.md); a case's nodeId names one of them or a registry node. For a route-table node, expected also has routeId, block (null, or its reason, param, and detail / on when set) and missing (the keys it needs), and unavailable is route_unavailable / routeUnavailable (null when the run can start). wiredCounts (when given) maps an input port to how many inputs it carries, as filled_counts gives with_wired_blockers.",
   "defaultToday": "2026-10-14",
+  "definitions": {
+    "routes-image": {
+      "id": "routes-image",
+      "displayName": "Fixture Image",
+      "category": "image-gen",
+      "apiProvider": "bfl",
+      "apiEndpoint": "/v1/flux-3-image",
+      "executionPattern": "async-poll",
+      "envKeyName": [
+        "BFL_API_KEY",
+        "FAL_KEY",
+        "REPLICATE_API_TOKEN",
+        "OPENROUTER_API_KEY",
+        "KREA_API_TOKEN"
+      ],
+      "directKeyName": [
+        "BFL_API_KEY"
+      ],
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": true
+        },
+        {
+          "id": "images",
+          "label": "Images",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "id": "image",
+          "label": "Image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "params": [
+        {
+          "key": "_provider",
+          "label": "Provider",
+          "type": "enum",
+          "required": false,
+          "default": "auto",
+          "options": [
+            {
+              "label": "auto",
+              "value": "auto"
+            },
+            {
+              "label": "bfl",
+              "value": "bfl"
+            },
+            {
+              "label": "fal",
+              "value": "fal"
+            },
+            {
+              "label": "replicate",
+              "value": "replicate"
+            },
+            {
+              "label": "openrouter",
+              "value": "openrouter"
+            },
+            {
+              "label": "krea",
+              "value": "krea"
+            }
+          ],
+          "hidden": true
+        },
+        {
+          "key": "_kreaAuth",
+          "label": "Krea connection",
+          "type": "enum",
+          "required": false,
+          "default": "api-token",
+          "options": [
+            {
+              "label": "api-token",
+              "value": "api-token"
+            },
+            {
+              "label": "mcp",
+              "value": "mcp"
+            }
+          ]
+        }
+      ],
+      "sharedParams": [
+        {
+          "key": "aspect_ratio",
+          "label": "Aspect ratio",
+          "type": "enum",
+          "required": false,
+          "default": "auto",
+          "options": [
+            {
+              "label": "auto",
+              "value": "auto"
+            },
+            {
+              "label": "1:1",
+              "value": "1:1"
+            },
+            {
+              "label": "16:9",
+              "value": "16:9"
+            },
+            {
+              "label": "9:21",
+              "value": "9:21"
+            }
+          ]
+        },
+        {
+          "key": "resolution",
+          "label": "Resolution",
+          "type": "enum",
+          "required": false,
+          "default": "1k",
+          "options": [
+            {
+              "label": "768sq",
+              "value": "768sq"
+            },
+            {
+              "label": "1k",
+              "value": "1k"
+            },
+            {
+              "label": "1.5k",
+              "value": "1.5k"
+            },
+            {
+              "label": "2k",
+              "value": "2k"
+            },
+            {
+              "label": "4k",
+              "value": "4k"
+            }
+          ]
+        },
+        {
+          "key": "safety_tolerance",
+          "label": "Safety tolerance",
+          "type": "integer",
+          "required": false,
+          "default": 2,
+          "min": 0,
+          "max": 6
+        }
+      ],
+      "routes": [
+        {
+          "id": "bfl",
+          "provider": "bfl",
+          "maker": true,
+          "keys": [
+            "BFL_API_KEY"
+          ],
+          "handler": "bfl",
+          "endpoint": "/v1/flux-3-image",
+          "params": [
+            {
+              "key": "grounding",
+              "label": "Grounding",
+              "type": "boolean",
+              "required": false,
+              "default": false
+            }
+          ],
+          "rules": {
+            "accepts": {
+              "safety_tolerance": {
+                "min": 0,
+                "max": 4,
+                "integer": true
+              }
+            }
+          }
+        },
+        {
+          "id": "fal",
+          "provider": "fal",
+          "keys": [
+            "FAL_KEY"
+          ],
+          "handler": "fal",
+          "endpoint": "blackforestlabs/flux-3/text-to-image",
+          "endpointWhen": [
+            {
+              "when": {
+                "images": "(set)"
+              },
+              "endpoint": "blackforestlabs/flux-3/edit-image"
+            }
+          ],
+          "valueMap": {
+            "resolution": {
+              "768sq": "square",
+              "1k": "1k",
+              "2k": "2k",
+              "4k": "4k"
+            },
+            "aspect_ratio": {
+              "auto": "auto",
+              "1:1": "1:1",
+              "16:9": "16:9"
+            }
+          }
+        },
+        {
+          "id": "replicate",
+          "provider": "replicate",
+          "keys": [
+            "REPLICATE_API_TOKEN"
+          ],
+          "handler": "replicate-model",
+          "endpoint": "black-forest-labs/flux-3-image",
+          "params": [
+            {
+              "key": "grounding",
+              "label": "Grounding",
+              "type": "boolean",
+              "required": false,
+              "default": false
+            }
+          ]
+        },
+        {
+          "id": "openrouter",
+          "provider": "openrouter",
+          "keys": [
+            "OPENROUTER_API_KEY"
+          ],
+          "handler": "openrouter-images",
+          "endpoint": "black-forest-labs/flux-3-image",
+          "valueMap": {
+            "resolution": {
+              "768sq": "768",
+              "1k": "1K",
+              "1.5k": "1.5K",
+              "2k": "2K",
+              "4k": "4K"
+            }
+          },
+          "rules": {
+            "ports": {
+              "images": {
+                "max": 4
+              }
+            }
+          }
+        },
+        {
+          "id": "krea",
+          "provider": "krea",
+          "keys": [
+            "KREA_API_TOKEN"
+          ],
+          "plan": "optional",
+          "handler": "krea",
+          "endpoint": "/generate/image/black-forest-labs/flux-3-image",
+          "rules": {
+            "rejects": {
+              "resolution": [
+                "4k"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "routes-krea": {
+      "id": "routes-krea",
+      "displayName": "Fixture Krea",
+      "category": "image-gen",
+      "apiProvider": "krea",
+      "apiEndpoint": "/generate/image/krea/krea-3",
+      "executionPattern": "async-poll",
+      "envKeyName": [
+        "KREA_API_TOKEN",
+        "FAL_KEY"
+      ],
+      "directKeyName": [
+        "KREA_API_TOKEN"
+      ],
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": true
+        },
+        {
+          "id": "style_image",
+          "label": "Style image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "outputPorts": [
+        {
+          "id": "image",
+          "label": "Image",
+          "dataType": "Image",
+          "required": false
+        }
+      ],
+      "params": [
+        {
+          "key": "_provider",
+          "label": "Provider",
+          "type": "enum",
+          "required": false,
+          "default": "auto",
+          "options": [
+            {
+              "label": "auto",
+              "value": "auto"
+            },
+            {
+              "label": "krea",
+              "value": "krea"
+            },
+            {
+              "label": "fal",
+              "value": "fal"
+            }
+          ],
+          "hidden": true
+        },
+        {
+          "key": "_kreaAuth",
+          "label": "Krea connection",
+          "type": "enum",
+          "required": false,
+          "default": "api-token",
+          "options": [
+            {
+              "label": "api-token",
+              "value": "api-token"
+            },
+            {
+              "label": "mcp",
+              "value": "mcp"
+            }
+          ]
+        }
+      ],
+      "sharedParams": [
+        {
+          "key": "resolution",
+          "label": "Resolution",
+          "type": "enum",
+          "required": false,
+          "default": "1K",
+          "options": [
+            {
+              "label": "1K",
+              "value": "1K"
+            },
+            {
+              "label": "2K",
+              "value": "2K"
+            },
+            {
+              "label": "4K",
+              "value": "4K"
+            }
+          ]
+        }
+      ],
+      "routes": [
+        {
+          "id": "krea",
+          "provider": "krea",
+          "maker": true,
+          "keys": [
+            "KREA_API_TOKEN"
+          ],
+          "plan": "optional",
+          "handler": "krea",
+          "endpoint": "/generate/image/krea/krea-3",
+          "params": [
+            {
+              "key": "thinking_mode",
+              "label": "Thinking",
+              "type": "enum",
+              "required": false,
+              "default": "low",
+              "options": [
+                {
+                  "label": "low",
+                  "value": "low"
+                },
+                {
+                  "label": "high",
+                  "value": "high"
+                }
+              ]
+            }
+          ],
+          "rules": {
+            "rejects": {
+              "resolution": [
+                "4K"
+              ]
+            },
+            "rejectsWhen": [
+              {
+                "match": {
+                  "resolution": "2K",
+                  "style_image": "(unset)"
+                },
+                "label": "2K without a style image"
+              }
+            ]
+          },
+          "note": "Early access: Krea 3 beta workspaces only"
+        },
+        {
+          "id": "fal",
+          "provider": "fal",
+          "keys": [
+            "FAL_KEY"
+          ],
+          "handler": "fal",
+          "endpoint": "krea/v3/text-to-image",
+          "params": [
+            {
+              "key": "fal_seed",
+              "label": "Seed",
+              "type": "integer",
+              "required": false
+            }
+          ],
+          "rename": {
+            "fal_seed": "seed"
+          }
+        }
+      ]
+    },
+    "routes-video": {
+      "id": "routes-video",
+      "displayName": "Fixture Video",
+      "category": "video-gen",
+      "apiProvider": "bfl",
+      "apiEndpoint": "/v1/flux-3-video",
+      "executionPattern": "async-poll",
+      "envKeyName": [
+        "BFL_API_KEY",
+        "OPENROUTER_API_KEY"
+      ],
+      "directKeyName": [
+        "BFL_API_KEY"
+      ],
+      "inputPorts": [
+        {
+          "id": "prompt",
+          "label": "Prompt",
+          "dataType": "Text",
+          "required": true
+        },
+        {
+          "id": "keyframes",
+          "label": "Keyframes",
+          "dataType": "Image",
+          "required": false,
+          "multiple": true
+        }
+      ],
+      "outputPorts": [
+        {
+          "id": "video",
+          "label": "Video",
+          "dataType": "Video",
+          "required": false
+        }
+      ],
+      "params": [
+        {
+          "key": "_provider",
+          "label": "Provider",
+          "type": "enum",
+          "required": false,
+          "default": "auto",
+          "options": [
+            {
+              "label": "auto",
+              "value": "auto"
+            },
+            {
+              "label": "bfl",
+              "value": "bfl"
+            },
+            {
+              "label": "openrouter",
+              "value": "openrouter"
+            },
+            {
+              "label": "krea-plan",
+              "value": "krea-plan"
+            }
+          ],
+          "hidden": true
+        },
+        {
+          "key": "_kreaAuth",
+          "label": "Krea connection",
+          "type": "enum",
+          "required": false,
+          "default": "api-token",
+          "options": [
+            {
+              "label": "api-token",
+              "value": "api-token"
+            },
+            {
+              "label": "mcp",
+              "value": "mcp"
+            }
+          ]
+        }
+      ],
+      "sharedParams": [
+        {
+          "key": "duration",
+          "label": "Duration",
+          "type": "integer",
+          "required": false,
+          "default": 5,
+          "min": 5,
+          "max": 20
+        },
+        {
+          "key": "draft",
+          "label": "Draft",
+          "type": "boolean",
+          "required": false,
+          "default": false
+        }
+      ],
+      "routes": [
+        {
+          "id": "bfl",
+          "provider": "bfl",
+          "maker": true,
+          "keys": [
+            "BFL_API_KEY"
+          ],
+          "handler": "bfl",
+          "endpoint": "/v1/flux-3-video"
+        },
+        {
+          "id": "openrouter",
+          "provider": "openrouter",
+          "keys": [
+            "OPENROUTER_API_KEY"
+          ],
+          "handler": "openrouter-videos",
+          "endpoint": "black-forest-labs/flux-3-video",
+          "pricing": "openrouter-video",
+          "rules": {
+            "rejects": {
+              "draft": [
+                true
+              ]
+            },
+            "ports": {
+              "keyframes": {
+                "max": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "krea-plan",
+          "provider": "krea",
+          "keys": [],
+          "plan": "only",
+          "handler": "krea",
+          "endpoint": "/generate/video/black-forest-labs/flux-3-video",
+          "rules": {
+            "ports": {
+              "keyframes": {
+                "max": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
   "cases": [
     {
       "name": "maker key wins over the fal key",
@@ -2819,6 +3420,1199 @@
       "block": {
         "reason": "requires",
         "param": "voice_id"
+      }
+    },
+    {
+      "name": "routes: Auto runs on the maker with the BFL key",
+      "nodeId": "routes-image",
+      "params": {},
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "grounding",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "routes: Auto without a BFL key runs on fal",
+      "nodeId": "routes-image",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "REPLICATE_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "routes: Auto with only a Replicate token runs on Replicate",
+      "nodeId": "routes-image",
+      "params": {},
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "replicate",
+        "key": "REPLICATE_API_TOKEN",
+        "routeId": "replicate",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: Auto with only an OpenRouter key runs on OpenRouter",
+      "nodeId": "routes-image",
+      "params": {},
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "openrouter",
+        "key": "OPENROUTER_API_KEY",
+        "routeId": "openrouter",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: Auto with no key is unset and names every key",
+      "nodeId": "routes-image",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": null,
+        "block": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY",
+          "REPLICATE_API_TOKEN",
+          "OPENROUTER_API_KEY",
+          "KREA_API_TOKEN"
+        ]
+      },
+      "unavailable": {
+        "routeId": null,
+        "missing": [
+          "BFL_API_KEY",
+          "FAL_KEY",
+          "REPLICATE_API_TOKEN",
+          "OPENROUTER_API_KEY",
+          "KREA_API_TOKEN"
+        ],
+        "block": null,
+        "alternatives": [],
+        "message": "Fixture Image needs BFL_API_KEY, FAL_KEY, REPLICATE_API_TOKEN, OPENROUTER_API_KEY or KREA_API_TOKEN in Settings > Providers."
+      }
+    },
+    {
+      "name": "routes: a missing _provider reads as Auto",
+      "nodeId": "routes-image",
+      "params": {
+        "resolution": "2k"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: a blank _provider reads as Auto",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": ""
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: explicit auto is Auto",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "auto"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: explicit BFL with its key",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "bfl"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: explicit fal with its key",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "routes: explicit fal while a BFL key is also set stays on fal",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: explicit Replicate with its token",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "replicate"
+      },
+      "apiKeys": {
+        "REPLICATE_API_TOKEN": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "replicate",
+        "key": "REPLICATE_API_TOKEN",
+        "routeId": "replicate",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "grounding",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "routes: explicit OpenRouter with its key",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "openrouter"
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "openrouter",
+        "key": "OPENROUTER_API_KEY",
+        "routeId": "openrouter",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "routes: explicit Krea on the API token",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "krea"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only",
+        "BFL_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN",
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "routes: explicit Replicate with no token is unset on Replicate",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "replicate"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "replicate",
+        "key": null,
+        "routeId": "replicate",
+        "block": null,
+        "missing": [
+          "REPLICATE_API_TOKEN"
+        ]
+      },
+      "unavailable": {
+        "routeId": "replicate",
+        "missing": [
+          "REPLICATE_API_TOKEN"
+        ],
+        "block": null,
+        "alternatives": [
+          "bfl",
+          "fal"
+        ],
+        "message": "Fixture Image is set to Replicate, which needs REPLICATE_API_TOKEN. Add it in Settings > Providers or choose another provider. Black Forest Labs or fal.ai can take it."
+      }
+    },
+    {
+      "name": "routes: explicit BFL with no BFL key is unset, never fal",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "bfl"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "REPLICATE_API_TOKEN": "fixture-only",
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": "bfl",
+        "block": null,
+        "missing": [
+          "BFL_API_KEY"
+        ]
+      },
+      "unavailable": {
+        "routeId": "bfl",
+        "missing": [
+          "BFL_API_KEY"
+        ],
+        "block": null,
+        "alternatives": [
+          "fal",
+          "replicate",
+          "openrouter"
+        ],
+        "message": "Fixture Image is set to Black Forest Labs, which needs BFL_API_KEY. Add it in Settings > Providers or choose another provider. fal.ai, Replicate or OpenRouter can take it."
+      }
+    },
+    {
+      "name": "routes: explicit fal at 1.5k is blocked, not moved",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "fal",
+        "resolution": "1.5k"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": "fal",
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "resolution 1.5k"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "fal",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "resolution 1.5k"
+        },
+        "alternatives": [
+          "bfl"
+        ],
+        "message": "Fixture Image can't run on fal.ai: it doesn't take resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Black Forest Labs can take it."
+      }
+    },
+    {
+      "name": "routes: explicit fal at 9:21 is blocked",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "fal",
+        "aspect_ratio": "9:21"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "REPLICATE_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": "fal",
+        "block": {
+          "reason": "unsupported",
+          "param": "aspect_ratio",
+          "detail": "aspect_ratio 9:21"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "fal",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "aspect_ratio",
+          "detail": "aspect_ratio 9:21"
+        },
+        "alternatives": [
+          "replicate"
+        ],
+        "message": "Fixture Image can't run on fal.ai: it doesn't take aspect_ratio 9:21. Pick auto, 1:1 or 16:9, or switch provider. Replicate can take it."
+      }
+    },
+    {
+      "name": "routes: Auto with a BFL key at 1.5k stays on BFL",
+      "nodeId": "routes-image",
+      "params": {
+        "resolution": "1.5k"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: Auto on fal at 1.5k stops with alternatives, never Replicate",
+      "nodeId": "routes-image",
+      "params": {
+        "resolution": "1.5k"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "REPLICATE_API_TOKEN": "fixture-only",
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "fal",
+        "key": null,
+        "routeId": "fal",
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "resolution 1.5k"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "fal",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "resolution 1.5k"
+        },
+        "alternatives": [
+          "replicate",
+          "openrouter"
+        ],
+        "message": "Fixture Image can't run on fal.ai: it doesn't take resolution 1.5k. Pick 768sq, 1k, 2k or 4k, or switch provider. Replicate or OpenRouter can take it."
+      }
+    },
+    {
+      "name": "routes: Auto with a BFL key at a value BFL refuses stops, never fal",
+      "nodeId": "routes-image",
+      "params": {
+        "safety_tolerance": 5
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": "bfl",
+        "block": {
+          "reason": "unsupported",
+          "param": "safety_tolerance",
+          "detail": "safety_tolerance 5"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "bfl",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "safety_tolerance",
+          "detail": "safety_tolerance 5"
+        },
+        "alternatives": [
+          "fal"
+        ],
+        "message": "Fixture Image can't run on Black Forest Labs: it doesn't take safety_tolerance 5. Change that setting, or switch provider. fal.ai can take it."
+      }
+    },
+    {
+      "name": "routes: explicit OpenRouter with five images wired is over its port limit",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "openrouter"
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "wiredCounts": {
+        "images": 5
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "openrouter",
+        "key": null,
+        "routeId": "openrouter",
+        "block": {
+          "reason": "ports",
+          "param": "images",
+          "detail": "images 5"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "openrouter",
+        "missing": [],
+        "block": {
+          "reason": "ports",
+          "param": "images",
+          "detail": "images 5"
+        },
+        "alternatives": [],
+        "message": "Fixture Image can't run on OpenRouter: it takes at most 4 wired images. Disconnect the extra inputs, or switch provider."
+      }
+    },
+    {
+      "name": "routes: explicit OpenRouter takes four wired images",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "openrouter"
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "wiredCounts": {
+        "images": 4
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "openrouter",
+        "key": "OPENROUTER_API_KEY",
+        "routeId": "openrouter",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: fal takes wired images (no port limit)",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "wired": [
+        "images"
+      ],
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: _kreaAuth mcp under Auto on a BFL-maker node runs on BFL, not the plan",
+      "nodeId": "routes-image",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: _kreaAuth mcp under Auto with only a Krea token uses the token",
+      "nodeId": "routes-image",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN",
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: explicit Krea with the plan bills the plan",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {},
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "aspect_ratio",
+        "resolution",
+        "safety_tolerance"
+      ]
+    },
+    {
+      "name": "routes: explicit Krea plan at a value Krea refuses is unset",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "krea",
+        "_kreaAuth": "mcp",
+        "resolution": "4k"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "resolution 4k"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "krea",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "resolution 4k"
+        },
+        "alternatives": [
+          "bfl",
+          "fal"
+        ],
+        "message": "Fixture Image can't run on Krea: it doesn't take resolution 4k. Change that setting, or switch provider. Black Forest Labs or fal.ai can take it."
+      }
+    },
+    {
+      "name": "routes: an unknown _provider is unset",
+      "nodeId": "routes-image",
+      "params": {
+        "_provider": "midjourney"
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": null,
+        "block": {
+          "reason": "unknown-provider",
+          "param": "_provider",
+          "detail": "midjourney"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": null,
+        "missing": [],
+        "block": {
+          "reason": "unknown-provider",
+          "param": "_provider",
+          "detail": "midjourney"
+        },
+        "alternatives": [
+          "bfl",
+          "fal"
+        ],
+        "message": "Fixture Image is set to provider 'midjourney', which it doesn't have. Choose auto, bfl, fal, replicate, openrouter or krea."
+      }
+    },
+    {
+      "name": "routes: Krea-maker Auto with the plan picked bills the plan",
+      "nodeId": "routes-krea",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "resolution",
+        "thinking_mode"
+      ]
+    },
+    {
+      "name": "routes: Krea-maker Auto on the API token is the maker route",
+      "nodeId": "routes-krea",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "krea",
+        "key": "KREA_API_TOKEN",
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: Krea-maker Auto with only fal runs on fal",
+      "nodeId": "routes-krea",
+      "params": {},
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null,
+      "paramKeys": [
+        "fal_seed",
+        "resolution"
+      ]
+    },
+    {
+      "name": "routes: explicit fal on a Krea-maker node with the plan picked runs on fal",
+      "nodeId": "routes-krea",
+      "params": {
+        "_provider": "fal",
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "fal",
+        "key": "FAL_KEY",
+        "routeId": "fal",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: Krea-maker plan at a value its route refuses is unset, never fal",
+      "nodeId": "routes-krea",
+      "params": {
+        "_kreaAuth": "mcp",
+        "resolution": "4K"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only",
+        "KREA_API_TOKEN": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "resolution 4K"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "krea",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "resolution 4K"
+        },
+        "alternatives": [
+          "fal"
+        ],
+        "message": "Fixture Krea can't run on Krea: it doesn't take resolution 4K. Change that setting, or switch provider. fal.ai can take it."
+      }
+    },
+    {
+      "name": "routes: Krea-maker plan its route refuses unless a port is wired is unset",
+      "nodeId": "routes-krea",
+      "params": {
+        "_kreaAuth": "mcp",
+        "resolution": "2K"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "2K without a style image"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "krea",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "resolution",
+          "detail": "2K without a style image"
+        },
+        "alternatives": [
+          "fal"
+        ],
+        "message": "Fixture Krea can't run on Krea: it doesn't take 2K without a style image. Change that setting, or switch provider. fal.ai can take it."
+      }
+    },
+    {
+      "name": "routes: Krea-maker plan unblocked by a wired port bills the plan",
+      "nodeId": "routes-krea",
+      "params": {
+        "_kreaAuth": "mcp",
+        "resolution": "2K"
+      },
+      "apiKeys": {
+        "FAL_KEY": "fixture-only"
+      },
+      "wiredCounts": {
+        "style_image": 1
+      },
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: plan-only routes are skipped under Auto",
+      "nodeId": "routes-video",
+      "params": {},
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "fallback",
+        "provider": "openrouter",
+        "key": "OPENROUTER_API_KEY",
+        "routeId": "openrouter",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: Auto with no key names only the keyed routes' keys",
+      "nodeId": "routes-video",
+      "params": {},
+      "apiKeys": {},
+      "expected": {
+        "kind": "unset",
+        "provider": "bfl",
+        "key": null,
+        "routeId": null,
+        "block": null,
+        "missing": [
+          "BFL_API_KEY",
+          "OPENROUTER_API_KEY"
+        ]
+      },
+      "unavailable": {
+        "routeId": null,
+        "missing": [
+          "BFL_API_KEY",
+          "OPENROUTER_API_KEY"
+        ],
+        "block": null,
+        "alternatives": [],
+        "message": "Fixture Video needs BFL_API_KEY or OPENROUTER_API_KEY in Settings > Providers."
+      }
+    },
+    {
+      "name": "routes: an explicit plan-only route bills the plan",
+      "nodeId": "routes-video",
+      "params": {
+        "_provider": "krea-plan"
+      },
+      "apiKeys": {},
+      "expected": {
+        "kind": "plan",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea-plan",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: OpenRouter refuses any wired keyframe",
+      "nodeId": "routes-video",
+      "params": {
+        "_provider": "openrouter"
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "wiredCounts": {
+        "keyframes": 1
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "openrouter",
+        "key": null,
+        "routeId": "openrouter",
+        "block": {
+          "reason": "ports",
+          "param": "keyframes",
+          "detail": "keyframes 1"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "openrouter",
+        "missing": [],
+        "block": {
+          "reason": "ports",
+          "param": "keyframes",
+          "detail": "keyframes 1"
+        },
+        "alternatives": [],
+        "message": "Fixture Video can't run on OpenRouter: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider."
+      }
+    },
+    {
+      "name": "routes: OpenRouter refuses a draft",
+      "nodeId": "routes-video",
+      "params": {
+        "_provider": "openrouter",
+        "draft": true
+      },
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "openrouter",
+        "key": null,
+        "routeId": "openrouter",
+        "block": {
+          "reason": "unsupported",
+          "param": "draft",
+          "detail": "draft true"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "openrouter",
+        "missing": [],
+        "block": {
+          "reason": "unsupported",
+          "param": "draft",
+          "detail": "draft true"
+        },
+        "alternatives": [],
+        "message": "Fixture Video can't run on OpenRouter: it doesn't take draft true. Change that setting, or switch provider."
+      }
+    },
+    {
+      "name": "routes: Auto on BFL takes a draft",
+      "nodeId": "routes-video",
+      "params": {
+        "draft": true
+      },
+      "apiKeys": {
+        "BFL_API_KEY": "fixture-only",
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "bfl",
+        "key": "BFL_API_KEY",
+        "routeId": "bfl",
+        "block": null,
+        "missing": []
+      },
+      "unavailable": null
+    },
+    {
+      "name": "routes: Auto with only OpenRouter and wired keyframes stops, never the plan",
+      "nodeId": "routes-video",
+      "params": {},
+      "apiKeys": {
+        "OPENROUTER_API_KEY": "fixture-only"
+      },
+      "wiredCounts": {
+        "keyframes": 2
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "openrouter",
+        "key": null,
+        "routeId": "openrouter",
+        "block": {
+          "reason": "ports",
+          "param": "keyframes",
+          "detail": "keyframes 2"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "openrouter",
+        "missing": [],
+        "block": {
+          "reason": "ports",
+          "param": "keyframes",
+          "detail": "keyframes 2"
+        },
+        "alternatives": [],
+        "message": "Fixture Video can't run on OpenRouter: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider."
+      }
+    },
+    {
+      "name": "routes: a plan-only route with wired keyframes is unset",
+      "nodeId": "routes-video",
+      "params": {
+        "_provider": "krea-plan"
+      },
+      "apiKeys": {},
+      "wiredCounts": {
+        "keyframes": 1
+      },
+      "expected": {
+        "kind": "unset",
+        "provider": "krea",
+        "key": null,
+        "routeId": "krea-plan",
+        "block": {
+          "reason": "ports",
+          "param": "keyframes",
+          "detail": "keyframes 1"
+        },
+        "missing": []
+      },
+      "unavailable": {
+        "routeId": "krea-plan",
+        "missing": [],
+        "block": {
+          "reason": "ports",
+          "param": "keyframes",
+          "detail": "keyframes 1"
+        },
+        "alternatives": [],
+        "message": "Fixture Video can't run on Krea: it doesn't take wired keyframes. Disconnect the extra inputs, or switch provider."
+      }
+    },
+    {
+      "name": "legacy: a dual-route node ignores a stray _provider",
+      "nodeId": "nano-banana-fal",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only",
+        "FAL_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "direct",
+        "provider": "google",
+        "key": "GOOGLE_API_KEY"
+      }
+    },
+    {
+      "name": "legacy: a single-route node ignores a stray _provider",
+      "nodeId": "nano-banana",
+      "params": {
+        "_provider": "fal"
+      },
+      "apiKeys": {
+        "GOOGLE_API_KEY": "fixture-only"
+      },
+      "expected": {
+        "kind": "only",
+        "provider": "google",
+        "key": "GOOGLE_API_KEY"
       }
     }
   ]

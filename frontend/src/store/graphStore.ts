@@ -81,6 +81,7 @@ import { useCreateDraftStore } from './createDraftStore';
 import { getCinemaUploadIssue, useCinemaUploadStore } from './cinemaUploadStore';
 import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore } from './cinemaMotionStore';
 import { nodeKeyStatus, withNewKreaMode } from '../lib/kreaConnection';
+import { allParamDefinitions } from '../lib/directRoute';
 import { clipSpeed, type EditClip } from '../lib/editor/virtualPlayback';
 import type { KeyframeData, VideoGraphManifest, TrackItem } from '../types/video';
 import { createEmptyManifest, DEFAULT_FPS } from '../types/video';
@@ -209,22 +210,21 @@ function restoreBatchPreview(node: Node<NodeData>, history: RunRecord[]): Node<N
     batchVariants: sanitizeVariantScopes(record.batchVariants?.[node.id], outputs.length) } };
 }
 
+/** Every route's defaults (lib/directRoute.ts allParamDefinitions): a
+ * route-table node starts on `_provider: 'auto'` and keeps each route's
+ * values, so a switch keeps them too. Every way of adding a node starts
+ * here, so the router sends what the estimate and the switcher describe.
+ * Values are copies, so editing a node never edits the definition. */
 function buildDefaultParams(def: ModelNodeDefinition): Record<string, unknown> {
   const defaults: Record<string, unknown> = {};
-  const sources = def.sharedParams
-    ? [...def.sharedParams, ...(def.falParams ?? []), ...(def.directParams ?? [])]
-    : def.params;
-  for (const p of sources) {
-    if (p.default !== undefined) defaults[p.key] = p.default;
+  for (const p of allParamDefinitions(def)) {
+    if (p.default !== undefined) defaults[p.key] = structuredClone(p.default);
   }
   return defaults;
 }
 
 function defHasParam(def: ModelNodeDefinition, key: string): boolean {
-  const sources = def.sharedParams
-    ? [...def.sharedParams, ...(def.falParams ?? []), ...(def.directParams ?? [])]
-    : def.params;
-  return sources.some((p) => p.key === key);
+  return allParamDefinitions(def).some((p) => p.key === key);
 }
 
 function definitionHasImageAndMaskPorts(definitionId: string): boolean {
@@ -2624,14 +2624,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       );
     }
 
-    // Build defaults from all param sources (shared + route-specific + legacy params)
-    const defaults: Record<string, unknown> = {};
-    const allParamSources = definition.sharedParams
-      ? [...definition.sharedParams, ...(definition.falParams ?? []), ...(definition.directParams ?? [])]
-      : definition.params;
-    for (const param of allParamSources) {
-      if (param.default !== undefined) defaults[param.key] = param.default;
-    }
+    const defaults = buildDefaultParams(definition);
     Object.assign(defaults, withNewKreaMode(definition, {},
       useUIStore.getState().settingsCache.kreaConnectionMode));
 
@@ -2749,11 +2742,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (existing) return existing;
     const definition = NODE_DEFINITIONS['veo-3'];
     if (!definition) return null;
-    const params: Record<string, unknown> = {};
-    for (const param of definition.sharedParams
-      ? [...definition.sharedParams, ...(definition.falParams ?? []), ...(definition.directParams ?? [])] : definition.params) {
-      if (param.default !== undefined) params[param.key] = structuredClone(param.default);
-    }
+    const params = buildDefaultParams(definition);
     const targetId = uuidv4();
     const target: Node<NodeData> = { id: targetId, type: 'model-node',
       position: { x: source.node.position.x + 360, y: source.node.position.y },
@@ -2799,13 +2788,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     const replacementRevision = canvasReplacementRevision;
     let originRevoked = false;
 
-    const defaults: Record<string, unknown> = {};
-    const allParamSources = definition.sharedParams
-      ? [...definition.sharedParams, ...(definition.falParams ?? []), ...(definition.directParams ?? [])]
-      : definition.params;
-    for (const param of allParamSources) {
-      if (param.default !== undefined) defaults[param.key] = structuredClone(param.default);
-    }
+    const defaults = buildDefaultParams(definition);
     Object.assign(defaults, withNewKreaMode(definition, {},
       useUIStore.getState().settingsCache.kreaConnectionMode));
 

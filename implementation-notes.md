@@ -66,6 +66,79 @@ Added Claude Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5, GPT-6 Astra / GPT-6.
 - **Contract checks.** `scripts/check-node-contracts.mjs` and `tests/test_node_contracts.py` pin the dialogue node's `model_id` default and options and that it has no speed/style/speaker-boost/similarity_boost.
 - **Not live-tested.** No paid or keyed call was made. Request bodies are checked with mocked HTTP only, so whether ElevenLabs accepts every field exactly as sent is unverified until a first real run.
 
+## 2026-10-15 — PR 1 review fixes
+
+### Review follow-up
+
+Four review findings, each confirmed with a failing test before the fix.
+
+- **Plan billing read raw params (fixed).** On a route-table node `uses_krea_plan` / `usesRoutePlan` ran the plan route's rules on the saved params. The router runs them on `with_wired_blockers` output. A wired input could block the plan route: the preflight then skipped `route_unavailable` and the estimate counted a plan run. Or it could unblock the route: the estimate priced the run in USD and the sign-in check was skipped. The fix is in the callers, not the function. `krea_account.uses_account` takes `wired`, and the engine preflight (edge counts), the cache key's connection revision (`filled_counts`), `estimate_run` and `runScope.summarizeRunScope` now pass routed values. Legacy nodes read only `_kreaAuth`, so for them nothing changes. New shared cases: `route_cases.json` gives `routes-krea` a `style_image` port and a `rejectsWhen` 2K-without-it rule, and `pricing_cases.json` gives the `table` Krea route `ports.images.max 2` plus a 2k-without-images rule. Both route harnesses now assert `uses_krea_plan(routed) == (kind == PLAN)`.
+- **addNode / addNodeAndConnect skipped route defaults (fixed).** Both, plus the cinema motion Veo node and `sampleGraph.defaultsFor`, now go through `buildDefaultParams` (`allParamDefinitions`). `buildDefaultParams` also `structuredClone`s each default now. Before, only add-and-connect and the Veo path did, so addNode shared array or object defaults with the definition. `allParamDefinitions.test.ts` already pins the defaults to be the same for every legacy catalog node.
+- **Two ways of counting wired inputs (partly fixed, rest documented).** There were really three. The cache key used `filled_ports` (one per port), the router used `filled_counts` (items), and the preflight, estimate and switcher used edges. The cache key now uses `filled_counts`. The router keeps counting items, because the items are what the provider receives. Counting edges there would send six images to a route that takes four. The preflight can't count items, since a list's length only exists once upstream nodes run, and no output port declares a list. So one edge carrying a list can pass the preflight and stop in the router. The router still stops it before that provider is called, but upstream nodes have already run. This is written down in `with_wired_blockers`, `withWiredBlockers`, the engine preflight and `docs/PROVIDER-ROUTES.md`. It's latent until PR 2 adds a `ports` rule to a real node.
+- **resultContext.modelName and ResultDetails hand lists (fixed).** Both read `allParamDefinitions`. It is first-wins in the same group order (params, shared, direct, fal), so legacy nodes give the same answers.
+
+Not changed: `nodeKeyStatus`, `modelReadiness` and the Inspector call `usesKreaAccount(def, params)` without wiring. They are per-node badges that don't see the graph's edges, and `routeUnavailable` in the same places doesn't see them either. A badge can be wrong for a plan route that only a wire blocks or unblocks, but the run, estimate and spend gate are now right.
+
+## 2026-10-15 — PR 1 integration: bfl-provider merged into provider-routes-core
+
+- **Conflicts were both additive.** `implementation-notes.md` keeps both lanes' sections (core first, BFL second). `scripts/check-node-contracts.mjs` keeps both new reads: the core lane's route fixtures / `keyProviders` and the BFL lane's `KEYS_AHEAD_OF_NODES` parse.
+- **`BFL_API_KEY: bfl` was already in both `KEY_PROVIDERS` tables** (the core lane added it), so no routing edit was needed. What was missing was a check that the two key lists agree: Settings' `credential_catalog.CREDENTIAL_PROVIDERS` and routing's `KEY_PROVIDERS` were never compared. `test_every_billing_key_settings_stores_names_its_provider` (test_node_contracts.py) now requires them equal, minus `KREA_USAGE_KEY` (it only reads Krea usage, nothing bills it), and ties `route_tables.json` to `KEY_PROVIDERS`; `routeTables.test.ts` already ties the TS table to that snapshot.
+- **The bisect gap from the BFL lane remains**: b5d1fb18 alone fails the settings-key contract tests, 7fca2ed0 fixes them. Left unsquashed because the branch history is a merge; squash when the PR is cut if each commit must pass.
+
+## 2026-10-15 — Provider routes, PR 1 of 4: the routing core and the BFL key
+
+Branch `provider-routes-core`. One node per model, all provider routes in that node, a saved `_provider` choice. No new model nodes and no switcher UI yet (PRs 2-4). Plain-language guide: `docs/PROVIDER-ROUTES.md`.
+
+**Proof the old nodes didn't move.** Before changing callers, a scratch copy of HEAD's `node_route.py` was run side by side with the new one over every legacy node: `select_route`, `cache_tag`, `with_wired_blockers`, `direct_block`, `route_param_keys`, `uses_krea_plan` and `krea_auth_param`, across param values, key sets and dates. 50,082,264 comparisons, 0 differences. The 147 existing route cases pass unchanged (they now compare only kind/provider/key, since `Route` grew three optional fields).
+
+Decisions the design didn't make:
+- **`route_unavailable` returns camelCase** (`routeId`, `missing`, `block`, `alternatives`, `message`), not the design's snake_case, so the Python dict, the TS object and `route_cases.json` are the same JSON. The message wording is mirrored exactly in TS and pinned by the shared cases.
+- **Wired-port counts ride in params** under a reserved key, `"(wired ports)"` (`PORT_COUNTS`), which `with_wired_blockers` adds only for route-table nodes with a `ports` rule. That kept every rule reader on one `(definition, params)` signature. Legacy params never get the key.
+- **A legacy node's computed maker spec carries all of today's rules**, including `requires` (DIRECT_REQUIRES) and `retires` (DIRECT_RETIRES), so `route_block` on it equals `direct_block` (tested over the registry).
+- **A `valueMap` implies `accepts`** for its keys: a route that maps `resolution` only knows those values, so another value blocks rather than reaching the provider untranslated.
+- **`endpointWhen` keys count as wired-rule params**, so `{"images": "(set)"}` picks the edit endpoint when images arrive by wire.
+- **Plan-only routes** (`plan: "only"`): Auto skips them; chosen explicitly they run on the plan.
+- **Unknown `_provider` id** blocks with a new `unknown-provider` reason rather than falling back to Auto.
+- **`withNewKreaMode`** seeds the global Krea mode only on `apiProvider: krea` nodes; other route-table nodes start on `api-token`.
+- **Price entries for route-table nodes are keyed by the route's `pricing` key (default its id)**, so two routes on one provider can each have a price. `estimate_node` now skips the inner `provider` check for an entry picked out of `routes` (validation ties it to that route's provider instead). For legacy entries the two checks were already identical, so nothing changes there.
+- **Estimates count edges per port**: new `model_pricing.wired_counts` (main and agent_spend use it; `wired_ports` stays) and TS `wiredPorts` returns port -> count, so a `ports` rule sees the same numbers in the estimate as in the preflight.
+- **`RunCost.unavailable`** (TS) and `estimate_run(...)["unavailable"]` (Python) carry the reason by node. Those nodes are also in `unpriced`; the run summary lists them as "Can't run on the chosen provider" instead of "No list price".
+- **`instance_access(definition, params, configured_keys, krea_signed_in=False, definitions=None)`**: the design's signature plus the two inputs `node_access` already takes. `keys_needed` for an explicit route returns a stand-in with that route's keys; a Krea route's stand-in carries the billing params so `krea_modes` still sees the plan.
+- **Billing guard**: `_billing_choice` returns `(provider choice, Krea mode)`. A provider switch is refused with its own message (`PROVIDER_CHOICE_REFUSAL`); when one edit switches both, the provider message wins. `_refuse_agent_krea_billing_in_run` / `_in_project` were renamed to `_refuse_agent_billing_in_run` / `_in_project` too.
+- **`_check_provider`** runs where `_check_krea_auth` does (graph apply, proposals) and also on single-node create and `PUT /api/graph/node`. Not on whole-graph replace or cluster add: a saved project with a stale route id would then fail to load, and the run already stops with a clear message.
+- **`cost_for`** takes optional `api_keys`. With keys it names the route the run would take (and `unavailable` when none can); without keys (the proposal view) it names the explicit route's provider, or the maker's under Auto.
+- **describe_node** keeps every legacy field as it was; route-table nodes skip `route`/`fallback`/`paramsDirect`/`paramsFallback` (`fallback_provider` would otherwise read their `directKeyName`). Each route row also has `name` (provider label) and `maker`/`plan`/`note` when set.
+- **`nebula info`** lists `all_param_definitions` for route-table nodes (shared + every route's own); legacy output is unchanged.
+- **`multi_route`** with no client registered for a route's handler fails with "can't run on X in this version of Nebula yet". `ROUTE_CLIENTS` is empty in PR 1; tests stub clients.
+- **The pricing fixture node is `table`**, not `routed`: `pricing_cases.json` already had a `routed` fixture.
+
+Deviations and things skipped:
+- **ideogram's `rendering_speed`** is the one param that differs between `directParams` and `falParams` (options and default). `all_param_definitions` lets the direct copy win; `model_pricing._definition_params` used to be last-wins (fal). No ideogram node is priced, so nothing changes today.
+- **No hosted-credit contract rule.** The design's "hosted credit only on maker routes" check has nothing to check: the repo has no hosted-credit code yet.
+
+Tradeoffs and surprises:
+- **TS circular import**: `kreaConnection.ts` imports from `directRoute.ts`, which already imported from it. Both uses are inside functions, so module load order doesn't matter; accepted rather than moving `kreaAuthParam`.
+- **Preflight counts edges, the router counts filled values.** A wire from a source a gate skips counts in the preflight but not at run time, so a `ports` limit could refuse a run that would have fit. Rare, and it errs toward not spending.
+- **The node's own run status (`nodeWiredPorts`) is still a set of ports**, not counts, so it can't show a `ports` block. It feeds the switcher UI, which is PR 3.
+- `route_tables.json` is about 121 KB. It pins `routes_of` and the param list for every node so the TS twin can't drift.
+
+## 2026-10-15 — FLUX 3 routing series, PR 1: the Black Forest Labs provider (key and client)
+
+The BFL part of DESIGN.md section 8: `BFL_API_KEY` everywhere keys are listed, its health check, and `backend/handlers/bfl.py`. `KEY_PROVIDERS` in node_route.py / directRoute.ts is left to the routing-core lane, as agreed. No node uses the key or the client in this PR.
+
+- **Health name is "Black Forest Labs".** Settings finds a key's health entry by `PROVIDER_KEY_LABELS[key]` (rowHelpers.ts), so the `PROVIDER_CHECKS` name and the label must match. Nothing tested that; `test_settings_health_rows_find_their_check_by_name` now does, for every key.
+- **403 and 422 read as invalid for BFL only.** Live probes (bfl lane, 2026-10-15): a missing or made-up key gets 403 "Not authenticated", a malformed one 422 "Invalid API key format". The shared classifier maps 403 to "unauthorized" (a permission the key lacks), which would mislabel a wrong BFL key, so `_check_one` has a BFL branch like the World Labs 404 one. A 200 with `credits: 0` still reads Valid: the fake responses in the health tests have no body, and reading it would change the shared probe. Possible follow-up.
+- **A key listed before its nodes: `KEYS_AHEAD_OF_NODES`.** Four checks require every Settings key to be some node's `envKeyName` (`test_node_contracts.py` for settings.example and providerCatalog.ts, `check-node-contracts.mjs`, and the health-coverage test), and no node lists BFL until PR 3. Rather than a quiet exemption in each, `credential_catalog.py` now has one named set, `KEYS_AHEAD_OF_NODES = {"BFL_API_KEY"}`, that all four read (the .mjs parses the Python literal, as sidecar.test.mjs does for `CREDENTIAL_PROVIDERS`). Each check also fails once a node lists a key in that set, so PR 3 has to empty it. The other option, keeping the key out of Settings until PR 3, contradicts the design's "BFL_API_KEY wiring, one commit" in PR 1.
+- **Desktop counts were already wrong on main.** `credential-service.test.mjs` and `sidecar.test.mjs` said 19 while `ALLOWED_PROVIDERS` held 20 (TypeSafe landed without bumping them), so both failed on origin/main 5dcc40c6. Now 21 with BFL. `sidecar.test.mjs` needs `ws`; I symlinked the main checkout's `desktop/node_modules` to run it (61/61) and removed the link after.
+- **Settings placeholder `bfl_...`.** BFL's organizations page says keys "use the format `bfl_<random-string>`". The lane notes called them UUID-shaped; the doc wins. The row's note is "FLUX on Black Forest Labs' own API", which is what an empty node list shows.
+- **Cost is returned, not yet recorded.** The design says "record the settled cost on the run", but main has no per-run actual-cost record (BytePlus logs its usage tokens for the same reason). `run_task` returns `BFLResult` with `cost_credits` (settled from the poll when present, else the submit's quote, flagged by `cost_settled`) and `cost_usd`, and logs it. PR 3 decides where the node puts it.
+- **The download host isn't allowlisted, and never gets the key.** Only the polling URL carries `x-key`, so only it is restricted (https, `api.bfl.ai` or `*.bfl.ai`, no userinfo, port 443 or none). `result.sample` is fetched without the key from wherever BFL says, since BFL warns the `delivery.*` region names change. Saved with `write_media_bytes`, so the extension comes from the media allowlist and the bytes are validated (ffprobe for mp4).
+- **Only a 429 resends a submit.** A 429 is refused before billing; any other failure (5xx, timeout, dropped connection) may have reached BFL, and a resend could bill twice. Waits 5, 15, 30 s (BFL: a 429 is "a signal to wait for a running task, not something to retry in a loop"). A 429 on a poll just polls again later, bounded by the 60-minute timeout.
+- **Unknown statuses keep polling** (logged), like BytePlus; the enum is closed today. `progress` is ignored because BFL doesn't document its scale.
+- **No cancel.** BFL documents none, so there's no `UpstreamTask` here: a stopped run stops polling and the task still bills. Said in the module docstring, the timeout message and the guide.
+- **HTTP errors.** Only `httpx.TransportError` is caught (wrapped with a plain message), as handlers on main do. PR #56 adds a shared `TRANSPORT_ERRORS` tuple; `bfl.py` should adopt it once #56 lands (marked `TODO(#56)` in `_transport_error`).
+- **Docs.** BytePlus has no `docs/model-providers/` folder, so the user guide follows `docs/api-guides/byteplus.md` (`docs/api-guides/bfl.md`) and the audit note follows `docs/model-providers/typesafe/_provider.md` (`docs/model-providers/bfl/_provider.md`). Prices are listed there with sources, checked 2026-10-15, but not added to `model_pricing.json` (no node to price yet). `provider_knowledge_manifest.json` regenerated. The `.agents/skills/bfl` skill (DESIGN section 10) waits for the nodes.
+
 ## 2026-10-13 — Connect your agent (PR 3 of 3, and BYO-agent Phase 0)
 
 Settings > Preferences > Agent spending > **Connect your agent** and `nebula mcp connect|disconnect <client>`. Config text lives in one place, `backend/services/agent_connect.py`, used by both.
@@ -190,7 +263,6 @@ Branch `mcp-tools`. Justin chose: the MCP server serves outside clients and the 
 - **Quick runs now carry a run id** (`quick-<hex>`) into the engine so they can be tracked. Nothing else keys on it apart from the run folder's name; no handler reads `execution_run_id`, and quick's event collector ignores it.
 - **Tests** use the real engine with the two OpenAI handlers swapped for counting fakes (`test_agent_spend.py`): a cache hit is given back; after an upstream failure only the downstream share is given back; a run where both nodes run keeps both. The cache-hit and upstream-failure tests fail with `_settle_hold` turned off.
 - **Live** (isolated backend, no keys, MCP stdio): GPT Image 2 into GPT Image 2 Edit, run on the editor. The generator stopped at its key check, the editor never started, and the session total stayed $0.00. No paid runs.
-
 
 **Cinema scenes passed the spending check as free (found while testing variations).** `cinema-scene` is defined as `apiProvider: "utility"`, and the estimate skips utility nodes. Its handler calls a paid base image model once per shot through that model's own handler, so an agent could run a whole scene with no limit at all. The bug dates from the spend gate (PR #38).
 - **Priced as its base model, once per shot.** `model_pricing.cinema_scene_base` reuses the handler's own `_guard_base_model` and `_build_base_node`, so the price follows what the handler calls. An unreadable scene, or a base the handler refuses, is unpriced. Shots only override seed and strength, which no price row matches on.
@@ -2771,7 +2843,6 @@ Reviewers found 5B covered only the graph-edit routes. Three other ways put a no
 - **Plan runs fail closed (minor findings).** `kreaPlanRuns` now follows `outsideDailyUsd`'s shape: kept only when named; unset means `DEFAULT_PLAN_RUNS` = 10 per chat or per 24 hours outside; explicit `null` is the person's "No limit"; anything unreadable (wrong type, negative, over 100000, `agentSpend` not an object) is 0, so every plan run needs a proposal. 0 is now a valid saved value ("Ask every time" in Settings). Chose a default number over "unset means always ask" because plan runs were already allowed and counted; 10 keeps agents useful on a Pro plan while bounding a runaway loop. The frontend reader mirrors this (unset stays unset and shows "10 (default)", unreadable reads as 0 and is never saved back as no limit, values over 100000 are unreadable), so a bad value can't make the next Settings save fail with a 400.
 - **Surprise: the default cap would have changed unpriced nodes.** `decide()` treated any budget, including a plan-run cap, as "limited", which makes unpriced nodes need a proposal. With the cap on by default, turning every USD limit off would still have refused unpriced runs. `decide()` now splits USD limits (which gate unpriced nodes) from plan-run limits.
 
-
 ### 2026-10-13 — Local nodes that still call a provider, and the pricing leads (pricing-readiness stage)
 
 The person chose to leave vision-llm QC runs unpriced for now (agents must propose them); heuristic and opencv stay free.
@@ -2806,7 +2877,6 @@ The person chose to leave vision-llm QC runs unpriced for now (agents must propo
 - **Deferred to the desktop pass (tracked in memory):** whether the packaged `file://` renderer sends Origin `null` or `file://` and whether the CORS preflight with `X-Nebula-Person` works there; a `ps` check that no token or connector session shows in argv; a planted skill declaring an MCP dependency under the generated Codex args.
 - **Also found:** test runs before 062ecaee wrote `runCostConfirmUsd: 1.0` and an empty `agentSpend` into the repo-root `settings.json` again (06:32). Removed by hand a second time; keys untouched, backup in the session scratchpad. 062ecaee's teardown hook now fails any test that leaves the settings path pointing there.
 - **Not fixed (also on main):** a `settings.json` that exists but lacks `apiKeys` (e.g. a hand-written `{}`) leaves Settings on "Settings couldn't load", because `load_settings` adds defaults only when the file is missing.
-
 
 ## 2026-10-13 — Desktop launch tests (integration + resilience) pass
 
@@ -2936,7 +3006,6 @@ Four minor findings from the reviewers on the follow-up commits. All four were r
 - **Guardian forgot a pid on a cancelled wait.** `_forget_when_done` deregistered in a `finally`, so the shutdown cancel (asyncio.run cancelling every task, including a turn still killing the tree) sent `-pid` with the agent alive, and a hard exit right after left it running. Now it deregisters only when `proc.returncode is not None`; a cancelled wait re-raises and leaves the pid registered. That's safe because the guardian re-checks group leadership and parent before killing, and a reaped pid fails that check. New test `test_a_cancelled_wait_keeps_the_agent_registered` (fails on the old code).
 - **Commons reader killed only the leader.** Since the reader goes through `spawn_agent_process`, claude is in its own session, so `proc.kill()` on timeout/cancel orphaned any child where no group kill reaches. `_kill` is now async and awaits `terminate_agent_process_tree` under `asyncio.shield` (the cancel branch re-raises right after, and the tree kill must finish), with `proc.kill()` as a fallback if the tree kill raises. New test `test_read_image_timeout_kills_the_whole_claude_tree` uses a real fake leader with a child in its group (fails on the old code).
 - **Failed startup + closed error window = no window ever.** `decideWindowAction` couldn't tell "starting" from "failed". main.mjs now keeps `startupError` (set in the startup catch, cleared on success) and passes `startupFailed: Boolean(startupError) && !sidecarStarting`. The new action `create-failure` calls `showFailure(startupError)`, which reuses or recreates the error window. Live window state still wins (an open error window is focused), and quitting still opens nothing. 4 new window-recovery tests (2 fail on the old code). Tradeoff: no retry of startup from the Dock; re-showing the error is consistent with the rest of the app's no-auto-restart rule, and quitting plus relaunching is the retry.
-
 
 ## 2026-10-13 — Sidecar and devserver drop inherited provider keys
 
@@ -4863,7 +4932,6 @@ Part 2, demo blockers from the dry run:
 - **FLUX Fill size.** `fal_universal._fal_mask_url` resizes a local mask to the local image's size (NEAREST, polarity kept) before inlining it; Box and Mask Painter masks already match, so this is a guard. Remote images aren't fetched just to measure them. This applies to every fal node with `image` + `mask` (FLUX Fill, Ideogram edit on fal).
 - **Tests.** `tests/test_media_refs_and_edit_masks.py` runs a real graph (Image Input -> Jev Box with mocked TypeSafe -> FLUX Fill / GPT Image 2.5 Edit with respx) and checks the bytes that go out: the image unchanged, FLUX Fill's mask equal to Box's, OpenAI's alpha the inverse of Box's white. With the engine mapping removed the OpenAI case fails with the dry run's exact `[Errno 2] ... '/api/outputs/...'`.
 - **Open.** EXIF-rotated inputs: Box makes its mask at the upright size, while the OpenAI conversion resizes to the file's stored size, so a rotated JPEG would get a stretched mask. Generated images carry no EXIF rotation, so I left it. fal's GPT Image edit endpoints don't take Nebula's mask port, so nothing there changed. Several handlers still carry their own `/api/outputs` resolvers; they're now redundant but harmless.
-
 
 ## Jev nodes (2026-10-14): live probe and demo fixes (review)
 

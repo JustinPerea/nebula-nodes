@@ -252,3 +252,72 @@ def test_is_local_means_no_provider_call():
     assert model_pricing.is_local(definitions["qc-loop-safety"])
     assert not model_pricing.is_local(definitions["qc-loop-safety"], {"mode": "vision-llm"})
     assert not model_pricing.is_local(definitions["nano-banana"])
+
+
+@pytest.mark.parametrize("case", CASES["runCases"], ids=[c["name"] for c in CASES["runCases"]])
+def test_route_table_run_estimate_matches_shared_cases(case):
+    """A route-table run is priced on the route it takes, or reported
+    unavailable with the reason; never priced on another route."""
+    item = {"id": "n1", "definitionId": case["nodeId"], "params": case["params"], "name": "Node"}
+    wired = {"n1": case["wiredCounts"]} if case.get("wiredCounts") else None
+    result = model_pricing.estimate_run([item], CASES["pricing"], CASES["definitions"], case["apiKeys"], None, wired)
+    expected = case["expected"]
+    if expected["low"] is None:
+        assert "n1" not in result["priced"]
+    else:
+        assert result["priced"]["n1"]["low"] == pytest.approx(expected["low"])
+        assert result["priced"]["n1"]["high"] == pytest.approx(expected["high"])
+    assert ("n1" in result["unavailable"]) is expected["unavailable"]
+    assert ("n1" in result["plan"]) is expected["plan"]
+    if expected["unavailable"]:
+        assert "n1" in result["unpriced"]
+        from services import node_route
+        definition = CASES["definitions"][case["nodeId"]]
+        routed = node_route.with_wired_blockers(definition, case["params"], case.get("wiredCounts") or {})
+        assert result["unavailable"]["n1"] == node_route.route_unavailable(definition, routed, case["apiKeys"])["message"]
+
+
+@pytest.mark.parametrize("case", CASES["routeEstimateCases"], ids=[c["name"] for c in CASES["routeEstimateCases"]])
+def test_estimate_routes_matches_shared_cases(case):
+    definition = CASES["definitions"][case["nodeId"]]
+    result = model_pricing.estimate_routes(definition, case["params"], case.get("wired", []), CASES["pricing"])
+    assert set(result) == set(case["expected"])
+    for route_id, price in case["expected"].items():
+        if price is None:
+            assert result[route_id] is None, route_id
+        else:
+            assert result[route_id] == {"currency": "usd", "low": pytest.approx(price), "high": pytest.approx(price)}
+
+
+def test_estimate_routes_is_empty_for_a_legacy_node():
+    assert model_pricing.estimate_routes(CASES["definitions"]["dual"], {}, (), CASES["pricing"]) == {}
+
+
+def test_route_table_price_keys_are_route_pricing_keys():
+    definition = CASES["definitions"]["table"]
+    assert model_pricing.route_price_keys(definition) == {
+        "bfl": "bfl", "fal": "fal", "replicate-std": "replicate", "openrouter": "openrouter", "krea": "krea"}
+    assert model_pricing.route_providers(definition) == {"bfl", "fal", "replicate", "openrouter", "krea"}
+    # A legacy node keeps pricing by provider.
+    assert model_pricing.route_price_keys(CASES["definitions"]["dual"]) == {"google": "google", "fal": "fal"}
+
+
+def test_validation_ties_a_route_table_entry_to_its_route():
+    good = CASES["pricing"]["nodes"]["table"]["routes"]
+    bad_routes = {
+        "replicate": good["replicate-std"],  # the route's provider, not its pricing key
+        "fal": {**good["fal"], "provider": "bfl"},
+    }
+    bad = {"currencies": CASES["pricing"].get("currencies", {}),
+           "nodes": {"table": {"routes": bad_routes}}}
+    problems = "\n".join(model_pricing.validate_pricing(bad, CASES["definitions"]))
+    assert "can't bill 'replicate'" in problems
+    assert "provider must be 'fal' or left out" in problems
+    assert "provider must be 'replicate'" not in problems
+
+
+def test_wired_counts_counts_each_edge_into_a_port():
+    items = [{"id": "k"}]
+    edges = [("a", "k", "images"), ("b", "k", "images"), ("c", "k", "prompt"), ("d", "other", "images"), ("e", "k", None)]
+    assert model_pricing.wired_counts(items, edges) == {"k": {"images": 2, "prompt": 1}}
+    assert model_pricing.wired_ports(items, edges) == {"k": {"images", "prompt"}}

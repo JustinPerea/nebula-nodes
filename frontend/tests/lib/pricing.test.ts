@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import shared from '../../../backend/tests/fixtures/pricing_cases.json';
 import shippedTable from '../../../backend/data/model_pricing.json';
 import backendCatalog from '../../../backend/data/node_definitions.json';
-import { estimateNode, formatUsd, formatUsdRange, type PriceEntry } from '../../src/lib/pricing';
+import { estimateNode, estimateRoutes, formatUsd, formatUsdRange, type PriceEntry, type PricingTable } from '../../src/lib/pricing';
+import type { ModelNodeDefinition } from '../../src/types';
 
 type Fixture = {
   definitions: Record<string, Record<string, unknown>>;
@@ -84,5 +85,27 @@ describe('formatUsd', () => {
   it('collapses equal bounds and joins a range with one dollar sign', () => {
     expect(formatUsdRange(0.04, 0.04)).toBe('$0.04');
     expect(formatUsdRange(0.0047, 0.428)).toBe('$0.0047–0.43');
+  });
+});
+
+describe('estimateRoutes (cases shared with the backend)', () => {
+  const cases = (shared as unknown as {
+    routeEstimateCases: Array<{ name: string; nodeId: string; params: Record<string, unknown>; wired?: string[]; expected: Record<string, number | null> }>;
+  }).routeEstimateCases;
+  for (const testCase of cases) {
+    it(testCase.name, () => {
+      const definition = fixture.definitions[testCase.nodeId] as unknown as ModelNodeDefinition;
+      const result = estimateRoutes(definition, testCase.params, testCase.wired ?? [], fixture.pricing as unknown as PricingTable);
+      expect(Object.keys(result).sort()).toEqual(Object.keys(testCase.expected).sort());
+      for (const [routeId, price] of Object.entries(testCase.expected)) {
+        if (price === null) expect(result[routeId], routeId).toBeNull();
+        else expect(result[routeId]).toEqual({ currency: 'usd', low: price, high: price });
+      }
+    });
+  }
+
+  it('is empty for a node without a route table', () => {
+    const definition = fixture.definitions.dual as unknown as ModelNodeDefinition;
+    expect(estimateRoutes(definition, {}, [], fixture.pricing as unknown as PricingTable)).toEqual({});
   });
 });

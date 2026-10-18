@@ -1647,5 +1647,9 @@ def get_handler_registry(
             handle_worldlabs_export,
             emit=emit,
         )
+        # Route-table nodes (definition `routes`): one handler over every
+        # provider route, chosen by `_provider` or Auto (execution/route_clients.py).
+        from execution import route_clients
+        route_clients.register_route_nodes(registry, maker_routes._definitions(), emit)
 
     return registry

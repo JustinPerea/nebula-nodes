@@ -390,8 +390,10 @@ def edit_canvas(
     - `move`: {"n4" or "+img": {"x": 0, "y": 0}}. New nodes are placed for you.
     - `note`: one line on what this is for; shown beside your cursor.
     Limits per call: 12 new nodes, 24 wires, 12 param changes.
-    Krea billing (`_kreaAuth`: API token or the Krea plan) is the person's call:
-    send a change to it with propose_change; edit_canvas refuses it.
+    Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
+    or the Krea plan) and a multi-provider node's route (`_provider`: a route id
+    or auto; describe_node lists them). Send a change to either with
+    propose_change; edit_canvas refuses it.
     Nothing runs; call run_nodes next. Returns `idMap` (ref → node id) and a summary.
     """
     body: dict[str, Any] = {key: value for key, value in {

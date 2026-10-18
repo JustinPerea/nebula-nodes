@@ -1,5 +1,5 @@
 import type { APIProvider, ModelNodeDefinition, NodeCategory, PortDefinition } from '../types';
-import { directKeyNames, KEY_PROVIDERS, selectRoute } from './directRoute';
+import { allParamDefinitions, directKeyNames, PROVIDER_LABELS, routesOf, selectRoute } from './directRoute';
 
 export const CATEGORY_LABELS: Record<NodeCategory, string> = {
   'image-gen': 'Image Generation',
@@ -16,31 +16,17 @@ export const CATEGORY_LABELS: Record<NodeCategory, string> = {
   moodboard: 'Moodboard',
 };
 
-const PROVIDER_LABELS: Record<APIProvider, string> = {
-  openai: 'OpenAI', anthropic: 'Anthropic', google: 'Google', runway: 'Runway',
-  kling: 'Kling', elevenlabs: 'ElevenLabs', replicate: 'Replicate', fal: 'fal.ai',
-  bytedance: 'ByteDance', minimax: 'MiniMax', luma: 'Luma', xai: 'xAI',
-  recraft: 'Recraft', ideogram: 'Ideogram', openrouter: 'OpenRouter', bfl: 'Black Forest Labs',
-  higgsfield: 'Higgsfield', meshy: 'Meshy', quiver: 'QuiverAI', krea: 'Krea',
-  worldlabs: 'World Labs', nous: 'Nous', typesafe: 'TypeSafe', utility: 'Local tools',
-};
-
+/** A provider's name, from the one label table every surface shares
+ * (lib/directRoute.ts PROVIDER_LABELS, the backend's node_route.PROVIDER_LABELS). */
 export function providerLabel(provider: string): string {
   return PROVIDER_LABELS[provider as APIProvider] ?? provider;
 }
 
-const CREDENTIAL_PROVIDER_IDS = KEY_PROVIDERS;
-
 /** Discovery includes every declared provider route, regardless of which
- * credential is currently configured. Readiness describes the selected route. */
+ * credential is currently configured (lib/directRoute.ts routesOf, the same
+ * route list pricing and readiness read). Readiness describes the selected route. */
 export function supportedModelProviders(definition: ModelNodeDefinition): APIProvider[] {
-  const providers = new Set<APIProvider>([definition.apiProvider]);
-  const keys = Array.isArray(definition.envKeyName) ? definition.envKeyName : [definition.envKeyName];
-  for (const key of [...keys, ...directKeyNames(definition)]) {
-    const provider = Object.hasOwn(CREDENTIAL_PROVIDER_IDS, key) ? CREDENTIAL_PROVIDER_IDS[key] : undefined;
-    if (provider) providers.add(provider);
-  }
-  return [...providers];
+  return [...new Set<APIProvider>([definition.apiProvider, ...routesOf(definition).map((route) => route.provider)])];
 }
 
 /** The provider a run actually goes through and bills, for "OpenAI · 6s" on
@@ -94,8 +80,7 @@ export function modelDescription(definition: ModelNodeDefinition): string {
  * enum options matter for catalog nodes that wrap more than one model. */
 export function modelSearchText(definition: ModelNodeDefinition): string {
   const routeKeys = Array.isArray(definition.envKeyName) ? definition.envKeyName : [definition.envKeyName];
-  const modelOptions = [...definition.params, ...(definition.sharedParams ?? []),
-    ...(definition.falParams ?? []), ...(definition.directParams ?? [])]
+  const modelOptions = allParamDefinitions(definition)
     .filter((param) => param.key === 'model')
     .flatMap((param) => (param.options ?? []).flatMap((option) => [option.label, String(option.value)]));
   return [definition.id, definition.displayName, definition.category, CATEGORY_LABELS[definition.category],

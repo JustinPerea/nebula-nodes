@@ -208,6 +208,31 @@ function formatPorts(ports) {
 }
 
 /**
+ * A route-table node's routes (in Auto order) and params: the shared ones,
+ * then each route's own under its provider's name. `_provider` and
+ * `_kreaAuth` are the switcher's, so they're named rather than tabled.
+ */
+function renderRoutes(node) {
+  const lines = ['**Routes** (Auto tries them in this order; `_provider` picks one)', ''];
+  lines.push('| Route | Provider | Keys | Endpoint | Notes |');
+  lines.push('|---|---|---|---|---|');
+  for (const route of node.routes) {
+    const notes = [route.maker ? 'maker' : null, route.plan ? `Krea plan: ${route.plan}` : null, route.note ?? null]
+      .filter(Boolean).join('; ');
+    lines.push(`| \`${escapeCell(route.id)}\` | ${PROVIDER_LABELS[route.provider] ?? route.provider} | `
+      + `${formatEnvKey(route.keys)} | ${route.endpoint ? `\`${escapeCell(route.endpoint)}\`` : '—'} | ${escapeCell(notes || '—')} |`);
+  }
+  lines.push('');
+  const shared = renderParamTable(node.sharedParams ?? []);
+  if (shared) lines.push('**Shared Parameters**', '', shared, '');
+  for (const route of node.routes) {
+    const table = renderParamTable(route.params ?? []);
+    if (table) lines.push(`**${PROVIDER_LABELS[route.provider] ?? route.provider} (\`${route.id}\`) Parameters**`, '', table, '');
+  }
+  return lines;
+}
+
+/**
  * Build all groups that have non-empty params for a node.
  */
 function getPopulatedParamGroups(node) {
@@ -289,6 +314,15 @@ async function generate() {
       lines.push(metaRow('Outputs', formatPorts(node.outputPorts)));
       lines.push(metaRow('Audited', audited));
       lines.push('');
+
+      // A route-table node (docs/PROVIDER-ROUTES.md): its routes, then its
+      // shared params and each route's own.
+      if (Array.isArray(node.routes) && node.routes.length > 0) {
+        lines.push(...renderRoutes(node));
+        lines.push('---');
+        lines.push('');
+        continue;
+      }
 
       // Parameters — handle dual/triple param groups
       const populatedGroups = getPopulatedParamGroups(node);
