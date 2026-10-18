@@ -86,22 +86,17 @@ def run_load(client: NebulaClient, filepath: str) -> None:
     except ProtectedPathError as exc:
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(1)
-    client.clear_graph()
 
-    nodes = data.get("nodes", [])
-    edges = data.get("edges", [])
-
-    id_map: dict[str, str] = {}
-    for n in nodes:
-        result = client.create_node(n["definitionId"], n.get("params", {}))
-        id_map[n["id"]] = result["id"]
-
-    for e in edges:
-        src = id_map.get(e["source"], e["source"])
-        dst = id_map.get(e["target"], e["target"])
-        client.connect(src, e["sourceHandle"], dst, e["targetHandle"])
-
-    print(f"Loaded graph ({len(nodes)} nodes, {len(edges)} connections) from {filepath}")
+    # One atomic replace through the route the canvas uses for .nebula files:
+    # the saved params (the canvas's own _ bookkeeping included) arrive as
+    # saved, retired nodes are migrated, and a refusal leaves the graph as it was.
+    body: dict[str, Any] = {"nodes": data.get("nodes", []), "edges": data.get("edges", [])}
+    if "paramsVersion" in data:
+        body["paramsVersion"] = data["paramsVersion"]
+    result = client.import_graph(body)
+    for warning in result.get("warnings") or []:
+        print(f"note: {warning}", file=sys.stderr)
+    print(f"Loaded graph ({result.get('nodeCount', 0)} nodes, {result.get('edgeCount', 0)} connections) from {filepath}")
 
 
 def run_clear(client: NebulaClient) -> None:

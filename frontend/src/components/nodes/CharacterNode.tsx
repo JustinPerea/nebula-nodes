@@ -1,43 +1,38 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
+import { storedAssetId, useStoredAsset } from '../../store/storedAssetsStore';
+import { NodeSettingsAction } from './NodeSettingsAction';
 import { PORT_COLORS } from '../../lib/portCompatibility';
+import { backendAssetUrlSync } from '../../lib/backend';
 import '../../styles/character-node.css';
 
-// The CharacterNode renders entirely from the React Flow node `data` it already
-// receives — it does NOT fetch the Character over the network. The canonical
-// asset lives in the backend CharacterStore and flows through the graph as a
-// CharacterBundle at execution time (handlers/character_node.py). For the
-// canvas card we only need the denormalized fields that Task 5/6's
-// addCharacterNode / library populate onto params. These are `_`-prefixed
-// runtime references (not declared model params) so they ride through the
-// backend's _validate_params on the /api/graph/node persist path (same
-// mechanism as _previewUrl):
-//   - _characterId    (always present once a Character is attached)
-//   - _characterName   (denormalized display name; optional)
-//   - _characterThumbnail (denormalized thumbnail URL; optional)
-// Missing fields fall back to neutral placeholders so the node always renders.
+// The node stores only the Character's id (its `character` param, which agents
+// set too); the card shows the Character as it is now (storedAssetsStore). The
+// canonical asset flows through the graph as a CharacterBundle at execution
+// time (handlers/character_node.py).
 interface CharacterNodeData {
-  params?: {
-    _characterId?: string;
-    _characterName?: string;
-    _characterThumbnail?: string;
-  };
+  params?: Record<string, unknown>;
 }
 
-export function CharacterNode({ data, selected }: NodeProps) {
+export function CharacterNode({ id, data, selected }: NodeProps) {
   const enterCharacterEditor = useUIStore((s) => s.enterCharacterEditor);
-  const params = (data as CharacterNodeData).params ?? {};
-  const characterId = params._characterId ?? '';
-  const name = params._characterName?.trim() || 'Character';
-  const thumbUrl = params._characterThumbnail || null;
+  const characterId = storedAssetId('character', (data as CharacterNodeData).params);
+  const entry = useStoredAsset('character', characterId);
+  const character = entry?.summary ?? null;
+  const status = characterId ? entry?.status ?? 'loading' : 'empty';
+  const name = character?.name.trim() || (status === 'missing' ? 'Character not found' : 'Character');
+  const thumbUrl = character?.thumbnail ? backendAssetUrlSync(character.thumbnail) : null;
 
   // Surface the id (short) so an unnamed-but-attached character is still
-  // identifiable on the canvas; empty when no character is attached yet.
-  const summary = characterId ? `#${characterId}` : 'no character attached';
+  // identifiable on the canvas.
+  const summary = status === 'empty' ? 'no character attached'
+    : status === 'missing' ? `#${characterId} was deleted or never existed`
+      : `#${characterId}`;
 
   return (
-    <div className={`character-node ${selected ? 'character-node--selected' : ''}`}>
+    <div className={`character-node ${selected ? 'character-node--selected' : ''}`} data-character-status={status} data-node-inspector-anchor={id}>
       <div className="character-node__title">◐ {name}</div>
+      <NodeSettingsAction id={id} />
 
       <div className="character-node__thumb">
         {thumbUrl ? (
@@ -49,7 +44,7 @@ export function CharacterNode({ data, selected }: NodeProps) {
 
       <div className="character-node__summary">{summary}</div>
 
-      {selected && characterId && (
+      {selected && characterId && status !== 'missing' && (
         <button
           type="button"
           className="character-node__open nodrag"

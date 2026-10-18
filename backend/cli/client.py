@@ -8,6 +8,7 @@ from urllib.parse import quote
 import httpx
 
 from nebula_api import NebulaAPI, NebulaAPIError
+from services.agent_params import internal_keys, internal_refusal
 
 
 DEFAULT_BASE = "http://localhost:8000"
@@ -87,7 +88,17 @@ class NebulaClient:
         return self._request("GET", "/api/agent/spend")
 
     # -- Graph --
+    @staticmethod
+    def _refuse_internal(label: str, params: dict[str, Any]) -> None:
+        """Agents don't write the canvas's internal (``_``) params; apply and
+        proposals refuse them too (services/agent_params.py). Checked here
+        because a CLI run without a name or token carries no agent marker."""
+        for key in internal_keys(params):
+            print(f"error: {internal_refusal(label, key)}", file=sys.stderr)
+            sys.exit(1)
+
     def create_node(self, definition_id: str, params: dict[str, Any]) -> dict[str, Any]:
+        self._refuse_internal(definition_id, params)
         return self._request("POST", "/api/graph/node", json={
             "definitionId": definition_id,
             "params": params,
@@ -126,10 +137,15 @@ class NebulaClient:
         return self._request("POST", f"/api/canvas/pins/{quote(pin_id, safe='')}/resolve",
                              json={"reply": reply}, headers=headers)
 
-    # -- Proposals (agents propose; only the person accepts, in Nebula) --
+    # -- Plans: proposals (only the person accepts, in Nebula) and direct edits --
     def propose(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None
         return self._request("POST", "/api/canvas/proposals", json=body, headers=headers)
+
+    def apply(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
+        """Edit the canvas directly, all of it or none of it (POST /api/graph/apply)."""
+        headers = {"X-Nebula-Agent": agent_name} if agent_name else None
+        return self._request("POST", "/api/graph/apply", json=body, headers=headers)
 
     def get_proposal(self, proposal_id: str, wait: float = 0.0, agent_name: str | None = None) -> dict[str, Any]:
         """GET one proposal; `wait` (≤25 s) blocks until the person decides."""
@@ -150,6 +166,7 @@ class NebulaClient:
         return self._request("POST", "/api/canvas/cursor", json=body, headers=headers)
 
     def update_node(self, node_id: str, params: dict[str, Any]) -> dict[str, Any]:
+        self._refuse_internal(node_id, params)
         return self._request("PUT", f"/api/graph/node/{node_id}", json={"params": params})
 
     def get_node_image_path(self, node_id: str) -> dict[str, Any]:
@@ -167,6 +184,10 @@ class NebulaClient:
 
     def clear_graph(self) -> dict[str, Any]:
         return self._request("DELETE", "/api/graph")
+
+    def import_graph(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Replace the graph with a saved one in one step (POST /api/graph/import)."""
+        return self._request("POST", "/api/graph/import", json=body)
 
     def delete_node(self, node_id: str) -> dict[str, Any]:
         return self._request("DELETE", f"/api/graph/node/{quote(node_id, safe='')}")

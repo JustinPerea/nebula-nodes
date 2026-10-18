@@ -5,6 +5,7 @@ from typing import Any
 
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import detail, krea_modes, node_access, provider_via  # noqa: F401 (node_access is re-exported)
+from services.agent_params import ASSET_PARAM_TYPES
 from services.maker_sizes import rule_note
 from services.node_route import all_param_definitions, route_hides, route_param_definitions
 
@@ -154,6 +155,9 @@ def format_node_detail(node: dict[str, Any]) -> str:
             if vis:
                 conds = [f"{k}={v}" for k, vals in vis.items() for v in vals]
                 detail += f"  (when {', '.join(conds[:3])})"
+            source = ASSET_PARAM_TYPES.get(str(ptype))
+            if source:
+                detail += f"  (a {source['noun']} id; {source['list']} lists them)"
             lines.append(f"  {detail}")
         lines.append("")
 
@@ -707,6 +711,16 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
         lines.append("  runs   nothing until the person chooses")
     if created:
         lines.append(f"Check the outcome: nebula proposal {proposal_id} --wait")
+    return "\n".join(lines)
+
+
+def format_applied(result: dict[str, Any]) -> str:
+    """`nebula apply`'s result: what changed, then each new node's id for the next command."""
+    lines = [f"Applied: {result.get('summary') or 'no change'}."]
+    refs = {node_id: ref for ref, node_id in (result.get("idMap") or {}).items()}
+    for node in result.get("added") or []:
+        node_id = str(node.get("id") or "")
+        lines.append(f"  {refs.get(node_id, '?')} → {node_id}  {node.get('name') or node.get('definitionId') or ''}".rstrip())
     return "\n".join(lines)
 
 

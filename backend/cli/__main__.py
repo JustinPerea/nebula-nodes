@@ -147,6 +147,43 @@ def build_parser() -> argparse.ArgumentParser:
     propose_p.add_argument("--as", dest="agent_name",
                            help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
 
+    apply_p = sub.add_parser(
+        "apply",
+        help="Edit the canvas directly in one step, all or nothing (never runs anything)",
+        description=(
+            "Builder: nebula apply --add +p=text-input --param +p.value=\"a lighthouse\" "
+            "--add +img=nano-banana --wire +p:text +img:prompt --rename +img=\"Hero shot\" "
+            "--move n3=400,120 --remove n7 --unwire n1:text n2:prompt. "
+            "New nodes use refs like +img; existing nodes use their ids (n4). Or pass --file plan.json "
+            "(- reads standard input) with {note, nodes, edges, params, rename, move, remove, unwire}: "
+            "the plan `nebula propose` takes, without run. If any part is refused, nothing changes. "
+            "It prints each new node's id; run them with `nebula run` after."
+        ),
+    )
+    apply_p.add_argument("--file", help="JSON plan file, or - for standard input")
+    apply_p.add_argument("--note", help="One line saying what this does (shown with your cursor)")
+    apply_p.add_argument("--add", action="append", default=[], metavar="+ref=definitionId",
+                         help="A new node, e.g. --add +img=nano-banana (repeatable)")
+    apply_p.add_argument("--param", action="append", nargs="*", default=[], metavar="+ref.key=value",
+                         help="A param on a new node, e.g. --param +img.aspect_ratio=16:9 (repeatable)")
+    apply_p.add_argument("--set", dest="set_params", action="append", default=[], metavar="nX.key=value",
+                         help="Change a param on an existing node, e.g. --set n4.prompt=warmer (repeatable)")
+    apply_p.add_argument("--wire", action="append", nargs=2, default=[], metavar=("SRC:port", "DST:port"),
+                         help="A wire, e.g. --wire +p:text +img:prompt (repeatable)")
+    apply_p.add_argument("--at", action="append", default=[], metavar="+ref=x,y",
+                         help="Where a new node goes, e.g. --at +img=820,140")
+    apply_p.add_argument("--rename", action="append", default=[], metavar="REF=name",
+                         help="Name a node, e.g. --rename n4=\"Hero shot\" (empty restores the model's name)")
+    apply_p.add_argument("--move", action="append", default=[], metavar="REF=x,y",
+                         help="Move a node, e.g. --move n4=400,120 (repeatable)")
+    apply_p.add_argument("--remove", action="append", default=[], metavar="nX",
+                         help="Delete a node and its wires (repeatable)")
+    apply_p.add_argument("--unwire", action="append", nargs=2, default=[], metavar=("SRC:port", "DST:port"),
+                         help="Remove a wire, e.g. --unwire n1:text n2:prompt (repeatable)")
+    apply_p.add_argument("--json", action="store_true", help="Print the raw result JSON")
+    apply_p.add_argument("--as", dest="agent_name",
+                         help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
+
     proposal_p = sub.add_parser("proposal", help="Check (or withdraw) one of your proposals")
     proposal_p.add_argument("id_or_action", help="A proposal id (p_9a1c3e02), or 'withdraw'")
     proposal_p.add_argument("proposal_id", nargs="?", help="With 'withdraw': the proposal id")
@@ -333,7 +370,7 @@ def main() -> None:
     client = NebulaClient(args.url)
 
     from .commands import (
-        canvas, commons, context, nodes, keys, graph, execute, quick, path, pins, projects, proposals,
+        apply, canvas, commons, context, nodes, keys, graph, execute, quick, path, pins, projects, proposals,
         selection, spend,
     )
 
@@ -365,6 +402,7 @@ def main() -> None:
         "pins": lambda: pins.run_list(client),
         "pin": lambda: pins.run_pin(client, args),
         "propose": lambda: proposals.run_propose(client, args),
+        "apply": lambda: apply.run_apply(client, args),
         "proposal": lambda: proposals.run_proposal(client, args),
         "proposals": lambda: proposals.run_list(client),
         "save": lambda: graph.run_save(client, args.file),

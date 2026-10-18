@@ -828,7 +828,8 @@ wires, 12 param changes, 24 removals). Nodes with unresolved World Labs paid
 state can't be removed. Krea nodes may name `_kreaAuth` only to keep the mode
 they have: a change is refused with 403 and must be proposed (see Spending
 limits). Other `_` params are refused. The route never runs anything and
-is for agents only (the canvas edits through its own routes).
+is for agents only (the canvas edits through its own routes). `nebula apply`
+is the CLI twin (see below).
 
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
 it gets the same spending check and the same long-run handling. It waits 45
@@ -912,6 +913,31 @@ nebula cancel 3f…                   # stop it; outputs that finished stay
 Finished outputs land on the canvas as each node completes, so a stopped
 run keeps what it made. The backend remembers the last 50 finished CLI runs
 until it restarts.
+
+To build or change several things at once, `nebula apply` sends one plan to
+`POST /api/graph/apply` (the route `edit_canvas` uses), and the backend
+applies all of it or none of it:
+
+```bash
+nebula apply --note "Two takes" \
+  --add +p=text-input --param +p.value="a lighthouse at dusk" \
+  --add +wide=nano-banana --add +tight=nano-banana \
+  --wire +p:text +wide:prompt --wire +p:text +tight:prompt \
+  --rename +wide=Wide --move n3=400,120 --remove n7 --unwire n1:text n2:prompt
+# Applied: added 3, wired 2, renamed 1, moved 1, removed 1, unwired 1.
+#   +p → n8  Text Input
+#   +wide → n9  Wide
+#   +tight → n10  Nano Banana
+nebula apply --file plan.json       # or --file - to read standard input
+```
+
+The plan is the one `nebula propose` takes (`nodes` with `+refs`, `edges`,
+`params`) plus `rename`, `move`, `remove` and `unwire`, so a file of nodes,
+edges and params can be proposed or applied as it is. `nebula apply` never
+runs anything: a plan with `run` is refused before it's sent (propose it, or
+apply it and then `nebula run`). Like proposals, it needs your agent name
+(`$NEBULA_AGENT_NAME` or `--as`). `--json` prints the backend's result,
+including `idMap`.
 
 Other graph commands:
 

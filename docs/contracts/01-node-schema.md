@@ -181,7 +181,9 @@ interface Param {
 
 ### Param types
 
-`string`, `integer`, `float`, `boolean`, `enum`, `textarea`, `file`, `palette`
+`string`, `integer`, `float`, `boolean`, `enum`, `textarea`, `file`, `palette`, `moodboard`, `character`
+
+`moodboard` and `character` hold a saved asset's id (`GET /api/moodboards`, `GET /api/characters` list them). The Inspector shows them as a picker of saved assets, and a node whose asset was deleted says so on its card.
 
 Enum params must list `options` with `{ label, value }`; `default` must be one of the values.
 

@@ -10,13 +10,11 @@ Identity-correctness contract (the whole point of this node):
     paraphrasing the trait string breaks downstream identity per the Seedance
     finding documented on the Character type).
 
-A missing / unknown id raises a clear ValueError("Character not found: ...").
+A missing or unknown id raises a clear ValueError naming what to do.
 
-The id (and denormalized display fields) live on the node params under the
-`_`-prefixed keys ``_characterId`` / ``_characterName`` / ``_characterThumbnail``
-— they are frontend-internal runtime references (which Character the node points
-at), not declared model params, so the `_` prefix lets them survive the
-``/api/graph/node`` persist-path validator (see test_character_api.py).
+The id is the node's public ``character`` param (agents set it too). A node
+saved with the old internal ``_characterId`` reaches the handler with it moved
+to ``character`` by the engine's migrate_params (test_asset_reference_params.py).
 """
 
 from __future__ import annotations
@@ -58,7 +56,7 @@ def _seed_character(monkeypatch, tmp_path) -> dict:
 
 
 def _character_node(character_id: str | None, **overrides) -> GraphNode:
-    params = {"_characterId": character_id} if character_id is not None else {}
+    params = {"character": character_id} if character_id is not None else {}
     params.update(overrides)
     return GraphNode(id="char1", definitionId="character", params=params)
 
@@ -165,7 +163,7 @@ async def test_strength_override_clamps_and_ignores_garbage(monkeypatch, tmp_pat
 @pytest.mark.asyncio
 async def test_missing_id_raises(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("NEBULA_CHARACTER_ROOT", str(tmp_path))
-    with pytest.raises(ValueError, match="Character not found"):
+    with pytest.raises(ValueError, match="No character chosen: set character to a character id"):
         await handle_character_node(
             _character_node(None), inputs={}, api_keys={}, emit=None
         )
@@ -174,7 +172,7 @@ async def test_missing_id_raises(monkeypatch, tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_unknown_id_raises(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("NEBULA_CHARACTER_ROOT", str(tmp_path))
-    with pytest.raises(ValueError, match="Character not found: doesnotexist"):
+    with pytest.raises(ValueError, match="Character 'doesnotexist' not found"):
         await handle_character_node(
             _character_node("doesnotexist"), inputs={}, api_keys={}, emit=None
         )

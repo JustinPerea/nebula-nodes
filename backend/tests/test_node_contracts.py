@@ -10,6 +10,7 @@ import pytest
 
 from execution.engine import LOCAL_EXECUTION_NODE_IDS
 from execution.sync_runner import get_handler_registry
+from services.agent_params import ASSET_PARAM_TYPES
 from services.credential_catalog import KEYS_AHEAD_OF_NODES
 from services.node_registry import NodeRegistry
 
@@ -81,7 +82,9 @@ VALID_PORT_TYPES = {
     "World",
     "Any",
 }
-VALID_PARAM_TYPES = {"string", "integer", "float", "boolean", "enum", "textarea", "file", "palette"}
+# Plus moodboard / character: a saved asset's id.
+VALID_PARAM_TYPES = {"string", "integer", "float", "boolean", "enum", "textarea", "file", "palette",
+                     *ASSET_PARAM_TYPES}
 PARAM_GROUPS = ("params", "sharedParams", "falParams", "directParams")
 
 

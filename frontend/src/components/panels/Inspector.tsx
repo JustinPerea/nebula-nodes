@@ -1,6 +1,8 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { Brush, Copy, Info, Play, Plus, RefreshCw, Star, Trash2, Upload, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
+import { storedAssetId } from '../../store/storedAssetsStore';
+import { StoredAssetPicker } from './StoredAssetPicker';
 import { useGraphStore } from '../../store/graphStore';
 import { usesKreaAccount } from '../../lib/kreaConnection';
 import { keysNeeded } from '../../lib/nodeKeys';
@@ -624,6 +626,17 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
     if (universalProvider && param.key === 'model') {
       return renderUniversalModelControl();
+    }
+
+    if (param.type === 'moodboard' || param.type === 'character') {
+      return (
+        <StoredAssetPicker
+          kind={param.type}
+          label={param.label}
+          value={storedAssetId(param.type, activeNodeData.params)}
+          onChange={(id) => onParamChange(param.key, id)}
+        />
+      );
     }
 
     if (param.type === 'enum') {

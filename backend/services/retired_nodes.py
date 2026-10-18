@@ -81,6 +81,15 @@ only from ports, so a value typed on the old node moves into a Text, Image or
 Video Input node wired to that port (``migrate_graph``). The old nodes' Krea
 job outputs (All videos, All artifacts, Job) have no counterpart; a
 connection from one is dropped, and the load says which.
+
+Two nodes retired an internal key instead (``RETIRED_PARAMS``, no date
+gate). The Moodboard and Character nodes kept which saved asset they show in
+``_moodboardId`` / ``_characterId``, with copies of its name, thumbnail and
+counts for the card. Agents can't write internal keys, so they couldn't point
+either node at anything. Since 2026-10-18 the id is the public ``moodboard`` /
+``character`` param (services/agent_params.py) and the card reads the asset
+itself, so a saved node's id moves to the public param (a value already there
+wins) and the copies are dropped.
 """
 from __future__ import annotations
 
@@ -248,6 +257,19 @@ _GEMINI_TTS_MODELS = {
     "gemini-3.1-flash-tts-preview": "gemini-3.8-flash-lite-tts",
 }
 
+def _asset_reference(public: str, internal: str, copies: tuple[str, ...]):
+    """Move a saved internal asset id to the ``public`` param; drop the copies."""
+    def fix(params: dict[str, Any]) -> dict[str, Any]:
+        saved = params.pop(internal, None)
+        current = params.get(public)
+        if not (isinstance(current, str) and current.strip()) and isinstance(saved, str) and saved.strip():
+            params[public] = saved.strip()
+        for key in copies:
+            params.pop(key, None)
+        return params
+    return fix
+
+
 RETIRED_PARAMS: dict[str, Any] = {
     "veo-3": _veo_params,
     "gpt-image-1-generate": _model_after(GPT_IMAGE_1_SHUTDOWN, {"gpt-image-1": "gpt-image-2.5-flare"}),
@@ -259,6 +281,9 @@ RETIRED_PARAMS: dict[str, Any] = {
     "gemini-tts": _model_after(GEMINI_TTS_PREVIEWS_SHUTDOWN, _GEMINI_TTS_MODELS),
     "runway-video": _runway_video_params,
     "runway-aleph": _runway_aleph_params,
+    "nebula-moodboard": _asset_reference("moodboard", "_moodboardId", (
+        "_moodboardName", "_moodboardThumbnail", "_moodboardImageCount", "_moodboardMode")),
+    "character": _asset_reference("character", "_characterId", ("_characterName", "_characterThumbnail")),
 }
 
 

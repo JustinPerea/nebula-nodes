@@ -150,6 +150,7 @@ from services.person_gate import (
     require_person,
 )
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
+from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
 from services.canvas_proposals import (
     MAX_REASON,
     Proposal,
@@ -3597,6 +3598,9 @@ def _describe_routes(
 
 def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
     brief: dict[str, Any] = {"key": param["key"], "type": param.get("type")}
+    if param.get("type") in ASSET_PARAM_TYPES:
+        # An asset reference: its value is an id this route lists.
+        brief["idsFrom"] = ASSET_PARAM_TYPES[str(param["type"])]["list"]
     for field in ("default", "min", "max", "required"):
         # `is False`, not `in (None, False)`: 0 == False, and a 0 minimum or
         # default is real (Safety 0-4 would otherwise read as "up to 4").
@@ -4266,7 +4270,16 @@ def _stage_proposal(
     new_ids = set(id_map.values())
     refs: dict[str, str] = {node_id: node_id for node_id in candidate.nodes if node_id not in new_ids}
     refs.update(id_map)
-    edge_ids = _stage_graph_edges(candidate, raw_edges, refs)
+    try:
+        edge_ids = _stage_graph_edges(candidate, raw_edges, refs)
+    except HTTPException as exc:
+        # The validators name nodes by id; a new node's staged id (n12) means
+        # nothing to the agent, which wrote +img.
+        ref_for = {new_id: ref for ref, new_id in id_map.items()}
+        detail = exc.detail
+        if isinstance(detail, str) and ref_for:
+            detail = re.sub(r"\bn\d+\b", lambda match: ref_for.get(match.group(0), match.group(0)), detail)
+        raise HTTPException(status_code=exc.status_code, detail=detail) from exc
     run_ids: list[str] = []
     for item in spec.run:
         if item not in refs:
@@ -4417,10 +4430,13 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     for node in spec.nodes:
         _check_krea_auth(node.definition_id, node.params, node.ref)
         _check_provider(node.definition_id, node.params, node.ref)
+        _check_asset_refs(node.definition_id, node.params, node.ref, must_exist=True)
     for change in spec.params:
         current = cli_graph.nodes.get(change.node_id) or {}
         _check_krea_auth(str(current.get("definitionId") or ""), change.params, change.node_id)
         _check_provider(str(current.get("definitionId") or ""), change.params, change.node_id)
+        _check_asset_refs(str(current.get("definitionId") or ""), change.params, change.node_id,
+                          before=current.get("params") or {}, must_exist=True)
     try:
         candidate, id_map, _edge_ids, run_ids = _stage_proposal(spec)
     except HTTPException as exc:
@@ -6860,8 +6876,10 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=400, detail="params must be an object")
     position = body.get("position")
     _validate_params(definition_id, params)
+    _refuse_agent_internal_params(params, str(definition_id))
     _check_provider(str(definition_id), params, str(definition_id))
     params = migrate_params(definition_id, _coerce_params(definition_id, params))
+    _check_asset_refs(str(definition_id), params, str(definition_id))
     _refuse_agent_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
         _graph_worldlabs_recovery_checkpoints(
@@ -6958,8 +6976,10 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
             if not isinstance(connect_spec.get(key), str) or not connect_spec[key]:
                 raise HTTPException(status_code=400, detail=f"connect.{key} must be a non-empty string")
     _validate_params(definition_id, params)
+    _refuse_agent_internal_params(params, str(definition_id))
     _check_provider(str(definition_id), params, str(definition_id))
     params = migrate_params(definition_id, _coerce_params(definition_id, params))
+    _check_asset_refs(str(definition_id), params, str(definition_id))
     _refuse_agent_billing_change([(str(definition_id), str(definition_id), None, params)])
     carries_recovery = bool(
         _graph_worldlabs_recovery_checkpoints(
@@ -7209,9 +7229,11 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         if not isinstance(params, dict):
             raise HTTPException(status_code=400, detail="params must be an object")
         _validate_params(node.get("definitionId", ""), params)
+        _refuse_agent_internal_params(params, node_id)
         _check_provider(str(node.get("definitionId") or ""), params, node_id)
         params = migrate_param_update(node.get("definitionId", ""), params_before,
                                       _coerce_params(node.get("definitionId", ""), params))
+        _check_asset_refs(str(node.get("definitionId") or ""), params, node_id, before=params_before)
         _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
         _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
@@ -7660,6 +7682,52 @@ def _check_krea_auth(definition_id: str, params: dict[str, Any], label: str) -> 
         raise HTTPException(status_code=400, detail=f"_kreaAuth on {label} must be {offered}")
 
 
+def _refuse_agent_internal_params(params: Mapping[str, Any], label: str) -> None:
+    """422 when an agent's create or update writes an internal (``_``) param.
+
+    Proposals and /api/graph/apply refuse those for every body; the node
+    routes also serve the canvas, which keeps them, so here only a request
+    with an agent marker is refused (services/agent_params.py)."""
+    if not has_agent_marker(current_request_headers()):
+        return
+    for key in internal_keys(params):
+        raise HTTPException(status_code=422, detail=internal_refusal(f"{label}.params", key))
+
+
+def _stored_asset(kind: str, asset_id: str) -> dict[str, Any] | None:
+    store = _moodboard_store() if kind == "moodboard" else _char_store()
+    try:
+        return store.get(asset_id)
+    except ValueError:  # not an id the store can hold
+        return None
+
+
+def _check_asset_refs(definition_id: str, params: Mapping[str, Any], label: str, *,
+                      before: Mapping[str, Any] | None = None, must_exist: bool | None = None) -> None:
+    """400 unless each asset-reference param (a Moodboard's ``moodboard``, a
+    Character's ``character``) in ``params`` is empty or an id. For an agent
+    (``must_exist`` defaults to whether the request has an agent marker) the
+    asset must also exist, so a typo fails here and not at run time. A value
+    equal to ``before``'s isn't checked again: a node whose board was deleted
+    still saves its other params, and pasting it keeps the dangling id."""
+    refs = asset_params(node_registry.get(definition_id))
+    if not refs:
+        return
+    if must_exist is None:
+        must_exist = has_agent_marker(current_request_headers())
+    for key, kind in refs:
+        value = params.get(key)
+        if key not in params or value in (None, "") or (before is not None and before.get(key) == value):
+            continue
+        source = ASSET_PARAM_TYPES[kind]
+        if not isinstance(value, str):
+            raise HTTPException(status_code=400, detail=(
+                f"{label}.{key} must be a {source['noun']} id; {source['list']} lists them"))
+        if must_exist and _stored_asset(kind, value.strip()) is None:
+            raise HTTPException(status_code=400, detail=(
+                f"{label}.{key}: there's no {source['noun']} {value.strip()[:64]!r}; {source['list']} lists them"))
+
+
 def _check_provider(definition_id: str, params: dict[str, Any], label: str) -> None:
     """Direct edits may set `_provider`; only to "auto" or one of the node's
     route ids, and only on a route-table node (services/node_route.py)."""
@@ -7700,10 +7768,13 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     for node in additions.nodes:
         _check_krea_auth(node.definition_id, node.params, node.ref)
         _check_provider(node.definition_id, node.params, node.ref)
+        _check_asset_refs(node.definition_id, node.params, node.ref, must_exist=True)
     for change in additions.params:
         current = cli_graph.nodes.get(change.node_id) or {}
         _check_krea_auth(str(current.get("definitionId") or ""), change.params, change.node_id)
         _check_provider(str(current.get("definitionId") or ""), change.params, change.node_id)
+        _check_asset_refs(str(current.get("definitionId") or ""), change.params, change.node_id,
+                          before=current.get("params") or {}, must_exist=True)
     _refuse_agent_billing_change(
         [(node.ref, node.definition_id, None, node.params) for node in additions.nodes]
         + [(change.node_id, str((cli_graph.nodes.get(change.node_id) or {}).get("definitionId") or ""),
@@ -9864,6 +9935,18 @@ def _validate_project_id_param(project_id: str | None) -> None:
         raise HTTPException(status_code=400, detail="invalid projectId")
 
 
+async def _broadcast_stored_asset(kind: str, asset: Mapping[str, Any] | None, asset_id: str = "",
+                                  *, deleted: bool = False) -> None:
+    """Tell canvases a saved moodboard or character changed, so a card that
+    shows it (MoodboardNode, CharacterNode) fetches it again."""
+    message = {"type": "storedAssetChanged", "kind": kind,
+               "id": str((asset or {}).get("id") or asset_id), "deleted": deleted}
+    try:
+        await manager.broadcast_raw(message)
+    except Exception:  # noqa: BLE001 - the asset is saved; a card fetches it again when it next mounts
+        pass
+
+
 @app.get("/api/characters")
 async def list_characters(scope: str = "global", projectId: str | None = None) -> list[dict]:
     """List Characters by scope.
@@ -9885,7 +9968,7 @@ async def create_character(body: CharacterCreate) -> dict:
     _validate_project_id_param(body.projectId)
     store = _char_store()
     try:
-        return store.create(
+        character = store.create(
             name=body.name,
             subjectType=body.subjectType,
             referenceViews=body.referenceViews,
@@ -9896,6 +9979,8 @@ async def create_character(body: CharacterCreate) -> dict:
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    await _broadcast_stored_asset("character", character)
+    return character
 
 
 @app.get("/api/characters/{char_id}")
@@ -9917,9 +10002,11 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
     store = _char_store()
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     try:
-        return store.update(char_id, **updates)
+        character = store.update(char_id, **updates)
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+    await _broadcast_stored_asset("character", character)
+    return character
 
 
 @app.delete("/api/characters/{char_id}")
@@ -9930,6 +10017,7 @@ async def delete_character(char_id: str) -> dict:
         store.delete(char_id)
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+    await _broadcast_stored_asset("character", None, char_id, deleted=True)
     return {"status": "deleted", "id": char_id}
 
 
@@ -9950,7 +10038,7 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
     _validate_project_id_param(body.projectId)
     store = _moodboard_store()
     try:
-        return store.create(
+        moodboard = store.create(
             name=body.name,
             images=[img.model_dump() for img in body.images],
             notes=body.notes,
@@ -9961,6 +10049,8 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    await _broadcast_stored_asset("moodboard", moodboard)
+    return moodboard
 
 
 @app.get("/api/moodboards/{moodboard_id}")
@@ -9986,11 +10076,13 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     if "images" in updates:
         updates["images"] = [img.model_dump() if hasattr(img, "model_dump") else img for img in body.images or []]
     try:
-        return store.update(moodboard_id, **updates)
+        moodboard = store.update(moodboard_id, **updates)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    await _broadcast_stored_asset("moodboard", moodboard)
+    return moodboard
 
 
 @app.post("/api/moodboards/{moodboard_id}/analyze")
@@ -10007,9 +10099,11 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
 
     analysis = analyze_moodboard(moodboard)
     try:
-        return store.update(moodboard_id, analysis=analysis)
+        moodboard = store.update(moodboard_id, analysis=analysis)
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    await _broadcast_stored_asset("moodboard", moodboard)
+    return moodboard
 
 
 @app.delete("/api/moodboards/{moodboard_id}")
@@ -10019,6 +10113,7 @@ async def delete_moodboard(moodboard_id: str) -> dict:
         store.delete(moodboard_id)
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
     return {"status": "deleted", "id": moodboard_id}
 
 

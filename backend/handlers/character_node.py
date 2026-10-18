@@ -1,16 +1,14 @@
 """Character source node.
 
 A pure utility/glue node: it loads a persisted Character from the project
-CharacterStore by id (params._characterId) and re-emits it as a CharacterBundle
-on the `character` output port. Downstream cinematic nodes consume the bundle.
+CharacterStore by id (the ``character`` param) and re-emits it as a
+CharacterBundle on the `character` output port. Downstream cinematic nodes
+consume the bundle.
 
-``_characterId`` (and the denormalized display fields ``_characterName`` /
-``_characterThumbnail`` the canvas card reads) are ``_``-prefixed because they
-are frontend-internal runtime references — which Character the node points at —
-not user-editable model params. The ``_`` prefix is what lets them ride through
-``_validate_params`` (same mechanism as ``_previewUrl``) on the
-``/api/graph/node`` persist path without being declared params (which would
-pollute the Inspector).
+``character`` is a public param of type ``character`` (services/agent_params.py):
+the Inspector shows a picker, agents set it to an id from GET /api/characters,
+and the canvas card reads the Character itself. A node saved before 2026-10-18
+kept the id in ``_characterId``; ``retired_nodes.migrate_params`` moves it.
 
 Identity-correctness contract — copied VERBATIM from the stored Character:
   - referenceViews are emitted in stored order (never sorted/reordered).
@@ -47,15 +45,21 @@ async def handle_character_node(
 ) -> dict[str, Any]:
     """Load the stored Character by id and emit it as a CharacterBundle.
 
-    Raises ValueError with a clear message when _characterId is absent or points
-    at a Character that does not exist in the store.
+    Raises ValueError with a clear message when ``character`` is empty or
+    names a Character that does not exist in the store.
     """
     params = node.params or {}
-    character_id = params.get("_characterId")
-
-    character = CharacterStore().get(character_id) if character_id else None
+    raw = params.get("character")
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("No character chosen: set character to a character id (GET /api/characters lists them)")
+    character_id = raw.strip()
+    try:
+        character = CharacterStore().get(character_id)
+    except ValueError:  # not an id the store can hold
+        character = None
     if character is None:
-        raise ValueError(f"Character not found: {character_id}")
+        raise ValueError(f"Character {character_id!r} not found; it may have been deleted. "
+                         "Pick another character for this node.")
 
     # Build the lightweight bundle. referenceViews + frozenTraitString are
     # passed through verbatim — no copy-with-sort, no string normalization.

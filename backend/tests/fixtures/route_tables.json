@@ -207,6 +207,7 @@
     }
    ],
    "allParamKeys": [
+    "character",
     "override_prompt",
     "override_refs",
     "strength_override"
