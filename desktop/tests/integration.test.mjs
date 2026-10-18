@@ -9,6 +9,9 @@
  *   - Invalid Python override surfaces a visible failure and exits non-zero.
  *   - Early-exit fixture surfaces a visible failure with exit metadata.
  *   - Health timeout terminates the child and surfaces a timeout failure.
+ *   - A backend at another params version than the built frontend's stamp
+ *     stops startup with a rebuild message and stops the sidecar
+ *     (frontend-build.mjs).
  *
  * Every test uses an isolated --user-data-dir and verifies no orphan listener
  * remains on the sidecar port after the process exits.
@@ -18,7 +21,7 @@ import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { execSync } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -29,6 +32,11 @@ const DESKTOP_DIR = join(REPO_ROOT, 'desktop');
 const ELECTRON = join(DESKTOP_DIR, 'node_modules', '.bin', 'electron');
 const FIXTURES = join(__dirname, 'fixtures');
 const DIST_INDEX = join(REPO_ROOT, 'frontend', 'dist-desktop', 'index.html');
+const DIST_STAMP = join(REPO_ROOT, 'frontend', 'dist-desktop', 'nebula-build.json');
+// A bundle built before the stamp now stops every launch at the stamp check,
+// so these tests need a current build, not just an index.html.
+const NOT_BUILT = !(existsSync(DIST_INDEX) && existsSync(DIST_STAMP))
+  && 'frontend/dist-desktop not built, or built before nebula-build.json (npm run build:desktop)';
 
 const tempDirs = [];
 
@@ -86,6 +94,21 @@ function portFromUrl(url) {
   return match ? parseInt(match[1], 10) : null;
 }
 
+/** The NEBULA_SIDECAR_PID=<pid> line main.mjs prints once the sidecar is healthy. */
+function sidecarPid(stdout) {
+  const match = stdout.match(/^NEBULA_SIDECAR_PID=(\d+)$/m);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM';
+  }
+}
+
 /** Verify no listener remains on a given port. */
 function assertNoListener(port) {
   if (!port) return;
@@ -107,7 +130,7 @@ describe('Electron integration — managed sidecar startup', () => {
     }
   });
 
-  test('smoke run proves dynamic endpoint injection on a non-8000 port', { timeout: 120_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
+  test('smoke run proves dynamic endpoint injection on a non-8000 port', { timeout: 120_000, skip: NOT_BUILT }, async () => {
     const userData = mkTemp();
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
@@ -152,7 +175,7 @@ describe('Electron integration — managed sidecar startup', () => {
     assertNoListener(apiPort);
   });
 
-  test('invalid Python override surfaces a visible failure with no orphan', { timeout: 30_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
+  test('invalid Python override surfaces a visible failure with no orphan', { timeout: 30_000, skip: NOT_BUILT }, async () => {
     const userData = mkTemp();
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
@@ -174,7 +197,7 @@ describe('Electron integration — managed sidecar startup', () => {
     assert.notEqual(result.exitCode, 0, 'Should exit non-zero on invalid Python');
   });
 
-  test('early-exit fixture surfaces failure with exit metadata', { timeout: 30_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
+  test('early-exit fixture surfaces failure with exit metadata', { timeout: 30_000, skip: NOT_BUILT }, async () => {
     const userData = mkTemp();
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
@@ -199,7 +222,7 @@ describe('Electron integration — managed sidecar startup', () => {
     assert.notEqual(result.exitCode, 0);
   });
 
-  test('health timeout terminates child and surfaces timeout failure', { timeout: 30_000, skip: !existsSync(DIST_INDEX) && 'frontend/dist-desktop not built (npm run build:desktop)' }, async () => {
+  test('health timeout terminates child and surfaces timeout failure', { timeout: 30_000, skip: NOT_BUILT }, async () => {
     const userData = mkTemp();
     const result = await runElectron({
       NEBULA_DESKTOP_SMOKE: '1',
@@ -221,4 +244,59 @@ describe('Electron integration — managed sidecar startup', () => {
     );
     assert.notEqual(result.exitCode, 0);
   });
+
+  // The stamp check (frontend-build.mjs): the serve-health fixture plays a
+  // healthy backend at another params version than the built frontend's.
+  const stampVersion = () => JSON.parse(readFileSync(DIST_STAMP, 'utf8')).paramsVersion;
+
+  for (const { name, health, type, phrase, needsVersionAboveZero = false } of [
+    {
+      name: 'a backend newer than the built frontend',
+      health: () => ({ status: 'ok', app: 'nebula', version: '0.1.0', paramsVersion: stampVersion() + 1 }),
+      type: 'frontend_older',
+      phrase: 'frontend is older than the backend',
+    },
+    {
+      name: 'a backend from before /api/health reported a version',
+      health: () => ({ status: 'ok', app: 'nebula', version: '0.1.0' }),
+      type: 'frontend_newer',
+      phrase: 'frontend is newer than the backend',
+      needsVersionAboveZero: true,
+    },
+  ]) {
+    test(`${name} stops startup with a rebuild message and no orphan sidecar`, { timeout: 30_000, skip: NOT_BUILT }, async (t) => {
+      if (needsVersionAboveZero && stampVersion() === 0) {
+        t.skip('the built frontend is at version 0, which matches a backend without the field');
+        return;
+      }
+      const body = health();
+      const userData = mkTemp();
+      const result = await runElectron({
+        NEBULA_DESKTOP_SMOKE: '1',
+        NEBULA_DESKTOP_USER_DATA_DIR: userData,
+        NEBULA_DESKTOP_TEST: '1',
+        NEBULA_DESKTOP_APP_ID: `nebula-int-${process.pid}-${Date.now()}`,
+        NEBULA_DESKTOP_PYTHON: join(FIXTURES, 'serve-health.mjs'),
+        FIXTURE_HEALTH_BODY: JSON.stringify(body),
+      }, 30_000);
+
+      assert.equal(result.timedOut, false, 'Electron did not exit within 30s');
+      const smoke = parseSmokeLine(result.stdout);
+      assert.ok(smoke, 'NEBULA_DESKTOP_SMOKE JSON line not found');
+      assert.equal(smoke.passed, false);
+      assert.equal(smoke.error?.type, type, JSON.stringify(smoke.error));
+      assert.ok(smoke.error?.message?.includes(phrase), smoke.error?.message);
+      assert.ok(smoke.error?.message?.includes('cd frontend && npm run build:desktop'), smoke.error?.message);
+      assert.notEqual(result.exitCode, 0);
+
+      // The sidecar was healthy (so the check ran after it) and was stopped.
+      const pid = sidecarPid(result.stdout);
+      assert.ok(pid, 'NEBULA_SIDECAR_PID line not found: the sidecar never became healthy');
+      assert.equal(processAlive(pid), false, `Sidecar pid ${pid} is still running`);
+      const portLine = result.stdout.match(/^NEBULA_SIDECAR_PORT=(\d+)$/m);
+      assertNoListener(portLine ? parseInt(portLine[1], 10) : null);
+      // And no renderer window was created for the stale bundle.
+      assert.ok(!result.stdout.includes('"rootMounted"'), 'The renderer should not have loaded');
+    });
+  }
 });
