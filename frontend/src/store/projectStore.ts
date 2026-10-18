@@ -38,7 +38,7 @@ interface ProjectState {
 }
 
 let initializing: Promise<void> | null = null;
-let saveQueue: Promise<void> = Promise.resolve();
+let saveQueue: Promise<unknown> = Promise.resolve();
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSaved = '';
 let applying = false;
@@ -497,22 +497,28 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   flush: async () => {
     if (saveTimer !== null) clearTimeout(saveTimer);
     saveTimer = null;
-    const task = saveQueue.catch(() => {}).then(async () => {
+    const task = saveQueue.catch(() => {}).then(async (): Promise<boolean> => {
       const state = get();
       const context = getProjectContext();
-      if (!state.initialized || !state.activeProject || !context) return;
+      if (!state.initialized || !state.activeProject || !context) return false;
       const snapshot = captureProjectSnapshot();
       const fingerprint = JSON.stringify(snapshot);
-      if (fingerprint === lastSaved) return;
+      // Nothing to send, e.g. an edit undone before autosave fired. Mark it
+      // clean too, or the re-flush below would keep finding it dirty forever.
+      if (fingerprint === lastSaved) {
+        if (state.dirty) set({ dirty: false, saveStatus: 'saved' });
+        return false;
+      }
       set({ saveStatus: 'saving' });
       try {
         const saved = await api.saveProject(context.id, snapshot, context.revision);
-        if (getProjectContext()?.revision !== context.revision) return;
+        if (getProjectContext()?.revision !== context.revision) return false;
         lastSaved = fingerprint;
         updateSummary(saved);
         const dirty = JSON.stringify(captureProjectSnapshot()) !== lastSaved;
         set({ dirty, saveStatus: dirty ? 'unsaved' : 'saved' });
         if (dirty) markDirty();
+        return true;
       } catch (error) {
         set({ dirty: true, saveStatus: 'error' });
         showError(error);
@@ -520,9 +526,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }
     });
     saveQueue = task;
-    await task;
     // An edit that landed during the request also belongs to the outgoing project.
-    if (get().dirty && get().saveStatus !== 'error') await get().flush();
+    // Only a save that landed can make progress; any other exit re-flushing
+    // while dirty would spin forever.
+    if (await task && get().dirty && get().saveStatus !== 'error') await get().flush();
   },
   retry: async () => {
     set({ error: null });
