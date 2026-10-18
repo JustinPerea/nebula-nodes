@@ -6,7 +6,7 @@ from typing import Any
 # The readiness rule lives with the backend so the CLI and MCP server agree.
 from services.node_readiness import detail, krea_modes, node_access, provider_via  # noqa: F401 (node_access is re-exported)
 from services.maker_sizes import rule_note
-from services.node_route import all_param_definitions, route_param_definitions
+from services.node_route import all_param_definitions, route_hides, route_param_definitions
 
 
 def format_node_table(nodes: list[dict[str, Any]]) -> str:
@@ -90,6 +90,10 @@ def format_node_detail(node: dict[str, Any]) -> str:
             takes = _route_takes(node, route)
             if takes:
                 lines.append(f"  {'':<16}takes {takes}")
+            # What this provider doesn't offer, one line: "no Seed".
+            hides = route_hides(node, str(route.get("id")))
+            if hides:
+                lines.append(f"  {'':<16}{'; '.join(hides)}")
         lines.append("  Changing _provider is the person's call: `nebula propose` it; direct edits are refused.")
     lines.append("")
 

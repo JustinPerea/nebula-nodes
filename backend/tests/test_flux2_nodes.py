@@ -82,14 +82,18 @@ RUNS = [
     ("fal", "klein-4b", {"enable_safety_checker": False}, "https://queue.fal.run/fal-ai/flux-2/klein/4b",
      "fal-ai/flux-2/klein/4b",
      {**{k: v for k, v in DEFAULT_FAL.items() if k != "safety_tolerance"}, "enable_safety_checker": False}),
-    # The cheapest fal run ($0.005 or less). Flash keeps the safety_tolerance
-    # the fal-only handler always sent it (see FLASH_LEGACY_FIELDS).
-    ("fal", "flash", {}, "https://queue.fal.run/fal-ai/flux-2/flash", "fal-ai/flux-2/flash", DEFAULT_FAL),
+    # The cheapest fal run ($0.005 or less). Flash has no safety_tolerance
+    # (Flux2FlashInput), so the route hides Safety there and doesn't send it
+    # (PR 5, D3).
+    ("fal", "flash", {}, "https://queue.fal.run/fal-ai/flux-2/flash", "fal-ai/flux-2/flash",
+     {k: v for k, v in DEFAULT_FAL.items() if k != "safety_tolerance"}),
 ]
-# Sent to fal-ai/flux-2/flash though its schema (Flux2FlashInput) has no such
-# field: the fal-only handler before PR 4 sent it on every Flash run, and the
-# fal route keeps saved graphs' requests exactly as they were.
-FLASH_LEGACY_FIELDS = {"safety_tolerance"}
+# The one approved change to what the fal route sends against the fal-only
+# handler's capture (fixtures/flux2_legacy_fal_requests.json, unchanged):
+# Flash no longer gets safety_tolerance, a field its schema doesn't have.
+# Justin, 2026-10-16, on the hide-params design: "Yes to all 4" (D3: drop
+# Flash's safety_tolerance). Exact: {endpoint: fields}.
+APPROVED_LEGACY_DELTA = {"https://queue.fal.run/fal-ai/flux-2/flash": {"safety_tolerance"}}
 
 
 @pytest.mark.asyncio
@@ -102,8 +106,7 @@ async def test_each_route_and_model_sends_a_body_its_provider_takes(monkeypatch,
     out = await registry_handler("flux-2-pro")(node("flux-2-pro", **saved), ports(prompt=P), dict(KEYS))
     sent = hosts.json("POST", re.escape(url))
     assert sent == body
-    checked = {k: v for k, v in sent.items() if not (schema == "fal-ai/flux-2/flash" and k in FLASH_LEGACY_FIELDS)}
-    validate(SCHEMAS[route_id][schema], checked)
+    validate(SCHEMAS[route_id][schema], sent)
     assert out["image"]["type"] == "Image"
     assert len([r for r in hosts.requests if r.method == "POST"]) == 1
 
@@ -158,7 +161,10 @@ async def test_a_saved_node_keeps_running_on_fal_until_a_bfl_key_is_added(monkey
 @pytest.mark.asyncio
 @pytest.mark.parametrize("saved, why", [
     ({"model": "flash"}, "it doesn't take model flash"),
-    ({"enable_safety_checker": False}, "it doesn't take enable_safety_checker false"),
+    # BFL has no safety-checker switch; fal offers one, so a saved "off" stops
+    # with a reset (rule H, PR 5) instead of BFL's old rejects rule.
+    ({"enable_safety_checker": False},
+     "it doesn't offer Safety Checker off. Turn Safety Checker on, or switch provider."),
 ])
 async def test_a_saved_value_bfl_cant_take_stops_before_any_request_and_offers_fal(monkeypatch, saved, why):
     """Auto with both keys lands on BFL; a saved value it can't take stops the
@@ -175,13 +181,16 @@ async def test_a_saved_value_bfl_cant_take_stops_before_any_request_and_offers_f
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("saved, why", [
-    ({"model": "klein-4b", "safety_tolerance": "4"}, "a safety tolerance other than 2 on Klein"),
-    ({"model": "flex", "num_inference_steps": 1}, "num_inference_steps 1"),
+    # fal's Klein endpoints have no safety_tolerance: Safety is hidden there,
+    # and a saved non-default value BFL would honor stops with a reset (rule H).
+    ({"model": "klein-4b", "safety_tolerance": "4"},
+     "it doesn't offer Safety 4 with Model FLUX.2 [klein] 4B. Set Safety back to 2, or switch provider."),
+    ({"model": "flex", "num_inference_steps": 1}, "it doesn't take num_inference_steps 1"),
 ])
 async def test_fal_stops_what_its_endpoint_cant_take(monkeypatch, saved, why):
     hosts = FakeHosts(monkeypatch, [])
     params = {**defaults(DEFINITION), **saved, "_provider": "fal"}
-    with pytest.raises(MissingCredentialError, match=re.escape(f"can't run on fal.ai: it doesn't take {why}")):
+    with pytest.raises(MissingCredentialError, match=re.escape(f"can't run on fal.ai: {why}")):
         await registry_handler("flux-2-pro")(node("flux-2-pro", **params), ports(prompt=P), dict(KEYS))
     assert hosts.requests == []
 
@@ -230,7 +239,8 @@ STALE_FLEX = {"num_inference_steps": 30, "guidance_scale": 4.5}
     ("bfl", "max", "https://api.bfl.ai/v1/flux-2-max", DEFAULT_BFL),
     ("bfl", "klein-4b", "https://api.bfl.ai/v1/flux-2-klein-4b", DEFAULT_BFL),
     ("fal", "pro", "https://queue.fal.run/fal-ai/flux-2-pro", DEFAULT_FAL),
-    ("fal", "flash", "https://queue.fal.run/fal-ai/flux-2/flash", DEFAULT_FAL),
+    ("fal", "flash", "https://queue.fal.run/fal-ai/flux-2/flash",
+     {k: v for k, v in DEFAULT_FAL.items() if k != "safety_tolerance"}),
     ("fal", "klein-9b", "https://queue.fal.run/fal-ai/flux-2/klein/9b",
      {k: v for k, v in DEFAULT_FAL.items() if k != "safety_tolerance"}),
 ])
@@ -284,10 +294,22 @@ async def test_the_fal_route_sends_exactly_what_the_fal_only_handler_sent_for_ev
     handler = get_handler_registry(emit=AsyncMock())["flux-2-pro"]
     rows = [await _fal_request(handler, params) for params in _legacy_space()]
     assert len(rows) == LEGACY["count"]
-    by_params = {json.dumps(row["params"], sort_keys=True): row for row in rows}
+    # The approved delta, exactly: those fields are never sent there now, and
+    # put back as the old handler sent them (the saved value, when set), every
+    # row matches the capture byte for byte.
+    restored = []
+    for row in rows:
+        dropped = APPROVED_LEGACY_DELTA.get(row["url"], set())
+        assert not dropped & set(row["body"]), row
+        body = dict(row["body"])
+        for key in dropped:
+            if row["params"].get(key) is not None:
+                body[key] = row["params"][key]
+        restored.append({**row, "body": body})
+    by_params = {json.dumps(row["params"], sort_keys=True): row for row in restored}
     for case in LEGACY["cases"]:
         assert by_params[json.dumps(case["params"], sort_keys=True)] == case
-    text = json.dumps(rows, sort_keys=True, separators=(",", ":"))
+    text = json.dumps(restored, sort_keys=True, separators=(",", ":"))
     assert hashlib.sha256(text.encode()).hexdigest() == LEGACY["sha256"]
 
 

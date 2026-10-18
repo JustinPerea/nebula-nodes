@@ -335,20 +335,27 @@ def test_fal_whole_endpoint_shapes_dont_leak_to_a_shared_last_segment():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("endpoint, wired, sent", [
-    ("blackforestlabs/flux-3/text-to-video/draft", {}, {"duration": 5, "aspect_ratio": "16:9", "generate_audio": True}),
-    ("blackforestlabs/flux-3/image-to-video", {"start_image": "https://e.com/s.png"},
+@pytest.mark.parametrize("saved, wired, endpoint, sent", [
+    # A draft hides Resolution (paramVisibleWhen {draft: [false]}): a draft
+    # saved at Full HD runs as fal's 720p draft, and no resolution is sent.
+    ({"draft": True, "resolution": "fhd"}, {}, "blackforestlabs/flux-3/text-to-video/draft",
+     {"duration": 5, "aspect_ratio": "16:9", "generate_audio": True}),
+    ({"draft": False, "resolution": "hd"}, {"start_image": "https://e.com/s.png"},
+     "blackforestlabs/flux-3/image-to-video",
      {"duration": 5, "aspect_ratio": "16:9", "generate_audio": True, "resolution": "720p",
       "image_url": "https://e.com/s.png"}),
 ])
-async def test_fal_never_sends_draft_and_drops_resolution_on_a_draft_endpoint(monkeypatch, endpoint, wired, sent):
-    """draft only picks fal's /draft endpoint (endpointWhen); no FLUX 3 video
-    schema has it, and the /draft schemas have no resolution."""
+async def test_fal_never_sends_draft_and_a_draft_sends_no_resolution(monkeypatch, saved, wired, endpoint, sent):
+    """draft only picks fal's /draft endpoint (endpointWhen) and no FLUX 3
+    video schema has it (FAL_ENDPOINT_SWITCHES); the /draft schemas have no
+    resolution, so the route hides it under Draft and the router never sends
+    it (node_route.route_sent_keys)."""
+    from tests.test_flux3_nodes import defaults
+
     hosts = fal_hosts(monkeypatch, {"video": {"url": "https://fal.media/x.mp4"}})
-    draft = endpoint.endswith("/draft")
-    await run("fal", "clients-video", "fal", {"draft": draft, "resolution": "720p", "duration": 5,
-                                              "aspect_ratio": "16:9", "generate_audio": True},
-              ports(prompt="p", **wired), endpoint=endpoint)
+    definition = definition_of("flux-3-video")
+    params = {**defaults(definition), **saved, "_provider": "fal"}
+    await registry_handler("flux-3-video")(node("flux-3-video", **params), ports(prompt="p", **wired), dict(KEYS))
     body = hosts.json("POST", FAL + re.escape(endpoint))
     assert body == {"prompt": "p", **sent}
     validate(SCHEMAS["fal"][endpoint], body)
@@ -806,7 +813,50 @@ def switch_node(case: dict[str, Any]) -> GraphNode:
                 if "default" in p}
     defaults.update({p["key"]: p["default"] for r in definition["routes"] for p in r.get("params") or []
                      if "default" in p})
-    return node(case["definition"], **{**defaults, **case["saved"], **case["writes"]})
+    return node(case["definition"], **saved_after(case, {**defaults, **case["saved"]}))
+
+
+def saved_after(case: dict[str, Any], before: dict[str, Any]) -> dict[str, Any]:
+    """``before`` with the click's ``writes`` applied (null clears a param)."""
+    after = {**before, **case["writes"]}
+    return {key: value for key, value in after.items() if value is not None}
+
+
+@pytest.mark.parametrize("case", SWITCH_CASES, ids=[c["name"] for c in SWITCH_CASES])
+def test_switch_cases_snap_like_the_switcher(case):
+    """The Python twin of the switcher's click (node_route.snap_for_route,
+    snap_hidden; frontend lib/providerSwitch.ts): each click writes exactly
+    the case's ``writes``, with its notes."""
+    from services import node_route
+
+    definition = definition_of(case["definition"])
+    defaults = {p["key"]: p["default"] for p in node_route.all_param_definitions(definition) if "default" in p}
+    before = {**defaults, **case["saved"]}
+    keys = {key: KEYS[key] for key in case["keys"]}
+    click = case["click"]
+    billing = {k: v for k, v in case["writes"].items() if k in node_route.BILLING_PARAMS}
+    if click is None:
+        params, notes = before, []
+    elif click.startswith("edit:"):
+        key, value = click[len("edit:"):].split("=", 1)
+        edited = {**before, key: json.loads(value)}
+        routed = node_route.with_wired_blockers(definition, edited, {port: 1 for port in case["wired"]})
+        params, notes = node_route.snap_hidden(definition, edited, node_route.shown_route_id(definition, routed, keys), key)
+    elif click.startswith("fix:"):
+        routed = node_route.with_wired_blockers(definition, before, {port: 1 for port in case["wired"]})
+        fixes = (node_route.route_unavailable(definition, routed, keys) or {}).get("fixes") or []
+        fix = next(f for f in fixes if f["param"] == click[len("fix:"):])
+        params = {**before, fix["param"]: fix["value"]}
+        notes = []
+    else:
+        picked = {**before, **billing}
+        target = click.removeprefix("alternative:").removesuffix(":plan")
+        if target == node_route.AUTO:
+            routed = node_route.with_wired_blockers(definition, picked, {port: 1 for port in case["wired"]})
+            target = node_route.select_route(definition, routed, keys).route_id
+        params, notes = node_route.snap_for_route(definition, picked, target)
+    assert {k: v for k, v in params.items() if v is not None} == saved_after(case, before)
+    assert notes == case["switcher"]["notes"]
 
 
 @pytest.mark.parametrize("case", SWITCH_CASES, ids=[c["name"] for c in SWITCH_CASES])

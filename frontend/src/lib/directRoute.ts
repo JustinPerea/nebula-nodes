@@ -88,13 +88,20 @@ export const DIRECT_RETIRES: Readonly<Record<string, DirectRetirement>> = {
  * (DIRECT_RETIRES). */
 export interface DirectBlock {
   /** Route-table nodes add `ports` (more inputs wired than a route takes,
-   * rules.ports) and `unknown-provider` (`_provider` names no route). */
-  reason: 'requires' | 'blocked' | 'unsupported' | 'size' | 'retired' | 'ports' | 'unknown-provider';
+   * rules.ports), `unknown-provider` (`_provider` names no route) and
+   * `hidden` (a saved value of a setting this route doesn't show, that
+   * another route honors: rule H, hiddenBlock). */
+  reason: 'requires' | 'blocked' | 'unsupported' | 'size' | 'retired' | 'ports' | 'unknown-provider' | 'hidden';
   param: string | null;
+  /** `retired`: the shutdown date. `hidden`: the route that would honor the value. */
   on: string | null;
   /** `unsupported`: what the maker doesn't take, the param and its value
-   * ("resolution 4K") or a rejectsWhen rule's label. */
+   * ("resolution 4K") or a rejectsWhen rule's label. `hidden`: the setting
+   * and its value as the card shows them ("Safety 5"). */
   detail?: string;
+  /** `hidden`: the settings that hide it on this route, as the card shows
+   * them ("Model FLUX.2 [klein] 9B"); absent when the route never offers it. */
+  when?: string;
 }
 
 export type RouteKind = 'local' | 'plan' | 'only' | 'direct' | 'fallback' | 'unset';
@@ -495,10 +502,196 @@ export function routeAcceptRule(route: RouteSpec, key: string): DirectAcceptRule
 }
 
 /** Why `route` can't take a run with these params, or null when it can
- * (node_route.route_block). */
+ * (node_route.route_block): its rules, then on a route-table node rule H
+ * (hiddenBlock), so a rule's own reason always wins. */
 export function routeBlock(definition: RoutedDefinition, route: RouteSpec | undefined, params: Record<string, unknown>): DirectBlock | null {
   if (!route) return null;
-  return rulesBlock(definition, params, routeRules(route));
+  if (!hasRoutes(definition) || route.id === undefined) return rulesBlock(definition, params, routeRules(route));
+  return shownRulesBlock(definition, route, params) ?? hiddenBlock(definition, route, params);
+}
+
+/** A route-table route's rules over the values it would send: a setting in
+ * its list that it hides with these values is read at its default, since it
+ * is never sent (node_route._shown_rules_block). */
+function shownRulesBlock(definition: RoutedDefinition, route: RouteSpec, params: Record<string, unknown>): DirectBlock | null {
+  const full = definition as ModelNodeDefinition;
+  const sent = routeSentKeys(full, route.id, params);
+  const hidden = routeParamDefinitions(full, route.id).map((param) => param.key).filter((key) => !sent.has(key));
+  const shown = hidden.length ? Object.fromEntries(Object.entries(params).filter(([key]) => !hidden.includes(key))) : params;
+  return rulesBlock(definition, shown, routeRules(route));
+}
+
+type VisibleWhen = Record<string, (string | number | boolean)[]>;
+
+/** A route's `paramVisibleWhen` (empty when it has none). */
+export function routeVisibleWhen(route: RouteSpec | undefined): NonNullable<RouteSpec['paramVisibleWhen']> {
+  return route?.paramVisibleWhen && typeof route.paramVisibleWhen === 'object' ? route.paramVisibleWhen : {};
+}
+
+/** A param's `visibleWhen` ANDed with a route's condition for it: the
+ * controllers unioned, and where both name one, the values both allow (in
+ * the param's order) (node_route.merge_visible_when). */
+export function mergeVisibleWhen(own: VisibleWhen | undefined, route: VisibleWhen | undefined): VisibleWhen {
+  const merged: VisibleWhen = Object.fromEntries(Object.entries(own ?? {}).map(([key, values]) => [key, [...values]]));
+  for (const [key, values] of Object.entries(route ?? {})) {
+    if (Object.hasOwn(merged, key)) {
+      const allowed = new Set(values.map(matchValue));
+      merged[key] = merged[key].filter((value) => allowed.has(matchValue(value)));
+    } else {
+      merged[key] = [...values];
+    }
+  }
+  return merged;
+}
+
+/** Whether a `visibleWhen` holds for these values (saved over defaults,
+ * effectiveValues). A controller with no value passes, and on a route-table
+ * node (`routeKeys` given) so does a controller that only another route
+ * takes: it counts as absent whatever is still saved for it. Values compare
+ * by matchValue (node_route.visible_when_holds). */
+export function visibleWhenHolds(
+  visibleWhen: VisibleWhen | undefined, values: Record<string, unknown>, routeKeys?: Iterable<string>,
+): boolean {
+  if (!visibleWhen) return true;
+  const listed = routeKeys ? new Set(routeKeys) : null;
+  return Object.entries(visibleWhen).every(([key, allowed]) => {
+    if (listed && !listed.has(key)) return true;
+    const value = values[key];
+    if (value === undefined || value === null) return true;
+    return allowed.map(matchValue).includes(matchValue(value));
+  });
+}
+
+/** Whether a param is shown (and so sent) for these values: its
+ * `visibleWhen` (on a route-table node, merged with the route's
+ * `paramVisibleWhen` by routeParamDefinitions) holds. The one predicate the
+ * Inspector, Create's pills, routeSentKeys and rule H read
+ * (node_route.param_shown). `hidden` (editor-managed) params are separate:
+ * they are sent, never edited. */
+export function paramShown(param: Pick<ParamDefinition, 'visibleWhen'>, values: Record<string, unknown>, routeKeys?: Iterable<string>): boolean {
+  return visibleWhenHolds(param.visibleWhen, values, routeKeys);
+}
+
+/** The values a node's controls are shown against: on a route-table node,
+ * effectiveValues (saved over every default); on any other node, the saved
+ * values over the defaults of the params `shown` lists, as the Inspector
+ * always read them. */
+export function shownValues(definition: RoutedDefinition, params: Record<string, unknown> | undefined, shown: readonly ParamDefinition[]): Record<string, unknown> {
+  if (hasRoutes(definition)) return effectiveValues(definition, params);
+  const values: Record<string, unknown> = Object.fromEntries(shown.filter((param) => param.default !== undefined)
+    .map((param) => [param.key, param.default]));
+  for (const [key, value] of Object.entries(params ?? {})) if (value !== undefined && value !== null) values[key] = value;
+  return values;
+}
+
+/** The controls a node shows for these values, out of `shown` (its route's
+ * list, paramDefinitionsForRun): not editor-managed (`hidden`), and
+ * paramShown with shownValues; on a route-table node a controller only
+ * another route takes counts as absent. The Inspector and Create's pills
+ * both read this, so they can't disagree. */
+export function visibleParams(definition: RoutedDefinition, params: Record<string, unknown> | undefined, shown: readonly ParamDefinition[]): ParamDefinition[] {
+  const values = shownValues(definition, params, shown);
+  const routeKeys = hasRoutes(definition) ? shown.map((param) => param.key) : undefined;
+  return shown.filter((param) => !param.hidden && paramShown(param, values, routeKeys));
+}
+
+/** `params` with every unset param (undefined, null, "" or blank) at its
+ * default, as a run reads them. Other keys (wired markers) are kept
+ * (node_route.effective_values). */
+export function effectiveValues(definition: RoutedDefinition, params: Record<string, unknown> | undefined): Record<string, unknown> {
+  const values: Record<string, unknown> = { ...(params ?? {}) };
+  for (const param of allParamDefinitions(definition)) {
+    if (!hasValue(values[param.key]) && param.default !== undefined && param.default !== null) values[param.key] = param.default;
+  }
+  return values;
+}
+
+/** The params a run on `route` sends with these values: the route's list
+ * less each one paramShown hides (its own `visibleWhen`, or the route's
+ * `paramVisibleWhen`); nodes without `routes` send their route's list
+ * unchanged (node_route.route_sent_keys). */
+export function routeSentKeys(definition: ModelNodeDefinition, route: RouteKind | string | null | undefined, params: Record<string, unknown> | undefined): Set<string> {
+  const offered = routeParamDefinitions(definition, route);
+  if (!hasRoutes(definition)) return new Set(offered.map((param) => param.key));
+  const listed = offered.map((param) => param.key);
+  const values = effectiveValues(definition, params);
+  return new Set(offered.filter((param) => paramShown(param, values, listed)).map((param) => param.key));
+}
+
+function optionLabelOf(param: ParamDefinition | undefined, value: unknown): string {
+  const option = param?.options?.find((candidate) => matchValue(candidate.value) === matchValue(value));
+  return option?.label ?? matchValue(value);
+}
+
+/** A setting and its value as the card shows them: "Safety 5", "Seed 42",
+ * "Grounding off", "Draft (fast preview)" (a switch that is on), or just the
+ * label for text (node_route._setting_text). */
+export function settingText(param: ParamDefinition | undefined, key: string, value: unknown): string {
+  const label = param?.label || key;
+  if (Array.isArray(param?.options) && param.options.length) return `${label} ${optionLabelOf(param, value)}`;
+  if (typeof value === 'boolean') return value ? label : `${label} off`;
+  if (typeof value === 'number') return `${label} ${matchValue(value)}`;
+  return label;
+}
+
+/** One saved value rule H stops a route on: the param, the route that would
+ * honor it, and the controllers that hide it here (node_route.HiddenStop). */
+export interface HiddenStop { param: string; honoredBy: string; controllers: string[] }
+
+/** Every saved value rule H stops `route` on (node_route.hidden_stops): a
+ * param the route doesn't show with these values whose saved value is set
+ * and isn't its default, that some other route shows with these values,
+ * takes on its own (routeTakesValue), whose rules don't block these values
+ * (keys don't matter), and which wouldn't itself stop, one level down, on
+ * one of the settings that hide this param on `route` (OpenRouter would stop
+ * on the Draft that hides Resolution on fal). Any other stop of that route
+ * doesn't count: then both routes stop, each with its own reset. Any other
+ * hidden value is ignored. */
+export function hiddenStops(definition: RoutedDefinition, route: RouteSpec, params: Record<string, unknown>, depth = 0): HiddenStop[] {
+  if (!hasRoutes(definition)) return [];
+  const full = definition as ModelNodeDefinition;
+  const sent = routeSentKeys(full, route.id, params);
+  const others = routesOf(definition).filter((spec) => spec.id !== route.id);
+  const offered = new Map(routeParamDefinitions(full, route.id).map((param) => [param.key, param]));
+  const effective = effectiveValues(definition, params);
+  const stops: HiddenStop[] = [];
+  for (const param of allParamDefinitions(definition)) {
+    if (BILLING_PARAMS.includes(param.key) || sent.has(param.key)) continue;
+    const value = params[param.key];
+    if (!hasValue(value) || value === WIRED) continue;
+    if (param.default !== undefined && param.default !== null && matchValue(value) === matchValue(param.default)) continue;
+    const condition = offered.get(param.key)?.visibleWhen ?? {};
+    const controllers = Object.keys(condition).filter((ctrl) => offered.has(ctrl)
+      && !visibleWhenHolds({ [ctrl]: condition[ctrl] }, effective));
+    const honored = others.find((spec) => routeSentKeys(full, spec.id, params).has(param.key)
+      && routeTakesValue(spec, param.key, value) && shownRulesBlock(definition, spec, params) === null
+      && (depth > 0 || !hiddenStops(definition, spec, params, depth + 1)
+        .some((stop) => controllers.includes(stop.param))));
+    if (!honored) continue;
+    stops.push({ param: param.key, honoredBy: honored.id, controllers });
+  }
+  return stops;
+}
+
+/** The first of hiddenStops as a `hidden` block (node_route.hidden_block). */
+export function hiddenBlock(definition: RoutedDefinition, route: RouteSpec, params: Record<string, unknown>): DirectBlock | null {
+  const stop = hiddenStops(definition, route, params)[0];
+  if (!stop) return null;
+  const effective = effectiveValues(definition, params);
+  const defs = new Map(allParamDefinitions(definition).map((param) => [param.key, param]));
+  const when = stop.controllers.map((ctrl) => settingText(defs.get(ctrl), ctrl, effective[ctrl])).join(' and ');
+  const block: DirectBlock = { reason: 'hidden', param: stop.param, on: stop.honoredBy,
+    detail: settingText(defs.get(stop.param), stop.param, params[stop.param]) };
+  if (when) block.when = when;
+  return block;
+}
+
+/** The one-click fix for a `hidden` stop: the param back to its default
+ * (`value` null: cleared when it has none) (node_route.hidden_fix). */
+export interface RouteFix { param: string; value: unknown }
+export function hiddenFix(definition: RoutedDefinition, param: string): RouteFix {
+  const def = allParamDefinitions(definition).find((candidate) => candidate.key === param);
+  return { param, value: def?.default ?? null };
 }
 
 export function directAllowed(definition: RoutedDefinition, params: Record<string, unknown>): boolean {
@@ -634,6 +827,7 @@ function orList(items: string[]): string {
 }
 
 function why(route: RouteSpec, block: DirectBlock): string {
+  if (block.reason === 'hidden') return `it doesn't offer ${block.detail}${block.when ? ` with ${block.when}` : ''}`;
   if (block.reason === 'unsupported') return `it doesn't take ${block.detail}`;
   if (block.reason === 'blocked') return `it doesn't take ${block.param}`;
   if (block.reason === 'requires') return `it needs ${block.param} set`;
@@ -653,13 +847,28 @@ function acceptedValues(route: RouteSpec, block: DirectBlock): string[] {
   return (rule?.values ?? []).map(matchValue);
 }
 
+/** How a `hidden` stop is fixed without a switch: the setting back to its
+ * default, or cleared when it has none (node_route._hidden_fix_sentence). */
+function hiddenFixSentence(definition: ModelNodeDefinition, param: string): string {
+  const spec = allParamDefinitions(definition).find((candidate) => candidate.key === param);
+  const label = spec?.label || param;
+  const fallback = spec?.default;
+  if (fallback === undefined || fallback === null) return `Clear ${label}, or switch provider.`;
+  if (typeof fallback === 'boolean') return `Turn ${label} ${fallback ? 'on' : 'off'}, or switch provider.`;
+  return `Set ${label} back to ${optionLabelOf(spec, fallback)}, or switch provider.`;
+}
+
 /** Why a route-table run can't start, in the words the router, the engine's
- * preflight and the switcher use (node_route.route_unavailable_message). */
-export function routeUnavailableMessage(definition: ModelNodeDefinition, route: NodeRoute, alternatives: string[] = []): string {
+ * preflight and the switcher use (node_route.route_unavailable_message).
+ * `keyless` are routes that would take the run but have no key set: a
+ * `hidden` stop with no alternative names them. */
+export function routeUnavailableMessage(definition: ModelNodeDefinition, route: NodeRoute, alternatives: string[] = [], keyless: string[] = []): string {
   const name = definition.displayName || definition.id || 'This node';
   const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
   const others = alternatives.map((alt) => providerLabel(routeById(definition, alt)?.provider));
-  const also = others.length ? ` ${orList(others)} can take it.` : '';
+  const keylessLabels = keyless.map((alt) => providerLabel(routeById(definition, alt)?.provider));
+  const also = others.length ? ` ${orList(others)} can take it.`
+    : keylessLabels.length ? ` ${orList(keylessLabels)} can take it (add its key in Settings > Providers).` : '';
   const block = route.block;
   if (block?.reason === 'unknown-provider') {
     const ids = [AUTO, ...routesOf(definition).map((candidate) => candidate.id)];
@@ -667,7 +876,8 @@ export function routeUnavailableMessage(definition: ModelNodeDefinition, route: 
   }
   if (block && spec) {
     const values = acceptedValues(spec, block);
-    const fix = values.length ? `Pick ${orList(values)}, or switch provider.`
+    const fix = block.reason === 'hidden' ? hiddenFixSentence(definition, block.param ?? '')
+      : values.length ? `Pick ${orList(values)}, or switch provider.`
       : block.reason === 'ports' ? 'Disconnect the extra inputs, or switch provider.'
         : 'Change that setting, or switch provider.';
     return `${name} can't run on ${providerLabel(spec.provider)}: ${why(spec, block)}. ${fix}${also}`;
@@ -687,6 +897,9 @@ export interface RouteUnavailable {
   /** The other routes with a key set that can take the run: the one-click
    * switches. Auto never takes one by itself. */
   alternatives: string[];
+  /** One-click param edits that let it run where it is (`value` null:
+   * clear): a `hidden` stop's setting back to its default, else none. */
+  fixes: RouteFix[];
   message: string;
 }
 
@@ -712,12 +925,18 @@ export function routeUnavailable(
     .filter((candidate) => candidate.id !== route.routeId && candidate.plan !== 'only'
       && setKeys(candidate, apiKeys).length > 0 && routeBlock(definition, candidate, values) === null)
     .map((candidate) => candidate.id);
+  const hidden = route.block?.reason === 'hidden';
+  const honoredBy = hidden ? route.block?.on : null;
+  const honoredSpec = honoredBy ? routeById(definition, honoredBy) : undefined;
+  const keyless = hidden && !alternatives.length && honoredBy && honoredSpec && !setKeys(honoredSpec, apiKeys).length
+    ? [honoredBy] : [];
   return {
     routeId: route.routeId ?? null,
     missing: route.missing ?? [],
     block: blockFields(route.block),
     alternatives,
-    message: routeUnavailableMessage(definition, route, alternatives),
+    fixes: hidden ? [hiddenFix(definition, route.block?.param ?? '')] : [],
+    message: routeUnavailableMessage(definition, route, alternatives, keyless),
   };
 }
 
@@ -752,15 +971,23 @@ function narrowed(param: ParamDefinition, rules: RouteRules): ParamDefinition {
  * sharedParams plus that route's params, each as the route offers it (an
  * enum cut to the values it takes, a number range narrowed to its own;
  * node_route.route_param_definitions), so a provider switch changes what
- * can be picked. `_provider` and `_kreaAuth` are the switcher's, never in
+ * can be picked. A param the route's `paramVisibleWhen` marks `false` is
+ * left out, and a condition there is merged into the param's own
+ * `visibleWhen` (mergeVisibleWhen), so every reader hides it the same way
+ * (paramShown). `_provider` and `_kreaAuth` are the switcher's, never in
  * this list (node_route.route_param_keys). */
 export function routeParamDefinitions(definition: ModelNodeDefinition, route: RouteKind | string | null | undefined): ParamDefinition[] {
   if (hasRoutes(definition)) {
     const spec = routeById(definition, route);
     const rules = spec ? routeRules(spec) : {};
+    const conditions = routeVisibleWhen(spec);
     const byKey = new Map<string, ParamDefinition>();
     for (const param of [...(definition.sharedParams ?? []), ...(spec?.params ?? [])]) {
-      if (param?.key) byKey.set(param.key, narrowed(param, rules));
+      if (!param?.key) continue;
+      const condition = Object.hasOwn(conditions, param.key) ? conditions[param.key] : undefined;
+      if (condition === false) continue;
+      const offered = narrowed(param, rules);
+      byKey.set(param.key, condition ? { ...offered, visibleWhen: mergeVisibleWhen(offered.visibleWhen, condition) } : offered);
     }
     return [...byKey.values()];
   }

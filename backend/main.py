@@ -3519,9 +3519,14 @@ PROVIDER_CHOICE_NOTE = (
     "Runs on one provider route: _provider names it (a route id), or auto takes the first route "
     "whose key is set, in this order. A run never moves to another route by itself: when the "
     "chosen route can't take a setting, or its key isn't set, the run stops and says which "
-    "routes could. Each route's params list the values that provider takes; set values the "
-    "route you run on takes. Which route runs decides whose key pays, so it's the person's "
-    "call: propose a _provider change with propose_change; direct edits of _provider are refused."
+    "routes could. Each route's params list what that provider offers, as the card shows it "
+    "there: a setting it doesn't offer is absent (`hides` names it) or has `onlyWhen`. That "
+    "route never receives it, and a saved non-default value of it stops the run when another "
+    "route would use it. The fix that lets it run where it is comes as `fixes` ([{param, value}], "
+    "null = clear: ordinary param edits) on a propose_change cost entry; a run error or the estimate "
+    "says the same fix in its message. Which route runs decides whose key pays, so it's the "
+    "person's call: propose a _provider change with propose_change; direct edits of _provider "
+    "are refused."
 )
 
 
@@ -3533,7 +3538,15 @@ def _describe_routes(
     routes): the provider choice at defaults, which route Auto resolves to
     here, and each route with its keys, the params it takes as it offers
     them (node_route.route_param_definitions), any block at the defaults and
-    its list price."""
+    its list price.
+
+    A route's ``params`` are exactly what the card shows on that provider:
+    a setting it never offers (its ``paramVisibleWhen`` false) is absent,
+    and one it offers only under some values carries them as ``onlyWhen``,
+    merged with the param's own condition. ``hides`` says the same in the
+    card's words (node_route.route_hides). docs/MODEL_REFERENCE.md's
+    per-provider tables and directRoute.ts routeParamDefinitions list the
+    same (tests/test_route_agent_surfaces.py checks all three agree)."""
     route = node_route.select_route(definition, {}, api_keys)
     try:
         pricing = model_pricing.load_pricing()
@@ -3567,6 +3580,10 @@ def _describe_routes(
             row["plan"] = spec["plan"]
         if spec.get("note"):
             row["note"] = spec["note"]
+        hides = node_route.route_hides(definition, str(spec["id"]))
+        if hides:
+            # What this provider doesn't offer, in the card's words ("no Seed").
+            row["hides"] = hides
         rows.append(row)
     return {
         "providerChoice": {
@@ -3581,7 +3598,9 @@ def _describe_routes(
 def _brief_param(param: dict[str, Any]) -> dict[str, Any]:
     brief: dict[str, Any] = {"key": param["key"], "type": param.get("type")}
     for field in ("default", "min", "max", "required"):
-        if param.get(field) not in (None, False):
+        # `is False`, not `in (None, False)`: 0 == False, and a 0 minimum or
+        # default is real (Safety 0-4 would otherwise read as "up to 4").
+        if param.get(field) is not None and param.get(field) is not False:
             brief[field] = param[field]
     option_rows = [option for option in param.get("options") or [] if isinstance(option, dict)]
     options = [option.get("value") for option in option_rows]

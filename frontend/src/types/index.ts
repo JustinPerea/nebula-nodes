@@ -243,6 +243,13 @@ export interface RouteSpec {
    *  list is one this route doesn't take. */
   valueMap?: Record<string, Record<string, unknown>>;
   rules?: RouteRules;
+  /** Which settings this route offers, by param key: `false` (never; the
+   *  param leaves the route's list) or `{controller: [values]}` (only while
+   *  every controller holds one of them), ANDed with the param's own
+   *  `visibleWhen` (routeParamDefinitions merges them). A hidden setting is
+   *  never sent; a saved non-default value of it stops the run only when
+   *  another route would honor it (rule H, docs/PROVIDER-ROUTES.md). */
+  paramVisibleWhen?: Record<string, false | Record<string, (string | number | boolean)[]>>;
   /** Its key under model_pricing.json `routes` (default: id). */
   pricing?: string;
   /** Readiness copy for this route. */

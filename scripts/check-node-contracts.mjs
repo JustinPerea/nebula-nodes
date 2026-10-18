@@ -11,8 +11,13 @@ const ENV_EXAMPLE_PATH = join(REPO_ROOT, '.env.example');
 const SETTINGS_EXAMPLE_PATH = join(REPO_ROOT, 'settings.example.json');
 // Inline route-table nodes (route_cases.json) and the key -> provider table
 // (route_tables.json, generated from backend services/node_route.py).
-const ROUTE_CASES_PATH = join(REPO_ROOT, 'backend', 'tests', 'fixtures', 'route_cases.json');
+// NEBULA_CONTRACTS_ROUTE_CASES_PATH: another copy of the fixture nodes (tests
+// check a broken copy with it).
+const ROUTE_CASES_PATH = process.env.NEBULA_CONTRACTS_ROUTE_CASES_PATH || join(REPO_ROOT, 'backend', 'tests', 'fixtures', 'route_cases.json');
 const ROUTE_TABLES_PATH = join(REPO_ROOT, 'backend', 'tests', 'fixtures', 'route_tables.json');
+// NEBULA_CONTRACTS_PRICING_PATH points the check at another pricing table
+// (tests/test_node_contracts.py checks a broken copy with it).
+const PRICING_PATH = process.env.NEBULA_CONTRACTS_PRICING_PATH || join(REPO_ROOT, 'backend', 'data', 'model_pricing.json');
 
 const VALID_CATEGORIES = new Set([
   'image-gen',
@@ -67,7 +72,7 @@ const PARAM_GROUPS = ['params', 'sharedParams', 'falParams', 'directParams'];
 // A route-table node's routes (definition `routes`, docs/PROVIDER-ROUTES.md).
 const ROUTE_HANDLERS = new Set(['bfl', 'fal', 'replicate-model', 'openrouter-images', 'openrouter-videos', 'krea']);
 const ROUTE_FIELDS = new Set(['id', 'provider', 'maker', 'keys', 'plan', 'handler', 'endpoint', 'endpointWhen',
-  'params', 'rename', 'valueMap', 'rules', 'pricing', 'note']);
+  'params', 'rename', 'valueMap', 'rules', 'paramVisibleWhen', 'pricing', 'note']);
 const ROUTE_RULES = new Set(['blockedBy', 'accepts', 'rejects', 'rejectsWhen', 'size', 'ports']);
 const BILLING_PARAMS = ['_provider', '_kreaAuth'];
 const LOCAL_EXECUTION_NODE_IDS = new Set([
@@ -96,6 +101,7 @@ const frontendSource = await readFile(FRONTEND_DEFS_PATH, 'utf8');
 const envExample = await readFile(ENV_EXAMPLE_PATH, 'utf8');
 const settingsExample = JSON.parse(await readFile(SETTINGS_EXAMPLE_PATH, 'utf8'));
 const routeFixtures = JSON.parse(await readFile(ROUTE_CASES_PATH, 'utf8')).definitions ?? {};
+const pricing = JSON.parse(await readFile(PRICING_PATH, 'utf8'));
 const keyProviders = JSON.parse(await readFile(ROUTE_TABLES_PATH, 'utf8')).keyProviders ?? {};
 // backend/services/credential_catalog.py KEYS_AHEAD_OF_NODES: keys Settings
 // lists before any node uses them.
@@ -108,6 +114,7 @@ const errors = [];
 validateRegistryShape();
 validateRoutes(definitions, '');
 validateRoutes(routeFixtures, 'route_cases.json ');
+validateHiddenPrices(definitions, pricing);
 validateFrontendBackendIdParity();
 validateCredentialExampleCoverage();
 validateGeneratedReference();
@@ -237,6 +244,8 @@ function validateRoutes(nodes, source) {
           if (!shared.has(key) && !routeKeys.has(key)) errors.push(`${at}.${field} names ${key}, which isn't one of its params`);
         }
       }
+      validateParamVisibleWhen(definition, route, at);
+      validateHideable(definition, route, at);
     });
     const union = [...new Set(routes.flatMap((route) => keyNames(route?.keys)))];
     if (JSON.stringify(keyNames(definition.envKeyName)) !== JSON.stringify(union)) {
@@ -273,6 +282,160 @@ function validateRoutes(nodes, source) {
     }
     for (const group of ['params', 'sharedParams']) validateParams(where, group, definition[group]);
     routes.forEach((route, index) => validateParams(where, `routes[${index}].params`, route?.params));
+  }
+}
+
+// What a route can hide must not pick its endpoint or hide itself
+// (node_route._hideable_problems): an endpointWhen key that is a param must
+// be one the route always shows, and the route's visibility conditions
+// (paramVisibleWhen plus its params' own visibleWhen) may not go in a circle.
+function validateHideable(definition, route, at) {
+  if (!route || typeof route !== 'object') return;
+  const listed = new Map([...(definition.sharedParams ?? []), ...(route.params ?? [])].filter((p) => p?.key).map((p) => [p.key, p]));
+  const conditions = route.paramVisibleWhen && typeof route.paramVisibleWhen === 'object' ? route.paramVisibleWhen : {};
+  const every = new Set([definition.params, definition.sharedParams, ...(definition.routes ?? []).map((r) => r?.params)]
+    .flatMap((group) => (group ?? []).map((p) => p?.key)).filter(Boolean));
+  (route.endpointWhen ?? []).forEach((option, index) => {
+    for (const key of Object.keys(option?.when ?? {})) {
+      if (!every.has(key)) continue;
+      const own = listed.get(key)?.visibleWhen;
+      if (!listed.has(key) || conditions[key] !== undefined || (own && Object.keys(own).length)) {
+        const problem = `${at}.endpointWhen[${index}] reads ${key}, which the route can hide`;
+        if (!errors.includes(problem)) errors.push(problem);
+      }
+    }
+  });
+  const edges = new Map();
+  for (const [key, param] of listed) edges.set(key, new Set(Object.keys(param.visibleWhen ?? {}).filter((c) => listed.has(c))));
+  for (const [key, condition] of Object.entries(conditions)) {
+    if (condition && typeof condition === 'object') {
+      if (!edges.has(key)) edges.set(key, new Set());
+      for (const c of Object.keys(condition)) if (listed.has(c)) edges.get(key).add(c);
+    }
+  }
+  const state = new Map();
+  const visit = (key, path) => {
+    state.set(key, 1);
+    for (const next of [...(edges.get(key) ?? [])].sort()) {
+      if (state.get(next) === 1) {
+        const loop = path.includes(next) ? [...path.slice(path.indexOf(next)), next] : [key, next];
+        errors.push(`${at} visibility conditions go in a circle: ${loop.join(' -> ')}`);
+      } else if (!state.get(next)) visit(next, [...path, next]);
+    }
+    state.set(key, 2);
+  };
+  for (const key of [...edges.keys()].sort()) if (!state.get(key)) visit(key, [key]);
+}
+
+// What a route offers (node_route._visible_when_problems): `paramVisibleWhen`
+// names this route's own params; each is false or {controller: [values]}
+// with controllers from the same list and literal option values, never
+// "(set)"/"(unset)".
+function literalValues(param) {
+  if (Array.isArray(param?.options) && param.options.length) return new Set(param.options.map((o) => String(o?.value ?? o)));
+  if (param?.type === 'boolean') return new Set(['true', 'false']);
+  return null;
+}
+
+function validateParamVisibleWhen(definition, route, at) {
+  if (!('paramVisibleWhen' in route)) return;
+  const conditions = route.paramVisibleWhen;
+  if (!conditions || typeof conditions !== 'object' || Array.isArray(conditions) || !Object.keys(conditions).length) {
+    errors.push(`${at}.paramVisibleWhen must be a non-empty object`);
+    return;
+  }
+  const listed = new Map([...(definition.sharedParams ?? []), ...(route.params ?? [])].filter((p) => p?.key).map((p) => [p.key, p]));
+  for (const [key, condition] of Object.entries(conditions)) {
+    const where = `${at}.paramVisibleWhen.${key}`;
+    if (!listed.has(key)) { errors.push(`${where} isn't one of this route's params`); continue; }
+    if (condition === false) continue;
+    if (!condition || typeof condition !== 'object' || Array.isArray(condition) || !Object.keys(condition).length) {
+      errors.push(`${where} must be false or {controller: [values]}`);
+      continue;
+    }
+    for (const [controller, allowed] of Object.entries(condition)) {
+      if (controller === key || !listed.has(controller)) {
+        errors.push(`${where} names ${controller}, which isn't another of this route's params`);
+        continue;
+      }
+      if (conditions[controller] === false) errors.push(`${where} names ${controller}, which this route never offers`);
+      if (!Array.isArray(allowed) || !allowed.length) { errors.push(`${where}.${controller} must list one or more values`); continue; }
+      if (allowed.some((value) => value === '(set)' || value === '(unset)')) {
+        errors.push(`${where}.${controller} can't use (set)/(unset): visibility never reads wired ports`);
+        continue;
+      }
+      const literal = literalValues(listed.get(controller));
+      if (!literal || allowed.some((value) => !literal.has(String(value)))) {
+        errors.push(`${where}.${controller} values must be options of ${controller}`);
+      }
+    }
+  }
+}
+
+// A route's price may not read a setting where the route hides it
+// (node_route.price_row_problems): over every combination of the values its
+// rows, extras and its params' conditions tell apart, the first row that
+// matches, every extra that matches and every multiplyBy param must not name
+// a param that route doesn't show with those values.
+function validateHiddenPrices(nodes, table) {
+  const asText = (value) => (value === undefined || value === null ? '' : String(value));
+  for (const [nodeId, definition] of Object.entries(nodes)) {
+    if (!Array.isArray(definition.routes) || !definition.routes.length) continue;
+    const entry = table.nodes?.[nodeId];
+    if (!entry?.routes) continue;
+    const all = new Map();
+    for (const group of [definition.params, definition.sharedParams, ...definition.routes.map((r) => r.params)]) {
+      for (const param of group ?? []) if (param?.key && !all.has(param.key)) all.set(param.key, param);
+    }
+    for (const route of definition.routes) {
+      const priced = entry.routes[route.pricing ?? route.id];
+      const rows = priced?.rows;
+      if (!Array.isArray(rows)) continue;
+      const extras = (Array.isArray(priced.extras) ? priced.extras : []).filter((extra) => extra && typeof extra === 'object');
+      const factors = (Array.isArray(priced.multiplyBy) ? priced.multiplyBy : []).map(String).filter((key) => !key.startsWith('('));
+      const matched = [...rows, ...extras];
+      const conditions = route.paramVisibleWhen ?? {};
+      const offered = new Map();
+      for (const param of [...(definition.sharedParams ?? []), ...(route.params ?? [])]) {
+        if (!param?.key || conditions[param.key] === false) continue;
+        const merged = Object.fromEntries(Object.entries(param.visibleWhen ?? {}).map(([k, v]) => [k, [...v]]));
+        for (const [k, v] of Object.entries(conditions[param.key] ?? {})) {
+          merged[k] = merged[k] ? merged[k].filter((x) => v.map(asText).includes(asText(x))) : [...v];
+        }
+        offered.set(param.key, merged);
+      }
+      const named = new Set([...matched.flatMap((row) => Object.keys(row.match ?? {})).filter((key) => !key.startsWith('(')), ...factors]);
+      const keys = new Set([...matched.flatMap((row) => Object.keys(row.match ?? {})), ...factors]);
+      for (const key of named) for (const ctrl of Object.keys(offered.get(key) ?? {})) keys.add(ctrl);
+      const ordered = [...keys].sort();
+      const choices = ordered.map((key) => {
+        const literal = literalValues(all.get(key));
+        if (literal) return [...literal].sort();
+        return [...new Set(matched.filter((row) => key in (row.match ?? {})).map((row) => asText(row.match[key])))].sort().concat(['(other)']);
+      });
+      const combos = choices.reduce((acc, values) => acc.flatMap((combo) => values.map((value) => [...combo, value])), [[]]);
+      for (const combo of combos) {
+        const values = Object.fromEntries(ordered.map((key, i) => [key, combo[i] === '(other)' ? undefined : combo[i]]));
+        for (const [key, param] of all) if (values[key] === undefined && param.default !== undefined && param.default !== null) values[key] = asText(param.default);
+        const matches = (candidate) => Object.entries(candidate.match ?? {}).every(([k, want]) => asText(values[k]) === asText(want));
+        const row = rows.find(matches);
+        if (!row) continue;
+        const listed = new Set(offered.keys());
+        const reads = [[`price row ${rows.indexOf(row)}`, Object.keys(row.match ?? {})],
+          ...extras.map((extra, index) => [`price extra ${index}`, matches(extra) ? Object.keys(extra.match ?? {}) : []]),
+          ['multiplyBy', factors]];
+        for (const [what, read] of reads) for (const key of read) {
+          if (key.startsWith('(')) continue;
+          const condition = offered.get(key);
+          const shown = condition !== undefined && Object.entries(condition).every(([ctrl, allowed]) =>
+            !listed.has(ctrl) || values[ctrl] === undefined || allowed.map(asText).includes(asText(values[ctrl])));
+          if (!shown) {
+            const problem = `${nodeId} (${route.pricing ?? route.id} route): ${what} reads ${key}, which the route doesn't show with ${ordered.map((k, i) => `${k}=${combo[i]}`).join(', ')}`;
+            if (!errors.includes(problem)) errors.push(problem);
+          }
+        }
+      }
+    }
   }
 }
 

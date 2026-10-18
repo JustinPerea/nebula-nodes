@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -372,6 +373,26 @@ def test_generated_model_reference_matches_committed_file() -> None:
         f"Run `node scripts/generate-model-reference.mjs` to regenerate.\n"
         f"Generator output:\n{result.stderr or result.stdout}"
     )
+
+
+def test_contract_script_refuses_a_price_extra_or_multiplier_on_a_hidden_setting(tmp_path: Path) -> None:
+    """scripts/check-node-contracts.mjs validateHiddenPrices reads a route's
+    extras and multiplyBy too, as node_route.price_row_problems does: FLUX.2's
+    fal safety is hidden under Flash and Klein, and FLUX 3 Video's fal
+    resolution under Draft."""
+    import subprocess
+
+    script = REPO_ROOT / "scripts" / "check-node-contracts.mjs"
+    table = json.loads((REPO_ROOT / "backend" / "data" / "model_pricing.json").read_text())
+    table["nodes"]["flux-2-pro"]["routes"]["fal"]["extras"] = [{"match": {"safety_tolerance": "5"}, "price": 0.5}]
+    table["nodes"]["flux-3-video"]["routes"]["fal"]["multiplyBy"] = ["duration", "resolution"]
+    broken = tmp_path / "model_pricing.json"
+    broken.write_text(json.dumps(table))
+    result = subprocess.run(["node", str(script)], capture_output=True, text=True,
+                            env={**os.environ, "NEBULA_CONTRACTS_PRICING_PATH": str(broken)})
+    assert result.returncode == 1, result.stdout
+    assert "flux-2-pro (fal route): price extra 0 reads safety_tolerance" in result.stderr, result.stderr
+    assert "flux-3-video (fal route): multiplyBy reads resolution" in result.stderr, result.stderr
 
 
 def _param_by_key(definition: dict[str, Any], key: str) -> dict[str, Any]:

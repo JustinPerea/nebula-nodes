@@ -137,7 +137,8 @@ def multi_route(clients: Mapping[str, Handler]) -> Handler:
     route's key isn't set, or the route can't take these params) raises
     before any provider is called, with route_unavailable's message, and no
     other client runs. Otherwise the client gets a copy of the node with only
-    that route's params (route_node), translated into the provider's names
+    the params that route shows with these values (node_route.route_sent_keys:
+    a setting it hides is never sent), translated into the provider's names
     (translate_params); a Krea route's copy carries ``_kreaAuth`` set to how
     the run bills. The client is also told the route's ``endpoint``,
     resolved here from ``endpointWhen`` on the routed values (our names, the
@@ -159,7 +160,9 @@ def multi_route(clients: Mapping[str, Handler]) -> Handler:
                 "Choose another provider.")
         extra = ({"_kreaAuth": "mcp" if route.kind == node_route.PLAN else "api-token"}
                  if spec.get("provider") == "krea" else None)
-        routed = route_node(node, node_route.route_param_keys(definition, route.route_id))
+        # Only the settings this route shows with these values: one it hides
+        # (paramVisibleWhen, or a param's own visibleWhen) is never sent.
+        routed = route_node(node, node_route.route_sent_keys(definition, route.route_id, routed_params))
         routed = routed.model_copy(update={"params": {**translate_params(spec, routed.params), **(extra or {})}})
         endpoint = node_route.route_endpoint(definition, spec, routed_params)
         return await client(routed, dict(inputs), api_keys, endpoint=endpoint)

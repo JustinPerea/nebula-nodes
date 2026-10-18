@@ -89,26 +89,33 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `bfl` | BFL | BFL_API_KEY | `/v1/flux-2-pro` | maker; BFL has no FLUX 2 Flash and no safety-checker switch. |
-| `fal` | FAL | FAL_KEY | `fal-ai/flux-2-pro` | — |
+| `bfl` | Black Forest Labs | BFL_API_KEY | `/v1/flux-2-pro` | maker; BFL has no FLUX 2 Flash and no safety-checker switch. |
+| `fal` | fal.ai | FAL_KEY | `fal-ai/flux-2-pro` | — |
 
-**Shared Parameters**
+**Black Forest Labs (`bfl`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Model | enum | pro | FLUX.2 [pro], FLUX.2 [max], FLUX 2 Flash, FLUX.2 [flex], FLUX.2 [klein] 9B, FLUX.2 [klein] 4B |
-| Size | enum | landscape_4_3 | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
-| Format | enum | jpeg | JPEG, PNG |
-| Safety | enum | 2 | 1 (Strict), 2, 3, 4, 5 (Permissive) |
-| Seed | int | — | — |
-| Steps (Flex) | int | — | 1–50 |
-| Guidance (Flex) | float | — | 1.5–10 |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Model | `model` | enum | pro | `pro` FLUX.2 [pro], `max` FLUX.2 [max], `flex` FLUX.2 [flex], `klein-9b` FLUX.2 [klein] 9B, `klein-4b` FLUX.2 [klein] 4B | always |
+| Size | `image_size` | enum | landscape_4_3 | `square_hd` Square HD, `square` Square, `portrait_4_3` Portrait 4:3, `portrait_16_9` Portrait 16:9, `landscape_4_3` Landscape 4:3, `landscape_16_9` Landscape 16:9 | always |
+| Format | `output_format` | enum | jpeg | `jpeg` JPEG, `png` PNG | always |
+| Safety | `safety_tolerance` | enum | 2 | `1` 1 (Strict), `2`, `3`, `4`, `5` 5 (Permissive) | always |
+| Seed | `seed` | int | — | — | always |
+| Steps (Flex) | `num_inference_steps` | int | — | 1–50 | `model` = `flex` |
+| Guidance (Flex) | `guidance_scale` | float | — | 1.5–10 | `model` = `flex` |
 
-**FAL (`fal`) Parameters**
+**fal.ai (`fal`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Safety Checker | bool | true | — |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Model | `model` | enum | pro | `pro` FLUX.2 [pro], `max` FLUX.2 [max], `flash` FLUX 2 Flash, `flex` FLUX.2 [flex], `klein-9b` FLUX.2 [klein] 9B, `klein-4b` FLUX.2 [klein] 4B | always |
+| Size | `image_size` | enum | landscape_4_3 | `square_hd` Square HD, `square` Square, `portrait_4_3` Portrait 4:3, `portrait_16_9` Portrait 16:9, `landscape_4_3` Landscape 4:3, `landscape_16_9` Landscape 16:9 | always |
+| Format | `output_format` | enum | jpeg | `jpeg` JPEG, `png` PNG | always |
+| Safety | `safety_tolerance` | enum | 2 | `1` 1 (Strict), `2`, `3`, `4`, `5` 5 (Permissive) | `model` = `pro` / `max` / `flex` |
+| Seed | `seed` | int | — | — | always |
+| Steps (Flex) | `num_inference_steps` | int | — | 2–50 | `model` = `flex` |
+| Guidance (Flex) | `guidance_scale` | float | — | 1.5–10 | `model` = `flex` |
+| Safety Checker | `enable_safety_checker` | bool | true | — | always |
 
 ---
 
@@ -129,36 +136,45 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `bfl` | BFL | BFL_API_KEY | `/v1/flux-3-image` | maker |
-| `fal` | FAL | FAL_KEY | `blackforestlabs/flux-3/text-to-image` | fal.ai has no 1.5k or 9:21. |
+| `bfl` | Black Forest Labs | BFL_API_KEY | `/v1/flux-3-image` | maker |
+| `fal` | fal.ai | FAL_KEY | `blackforestlabs/flux-3/text-to-image` | fal.ai has no 1.5k or 9:21. |
 | `replicate` | Replicate | REPLICATE_API_TOKEN | `black-forest-labs/flux-3-image` | — |
 | `openrouter` | OpenRouter | OPENROUTER_API_KEY | `black-forest-labs/flux-3-image` | — |
 
-**Shared Parameters**
+**Black Forest Labs (`bfl`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Aspect ratio | enum | auto | Auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, … |
-| Resolution | enum | 1k | 768 x 768, 1K, 1.5K, 2K, 4K |
-| Safety tolerance | int | 2 | 0–4 |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Aspect ratio | `aspect_ratio` | enum | auto | `auto` Auto, `21:9`, `2:1`, `16:9`, `3:2`, `7:5`, `4:3`, `5:4`, `1:1`, `4:5`, `3:4`, `5:7`, `2:3`, `9:16`, `1:2`, `9:21` | always |
+| Resolution | `resolution` | enum | 1k | `768sq` 768 x 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
+| Safety tolerance | `safety_tolerance` | int | 2 | 0–4 | always |
+| Grounding (web + image search) | `grounding` | bool | true | — | always |
 
-**BFL (`bfl`) Parameters**
+**fal.ai (`fal`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Grounding (web + image search) | bool | true | — |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Aspect ratio | `aspect_ratio` | enum | auto | `auto` Auto, `21:9`, `2:1`, `16:9`, `3:2`, `7:5`, `4:3`, `5:4`, `1:1`, `4:5`, `3:4`, `5:7`, `2:3`, `9:16`, `1:2` | always |
+| Resolution | `resolution` | enum | 1k | `768sq` 768 x 768, `1k` 1K, `2k` 2K, `4k` 4K | always |
+| Safety tolerance | `safety_tolerance` | int | 2 | 0–4 | always |
+| Prompt expansion | `enable_prompt_expansion` | bool | false | — | always |
 
-**FAL (`fal`) Parameters**
+**Replicate (`replicate`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Prompt expansion | bool | false | — |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Aspect ratio | `aspect_ratio` | enum | auto | `auto` Auto, `21:9`, `2:1`, `16:9`, `3:2`, `7:5`, `4:3`, `5:4`, `1:1`, `4:5`, `3:4`, `5:7`, `2:3`, `9:16`, `1:2`, `9:21` | always |
+| Resolution | `resolution` | enum | 1k | `768sq` 768 x 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
+| Safety tolerance | `safety_tolerance` | int | 2 | 0–4 | always |
+| Grounding (web + image search) | `grounding` | bool | true | — | always |
 
-**Replicate (`replicate`) Parameters**
+**OpenRouter (`openrouter`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Grounding (web + image search) | bool | true | — |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Aspect ratio | `aspect_ratio` | enum | auto | `auto` Auto, `21:9`, `2:1`, `16:9`, `3:2`, `7:5`, `4:3`, `5:4`, `1:1`, `4:5`, `3:4`, `5:7`, `2:3`, `9:16`, `1:2`, `9:21` | always |
+| Resolution | `resolution` | enum | 1k | `768sq` 768 x 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
+| Safety tolerance | `safety_tolerance` | int | 2 | 0–4 | always |
 
 ---
 
@@ -179,24 +195,27 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `bfl` | BFL | BFL_API_KEY | `/v1/flux-3-image-klein` | maker |
+| `bfl` | Black Forest Labs | BFL_API_KEY | `/v1/flux-3-image-klein` | maker |
 | `openrouter` | OpenRouter | OPENROUTER_API_KEY | `black-forest-labs/flux-3-image-klein` | OpenRouter can't take a seed. |
 
-**Shared Parameters**
+**Black Forest Labs (`bfl`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Aspect ratio | enum | auto | Auto, 21:9, 2:1, 16:9, 3:2, 7:5, 4:3, 5:4, … |
-| Resolution | enum | 1k | 768 x 768, 1K, 1.5K, 2K, 4K |
-| Safety tolerance | int | 2 | 0–4 |
-| Seed | int | — | 0–4294967295 |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Aspect ratio | `aspect_ratio` | enum | auto | `auto` Auto, `21:9`, `2:1`, `16:9`, `3:2`, `7:5`, `4:3`, `5:4`, `1:1`, `4:5`, `3:4`, `5:7`, `2:3`, `9:16`, `1:2`, `9:21` | always |
+| Resolution | `resolution` | enum | 1k | `768sq` 768 x 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
+| Safety tolerance | `safety_tolerance` | int | 2 | 0–4 | always |
+| Seed | `seed` | int | — | 0–4294967295 | always |
+| Steps | `steps` | int | 16 | 1–16 | always |
+| Format | `output_format` | enum | jpeg | `jpeg` JPEG, `png` PNG | always |
 
-**BFL (`bfl`) Parameters**
+**OpenRouter (`openrouter`) settings** · not offered here: Seed (`seed`)
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Steps | int | 16 | 1–16 |
-| Format | enum | jpeg | JPEG, PNG |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Aspect ratio | `aspect_ratio` | enum | auto | `auto` Auto, `21:9`, `2:1`, `16:9`, `3:2`, `7:5`, `4:3`, `5:4`, `1:1`, `4:5`, `3:4`, `5:7`, `2:3`, `9:16`, `1:2`, `9:21` | always |
+| Resolution | `resolution` | enum | 1k | `768sq` 768 x 768, `1k` 1K, `1.5k` 1.5K, `2k` 2K, `4k` 4K | always |
+| Safety tolerance | `safety_tolerance` | int | 2 | 0–4 | always |
 
 ---
 
@@ -217,17 +236,17 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `fal` | FAL | FAL_KEY | `blackforestlabs/flux-3/klein/base/text-to-image` | — |
+| `fal` | fal.ai | FAL_KEY | `blackforestlabs/flux-3/klein/base/text-to-image` | — |
 
-**Shared Parameters**
+**fal.ai (`fal`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Size | enum | square_hd | Square HD, Square, Portrait 4:3, Portrait 16:9, Landscape 4:3, Landscape 16:9 |
-| Seed | int | — | — |
-| Format | enum | png | PNG, JPEG, WebP |
-| Prompt expansion | bool | true | — |
-| Safety checker | bool | true | — |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Size | `image_size` | enum | square_hd | `square_hd` Square HD, `square` Square, `portrait_4_3` Portrait 4:3, `portrait_16_9` Portrait 16:9, `landscape_4_3` Landscape 4:3, `landscape_16_9` Landscape 16:9 | always |
+| Seed | `seed` | int | — | — | always |
+| Format | `output_format` | enum | png | `png` PNG, `jpeg` JPEG, `webp` WebP | always |
+| Prompt expansion | `enable_prompt_expansion` | bool | true | — | always |
+| Safety checker | `enable_safety_checker` | bool | true | — | always |
 
 ---
 
@@ -921,32 +940,28 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
 | `krea` | Krea | KREA_API_TOKEN | `/generate/image/krea/krea-3` | maker; Krea plan: optional; Early access: Krea 3 on Krea's API is for beta workspaces |
-| `fal` | FAL | FAL_KEY | `krea/v3/text-to-image` | — |
+| `fal` | fal.ai | FAL_KEY | `krea/v3/text-to-image` | — |
 
-**Shared Parameters**
+**Krea (`krea`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Seed | int | — | — |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Seed | `seed` | int | — | — | always |
+| Thinking mode | `thinking_mode` | enum | fast | `fast` Fast, `high` High | always |
+| Resolution | `resolution` | enum | 1K | `1K`, `2K` | always |
+| Aspect ratio | `aspect_ratio` | enum | — | `1:1`, `4:5`, `3:4`, `2:3`, `9:16`, `5:4`, `4:3`, `3:2`, `16:9`, `21:9` | always |
+| Regional edit | `regional_edit` | bool | false | — | always |
 
-**Krea (`krea`) Parameters**
+**fal.ai (`fal`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Thinking mode | enum | fast | Fast, High |
-| Resolution | enum | 1K | 1K, 2K |
-| Aspect ratio | enum | — | 1:1, 4:5, 3:4, 2:3, 9:16, 5:4, 4:3, 3:2, … |
-| Regional edit | bool | false | — |
-
-**FAL (`fal`) Parameters**
-
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Model | enum | berry | Berry (quality), Jam (speed) |
-| Reasoning level | enum | low | Low, Medium, High |
-| Image size | enum | auto | auto, square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9 |
-| Negative prompt | string | — | — |
-| Output format | enum | png | png, jpeg |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Seed | `seed` | int | — | — | always |
+| Model | `model` | enum | berry | `berry` Berry (quality), `jam` Jam (speed) | always |
+| Reasoning level | `reasoning_level` | enum | low | `low` Low, `medium` Medium, `high` High | always |
+| Image size | `image_size` | enum | auto | `auto`, `square_hd`, `square`, `portrait_4_3`, `portrait_16_9`, `landscape_4_3`, `landscape_16_9` | always |
+| Negative prompt | `negative_prompt` | string | — | — | `model` = `berry` |
+| Output format | `output_format` | enum | png | `png`, `jpeg` | always |
 
 ---
 
@@ -2217,38 +2232,59 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `bfl` | BFL | BFL_API_KEY | `/v1/flux-3-video` | maker |
-| `fal` | FAL | FAL_KEY | `blackforestlabs/flux-3/text-to-video` | — |
+| `bfl` | Black Forest Labs | BFL_API_KEY | `/v1/flux-3-video` | maker |
+| `fal` | fal.ai | FAL_KEY | `blackforestlabs/flux-3/text-to-video` | — |
 | `replicate` | Replicate | REPLICATE_API_TOKEN | `black-forest-labs/flux-3` | — |
 | `openrouter` | OpenRouter | OPENROUTER_API_KEY | `black-forest-labs/flux-3-video` | Start and end images go only as public http(s) URLs (a Nebula output can't be sent). |
 | `krea` | Krea | KREA_API_TOKEN | `/generate/video/black-forest-labs/flux-3-video` | Krea plan: optional |
 
-**Shared Parameters**
+**Black Forest Labs (`bfl`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Duration | int | 5 | 5–20 |
-| Resolution | enum | hd | HD (720p), Full HD (1080p), QHD (1440p), UHD (4K) |
-| Aspect ratio | enum | 16:9 | auto, 21:9, 2:1, 16:9, 4:3, 1:1, 3:4, 9:16, … |
-| Generate audio | bool | true | — |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Duration | `duration` | int | 5 | 5–20 | always |
+| Resolution | `resolution` | enum | hd | `hd` HD (720p), `fhd` Full HD (1080p), `qhd` QHD (1440p), `uhd` UHD (4K) | `draft` = `false` |
+| Aspect ratio | `aspect_ratio` | enum | 16:9 | `auto`, `21:9`, `2:1`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, `9:21` | always |
+| Generate audio | `generate_audio` | bool | true | — | always |
+| Draft (fast preview) | `draft` | bool | false | — | always |
 
-**BFL (`bfl`) Parameters**
+**fal.ai (`fal`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Draft (fast preview) | bool | false | — |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Duration | `duration` | int | 5 | 5–20 | always |
+| Resolution | `resolution` | enum | hd | `hd` HD (720p), `fhd` Full HD (1080p), `qhd` QHD (1440p), `uhd` UHD (4K) | `draft` = `false` |
+| Aspect ratio | `aspect_ratio` | enum | 16:9 | `auto`, `21:9`, `2:1`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16` | always |
+| Generate audio | `generate_audio` | bool | true | — | always |
+| Draft (fast preview) | `draft` | bool | false | — | always |
 
-**FAL (`fal`) Parameters**
+**Replicate (`replicate`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Draft (fast preview) | bool | false | — |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Duration | `duration` | int | 5 | 5–20 | always |
+| Resolution | `resolution` | enum | hd | `hd` HD (720p), `fhd` Full HD (1080p) | `draft` = `false` |
+| Aspect ratio | `aspect_ratio` | enum | 16:9 | `auto`, `21:9`, `2:1`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16` | always |
+| Generate audio | `generate_audio` | bool | true | — | always |
+| Draft (fast preview) | `draft` | bool | false | — | always |
 
-**Replicate (`replicate`) Parameters**
+**OpenRouter (`openrouter`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Draft (fast preview) | bool | false | — |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Duration | `duration` | int | 5 | 5–20 | always |
+| Resolution | `resolution` | enum | hd | `hd` HD (720p), `fhd` Full HD (1080p), `qhd` QHD (1440p), `uhd` UHD (4K) | always |
+| Aspect ratio | `aspect_ratio` | enum | 16:9 | `21:9`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16` | always |
+| Generate audio | `generate_audio` | bool | true | — | always |
+
+**Krea (`krea`) settings**
+
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Duration | `duration` | int | 5 | 5–20 | always |
+| Resolution | `resolution` | enum | hd | `hd` HD (720p), `fhd` Full HD (1080p) | always |
+| Aspect ratio | `aspect_ratio` | enum | 16:9 | `21:9`, `2:1`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16` | always |
+| Generate audio | `generate_audio` | bool | true | — | always |
 
 ---
 
@@ -2269,9 +2305,21 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `bfl` | BFL | BFL_API_KEY | `/v1/flux-tools/video-edit-v1` | maker |
-| `fal` | FAL | FAL_KEY | `blackforestlabs/flux-3/edit-video` | — |
+| `bfl` | Black Forest Labs | BFL_API_KEY | `/v1/flux-tools/video-edit-v1` | maker |
+| `fal` | fal.ai | FAL_KEY | `blackforestlabs/flux-3/edit-video` | — |
 | `krea` | Krea | KREA_API_TOKEN | `/generate/video/black-forest-labs/flux-video-edit` | Krea plan: optional |
+
+**Black Forest Labs (`bfl`) settings**
+
+No settings.
+
+**fal.ai (`fal`) settings**
+
+No settings.
+
+**Krea (`krea`) settings**
+
+No settings.
 
 ---
 
@@ -5686,17 +5734,38 @@ Nodes: 308 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `bfl` | BFL | BFL_API_KEY | `/v1/flux-tools/video-upscale-v1` | maker |
-| `fal` | FAL | FAL_KEY | `blackforestlabs/flux-video-upscale` | — |
+| `bfl` | Black Forest Labs | BFL_API_KEY | `/v1/flux-tools/video-upscale-v1` | maker |
+| `fal` | fal.ai | FAL_KEY | `blackforestlabs/flux-video-upscale` | — |
 | `replicate` | Replicate | REPLICATE_API_TOKEN | `black-forest-labs/flux-video-upscale` | — |
 | `krea` | Krea | KREA_API_TOKEN | `/generate/enhance/black-forest-labs/flux-video-upscale` | Krea plan: optional |
 
-**Shared Parameters**
+**Black Forest Labs (`bfl`) settings**
 
-| Parameter | Type | Default | Options/Range |
-|-----------|------|---------|---------------|
-| Creativity | enum | 1 | Precise, Creative |
-| Upscale factor | float | 2 | 1.5–3 |
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Creativity | `creativity` | enum | 1 | `0` Precise, `1` Creative | always |
+| Upscale factor | `upscale_factor` | float | 2 | 1.5–3 | always |
+
+**fal.ai (`fal`) settings**
+
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Creativity | `creativity` | enum | 1 | `0` Precise, `1` Creative | always |
+| Upscale factor | `upscale_factor` | float | 2 | 1.5–3 | always |
+
+**Replicate (`replicate`) settings**
+
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Creativity | `creativity` | enum | 1 | `0` Precise, `1` Creative | always |
+| Upscale factor | `upscale_factor` | float | 2 | 1.5–3 | always |
+
+**Krea (`krea`) settings**
+
+| Parameter | Key | Type | Default | Options/Range | Shown when |
+|---|---|---|---|---|---|
+| Creativity | `creativity` | enum | 1 | `0` Precise, `1` Creative | always |
+| Upscale factor | `upscale_factor` | float | 2 | 1.5–3 | always |
 
 ---
 

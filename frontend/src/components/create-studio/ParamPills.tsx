@@ -3,6 +3,7 @@ import type { ModelNodeDefinition } from '../../types';
 import { deriveVisibleParams } from '../../lib/createParams';
 import { allParamDefinitions, providerLabel, routeById, routeSwitch, shownRouteId } from '../../lib/directRoute';
 import { paramDefaultFor, snapParamDefaults, type DefaultSnapNote } from '../../lib/paramDefaults';
+import { snapHidden } from '../../lib/providerSwitch';
 import { useUIStore } from '../../store/uiStore';
 import { ProviderSwitcher } from '../nodes/ProviderSwitcher';
 
@@ -42,16 +43,29 @@ export function ParamPills({ def, params, onChange }: ParamPillsProps) {
   // node or applying a preset swaps them from outside, and the note goes.
   const [snapNotes, setSnapNotes] = useState<SnapNotes>({ def, params, notes: [] });
   const notes = snapNotes.def === def && sameValues(snapNotes.params, params) ? snapNotes.notes : [];
+  // A person's edit: on a route-table model, a setting it now hides on the
+  // shown provider at a value another provider would honor goes back to its
+  // default, with the note (lib/providerSwitch.ts snapHidden), as in the
+  // Inspector. `defaultNotes` are set()'s per-model default notes; one whose
+  // value that snap moved again is dropped.
+  const edit = (next: Record<string, unknown>, key: string, defaultNotes: DefaultSnapNote[] = []) => {
+    let written = next;
+    if (switchable) {
+      const snapped = snapHidden(def, next, shownRouteId(def, next, apiKeys), key);
+      written = snapped.params;
+      if (snapped.notes.length) setSwitchNote({ model: def.id, text: snapped.notes.join('. ') });
+    }
+    setSnapNotes({ def, params: written, notes: defaultNotes.filter((n) => Object.is(written[n.param], next[n.param])) });
+    onChange(written);
+  };
   const set = (key: string, value: unknown) => {
     const snap = snapParamDefaults(def, params, { ...params, [key]: value });
-    setSnapNotes({ def, params: snap.params, notes: snap.notes });
-    onChange(snap.params);
+    edit(snap.params, key, snap.notes);
   };
   const unset = (key: string) => {
     const next = { ...params };
     delete next[key];
-    setSnapNotes({ def, params: next, notes: [] });
-    onChange(next);
+    edit(next, key);
   };
 
   return (

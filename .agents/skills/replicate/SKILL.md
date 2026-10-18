@@ -123,7 +123,7 @@ The route client is `backend/handlers/replicate_model.py` `run_model`, not the u
 - A local Nebula output goes up through `POST /v1/files` first, and its `urls.get` is sent as the input. URLs pass through.
 - Polls every 3 s, up to 300 polls (15 minutes). Stop cancels with `POST /v1/predictions/{id}/cancel`.
 - The output is saved as the node's port type (`image` or `video`), fetched with the token only from `replicate.delivery`.
-- A setting the route can't take (4K video, a draft at `fhd`) stops the run before any request and names the routes that could take it. Auto never moves to another provider by itself.
+- A setting the route can't take (4K video) stops the run before any request and names the routes that could take it. Auto never moves to another provider by itself. A FLUX 3 Video draft hides Resolution and sends none, so a draft saved at any resolution runs as the 720p draft at the draft price.
 
 Prices are per route in `backend/data/model_pricing.json`: FLUX 3 Image $0.0205 / 0.024 / 0.035 / 0.05 / 0.3035 per image (768sq to 4k); FLUX 3 Video $0.17 (720p) / $0.29 (1080p) per second, continuation $0.41 / $0.53; Video Upscale $0.07 / $0.10 per output megapixel-second (unconfirmed: Replicate doesn't define its megapixel).
 

@@ -14569,11 +14569,6 @@
                 "klein-4b"
               ]
             }
-          },
-          "rejects": {
-            "enable_safety_checker": [
-              false
-            ]
           }
         },
         "note": "BFL has no FLUX 2 Flash and no safety-checker switch."
@@ -14644,65 +14639,16 @@
               "max": 50,
               "integer": true
             }
-          },
-          "rejectsWhen": [
-            {
-              "match": {
-                "safety_tolerance": "1",
-                "model": "klein-9b"
-              },
-              "label": "a safety tolerance other than 2 on Klein"
-            },
-            {
-              "match": {
-                "safety_tolerance": "3",
-                "model": "klein-9b"
-              },
-              "label": "a safety tolerance other than 2 on Klein"
-            },
-            {
-              "match": {
-                "safety_tolerance": "4",
-                "model": "klein-9b"
-              },
-              "label": "a safety tolerance other than 2 on Klein"
-            },
-            {
-              "match": {
-                "safety_tolerance": "5",
-                "model": "klein-9b"
-              },
-              "label": "a safety tolerance other than 2 on Klein"
-            },
-            {
-              "match": {
-                "safety_tolerance": "1",
-                "model": "klein-4b"
-              },
-              "label": "a safety tolerance other than 2 on Klein"
-            },
-            {
-              "match": {
-                "safety_tolerance": "3",
-                "model": "klein-4b"
-              },
-              "label": "a safety tolerance other than 2 on Klein"
-            },
-            {
-              "match": {
-                "safety_tolerance": "4",
-                "model": "klein-4b"
-              },
-              "label": "a safety tolerance other than 2 on Klein"
-            },
-            {
-              "match": {
-                "safety_tolerance": "5",
-                "model": "klein-4b"
-              },
-              "label": "a safety tolerance other than 2 on Klein"
-            }
-          ]
+          }
+        },
+        "paramVisibleWhen": {
+          "safety_tolerance": {
+            "model": [
+              "pro",
+              "max",
+              "flex"
+            ]
+          }
         }
       }
     ]
@@ -25146,15 +25092,10 @@
             "images": {
               "max": 10
             }
-          },
-          "rejectsWhen": [
-            {
-              "match": {
-                "seed": "(set)"
-              },
-              "label": "a seed"
-            }
-          ]
+          }
+        },
+        "paramVisibleWhen": {
+          "seed": false
         },
         "note": "OpenRouter can't take a seed."
       }
@@ -25544,27 +25485,6 @@
           "rejectsWhen": [
             {
               "match": {
-                "draft": true,
-                "resolution": "fhd"
-              },
-              "label": "a draft above hd"
-            },
-            {
-              "match": {
-                "draft": true,
-                "resolution": "qhd"
-              },
-              "label": "a draft above hd"
-            },
-            {
-              "match": {
-                "draft": true,
-                "resolution": "uhd"
-              },
-              "label": "a draft above hd"
-            },
-            {
-              "match": {
                 "start_video": "(set)",
                 "duration": 16
               },
@@ -25641,6 +25561,13 @@
               ],
               "label": "images (start + keyframes + end)"
             }
+          }
+        },
+        "paramVisibleWhen": {
+          "resolution": {
+            "draft": [
+              false
+            ]
           }
         }
       },
@@ -25747,27 +25674,6 @@
           "rejectsWhen": [
             {
               "match": {
-                "draft": true,
-                "resolution": "fhd"
-              },
-              "label": "a draft above hd"
-            },
-            {
-              "match": {
-                "draft": true,
-                "resolution": "qhd"
-              },
-              "label": "a draft above hd"
-            },
-            {
-              "match": {
-                "draft": true,
-                "resolution": "uhd"
-              },
-              "label": "a draft above hd"
-            },
-            {
-              "match": {
                 "start_video": "(set)",
                 "start_image": "(set)"
               },
@@ -25809,6 +25715,13 @@
               ],
               "label": "images (start + keyframes + end)"
             }
+          }
+        },
+        "paramVisibleWhen": {
+          "resolution": {
+            "draft": [
+              false
+            ]
           }
         }
       },
@@ -25871,13 +25784,6 @@
           "rejectsWhen": [
             {
               "match": {
-                "draft": true,
-                "resolution": "fhd"
-              },
-              "label": "a draft above hd"
-            },
-            {
-              "match": {
                 "start_video": "(set)",
                 "start_image": "(set)"
               },
@@ -25920,6 +25826,13 @@
               "label": "images (start + keyframes + end)"
             }
           }
+        },
+        "paramVisibleWhen": {
+          "resolution": {
+            "draft": [
+              false
+            ]
+          }
         }
       },
       {
@@ -25950,11 +25863,6 @@
                 "9:16"
               ]
             }
-          },
-          "rejects": {
-            "draft": [
-              true
-            ]
           },
           "rejectsWhen": [
             {
@@ -26005,11 +25913,6 @@
                 "9:16"
               ]
             }
-          },
-          "rejects": {
-            "draft": [
-              true
-            ]
           },
           "rejectsWhen": [
             {

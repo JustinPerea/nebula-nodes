@@ -77,6 +77,17 @@ function view(definition: ModelNodeDefinition, params: Params, context: SwitchCo
   return { chip: state.chip, blocked: state.blocked, alternatives: state.alternatives.map((a) => a.routeId) };
 }
 
+/** `before` with the click's writes applied; null clears a param. */
+function after(before: Params, writes: Params): Params {
+  const out: Params = { ...before, ...writes };
+  for (const [key, value] of Object.entries(writes)) if (value === null) delete out[key];
+  return out;
+}
+
+// Every click kind runs through the rendered Inspector: a provider row, an
+// 'alternative:' switch row, a 'fix:' reset row (applyFix) and an 'edit:'
+// of a setting in the Inspector's own field (snapHidden). The lib-level twin
+// is tests/lib/providerSwitch.test.ts.
 describe('switch_cases.json: a switcher click writes what the backend run expects', () => {
   it.each(CASES.map((c) => [c.name, c] as const))('%s', (_name, c) => {
     // A fixture node, else a real route-table node (PR 3).
@@ -96,7 +107,15 @@ describe('switch_cases.json: a switcher click writes what the backend run expect
 
     render(<Inspector embedded />);
     const menu = within(document.querySelector('[data-inspector-provider]') as HTMLElement).getByRole('menu');
-    if (c.click?.startsWith('alternative:')) {
+    if (c.click?.startsWith('edit:')) {
+      const [key, raw] = c.click.slice('edit:'.length).split(/=(.*)/s);
+      const param = allParamDefinitions(definition).find((candidate) => candidate.key === key)!;
+      const field = screen.getByLabelText(param.label ?? key);
+      fireEvent.change(field, { target: { value: String(JSON.parse(raw)) } });
+    } else if (c.click?.startsWith('fix:')) {
+      const fix = providerSwitchState(definition, before, context).fixes.find((candidate) => candidate.param === c.click!.slice(4))!;
+      fireEvent.click(within(menu).getByRole('menuitem', { name: fix.label }));
+    } else if (c.click?.startsWith('alternative:')) {
       const routeId = c.click.slice('alternative:'.length);
       const label = providerSwitchState(definition, before, context).alternatives.find((a) => a.routeId === routeId)!.label;
       fireEvent.click(within(menu).getByRole('menuitem', { name: `Switch to ${label}` }));
@@ -106,11 +125,11 @@ describe('switch_cases.json: a switcher click writes what the backend run expect
       fireEvent.click(within(menu).getAllByRole('menuitemradio')[index]);
     }
 
-    const after = useGraphStore.getState().nodes[0].data.params;
-    expect(after).toEqual({ ...before, ...c.writes });
+    const afterClick = useGraphStore.getState().nodes[0].data.params;
+    expect(afterClick).toEqual(after(before, c.writes));
     expect(useProviderNoteStore.getState().notes.n1 ?? '').toBe(c.switcher.notes.join('. '));
     const { chip, blocked, alternatives } = c.switcher;
-    expect(view(definition, after, context)).toEqual({ chip, blocked, alternatives });
+    expect(view(definition, afterClick, context)).toEqual({ chip, blocked, alternatives });
     if (c.switcher.blocked) expect(screen.getByRole('status')).toHaveTextContent(/can't run on/);
   });
 });
