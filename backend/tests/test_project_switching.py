@@ -147,6 +147,27 @@ def test_the_tab_an_agent_switched_away_saves_its_last_changes_until_the_next_sw
     assert late.status_code == 409
 
 
+def test_an_agent_reopening_the_open_project_still_takes_the_tabs_last_save(workspace, person):
+    client, _, store, broadcast = workspace
+    mine = _create(client, "Mine", headers=person.headers)
+    project_id = mine["project"]["id"]
+    reopened = client.post(f"/api/projects/{project_id}/open",
+                           json={"workspaceRevision": mine["workspaceRevision"]}, headers=AGENT)
+    assert reopened.status_code == 200, reopened.text
+    switch = _syncs(broadcast)[-1]["projectSwitch"]
+    assert switch["previousProjectId"] == switch["projectId"] == project_id
+    # The tab was showing this project at the old revision; its unsaved
+    # edit lands instead of a 409 that would leave a "(recovered)" copy.
+    tab = {"nodes": [_rf("local-sticky", "only in the tab")], "edges": [], "runHistory": [],
+           "viewport": {"x": 5, "y": 5, "zoom": 1}, "createSessionId": None}
+    saved = client.put(f"/api/projects/{project_id}", json={"snapshot": tab, "workspaceRevision": mine["workspaceRevision"]},
+                       headers=person.headers)
+    assert saved.status_code == 200, saved.text
+    catalog = store.read()
+    assert [node["id"] for node in catalog["projects"][project_id]["snapshot"]["nodes"]] == ["local-sticky"]
+    assert len(catalog["projects"]) == 1
+
+
 def test_a_stale_tab_cant_hand_off_into_some_other_project(workspace, person):
     client, _, _, _ = workspace
     first = _create(client, "First", headers=person.headers)
@@ -232,6 +253,16 @@ def test_only_references_make_a_mosaic_of_up_to_four(clock):
     found = project_cover.cover({"nodes": [*refs, passed]})
     assert found == {"source": "references", "images": [f"/api/outputs/ref{i}.png" for i in range(4)]}
     assert project_cover.cover({"nodes": [_rf("n1")]}) is None
+
+
+def test_a_painted_mask_is_never_a_cover_and_a_paper_artboard_is_a_reference(clock):
+    clock.update({"/api/outputs/made.png": 1.0, "/api/outputs/mask.png": 9.0})
+    mask = _image_node("m", "/api/outputs/mask.png", definition="mask-painter", key="mask")
+    made = _image_node("n1", "/api/outputs/made.png")
+    assert project_cover.cover({"nodes": [made, mask]}) == {"source": "output", "images": ["/api/outputs/made.png"]}
+    assert "/api/outputs/mask.png" not in [c["url"] for c in project_cover.choices({"nodes": [made, mask]})]
+    paper = _image_node("p", "/api/outputs/artboard.png", definition="paper-source")
+    assert project_cover.cover({"nodes": [paper, mask]}) == {"source": "references", "images": ["/api/outputs/artboard.png"]}
 
 
 def test_a_pin_wins_while_its_image_is_in_the_project(clock):

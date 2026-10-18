@@ -121,6 +121,22 @@ describe('following an agent’s project switch', () => {
     expect(switchMessage(useProjectStore.getState().switchNotice!)).toContain('kept as a copy in Projects');
   });
 
+  it('an agent reopening this project saves the last edit into it and offers no way "back" to itself', async () => {
+    vi.mocked(api.recoverProject).mockClear();
+    setPrompt('b');
+    vi.mocked(api.listProjects).mockResolvedValue({
+      projects: [loop], trash: [], activeProjectId: 'p1', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION,
+    } as never);
+    vi.mocked(api.getProject).mockResolvedValue(saved(loop));
+    socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION,
+      projectSwitch: { ...agentSwitch, projectId: 'p1', projectName: 'Loop', created: false } } as never);
+    await vi.waitFor(() => expect(useProjectStore.getState().switchNotice).not.toBeNull());
+    expect(saveProject.mock.calls[0].slice(0, 1).concat(saveProject.mock.calls[0][2])).toEqual(['p1', 'r1']);
+    expect(api.recoverProject).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().switchNotice).toMatchObject({ previousProjectId: null, keptCopy: false });
+    expect(switchMessage(useProjectStore.getState().switchNotice!)).toBe('Claude Code opened “Loop”.');
+  });
+
   it('still treats a switch the person made in another window as a conflict', () => {
     socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION } as never);
     expect(useProjectStore.getState()).toMatchObject({ initialized: false, switchNotice: null });

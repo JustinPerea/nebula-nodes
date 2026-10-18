@@ -9155,11 +9155,13 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
         handoff = catalog.get("handoff") or {}
-        if ("snapshot" in body and catalog["activeProjectId"] != project_id
-                and handoff.get("projectId") == project_id and body.get("workspaceRevision") == handoff.get("revision")):
+        if ("snapshot" in body and handoff.get("projectId") == project_id
+                and body.get("workspaceRevision") == handoff.get("revision")):
             # Not once: an autosave already in flight at the switch lands
             # first, and the tab's own last save must still land after it.
-            # The next switch (anyone's) ends the handoff.
+            # The next switch (anyone's) ends the handoff. The project may
+            # be the open one again: an agent reopened the project the tab
+            # was showing, which reloads it from what was saved.
             _save_handoff(project, body["snapshot"])
             refresh_metadata(project)
             project_store.commit(catalog)

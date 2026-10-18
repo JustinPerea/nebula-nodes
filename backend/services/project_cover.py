@@ -5,7 +5,8 @@ Order of choice:
 1. The image the person pinned, while it is still one of the project's images.
 2. The newest image a node made (not an input reference).
 3. When the project has only input references (Image Input, Style
-   Reference), up to four of them, shown as a 2x2 mosaic.
+   Reference, Paper Source), up to four of them, shown as a 2x2 mosaic.
+   A painted mask is never a cover.
 4. Nothing: the card keeps its drawn placeholder.
 
 "Newest" goes by the output file's time on disk when Nebula can find the file,
@@ -19,8 +20,12 @@ from __future__ import annotations
 
 from typing import Any, Callable, Iterable
 
-# Nodes that hold a picture the person brought in rather than one Nebula made.
-REFERENCE_NODES = frozenset({"image-input", "style-reference"})
+# Nodes that hold a picture the person brought in rather than one Nebula made
+# (a Paper artboard counts too).
+REFERENCE_NODES = frozenset({"image-input", "style-reference", "paper-source"})
+# Nodes whose image is a working part, not a picture: a painted mask is black
+# and white, so it is never a cover or offered as one.
+NOT_PICTURES = frozenset({"mask-painter"})
 MAX_MOSAIC = 4
 MAX_URL_CHARS = 8192
 # The cover picker lists at most this many images, newest first.
@@ -94,7 +99,7 @@ def project_images(snapshot: dict[str, Any]) -> tuple[list[str], list[str]]:
     order = 0
     for node in snapshot.get("nodes") or []:
         data = node.get("data") if isinstance(node, dict) else None
-        if not isinstance(data, dict):
+        if not isinstance(data, dict) or data.get("definitionId") in NOT_PICTURES:
             continue
         if data.get("definitionId") in REFERENCE_NODES:
             for url in _reference_urls(data):

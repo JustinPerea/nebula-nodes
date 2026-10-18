@@ -427,9 +427,13 @@ async function followProjectSwitch(notice: ProjectSwitch, context: { id: string;
     lastSaved = '';
     await loadWorkspace();
     const actor = notice.actor?.kind === 'agent' && typeof notice.actor.name === 'string' ? notice.actor.name : null;
+    // An agent that reopened the project this tab was showing reloaded it
+    // from what was saved: there's no other project to go back to.
+    const reopened = notice.previousProjectId === notice.projectId;
     useProjectStore.setState({ switchNotice: {
       actorName: actor, created: notice.created === true, projectName: notice.projectName,
-      previousProjectId: notice.previousProjectId, previousProjectName: notice.previousProjectName, keptCopy,
+      previousProjectId: reopened ? null : notice.previousProjectId,
+      previousProjectName: reopened ? null : notice.previousProjectName, keptCopy,
     } });
   } catch (error) {
     const who = notice.actor?.name ?? 'Another app';
