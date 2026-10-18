@@ -142,6 +142,34 @@ def test_changes_params_renames_moves_and_journals_each(api):
     assert "node.params" in kinds and "node.renamed" in kinds
 
 
+
+def _last_sync(api) -> dict:
+    return [event for event in api.sent if event.get("type") == "graphSync"][-1]
+
+
+def test_a_move_tells_open_canvases_which_nodes_moved(api):
+    # A canvas keeps its own position for nodes it already shows, so without
+    # the list an agent's move didn't show on an open canvas until it reloaded.
+    prompt, image = _seed(api)
+    response = _apply(api, {
+        "nodes": [{"ref": "+up", "definitionId": "text-input"}],
+        "move": {image: {"x": 900, "y": 300}, "+up": {"x": 40, "y": 40}},
+        "params": [{"nodeId": prompt, "params": {"value": "a castle"}}],
+    })
+    assert response.status_code == 200, response.text
+    assert _last_sync(api)["moved"] == [image]
+
+    _apply(api, {"params": [{"nodeId": prompt, "params": {"value": "a fort"}}]})
+    assert "moved" not in _last_sync(api)
+
+
+def test_a_layout_write_tells_open_canvases_which_nodes_moved(api):
+    prompt, image = _seed(api)
+    response = api.client.put("/api/graph/layout", headers=PERSON,
+                              json={"positions": {image: {"x": 10, "y": 20}, prompt: {"x": 0, "y": 0}}})
+    assert response.status_code == 200, response.text
+    assert _last_sync(api)["moved"] == sorted([prompt, image])
+
 def test_remove_and_unwire(api):
     prompt, image = _seed(api)
     spare = api.graph.add_node("text-input", {"value": "spare"})
