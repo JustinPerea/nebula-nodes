@@ -402,6 +402,18 @@ def test_the_first_arrange_write_wins_and_a_second_tab_changes_nothing(api):
     assert arranged["summary"].startswith("arranged") and arranged["actor"]["name"] == "Claude Desktop"
 
 
+def test_another_agent_finishing_an_arrange_is_journaled_as_itself(api):
+    body = _apply(api, _arrange_plan(count=2)).json()
+    arrange_id, new = body["arrange"]["id"], body["arrange"]["nodeIds"]
+    # Codex read the arrangeId off a graphSync and wrote positions of its own.
+    response = api.client.put("/api/graph/layout", headers={"X-Nebula-Agent": "Codex"}, json={
+        "positions": {node_id: {"x": 3000, "y": 3000 + n} for n, node_id in enumerate(new)},
+        "arrangeId": arrange_id})
+    assert response.json()["status"] == "arranged"
+    arranged = [e for e in api.journal.read(after=0, limit=50)["events"] if e["kind"] == "node.moved"][-1]
+    assert arranged["actor"]["name"] == "Codex"
+
+
 def test_an_arrange_write_can_only_move_that_edits_new_nodes(api):
     prompt, image = _seed(api)
     api.client.put("/api/graph/layout", headers=PERSON, json={"positions": {image: {"x": 50, "y": 50}}})

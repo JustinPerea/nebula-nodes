@@ -7450,8 +7450,10 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
             node_id=moved[0] if len(moved) == 1 else None,
             data={"nodeIds": moved[:50], "count": len(moved)},
             summary=f"{'arranged' if arrange is not None else 'moved'} {_listed(moved)}",
-            # The agent asked for the arrange; the canvas only measured.
-            actor=arrange.actor if arrange is not None else None,
+            # The agent asked for the arrange; a canvas only measured. An agent
+            # that writes it (the arrangeId is on every graphSync) is credited
+            # itself, so it can't put its positions under another agent's name.
+            actor=arrange.actor if arrange is not None and not has_agent_marker(current_request_headers()) else None,
         )
     if arrange is not None:
         return {"status": "arranged", "count": len(normalized), "positions": normalized}
