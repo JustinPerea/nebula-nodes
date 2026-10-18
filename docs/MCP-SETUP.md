@@ -59,9 +59,10 @@ The server exposes these tools for building and running (see
   projects, switch the canvas to one, or start a new, empty one. The project
   that was open is saved as it is. The person's canvas follows, shows a note
   naming the agent, and offers a button back to the project they had open.
-  Start new work in a new project rather than emptying the canvas: clearing
-  a canvas that has nodes can't be undone, so the backend refuses it from
-  agents.
+  Start new work in a new project rather than emptying the canvas: it keeps
+  the person's work. Clearing a project that has nodes needs an explicit
+  force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
+  on an open canvas the person can undo it.
 
 And these canvas tools:
 
@@ -983,7 +984,7 @@ nebula projects                     # saved projects; * is open
 nebula project open <id>            # switch the canvas (not while a run is going)
 nebula project new "Logo ideas"     # start a new, empty project and open it
 nebula clear                        # refused when the canvas has nodes
-nebula clear --force                # the person only: clears it anyway
+nebula clear --force                # clears it anyway; the person can undo it
 ```
 
 Opening or starting a project keeps the one that was open as it is. When an
@@ -991,10 +992,15 @@ agent (or any script that isn't the person's own canvas) does it, the
 person's canvas follows, says who switched it, and offers a button back.
 The project's history names the agent.
 
-`nebula clear` can't be undone, so it refuses when the open project has
-nodes and points to `nebula project new` instead. `--force` clears anyway,
-but only for the person: the backend refuses a clear (or a `nebula load`
-over a canvas that has nodes) from anything that names an agent.
+`nebula clear` refuses when the open project has nodes and points to
+`nebula project new` instead, which keeps this project's work. `--force`
+clears anyway, for agents and the person alike. The backend enforces this
+for every caller: `DELETE /api/graph` on a project with nodes returns 409
+unless it has `?force=true` (the canvas's Clear button and chat `/clear`
+send it after the person confirms). It's a check of intent, not of who is
+asking. With the canvas open, a clear is one undo step: Undo (or Cmd-Z)
+brings back every node, wire, name and output. With no canvas open there is
+nothing to undo it from, so prefer `nebula project new`.
 
 `nebula context` lists the definition ids that can run here: with your keys,
 free, on the signed-in Krea account (marked `*`), or with a Nous sign-in.

@@ -340,7 +340,7 @@ def test_deleting_a_referenced_node_import_and_clear_invalidate(api):
     assert api.client.delete(f"/api/graph/node/{n1}", headers=PERSON).status_code == 200
     assert api.book.get(first).status == "invalidated" and "was deleted" in api.book.get(first).reason
     assert api.book.get(second).status == "open"
-    assert api.client.delete("/api/graph", headers=PERSON).status_code == 200
+    assert api.client.delete("/api/graph?force=true", headers=PERSON).status_code == 200
     assert api.book.get(second).status == "invalidated" and "cleared" in api.book.get(second).reason
 
     n3 = api.graph.add_node("text-input", {"value": "again"})
@@ -756,7 +756,7 @@ def test_the_person_can_still_edit_and_an_approval_expires(api, runs):
 def test_replacing_or_clearing_the_canvas_drops_approvals(api):
     _n1, _img, _result = _accept_cheap_image(api)
     assert api.approvals.open_list()
-    assert api.client.delete("/api/graph", headers=PERSON).status_code == 200
+    assert api.client.delete("/api/graph?force=true", headers=PERSON).status_code == 200
     assert api.approvals.open_list() == []
 
 

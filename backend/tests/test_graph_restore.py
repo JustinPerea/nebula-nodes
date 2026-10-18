@@ -126,7 +126,7 @@ def test_every_direct_edit_route_marks_its_sync_as_an_edit(api):
         lambda: api.client.post("/api/graph/connect", headers=AGENT, json={
             "source": prompt, "sourceHandle": "text", "target": image, "targetHandle": "prompt"}),
         lambda: api.client.delete(f"/api/graph/node/{image}", headers=AGENT),
-        lambda: api.client.delete("/api/graph", headers=AGENT),
+        lambda: api.client.delete("/api/graph?force=true", headers=AGENT),
     ]
     for call in calls:
         before = len(_syncs(api))
@@ -220,6 +220,47 @@ def test_undoing_an_agent_delete_brings_the_node_back_with_params_outputs_and_wi
     sync = _syncs(api)[-1]
     assert sync["edit"]["tab"] == TAB
     assert {n["id"] for n in sync["nodes"]} == {prompt, image}
+
+
+def test_an_agents_forced_clear_is_one_undo_step_that_restore_puts_back(api):
+    """D3 (2026-10-18): agents may clear with force. The clear's graphSync
+    names the agent (so an open canvas makes it one undo step), and the undo's
+    restore brings back every node, wire, name and output."""
+    prompt, image = _seed(api)
+    api.graph.nodes[prompt]["outputs"] = {"text": {"type": "Text", "value": "a lighthouse"}}
+    api.graph.set_label(prompt, "Hero prompt")
+    api.graph.set_label(image, "Hero shot")
+    # Without force the clear is refused for the agent too, and nothing changes.
+    before = len(_syncs(api))
+    refused = api.client.delete("/api/graph", headers=AGENT)
+    assert refused.status_code == 409 and "nebula project new" in refused.json()["detail"]
+    assert set(api.graph.nodes) == {prompt, image} and len(_syncs(api)) == before
+
+    # A tab id sent by the agent can't make the clear pass as a tab's echo.
+    cleared = api.client.delete("/api/graph?force=true", headers={**AGENT, "X-Nebula-Tab": TAB})
+    assert cleared.status_code == 200, cleared.text
+    assert api.graph.nodes == {} and api.graph.edges == []
+    sync = _syncs(api)[-1]
+    assert sync["nodes"] == [] and sync["edit"]["actor"]["name"] == "Claude"
+    assert sync["edit"]["actor"]["kind"] == "agent" and "tab" not in sync["edit"]
+    assert "graphReplaced" not in sync
+
+    response = _restore(api, {
+        "action": "undo",
+        "nodes": [
+            {"id": prompt, "definitionId": "text-input", "label": "Hero prompt", "params": {"value": "a lighthouse"},
+             "position": {"x": 0, "y": 0}, "outputs": {"text": {"type": "Text", "value": "a lighthouse"}}},
+            {"id": image, "definitionId": "nano-banana", "label": "Hero shot", "params": {},
+             "position": {"x": 400, "y": 0}, "outputs": {}},
+        ],
+        "wire": [{"source": prompt, "sourceHandle": "text", "target": image, "targetHandle": "prompt"}],
+    })
+    assert response.status_code == 200, response.text
+    assert sorted(response.json()["added"]) == sorted([prompt, image])
+    assert api.graph.nodes[prompt]["label"] == "Hero prompt" and api.graph.nodes[image]["label"] == "Hero shot"
+    assert api.graph.nodes[prompt]["params"] == {"value": "a lighthouse"}
+    assert api.graph.nodes[prompt]["outputs"]["text"]["value"] == "a lighthouse"
+    assert _wires(api) == {(prompt, "text", image, "prompt")}
 
 
 def test_undoing_an_agent_create_removes_its_nodes_and_wires(api):

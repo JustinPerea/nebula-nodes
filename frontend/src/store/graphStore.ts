@@ -1962,7 +1962,8 @@ async function ensureBackendFreshForLocalCanvas(
   if (exported.empty === false) {
     let clearRes: Response;
     try {
-      clearRes = await graphMutationFetch('/api/graph', { method: 'DELETE' });
+      // force: the backend refuses a clear of a project with nodes without it.
+      clearRes = await graphMutationFetch('/api/graph?force=true', { method: 'DELETE' });
     } catch {
       set({ backendFreshStartPending: true });
       throw new Error(

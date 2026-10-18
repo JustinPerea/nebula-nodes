@@ -7488,27 +7488,32 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
     return {"status": "updated", "count": len(normalized)}
 
 
-def _refuse_agent_wipe(verb: str) -> None:
-    """Clearing or replacing a canvas that has nodes can't be undone, so an
-    agent may not do it (Justin's D3). It can start a new project instead,
-    which keeps the person's work and lets them switch back. The person, and
-    a CLI run with no agent name, may still clear (`nebula clear --force`)."""
-    if cli_graph.nodes and has_agent_marker(current_request_headers()):
-        count = len(cli_graph.nodes)
-        raise HTTPException(status_code=403, detail=(
-            f"Agents can't {verb} a canvas that has nodes ({count} here): it can't be undone. "
-            "Start a new project instead: `nebula project new \"<name>\"` or the new_project MCP tool. "
-            "The person's work stays in this project, and they can switch back to it."
-        ))
+def _require_clear_intent(force: bool) -> None:
+    """Clearing a project that has nodes needs an explicit ``force``, from
+    every caller (Justin's D3, 2026-10-18). This is a check of intent, not of
+    who is asking: agents may clear too, because an open canvas makes the
+    clear one undo step (the graphSync carries ``edit``; Undo sends the nodes,
+    wires, names and outputs back through POST /api/graph/restore). The
+    canvas's Clear button and chat /clear send force after the person
+    confirms; `nebula clear --force` and the MCP send it when asked to."""
+    if force or not cli_graph.nodes:
+        return
+    count = len(cli_graph.nodes)
+    raise HTTPException(status_code=409, detail=(
+        f"The open project has {count} node{'s' if count != 1 else ''}, and clearing removes all of them. "
+        "To start fresh and keep this work, make a new project: `nebula project new \"<name>\"` "
+        "(MCP: new_project). To clear it anyway, pass force: `nebula clear --force` "
+        "(DELETE /api/graph?force=true). The person can undo a clear on an open canvas."
+    ))
 
 
 @app.delete("/api/graph")
-async def clear_graph() -> dict:
+async def clear_graph(force: bool = False) -> dict:
     # Clear Canvas is not consent to forget paid-provider state. Resolve each
     # recovery/ambiguity through its exact endpoint first; otherwise recreating
     # a node with the same identity could silently duplicate provider spend.
     _check_workspace_revision()
-    _refuse_agent_wipe("clear")
+    _require_clear_intent(force)
     with _paid_graph_mutation("clear the canvas"):
         _reject_graph_replacement_during_paid_start("clear the canvas")
         cli_graph.clear()
@@ -8704,8 +8709,6 @@ async def import_graph(body: dict[str, Any]) -> dict:
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
          candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
     _stage_graph_edges(candidate, raw_edges, id_map)
-    # After staging, so a bad file still gets its own error first.
-    _refuse_agent_wipe("replace")
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph")
         if execution_runs.has_active() or _synchronous_workspace_runs:

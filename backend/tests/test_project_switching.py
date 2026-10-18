@@ -1,5 +1,6 @@
 """Agents start and switch projects; the person's canvas follows with a way
-back (D4). Agents can't wipe a canvas that has nodes (D3). Project cards show
+back (D4). Clearing a project that has nodes needs an explicit force from
+every caller, agents included (D3, as changed 2026-10-18). Project cards show
 a real cover, and the person can pin one (F1, F2)."""
 from __future__ import annotations
 
@@ -181,34 +182,52 @@ def test_a_stale_tab_cant_hand_off_into_some_other_project(workspace, person):
         "snapshot": tab, "workspaceRevision": first["workspaceRevision"]}).status_code == 409
 
 
-# -- D3: agents don't wipe a canvas that has nodes ----------------------------------
+# -- D3: clearing a project that has nodes needs force, from anyone ---------------
 
-def test_agents_cant_clear_or_replace_a_canvas_with_nodes(workspace, person):
-    client, graph, _, _ = workspace
+def test_clearing_a_project_with_nodes_needs_force_from_every_caller(workspace, person):
+    """Intent, not identity: the person, a named agent and an unnamed script
+    all get the same 409 without force, and all may clear with it."""
+    client, graph, _, broadcast = workspace
+    _create(client, "Mine", headers=person.headers)
+    for headers in (person.headers, AGENT, {}):
+        graph.add_node("text-input", {"value": "keep"})
+        before = graph.get_state()
+        syncs = len(_syncs(broadcast))
+        refused = client.delete("/api/graph", headers=headers)
+        assert refused.status_code == 409, refused.text
+        detail = refused.json()["detail"]
+        assert "nebula project new" in detail and "new_project" in detail and "--force" in detail
+        assert graph.get_state() == before and len(_syncs(broadcast)) == syncs
+        # force=false is the same as leaving it out.
+        assert client.delete("/api/graph?force=false", headers=headers).status_code == 409
+        cleared = client.delete("/api/graph?force=true", headers=headers)
+        assert cleared.status_code == 200, cleared.text
+        assert graph.nodes == {}
+        assert "edit" in _syncs(broadcast)[-1]
+    # An empty project has nothing to lose, so no force is needed.
+    assert client.delete("/api/graph", headers=AGENT).status_code == 200
+
+
+def test_an_agent_clear_is_named_in_its_sync_so_the_canvas_can_undo_it(workspace, person):
+    client, graph, _, broadcast = workspace
     _create(client, "Mine", headers=person.headers)
     graph.add_node("text-input", {"value": "keep"})
-    before = graph.get_state()
-    for method, path, body in (("DELETE", "/api/graph", None),
-                               ("POST", "/api/graph/import", {"nodes": [], "edges": []})):
-        response = client.request(method, path, headers=AGENT, **({"json": body} if body is not None else {}))
-        assert response.status_code == 403, response.text
-        assert "nebula project new" in response.json()["detail"] and "new_project" in response.json()["detail"]
-        assert graph.get_state() == before
-    # The person may clear (the CLI's --force without an agent name is the same).
-    assert client.delete("/api/graph", headers=person.headers).status_code == 200
-    assert graph.nodes == {}
-    # An empty canvas has nothing to lose.
-    assert client.delete("/api/graph", headers=AGENT).status_code == 200
+    assert client.delete("/api/graph?force=true", headers=AGENT).status_code == 200
+    edit = _syncs(broadcast)[-1]["edit"]
+    assert edit["actor"]["kind"] == "agent" and edit["actor"]["name"] == "Claude Code"
+
+
+def test_an_agent_may_load_a_graph_over_one_with_nodes(workspace, person):
+    """An import over nodes is one undo step on an open canvas (#75), so it
+    isn't refused for agents."""
+    client, graph, _, broadcast = workspace
+    _create(client, "Mine", headers=person.headers)
+    graph.add_node("text-input", {"value": "keep"})
     imported = client.post("/api/graph/import", headers=AGENT, json={
         "nodes": [{"id": "a", "definitionId": "text-input", "params": {"value": "x"}}], "edges": []})
     assert imported.status_code == 200, imported.text
-
-
-def test_an_unnamed_cli_clear_still_works(workspace):
-    client, graph, _, _ = workspace
-    graph.add_node("text-input", {"value": "x"})
-    assert client.delete("/api/graph").status_code == 200
-    assert graph.nodes == {}
+    sync = _syncs(broadcast)[-1]
+    assert sync.get("graphReplaced") and sync["edit"]["actor"]["name"] == "Claude Code"
 
 
 # -- F1/F2: covers -----------------------------------------------------------------

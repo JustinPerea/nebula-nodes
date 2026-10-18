@@ -103,15 +103,19 @@ def run_clear(client: NebulaClient, force: bool = False) -> None:
     count = len(client.get_graph().get("nodes") or [])
     if count and not force:
         print(
-            f"error: the open project has {count} node{'s' if count != 1 else ''}, and clearing can't be undone.\n"
+            f"error: the open project has {count} node{'s' if count != 1 else ''}, and clearing removes all of them.\n"
             "To start fresh, make a new project instead (this one keeps its work):\n"
             "  nebula project new \"<name>\"\n"
-            "To clear it anyway, run `nebula clear --force`. Agents can't clear a project that has nodes.",
+            "To clear it anyway, run `nebula clear --force`.",
             file=sys.stderr,
         )
         sys.exit(1)
-    client.clear_graph()
-    print("Canvas cleared." if count else "Canvas cleared (it was already empty).")
+    client.clear_graph(force=force)
+    if count:
+        print(f"Canvas cleared ({count} node{'s' if count != 1 else ''} removed). "
+              "The person can undo it on an open canvas (Undo, or Cmd-Z).")
+    else:
+        print("Canvas cleared (it was already empty).")
 
 
 def _port_ref(value: str, role: str) -> tuple[str, str]:

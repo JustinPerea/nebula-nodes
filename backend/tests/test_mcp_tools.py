@@ -51,11 +51,11 @@ def nebula(monkeypatch):
     monkeypatch.setattr(main, "_krea_connector", lambda: _Krea())
     monkeypatch.setattr(main, "agent_spend_ledger", agent_spend.SpendLedger(None))
     with TestClient(main.app) as http:
-        http.delete("/api/graph")
+        http.delete("/api/graph?force=true")
         monkeypatch.setattr(mcp_server, "_api", lambda: NebulaAPI("http://testserver", client=http))
         yield http, release
         release.set()
-        http.delete("/api/graph")
+        http.delete("/api/graph?force=true")
     (main.OUTPUT_ROOT / picture).unlink(missing_ok=True)
 
 
@@ -250,10 +250,11 @@ def test_an_agent_starts_a_new_project_and_can_name_the_way_back(nebula):
     assert next(p for p in listed["projects"] if p["id"] == back["id"])["nodes"] == 2
     returned = mcp_server.open_project(back["id"])
     assert returned["project"]["nodes"] == 2 and returned["previousProject"]["name"] == "Agent sketches"
-    # Clearing a canvas with nodes isn't for agents: the refusal says what to do.
+    # Clearing a project with nodes needs force: the refusal says what to do.
     with pytest.raises(NebulaAPIError) as refused:
         mcp_server._canvas_call("DELETE", "/api/graph", None)
-    assert refused.value.status == 403 and "new_project" in refused.value.detail
+    assert refused.value.status == 409 and "new_project" in refused.value.detail
+    assert "--force" in refused.value.detail
 
 
 def test_every_tool_is_annotated_and_the_instructions_name_real_tools():

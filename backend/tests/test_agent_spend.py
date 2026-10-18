@@ -185,11 +185,11 @@ def client(monkeypatch, person):
     monkeypatch.setattr(main, "execute_graph", AsyncMock(side_effect=every_node_calls_its_provider))
     monkeypatch.setattr(main, "agent_spend_ledger", agent_spend.SpendLedger(None))
     test_client = TestClient(main.app)
-    test_client.delete("/api/graph")
+    test_client.delete("/api/graph?force=true")
     reset = {"runCostConfirmUsd": 1, "agentSpend": {"sessionUsd": None, "models": {}}}
     test_client.put("/api/settings", json=reset, headers=PERSON)
     yield test_client
-    test_client.delete("/api/graph")
+    test_client.delete("/api/graph?force=true")
     test_client.put("/api/settings", json=reset, headers=PERSON)
 
 

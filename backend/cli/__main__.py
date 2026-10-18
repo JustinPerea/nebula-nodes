@@ -206,13 +206,13 @@ def build_parser() -> argparse.ArgumentParser:
     load_p.add_argument("file", help="Input file path (JSON)")
 
     clear_p = sub.add_parser(
-        "clear", help="Remove every node from the open project (can't be undone)",
-        description="Remove every node from the open project. This can't be undone, so it refuses when "
-                    "the project has nodes unless you pass --force. To start fresh, run "
-                    "`nebula project new \"<name>\"` instead: it keeps this project's work. "
-                    "Agents can't clear a project that has nodes, even with --force.")
+        "clear", help="Remove every node from the open project (needs --force when it has nodes)",
+        description="Remove every node from the open project. It refuses when the project has nodes "
+                    "unless you pass --force. To start fresh, run `nebula project new \"<name>\"` "
+                    "instead: it keeps this project's work. With the canvas open, the person can undo "
+                    "a clear (Undo, or Cmd-Z), which brings back every node, wire, name and output.")
     clear_p.add_argument("--force", action="store_true",
-                         help="Clear even when the project has nodes (the person's choice; agents are refused)")
+                         help="Clear even when the project has nodes")
 
     path_p = sub.add_parser("path", help="Print local file path of a node's primary image")
     path_p.add_argument("node_ref", help="Node reference (e.g. n1)")

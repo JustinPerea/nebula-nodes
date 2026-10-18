@@ -27,12 +27,12 @@ def cli(monkeypatch):
 
     monkeypatch.setattr(main, "execute_graph", slow_execute_graph)
     with TestClient(main.app) as http:
-        http.delete("/api/graph")
+        http.delete("/api/graph?force=true")
         client = NebulaClient()
         client._client = http
         yield client, release
         release.set()
-        http.delete("/api/graph")
+        http.delete("/api/graph?force=true")
 
 
 def _text_node(client: NebulaClient) -> str:
@@ -120,17 +120,27 @@ def test_clear_refuses_a_canvas_with_nodes_unless_forced(cli, capsys, monkeypatc
     message = capsys.readouterr().err
     assert "has 1 node" in message and 'nebula project new "<name>"' in message and "--force" in message
     assert len(client.get_graph()["nodes"]) == 1
-    # An agent is refused by the backend even with --force.
+    # Agents may clear with --force (D3, 2026-10-18): the canvas makes it one
+    # undo step, and the CLI says so.
     monkeypatch.setenv("NEBULA_AGENT_NAME", "Claude Code")
-    with pytest.raises(SystemExit):
-        graph.run_clear(client, force=True)
-    assert "Agents can't clear" in capsys.readouterr().err
-    assert len(client.get_graph()["nodes"]) == 1
-    # The person's --force (no agent name) clears.
-    monkeypatch.delenv("NEBULA_AGENT_NAME")
     graph.run_clear(client, force=True)
     assert client.get_graph()["nodes"] == []
-    assert "Canvas cleared." in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Canvas cleared (1 node removed)" in out and "undo" in out
+
+
+def test_the_backend_refuses_a_clear_without_force_even_when_the_cli_check_is_skipped(cli, capsys):
+    """The 409 is the backend's, not only the CLI's: a node added after the
+    CLI looked (or a client that never looks) still needs force."""
+    client, _ = cli
+    _text_node(client)
+    with pytest.raises(SystemExit):
+        client.clear_graph()
+    err = capsys.readouterr().err
+    assert "nebula project new" in err and "--force" in err
+    assert len(client.get_graph()["nodes"]) == 1
+    client.clear_graph(force=True)
+    assert client.get_graph()["nodes"] == []
 
 
 def test_spend_shows_the_limits_an_agent_works_under(cli, capsys):

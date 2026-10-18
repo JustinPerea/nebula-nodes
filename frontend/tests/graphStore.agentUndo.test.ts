@@ -147,6 +147,31 @@ describe("an agent's edit is one undo step", () => {
     expect(useGraphStore.getState().edges).toHaveLength(1);
   });
 
+  it('an agent\'s forced clear (nebula clear --force) is one step: undo brings back names, outputs and wires, and posts the restore', async () => {
+    const { nodes, edges } = start();
+    const named = { ...nodes[0], data: { ...nodes[0].data, label: 'Hero prompt' } };
+    useGraphStore.setState({ nodes: [named, nodes[1]], edges });
+    sync([], [], { edit: CLAUDE });
+    expect(ids()).toEqual([]);
+    expect(useGraphStore.getState().undoNotice?.text).toBe('Claude changed the canvas');
+
+    useGraphStore.getState().undo();
+    expect(ids()).toEqual(['n1', 'n2']);
+    expect(nodeById('n1')?.data.label).toBe('Hero prompt');
+    expect(nodeById('n1')?.data.params).toEqual({ value: 'a lighthouse' });
+    expect(nodeById('n1')?.data.outputs).toEqual({ text: { type: 'Text', value: 'a lighthouse' } });
+    expect(useGraphStore.getState().edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual(['n1->n2']);
+    await flush();
+    const [body] = restores();
+    expect(body.action).toBe('undo');
+    expect(body.remove).toEqual([]);
+    expect(body.nodes.map((node) => [node.id, node.definitionId, node.label])).toEqual([
+      ['n1', 'text-input', 'Hero prompt'], ['n2', 'nano-banana', 'Nano Banana']]);
+    expect(body.nodes[0].params).toEqual({ value: 'a lighthouse' });
+    expect(body.nodes[0].outputs).toEqual({ text: { type: 'Text', value: 'a lighthouse' } });
+    expect(body.wire).toEqual([{ source: 'n1', sourceHandle: 'text', target: 'n2', targetHandle: 'prompt' }]);
+  });
+
   it('an agent\'s move is undone too', () => {
     const { nodes, edges } = start();
     sync([textNode('n1', 'a lighthouse', {}, 900), nodes[1]], edges, { edit: CLAUDE, moved: ['n1'] });

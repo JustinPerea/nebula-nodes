@@ -182,8 +182,10 @@ class NebulaClient:
                 ) from exc
             raise RuntimeError(exc.detail) from exc
 
-    def clear_graph(self) -> dict[str, Any]:
-        return self._request("DELETE", "/api/graph")
+    def clear_graph(self, force: bool = False) -> dict[str, Any]:
+        """Empty the open project. The backend refuses a project that has
+        nodes without force (409), whoever asks."""
+        return self._request("DELETE", "/api/graph", params={"force": "true"} if force else None)
 
     def import_graph(self, body: dict[str, Any]) -> dict[str, Any]:
         """Replace the graph with a saved one in one step (POST /api/graph/import)."""
