@@ -26,4 +26,4 @@ Keyboard activation focused the destination's first parameter. At 800×600 the A
 
 ## Remaining limits
 
-Existing global Undo/Redo restores frontend structure only; a later backend synchronization can restore CLI changes. Durable backend Undo/Redo is outside this slice. Native browser 200% zoom, live provider generation and packaged Electron were not acceptance gates for this change.
+Existing global Undo/Redo restores frontend structure only; a later backend synchronization can restore CLI changes. Durable backend Undo/Redo is outside this slice. (Update 2026-10-18: undo and redo now reach the backend through `POST /api/graph/restore`, and an agent's edit is its own undo step. See `implementation-notes.md`.) Native browser 200% zoom, live provider generation and packaged Electron were not acceptance gates for this change.

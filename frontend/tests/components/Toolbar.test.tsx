@@ -15,8 +15,10 @@ interface ToolbarGraph {
   executeGraph: () => void;
   cancelExecution: () => void;
   autoLayout: () => void;
-  clearGraph: () => void;
+  clearGraph: (options?: { undoStep?: object }) => void;
   loadGraph: (...args: unknown[]) => void;
+  beginUndoStep: () => object;
+  cancelUndoStep: (step: object) => void;
 }
 
 interface ToolbarUI {
@@ -33,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   graph: null as UseBoundStore<StoreApi<ToolbarGraph>> | null,
   ui: null as UseBoundStore<StoreApi<ToolbarUI>> | null,
   execute: vi.fn(), cancel: vi.fn(), layout: vi.fn(), clear: vi.fn(), load: vi.fn(),
+  undoStep: { step: 'before clear' }, beginStep: vi.fn(), cancelStep: vi.fn(),
   reset: vi.fn(), fit: vi.fn(), fetch: vi.fn(), cli: vi.fn(),
   zoomIn: vi.fn(), zoomOut: vi.fn(), zoomTo: vi.fn(),
   flow: { transform: [0, 0, 1] as [number, number, number], minZoom: 0.1, maxZoom: 4 },
@@ -49,6 +52,7 @@ vi.mock('../../src/store/graphStore', async () => {
     createLaunchingIds: [], providerStartAmbiguities: [], providerRecoveries: [], nodes: [{ id: 'n1' }],
     executeGraph: mocks.execute, cancelExecution: mocks.cancel, autoLayout: mocks.layout,
     clearGraph: mocks.clear, loadGraph: mocks.load,
+    beginUndoStep: () => { mocks.beginStep(); return mocks.undoStep; }, cancelUndoStep: mocks.cancelStep,
   }));
   return { useGraphStore: mocks.graph };
 });
@@ -271,6 +275,9 @@ describe('Canvas toolbar hierarchy', () => {
     expect(mocks.graph!.getState().providerRecoveries).toEqual([]);
     expect(mocks.graph!.getState().providerStartAmbiguities).toEqual([]);
     expect(mocks.clear).toHaveBeenCalledTimes(1);
+    // One undo step, taken before the backend clear's graphSync can empty the canvas.
+    expect(mocks.beginStep).toHaveBeenCalledTimes(1);
+    expect(mocks.clear).toHaveBeenCalledWith({ undoStep: mocks.undoStep });
   });
 
   it('leaves canvas and provider recovery state intact after clear is refused', async () => {
@@ -281,6 +288,7 @@ describe('Canvas toolbar hierarchy', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Clear canvas…' }));
     await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Provider is still settling.'));
     expect(mocks.clear).not.toHaveBeenCalled();
+    expect(mocks.cancelStep).toHaveBeenCalledWith(mocks.undoStep);
     expect(mocks.graph!.getState().providerRecoveries).toHaveLength(1);
     expect(mocks.graph!.getState().nodes).toHaveLength(1);
   });

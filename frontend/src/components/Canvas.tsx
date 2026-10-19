@@ -511,9 +511,17 @@ export function Canvas() {
             const formData = new FormData();
             formData.append('file', file);
             formData.append('create_node', 'true');
+            // One undo step per dropped file, taken before its graphSync lands.
+            const undoStep = useGraphStore.getState().beginUndoStep();
             apiFetch('/api/uploads', { method: 'POST', body: formData })
-              .then((r) => r.json())
-              .catch((err) => console.error('Upload/create failed:', err));
+              .then((r) => {
+                if (!r.ok) useGraphStore.getState().cancelUndoStep(undoStep);
+                return r.json();
+              })
+              .catch((err) => {
+                useGraphStore.getState().cancelUndoStep(undoStep);
+                console.error('Upload/create failed:', err);
+              });
           });
           return;
         }

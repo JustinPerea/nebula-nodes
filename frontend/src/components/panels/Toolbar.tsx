@@ -151,6 +151,9 @@ export function Toolbar() {
     if (!canLoadGraph(useGraphStore.getState())) return;
     // Confirm the backend clear before replacing the local graph. The backend
     // rejects this while any tracked execution owns provider lifecycle state.
+    // One undo step for the clear, taken before the backend's graphSync can
+    // empty the canvas.
+    const undoStep = useGraphStore.getState().beginUndoStep();
     try {
       const response = await apiFetch('/api/graph', { method: 'DELETE' });
       if (!response.ok) {
@@ -163,8 +166,9 @@ export function Toolbar() {
       // A successful backend clear proves no provider safety record remains;
       // unlike ordinary snapshot hydration, this is authoritative removal.
       useGraphStore.setState({ providerRecoveries: [], providerStartAmbiguities: [] });
-      useGraphStore.getState().clearGraph();
+      useGraphStore.getState().clearGraph({ undoStep });
     } catch (error) {
+      useGraphStore.getState().cancelUndoStep(undoStep);
       alert(error instanceof Error ? error.message : 'Could not clear the graph.');
     }
   }, []);
