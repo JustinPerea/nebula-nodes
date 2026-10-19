@@ -1,0 +1,64 @@
+/* A Studio toolbar's Move menu (components/asset-move/AssetMoveMenu.tsx). The
+ * button takes the toolbar's own class; this adds the caret and the menu. */
+.asset-move__trigger:disabled { opacity: var(--sr-disabled-opacity, 0.45); cursor: default; }
+.asset-move__caret { margin-left: 5px; font-size: 9px; line-height: 1; opacity: 0.7; }
+
+.asset-move__menu {
+  /* A short, slightly underdamped spring for the open, like the provider switcher's. */
+  --asset-move-spring: linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+  position: fixed;
+  left: 0;
+  top: 0;
+  /* Above a Studio (--sr-layer-workspace, 50), which a plain popover (40) sits under. */
+  z-index: var(--sr-layer-workspace-overlay, 55);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 4px;
+  border: 1px solid var(--sr-edge-strong, rgba(0, 0, 0, 0.18));
+  border-radius: 6px;
+  background: var(--sr-canvas-elevated, var(--sr-canvas, #fff));
+  color: var(--sr-ink, #1a1a1a);
+  font-family: var(--sr-ui, inherit);
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: top right;
+}
+.asset-move__menu--open {
+  opacity: 1;
+  pointer-events: auto;
+  animation:
+    asset-move-spring 320ms var(--asset-move-spring) both,
+    asset-move-fade 120ms ease-out both;
+}
+@keyframes asset-move-spring { from { transform: scale(0.97) translateY(-2px); } to { transform: none; } }
+@keyframes asset-move-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .asset-move__menu--open { animation: none; } }
+
+.asset-move__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 28px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.asset-move__item:hover:not([aria-disabled="true"]),
+.asset-move__item:focus-visible {
+  background: var(--sr-accent-soft, rgba(255, 90, 31, 0.12));
+  outline: none;
+}
+.asset-move__item[aria-disabled="true"] { cursor: default; color: var(--sr-ink-faint, rgba(0, 0, 0, 0.4)); }
+.asset-move__label { overflow-wrap: anywhere; }
+.asset-move__reason { font-size: 11px; color: var(--sr-ink-meta, rgba(0, 0, 0, 0.6)); white-space: normal; }

@@ -74,6 +74,8 @@ export interface StoredAssetChangedEvent {
   kind: 'moodboard' | 'character';
   id: string;
   deleted: boolean;
+  /** Only after a move (POST .../move): where it lives now, null for Global. */
+  projectId?: string | null;
 }
 
 /** The active project's pins, sent after graphSync and on every pin change. */

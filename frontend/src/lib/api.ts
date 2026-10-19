@@ -746,6 +746,33 @@ export async function deleteMoodboard(id: string): Promise<TrashedItem> {
   return ((await response.json()) as { trashed: TrashedItem }).trashed;
 }
 
+/** What a move answered (backend main.py _move_stored_asset). `from` / `to`
+ * are canvas project ids, null for Global. */
+export interface StoredAssetMove<T> {
+  status: 'moved' | 'unchanged';
+  from: string | null;
+  to: string | null;
+  fromName: string;
+  toName: string;
+  detail: string;
+  asset: T;
+}
+
+/** Move a saved board or Character to a canvas project (`projectId`) or to
+ * Global (null). Only where it's listed changes: its id, version and
+ * contents stay, and nodes that use it work in every project. */
+export async function moveStoredAsset<K extends 'moodboard' | 'character'>(
+  kind: K, id: string, projectId: string | null,
+): Promise<StoredAssetMove<K extends 'moodboard' ? Moodboard : Character>> {
+  const response = await apiFetch(`/api/${kind === 'moodboard' ? 'moodboards' : 'characters'}/${encodeURIComponent(id)}/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectId }),
+  });
+  if (!response.ok) throw await moodboardError(response, 'Move');
+  return response.json();
+}
+
 // ---------------------------------------------------------------------------
 // One saved asset as a card shows it: live, in Recently deleted, or gone
 // ---------------------------------------------------------------------------

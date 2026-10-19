@@ -530,7 +530,7 @@ def test_cli_help_lists_the_moodboard_verbs():
     parser = build_parser()
     action = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
     verbs = action.choices["moodboard"]._actions[-1].choices
-    assert set(verbs) == {"list", "show", "new", "add", "set", "analyze", "delete"}
+    assert set(verbs) == {"list", "show", "new", "add", "set", "analyze", "move", "delete"}
 
 
 def test_mcp_tools_run_off_the_event_loop_without_errors(app, tmp_path):

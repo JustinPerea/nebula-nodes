@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
   fetchMoodboards: vi.fn(),
   keepMoodboardBriefOverride: vi.fn(),
   lookupStoredAsset: vi.fn(),
+  moveStoredAsset: vi.fn(),
   updateMoodboard: vi.fn(),
 }));
 vi.mock('../../lib/api', () => api);
@@ -45,6 +46,14 @@ function board(overrides: Partial<Moodboard> = {}): Moodboard {
 
 const boards: Record<string, Moodboard> = {};
 
+/** What the backend's move answers, after moving the stored board. */
+function movedTo(id: string, to: string | null) {
+  const from = boards[id].projectId ?? null;
+  const moved = { ...boards[id], projectId: to ?? undefined } as Moodboard;
+  for (const key of Object.keys(boards)) if (boards[key].id === id) boards[key] = moved;
+  return { status: 'moved', from, to, fromName: from ?? 'Global', toName: to ?? 'Global', detail: '', asset: moved };
+}
+
 beforeEach(() => {
   Object.values(api).forEach((mock) => mock.mockReset());
   for (const key of Object.keys(boards)) delete boards[key];
@@ -58,6 +67,7 @@ beforeEach(() => {
   api.createMoodboard.mockImplementation(async (body: Partial<Moodboard>) => ({ ...board(), ...body, id: 'made1' }));
   api.updateMoodboard.mockImplementation(async (id: string, body: Partial<Moodboard>) => ({ ...boards[id], ...body }));
   api.lookupStoredAsset.mockResolvedValue({ status: 'missing' });
+  api.moveStoredAsset.mockImplementation(async (_kind: string, id: string, to: string | null) => movedTo(id, to));
   useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
   setOpenProject(['p1', 'Project'], [['pA', 'Shoot A']]);
 });
@@ -179,5 +189,149 @@ describe('Moodboard Studio and the open canvas project', () => {
     expect(await screen.findByDisplayValue('For p1')).toBeTruthy();
     await waitFor(() => expect(api.createMoodboard).toHaveBeenCalled(), { timeout: 3000 });
     expect(api.createMoodboard.mock.calls.every(([body]) => body.projectId === 'p1')).toBe(true);
+  });
+});
+
+const menuItems = () => screen.queryAllByRole('menuitem').map((item) => [item.textContent, item.getAttribute('aria-disabled') === 'true']);
+const openMove = () => fireEvent.click(screen.getByRole('button', { name: /^Move/ }));
+
+describe('Moodboard Studio Move', () => {
+  it('offers Move to <open project> for a Global board, and Move to Global for one in this project', async () => {
+    const view = await openStudio('g1', 'global', 'Global board');
+    openMove();
+    expect(menuItems()).toEqual([['Move to Project', false]]);
+    view.unmount();
+
+    await openStudio('p1b', 'project', 'Project board');
+    openMove();
+    expect(menuItems()).toEqual([['Move to Global', false]]);
+  });
+
+  it("offers both for another project's board; with no project open, Move to a project is off", async () => {
+    boards.pa1 = board({ id: 'pa1', name: 'Shoot A board', projectId: 'pA' });
+    const view = await openStudio('pa1', 'project', 'Shoot A board');
+    openMove();
+    expect(menuItems()).toEqual([['Move to Global', false], ['Move to Project', false]]);
+    view.unmount();
+
+    // (A project board doesn't open with no project open, so only a Global one can be here.)
+    setOpenProject(null);
+    await openStudio('g1', 'global', 'Global board');
+    openMove();
+    const items = screen.getAllByRole('menuitem');
+    expect(items.map((item) => item.querySelector('.asset-move__label')?.textContent)).toEqual(['Move to a project']);
+    expect(items[0].getAttribute('aria-disabled')).toBe('true');
+    expect(items[0].textContent).toContain('No project is open');
+    fireEvent.click(items[0]);
+    expect(api.moveStoredAsset).not.toHaveBeenCalled();
+  });
+
+  it('moves a Global board into the open project: the rail follows, the draft key moves, saves keep the new home', async () => {
+    await openStudio('g1', 'global', 'Global board');
+    expect(tab('Global').getAttribute('aria-selected')).toBe('true');
+    openMove();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
+
+    await waitFor(() => expect(api.moveStoredAsset).toHaveBeenCalledWith('moodboard', 'g1', 'p1'));
+    await waitFor(() => expect(useUIStore.getState().moodboardEditorScope).toBe('project'));
+    await waitFor(() => expect(tab('Project').getAttribute('aria-selected')).toBe('true'));
+    expect(await screen.findByRole('button', { name: /Global board/ })).toBeTruthy();
+    const drafts = useAssetStudioDraftStore.getState();
+    const moved = drafts.entries[assetStudioDraftKey('moodboard', 'project', 'g1', 'p1')];
+    expect((moved?.draft as { projectId?: string }).projectId).toBe('p1');
+    expect(drafts.entries[assetStudioDraftKey('moodboard', 'global', 'g1')]).toBeUndefined();
+
+    fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'House style' } });
+    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    expect(api.updateMoodboard.mock.calls.at(-1)![1]).toMatchObject({ name: 'House style', projectId: 'p1' });
+  });
+
+  it("moves another project's board to Global: the notice goes and the Global tab shows it", async () => {
+    boards.pa1 = board({ id: 'pa1', name: 'Shoot A board', projectId: 'pA' });
+    await openStudio('pa1', 'project', 'Shoot A board');
+    expect(await screen.findByText('This board is in Shoot A.')).toBeTruthy();
+    openMove();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Global' }));
+
+    await waitFor(() => expect(tab('Global').getAttribute('aria-selected')).toBe('true'));
+    expect(screen.queryByText('This board is in Shoot A.')).toBeNull();
+    expect(useUIStore.getState().moodboardEditorScope).toBe('global');
+    expect(api.moveStoredAsset).toHaveBeenCalledWith('moodboard', 'pa1', null);
+  });
+
+  it('moving it into the open project from another keeps the scope and key, and drops the notice', async () => {
+    boards.pa1 = board({ id: 'pa1', name: 'Shoot A board', projectId: 'pA' });
+    await openStudio('pa1', 'project', 'Shoot A board');
+    expect(await screen.findByText('This board is in Shoot A.')).toBeTruthy();
+    openMove();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
+    await waitFor(() => expect(screen.queryByText('This board is in Shoot A.')).toBeNull());
+    const entry = useAssetStudioDraftStore.getState().entries[assetStudioDraftKey('moodboard', 'project', 'pa1', 'p1')];
+    expect((entry?.draft as { projectId?: string }).projectId).toBe('p1');
+  });
+
+  it('saves unsaved edits first, then moves; edits typed during the move are kept and saved to the new home', async () => {
+    await openStudio('g1', 'global', 'Global board');
+    let finish: (() => void) | null = null;
+    api.moveStoredAsset.mockImplementation((_kind: string, id: string, to: string | null) =>
+      new Promise((resolve) => { finish = () => resolve(movedTo(id, to)); }));
+    fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'Edited before' } });
+    openMove();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
+
+    await waitFor(() => expect(api.moveStoredAsset).toHaveBeenCalled());
+    // The save went first, with the board still Global.
+    expect(api.updateMoodboard).toHaveBeenCalledTimes(1);
+    expect(api.updateMoodboard.mock.calls[0][1]).toMatchObject({ name: 'Edited before' });
+    expect(api.updateMoodboard.mock.calls[0][1].projectId).toBeUndefined();
+    expect(api.updateMoodboard.mock.invocationCallOrder[0]).toBeLessThan(api.moveStoredAsset.mock.invocationCallOrder[0]);
+
+    fireEvent.change(screen.getByDisplayValue('Edited before'), { target: { value: 'Typed while moving' } });
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(api.updateMoodboard).toHaveBeenCalledTimes(1); // no save with the old home mid-move
+    await act(async () => { finish!(); });
+
+    expect(await screen.findByDisplayValue('Typed while moving')).toBeTruthy();
+    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    expect(api.updateMoodboard.mock.calls[1][1]).toMatchObject({ name: 'Typed while moving', projectId: 'p1' });
+  });
+
+  it('the move broadcast landing before its answer (re-homing the draft) leaves no save stuck', async () => {
+    await openStudio('g1', 'global', 'Global board');
+    api.moveStoredAsset.mockImplementation(async (_kind: string, id: string, to: string | null) => {
+      useAssetStudioDraftStore.getState().rehome('moodboard', id, to); // storedAssetChanged arrives first
+      return movedTo(id, to);
+    });
+    openMove();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
+    await waitFor(() => expect(tab('Project').getAttribute('aria-selected')).toBe('true'));
+    const entry = useAssetStudioDraftStore.getState().entries[assetStudioDraftKey('moodboard', 'project', 'g1', 'p1')];
+    expect(entry?.pendingSaveId).toBeNull();
+    expect(entry?.saveState).toBe('saved');
+    fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'After the race' } });
+    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    expect(api.updateMoodboard.mock.calls.at(-1)![1]).toMatchObject({ name: 'After the race', projectId: 'p1' });
+  });
+
+  it("doesn't move when saving the edits fails, and a refused move keeps the draft", async () => {
+    await openStudio('g1', 'global', 'Global board');
+    api.updateMoodboard.mockRejectedValueOnce(new Error('Save failed: disk full'));
+    fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'Unsaved' } });
+    openMove();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
+    expect(await screen.findByText('Save failed: disk full')).toBeTruthy();
+    expect(api.moveStoredAsset).not.toHaveBeenCalled();
+
+    api.moveStoredAsset.mockRejectedValueOnce(new Error('Move failed: No project has the id'));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalledTimes(2));
+    openMove();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
+    expect(await screen.findByText('Move failed: No project has the id')).toBeTruthy();
+    expect(screen.getByDisplayValue('Unsaved')).toBeTruthy();
+    expect(useUIStore.getState().moodboardEditorScope).toBe('global');
+    const entry = useAssetStudioDraftStore.getState().entries[assetStudioDraftKey('moodboard', 'global', 'g1')];
+    expect(entry?.pendingSaveId).toBeNull();
+    expect(entry?.saveState).toBe('saved');
   });
 });

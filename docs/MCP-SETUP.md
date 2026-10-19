@@ -66,11 +66,13 @@ The server exposes these tools for building and running (see
   force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
   on an open canvas the person can undo it.
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
-  `moodboard_update`, `moodboard_analyze`, `moodboard_delete`: the boards in
+  `moodboard_update`, `moodboard_analyze`, `moodboard_move`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
   hand-written brief, and the brief generators get). `moodboard_analyze`
   with `dry_run` previews an analysis, optionally with other colour
-  thresholds, and saves nothing. See
+  thresholds, and saves nothing. `moodboard_move` and `character_move`
+  move a board or a Character to Global or a canvas project (`to`:
+  "global", "current", or a project's id or exact name). See
   [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
   characters, projects), and bring one back with the same id. See
@@ -1155,6 +1157,8 @@ nebula moodboard set <board> --restore set-output.json  # undo: the `set --json`
 nebula moodboard analyze <board>
 nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
 nebula moodboard list                      # boards for every project, plus the open project's
+nebula moodboard move <board> --to global  # or current, or a project's id or exact name
+nebula character move <character> --to "Shoot B"
 nebula moodboard delete <board>
 ```
 
@@ -1166,6 +1170,17 @@ nebula moodboard delete <board>
   project still shows, runs and opens it there; the board stays in its own
   project. Boards filed under an old-style id (the backend's folder name, from
   older builds) are moved at startup (contract 07, section 1.9).
+- Moving: `nebula moodboard move <board> --to ...` / `moodboard_move(board,
+  to)`, and `nebula character move` / `character_move` for a Character,
+  file it under Global or another canvas project (contract 07, section
+  1.10). `to` is `global`, `current` (refused with no project open), a
+  project's id, or its exact name (refused when two projects share it, or
+  it's in Recently deleted). Only its listing changes: id, contents,
+  `version` and `updatedAt` stay, and nodes in every project keep using it.
+  Anyone may move, agents included; the result's `from` says where to move
+  it back, and `movedBy` who moved it. Already there is a no-op
+  (`status: "unchanged"`); one in Recently deleted is refused until it's
+  restored.
 - A board is named by its id or exact name; an image by its number or id
   from `show`. `--json` prints the board as JSON (the MCP tools return the
   same shape).

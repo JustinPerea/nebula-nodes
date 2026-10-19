@@ -10733,11 +10733,16 @@ def _require_canvas_project(project_id: str | None) -> None:
 
 
 async def _broadcast_stored_asset(kind: str, asset: Mapping[str, Any] | None, asset_id: str = "",
-                                  *, deleted: bool = False) -> None:
+                                  *, deleted: bool = False, moved: bool = False) -> None:
     """Tell canvases a saved moodboard or character changed, so a card that
-    shows it (MoodboardNode, CharacterNode) fetches it again."""
-    message = {"type": "storedAssetChanged", "kind": kind,
-               "id": str((asset or {}).get("id") or asset_id), "deleted": deleted}
+    shows it (MoodboardNode, CharacterNode) fetches it again. A move also
+    says where it lives now (``projectId``, null for Global), so a Studio
+    draft kept for it this session follows (frontend assetStudioDraftStore
+    ``rehome``)."""
+    message: dict[str, Any] = {"type": "storedAssetChanged", "kind": kind,
+                               "id": str((asset or {}).get("id") or asset_id), "deleted": deleted}
+    if moved:
+        message["projectId"] = (asset or {}).get("projectId") or None
     try:
         await manager.broadcast_raw(message)
     except Exception:  # noqa: BLE001 - the asset is saved; a card fetches it again when it next mounts
@@ -10982,6 +10987,97 @@ async def delete_moodboard(moodboard_id: str) -> dict:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
     return {"status": "trashed", "id": moodboard_id, "trashed": record}
+
+
+# ---------- Move a board or Character between Global and a canvas project ----------
+#
+# Justin's call P4 (2026-10-19): "Move to Global" / "Move to <project>", so a
+# re-home that guessed wrong can be put right and a project board can become
+# house style. Anyone may move, agents included: moving it back undoes it.
+# Contract 07, 1.10.
+
+class AssetMoveBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Required, and null means Global: a body that forgot it is a 422, never a
+    # silent move to Global.
+    projectId: str | None
+
+
+def _scope_name(catalog: Mapping[str, Any], project_id: str | None) -> str:
+    """"Global", or a canvas project's name (Recently deleted too), else its id."""
+    if not project_id:
+        return "Global"
+    for key in ("projects", "trash"):
+        project = (catalog.get(key) or {}).get(project_id)
+        if isinstance(project, dict) and project.get("name"):
+            return str(project["name"])
+    return project_id
+
+
+async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> dict:
+    """POST /api/{moodboards|characters}/{id}/move. 400 for an unsafe
+    projectId; 404 for no such asset; 409 for one in Recently deleted (restore
+    it first) or an id already in the target; 422 for a target that isn't a
+    live canvas project. Already there: 200, ``status: "unchanged"``, nothing
+    written or broadcast."""
+    target = body.projectId
+    _validate_project_id_param(target)
+    store = _asset_store(kind)
+    noun = _asset_noun(kind)
+    try:
+        live = store.get(asset_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"{noun} '{asset_id}' not found")
+    if live is None:
+        record = _trashed_asset(kind, asset_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail=f"{noun} '{asset_id}' not found")
+        return JSONResponse(status_code=409, content={
+            "detail": (f"{noun} '{asset_id}' is in Recently deleted. Restore it first "
+                       f"(nebula trash restore {kind} {asset_id}, or POST /api/trash/{kind}/{asset_id}/restore), "
+                       "then move it."),
+            "code": "in_trash",
+            "trashed": record,
+        })
+    _require_canvas_project(target)
+    try:
+        before, after, moved = store.move(asset_id, target)
+    except KeyError:  # deleted between the read and the move
+        raise HTTPException(status_code=404, detail=f"{noun} '{asset_id}' not found")
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=(
+            f"{noun} '{asset_id}' can't move: {exc}. Nothing was changed.")) from exc
+    catalog = project_store.read()
+    source = before.get("projectId") or None
+    names = {"from": _scope_name(catalog, source), "to": _scope_name(catalog, target)}
+    name = after.get("name") or asset_id
+    out = _moodboard_out(after) if kind == "moodboard" else after
+    result: dict[str, Any] = {"status": "moved" if moved else "unchanged", "kind": kind, "id": asset_id,
+                              "from": source, "to": target, "fromName": names["from"], "toName": names["to"],
+                              "asset": out}
+    if not moved:
+        where = "Global" if not target else f"in {names['to']}"
+        result["detail"] = f"“{name}” is already {where}. Nothing changed."
+        return result
+    # Who moved it, as Recently deleted's deletedBy keeps it. Boards and
+    # Characters keep no "changed by" field, so it is in the answer only.
+    result["movedBy"] = actor_record(actor_for_headers(current_request_headers()))
+    result["detail"] = f"Moved “{name}” from {names['from']} to {names['to']}."
+    await _broadcast_stored_asset(kind, after, moved=True)
+    return result
+
+
+@app.post("/api/moodboards/{moodboard_id}/move")
+async def move_moodboard(moodboard_id: str, body: AssetMoveBody) -> dict:
+    """Move a board to a canvas project (``projectId``) or to Global (null)."""
+    return await _move_stored_asset("moodboard", moodboard_id, body)
+
+
+@app.post("/api/characters/{char_id}/move")
+async def move_character(char_id: str, body: AssetMoveBody) -> dict:
+    """Move a Character to a canvas project (``projectId``) or to Global (null)."""
+    return await _move_stored_asset("character", char_id, body)
 
 
 # ---------- Recently deleted: moodboards, characters and projects ----------

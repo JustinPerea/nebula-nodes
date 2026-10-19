@@ -108,13 +108,14 @@ def test_a_put_without_analysis_keeps_it(client):
     assert renamed["analysis"] == analyzed["analysis"]
 
 
-def test_a_board_cannot_move_to_another_project(client, canvas_project):
+def test_an_edit_cannot_move_a_board_to_another_project(client, canvas_project):
     board = _create(client, projectId=canvas_project)
 
     response = client.put(f"/api/moodboards/{board['id']}", json={"name": "Moved", "projectId": "project-two"})
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "projectId can't change: a board stays where it was created"
+    assert response.json()["detail"] == (
+        f"projectId can't change in an edit: move the board with POST /api/moodboards/{board['id']}/move")
     assert client.get(f"/api/moodboards/{board['id']}").json()["name"] == "Board"
 
 

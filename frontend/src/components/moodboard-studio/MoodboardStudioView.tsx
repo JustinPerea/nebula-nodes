@@ -17,7 +17,7 @@ import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useAssetStudioDraft } from '../../hooks/useAssetStudioDraft';
 import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
-import { NO_PROJECT_OPEN, currentProject } from '../../lib/currentProject';
+import { NO_PROJECT_OPEN, currentProject, useCurrentProject } from '../../lib/currentProject';
 import { useProjectName } from '../../hooks/useProjectName';
 import type { AssetScope } from '../../store/uiStore';
 import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardImage, MoodboardPinnedColors } from '../../types';
@@ -27,6 +27,9 @@ import { overrideAuthor } from './briefAuthor';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { assetHome, emptyRailMessage, railNotice, type AssetHome } from '../../lib/assetHome';
 import { wsClient } from '../../lib/wsClient';
+import { moveChoices, type MoveChoice } from '../../lib/assetMove';
+import { useStudioAssetMove } from '../../hooks/useStudioAssetMove';
+import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
 import '../../styles/moodboard-studio.css';
 
 interface MoodboardDraft {
@@ -372,6 +375,17 @@ export function MoodboardStudioView() {
     setRailScope(scope);
     enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
   };
+  // Move to Global / Move to <open project> (contract 07, 1.10).
+  const openProject = useCurrentProject();
+  const moving = useStudioAssetMove('moodboard');
+  const moveBoard = (choice: MoveChoice) => {
+    if (!savedId) return;
+    const id = savedId;
+    void moving.move({ id, key, target: choice.target, persist, canSave, isCurrent,
+      isOpen: () => mounted.current && useUIStore.getState().viewMode === 'moodboard-editor'
+        && useUIStore.getState().moodboardEditorId === id,
+      open: (movedId, scope) => { setRailScope(scope); enterMoodboardEditor(movedId, scope); } });
+  };
   const openRestored = (id: string, scope: AssetScope) => {
     if (!mounted.current || useUIStore.getState().viewMode !== 'moodboard-editor') return;
     setRailScope(scope);
@@ -399,6 +413,11 @@ export function MoodboardStudioView() {
             Retry
           </button>
         )}
+        {savedId && !isDraftId && loaded && (
+          <AssetMoveMenu noun="board" buttonClassName="moodboard-studio-toolbar__button"
+            choices={moveChoices(draft.projectId, openProject)} onChoose={moveBoard} busy={moving.busy}
+            disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} />
+        )}
         {savedId && !isDraftId && (
           <button type="button" className="moodboard-studio-toolbar__button" title="Move to Recently deleted"
             disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} onClick={() => void deleteBoard()}>
@@ -414,7 +433,7 @@ export function MoodboardStudioView() {
           initialScope={shownRailScope}
           boardHome={boardHome}
           projectId={projectId}
-          refreshKey={deleting.refreshKey}
+          refreshKey={`${deleting.refreshKey}:${moving.moves}`}
           onSelect={(id, scope) => {
             setRailScope(scope);
             enterMoodboardEditor(id, scope);
@@ -448,6 +467,9 @@ export function MoodboardStudioView() {
               <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert">{deleting.error}</div>
             )}
             {saveError && <div className="moodboard-studio__notice moodboard-studio__notice--error">{saveError}</div>}
+            {moving.error && (
+              <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert">{moving.error}</div>
+            )}
 
             <section className="moodboard-def">
               <div className="moodboard-def__cover">

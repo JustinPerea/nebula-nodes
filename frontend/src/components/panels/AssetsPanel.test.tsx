@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ReactFlowProvider } from '@xyflow/react';
 import type { Character, Moodboard } from '../../types';
 
-const api = vi.hoisted(() => ({ fetchMoodboards: vi.fn(), fetchCharacters: vi.fn() }));
+const api = vi.hoisted(() => ({ fetchMoodboards: vi.fn(), fetchCharacters: vi.fn(), moveStoredAsset: vi.fn() }));
 vi.mock('../../lib/api', () => api);
 vi.mock('../../lib/createPresets', () => ({ fetchPresets: vi.fn().mockResolvedValue([]) }));
 vi.mock('../../lib/backend', async (importOriginal) => ({ ...(await importOriginal<object>()), backendAssetUrlSync: (url: string) => url }));
@@ -13,6 +13,7 @@ import { AssetsPanel } from './AssetsPanel';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import { setOpenProject } from '../../test/projectState';
+import { assetStudioDraftKey, emptyAssetStudioEntry, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 
 const board = { id: 'b1', name: 'Warm editorial', thumbnail: '/api/outputs/a.png', images: [{}], mode: 'look' } as unknown as Moodboard;
 const character = { id: 'c1', name: 'Nari', thumbnail: '/api/outputs/n.png', referenceViews: ['a', 'b', 'c'] } as unknown as Character;
@@ -25,6 +26,9 @@ const enterCharacterEditor = vi.fn();
 beforeEach(() => {
   api.fetchMoodboards.mockReset().mockResolvedValue([board]);
   api.fetchCharacters.mockReset().mockResolvedValue([character]);
+  api.moveStoredAsset.mockReset().mockImplementation(async (_kind: string, _id: string, to: string | null) =>
+    ({ status: 'moved', from: null, to, fromName: 'Global', toName: to ? 'Shoot A' : 'Global', detail: '', asset: {} }));
+  useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
   [addMoodboardNode, addCharacterNode, enterMoodboardEditor, enterCharacterEditor].forEach((mock) => mock.mockReset());
   useGraphStore.setState({ addMoodboardNode, addCharacterNode, nodes: [] } as never);
   useUIStore.setState({ enterMoodboardEditor, enterCharacterEditor } as never);
@@ -119,5 +123,45 @@ describe('Assets panel Project tab', () => {
     fireEvent.click(newButton);
     expect(enterCharacterEditor).not.toHaveBeenCalled();
     expect(screen.queryByText(/failed/i)).toBeNull();
+  });
+});
+
+describe.each([
+  { tab: 'Moodboards' as const, item: 'Warm editorial', kind: 'moodboard', id: 'b1' },
+  { tab: 'Characters' as const, item: 'Nari', kind: 'character', id: 'c1' },
+])('Assets panel Move ($tab)', ({ tab, item, kind, id }) => {
+  it('a Global item moves into the open project, and a Studio draft kept for it follows', async () => {
+    // A draft from an earlier Studio visit, with an unsaved edit.
+    const kept = assetStudioDraftKey(kind as 'moodboard', 'global', id);
+    useAssetStudioDraftStore.setState({ entries: { [kept]: { ...emptyAssetStudioEntry({ name: 'Edited, unsaved' }),
+      savedId: id, loaded: true, dirty: true } }, aliases: {} });
+    await openTab(tab);
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${item}`) }));
+    fireEvent.click(screen.getByRole('button', { name: /^Move/ }));
+    expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual(['Move to Shoot A']);
+    const listed = api[kind === 'moodboard' ? 'fetchMoodboards' : 'fetchCharacters'].mock.calls.length;
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Shoot A' }));
+
+    await waitFor(() => expect(api.moveStoredAsset).toHaveBeenCalledWith(kind, id, 'pA'));
+    await waitFor(() => expect(api[kind === 'moodboard' ? 'fetchMoodboards' : 'fetchCharacters'].mock.calls.length).toBeGreaterThan(listed));
+    const drafts = useAssetStudioDraftStore.getState();
+    const moved = drafts.entries[assetStudioDraftKey(kind as 'moodboard', 'project', id, 'pA')];
+    expect(moved?.draft).toEqual({ name: 'Edited, unsaved', projectId: 'pA' });
+    expect(moved?.dirty).toBe(true);
+    expect(drafts.entries[kept]).toBeUndefined();
+  });
+
+  it("a project item offers Move to Global; a refused move says why", async () => {
+    api[kind === 'moodboard' ? 'fetchMoodboards' : 'fetchCharacters'].mockResolvedValue([
+      { ...(kind === 'moodboard' ? board : character), projectId: 'pA' }]);
+    api.moveStoredAsset.mockRejectedValueOnce(new Error('Move failed: No project has the id'));
+    await openTab(tab);
+    fireEvent.click(screen.getByRole('tab', { name: 'Project' }));
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${item}`) }));
+    fireEvent.click(screen.getByRole('button', { name: /^Move/ }));
+    expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual(['Move to Global']);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Global' }));
+    expect(await screen.findByText('Move failed: No project has the id')).toBeTruthy();
+    expect(api.moveStoredAsset).toHaveBeenCalledWith(kind, id, null);
   });
 });

@@ -49,6 +49,10 @@ interface AssetStudioDraftState {
   finishSave: (key: string, id: string, revision: number, savedId: string, thumbnail: string) => boolean;
   failSave: (key: string, id: string, message: string) => void;
   copyTo: (key: string, destination: string) => void;
+  /** The asset moved (Global <-> a project): drafts kept for it take its new
+   * `projectId` and the key of its new scope, so a later save never sends
+   * the old one (a board's PUT refuses that) and unsaved edits come along. */
+  rehome: (kind: AssetStudioKind, id: string, projectId: string | null) => void;
   beginAnalysis: (key: string) => { id: string; revision: number } | null;
   clearAnalysis: (key: string, id: string) => void;
 }
@@ -109,6 +113,21 @@ export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get)
       const entries = { ...state.entries, [destination]: { ...entry } }; delete entries[source];
       return { entries, aliases: { ...state.aliases, [source]: destination, [key]: destination } };
     });
+  },
+  rehome: (kind, id, projectId) => {
+    for (const key of Object.keys(get().entries)) {
+      let parts: unknown;
+      try { parts = JSON.parse(key); } catch { continue; }
+      if (!Array.isArray(parts) || parts[0] !== kind || parts[parts.length - 1] !== id) continue;
+      const entry = get().entries[key];
+      const draft = (entry?.draft ?? null) as { projectId?: string | null } | null;
+      if (!entry || !draft || (draft.projectId ?? null) === projectId) continue;
+      get().patch(key, { draft: { ...draft, projectId: projectId ?? undefined } });
+      // A project draft is keyed by the project open when it was made; the
+      // likeliest one to open it next is the project it now lives in.
+      const scope = projectId ? 'project' : 'global';
+      if (parts[1] !== scope) get().copyTo(key, assetStudioDraftKey(kind, scope, id, projectId));
+    }
   },
   beginAnalysis: (key) => {
     key = resolveAssetStudioDraftKey(get(), key);

@@ -4,7 +4,7 @@ import { useReactFlow } from '@xyflow/react';
 import { X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
-import { fetchCharacters, fetchMoodboards } from '../../lib/api';
+import { fetchCharacters, fetchMoodboards, moveStoredAsset } from '../../lib/api';
 import { fetchPresets, type Preset } from '../../lib/createPresets';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../../lib/dragMime';
@@ -14,6 +14,9 @@ import type { Character, Moodboard } from '../../types';
 import { ScrollFade } from '../ScrollFade';
 import { NO_PROJECT_OPEN, useCurrentProject } from '../../lib/currentProject';
 import { wsClient } from '../../lib/wsClient';
+import { moveChoices } from '../../lib/assetMove';
+import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
+import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import '../../styles/panels.css';
 import '../../styles/character-studio.css';
 import '../../styles/moodboard-studio.css';
@@ -36,7 +39,9 @@ const TABS: Array<{ id: Tab; label: string }> = [
  * Space too), and never changes the canvas. Double-click opens it (a Studio,
  * or Create with a Style); the selected item's buttons do the same, and
  * "Add to canvas" (or dragging the item) puts a Character or Moodboard node
- * on the canvas through the existing add*Node paths + drag MIMEs.
+ * on the canvas through the existing add*Node paths + drag MIMEs. "Move"
+ * files a Character or Moodboard under Global or the open project
+ * (contract 07, 1.10).
  */
 export function AssetsPanel() {
   const togglePanel = useUIStore((s) => s.togglePanel);
@@ -68,6 +73,8 @@ export function AssetsPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [relistKey, setRelistKey] = useState(0);
+  const [movingId, setMovingId] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
 
   // A board or Character saved or deleted elsewhere (the Studio, an agent,
   // the CLI) shows up without reopening the panel.
@@ -157,6 +164,21 @@ export function AssetsPanel() {
     else if (tab === 'moodboards') enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
   };
 
+  // Move to Global / Move to <open project>. A Studio draft kept for it this
+  // session follows (rehome), so its next save goes to the new home.
+  const moveAsset = async (kind: 'moodboard' | 'character', id: string, target: string | null) => {
+    setMovingId(id);
+    setMoveError(null);
+    try {
+      const result = await moveStoredAsset(kind, id, target);
+      useAssetStudioDraftStore.getState().rehome(kind, id, result.to);
+      setRelistKey((value) => value + 1);
+    } catch (err) {
+      setMoveError(err instanceof Error ? err.message : 'Move failed.');
+    }
+    setMovingId(null);
+  };
+
   const applyStyle = (p: Preset) => {
     // Hand the preset to Create (consumed on mount) and switch surfaces.
     setPendingPreset(p);
@@ -240,6 +262,9 @@ export function AssetsPanel() {
           {failed && !busy && (
             <div className="character-palette__empty character-palette__empty--error">{failed}</div>
           )}
+          {moveError && (
+            <div className="character-palette__empty character-palette__empty--error" role="alert">{moveError}</div>
+          )}
 
           {!noProject && !busy && !failed && tab === 'characters' && (
             filteredCharacters.length === 0 ? (
@@ -258,6 +283,9 @@ export function AssetsPanel() {
                   onOpen={() => enterCharacterEditor(c.id, scope)}
                   openLabel="Open"
                   onAdd={() => addCharacterNode(c.id, canvasCenter(), { name: c.name, thumbnail: c.thumbnail })}
+                  move={<AssetMoveMenu noun="Character" buttonClassName="assets-item__action"
+                    choices={moveChoices(c.projectId, project)} busy={movingId === c.id}
+                    onChoose={(choice) => { void moveAsset('character', c.id, choice.target); }} />}
                 />
               ))
             )
@@ -281,6 +309,9 @@ export function AssetsPanel() {
                   openLabel="Open"
                   onAdd={() => addMoodboardNode(m.id, canvasCenter(),
                     { name: m.name, thumbnail: m.thumbnail, imageCount: m.images.length, mode: m.mode })}
+                  move={<AssetMoveMenu noun="board" buttonClassName="assets-item__action"
+                    choices={moveChoices(m.projectId, project)} busy={movingId === m.id}
+                    onChoose={(choice) => { void moveAsset('moodboard', m.id, choice.target); }} />}
                 />
               ))
             )
@@ -326,6 +357,7 @@ function AssetItem({
   openLabel,
   onAdd,
   onDragStart,
+  move,
 }: {
   name: string;
   sub: ReactNode;
@@ -337,6 +369,8 @@ function AssetItem({
   openLabel: string;
   onAdd?: () => void;
   onDragStart?: (e: ReactDragEvent<HTMLButtonElement>) => void;
+  /** The Move menu (Characters and Moodboards). */
+  move?: ReactNode;
 }) {
   const label = name || 'Untitled';
   return (
@@ -373,6 +407,7 @@ function AssetItem({
               Add to canvas
             </button>
           )}
+          {move}
         </div>
       )}
     </div>

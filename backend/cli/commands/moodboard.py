@@ -1,4 +1,4 @@
-"""nebula moodboard list|show|new|add|set|analyze [--dry-run]|delete.
+"""nebula moodboard list|show|new|add|set|analyze [--dry-run]|move|delete.
 
 The boards Moodboard Studio edits, from the terminal. The work is in
 moodboard_client.py, which the MCP server's moodboard tools share; this file
@@ -249,6 +249,24 @@ def _added_line(count: int, skipped: int) -> str:
     return line
 
 
+def print_move(result: dict[str, Any], kind: str) -> None:
+    """A move's answer in words, with the command that moves it back."""
+    asset = result.get("asset") if isinstance(result.get("asset"), dict) else {}
+    label = f"{asset.get('name') or result.get('id')} ({result.get('id')})"
+    if result.get("status") != "moved":
+        where = "Global" if not result.get("to") else f"in {result.get('toName') or result.get('to')}"
+        print(f"{label} is already {where}. Nothing changed.")
+        return
+    source, target = result.get("fromName") or "Global", result.get("toName") or "Global"
+    if result.get("to"):
+        print(f"Moved {label} from {source} to {target}. It's in {target}'s Project tab now.")
+    else:
+        print(f"Moved {label} from {source} to Global. Every project's Global tab lists it now.")
+    print("Nodes that use it keep working in every project.")
+    back = result.get("from") or "global"
+    print(f"Move it back: nebula {kind} move {result.get('id')} --to {back}")
+
+
 def run(client: NebulaClient, args) -> None:
     api = client.api
     headers = client._identity_headers()
@@ -352,6 +370,13 @@ def run(client: NebulaClient, args) -> None:
                 _print_json(boards.brief(board))
             else:
                 _print_board(board, boards.project_names(api, headers) if board.get("projectId") else None)
+        elif verb == "move":
+            result = boards.move_board(api, args.board, args.to, headers)
+            if args.json:
+                asset = result.get("asset")
+                _print_json({**result, "asset": boards.brief(asset) if isinstance(asset, dict) else asset})
+                return
+            print_move(result, "moodboard")
         elif verb == "delete":
             result = boards.delete_board(api, args.board, headers)
             if result.get("restorable"):
@@ -478,6 +503,17 @@ def add_parser(sub) -> None:
     analyze_p.add_argument("--merge-delta-e", dest="merge_delta_e", type=float, metavar="N",
                            help="Colours closer than this merge, dE00 0 to 50 (default 5; dry run only)")
     analyze_p.add_argument("--json", action="store_true", help="Print JSON")
+
+    move_p = msub.add_parser(
+        "move", help="Move a board to Global or to a canvas project",
+        description=("Global boards show in every project's Global tab; a project's boards in its Project tab. "
+                     "Only where it's listed changes: nodes that use the board keep working in every project, "
+                     "and its settings, brief and analysis stay. Moving it back undoes it."))
+    move_p.add_argument("board", help=board_help)
+    move_p.add_argument("--to", required=True, metavar="WHERE",
+                        help="global, current (the project open on the canvas), or a project's id or exact "
+                             "name from `nebula projects`")
+    move_p.add_argument("--json", action="store_true", help="Print JSON")
 
     delete_p = msub.add_parser(
         "delete", help="Delete a board (it goes to Recently deleted where Nebula has it)",

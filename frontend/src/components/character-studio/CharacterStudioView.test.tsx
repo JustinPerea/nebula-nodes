@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   fetchCharacter: vi.fn(),
   fetchCharacters: vi.fn(),
   lookupStoredAsset: vi.fn(),
+  moveStoredAsset: vi.fn(),
   updateCharacter: vi.fn(),
 }));
 vi.mock('../../lib/api', () => api);
@@ -24,7 +25,7 @@ vi.mock('../../hooks/useAssetDelete', () => ({
 
 import { CharacterStudioView } from './CharacterStudioView';
 import { useUIStore } from '../../store/uiStore';
-import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
+import { assetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { setOpenProject } from '../../test/projectState';
 
 function character(overrides: Partial<Character> = {}): Character {
@@ -48,6 +49,11 @@ beforeEach(() => {
     .filter((item) => (scope === 'project' ? item.projectId === projectId : !item.projectId)));
   api.updateCharacter.mockImplementation(async (id: string, body: Partial<Character>) => ({ ...characters[id], ...body }));
   api.lookupStoredAsset.mockResolvedValue({ status: 'missing' });
+  api.moveStoredAsset.mockImplementation(async (_kind: string, id: string, to: string | null) => {
+    const from = characters[id].projectId ?? null;
+    characters[id] = { ...characters[id], projectId: to ?? undefined };
+    return { status: 'moved', from, to, fromName: from ?? 'Global', toName: to ?? 'Global', detail: '', asset: characters[id] };
+  });
   useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
   setOpenProject(['p1', 'Project'], [['pA', 'Shoot A']]);
 });
@@ -109,5 +115,57 @@ describe('Character Studio rail', () => {
     expect(await screen.findByRole('button', { name: /Shoot A hero/ })).toBeTruthy();
     // The open Character is now the other project's, and the rail says so.
     expect(await screen.findByText('This Character is in Project.')).toBeTruthy();
+  });
+});
+
+describe('Character Studio Move', () => {
+  const items = () => screen.queryAllByRole('menuitem').map((item) => item.querySelector('.asset-move__label')?.textContent);
+
+  it('offers the choices for where the Character lives', async () => {
+    let view = await openStudio('c1', 'global', 'Nari');
+    fireEvent.click(screen.getByRole('button', { name: /^Move/ }));
+    expect(items()).toEqual(['Move to Project']);
+    view.unmount();
+    view = await openStudio('cp', 'project', 'Project hero');
+    fireEvent.click(screen.getByRole('button', { name: /^Move/ }));
+    expect(items()).toEqual(['Move to Global']);
+    view.unmount();
+    await openStudio('ca', 'project', 'Shoot A hero');
+    fireEvent.click(screen.getByRole('button', { name: /^Move/ }));
+    expect(items()).toEqual(['Move to Global', 'Move to Project']);
+  });
+
+  it('moves a Global Character into the open project: the rail switches and the draft key moves', async () => {
+    await openStudio('c1', 'global', 'Nari');
+    fireEvent.click(screen.getByRole('button', { name: /^Move/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
+    await waitFor(() => expect(api.moveStoredAsset).toHaveBeenCalledWith('character', 'c1', 'p1'));
+    await waitFor(() => expect(tab('Project').getAttribute('aria-selected')).toBe('true'));
+    expect(useUIStore.getState().characterEditorScope).toBe('project');
+    const entry = useAssetStudioDraftStore.getState().entries[assetStudioDraftKey('character', 'project', 'c1', 'p1')];
+    expect((entry?.draft as { projectId?: string }).projectId).toBe('p1');
+    expect(screen.getByDisplayValue('Nari')).toBeTruthy();
+  });
+
+  it('saves unsaved edits before it moves, and keeps them', async () => {
+    await openStudio('c1', 'global', 'Nari');
+    fireEvent.change(screen.getByDisplayValue('Nari'), { target: { value: 'Nari 2' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Move/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
+    await waitFor(() => expect(api.moveStoredAsset).toHaveBeenCalled());
+    expect(api.updateCharacter.mock.calls[0][1]).toMatchObject({ name: 'Nari 2' });
+    expect(api.updateCharacter.mock.invocationCallOrder[0]).toBeLessThan(api.moveStoredAsset.mock.invocationCallOrder[0]);
+    await waitFor(() => expect(tab('Project').getAttribute('aria-selected')).toBe('true'));
+    expect(screen.getByDisplayValue('Nari 2')).toBeTruthy();
+  });
+
+  it('with no project open, Move to a project is off', async () => {
+    setOpenProject(null);
+    await openStudio('c1', 'global', 'Nari');
+    fireEvent.click(screen.getByRole('button', { name: /^Move/ }));
+    const [only] = screen.getAllByRole('menuitem');
+    expect(only.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(only);
+    expect(api.moveStoredAsset).not.toHaveBeenCalled();
   });
 });

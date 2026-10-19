@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import type { SaveState } from './CharacterStudioView';
@@ -9,6 +10,8 @@ interface CharacterStudioToolbarProps {
   /** Shown for a saved Character: moves it to Recently deleted. */
   onDelete?: () => void;
   deleteDisabled?: boolean;
+  /** The Move menu (AssetMoveMenu), shown before Delete for a saved Character. */
+  move?: ReactNode;
 }
 
 const SAVE_LABEL: Record<SaveState, string> = {
@@ -30,6 +33,7 @@ export function CharacterStudioToolbar({
   onRetry,
   onDelete,
   deleteDisabled = false,
+  move,
 }: CharacterStudioToolbarProps) {
   const exitCharacterEditor = useUIStore((s) => s.exitCharacterEditor);
   const label = SAVE_LABEL[saveState];
@@ -54,6 +58,7 @@ export function CharacterStudioToolbar({
           Retry
         </button>
       )}
+      {move}
       {onDelete && (
         <button
           type="button"
