@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../lib/wsClient', () => ({
   wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
+vi.mock('../lib/personSession', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/personSession')>()),
+  holdsPersonCredential: vi.fn(() => false),
+}));
 vi.mock('../lib/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/projects')>()),
   saveProject: vi.fn(),
@@ -10,13 +14,16 @@ vi.mock('../lib/projects', async (importOriginal) => ({
 }));
 
 import * as api from '../lib/projects';
+import { holdsPersonCredential } from '../lib/personSession';
 import { setProjectContext } from '../lib/projectContext';
 import { wsClient } from '../lib/wsClient';
 import { useGraphStore } from './graphStore';
+import { useUIStore } from './uiStore';
 import { subscribeProjectAutosave, useProjectStore } from './projectStore';
 import type { ProjectSnapshot, SavedProject } from '../lib/projects';
 
 const saveProject = vi.mocked(api.saveProject);
+const personTab = vi.mocked(holdsPersonCredential);
 const summary = {
   id: 'p1', name: 'Loop', createdAt: '', updatedAt: '2026-10-16T00:00:00Z', lastOpenedAt: null,
   nodeCount: 1, edgeCount: 0, thumbnail: null,
@@ -43,6 +50,8 @@ beforeEach(async () => {
   saveProject.mockReset();
   saveProject.mockImplementation(async (_id, snapshot) => saved(snapshot));
   setProjectContext({ id: 'p1', revision: 'r1' });
+  personTab.mockReturnValue(false);
+  useUIStore.setState({ canvasViewport: null });
   setPrompt('a');
   useProjectStore.setState({
     initialized: true, busy: false, activeProject: summary, dirty: false, saveStatus: 'saved', error: null,
@@ -65,6 +74,31 @@ beforeEach(async () => {
 afterEach(() => {
   unsubscribe();
   vi.useRealTimers();
+});
+
+describe('the saved view (design-canvas gap 19)', () => {
+  it("a tab that isn't connected as the person never saves its zoom and pan", async () => {
+    useUIStore.getState().setCanvasViewport({ x: -900, y: -400, zoom: 4 });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(saveProject).not.toHaveBeenCalled();
+    expect(useProjectStore.getState()).toMatchObject({ dirty: false, saveStatus: 'saved' });
+
+    // Its edits still save, carrying the project's view rather than its own.
+    setPrompt('b');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(saveProject).toHaveBeenCalledTimes(1);
+    expect(saveProject.mock.calls[0][1].viewport).toBeNull();
+    expect(useUIStore.getState().canvasViewport).toEqual({ x: -900, y: -400, zoom: 4 });
+  });
+
+  it("the person's tab saves its view", async () => {
+    personTab.mockReturnValue(true);
+    useUIStore.getState().setCanvasViewport({ x: 10, y: 20, zoom: 0.7 });
+    expect(useProjectStore.getState()).toMatchObject({ dirty: true, saveStatus: 'unsaved' });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(saveProject).toHaveBeenCalledTimes(1);
+    expect(saveProject.mock.calls[0][1].viewport).toEqual({ x: 10, y: 20, zoom: 0.7 });
+  });
 });
 
 describe('project autosave', () => {

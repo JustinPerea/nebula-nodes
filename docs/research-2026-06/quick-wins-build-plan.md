@@ -33,6 +33,7 @@ These were the open questions; I've taken the recommended default for each so th
 3. `Canvas.tsx` — conditionally render `<Controls />` + `<MiniMap pannable zoomable .../>` (gated on `canvasPerfMode`) after `<Background>`; MiniMap `nodeColor` muted, themed for Slava.
 4. LOD: a tiny `<ZoomLodController/>` child reads live zoom via `useStore((s)=>s.transform[2])` and writes `data-lod` on `.canvas-wrapper` (threshold 0.4) — **no per-node re-render**. Must sit inside the ReactFlowProvider context.
 5. `canvas.css` — `[data-lod='low']` rules hide node previews/labels + flatten node box; keep handles/edges visible.
+   *(2026-10-19, design-canvas gap 19: images and video stills now stay visible when zoomed out, swapped for 512 px thumbnails from `/api/outputs/<rel>?thumb=1`; players, text, audio, 3D and port labels still hide. The cutoff moved to `CANVAS_LOD_ZOOM` in `lib/canvasOverview.ts`. See implementation-notes.md.)*
 6. `Settings.tsx` — two toggle-rows in the existing "Interface" section.
 7. Optional: a `<Panel position='bottom-left'>` node-count readout.
 

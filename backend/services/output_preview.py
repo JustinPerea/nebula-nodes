@@ -15,7 +15,7 @@ MAX_BYTES = 350_000
 _SHEET_GAP = 8
 
 
-def _has_alpha(image: Image.Image) -> bool:
+def has_alpha(image: Image.Image) -> bool:
     if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
         alpha = image.convert("RGBA").getchannel("A")
         return alpha.getextrema()[0] < 255
@@ -25,7 +25,7 @@ def _has_alpha(image: Image.Image) -> bool:
 def _encode(image: Image.Image, longest: int) -> tuple[bytes, str]:
     """Fit `image` within `longest` px and under MAX_BYTES; PNG only when it has transparency."""
     image = ImageOps.exif_transpose(image)
-    alpha = _has_alpha(image)
+    alpha = has_alpha(image)
     edge = longest
     while True:
         frame = image.copy()

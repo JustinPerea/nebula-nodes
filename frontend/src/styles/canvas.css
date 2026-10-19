@@ -220,12 +220,28 @@ body.app-slava-restraint .react-flow__minimap {
     padding-inline: 7px;
   }
 }
-/* Zoom level-of-detail: when zoomed out past the threshold, hide the heavy
-   per-node media/labels so panning a large graph stays cheap. Handles, edges,
-   header and the node box stay visible so topology remains readable. */
-.canvas-wrapper[data-lod='low'] .react-flow__node .model-node__preview,
+/* Zoom level-of-detail: zoomed out past the threshold (CANVAS_LOD_ZOOM), hide
+   the heavy per-node media and labels so panning a large graph stays cheap.
+   Images and video stills stay (--overview): the nodes swap them for small
+   thumbnails then (lib/canvasOverview.ts), so the overview still shows what
+   each branch made. Handles, edges, header and the node box stay visible so
+   topology remains readable. */
+.canvas-wrapper[data-lod='low'] .react-flow__node .model-node__preview:not(.model-node__preview--overview),
+.canvas-wrapper[data-lod='low'] .react-flow__node .model-node__preview-video,
+.canvas-wrapper[data-lod='low'] .react-flow__node .model-node__download,
+.canvas-wrapper[data-lod='low'] .react-flow__node .model-node__loop-toggle,
 .canvas-wrapper[data-lod='low'] .react-flow__node .model-node__port-label {
   visibility: hidden;
+}
+
+/* A video's still sits over its hidden player while zoomed out. */
+.model-node__preview-still {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 body:not(.app-slava-restraint) .react-flow__edge.animated path {

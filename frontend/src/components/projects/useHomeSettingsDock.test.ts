@@ -42,6 +42,22 @@ describe('useHomeSettingsDock', () => {
     expect(dock()).toBe('history');
   });
 
+  it('lets a project opened from home pick its own drawer', () => {
+    const { rerender } = renderHook(({ home }) => useHomeSettingsDock(home), { initialProps: { home: true } });
+    act(() => useUIStore.getState().resetPanelsForFreshCanvas({ canvasEmpty: false }));
+    rerender({ home: false });
+    expect(dock()).toBeNull();
+    expect(useUIStore.getState().panels.library.visible).toBe(false);
+  });
+
+  it("doesn't reopen a workspace's Settings in a different project", () => {
+    act(() => useUIStore.getState().setLeftDock('settings'));
+    const { rerender } = renderHook(({ home }) => useHomeSettingsDock(home), { initialProps: { home: true } });
+    act(() => useUIStore.getState().resetPanelsForFreshCanvas({ canvasEmpty: true }));
+    rerender({ home: false });
+    expect(dock()).toBe('library');
+  });
+
   it('reports closed outside home even when the workspace has Settings open', () => {
     act(() => useUIStore.getState().setLeftDock('settings'));
     const { result } = renderHook(() => useHomeSettingsDock(false));

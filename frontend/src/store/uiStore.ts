@@ -46,6 +46,16 @@ function isLeftDockPanel(panel: string): panel is LeftDock {
   return LEFT_DOCK_PANELS.includes(panel as LeftDock);
 }
 
+/** The panels with only `leftDock`'s drawer showing: the dock panels' visibility
+ * always follows leftDock. */
+function withLeftDock(panels: UIState['panels'], leftDock: LeftDock | null): UIState['panels'] {
+  const next = { ...panels };
+  for (const dockPanel of LEFT_DOCK_PANELS) {
+    next[dockPanel] = { ...next[dockPanel], visible: leftDock === dockPanel };
+  }
+  return next;
+}
+
 export function defaultRunHistoryPosition(viewportWidth?: number): { x: number; y: number } {
   const width = viewportWidth
     ?? (typeof window !== 'undefined' ? window.innerWidth : 1280);
@@ -180,6 +190,8 @@ interface UIState {
   canvasViewport: Viewport | null;
   /** Invalidates delayed initialization after an authoritative graph replacement. */
   canvasViewportRevision: number;
+  /** Counts fresh-canvas panel resets (a project opened, created or deleted). */
+  panelsResetRevision: number;
   /** A volatile handoff: consumed only after Canvas can measure this node. */
   canvasFocusRequest: { nodeId: string; requestId: string } | null;
   /** Retained after consumption so delayed automatic fits can yield to a handoff. */
@@ -263,6 +275,8 @@ interface UIState {
   agentLogEnabled: boolean;
   canvasPerfMode: boolean;
   canvasLowDetail: boolean;
+  /** Zoomed out past the level-of-detail cutoff (lib/canvasOverview.ts); set by the canvas. */
+  canvasZoomedOut: boolean;
   canvasMinimapEnabled: boolean;
   /** Confirm before a run estimated to cost at least this much (USD); null never asks. */
   runCostConfirmUsd: number | null;
@@ -340,6 +354,7 @@ interface UIState {
   setAgentLogEnabled: (enabled: boolean) => void;
   setCanvasPerfMode: (enabled: boolean) => void;
   setCanvasLowDetail: (enabled: boolean) => void;
+  setCanvasZoomedOut: (zoomedOut: boolean) => void;
   setCanvasMinimapEnabled: (enabled: boolean) => void;
   setRunCostConfirmUsd: (value: number | null) => void;
   setNotificationPrefs: (partial: Partial<NotificationPrefs>) => void;
@@ -351,13 +366,16 @@ interface UIState {
   consumePendingPreset: () => Preset | null;
   setLeftDock: (dock: LeftDock | null) => void;
   resetPanelLayout: () => void;
-  resetPanelsForFreshCanvas: () => void;
+  /** Panels back to their defaults for another canvas. The Nodes panel opens
+   * only when that canvas is empty (design-canvas gap 19). */
+  resetPanelsForFreshCanvas: (options?: { canvasEmpty?: boolean }) => void;
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
   selectedNodeId: null,
   canvasViewport: null,
   canvasViewportRevision: 0,
+  panelsResetRevision: 0,
   canvasFocusRequest: null,
   canvasFocusRevision: 0,
   viewMode: 'canvas',
@@ -404,6 +422,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   agentLogEnabled: loadAgentLogEnabled(),
   canvasPerfMode: loadCanvasPref(CANVAS_PERF_MODE_KEY),
   canvasLowDetail: loadCanvasPref(CANVAS_LOW_DETAIL_KEY),
+  canvasZoomedOut: false,
   canvasMinimapEnabled: loadCanvasPref(CANVAS_MINIMAP_ENABLED_KEY, false),
   runCostConfirmUsd: loadRunCostConfirm(),
   notificationPrefs: getNotificationPrefs(),
@@ -678,14 +697,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     set((state) => {
       if (isLeftDockPanel(panel)) {
         const leftDock = state.leftDock === panel ? null : panel;
-        const panels = { ...state.panels };
-        for (const dockPanel of LEFT_DOCK_PANELS) {
-          panels[dockPanel] = {
-            ...panels[dockPanel],
-            visible: leftDock === dockPanel,
-          };
-        }
-        return { leftDock, panels, ...(leftDock !== 'settings' ? { settingsProviderTarget: null } : {}) };
+        return {
+          leftDock,
+          panels: withLeftDock(state.panels, leftDock),
+          ...(leftDock !== 'settings' ? { settingsProviderTarget: null } : {}),
+        };
       }
 
       const opening = !state.panels[panel].visible;
@@ -809,6 +825,10 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ canvasLowDetail: enabled });
   },
 
+  setCanvasZoomedOut: (zoomedOut) => {
+    if (get().canvasZoomedOut !== zoomedOut) set({ canvasZoomedOut: zoomedOut });
+  },
+
   setCanvasMinimapEnabled: (enabled) => {
     persistCanvasPref(CANVAS_MINIMAP_ENABLED_KEY, enabled);
     set({ canvasMinimapEnabled: enabled });
@@ -851,16 +871,11 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
 
   setLeftDock: (leftDock) =>
-    set((state) => {
-      const panels = { ...state.panels };
-      for (const dockPanel of LEFT_DOCK_PANELS) {
-        panels[dockPanel] = {
-          ...panels[dockPanel],
-          visible: leftDock === dockPanel,
-        };
-      }
-      return { leftDock, panels, ...(leftDock !== 'settings' ? { settingsProviderTarget: null } : {}) };
-    }),
+    set((state) => ({
+      leftDock,
+      panels: withLeftDock(state.panels, leftDock),
+      ...(leftDock !== 'settings' ? { settingsProviderTarget: null } : {}),
+    })),
 
   resetPanelLayout: () => {
     const defaults = createDefaultPanels();
@@ -886,17 +901,19 @@ export const useUIStore = create<UIState>((set, get) => ({
     }));
   },
 
-  resetPanelsForFreshCanvas: () => {
+  resetPanelsForFreshCanvas: ({ canvasEmpty = true } = {}) => {
+    const leftDock: LeftDock | null = canvasEmpty ? 'library' : null;
     set({
       selectedNodeId: null,
       canvasViewport: null,
       canvasViewportRevision: get().canvasViewportRevision + 1,
+      panelsResetRevision: get().panelsResetRevision + 1,
       cinemaSelectedShotIds: {},
       chatResized: false,
-      leftDock: 'library',
+      leftDock,
       inspectorPinned: false,
       pendingPreset: null,
-      panels: createDefaultPanels(),
+      panels: withLeftDock(createDefaultPanels(), leftDock),
       contextMenu: { visible: false, position: { x: 0, y: 0 }, nodeId: null, flowPosition: null },
       connectionPopup: {
         visible: false,

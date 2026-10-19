@@ -197,6 +197,15 @@ export async function personCredential(): Promise<PersonCredential | null> {
   return desktopLookup;
 }
 
+/** Whether this tab holds the person's credential right now. Not proof (the
+ * backend checks the token), but it is what decides whether this tab's zoom
+ * and pan are the project's saved view (design-canvas gap 19). */
+export function holdsPersonCredential(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (hasDesktopBridge()) return desktopReason === null;
+  return browserPersonCredential() !== null;
+}
+
 export async function personToken(): Promise<string | null> {
   return (await personCredential())?.token ?? null;
 }
