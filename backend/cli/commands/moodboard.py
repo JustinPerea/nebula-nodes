@@ -114,7 +114,10 @@ def _print_brief(board: dict[str, Any]) -> None:
 
 def _clash_line(item: dict[str, Any]) -> str:
     role = "pinned" if item.get("role") == "pinned" else ("accent" if item.get("role") == "accent" else "palette")
-    return f"    {item.get('hex') or 'the whole palette'} ({role}): {item.get('reason') or ''}".rstrip()
+    # Every reason: a colour off because the board sends no measured colours
+    # may also clash with the words.
+    reasons = [str(reason) for reason in item.get("reasons") or [] if reason] or [str(item.get("reason") or "")]
+    return f"    {item.get('hex') or 'the whole palette'} ({role}): {'; '.join(reasons)}".rstrip()
 
 
 def _print_clashes(composed: dict[str, Any], board_id: Any) -> None:

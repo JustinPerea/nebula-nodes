@@ -174,6 +174,14 @@ describe('BriefPanel: left out of the brief', () => {
     expect(pinned.textContent).toContain('Avoid: red, orange or pink flowers');
   });
 
+  it('gives every reason, so a colour off for the mode still shows its clash', () => {
+    clashPanel({ clashMode: 'no-measured', leftOut: [{ ...BRICK, why: 'mode',
+      reason: 'Measured colors are off for this board',
+      reasons: ['Measured colors are off for this board', 'Avoid: red, orange or pink flowers'] }] });
+    expect(screen.getByRole('list', { name: 'Left out of the brief' }).textContent)
+      .toContain('Measured colors are off for this board · Avoid: red, orange or pink flowers');
+  });
+
   it('shows a kept colour with Undo', () => {
     const { onColorChoice } = clashPanel({ kept: [{ ...BRICK, why: 'choice' }] });
     expect(screen.getByRole('list', { name: 'Kept anyway' }).textContent).toContain('#a6392d');

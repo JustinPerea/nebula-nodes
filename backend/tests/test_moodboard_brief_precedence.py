@@ -170,6 +170,12 @@ def test_no_measured_sends_no_measured_colour_once_there_is_a_direction():
                for item in brief["leftOut"])
     assert "Color palette" not in brief["styleBrief"]
     assert "Make sure these colors appear: #e8593c." in brief["styleBrief"]
+    # A colour that also clashes keeps its clash: the person sees it before
+    # pressing Keep anyway.
+    brick = next(item for item in brief["leftOut"] if item["hex"] == BRICK)
+    assert brick["level"] == "conflict"
+    assert brick["reasons"][0] == "Measured colors are off for this board"
+    assert "Avoid: red, orange or pink flowers" in brick["reasons"][1:]
     kept = compose(gm_board(clashMode="no-measured", colorChoices={"keep": ["#f7f8f7"], "leaveOut": []}))
     assert kept["palette"] == ["#f7f8f7"] and hexes(kept["kept"]) == ["#f7f8f7"]
     # Without a Direction it behaves as the default.
@@ -513,6 +519,16 @@ def test_cli_show_lists_what_was_left_out_and_how_to_keep_it(app, tmp_path, caps
     assert data["colorChoices"] == {"keep": [], "leaveOut": []}
     assert data["colorCheck"]["findings"] and hexes(data["brief"]["leftOut"]) == ["#e8593c"]
     assert data["brief"]["notesSent"] is False
+
+
+def test_cli_show_gives_every_reason_when_measured_colours_are_off(app, tmp_path, capsys):
+    import moodboard_client as boards
+
+    board = _red_board(app, tmp_path)
+    boards.update_board(app.api, board["id"], direction="Quiet harbour at dawn.", clash_mode="no-measured")
+    shown = _cli(app, ["moodboard", "show", board["id"]], capsys)
+    assert ("#e8593c (palette): Measured colors are off for this board; "
+            "Avoid: red, orange or pink flowers") in shown
 
 
 def test_cli_set_flags_and_restore(app, tmp_path, capsys):

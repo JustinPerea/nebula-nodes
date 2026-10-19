@@ -151,6 +151,14 @@ function BriefClashes({
   );
 }
 
+/** Every reason, the first one first: a colour off because the board sends
+ *  no measured colours may also clash with the words, and Keep anyway
+ *  shouldn't hide that. */
+function reasonText(item: MoodboardClash): string {
+  const reasons = (item.reasons ?? []).filter(Boolean);
+  return (reasons.length ? reasons : [item.reason]).join(' · ');
+}
+
 function ClashList({
   label,
   items,
@@ -184,7 +192,7 @@ function ClashList({
                 : <span className="moodboard-clash__palette" aria-hidden="true" />}
               <span className="moodboard-clash__hex">{item.hex ?? 'All colors'}</span>
               <span className="moodboard-clash__role">{item.hex ? ROLE_LABEL[item.role] : 'palette'}</span>
-              <span className="moodboard-clash__reason">{item.reason}</span>
+              <span className="moodboard-clash__reason">{reasonText(item)}</span>
               {button && (
                 <button type="button" className="moodboard-clash__action" aria-label={button.label} disabled={busy}
                   onClick={button.run}>{button.text}</button>
