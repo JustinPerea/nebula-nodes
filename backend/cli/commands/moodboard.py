@@ -295,7 +295,7 @@ def run(client: NebulaClient, args) -> None:
         elif verb == "show":
             board = boards.get_board(api, args.board, headers)
             if args.json:
-                _print_json(boards.brief(board))
+                _print_json(boards.brief(board, layout=True))
             else:
                 _print_board(board, boards.project_names(api, headers) if board.get("projectId") else None)
         elif verb == "new":

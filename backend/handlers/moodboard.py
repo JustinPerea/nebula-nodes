@@ -9,7 +9,7 @@ from models.events import ExecutionEvent, add_run_note
 from models.graph import GraphNode, PortValueDict
 from services.moodboard_analysis import analysis_is_current, analyze_moodboard, rank_representative_images
 from services.moodboard_brief import compose
-from services.moodboard_store import MoodboardStore, without_private
+from services.moodboard_store import MoodboardStore, output_image
 
 
 def _in_trash(moodboard_id: str) -> bool:
@@ -35,7 +35,8 @@ async def handle_moodboard_node(
         raise ValueError("No moodboard chosen: set moodboard to a board id (GET /api/moodboards lists them)")
     moodboard_id = raw.strip()
     try:
-        moodboard = MoodboardStore().get(moodboard_id)
+        # The node never reads the layout, so the board isn't laid out.
+        moodboard = MoodboardStore().get(moodboard_id, laid_out=False)
     except ValueError:  # not an id the store can hold
         moodboard = None
     if moodboard is None:
@@ -57,9 +58,10 @@ async def handle_moodboard_node(
                 "Analyze it in Moodboard Studio to save the new analysis.",
             ]
 
-    # Without the person's private notes: they never leave the board.
+    # Only the keys generators read: never the person's private notes, which
+    # never leave the board, or the layout (placements), which steers nothing.
     images = [
-        without_private(img) for img in moodboard.get("images", [])
+        output_image(img) for img in moodboard.get("images", [])
         if isinstance(img, dict) and not bool(img.get("excluded"))
     ]
     representative = analysis.get("representativeImages") or rank_representative_images(images)
