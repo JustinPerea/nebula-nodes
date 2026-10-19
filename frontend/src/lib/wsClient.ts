@@ -228,6 +228,9 @@ export type ExecutionEvent = (
       graphReplaced?: boolean;
       /** Existing nodes this change put somewhere new; the canvas takes their positions. */
       moved?: string[];
+      /** The person's canvas finished an agent's arrange: not an edit, it joins
+       * the agent's undo step (graphStore foldFinishedArrange). */
+      arranged?: { id: string; nodeIds: string[] };
       activeProjectId?: string | null;
       workspaceRevision?: string;
       /** Someone other than the person (an agent, a script) opened or made a

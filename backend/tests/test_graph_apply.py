@@ -402,6 +402,43 @@ def test_the_first_arrange_write_wins_and_a_second_tab_changes_nothing(api):
     assert arranged["summary"].startswith("arranged") and arranged["actor"]["name"] == "Claude Desktop"
 
 
+def test_the_canvas_finishing_an_arrange_is_not_a_new_edit(api):
+    body = _apply(api, _arrange_plan(count=2)).json()
+    arrange_id, new = body["arrange"]["id"], body["arrange"]["nodeIds"]
+    tab = {**PERSON, "X-Nebula-Tab": "tab_arranging01"}
+    positions = {node_id: {"x": 1200, "y": 300 * n} for n, node_id in enumerate(new)}
+    assert api.client.put("/api/graph/layout", headers=tab,
+                          json={"positions": positions, "arrangeId": arrange_id}).json()["status"] == "arranged"
+    sync = _last_sync(api)
+    # Part of the agent's edit: no new undo step anywhere, and every tab folds the
+    # positions into the step that added these nodes.
+    assert "edit" not in sync
+    assert sync["arranged"] == {"id": arrange_id, "nodeIds": sorted(new)}
+    assert sync["moved"] == sorted(new)
+    # The journal still credits the agent that asked for it.
+    arranged = [e for e in api.journal.read(after=0, limit=50)["events"] if e["kind"] == "node.moved"][-1]
+    assert arranged["actor"]["name"] == "Claude Desktop"
+
+    # A plain layout write (a drag) is still an edit.
+    api.client.put("/api/graph/layout", headers=tab, json={"positions": {new[0]: {"x": 5, "y": 5}}})
+    sync = _last_sync(api)
+    assert sync["edit"]["tab"] == "tab_arranging01" and "arranged" not in sync
+
+
+def test_an_arrange_written_by_anyone_but_the_person_stays_an_edit(api):
+    # An agent or a script can read the arrangeId off a graphSync. Its write is a
+    # normal edit, credited to it, so it can't keep a move off the person's undo stack.
+    for headers in ({"X-Nebula-Agent": "Codex"}, FORGED_ORIGIN):
+        body = _apply(api, _arrange_plan(count=1)).json()
+        arrange_id, new = body["arrange"]["id"], body["arrange"]["nodeIds"]
+        response = api.client.put("/api/graph/layout", headers=headers, json={
+            "positions": {new[0]: {"x": 3000, "y": 3000}}, "arrangeId": arrange_id})
+        assert response.json()["status"] == "arranged"
+        sync = _last_sync(api)
+        assert "edit" in sync and "tab" not in sync["edit"] and "arranged" not in sync
+    assert sync["edit"]["actor"]["kind"] != "agent"
+
+
 def test_another_agent_finishing_an_arrange_is_journaled_as_itself(api):
     body = _apply(api, _arrange_plan(count=2)).json()
     arrange_id, new = body["arrange"]["id"], body["arrange"]["nodeIds"]

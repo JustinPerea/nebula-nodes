@@ -6291,7 +6291,7 @@ def _graph_edit_origin() -> dict[str, Any]:
 
 async def _broadcast_graph_sync(
     *, graph_replaced: bool = False, reason: str = "import", moved: Iterable[str] = (), edit: bool = False,
-    project_switch: dict[str, Any] | None = None,
+    project_switch: dict[str, Any] | None = None, arranged: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket.
 
@@ -6310,6 +6310,9 @@ async def _broadcast_graph_sync(
     replacement carries it only for an import into the open project (``nebula
     graph load``, a file loaded in another window), which is an edit like any
     other; opening, creating or deleting a project is not.
+    `arranged` ({id, nodeIds}) marks the person's canvas finishing an agent's
+    arrange (update_graph_layout). It is not an edit: each canvas folds the
+    positions into the undo step that added those nodes.
     """
     if graph_replaced:
         # Node ids restart with another project; no open arrange can apply to it.
@@ -6322,6 +6325,7 @@ async def _broadcast_graph_sync(
                                  **({"graphReplaced": True} if graph_replaced else {}),
                                  **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
                                  **({"projectSwitch": project_switch} if project_switch and graph_replaced else {}),
+                                 **({"arranged": arranged} if arranged and not graph_replaced else {}),
                                  **({"edit": _graph_edit_origin()}
                                     if edit and (not graph_replaced or reason == "import") else {})})
     if graph_replaced:
@@ -7468,6 +7472,7 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
     (services/canvas_arrange.py): only that request's nodes may be in
     ``positions``, and only the first write for the id applies. A later one
     (another open tab) returns ``already-arranged`` and changes nothing.
+    From the person's canvas it is no edit of its own (see the broadcast below).
     Without it, the nodes it positions drop out of any open arrange.
     """
     _check_workspace_revision()
@@ -7527,7 +7532,16 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=404, detail=str(exc))
     if arrange is None:
         canvas_arrange.forget_nodes(normalized)
-    await _broadcast_graph_sync(edit=True, moved=normalized)
+    if arrange is not None and is_person(current_request_headers()):
+        # The person's canvas laying out an agent's new nodes finishes that
+        # agent's edit; it is not a new one. No `edit`, so no tab makes it a
+        # step of its own; `arranged` tells each tab to fold these positions
+        # into the step that added the nodes, so its redo puts them here.
+        # Anyone else's write (an agent or script can read the arrangeId off
+        # a graphSync) stays a normal edit, credited to it, as before.
+        await _broadcast_graph_sync(moved=normalized, arranged={"id": arrange.id, "nodeIds": sorted(normalized)})
+    else:
+        await _broadcast_graph_sync(edit=True, moved=normalized)
     publish_action(f"Updated layout for {len(normalized)} node(s)")
     # This route is the authoritative move signal (drag end, auto-layout,
     # paste).

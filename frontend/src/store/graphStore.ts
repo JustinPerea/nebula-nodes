@@ -75,7 +75,7 @@ import {
 } from '../lib/backend';
 import { wsClient, type ExecutionEvent } from '../lib/wsClient';
 import {
-  RUNTIME_FIELDS, applySlice, diffCanvas, editArrivedText, foreignSource, isForeignEdit, isOwnEcho,
+  RUNTIME_FIELDS, applySlice, diffCanvas, editArrivedText, foldArrange, foreignSource, isForeignEdit, isOwnEcho,
   restoreRequest, undoNoticeText, type EditOrigin, type ForeignEdit,
 } from '../lib/canvasUndo';
 import { TAB_ID } from '../lib/tabId';
@@ -1328,6 +1328,8 @@ function persistNodePositions(positions: Record<string, { x: number; y: number }
  * a tab that lost gets 'already-arranged' and changes nothing. Positions
  * reach every tab, this one included, through the graphSync `moved` list,
  * so this tab doesn't apply them first: two tabs can't end up disagreeing.
+ * That sync is no undo step of its own: it joins the agent's step
+ * (foldFinishedArrange).
  */
 export async function completeArrange(
   arrangeId: string,
@@ -2194,6 +2196,29 @@ function foreignEditStep(
   };
 }
 
+/**
+ * A graphSync that finishes an agent's arrange carries `arranged` ({id,
+ * nodeIds}) and no `edit`: the person's canvas measured and wrote it
+ * (completeArrange), and the backend sends the marker only for that write.
+ * It is not a step of its own in any tab, the one that arranged included.
+ * Its positions go into the agent's step that added those nodes, and into
+ * later steps that still hold the old ones (foldArrange), so Undo then Redo
+ * puts the nodes where the arrange did, here and on the backend.
+ */
+function foldFinishedArrange(state: GraphState, arranged: unknown, incoming: Node<NodeData>[]): void {
+  const nodeIds = arranged && typeof arranged === 'object' ? (arranged as { nodeIds?: unknown }).nodeIds : null;
+  if (!Array.isArray(nodeIds)) return;
+  const byId = new Map(incoming.map((node) => [node.id, node]));
+  const positions: Record<string, { x: number; y: number }> = {};
+  for (const id of nodeIds) {
+    const node = typeof id === 'string' ? byId.get(id) : undefined;
+    if (node?.position) positions[node.id] = { x: node.position.x, y: node.position.y };
+  }
+  if (Object.keys(positions).length === 0) return;
+  const shown = Object.fromEntries(state.nodes.map((node) => [node.id, node.position]));
+  foldArrange([...state.undoStack, ...[...state.redoStack].reverse()], positions, shown);
+}
+
 /** Recompute the missing-key badge on nodes whose params an undo or redo changed. */
 function withFreshKeyStatus(nodes: Node<NodeData>[], before: Node<NodeData>[]): Node<NodeData>[] {
   const previous = new Map(before.map((node) => [node.id, node.data.params]));
@@ -2330,6 +2355,7 @@ wsClient.subscribe((event) => {
       graphReplaced = false,
       moved = [],
       arrange = [],
+      arranged,
       providerRecoveries = [],
       providerStartAmbiguities = [],
       executionStatuses,
@@ -2342,6 +2368,8 @@ wsClient.subscribe((event) => {
       graphReplaced?: boolean;
       moved?: string[];
       arrange?: unknown;
+      /** Set when this sync finishes an agent's arrange: {id, nodeIds}. Not an edit. */
+      arranged?: unknown;
       /** Set when a graph edit caused this sync: who made it, and which tab sent it. */
       edit?: EditOrigin;
       providerRecoveries?: ProviderRecoveryCheckpoint[];
@@ -2530,6 +2558,7 @@ wsClient.subscribe((event) => {
     );
     const mergedEdges = [...frontendOnlyEdges, ...cliEdges];
 
+    if (!origin && !graphReplaced) foldFinishedArrange(state, arranged, cliNodes as Node<NodeData>[]);
     useGraphStore.setState({
       nodes: merged,
       edges: mergedEdges,
