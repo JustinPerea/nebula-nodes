@@ -240,6 +240,19 @@ def test_a_board_for_a_project_that_does_not_exist_is_refused(app, tmp_path, can
         boards.create_board(app.api, "Lost", [str(_png(tmp_path / "a.png"))], project="nebula_nodes")
 
 
+def test_list_and_show_name_the_boards_project(app, tmp_path, canvas_project, capsys):
+    from services.moodboard_store import MoodboardStore
+
+    board, _ = boards.create_board(app.api, "Here", [str(_png(tmp_path / "a.png"))], project="current")
+    label = f"project Test project ({canvas_project[:8]}…)"
+    assert label in _cli(app, ["moodboard", "list"], capsys)
+    assert f"· {label}" in _cli(app, ["moodboard", "show", board["id"]], capsys)
+    # A board under an id that isn't a canvas project shows the id.
+    stray = MoodboardStore().create(name="Stray", images=[{"url": "/api/outputs/a.png"}], projectId="nebula_nodes")
+    assert "project nebula_nodes)" in _cli(app, ["moodboard", "list", "--project", "nebula_nodes"], capsys)
+    assert "· project nebula_nodes\n" in _cli(app, ["moodboard", "show", stray["id"]], capsys)
+
+
 # -- downloads ---------------------------------------------------------------------
 
 def _transport(handler):
