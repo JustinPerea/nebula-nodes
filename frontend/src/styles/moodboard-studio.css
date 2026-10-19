@@ -211,10 +211,20 @@ body.app-slava-restraint .moodboard-tile textarea {
   letter-spacing: 0;
 }
 
+/* Notes grow with their text (AutoGrowTextarea) up to max-height, then scroll. */
 body.app-slava-restraint .moodboard-field textarea,
 body.app-slava-restraint .moodboard-tile textarea {
-  resize: vertical;
+  resize: none;
+  overflow-y: hidden;
   line-height: 1.35;
+}
+
+body.app-slava-restraint .moodboard-field textarea {
+  max-height: 260px;
+}
+
+body.app-slava-restraint .moodboard-tile textarea {
+  max-height: 180px;
 }
 
 body.app-slava-restraint .moodboard-dropzone,
@@ -301,6 +311,23 @@ body.app-slava-restraint .moodboard-tile__toggle {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+body.app-slava-restraint .moodboard-tile__controls .moodboard-tile__note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+body.app-slava-restraint .moodboard-tile__note-hint {
+  color: var(--sr-ink-faint);
+  font-size: 10px;
+}
+
+/* The private note is the person's alone: set apart from the note that steers. */
+body.app-slava-restraint .moodboard-tile__note--private textarea {
+  border-style: dashed;
+  background: transparent;
 }
 
 body.app-slava-restraint .moodboard-swatches {

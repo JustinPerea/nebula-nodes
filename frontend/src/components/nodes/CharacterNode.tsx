@@ -5,6 +5,7 @@ import { NodeSettingsAction } from './NodeSettingsAction';
 import { RestoreTrashedAsset } from './RestoreTrashedAsset';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { useOpenOnDoubleClick } from './useOpenOnDoubleClick';
 import '../../styles/character-node.css';
 
 // The node stores only the Character's id (its `character` param, which agents
@@ -31,8 +32,13 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
       : status === 'trashed' ? 'In Recently deleted'
         : `#${characterId}`;
 
+  const canOpen = Boolean(characterId) && status !== 'missing' && status !== 'trashed';
+  // Double-click opens the Character, as on a Moodboard node (useOpenOnDoubleClick).
+  const cardRef = useOpenOnDoubleClick<HTMLDivElement>(canOpen ? () => enterCharacterEditor(characterId) : null);
+
   return (
-    <div className={`character-node ${selected ? 'character-node--selected' : ''}`} data-character-status={status} data-node-inspector-anchor={id}>
+    <div ref={cardRef} className={`character-node ${selected ? 'character-node--selected' : ''}`} data-character-status={status}
+      data-node-inspector-anchor={id} title={canOpen ? 'Double-click to open in Character Studio' : undefined}>
       <div className="character-node__title">◐ {name}</div>
       <NodeSettingsAction id={id} />
 
@@ -50,7 +56,7 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
         <RestoreTrashedAsset kind="character" id={characterId} className="character-node__open" />
       )}
 
-      {selected && characterId && status !== 'missing' && status !== 'trashed' && (
+      {selected && canOpen && (
         <button
           type="button"
           className="character-node__open nodrag"

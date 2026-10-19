@@ -22,8 +22,9 @@ A board is one JSON file under the moodboard root (`NEBULA_MOODBOARD_ROOT`, defa
 | Field | Type | Who writes it | Notes |
 |-------|------|---------------|-------|
 | `id`, `createdAt`, `projectId` | string | store | Fixed after create |
-| `name`, `notes`, `mode`, `strength`, `images` | — | person or agent | `mode` is `look`, `world` or `subject`; each image has `weight` and `excluded` |
-| `analysis` | object or null | Analyze | Colour reading of the images. Set to null when the images, weights, mode, strength or notes change. Its own `styleBrief` and `negativePrompt` are the analyzer's; generators get `brief` (1.2), so change the brief through `briefOverride`, not here |
+| `name`, `notes`, `mode`, `strength`, `images` | — | person or agent | `mode` is `look`, `world` or `subject`; each image has `id`, `url`, `weight`, `notes`, `privateNote` and `excluded` |
+| `images[].privateNote` | string | person or agent | The person's own label for the image ("PAINTERLY (liked)"), up to 2000 characters. Shown wherever the board is inspected (Moodboard Studio, `nebula moodboard show`, `moodboard_get`), never sent anywhere: it isn't in `source_hash`, the analysis, `brief`, the negative prompt or the Moodboard node's outputs (`moodboard_store.without_private`). Changing it keeps the analysis. A board saved before it existed reads with `""`. `images[].notes` is the note that steers |
+| `analysis` | object or null | Analyze | Colour reading of the images. Set to null when the images, weights, mode, strength or notes change (not an image's `privateNote`). Its own `styleBrief` and `negativePrompt` are the analyzer's; generators get `brief` (1.2), so change the brief through `briefOverride`, not here |
 | `direction` | string | person or agent | What the board is for, in positive words. Up to 4000 characters |
 | `avoid` | string[] | person or agent | Things to keep out of the image. Trimmed, de-duplicated (case-insensitive), at most 40 items of 200 characters |
 | `pinnedColors` | `{include: hex[], exclude: hex[]}` | person or agent | Colours that must appear or must stay out. Hex is stored as `#rrggbb`; at most 12 per list; a colour can't be in both |
@@ -86,6 +87,12 @@ Boards saved before the brief fields (no `briefVersion`) are migrated once at ba
 
 The result's `previous` puts the board back when passed as the same call's arguments: settings, image settings, `direction`, `avoid`, `pinned_colors` and `brief_override` (the agent's own text, or `""` for none). `brief_override` is there only when the change touched the override, so undoing anything else never touches a brief the person wrote since. A call that would replace, clear or Keep the person's override, or Keep with no override, is refused before anything is sent and changes nothing; the message says to leave that argument out. Keep loses nothing, so its refusal gives its own reason: keeping clears the person's notice that the board changed, which is theirs to answer. If the person writes or removes their brief while the call runs, a Keep refused after the other changes were saved says so and hands back `previous` for them (`MoodboardError.previous`; in the MCP error's text; on the CLI's stderr). `nebula moodboard set --restore <file>` sends a saved `previous` (or the whole `set --json` output) back as one change; it refuses other flags with it and keys `previous` never has. Images the change removed aren't in `previous` (it only sets images on the board); the result's `removed` URLs add them back. A Keep that got no answer (connect or timeout) says the brief may or may not have been kept, not that it wasn't.
 
+Each image carries `privateNote` (1.1). `--private-note IMAGE=TEXT` and `{"image": ..., "privateNote": ...}` in `moodboard_update` set it, `show` prints it marked private, `--json` and `previous` include it, and a change to it alone keeps the analysis. On a backend whose images have no `privateNote`, setting one is refused before anything is sent, and `previous` has none.
+
+### 1.7 Opening a board in Moodboard Studio
+
+`#moodboard/<id>` opens Moodboard Studio on that board (`frontend/src/hooks/useMoodboardDeepLink.ts`). The scope it opens with is a hint; the board's own `projectId` decides where the Studio and its rail land. While the Studio shows a saved board the hash names it (replaced in place, no history entries), and leaving the Studio clears it. Loading the app with the link goes into the open project; with none it waits on Projects. Double-clicking a Moodboard (or Character) node, double-clicking an item in the Assets panel, the node's Open button and the Studio's rail all open a board without changing the graph; only "Add to canvas" or a drag from the Assets panel adds a node.
+
 ---
 
 ## Changelog
@@ -93,4 +100,5 @@ The result's `previous` puts the board back when passed as the same call's argum
 | Date | Change |
 |------|--------|
 | 2026-10-18 | Moodboard: brief fields, computed `brief`, override and Keep, migration |
+| 2026-10-19 | Moodboard: `images[].privateNote`, `#moodboard/<id>` links, opening a board never edits the canvas |
 | 2026-10-19 | Moodboard: brief fields and the computed brief from the CLI and MCP (1.6) |

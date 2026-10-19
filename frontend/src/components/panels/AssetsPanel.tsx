@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { DragEvent as ReactDragEvent } from 'react';
+import type { DragEvent as ReactDragEvent, ReactNode } from 'react';
+import { useReactFlow } from '@xyflow/react';
 import { X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
@@ -8,6 +9,7 @@ import { fetchPresets, type Preset } from '../../lib/createPresets';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../../lib/dragMime';
 import { NEW_CHARACTER_SENTINEL, NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
+import { findAvailableNodePosition } from '../../lib/nodePlacement';
 import type { Character, Moodboard } from '../../types';
 import { ScrollFade } from '../ScrollFade';
 import '../../styles/panels.css';
@@ -26,9 +28,13 @@ const TABS: Array<{ id: Tab; label: string }> = [
 /**
  * Unified Assets panel — collapses the former Character, Moodboard, and Style
  * (preset) palettes into one canvas-chrome panel with type tabs, a shared scope
- * toggle, and search. Characters/Moodboards drag or click onto the canvas
- * (reusing the existing add*Node paths + drag MIMEs); Styles open Create with the
- * preset applied. Double-click opens the relevant Studio editor.
+ * toggle, and search.
+ *
+ * One interaction model for every tab: a click only selects an item (Enter or
+ * Space too), and never changes the canvas. Double-click opens it (a Studio,
+ * or Create with a Style); the selected item's buttons do the same, and
+ * "Add to canvas" (or dragging the item) puts a Character or Moodboard node
+ * on the canvas through the existing add*Node paths + drag MIMEs.
  */
 export function AssetsPanel() {
   const togglePanel = useUIStore((s) => s.togglePanel);
@@ -38,10 +44,13 @@ export function AssetsPanel() {
   const setPendingPreset = useUIStore((s) => s.setPendingPreset);
   const addCharacterNode = useGraphStore((s) => s.addCharacterNode);
   const addMoodboardNode = useGraphStore((s) => s.addMoodboardNode);
+  const { screenToFlowPosition } = useReactFlow();
 
   const [tab, setTab] = useState<Tab>('characters');
   const [scope, setScope] = useState<Scope>('global');
   const [query, setQuery] = useState('');
+  // The selected item, as "<tab>:<id>", so it belongs to one tab.
+  const [selected, setSelected] = useState<string | null>(null);
 
   const [characters, setCharacters] = useState<Character[]>([]);
   const [moodboards, setMoodboards] = useState<Moodboard[]>([]);
@@ -92,6 +101,12 @@ export function AssetsPanel() {
   const filteredPresets = useMemo(
     () => presets.filter((p) => !q || `${p.name} ${p.category}`.toLowerCase().includes(q)),
     [presets, q]
+  );
+
+  // Where "Add to canvas" puts a node: the middle of the view, clear of other nodes.
+  const canvasCenter = () => findAvailableNodePosition(
+    screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }),
+    useGraphStore.getState().nodes.map((node) => node.position),
   );
 
   const onDragCharacter = (e: ReactDragEvent<HTMLButtonElement>, c: Character) => {
@@ -193,28 +208,19 @@ export function AssetsPanel() {
               <div className="character-palette__empty">No Characters{q ? ' match' : ' yet'}.</div>
             ) : (
               filteredCharacters.map((c) => (
-                <button
+                <AssetItem
                   key={c.id}
-                  type="button"
-                  className="character-palette__item"
-                  draggable
+                  name={c.name}
+                  sub={`${c.referenceViews.length} views`}
+                  thumbnail={c.thumbnail}
+                  emptyThumb="◐"
+                  selected={selected === `characters:${c.id}`}
+                  onSelect={() => setSelected(`characters:${c.id}`)}
                   onDragStart={(e) => onDragCharacter(e, c)}
-                  onClick={() => addCharacterNode(c.id, { x: 400, y: 300 }, { name: c.name, thumbnail: c.thumbnail })}
-                  onDoubleClick={() => enterCharacterEditor(c.id, scope)}
-                  title="Click to add to canvas · double-click to edit"
-                >
-                  <span className="character-palette__thumb">
-                    {c.thumbnail ? (
-                      <img src={backendAssetUrlSync(c.thumbnail)} alt="" draggable={false} />
-                    ) : (
-                      <span className="character-palette__thumb-empty">◐</span>
-                    )}
-                  </span>
-                  <span className="character-palette__meta">
-                    <span className="character-palette__name">{c.name || 'Untitled'}</span>
-                    <span className="character-palette__sub">{c.referenceViews.length} views</span>
-                  </span>
-                </button>
+                  onOpen={() => enterCharacterEditor(c.id, scope)}
+                  openLabel="Open"
+                  onAdd={() => addCharacterNode(c.id, canvasCenter(), { name: c.name, thumbnail: c.thumbnail })}
+                />
               ))
             )
           )}
@@ -224,24 +230,20 @@ export function AssetsPanel() {
               <div className="character-palette__empty">No Moodboards{q ? ' match' : ' yet'}.</div>
             ) : (
               filteredMoodboards.map((m) => (
-                <button
+                <AssetItem
                   key={m.id}
-                  type="button"
-                  className="character-palette__item"
-                  draggable
+                  name={m.name}
+                  sub={`${m.images.length} images · ${m.mode}`}
+                  thumbnail={m.thumbnail}
+                  emptyThumb="▦"
+                  selected={selected === `moodboards:${m.id}`}
+                  onSelect={() => setSelected(`moodboards:${m.id}`)}
                   onDragStart={(e) => onDragMoodboard(e, m)}
-                  onClick={() => addMoodboardNode(m.id, { x: 460, y: 360 }, { name: m.name, thumbnail: m.thumbnail, imageCount: m.images.length, mode: m.mode })}
-                  onDoubleClick={() => enterMoodboardEditor(m.id, scope)}
-                  title="Click to add to canvas · double-click to edit"
-                >
-                  <span className="character-palette__thumb">
-                    {m.thumbnail ? <img src={backendAssetUrlSync(m.thumbnail)} alt="" draggable={false} /> : <span className="character-palette__thumb-empty">▦</span>}
-                  </span>
-                  <span className="character-palette__meta">
-                    <span className="character-palette__name">{m.name || 'Untitled'}</span>
-                    <span className="character-palette__sub">{m.images.length} images · {m.mode}</span>
-                  </span>
-                </button>
+                  onOpen={() => enterMoodboardEditor(m.id, scope)}
+                  openLabel="Open"
+                  onAdd={() => addMoodboardNode(m.id, canvasCenter(),
+                    { name: m.name, thumbnail: m.thumbnail, imageCount: m.images.length, mode: m.mode })}
+                />
               ))
             )
           )}
@@ -251,26 +253,90 @@ export function AssetsPanel() {
               <div className="character-palette__empty">No Styles{q ? ' match' : ' yet'}.</div>
             ) : (
               filteredPresets.map((p) => (
-                <button
+                <AssetItem
                   key={p.id}
-                  type="button"
-                  className="character-palette__item"
-                  onClick={() => applyStyle(p)}
-                  title="Click to use this style in Create"
-                >
-                  <span className="character-palette__thumb">
-                    {p.thumbnail ? <img src={backendAssetUrlSync(p.thumbnail)} alt="" draggable={false} /> : <span className="character-palette__thumb-empty">✦</span>}
-                  </span>
-                  <span className="character-palette__meta">
-                    <span className="character-palette__name">{p.name || 'Untitled'}</span>
-                    <span className="character-palette__sub">{p.category}</span>
-                  </span>
-                </button>
+                  name={p.name}
+                  sub={p.category}
+                  thumbnail={p.thumbnail}
+                  emptyThumb="✦"
+                  selected={selected === `styles:${p.id}`}
+                  onSelect={() => setSelected(`styles:${p.id}`)}
+                  onOpen={() => applyStyle(p)}
+                  openLabel="Use in Create"
+                />
               ))
             )
           )}
         </ScrollFade>
       </ScrollFade>
+    </div>
+  );
+}
+
+/**
+ * One asset in the list. A click (or Enter / Space) selects it and shows its
+ * buttons; double-click opens it. Only "Add to canvas" and dragging add a node.
+ */
+function AssetItem({
+  name,
+  sub,
+  thumbnail,
+  emptyThumb,
+  selected,
+  onSelect,
+  onOpen,
+  openLabel,
+  onAdd,
+  onDragStart,
+}: {
+  name: string;
+  sub: ReactNode;
+  thumbnail?: string;
+  emptyThumb: string;
+  selected: boolean;
+  onSelect: () => void;
+  onOpen: () => void;
+  openLabel: string;
+  onAdd?: () => void;
+  onDragStart?: (e: ReactDragEvent<HTMLButtonElement>) => void;
+}) {
+  const label = name || 'Untitled';
+  return (
+    <div className={`assets-item${selected ? ' assets-item--selected' : ''}`}>
+      <button
+        type="button"
+        className="character-palette__item assets-item__select"
+        aria-pressed={selected}
+        draggable={Boolean(onDragStart)}
+        onDragStart={onDragStart}
+        onClick={onSelect}
+        onDoubleClick={onOpen}
+        title={onAdd ? 'Double-click to open · drag onto the canvas to add' : 'Double-click to use in Create'}
+      >
+        <span className="character-palette__thumb">
+          {thumbnail ? (
+            <img src={backendAssetUrlSync(thumbnail)} alt="" draggable={false} />
+          ) : (
+            <span className="character-palette__thumb-empty" aria-hidden="true">{emptyThumb}</span>
+          )}
+        </span>
+        <span className="character-palette__meta">
+          <span className="character-palette__name">{label}</span>
+          <span className="character-palette__sub">{sub}</span>
+        </span>
+      </button>
+      {selected && (
+        <div className="assets-item__actions">
+          <button type="button" className="assets-item__action" onClick={onOpen} aria-label={`${openLabel} ${label}`}>
+            {openLabel}
+          </button>
+          {onAdd && (
+            <button type="button" className="assets-item__action" onClick={onAdd} aria-label={`Add ${label} to canvas`}>
+              Add to canvas
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

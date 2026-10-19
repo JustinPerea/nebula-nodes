@@ -122,6 +122,8 @@ def _print_board(board: dict[str, Any]) -> None:
         note = f'  "{image["notes"]}"' if image.get("notes") else ""
         print(f"    {index:>2}  {image.get('id')}  weight {float(image.get('weight', 1)):.2f}{flags}  "
               f"{image.get('url')}{note}")
+        if image.get("privateNote"):
+            print(f'        Private note (not sent anywhere): "{image["privateNote"]}"')
     _print_brief(board)
     analysis = board.get("analysis")
     if not analysis:
@@ -197,6 +199,8 @@ def run(client: NebulaClient, args) -> None:
                 edits.setdefault(image, {"image": image})["weight"] = value
             for image, value in _pairs(args.image_note, "--image-note"):
                 edits.setdefault(image, {"image": image})["notes"] = value
+            for image, value in _pairs(args.private_note, "--private-note"):
+                edits.setdefault(image, {"image": image})["privateNote"] = value
             for image in args.exclude:
                 edits.setdefault(image, {"image": image})["excluded"] = True
             for image in args.include:
@@ -300,6 +304,10 @@ def add_parser(sub) -> None:
                        help="How much one image counts, 0 to 1, e.g. --weight 2=0.5 (repeatable)")
     set_p.add_argument("--image-note", dest="image_note", action="append", default=[], metavar="IMAGE=TEXT",
                        help="A note on one image, e.g. --image-note 3=\"the orange accent\" (repeatable)")
+    set_p.add_argument("--private-note", dest="private_note", action="append", default=[], metavar="IMAGE=TEXT",
+                       help="The person's own label for one image, e.g. --private-note 2=\"PAINTERLY (liked)\". "
+                            "Not sent anywhere: no analysis, brief or generator gets it, so it keeps the "
+                            "analysis (repeatable)")
     set_p.add_argument("--exclude", action="append", default=[], metavar="IMAGE",
                        help="Keep an image on the board but stop it steering (repeatable)")
     set_p.add_argument("--include", action="append", default=[], metavar="IMAGE",

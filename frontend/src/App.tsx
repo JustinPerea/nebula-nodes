@@ -28,6 +28,7 @@ import { usePricingStore } from './store/pricingStore';
 import { useGraphStore } from './store/graphStore';
 import { useCommonsCapability } from './hooks/useCommonsCapability';
 import { useZoomManifest } from './hooks/useZoomManifest';
+import { useMoodboardDeepLink } from './hooks/useMoodboardDeepLink';
 import { NODE_DEFINITIONS } from './constants/nodeDefinitions';
 import { ProjectCoordinator } from './components/projects/ProjectCoordinator';
 import { ProjectSwitchToast } from './components/projects/ProjectSwitchToast';
@@ -200,6 +201,10 @@ export default function App() {
     window.addEventListener('hashchange', sync);
     return () => window.removeEventListener('hashchange', sync);
   }, []);
+
+  // `#moodboard/<id>` opens Moodboard Studio on that board, and follows the
+  // board the Studio shows. After the brand route, so its hashchange runs first.
+  useMoodboardDeepLink();
 
   // Job-notification "working" tab badge: flash the title while a run is in
   // flight and the tab is backgrounded. Completion notifications fire from the store.

@@ -9,7 +9,7 @@ from models.events import ExecutionEvent, add_run_note
 from models.graph import GraphNode, PortValueDict
 from services.moodboard_analysis import analysis_is_current, analyze_moodboard, rank_representative_images
 from services.moodboard_brief import compose
-from services.moodboard_store import MoodboardStore
+from services.moodboard_store import MoodboardStore, without_private
 
 
 def _in_trash(moodboard_id: str) -> bool:
@@ -57,8 +57,9 @@ async def handle_moodboard_node(
                 "Analyze it in Moodboard Studio to save the new analysis.",
             ]
 
+    # Without the person's private notes: they never leave the board.
     images = [
-        img for img in moodboard.get("images", [])
+        without_private(img) for img in moodboard.get("images", [])
         if isinstance(img, dict) and not bool(img.get("excluded"))
     ]
     representative = analysis.get("representativeImages") or rank_representative_images(images)

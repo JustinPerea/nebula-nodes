@@ -22,6 +22,8 @@ import type { AssetScope } from '../../store/uiStore';
 import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardImage, MoodboardPinnedColors } from '../../types';
 import { BriefFields, BriefPanel } from './MoodboardBrief';
 import { overrideAuthor } from './briefAuthor';
+import { AutoGrowTextarea } from '../AutoGrowTextarea';
+import { emptyRailMessage } from './railEmpty';
 import '../../styles/moodboard-studio.css';
 
 interface MoodboardDraft {
@@ -89,9 +91,13 @@ function createDraftImage(url: string): MoodboardImage {
     url,
     weight: 1,
     notes: '',
+    privateNote: '',
     excluded: false,
   };
 }
+
+// The backend's cap on a private note (services/moodboard_store.py).
+const PRIVATE_NOTE_LIMIT = 2000;
 
 export function MoodboardStudioView() {
   const moodboardEditorId = useUIStore((s) => s.moodboardEditorId);
@@ -258,9 +264,11 @@ export function MoodboardStudioView() {
   };
 
   const updateImage = (id: string, patch: Partial<MoodboardImage>) => {
+    // A private note isn't an analysis input, so changing only that keeps it.
+    const steers = Object.keys(patch).some((field) => field !== 'privateNote');
     setDraft((current) => ({
       ...current,
-      analysis: null,
+      analysis: steers ? null : current.analysis,
       images: current.images.map((img) => (img.id === id ? { ...img, ...patch } : img)),
     }));
   };
@@ -365,6 +373,11 @@ export function MoodboardStudioView() {
     enterMoodboardEditor(id, scope);
   };
 
+  // Where the open board lives, once it's a saved board: its own projectId
+  // says, whatever scope it was opened with. The rail opens on that scope.
+  const boardScope: AssetScope | null = loaded && savedId ? (draft.projectId ? 'project' : 'global') : null;
+  const shownRailScope = boardScope ?? railScope;
+
   const previewThumbnail = thumbnail || draft.images.find((img) => !img.excluded)?.url || '';
   const analysis = draft.analysis;
 
@@ -389,9 +402,10 @@ export function MoodboardStudioView() {
 
       <aside className="moodboard-studio-view__rail">
         <MoodboardRail
-          key={railScope}
+          key={shownRailScope}
           activeId={savedId ?? (isDraftId ? NEW_MOODBOARD_SENTINEL : moodboardEditorId)}
-          initialScope={railScope}
+          initialScope={shownRailScope}
+          boardScope={boardScope}
           refreshKey={deleting.refreshKey}
           onSelect={(id, scope) => {
             setRailScope(scope);
@@ -469,7 +483,7 @@ export function MoodboardStudioView() {
                 </div>
                 <label className="moodboard-field">
                   <span>Notes</span>
-                  <textarea
+                  <AutoGrowTextarea
                     rows={3}
                     value={draft.notes}
                     onChange={(event) => setDraft({ ...draft, analysis: null, notes: event.target.value })}
@@ -536,12 +550,31 @@ export function MoodboardStudioView() {
                         />
                         <span>Exclude</span>
                       </label>
-                      <textarea
-                        rows={2}
-                        value={img.notes}
-                        placeholder="Image note"
-                        onChange={(event) => updateImage(img.id, { notes: event.target.value })}
-                      />
+                      <label className="moodboard-tile__note">
+                        <span>Image note</span>
+                        <AutoGrowTextarea
+                          rows={2}
+                          value={img.notes}
+                          placeholder="What to take from this image"
+                          onChange={(event) => updateImage(img.id, { notes: event.target.value })}
+                        />
+                      </label>
+                      <div className="moodboard-tile__note moodboard-tile__note--private">
+                        <label className="moodboard-tile__note">
+                          <span>Private note</span>
+                          <AutoGrowTextarea
+                            rows={1}
+                            value={img.privateNote ?? ''}
+                            maxLength={PRIVATE_NOTE_LIMIT}
+                            placeholder="A label for you, like Liked"
+                            aria-describedby={`private-note-hint-${img.id}`}
+                            onChange={(event) => updateImage(img.id, { privateNote: event.target.value })}
+                          />
+                        </label>
+                        <span id={`private-note-hint-${img.id}`} className="moodboard-tile__note-hint">
+                          Only for you. Not sent anywhere.
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -625,12 +658,15 @@ function Swatches({ label, colors }: { label: string; colors: string[] }) {
 function MoodboardRail({
   activeId,
   initialScope,
+  boardScope,
   refreshKey,
   onSelect,
   onNew,
 }: {
   activeId: string | null;
   initialScope: AssetScope;
+  /** Where the open saved board lives; null for a new draft. */
+  boardScope: AssetScope | null;
   refreshKey?: unknown;
   onSelect: (id: string, scope: AssetScope) => void;
   onNew: (scope: AssetScope) => void;
@@ -692,7 +728,9 @@ function MoodboardRail({
       <div className="moodboard-rail__list">
         {loading && <div className="moodboard-rail__empty">Loading...</div>}
         {error && !loading && <div className="moodboard-rail__empty moodboard-rail__empty--error">{error}</div>}
-        {!loading && !error && moodboards.length === 0 && <div className="moodboard-rail__empty">No Moodboards yet.</div>}
+        {!loading && !error && moodboards.length === 0 && (
+          <div className="moodboard-rail__empty">{emptyRailMessage(scope, boardScope)}</div>
+        )}
         {moodboards.map((m) => (
           <button
             key={m.id}
