@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../lib/backend';
-import { clearCurrentProjectCache } from '../lib/currentProject';
 
 type ConnectionState = 'online' | 'offline';
 
@@ -20,9 +19,6 @@ export function BackendConnectionStatus() {
         if (!response.ok) throw new Error(`Backend health failed: ${response.status}`);
         if (cancelled) return;
 
-        if (previous.current === 'offline') {
-          clearCurrentProjectCache();
-        }
         previous.current = 'online';
         setConnection('online');
       } catch {

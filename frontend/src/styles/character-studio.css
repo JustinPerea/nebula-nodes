@@ -187,6 +187,19 @@ body.app-slava-restraint .character-palette__empty--error {
   color: #e0796b;
 }
 
+/* The open Character is another project's: say where, above the list. */
+body.app-slava-restraint .character-rail__empty--notice {
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .character-rail__new:disabled,
+body.app-slava-restraint .character-palette__new:disabled {
+  opacity: 0.45;
+  cursor: default;
+  border-color: var(--sr-edge);
+  color: var(--sr-ink-meta);
+}
+
 body.app-slava-restraint .character-rail__item,
 body.app-slava-restraint .character-palette__item {
   display: flex;

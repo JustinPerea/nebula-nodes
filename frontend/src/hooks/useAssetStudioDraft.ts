@@ -1,26 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { assetStudioDraftKey, emptyAssetStudioEntry, useAssetStudioDraftStore,
   resolveAssetStudioDraftKey, type AssetStudioDraftEntry, type AssetStudioKind } from '../store/assetStudioDraftStore';
-import { getCurrentProject } from '../lib/currentProject';
+import { NO_PROJECT_OPEN, currentProject, useCurrentProjectId } from '../lib/currentProject';
 
+/**
+ * One Studio's session draft. A project draft is keyed under the canvas
+ * project open now (lib/currentProject), so switching projects moves the
+ * Studio to that project's drafts at once; the previous project's draft waits
+ * under its own key until that project is open again.
+ */
 export function useAssetStudioDraft<D>(kind: AssetStudioKind, scope: string, id: string | null,
   createEmpty: () => D) {
-  const projectId = useAssetStudioDraftStore((state) => state.projectId);
-  const [verifiedTarget, setVerifiedTarget] = useState<string | null>(null);
-  const [projectError, setProjectError] = useState<string | null>(null);
-  const target = JSON.stringify([scope, id]);
-  const projectReady = scope !== 'project' || verifiedTarget === target;
-  useEffect(() => {
-    if (scope !== 'project') return;
-    let cancelled = false;
-    void getCurrentProject().then((project) => {
-      if (cancelled) return;
-      useAssetStudioDraftStore.getState().setProjectId(project.id);
-      setProjectError(null); setVerifiedTarget(target);
-    }).catch((err) => { if (!cancelled) setProjectError(err instanceof Error ? err.message : 'Failed to resolve project.'); });
-    return () => { cancelled = true; };
-  }, [target, scope]);
+  const projectId = useCurrentProjectId();
+  const projectReady = scope !== 'project' || projectId !== null;
+  const projectError = scope === 'project' && projectId === null ? NO_PROJECT_OPEN : null;
   const requestedKey = assetStudioDraftKey(kind, scope, id, projectId);
   const key = useAssetStudioDraftStore((state) => resolveAssetStudioDraftKey(state, requestedKey));
   const fallback = useMemo(() => emptyAssetStudioEntry(createEmpty()), [createEmpty]);
@@ -42,18 +36,14 @@ export function useAssetStudioDraft<D>(kind: AssetStudioKind, scope: string, id:
     patch({ draft, savedId, thumbnail, loadError, loaded: true, dirty: false,
       saveState: savedId ? 'saved' : 'draft', saveError: null });
   }, [patch]);
+  /** True when this draft may be saved now: a project draft only while the
+   * project it's keyed under is still the open one. A save that lost that
+   * race (an agent switched projects mid-autosave) is dropped, not filed in
+   * the newly open project; the draft stays under its own project. */
   const verifyProject = useCallback(async () => {
     if (scope !== 'project') return true;
-    try {
-      const project = await getCurrentProject();
-      useAssetStudioDraftStore.getState().setProjectId(project.id);
-      setProjectError(null); setVerifiedTarget(target);
-      return projectReady && project.id === projectId;
-    } catch (err) {
-      setProjectError(err instanceof Error ? err.message : 'Failed to resolve project.');
-      return false;
-    }
-  }, [scope, projectId, projectReady, target]);
-  return { ...entry, loaded: projectReady && entry.loaded, loadError: scope === 'project' ? projectError ?? entry.loadError : entry.loadError,
+    return projectId !== null && currentProject()?.id === projectId;
+  }, [scope, projectId]);
+  return { ...entry, loaded: projectReady && entry.loaded, loadError: projectError ?? entry.loadError,
     key, projectId, projectReady, verifyProject, setDraft, patch, initialize };
 }

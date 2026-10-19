@@ -17,14 +17,16 @@ import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useAssetStudioDraft } from '../../hooks/useAssetStudioDraft';
 import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
 import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
-import { getCurrentProject } from '../../lib/currentProject';
+import { NO_PROJECT_OPEN, currentProject } from '../../lib/currentProject';
+import { useProjectName } from '../../hooks/useProjectName';
 import type { AssetScope } from '../../store/uiStore';
 import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardImage, MoodboardPinnedColors } from '../../types';
 import { BriefFields, BriefPanel } from './MoodboardBrief';
 import { BoardSwatches, ImageColors, SourcesOutdated } from './MoodboardColors';
 import { overrideAuthor } from './briefAuthor';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
-import { emptyRailMessage } from './railEmpty';
+import { assetHome, emptyRailMessage, railNotice, type AssetHome } from '../../lib/assetHome';
+import { wsClient } from '../../lib/wsClient';
 import '../../styles/moodboard-studio.css';
 
 interface MoodboardDraft {
@@ -130,7 +132,7 @@ export function MoodboardStudioView() {
     const ui = useUIStore.getState();
     return mounted.current && ui.viewMode === 'moodboard-editor' && ui.moodboardEditorId === moodboardEditorId
       && ui.moodboardEditorScope === moodboardEditorScope
-      && projectReady && (moodboardEditorScope !== 'project' || useAssetStudioDraftStore.getState().projectId === projectId)
+      && projectReady && (moodboardEditorScope !== 'project' || (currentProject()?.id ?? null) === projectId)
       && useAssetStudioDraftStore.getState().entries[key]?.epoch === epoch;
   }, [moodboardEditorId, moodboardEditorScope, key, epoch, projectReady, projectId]);
   const isDraftId = !moodboardEditorId || moodboardEditorId === NEW_MOODBOARD_SENTINEL;
@@ -292,8 +294,9 @@ export function MoodboardStudioView() {
     const ui = useUIStore.getState();
     if (ui.viewMode !== 'moodboard-editor') return;
     const store = useAssetStudioDraftStore.getState();
-    const targetKey = assetStudioDraftKey('moodboard', ui.moodboardEditorScope, id, store.projectId);
-    const selectedKey = resolveAssetStudioDraftKey(store, assetStudioDraftKey('moodboard', ui.moodboardEditorScope, ui.moodboardEditorId, store.projectId));
+    const openProjectId = currentProject()?.id ?? null;
+    const targetKey = assetStudioDraftKey('moodboard', ui.moodboardEditorScope, id, openProjectId);
+    const selectedKey = resolveAssetStudioDraftKey(store, assetStudioDraftKey('moodboard', ui.moodboardEditorScope, ui.moodboardEditorId, openProjectId));
     if (selectedKey !== targetKey) return;
     const target = store.entries[targetKey];
     if (!target || target.pendingSaveId || target.dirty) {
@@ -307,7 +310,7 @@ export function MoodboardStudioView() {
       const latest = useAssetStudioDraftStore.getState();
       return mounted.current && selected.viewMode === 'moodboard-editor'
         && resolveAssetStudioDraftKey(latest, assetStudioDraftKey('moodboard', selected.moodboardEditorScope,
-          selected.moodboardEditorId, latest.projectId)) === targetKey
+          selected.moodboardEditorId, currentProject()?.id ?? null)) === targetKey
         && latest.entries[targetKey]?.revision === attempt.revision
         && latest.entries[targetKey]?.pendingAnalysisId === attempt.id;
     };
@@ -363,8 +366,9 @@ export function MoodboardStudioView() {
     store.reset(deletedKey, emptyDraft());
     const ui = useUIStore.getState();
     if (ui.viewMode !== 'moodboard-editor') return;
-    store.reset(assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, store.projectId),
-      scope === 'project' && store.projectId ? { ...emptyDraft(), projectId: store.projectId } : emptyDraft());
+    const openProjectId = currentProject()?.id ?? null;
+    store.reset(assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, openProjectId),
+      scope === 'project' && openProjectId ? { ...emptyDraft(), projectId: openProjectId } : emptyDraft());
     setRailScope(scope);
     enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
   };
@@ -375,9 +379,11 @@ export function MoodboardStudioView() {
   };
 
   // Where the open board lives, once it's a saved board: its own projectId
-  // says, whatever scope it was opened with. The rail opens on that scope.
-  const boardScope: AssetScope | null = loaded && savedId ? (draft.projectId ? 'project' : 'global') : null;
-  const shownRailScope = boardScope ?? railScope;
+  // says, whatever scope it was opened with. The rail opens on that scope,
+  // and says so when it's another project's board.
+  const boardProjectName = useProjectName(draft.projectId);
+  const boardHome: AssetHome | null = loaded && savedId ? assetHome(draft.projectId, projectId, boardProjectName) : null;
+  const shownRailScope = boardHome?.scope ?? railScope;
 
   const previewThumbnail = thumbnail || draft.images.find((img) => !img.excluded)?.url || '';
   const analysis = draft.analysis;
@@ -406,23 +412,24 @@ export function MoodboardStudioView() {
           key={shownRailScope}
           activeId={savedId ?? (isDraftId ? NEW_MOODBOARD_SENTINEL : moodboardEditorId)}
           initialScope={shownRailScope}
-          boardScope={boardScope}
+          boardHome={boardHome}
+          projectId={projectId}
           refreshKey={deleting.refreshKey}
           onSelect={(id, scope) => {
             setRailScope(scope);
             enterMoodboardEditor(id, scope);
           }}
           onNew={(scope) => {
-            void (async () => {
-              if (!isCurrent()) return;
-              const currentProject = scope === 'project' ? await getCurrentProject() : null;
-              if (!isCurrent()) return;
-              const store = useAssetStudioDraftStore.getState();
-              if (currentProject) store.setProjectId(currentProject.id);
-              store.reset(assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, currentProject?.id), emptyDraft());
-              setRailScope(scope);
-              enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
-            })().catch((err) => { if (isCurrent()) patch({ saveError: err instanceof Error ? err.message : 'Failed to resolve project.' }); });
+            if (!isCurrent()) return;
+            const project = scope === 'project' ? currentProject() : null;
+            if (scope === 'project' && !project) {
+              patch({ saveError: NO_PROJECT_OPEN });
+              return;
+            }
+            useAssetStudioDraftStore.getState().reset(
+              assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, project?.id), emptyDraft());
+            setRailScope(scope);
+            enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
           }}
         />
       </aside>
@@ -648,7 +655,8 @@ export function MoodboardStudioView() {
 function MoodboardRail({
   activeId,
   initialScope,
-  boardScope,
+  boardHome,
+  projectId,
   refreshKey,
   onSelect,
   onNew,
@@ -656,7 +664,9 @@ function MoodboardRail({
   activeId: string | null;
   initialScope: AssetScope;
   /** Where the open saved board lives; null for a new draft. */
-  boardScope: AssetScope | null;
+  boardHome: AssetHome | null;
+  /** The canvas project open now (null: none), whose boards the Project tab lists. */
+  projectId: string | null;
   refreshKey?: unknown;
   onSelect: (id: string, scope: AssetScope) => void;
   onNew: (scope: AssetScope) => void;
@@ -665,23 +675,34 @@ function MoodboardRail({
   // Bumped when Recently deleted changes (a delete or restore elsewhere), to list again.
   const [relistKey, setRelistKey] = useState(0);
   const relist = useCallback(() => setRelistKey((value) => value + 1), []);
-  const [moodboards, setMoodboards] = useState<Moodboard[]>([]);
+  // The list with the tab and project it was fetched for, so a list from
+  // before a project switch is never shown as this project's.
+  const [listing, setListing] = useState<{ for: string; items: Moodboard[] }>({ for: '', items: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // A board saved or deleted elsewhere (an agent, the CLI) shows up here too.
+  useEffect(() => wsClient.subscribe((event) => {
+    if (event.type === 'storedAssetChanged' && event.kind === 'moodboard') relist();
+  }), [relist]);
+
+  const noProject = scope === 'project' && !projectId;
+  const listKey = `${scope}:${scope === 'project' ? projectId : ''}`;
   useEffect(() => {
+    // No project open: nothing to fetch; the empty state says to open one.
+    if (noProject) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading gate before async fetch; not derived state, does not cascade
     setLoading(true);
     setError(null);
-    fetchMoodboards(scope)
+    fetchMoodboards(scope, scope === 'project' ? projectId ?? undefined : undefined)
       .then((list) => {
-        if (!cancelled) setMoodboards(list);
+        if (!cancelled) setListing({ for: listKey, items: list });
       })
       .catch((err) => {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load.');
-          setMoodboards([]);
+          setListing({ for: listKey, items: [] });
         }
       })
       .finally(() => {
@@ -690,7 +711,11 @@ function MoodboardRail({
     return () => {
       cancelled = true;
     };
-  }, [scope, activeId, refreshKey, relistKey]);
+  }, [scope, projectId, noProject, listKey, activeId, refreshKey, relistKey]);
+  const notice = railNotice('moodboard', boardHome);
+  const shown = noProject || listing.for !== listKey ? [] : listing.items;
+  const busy = !noProject && loading;
+  const failed = noProject ? null : error;
 
   return (
     <div className="moodboard-rail">
@@ -714,14 +739,16 @@ function MoodboardRail({
           Global
         </button>
       </div>
-      <button type="button" className="moodboard-rail__new" onClick={() => onNew(scope)}>+ New Moodboard</button>
+      <button type="button" className="moodboard-rail__new" disabled={noProject}
+        title={noProject ? NO_PROJECT_OPEN : undefined} onClick={() => onNew(scope)}>+ New Moodboard</button>
       <div className="moodboard-rail__list">
-        {loading && <div className="moodboard-rail__empty">Loading...</div>}
-        {error && !loading && <div className="moodboard-rail__empty moodboard-rail__empty--error">{error}</div>}
-        {!loading && !error && moodboards.length === 0 && (
-          <div className="moodboard-rail__empty">{emptyRailMessage(scope, boardScope)}</div>
+        {notice && <div className="moodboard-rail__empty moodboard-rail__empty--notice" role="status">{notice}</div>}
+        {busy && <div className="moodboard-rail__empty">Loading...</div>}
+        {failed && !busy && <div className="moodboard-rail__empty moodboard-rail__empty--error">{failed}</div>}
+        {!busy && !failed && shown.length === 0 && (
+          <div className="moodboard-rail__empty">{emptyRailMessage('moodboard', scope, boardHome, !noProject)}</div>
         )}
-        {moodboards.map((m) => (
+        {shown.map((m) => (
           <button
             key={m.id}
             type="button"

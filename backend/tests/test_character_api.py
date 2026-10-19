@@ -11,11 +11,12 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def client():
+def client(canvas_project):
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from main import app
+    _VALID_BODY["projectId"] = canvas_project
     return TestClient(app)
 
 
@@ -26,7 +27,8 @@ _VALID_BODY = {
     "frozenTraitString": "late 20s, warm skin tone, high cheekbones",
     "seed": 7,
     "consistencyStrength": 0.9,
-    "projectId": "proj-test",
+    # A real canvas project's id, set by the client fixture (main._require_canvas_project).
+    "projectId": None,
 }
 
 
@@ -40,7 +42,7 @@ class TestCharacterCreateAndGet:
         assert data["version"] == 1
         assert data["subjectType"] == "human"
         assert data["thumbnail"] == "url_a"
-        assert data["projectId"] == "proj-test"
+        assert data["projectId"] == _VALID_BODY["projectId"]
         assert "createdAt" in data
         assert "updatedAt" in data
 
@@ -71,7 +73,7 @@ class TestCharacterCreateAndGet:
 class TestCharacterList:
     def test_list_project_scope_returns_posted_char(self, client):
         client.post("/api/characters", json=_VALID_BODY)
-        resp = client.get("/api/characters?scope=project&projectId=proj-test")
+        resp = client.get(f"/api/characters?scope=project&projectId={_VALID_BODY['projectId']}")
         assert resp.status_code == 200
         names = [c["name"] for c in resp.json()]
         assert "Rina" in names

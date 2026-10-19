@@ -15,7 +15,7 @@ Saved assets that studios edit and bridge nodes read. This volume starts with th
 
 ## 1. Moodboard
 
-A board is one JSON file under the moodboard root (`NEBULA_MOODBOARD_ROOT`, default `~/.nebula/moodboards/<scope>/<id>.json`; scope is `_global` or a project id).
+A board is one JSON file under the moodboard root (`NEBULA_MOODBOARD_ROOT`, default `~/.nebula/moodboards/<scope>/<id>.json`; scope is `_global` or a canvas project's id, see 1.8).
 
 ### 1.1 Saved fields
 
@@ -129,6 +129,25 @@ It is a route of its own, not a flag on `/analyze`: an older backend ignores a b
 
 `nebula moodboard analyze <board> --dry-run [--accent-min-chroma N --accent-separation N --merge-delta-e N] [--json]` and `moodboard_analyze(dry_run=True, accent_min_chroma=…, accent_separation=…, merge_delta_e=…)` call it; thresholds without the dry run are refused. `nebula moodboard show` prints each palette and accent colour with its share and source images (`#4 0.35%, #5 0.26%`: image number and the colour's share of it).
 
+### 1.9 Projects: which project an asset is in
+
+Moodboards, Characters and project Styles share one meaning of "project": a **canvas project** from the project catalog (`GET /api/projects`), never the backend's working folder. "This project" or "current" is the one open on the canvas (the catalog's `activeProjectId`).
+
+- `GET /api/project` returns `{id, name}` of the open canvas project, or 404 `"No project is open."`. The app doesn't call it: it reads the open project from its own project store (`frontend/src/lib/currentProject.ts`), which the CLI's and MCP's `current` also resolve to.
+- `POST /api/moodboards`, `POST /api/characters`, and `POST /api/presets` with `scope: "project"` take a `projectId` only if it's a canvas project: an unknown id is 422 (`"No project has the id '<id>'. Use the id of a project from GET /api/projects ..."`), a project in Recently deleted is 422 (`"The project “<name>” is in Recently deleted. Restore it first, ..."`), an unsafe id is 400. Leaving `projectId` out saves the asset as Global. Lists still take any safe id.
+- An asset never refuses to work outside its project. A Moodboard or Character node names its asset by id, so a node copied, pasted or imported into another project shows the asset, runs, and opens the Studio on it. Saving it from there keeps its `projectId`: it stays where it lives.
+- In the app the Project tabs (Assets panel, both Studio rails, the Styles library, Recently deleted, the node pickers) list the open project's assets and relist when the project changes or a `storedAssetChanged` event arrives. With no project open the Project tab says `"Open a project to see its moodboards."` (or Characters, Styles) and New is off. A Studio opened on an asset from another project lands on the Project tab with `"This board is in <name>."` (`"This Character is in <name>."`) above the open project's list (`frontend/src/lib/assetHome.ts`). A draft started in one project is never saved into another: the save is dropped if the open project changed.
+
+**Re-home of old-style assets (every start; `backend/services/asset_project_rehome.py`).** Before this, project assets were filed under the working-folder project (`nebula_nodes`, `NEBULA_PROJECT_ID`, ...), which no canvas project could see, and an older build or the desktop app on the same `~/.nebula` can still write one. Every folder under the moodboard, Character and preset roots (each store's own `store_root()`) that isn't `_global`, a canvas project's id or a project in Recently deleted is old-style. Each asset in one is moved by use (Justin picked this rule on 2026-10-19):
+
+| Asset | Goes to |
+|-------|---------|
+| A Moodboard or Character used by nodes in exactly one canvas project (saved snapshots, and the open canvas for the open project; trashed projects don't count) | That project |
+| One used in no project, or in two or more | Global |
+| A Style (preset) | Global |
+
+Assets in Recently deleted move too (their trash record's `projectId` and `scopeDir` change, so a restore lands in the new place). Only `projectId` changes (and a preset's `scope`, to `global`). It runs on every start; a start with nothing old-style writes nothing. Each moved file is first copied to `<root>/../<kind>-backups/project-rehome-<UTC time>/`, with `migration-log.json` listing every asset, where it went and why. An id already present in the target is skipped and logged once: `<state dir>/migrations/asset-project-rehome.json` remembers each skip by path, size and mtime, so the same skip isn't logged again, a changed file is, and the move happens on the first start after the collision is gone. Nothing changes while the catalog can't be read, or while there are old-style assets and an open canvas but no projects yet. It never stops the backend from starting, and prints one line only when it moved something or found a new skip; `NEBULA_NO_ASSET_REHOME=1` turns it off. To undo a re-home, stop the backend, copy the backup folder's files back over the root, delete the moved copies the log names (`file`), and start with `NEBULA_NO_ASSET_REHOME=1` (otherwise it moves them again). `move_asset(kind, root, source, target)` in the same module moves one asset between scopes with the same checks.
+
 ---
 
 ## Changelog
@@ -139,3 +158,4 @@ It is a route of its own, not a flag on `/analyze`: an older backend ignores a b
 | 2026-10-19 | Moodboard: `images[].privateNote`, `#moodboard/<id>` links, opening a board never edits the canvas |
 | 2026-10-19 | Moodboard: brief fields and the computed brief from the CLI and MCP (1.6) |
 | 2026-10-19 | Moodboard: colour sources in the analysis (1.3a, analysis version 4) and the dry run (1.8) |
+| 2026-10-19 | Moodboards, Characters and Styles: "project" is the canvas project everywhere, create routes check it, re-home of old-style assets at every start (1.9), nodes copy between projects |

@@ -202,7 +202,7 @@ def test_only_the_person_deletes_for_good(api, headers):
 def test_the_person_deletes_one_for_good_or_empties_a_scope(api):
     keep, purge, other = _board(api, "Keep"), _board(api, "Purge"), _board(api, "Other")
     project_board = api.client.post("/api/moodboards", json={
-        "name": "In project", "images": [{"url": "/api/outputs/x.png"}], "projectId": "projA"}).json()
+        "name": "In project", "images": [{"url": "/api/outputs/x.png"}], "projectId": api.project_id}).json()
     for board in (purge, other, project_board):
         api.client.delete(f"/api/moodboards/{board['id']}")
 

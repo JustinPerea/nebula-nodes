@@ -96,6 +96,7 @@ import { validateManifest } from '../lib/video/manifestValidator';
 import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
 import { isPortCompatible } from '../lib/portCompatibility';
 import { getProjectContext } from '../lib/projectContext';
+import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
@@ -664,9 +665,14 @@ interface GraphState {
   dismissUndoNotice: () => void;
 
   // Clipboard
-  clipboard: { nodes: Node<NodeData>[]; edges: Edge[] } | null;
+  clipboard: CanvasClipboard | null;
   copySelected: () => void;
-  pasteClipboard: () => void;
+  /** Paste what Cmd+C copied. Same load: +20 px from the copies, as before.
+   *  From another load (another project, or this one reopened): centred in
+   *  `view` (the visible canvas in flow coordinates, which Canvas passes),
+   *  then moved to the nearest spot clear of the nodes already here, in view
+   *  if one is, keeping its own layout. Returns the new nodes' ids. */
+  pasteClipboard: (target?: { view?: NodeRect }) => string[];
 
   // Selection & batch ops
   selectAll: () => void;
@@ -1724,6 +1730,87 @@ function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
     || state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId);
 }
 
+/**
+ * What Cmd+C copied. It survives opening another project, so nodes copy from
+ * one project to another (a Moodboard node keeps pointing at its board).
+ *
+ * `source` names the canvas the nodes came from: its project and which load
+ * of it (`load` counts project loads). `params` holds each node's
+ * provider-safe params worked out at copy time against that canvas's own
+ * recovery checkpoints and start ambiguities, or null when cloning it wasn't
+ * safe then. Those lists are keyed by node id and node ids restart per
+ * project, so after a switch the open canvas's lists say nothing about these
+ * nodes (or, worse, name a different node with the same id).
+ */
+export interface CanvasClipboard {
+  nodes: Node<NodeData>[];
+  edges: Edge[];
+  source: { projectId: string | null; load: number };
+  params: Record<string, Record<string, unknown> | null>;
+}
+
+/** Bumped by every project load: a clipboard from an earlier load is foreign. */
+let canvasLoad = 0;
+
+function sameCanvas(source: CanvasClipboard['source']): boolean {
+  return source.load === canvasLoad && source.projectId === (getProjectContext()?.id ?? null);
+}
+
+/** The params to paste for each clipboard node, or null if any isn't safe to clone. */
+function clipboardPasteParams(
+  state: GraphState,
+  clipboard: CanvasClipboard,
+): Map<string, Record<string, unknown>> | null {
+  const result = new Map<string, Record<string, unknown>>();
+  const here = sameCanvas(clipboard.source);
+  for (const node of clipboard.nodes) {
+    if (here) {
+      // On the canvas it came from: check against what this canvas knows now
+      // (a checkpoint or an ambiguity may have arrived since the copy), as a
+      // duplicate does. Unchanged from before the clipboard outlived a switch.
+      const params = providerSafeCloneParams(state, node);
+      if (!params) return null;
+      result.set(node.id, params);
+      continue;
+    }
+    // From another canvas (or an earlier load of this one): what was unsafe
+    // when copied stays unsafe; else the copy-time params, and the node-local
+    // check that a blank paid World Labs start never becomes a new one.
+    const copied = clipboard.params[node.id];
+    if (!copied) return null;
+    if (runIncludesFreshPaidWorldLabsStart({
+      nodes: [{ id: node.id, definitionId: node.data.definitionId, params: copied, outputs: {} }], edges: [],
+    })) return null;
+    result.set(node.id, { ...copied });
+  }
+  return result;
+}
+
+/** A node's box in flow coordinates, with the size the canvas measured if it has rendered. */
+function nodeRect(node: Node<NodeData>): NodeRect {
+  return {
+    x: node.position.x, y: node.position.y,
+    width: node.measured?.width ?? node.width ?? UNMEASURED_NODE_SIZE.width,
+    height: node.measured?.height ?? node.height ?? UNMEASURED_NODE_SIZE.height,
+  };
+}
+
+/** How far to move the clipboard's nodes on paste. The copies' own
+ * coordinates mean nothing on another canvas, so a paste from another load
+ * goes to the middle of the view (or, with no view given, where it was) and
+ * then clear of what's there. On the canvas it came from it stays +20 px. */
+function pasteOffset(
+  state: GraphState,
+  clipboard: CanvasClipboard,
+  view: NodeRect | undefined,
+): { x: number; y: number } {
+  if (sameCanvas(clipboard.source)) return { x: 20, y: 20 };
+  const group = clipboard.nodes.map(nodeRect);
+  const box = view ?? boundingRect(group);
+  const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  return findOpenGroupOffset(group, state.nodes.map(nodeRect), center, view);
+}
+
 /** Clone the provider state attached to the source node, not a stale object
  * captured before the paid-start recovery event arrived. Returning null is a
  * fail-closed signal for an ambiguous source that has no safe ID to copy. */
@@ -2697,25 +2784,28 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       (e) => selectedIds.has(e.source) && selectedIds.has(e.target)
     );
 
-    set({ clipboard: { nodes: selected, edges: internalEdges } });
+    const state = get();
+    const params: CanvasClipboard['params'] = {};
+    for (const node of selected) params[node.id] = providerSafeCloneParams(state, node);
+    set({ clipboard: {
+      nodes: selected, edges: internalEdges, params,
+      source: { projectId: getProjectContext()?.id ?? null, load: canvasLoad },
+    } });
   },
 
-  pasteClipboard: () => {
+  pasteClipboard: (target) => {
     const state = get();
     const { clipboard, isExecuting } = state;
-    if (isExecuting) return;
-    if (!clipboard || clipboard.nodes.length === 0) return;
+    if (isExecuting) return [];
+    if (!clipboard || clipboard.nodes.length === 0) return [];
 
-    const safeParams = new Map<string, Record<string, unknown>>();
-    for (const node of clipboard.nodes) {
-      const params = providerSafeCloneParams(state, node);
-      if (!params) {
-        warnUnsafeProviderClone();
-        return;
-      }
-      safeParams.set(node.id, params);
+    const safeParams = clipboardPasteParams(state, clipboard);
+    if (!safeParams) {
+      warnUnsafeProviderClone();
+      return [];
     }
 
+    const offset = pasteOffset(state, clipboard, target?.view);
     pushUndo(set, get);
 
     const idMap = new Map<string, string>();
@@ -2725,7 +2815,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return {
         ...node,
         id: newId,
-        position: { x: node.position.x + 20, y: node.position.y + 20 },
+        position: { x: node.position.x + offset.x, y: node.position.y + offset.y },
         selected: true,
         data: {
           ...node.data,
@@ -2760,6 +2850,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       ],
       edges: [...state.edges, ...newEdges],
     }));
+    return newNodes.map((node) => node.id);
   },
 
   // ---------------------------------------------------------------------------
@@ -5195,6 +5286,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     currentRunId = null;
     lastUndoPush = 0;
     lastUndoNodeId = '';
+    canvasLoad += 1;
 
     for (const record of restoredHistory) {
       if (record.status !== 'running') continue;
@@ -5218,7 +5310,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set({
       nodes, edges, runHistory: persistedRunHistory(restoredHistory),
       ...ownershipState(), createLaunchingIds: [], createCancelledLaunchIds: [],
-      clipboard: null, undoStack: [], redoStack: [], backendFreshStartPending: false,
+      // The clipboard stays, so nodes copy across projects; the bumped load
+      // makes it paste with its copy-time params (see CanvasClipboard).
+      undoStack: [], redoStack: [], backendFreshStartPending: false,
       providerRecoveryWarning: null, providerRecoveries: [], providerStartAmbiguities: [],
       uncertainWorldLabsRunId: null,
     });

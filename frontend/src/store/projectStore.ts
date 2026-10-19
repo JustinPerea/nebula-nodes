@@ -8,6 +8,7 @@ import { rewriteBackendAssetUrls } from '../lib/backend';
 import { normalizeRuntimeMediaParams } from '../lib/graphFile';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { getProjectContext, setProjectContext } from '../lib/projectContext';
+import { currentProjectOf, publishOpenProject } from '../lib/currentProject';
 import { holdsPersonCredential } from '../lib/personSession';
 import { backendParamsVersion, onParamsOutdated, reloadPage } from '../lib/paramsOutdated';
 import { clearPersistedRunHistory, loadRunHistory } from '../lib/runHistory';
@@ -668,6 +669,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 }));
+
+// "This project" for Characters, Moodboards and Styles follows the open
+// canvas project (lib/currentProject): this store is its only source.
+useProjectStore.subscribe((state) => publishOpenProject(currentProjectOf(state)));
 
 /** One coordinator stays mounted across Home, Canvas and all studios. */
 export function subscribeProjectAutosave(): () => void {

@@ -63,9 +63,18 @@ def _pairs(items: list[str], flag: str) -> list[tuple[str, str]]:
     return pairs
 
 
-def _scope_label(board: dict[str, Any]) -> str:
+def _scope_label(board: dict[str, Any], names: dict[str, tuple[str, bool]] | None = None) -> str:
+    """"all projects", or the board's canvas project by name with a short id
+    ("project Shoot A (5f3c1a2b…)"); just the id when the name isn't known."""
     project = board.get("projectId")
-    return f"project {project}" if project else "all projects"
+    if not project:
+        return "all projects"
+    known = (names or {}).get(project)
+    if not known:
+        return f"project {project}"
+    name, trashed = known
+    short = project if len(project) <= 12 else f"{project[:8]}…"
+    return f"project {name} ({short}{', in Recently deleted' if trashed else ''})"
 
 
 _OVERRIDE_AUTHOR = {"person": "written by the person", "agent": "written by an agent"}
@@ -100,12 +109,12 @@ def _print_brief(board: dict[str, Any]) -> None:
         print(f"  Added to the prompt for GPT Image, Nano Banana and Krea 2: {composed['avoidPrompt']}")
 
 
-def _print_board(board: dict[str, Any]) -> None:
+def _print_board(board: dict[str, Any], names: dict[str, tuple[str, bool]] | None = None) -> None:
     images = board.get("images") or []
     strength = board.get("strength")
     strength_text = f"{float(strength):.2f}" if isinstance(strength, (int, float)) else "?"
     print(f"{board.get('name')}  ({board.get('id')})")
-    print(f"  {board.get('mode')} · strength {strength_text} · {_scope_label(board)}")
+    print(f"  {board.get('mode')} · strength {strength_text} · {_scope_label(board, names)}")
     if board.get("notes"):
         print(f"  Notes: {board['notes']}")
     if board.get("direction"):
@@ -260,16 +269,17 @@ def run(client: NebulaClient, args) -> None:
             if not listing:
                 print("No moodboards yet. `nebula moodboard new \"Name\" <images...>` makes one.")
                 return
+            names = boards.project_names(api, headers) if any(b.get("projectId") for b in listing) else {}
             for board in listing:
                 analyzed = "analyzed" if board.get("analysis") else "not analyzed"
                 print(f"{board.get('id')}  {board.get('name')}  ({len(board.get('images') or [])} images, "
-                      f"{board.get('mode')}, {analyzed}, {_scope_label(board)})")
+                      f"{board.get('mode')}, {analyzed}, {_scope_label(board, names)})")
         elif verb == "show":
             board = boards.get_board(api, args.board, headers)
             if args.json:
                 _print_json(boards.brief(board))
             else:
-                _print_board(board)
+                _print_board(board, boards.project_names(api, headers) if board.get("projectId") else None)
         elif verb == "new":
             board, skipped = boards.create_board(
                 api, args.name, args.sources, project=args.project, mode=args.mode, strength=args.strength,
@@ -341,7 +351,7 @@ def run(client: NebulaClient, args) -> None:
             if args.json:
                 _print_json(boards.brief(board))
             else:
-                _print_board(board)
+                _print_board(board, boards.project_names(api, headers) if board.get("projectId") else None)
         elif verb == "delete":
             result = boards.delete_board(api, args.board, headers)
             if result.get("restorable"):
@@ -378,7 +388,8 @@ def add_parser(sub) -> None:
     msub = moodboard_p.add_subparsers(dest="moodboard_cmd", required=True)
 
     list_p = msub.add_parser("list", help="List boards: those for every project, plus the open project's")
-    list_p.add_argument("--project", help="A project id (or 'current') instead of the open project")
+    list_p.add_argument("--project", help="A canvas project id (from `nebula projects`) or 'current' "
+                                          "instead of the open project")
     list_p.add_argument("--global", dest="global_only", action="store_true",
                         help="Only boards that belong to no project")
     list_p.add_argument("--json", action="store_true", help="Print JSON")
@@ -391,7 +402,8 @@ def add_parser(sub) -> None:
     new_p = msub.add_parser("new", help="Make a board from files, folders and links")
     new_p.add_argument("name", help="Board name")
     new_p.add_argument("sources", nargs="*", metavar="image", help="Files, folders, http(s) links or Nebula outputs")
-    new_p.add_argument("--project", help="Keep the board in this project ('current' = the open one). "
+    new_p.add_argument("--project", help="Keep the board in this canvas project: 'current' = the one open "
+                                         "on the canvas, or an id from `nebula projects`. "
                                          "Default: no project, so every project can use it")
     new_p.add_argument("--mode", choices=boards.MODES, default="look",
                        help="look (style), world (setting) or subject (default: look)")

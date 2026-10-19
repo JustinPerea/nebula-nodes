@@ -18,7 +18,6 @@ vi.mock('../../src/lib/backend', async (importOriginal) => ({
   apiFetch: net.apiFetch,
   getCachedBackendBaseUrl: () => null,
 }));
-vi.mock('../../src/lib/currentProject', () => ({ resolveProjectId: async () => 'project-1' }));
 vi.mock('../../src/lib/wsClient', () => ({ wsClient: {
   connect: vi.fn(), disconnect: vi.fn(),
   subscribe: vi.fn((handler: (event: unknown) => void) => {
@@ -38,6 +37,7 @@ import { useGraphStore } from '../../src/store/graphStore';
 import { useStoredAssetsStore } from '../../src/store/storedAssetsStore';
 import { useUIStore } from '../../src/store/uiStore';
 import { setSelectionActionSlot } from '../../src/lib/selectionActionSlot';
+import { setOpenProject } from '../../src/test/projectState';
 
 function board(id: string, name: string, images: number): Moodboard {
   return {
@@ -57,6 +57,7 @@ function reply(body: unknown, status = 200) {
 }
 
 beforeEach(() => {
+  setOpenProject(['project-1', 'Project one']);
   boards = { gm: board('gm', 'Good Machines', 3), other: board('other', 'Other board', 1) };
   trashedBoards = {};
   posted = [];

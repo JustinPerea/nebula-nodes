@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Character, Moodboard } from '../../src/types';
 
 const api = vi.hoisted(() => ({ characters: vi.fn(), boards: vi.fn(), character: vi.fn(), board: vi.fn(), createCharacter: vi.fn(),
-  updateCharacter: vi.fn(), createBoard: vi.fn(), updateBoard: vi.fn(), analyze: vi.fn(), upload: vi.fn(), project: vi.fn() }));
+  updateCharacter: vi.fn(), createBoard: vi.fn(), updateBoard: vi.fn(), analyze: vi.fn(), upload: vi.fn() }));
 vi.mock('../../src/lib/api', async (original) => ({ ...await original<typeof import('../../src/lib/api')>(),
   fetchCharacters: api.characters, fetchMoodboards: api.boards, fetchCharacter: api.character, fetchMoodboard: api.board,
   createCharacter: api.createCharacter,
@@ -19,7 +19,6 @@ vi.mock('../../src/lib/backend', async (original) => ({ ...await original<typeof
       ? new Response(JSON.stringify({ items: [] }), json)
       : new Response(JSON.stringify({ detail: 'not found' }), { ...json, status: 404 }));
   } }));
-vi.mock('../../src/lib/currentProject', () => ({ getCurrentProject: api.project }));
 vi.mock('../../src/components/character-studio/CharacterTestPanel', () => ({ CharacterTestPanel: () => null }));
 
 import { CharacterStudioView } from '../../src/components/character-studio/CharacterStudioView';
@@ -27,6 +26,7 @@ import { MoodboardStudioView } from '../../src/components/moodboard-studio/Moodb
 import { useUIStore } from '../../src/store/uiStore';
 import { assetStudioDraftKey, useAssetStudioDraftStore } from '../../src/store/assetStudioDraftStore';
 import { NEW_CHARACTER_SENTINEL, NEW_MOODBOARD_SENTINEL } from '../../src/lib/studioSentinels';
+import { setOpenProject } from '../../src/test/projectState';
 
 const initialUI = useUIStore.getState();
 const character = (id = 'character-a', name = 'Original character'): Character => ({ id, name,
@@ -55,9 +55,9 @@ function characterUpload(view: ReturnType<typeof render>) {
 
 beforeEach(() => {
   vi.useFakeTimers(); useUIStore.setState(initialUI, true);
-  useAssetStudioDraftStore.setState({ entries: {}, aliases: {}, projectId: null });
+  useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
   for (const mock of Object.values(api)) mock.mockReset();
-  api.project.mockResolvedValue({ id: 'project-one', name: 'First project' });
+  setOpenProject(['project-one', 'First project']);
   api.characters.mockImplementation(async (scope: string) => scope === 'global' ? [character(), character('character-b', 'Other character')] : []);
   api.boards.mockImplementation(async (scope: string) => scope === 'global' ? [board(), board('board-b', 'Other board')] : []);
   // By id, from whatever the lists hold, so a test that changes a list changes this too.
@@ -72,7 +72,7 @@ beforeEach(() => {
   api.upload.mockResolvedValue(new Response(JSON.stringify({ url: '/uploaded.png' }), { headers: { 'content-type': 'application/json' } }));
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); useUIStore.setState(initialUI, true);
-  useAssetStudioDraftStore.setState({ entries: {}, aliases: {}, projectId: null }); });
+  useAssetStudioDraftStore.setState({ entries: {}, aliases: {} }); });
 
 describe('asset studio workspace continuity', () => {
   it('retains an invalid Character draft verbatim through return and keeps scoped drafts separate', async () => {
@@ -305,14 +305,14 @@ describe('asset studio workspace continuity', () => {
     expect(screen.getByRole('button', { name: 'Analyze' })).toBeEnabled();
   });
 
-  it('preserves separate project drafts when backend identity changes and restores the original project', async () => {
+  it('preserves separate project drafts when the open project changes and restores the original project', async () => {
     useUIStore.getState().enterCharacterEditor(NEW_CHARACTER_SENTINEL, 'project');
     const first = render(<CharacterStudioView />); await settle(); change('Name', 'First project draft'); leave(first);
-    api.project.mockResolvedValue({ id: 'project-two', name: 'Second project' });
+    setOpenProject(['project-two', 'Second project']);
     useUIStore.getState().enterCharacterEditor(NEW_CHARACTER_SENTINEL, 'project');
     const second = render(<CharacterStudioView />); await settle();
     expect(screen.getByLabelText('Name')).toHaveValue(''); change('Name', 'Second project draft'); leave(second);
-    api.project.mockResolvedValue({ id: 'project-one', name: 'First project' });
+    setOpenProject(['project-one', 'First project']);
     useUIStore.getState().enterCharacterEditor(NEW_CHARACTER_SENTINEL, 'project'); render(<CharacterStudioView />); await settle();
     expect(screen.getByLabelText('Name')).toHaveValue('First project draft');
     expect(useAssetStudioDraftStore.getState().entries[assetStudioDraftKey('character', 'project', 'new', 'project-one')].draft)
@@ -322,11 +322,12 @@ describe('asset studio workspace continuity', () => {
     expect(api.createCharacter).not.toHaveBeenCalled(); expect(api.updateCharacter).not.toHaveBeenCalled();
   });
 
-  it('verifies project identity again before autosave and retains the old project draft', async () => {
+  it('a switch before the autosave keeps the old project draft and never saves it into the new project', async () => {
     useUIStore.getState().enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, 'project'); render(<MoodboardStudioView />); await settle();
     const firstKey = assetStudioDraftKey('moodboard', 'project', 'new', 'project-one');
     act(() => useAssetStudioDraftStore.getState().edit(firstKey, () => ({ ...board(), notes: 'Old project direction', projectId: 'project-one' })));
-    api.project.mockResolvedValue({ id: 'project-two', name: 'Recovered backend project' });
+    // An agent opens another project before the autosave fires.
+    act(() => setOpenProject(['project-two', 'Recovered backend project']));
     await act(async () => { vi.advanceTimersByTime(600); }); await settle();
     expect(api.createBoard).not.toHaveBeenCalled(); expect(api.updateBoard).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Notes')).toHaveValue('');

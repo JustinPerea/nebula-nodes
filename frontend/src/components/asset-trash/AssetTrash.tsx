@@ -8,6 +8,7 @@ import {
 import type { AssetScope } from '../../store/uiStore';
 import { wsClient } from '../../lib/wsClient';
 import '../../styles/asset-trash.css';
+import { useCurrentProjectId } from '../../lib/currentProject';
 
 /**
  * Recently deleted, inside Moodboard Studio and Character Studio.
@@ -72,32 +73,45 @@ export interface RecentlyDeletedAssetsProps {
 
 export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onTrashChanged }: RecentlyDeletedAssetsProps) {
   const [items, setItems] = useState<TrashedItem[]>([]);
+  // Which tab and project `items` came from.
+  const [itemsFor, setItemsFor] = useState('');
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const noun = NOUNS[kind];
+  // A project's Recently deleted is the open canvas project's (lib/currentProject).
+  const openProjectId = useCurrentProjectId();
+  const projectId = scope === 'project' ? openProjectId : null;
+  const noProject = scope === 'project' && !projectId;
+  const where = `${scope}:${projectId ?? ''}`;
 
   // The ids last listed for this scope, to tell when the list changed.
-  const listed = useRef<{ scope: AssetScope; ids: string } | null>(null);
+  const listed = useRef<{ where: string; ids: string } | null>(null);
   const trashChanged = useRef(onTrashChanged);
   useEffect(() => { trashChanged.current = onTrashChanged; }, [onTrashChanged]);
 
   useEffect(() => {
+    if (noProject) return; // nothing is shown without an open project
     let cancelled = false;
-    fetchTrash({ kind, scope })
+    fetchTrash({ kind, scope, projectId: projectId ?? undefined })
       .then((list) => {
         if (cancelled) return;
         setItems(list);
+        setItemsFor(where);
         setError(null);
         const ids = list.map((item) => item.id).join(',');
         const before = listed.current;
-        listed.current = { scope, ids };
-        if (before && before.scope === scope && before.ids !== ids) trashChanged.current?.();
+        listed.current = { where, ids };
+        if (before && before.where === where && before.ids !== ids) trashChanged.current?.();
       })
-      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Couldn’t load Recently deleted.'); });
+      .catch((err) => {
+        if (cancelled) return;
+        setItemsFor(where);
+        setError(err instanceof Error ? err.message : 'Couldn’t load Recently deleted.');
+      });
     return () => { cancelled = true; };
-  }, [kind, scope, refreshKey, reload]);
+  }, [kind, scope, projectId, noProject, where, refreshKey, reload]);
 
   // A delete or restore elsewhere (another tab, an agent) shows up here too.
   useEffect(() => wsClient.subscribe((event) => {
@@ -118,7 +132,8 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
     }
   }, []);
 
-  if (items.length === 0 && !error) return null;
+  // A list from another project or tab, until this one loads, isn't shown.
+  if (noProject || itemsFor !== where || (items.length === 0 && !error)) return null;
 
   return (
     <section className="asset-trash" aria-label={`Recently deleted ${noun.many}`}>
@@ -130,7 +145,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onT
         {open && items.length > 0 && (
           <ConfirmInline label="Empty" confirmLabel="Delete all" busy={busy}
             prompt={items.length === 1 ? `Delete this ${noun.one} for good?` : `Delete all ${items.length} ${noun.many} for good?`}
-            onConfirm={() => void act(() => emptyTrash({ kind, scope }, items))} />
+            onConfirm={() => void act(() => emptyTrash({ kind, scope, projectId: projectId ?? undefined }, items))} />
         )}
       </div>
       {error && <p className="asset-trash__error" role="alert">{error}</p>}

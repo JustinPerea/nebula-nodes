@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { Character, Moodboard } from '../../types';
 
@@ -12,6 +12,7 @@ vi.mock('../../lib/wsClient', () => ({ wsClient: { subscribe: () => () => {}, co
 import { AssetsPanel } from './AssetsPanel';
 import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
+import { setOpenProject } from '../../test/projectState';
 
 const board = { id: 'b1', name: 'Warm editorial', thumbnail: '/api/outputs/a.png', images: [{}], mode: 'look' } as unknown as Moodboard;
 const character = { id: 'c1', name: 'Nari', thumbnail: '/api/outputs/n.png', referenceViews: ['a', 'b', 'c'] } as unknown as Character;
@@ -27,6 +28,7 @@ beforeEach(() => {
   [addMoodboardNode, addCharacterNode, enterMoodboardEditor, enterCharacterEditor].forEach((mock) => mock.mockReset());
   useGraphStore.setState({ addMoodboardNode, addCharacterNode, nodes: [] } as never);
   useUIStore.setState({ enterMoodboardEditor, enterCharacterEditor } as never);
+  setOpenProject(['pA', 'Shoot A'], [['pB', 'Shoot B']]);
 });
 
 function renderPanel() {
@@ -81,5 +83,41 @@ describe.each([
     fireEvent.dragStart(row, { dataTransfer: { setData, effectAllowed: '' } });
     expect(setData).toHaveBeenCalledWith(expect.stringContaining('application/'), expect.stringContaining(`"id":"${id}"`));
     expect(add).not.toHaveBeenCalled();
+  });
+});
+
+describe('Assets panel Project tab', () => {
+  it('lists the open canvas project and lists again when the project changes', async () => {
+    const boardA = { ...board, id: 'a1', name: 'A board' } as Moodboard;
+    const boardB = { ...board, id: 'b2', name: 'B board' } as Moodboard;
+    api.fetchMoodboards.mockImplementation(async (scope: string, projectId?: string) => (
+      scope === 'global' ? [board] : projectId === 'pA' ? [boardA] : projectId === 'pB' ? [boardB] : []));
+    await openTab('Moodboards');
+    fireEvent.click(screen.getByRole('tab', { name: 'Project' }));
+    expect(await screen.findByRole('button', { name: /^A board/ })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Project' }).getAttribute('title')).toBe('Assets in Shoot A');
+
+    // The person, or an agent this tab follows, opens Shoot B.
+    act(() => { setOpenProject(['pB', 'Shoot B'], [['pA', 'Shoot A']]); });
+    expect(await screen.findByRole('button', { name: /^B board/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^A board/ })).toBeNull();
+    expect(api.fetchMoodboards).toHaveBeenCalledWith('project', 'pB');
+
+    fireEvent.click(screen.getByRole('button', { name: '+ New Moodboard' }));
+    expect(enterMoodboardEditor).toHaveBeenCalledWith('new', 'project');
+  });
+
+  it('with no project open it says to open one, fetches nothing for it and New is off', async () => {
+    setOpenProject(null);
+    await openTab('Characters');
+    fireEvent.click(screen.getByRole('tab', { name: 'Project' }));
+    expect(await screen.findByText('Open a project to see its Characters.')).toBeTruthy();
+    await waitFor(() => expect(api.fetchCharacters).toHaveBeenCalledTimes(1));
+    expect(api.fetchCharacters).toHaveBeenCalledWith('global', undefined);
+    const newButton = screen.getByRole('button', { name: '+ New Character' }) as HTMLButtonElement;
+    expect(newButton.disabled).toBe(true);
+    fireEvent.click(newButton);
+    expect(enterCharacterEditor).not.toHaveBeenCalled();
+    expect(screen.queryByText(/failed/i)).toBeNull();
   });
 });

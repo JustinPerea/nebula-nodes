@@ -4,11 +4,18 @@ import { backendAssetUrlSync } from '../../lib/backend';
 import type { Character } from '../../types';
 import type { AssetScope } from '../../store/uiStore';
 import { RecentlyDeletedAssets } from '../asset-trash/AssetTrash';
+import { emptyRailMessage, railNotice, type AssetHome } from '../../lib/assetHome';
+import { NO_PROJECT_OPEN } from '../../lib/currentProject';
+import { wsClient } from '../../lib/wsClient';
 
 interface CharacterLibraryRailProps {
   /** Currently-open Character id (or the 'new' sentinel for a fresh draft). */
   activeId: string | null;
   initialScope: AssetScope;
+  /** Where the open saved Character lives; null for a new draft. */
+  characterHome?: AssetHome | null;
+  /** The canvas project open now (null: none), whose Characters the Project tab lists. */
+  projectId: string | null;
   /** Changes after a delete or undo, so the list loads again. */
   refreshKey?: unknown;
   onSelect: (id: string, scope: AssetScope) => void;
@@ -19,11 +26,13 @@ interface CharacterLibraryRailProps {
  *  global toggle and a "+ New" button. Mirrors CinemaShotsRail's role (a
  *  vertical pick-list) but loads from /api/characters rather than node state.
  *
- *  Project scope resolves through the backend-owned current-project identity;
- *  initialScope keeps the rail truthful when a project asset or draft opens. */
+ *  The Project tab lists the open canvas project's Characters (lib/currentProject);
+ *  initialScope is where the open Character lives, so the rail opens on its tab. */
 export function CharacterLibraryRail({
   activeId,
   initialScope,
+  characterHome = null,
+  projectId,
   refreshKey,
   onSelect,
   onNew,
@@ -32,26 +41,37 @@ export function CharacterLibraryRail({
   // Bumped when Recently deleted changes (a delete or restore elsewhere), to list again.
   const [relistKey, setRelistKey] = useState(0);
   const relist = useCallback(() => setRelistKey((value) => value + 1), []);
-  const [characters, setCharacters] = useState<Character[]>([]);
+  // The list with the tab and project it was fetched for, so a list from
+  // before a project switch is never shown as this project's.
+  const [listing, setListing] = useState<{ for: string; items: Character[] }>({ for: '', items: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Reload on scope change AND whenever the active id changes — selecting/
   // creating/leaving a Character should refresh the list so a just-saved draft
   // appears here without a manual refresh.
+  // A Character saved or deleted elsewhere (an agent, the CLI) shows up here too.
+  useEffect(() => wsClient.subscribe((event) => {
+    if (event.type === 'storedAssetChanged' && event.kind === 'character') relist();
+  }), [relist]);
+
+  const noProject = scope === 'project' && !projectId;
+  const listKey = `${scope}:${scope === 'project' ? projectId : ''}`;
   useEffect(() => {
+    // No project open: nothing to fetch; the empty state says to open one.
+    if (noProject) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading gate before async fetch; not derived state, does not cascade
     setLoading(true);
     setError(null);
-    fetchCharacters(scope)
+    fetchCharacters(scope, scope === 'project' ? projectId ?? undefined : undefined)
       .then((list) => {
-        if (!cancelled) setCharacters(list);
+        if (!cancelled) setListing({ for: listKey, items: list });
       })
       .catch((err) => {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load.');
-          setCharacters([]);
+          setListing({ for: listKey, items: [] });
         }
       })
       .finally(() => {
@@ -60,7 +80,11 @@ export function CharacterLibraryRail({
     return () => {
       cancelled = true;
     };
-  }, [scope, activeId, refreshKey, relistKey]);
+  }, [scope, projectId, noProject, listKey, activeId, refreshKey, relistKey]);
+  const notice = railNotice('character', characterHome);
+  const characters = noProject || listing.for !== listKey ? [] : listing.items;
+  const busy = !noProject && loading;
+  const failed = noProject ? null : error;
 
   return (
     <div className="character-rail">
@@ -85,20 +109,20 @@ export function CharacterLibraryRail({
         </button>
       </div>
 
-      <button type="button" className="character-rail__new" onClick={() => onNew(scope)}>
+      <button type="button" className="character-rail__new" disabled={noProject}
+        title={noProject ? NO_PROJECT_OPEN : undefined} onClick={() => onNew(scope)}>
         + New Character
       </button>
 
       <div className="character-rail__list">
-        {loading && <div className="character-rail__empty">Loading…</div>}
-        {error && !loading && (
-          <div className="character-rail__empty character-rail__empty--error">{error}</div>
+        {notice && <div className="character-rail__empty character-rail__empty--notice" role="status">{notice}</div>}
+        {busy && <div className="character-rail__empty">Loading…</div>}
+        {failed && !busy && (
+          <div className="character-rail__empty character-rail__empty--error">{failed}</div>
         )}
-        {!loading && !error && characters.length === 0 && (
+        {!busy && !failed && characters.length === 0 && (
           <div className="character-rail__empty">
-            {scope === 'project'
-              ? 'No project Characters yet.'
-              : 'No Characters yet. Create one →'}
+            {emptyRailMessage('character', scope, characterHome, !noProject)}
           </div>
         )}
         {characters.map((c) => (

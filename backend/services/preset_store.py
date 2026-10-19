@@ -39,6 +39,13 @@ def _root() -> Path:
     return Path(os.environ.get("NEBULA_PRESET_ROOT", str(Path.home() / ".nebula" / "presets")))
 
 
+def store_root() -> Path:
+    """This store's root folder, resolved now (env var, else ~/.nebula/...).
+    Public so other code (services/asset_project_rehome.py) finds the same
+    folder this store writes to."""
+    return _root()
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 

@@ -76,6 +76,7 @@ def api(tmp_path, monkeypatch, person):
 
     ctx = Api()
     ctx.client = TestClient(main_module.app)
+    ctx.project_id = project["id"]
     ctx.graph = graph
     ctx.sent = sent
     return ctx

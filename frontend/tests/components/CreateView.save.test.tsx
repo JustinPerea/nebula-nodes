@@ -6,6 +6,7 @@ import type { Preset } from '../../src/lib/createPresets';
 import { CreateView } from '../../src/components/create-studio/CreateView';
 import { CREATE_DRAFT_STORAGE_KEY, useCreateDraftStore } from '../../src/store/createDraftStore';
 import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
+import { publishOpenProject } from '../../src/lib/currentProject';
 
 const mocks = vi.hoisted(() => ({
   createPreset: vi.fn(), fetchPresets: vi.fn(),
@@ -36,6 +37,7 @@ beforeEach(() => {
   mocks.saveToFolder.mockReset().mockResolvedValue({ savedPath: '/tmp/synthetic-result.png' });
   mocks.revealInFinder.mockReset();
   mocks.graph.nodes = [];
+  publishOpenProject({ id: 'project-one', name: 'First project' });
 });
 afterEach(() => vi.restoreAllMocks());
 

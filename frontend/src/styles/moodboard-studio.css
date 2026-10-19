@@ -104,6 +104,16 @@ body.app-slava-restraint .moodboard-rail__empty--error {
   color: #e0796b;
 }
 
+/* The open board is another project's: say where, above the list. */
+body.app-slava-restraint .moodboard-rail__empty--notice {
+  color: var(--sr-ink-meta);
+}
+
+body.app-slava-restraint .moodboard-rail__new:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 body.app-slava-restraint .moodboard-studio-view__rail {
   grid-area: rail;
   min-width: 0;

@@ -18,6 +18,9 @@ export interface AssetStudioDraftEntry<D = unknown> {
   pendingAnalysisId: string | null;
 }
 
+/** A project draft is keyed under the canvas project it was started in
+ * (lib/currentProject), so switching projects shows that project's drafts and
+ * a draft is never saved into a project it wasn't made for. */
 export function assetStudioDraftKey(kind: AssetStudioKind, scope: string, id: string | null, projectId?: string | null): string {
   return JSON.stringify(scope === 'project' ? [kind, scope, projectId ?? 'pending', id ?? 'new']
     : [kind, scope, id ?? 'new']);
@@ -38,8 +41,6 @@ export function resolveAssetStudioDraftKey(state: { aliases: Record<string, stri
 interface AssetStudioDraftState {
   entries: Record<string, AssetStudioDraftEntry>;
   aliases: Record<string, string>;
-  projectId: string | null;
-  setProjectId: (id: string) => void;
   ensure: (key: string, entry: AssetStudioDraftEntry) => void;
   patch: (key: string, patch: Partial<AssetStudioDraftEntry>) => void;
   edit: (key: string, update: (draft: unknown) => unknown) => void;
@@ -56,8 +57,6 @@ interface AssetStudioDraftState {
 export const useAssetStudioDraftStore = create<AssetStudioDraftState>((set, get) => ({
   entries: {},
   aliases: {},
-  projectId: null,
-  setProjectId: (projectId) => set({ projectId }),
   ensure: (key, entry) => set((state) => {
     key = resolveAssetStudioDraftKey(state, key);
     return state.entries[key] ? {} : { entries: { ...state.entries, [key]: entry } };

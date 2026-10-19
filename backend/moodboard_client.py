@@ -351,6 +351,23 @@ def active_project(api: NebulaAPI, headers: dict[str, str] | None = None) -> str
     return active if isinstance(active, str) and active else None
 
 
+def project_names(api: NebulaAPI, headers: dict[str, str] | None = None) -> dict[str, tuple[str, bool]]:
+    """Canvas project id -> (name, in Recently deleted), for labels. Empty
+    when the listing can't be read: callers fall back to the id."""
+    try:
+        listing = api.request("GET", "/api/projects", headers=headers)
+    except NebulaAPIError:
+        return {}
+    names: dict[str, tuple[str, bool]] = {}
+    if not isinstance(listing, dict):
+        return names
+    for key, trashed in (("projects", False), ("trash", True)):
+        for project in listing.get(key) or []:
+            if isinstance(project, dict) and isinstance(project.get("id"), str):
+                names[project["id"]] = (str(project.get("name") or "Untitled project"), trashed)
+    return names
+
+
 def resolve_project(api: NebulaAPI, project: str | None, headers: dict[str, str] | None = None) -> str | None:
     """None for a board in no project; "current" means the project open on the canvas."""
     if project is None or project == "":
