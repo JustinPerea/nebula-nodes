@@ -139,6 +139,9 @@ nebula moodboard set <board> --direction "quiet coastal mornings" --avoid "neon 
   --pin-color "#E8593C" --keep-out-color "#0000FF"
 nebula moodboard set <board> --unavoid "neon signage" --unpin-color "#0000FF"
 nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --keep-brief
+nebula moodboard set <board> --keep-anyway "#a6392d"     # put a left-out colour back (not pinned)
+nebula moodboard set <board> --leave-out "#1c70f2"       # or --leave-out-flagged, --reset-color HEX
+nebula moodboard set <board> --clash-mode flag           # leave-out (default), flag, no-measured, keep-all
 nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
 nebula moodboard analyze <board>
 nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
@@ -178,6 +181,26 @@ nebula moodboard delete <board>
   `brief.negativePrompt` their negatives); `show` prints it with who wrote
   it. Don't use `analysis.styleBrief`: it leaves out Direction, pinned
   colours and any hand-written brief.
+- Nebula checks the measured colours against the words in Direction and
+  Avoid. By default a colour that clashes (Avoid "red, orange or pink
+  flowers" and a brick-red accent) leaves the brief: `show` lists it under
+  "Left out of the brief" with the reason and the `--keep-anyway` command,
+  and `--json` has it in `brief.leftOut` (each with `reason`, `level`,
+  `why` and `foundBy`). `brief.mayClash` still goes; `brief.pinnedClashes`
+  are pinned colours, which always go. Tell the person what was left out
+  rather than putting it back yourself. `--keep-anyway` doesn't pin the
+  colour; `--reset-color` hands it back to Nebula's check. `--clash-mode`:
+  `flag` leaves nothing out and lists clashes, `no-measured` sends no
+  measured colour once there is a Direction, `keep-all` turns the check's
+  effect off. Today the check reads words only; a later check (one that
+  looks at the images) adds its findings to `colorCheck` the same way.
+- The board's notes (and each image's notes) are for the person, their team
+  and you: generators don't get them unless the person turns on "Send these
+  notes to generators" (`sendNotes`, `brief.notesSent`). `--no-send-notes`
+  turns it off; `--send-notes` is the person's call and refused for an
+  agent. A Moodboard node's `send_notes` param (`board`, `yes`, `no`) can
+  override it per node; moving it toward sending is also the person's, so
+  propose it.
 - `--avoid`, `--pin-color` and `--keep-out-color` add (repeatable);
   `--unavoid` and `--unpin-color` take off; `--clear-avoid` empties the list
   first; `--direction ""` clears Direction. Limits: 40 Avoid items of 200

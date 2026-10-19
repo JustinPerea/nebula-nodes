@@ -626,6 +626,15 @@ for _node_id in (
 ):
     APPROVED_INPUT_PORT_ADDITIONS[_node_id] = [*APPROVED_INPUT_PORT_ADDITIONS.get(_node_id, []), _MOODBOARD_PORT]
 
+# Gap 18 (2026-10-19): board notes reach generators only on opt-in. The
+# Moodboard node gains `send_notes` after `moodboard` ("board" follows the
+# board's own switch); nothing else about the node changes.
+APPROVED_INSERTED_PARAMS["nebula-moodboard"] = [("moodboard", {
+    "key": "send_notes", "label": "Board notes to generators", "type": "enum", "required": False,
+    "default": "board", "options": [{"label": "As the board says", "value": "board"},
+                                    {"label": "Send", "value": "yes"}, {"label": "Don't send", "value": "no"}],
+})]
+
 
 def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any]:
     """Normalize exact approved deltas without mutating shared fixture data."""

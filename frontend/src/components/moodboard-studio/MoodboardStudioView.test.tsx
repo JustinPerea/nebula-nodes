@@ -335,3 +335,47 @@ describe('Moodboard Studio Move', () => {
     expect(entry?.saveState).toBe('saved');
   });
 });
+
+// -- gap 18: the brief's left-out list, the clash setting and the notes switch ----
+
+const leftOutBrief = {
+  styleBrief: 'Use the Nebula moodboard.', generatedStyleBrief: 'Use the Nebula moodboard.', negativePrompt: 'blurry',
+  avoid: ['red flowers'], avoidPrompt: '', direction: '', pinnedColors: { include: [], exclude: [] },
+  palette: [], accents: [], override: { active: false, stale: false }, needsAnalysis: false,
+  clashMode: 'leave-out', notesSent: false, kept: [], mayClash: [], pinnedClashes: [], paletteClashes: [],
+  leftOut: [{ hex: '#e8593c', role: 'palette', level: 'conflict', why: 'check', reason: 'Avoid: red flowers',
+    reasons: ['Avoid: red flowers'], foundBy: ['words'] }],
+};
+
+describe('Moodboard Studio: what generators get', () => {
+  it('lists what the brief left out and saves Keep anyway, keeping the analysis', async () => {
+    boards.g1 = board({ brief: leftOutBrief } as Partial<Moodboard>);
+    await openStudio('g1', 'global', 'Global board');
+    expect((await screen.findByRole('list', { name: 'Left out of the brief' })).textContent)
+      .toContain('Avoid: red flowers');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep #e8593c anyway' }));
+    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    const [, body] = api.updateMoodboard.mock.calls.at(-1)!;
+    expect(body.colorChoices).toEqual({ keep: ['#e8593c'], leaveOut: [] });
+    expect(body.analysis).toEqual(analysis);
+  });
+
+  it('has a notes switch, off, that says who the notes are for', async () => {
+    await openStudio('g1', 'global', 'Global board');
+    const toggle = screen.getByRole('switch', { name: 'Send these notes to generators' });
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByText('Off: notes are for you, your team and agents.')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Anything about the board, in your words.')).toBeTruthy();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(api.updateMoodboard.mock.calls.at(-1)?.[1].sendNotes).toBe(true), { timeout: 3000 });
+    // Sending notes or not doesn't change what the analysis read.
+    expect(api.updateMoodboard.mock.calls.at(-1)![1].analysis).toEqual(analysis);
+  });
+
+  it('saves the clash setting from Advanced', async () => {
+    await openStudio('g1', 'global', 'Global board');
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
+    fireEvent.click(screen.getByLabelText(/Flag clashes, leave nothing out/));
+    await waitFor(() => expect(api.updateMoodboard.mock.calls.at(-1)?.[1].clashMode).toBe('flag'), { timeout: 3000 });
+  });
+});

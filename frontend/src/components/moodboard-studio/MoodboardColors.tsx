@@ -1,47 +1,67 @@
 import { useId } from 'react';
-import type { MoodboardAnalysis, MoodboardColor } from '../../types';
+import type { MoodboardAnalysis, MoodboardClash, MoodboardColor } from '../../types';
 import { formatShare, hasSources, sourcesLabel } from './colorSources';
 
 /** The board's palette or accents: each colour with its share of the board
  *  and the images it comes from, the full list on hover or focus. An
- *  analysis saved before sources existed shows the colours alone. */
-export function BoardSwatches({ label, role, analysis }: {
+ *  analysis saved before sources existed shows the colours alone.
+ *  `leftOut` (the brief's, gap 18) dims the colours generators don't get,
+ *  with the reason in the tooltip. The backend decides; this only shows. */
+export function BoardSwatches({ label, role, analysis, leftOut }: {
   label: string;
   role: MoodboardColor['role'];
   analysis: MoodboardAnalysis;
+  leftOut?: MoodboardClash[];
 }) {
   // A saved analysis is stored JSON (an agent can create a board with one), so
   // a list may be missing: show nothing rather than fail the whole Studio.
   const hexes = (role === 'dominant' ? analysis.palette : analysis.accents) ?? [];
   if (hexes.length === 0) return null;
   const colors = (analysis.colors ?? []).filter((color) => color.role === role);
+  const briefRole = role === 'dominant' ? 'palette' : 'accent';
+  const reasons = new Map((leftOut ?? []).filter((item) => item.hex && item.role === briefRole)
+    .map((item) => [item.hex!.toLowerCase(), item.reason]));
   return (
     <div className="moodboard-swatches">
       <span className="moodboard-swatches__label">{label}</span>
       {colors.length > 0 ? (
         <ul className="moodboard-colors" aria-label={label}>
-          {colors.map((color) => <BoardColor key={color.hex} color={color} />)}
+          {colors.map((color) => <BoardColor key={color.hex} color={color} leftOut={reasons.get(color.hex.toLowerCase())} />)}
         </ul>
       ) : (
         <div className="moodboard-palette" role="list" aria-label={label}>
-          {hexes.map((hex) => (
-            <span key={hex} role="listitem" className="moodboard-palette__swatch" style={{ backgroundColor: hex }} title={hex} />
-          ))}
+          {hexes.map((hex) => {
+            const reason = reasons.get(hex.toLowerCase());
+            return (
+              <span key={hex} role="listitem"
+                className={`moodboard-palette__swatch${reason !== undefined ? ' moodboard-color--left-out' : ''}`}
+                style={{ backgroundColor: hex }}
+                title={reason !== undefined ? `${hex} · ${leftOutTitle(reason)}` : hex} />
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-function BoardColor({ color }: { color: MoodboardColor }) {
+function leftOutTitle(reason: string): string {
+  return reason ? `Left out of the brief: ${reason}` : 'Left out of the brief';
+}
+
+function BoardColor({ color, leftOut }: { color: MoodboardColor; leftOut?: string }) {
   const detailId = useId();
   const sources = color.sources;
+  const isLeftOut = leftOut !== undefined;
   return (
-    <li className="moodboard-color" tabIndex={sources?.length ? 0 : undefined}
+    <li className={`moodboard-color${isLeftOut ? ' moodboard-color--left-out' : ''}`}
+      title={isLeftOut ? leftOutTitle(leftOut) : undefined}
+      tabIndex={sources?.length ? 0 : undefined}
       aria-describedby={sources?.length ? detailId : undefined}>
       <span className="moodboard-color__swatch" style={{ backgroundColor: color.hex }} aria-hidden="true" />
       <span className="moodboard-color__hex">{color.hex}</span>
       <span className="moodboard-color__share">{formatShare(color.share)}</span>
+      {isLeftOut && <span className="moodboard-color__flag">Left out</span>}
       {sources?.length ? (
         <>
           <span className="moodboard-color__sources">{sourcesLabel(color)}</span>

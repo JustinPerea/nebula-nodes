@@ -41,11 +41,11 @@ Every moodboard API response adds `brief`, computed on each read and never saved
 | Key | Meaning |
 |-----|---------|
 | `styleBrief` | The override text when there is one, else `generatedStyleBrief` |
-| `generatedStyleBrief` | Direction first, then mode intent, palette (minus kept-out colours), accents, "Make sure these colors appear", visual cues, any reader fields (`motifs`, `materials`, `textures`), notes. Empty until the board is analyzed |
+| `generatedStyleBrief` | Direction first, then mode intent, palette (minus kept-out and left-out colours, 1.11), accents, "Make sure these colors appear", visual cues, any reader fields (`motifs`, `materials`, `textures`), notes (only when sent, 1.11). Empty until the board is analyzed |
 | `negativePrompt` | `blurry, low-detail artifacts` plus the Avoid list. Defects only: content intent goes in the brief as positive words |
 | `avoid`, `direction`, `pinnedColors` | The saved fields |
 | `avoidPrompt` | `Keep these out of the image: <avoid>, colors close to <kept-out hex>.` or empty |
-| `palette`, `accents` | The analysis colours, minus any within dE00 5 of a kept-out colour |
+| `palette`, `accents` | The analysis colours, minus any within dE00 5 of a kept-out colour, minus those left out (1.11) |
 | `override` | `{active, stale}`: `stale` is true when the board changed after the override was written |
 | `needsAnalysis` | No saved analysis yet |
 
@@ -80,7 +80,7 @@ Analyses before version 4 have no `sources` or `number`. They stay current (the 
 
 ### 1.4 How a board reaches a generator
 
-The `nebula-moodboard` node emits a `Moodboard` bundle (`kind: "nebula_moodboard"`) carrying `styleBrief`, `negativePrompt`, `avoid`, `avoidPrompt`, `direction`, `pinnedColors`, `briefOverride` (`{active, stale}`), `palette`, `accents`, `images`, `representativeImages`, `analysis` and `providerHints`. A stale override is still used, and the run gets a note saying so. The node is not output-cached: its params name the board, not its contents.
+The `nebula-moodboard` node emits a `Moodboard` bundle (`kind: "nebula_moodboard"`) carrying `styleBrief`, `negativePrompt`, `avoid`, `avoidPrompt`, `direction`, `pinnedColors`, `briefOverride` (`{active, stale}`), `palette`, `accents`, `images`, `representativeImages`, `analysis` and `providerHints`, plus what 1.11 adds (no notes unless sent, the left-out lists). A stale override is still used, and the run gets a note saying so. The node is not output-cached: its params name the board, not its contents.
 
 Image generators take it on an optional `moodboard` input port. The engine folds it in before the handler runs (Volume 2, section 7a, "Moodboard fold").
 
@@ -165,6 +165,31 @@ Justin's call P4 (2026-10-19): a re-home that guessed wrong can be put right, an
 - **CLI and MCP.** `nebula moodboard move <board> --to global|current|<project id or exact name> [--json]`, `nebula character move <character> --to ... [--json]`, `moodboard_move(board, to)`, `character_move(character, to)` (`moodboard_client.resolve_move_target` / `move_asset`, `character_client.py`). `current` with no project open, an unknown project, a name two live projects share, or a project in Recently deleted is refused before anything is sent. On a Nebula without the route they say so and move nothing.
 - **Not here.** Styles (presets) have no Move; P4 named boards and Characters.
 
+### 1.11 When the words and the measured colours disagree, and board notes
+
+Design-canvas gap 18 (Justin's calls P1-P4, 2026-10-19). Where two parts of a board disagree, the higher wins; where it says nothing, the lower fills in: (1) the hand-written brief, as is, no check; (2) pinned colours: "must appear" always go, even against Avoid (the clash is listed), "keep out" drops near measured colours; (3) Direction and Avoid, through the colour check; (4) board notes, only when opted in; (5) what Nebula measured.
+
+**Saved fields** (all optional; a board without them reads with the defaults and is never rewritten on read):
+
+| Field | Type | Who writes it | Notes |
+|-------|------|---------------|-------|
+| `clashMode` | `leave-out` \| `flag` \| `no-measured` \| `keep-all` | person or agent | What a clash does. `leave-out` (default): a conflicting colour leaves the brief, listed with its reason; a warning stays, listed as "may clash". `flag`: nothing leaves unless the person says so; every clash is listed. `no-measured`: once there is a Direction, no measured colour goes (each listed, "Measured colors are off for this board"); without one it acts as `leave-out`. `keep-all`: as before this change; the check still runs and is saved, nothing is listed or applied, choices are ignored. Anything else is 422 |
+| `colorChoices` | `{keep: hex[], leaveOut: hex[]}` | person or agent | The person's Keep anyway and Leave out. At most 24 per list, `#rrggbb`, a colour in one list only, and Keep anyway can't hold a colour pinned to keep out (422). Matched to measured colours within dE00 5, nearest first, so a choice survives a re-analysis that nudges the hex. Keep anyway doesn't pin: the colour goes back with its share and role. Pinning a colour to keep out drops it from `keep` when `colorChoices` isn't sent |
+| `sendNotes` | boolean | person (on), anyone (off) | Board notes and image notes to generators. Off by default, on every board. Strictly `true`/`false` (422 otherwise). Turning it on (create with `true`, or `false` to `true`) is the person's: 403 with the person gate's `code` and a sentence about notes, and nothing in that request is saved. Sending `true` again when it is already on passes |
+| `colorCheck` | `{version, basis, checks: {words: {version}}, findings}` | store | The saved check. Refreshed on every create and update (Analyze included) whose basis moved: Direction, Avoid, pinned "must appear", the measured colours (hex, role, share), `LEXICON_VERSION` and the check's own version. A sent one is ignored |
+
+**The check** (`services/moodboard_colour_words.py`, deterministic, no model, no cost). The Direction and Avoid text is parsed into colour terms with their modifiers, negation ("no", "without", "avoid", up to "but") and scope (an object such as "flowers", a cast, or the whole palette), then matched in OKLCH by hue arcs and chroma gates; a hex written in the text matches within dE00 5. A cast term tests the share-weighted palette mean, so one warm accent on a cool board is only a warning. A Direction allowance ("cornflower blue") turns an Avoid conflict into a warning and flags a colour of that hue that is clearly more saturated than the reference. The numbers sit in one table and are retuned by bumping `LEXICON_VERSION`, which refreshes saved checks. Each finding: `{hex (null for the whole palette), role (palette, accent, pinned), share, level (conflict or warning), source (avoid or direction), clause, rule, reason, foundBy}`. `foundBy` is `words` today. A second check (one that looks at the images) adds `checks.<name>` and its findings under the same basis; `compose` uses a saved check whose basis matches, else runs the words check in memory without saving.
+
+**`brief` adds** (1.2): `leftOut` (colours generators don't get), `mayClash` (still sent), `kept` (Keep anyway), `pinnedClashes` (pinned colours that clash; they still go), `paletteClashes` (whole-palette findings, such as a cast), each item `{hex, role, share, level, reason, reasons, foundBy, why}` with `why` `check`, `choice` or `mode`, and `level` `off` for one left out by `no-measured`; `clashMode`; `notesSent`. `palette`, `accents` and the brief's colour sentences are what generators get. The lists are computed with an override active too, since they shape `palette`.
+
+**Notes.** Without the opt-in the brief has no `Notes:` sentence and its visual cues are only the measured ones (`MEASURED_CUES`: palette-led, the mode cues, the palette labels), not words lifted from the notes. Agents and the person still read notes everywhere.
+
+**The node.** `nebula-moodboard` gains `send_notes`: `board` (default; follows `sendNotes`), `yes` or `no`. A node saved before it reads `board`. Moving it toward sending (`no` to `board`, anything to `yes`, or a new node on `yes`) is the person's: an agent's edit, create or apply gets 403 naming `send_notes` and `propose_change`. Its bundle: `notes` and `images[].notes` are `""` unless sent; `notesSent`, `leftOut`, `mayClash`, `kept`, `pinnedClashes`, `paletteClashes` and `clashMode` are added; `analysis` is the generator's view (measured keywords only, `summary` and `tasteProfile` rebuilt from the brief's colours without notes, `subjectBias` `[]`, `styleBrief` without notes, `images[].notes` `""`, `providerHints.generic.palette`/`accents` the brief's). Its raw lists (`palette`, `accents`, `colors`, per-image colours) stay as measured; `leftOut` says which went. The saved analysis is never changed.
+
+**CLI and MCP.** `show` prints "Left out of the brief:" (each with `Keep it: nebula moodboard set <id> --keep-anyway "#hex"`), "Kept anyway", "May clash (still sent):", "Pinned colors that clash (still sent):", "Notes: not sent to generators" (or "sent") and "Clash check: <mode>" when not the default. `set` takes `--keep-anyway`, `--leave-out`, `--leave-out-flagged`, `--reset-color`, `--clash-mode`, `--send-notes` / `--no-send-notes`; `moodboard_update` takes `keep_anyway`, `leave_out`, `leave_out_flagged`, `reset_colors`, `color_choices`, `clash_mode`, `send_notes`. `--json` and the MCP tools carry `clashMode`, `colorChoices`, `sendNotes` and `colorCheck`. `previous` has `clash_mode` and `color_choices`, and `send_notes` when the change touched it. An agent's `--send-notes` is refused in the CLI's own words and nothing in the call is saved.
+
+**Studio.** Under "Brief sent to generators": "Left out of the brief" (Keep anyway, or Undo for one the person left out), "Kept anyway" (Undo), "May clash" (Leave out), or in `flag` mode one "Flagged" list with Leave out all flagged, and "Pinned, so it still goes". `keep-all` shows "Clash check is off for this board." The swatches dim a left-out colour, with the reason in its tooltip. `BriefFields` has an Advanced disclosure with the four modes; under Notes, a "Send these notes to generators" switch, off. The Studio shows the backend's lists and never recomputes them.
+
 ---
 
 ## Changelog
@@ -177,3 +202,4 @@ Justin's call P4 (2026-10-19): a re-home that guessed wrong can be put right, an
 | 2026-10-19 | Moodboard: colour sources in the analysis (1.3a, analysis version 4) and the dry run (1.8) |
 | 2026-10-19 | Moodboards, Characters and Styles: "project" is the canvas project everywhere, create routes check it, re-home of old-style assets at every start (1.9), nodes copy between projects |
 | 2026-10-19 | Moodboards and Characters: Move to Global / Move to <project> in both Studios, `POST .../move`, `nebula moodboard move`, `nebula character move`, `moodboard_move`, `character_move` (1.10) |
+| 2026-10-19 | Moodboard: the colour-word check, `clashMode`, `colorChoices`, `sendNotes`, `colorCheck`, the brief's left-out lists, notes only on opt-in, the node's `send_notes` (1.11) |

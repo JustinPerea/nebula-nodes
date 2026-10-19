@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { useUIStore } from '../../store/uiStore';
 import {
@@ -20,8 +20,8 @@ import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import { NO_PROJECT_OPEN, currentProject, useCurrentProject } from '../../lib/currentProject';
 import { useProjectName } from '../../hooks/useProjectName';
 import type { AssetScope } from '../../store/uiStore';
-import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardImage, MoodboardPinnedColors } from '../../types';
-import { BriefFields, BriefPanel } from './MoodboardBrief';
+import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardClashMode, MoodboardImage, MoodboardPinnedColors } from '../../types';
+import { BriefFields, BriefPanel, type ColorChoice } from './MoodboardBrief';
 import { BoardSwatches, ImageColors, SourcesOutdated } from './MoodboardColors';
 import { overrideAuthor } from './briefAuthor';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
@@ -46,6 +46,12 @@ interface MoodboardDraft {
   pinnedColors: MoodboardPinnedColors;
   /** Only the text is sent; the server keeps when it was written. */
   briefOverride: { text: string } | null;
+  // Gap 18: what a clash does, the person's Keep anyway / Leave out, and
+  // whether the notes reach generators. None of them feed the analysis.
+  // Absent in a draft kept from before they existed, so it never sends them.
+  clashMode?: MoodboardClashMode;
+  colorChoices?: { keep: string[]; leaveOut: string[] };
+  sendNotes?: boolean;
   projectId?: string;
 }
 
@@ -61,6 +67,9 @@ function emptyDraft(): MoodboardDraft {
     avoid: [],
     pinnedColors: { include: [], exclude: [] },
     briefOverride: null,
+    clashMode: 'leave-out',
+    colorChoices: { keep: [], leaveOut: [] },
+    sendNotes: false,
   };
 }
 
@@ -76,8 +85,28 @@ function moodboardToDraft(m: Moodboard): MoodboardDraft {
     avoid: [...(m.avoid ?? [])],
     pinnedColors: { include: [...(m.pinnedColors?.include ?? [])], exclude: [...(m.pinnedColors?.exclude ?? [])] },
     briefOverride: m.briefOverride?.text ? { text: m.briefOverride.text } : null,
+    clashMode: m.clashMode ?? 'leave-out',
+    colorChoices: { keep: [...(m.colorChoices?.keep ?? [])], leaveOut: [...(m.colorChoices?.leaveOut ?? [])] },
+    sendNotes: m.sendNotes === true,
     projectId: m.projectId,
   };
+}
+
+/** The person's Keep anyway / Leave out after one choice: a colour is in
+ *  one list at most, and Reset takes it off both. The backend decides what
+ *  each choice does to the brief. */
+function nextColorChoices(
+  choices: { keep: string[]; leaveOut: string[] } | undefined,
+  choice: ColorChoice,
+  hexes: string[],
+): { keep: string[]; leaveOut: string[] } {
+  const drop = new Set(hexes.map((hex) => hex.toLowerCase()));
+  const keep = (choices?.keep ?? []).filter((hex) => !drop.has(hex.toLowerCase()));
+  const leaveOut = (choices?.leaveOut ?? []).filter((hex) => !drop.has(hex.toLowerCase()));
+  const added = [...drop];
+  if (choice === 'keep') return { keep: [...keep, ...added], leaveOut };
+  if (choice === 'leaveOut') return { keep, leaveOut: [...leaveOut, ...added] };
+  return { keep, leaveOut };
 }
 
 /** A draft as an older store entry may hold it (saved before the brief fields). */
@@ -330,8 +359,23 @@ export function MoodboardStudioView() {
   };
 
   // Brief fields don't feed the analysis, so changing them keeps it.
-  const setBriefFields = (fields: Partial<Pick<MoodboardDraft, 'direction' | 'avoid' | 'pinnedColors' | 'briefOverride'>>) => {
-    setDraft((current) => ({ ...withBriefFields(current), ...fields }));
+  const setBriefFields = (fields: Partial<Pick<MoodboardDraft, 'direction' | 'avoid' | 'pinnedColors' | 'briefOverride'
+    | 'clashMode' | 'colorChoices' | 'sendNotes'>>) => {
+    setDraft((current) => {
+      const next = { ...withBriefFields(current), ...fields };
+      // A colour pinned to keep out can't also be kept anyway: the pin wins.
+      if (fields.pinnedColors && next.colorChoices) {
+        const out = new Set(next.pinnedColors.exclude);
+        next.colorChoices = { ...next.colorChoices, keep: next.colorChoices.keep.filter((hex) => !out.has(hex)) };
+      }
+      return next;
+    });
+  };
+  const chooseColors = (choice: ColorChoice, hexes: string[]) => {
+    setDraft((current) => {
+      const board = withBriefFields(current);
+      return { ...board, colorChoices: nextColorChoices(board.colorChoices, choice, hexes) };
+    });
   };
 
   const keepOverride = async () => {
@@ -517,9 +561,11 @@ export function MoodboardStudioView() {
                     rows={3}
                     value={draft.notes}
                     onChange={(event) => setDraft({ ...draft, analysis: null, notes: event.target.value })}
-                    placeholder="Anything the board should carry, in your words."
+                    placeholder="Anything about the board, in your words."
                   />
                 </label>
+                <NotesSwitch on={draft.sendNotes === true}
+                  onChange={(sendNotes) => setBriefFields({ sendNotes })} />
               </div>
             </section>
 
@@ -617,6 +663,7 @@ export function MoodboardStudioView() {
               direction={draft.direction}
               avoid={draft.avoid}
               pinnedColors={draft.pinnedColors}
+              clashMode={draft.clashMode ?? 'leave-out'}
               onChange={setBriefFields}
             />
 
@@ -642,12 +689,14 @@ export function MoodboardStudioView() {
                 onEdit={(text) => setBriefFields({ briefOverride: { text } })}
                 onKeep={() => void keepOverride()}
                 onRegenerate={regenerateBrief}
+                onColorChoice={(choice, hex) => chooseColors(choice, [hex])}
+                onLeaveOutAll={(hexes) => chooseColors('leaveOut', hexes)}
               />
 
               {analysis ? (
                 <div className="moodboard-analysis__body">
-                  <BoardSwatches label="Palette" role="dominant" analysis={analysis} />
-                  <BoardSwatches label="Accents" role="accent" analysis={analysis} />
+                  <BoardSwatches label="Palette" role="dominant" analysis={analysis} leftOut={brief?.leftOut} />
+                  <BoardSwatches label="Accents" role="accent" analysis={analysis} leftOut={brief?.leftOut} />
                   <SourcesOutdated analysis={analysis} />
                   <div className="moodboard-analysis__summary">{analysis.summary}</div>
                   {analysis.version < 2 && (
@@ -789,6 +838,25 @@ function MoodboardRail({
       </div>
       <RecentlyDeletedAssets kind="moodboard" scope={scope} refreshKey={`${String(refreshKey)}:${activeId}`}
         onRestored={(item) => onSelect(item.id, scope)} onTrashChanged={relist} />
+    </div>
+  );
+}
+
+/** Whether the board's notes go to generators (gap 18). Off by default:
+ *  notes are the person's words about the board, for them, their team and
+ *  agents. Only the person can turn it on (the backend refuses an agent). */
+function NotesSwitch({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  const hintId = useId();
+  return (
+    <div className="moodboard-switch">
+      <button type="button" role="switch" aria-checked={on} aria-describedby={hintId}
+        className="moodboard-switch__control" onClick={() => onChange(!on)}>
+        <span className="moodboard-switch__track" aria-hidden="true"><span className="moodboard-switch__thumb" /></span>
+        <span className="moodboard-switch__label">Send these notes to generators</span>
+      </button>
+      <span id={hintId} className="moodboard-switch__hint">
+        {on ? 'On: generators get these notes with the brief.' : 'Off: notes are for you, your team and agents.'}
+      </span>
     </div>
   );
 }
