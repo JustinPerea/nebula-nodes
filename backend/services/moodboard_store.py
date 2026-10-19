@@ -75,6 +75,13 @@ def _moodboard_root() -> Path:
     return Path.home() / ".nebula" / "moodboards"
 
 
+def store_root() -> Path:
+    """This store's root folder, resolved now (env var, else ~/.nebula/...).
+    Public so other code (services/asset_project_rehome.py) finds the same
+    folder this store writes to."""
+    return _moodboard_root()
+
+
 def _scope_dir(root: Path, project_id: str | None) -> Path:
     if project_id:
         _validate_project_id(project_id)

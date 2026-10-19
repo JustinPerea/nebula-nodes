@@ -1,4 +1,4 @@
-"""One-time re-home of project-scoped assets saved under the old project id.
+"""Re-home of project-scoped assets saved under an old-style project id.
 
 Until 2026-10-19 the Studios, the Assets panel and Create filed "project"
 Characters, Moodboards and Styles under one install-wide id: the backend's
@@ -8,7 +8,7 @@ working-folder name (``nebula_nodes`` on a source checkout) or
 project, and their assets would vanish from every Project tab (a node that
 points at one still finds it by id, which would hide the loss).
 
-At startup this moves each such asset once, by the rule in ``decide_home``:
+At every startup this moves each such asset, by the rule in ``decide_home``:
 
     <root>/<old folder>/<id>.json  ->  <root>/<canvas project id>/<id>.json
                                    or  <root>/_global/<id>.json
@@ -33,10 +33,18 @@ Safety:
   named in the log) undoes it; implementation-notes.md has the steps.
 - A file already at the target with the same id is never overwritten: that
   asset is skipped and logged.
-- A marker (``<state dir>/migrations/asset-project-rehome.json``) records each
-  root it finished, so it runs once per root and is a no-op after. It is
-  written only when the catalog could be read; otherwise nothing changes and
-  the next start tries again.
+- It runs on every start, not once: an older build or the desktop app on the
+  same ``~/.nebula`` can still write an old-style folder later, and those
+  assets would vanish from every Project tab. Finding them is a listing of
+  each root (and its ``.trash``); a start with nothing to move writes no
+  backup or log.
+- A skip that hasn't changed since (same file, size and mtime) is logged
+  once: the state file (``<state dir>/migrations/asset-project-rehome.json``)
+  remembers it. The move is still tried each start, so it happens once the
+  collision is gone.
+- If the catalog can't be read, nothing changes. While there are old-style
+  assets and an open canvas but no projects yet, it waits for the canvas to
+  become a project.
 """
 from __future__ import annotations
 
@@ -75,12 +83,13 @@ class AssetRoot:
 
 
 def default_roots() -> list[AssetRoot]:
-    """The three stores' roots, as each store resolves them (env, else ~/.nebula)."""
-    home = Path.home() / ".nebula"
+    """The three stores' roots, from each store's own resolver."""
+    from services import character_store, moodboard_store, preset_store
+
     return [
-        AssetRoot("moodboard", Path(os.environ.get("NEBULA_MOODBOARD_ROOT") or home / "moodboards"), True),
-        AssetRoot("character", Path(os.environ.get("NEBULA_CHARACTER_ROOT") or home / "characters"), True),
-        AssetRoot("preset", Path(os.environ.get("NEBULA_PRESET_ROOT") or home / "presets"), False),
+        AssetRoot("moodboard", moodboard_store.store_root(), True),
+        AssetRoot("character", character_store.store_root(), True),
+        AssetRoot("preset", preset_store.store_root(), False),
     ]
 
 
@@ -276,6 +285,15 @@ class _Run:
                 "from": from_folder, "to": self.to_label(target), "reason": reason, **extra}
 
 
+def _fingerprint(path: Path) -> str:
+    """Which version of a skipped file this is: path, size and mtime."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return f"{path}:gone"
+    return f"{path}:{stat.st_size}:{stat.st_mtime_ns}"
+
+
 def _rehome_root(spec: AssetRoot, run: _Run, canvas_ids: set[str],
                  users: dict[str, list[tuple[str, str]]]) -> None:
     root = spec.root
@@ -322,27 +340,23 @@ def _rehome_root(spec: AssetRoot, run: _Run, canvas_ids: set[str],
                                    file=str(asset_path), backup=backups, trashed=True))
 
 
-# -- marker -----------------------------------------------------------------------
+# -- state ------------------------------------------------------------------------
 
-def _marker_path(state_dir: Path) -> Path:
+def _state_path(state_dir: Path) -> Path:
     return state_dir / "migrations" / MARKER_NAME
 
 
-def _read_marker(state_dir: Path) -> dict[str, Any]:
+def _read_state(state_dir: Path) -> dict[str, Any]:
+    """``{"version": 2, "knownSkips": {kind: {file: fingerprint}}}``. A
+    version-1 marker (runs once per root) reads as no known skips."""
     try:
-        marker = _read_json(_marker_path(state_dir))
+        state = _read_json(_state_path(state_dir))
     except (OSError, ValueError):
-        return {"version": 1, "roots": {}}
-    if not isinstance(marker.get("roots"), dict):
-        marker["roots"] = {}
-    return marker
-
-
-def _root_key(path: Path) -> str:
-    try:
-        return str(path.resolve())
-    except OSError:
-        return str(path)
+        state = {}
+    skips = state.get("knownSkips") if state.get("version") == 2 else None
+    if not isinstance(skips, dict):
+        skips = {}
+    return {"version": 2, "knownSkips": {kind: dict(value) for kind, value in skips.items() if isinstance(value, dict)}}
 
 
 # -- entry point --------------------------------------------------------------------
@@ -354,19 +368,15 @@ def rehome_legacy_assets(
     live_nodes: Iterable[Any] = (),
     roots: list[AssetRoot] | None = None,
 ) -> dict[str, Any]:
-    """Re-home old-folder assets in every root not yet marked done.
+    """Re-home every old-style asset in every root. Runs on each start.
 
     ``read_catalog`` returns the project catalog, or None when there is none
-    yet; it raises when the catalog can't be read, and then nothing changes and
-    no marker is written. ``live_nodes`` is the open project's live graph.
-    Returns ``{status, moved, global, skipped, logs}``."""
+    yet; it raises when the catalog can't be read, and then nothing changes.
+    ``live_nodes`` is the open project's live graph. Returns ``{status, moved,
+    global, skipped, logs}``, where ``skipped`` counts only skips not seen
+    before; status is ``nothing to do`` when there was nothing old-style."""
     report: dict[str, Any] = {"status": "done", "moved": 0, "global": 0, "skipped": 0, "logs": []}
     roots = roots if roots is not None else default_roots()
-    marker = _read_marker(state_dir)
-    pending = [spec for spec in roots if marker["roots"].get(spec.kind, {}).get("root") != _root_key(spec.root)]
-    if not pending:
-        report["status"] = "already done"
-        return report
     try:
         catalog = read_catalog() or {"projects": {}, "trash": {}, "activeProjectId": None}
     except Exception as exc:  # noqa: BLE001 - any unreadable catalog: change nothing, retry next start
@@ -375,40 +385,58 @@ def rehome_legacy_assets(
     projects = catalog.get("projects") or {}
     trash = catalog.get("trash") or {}
     canvas_ids = set(projects) | set(trash)
+    pending = [spec for spec in roots
+               if _legacy_folders(spec.root, canvas_ids) or (spec.has_trash and _legacy_trash(spec.root, canvas_ids))]
+    state = _read_state(state_dir)
+    if not pending:
+        report["status"] = "nothing to do"
+        # Forget remembered skips once nothing old-style is left.
+        if any(state["knownSkips"].values()):
+            _write_json_atomic(_state_path(state_dir), {"version": 2, "knownSkips": {}})
+        return report
     live = list(live_nodes or ())
-    any_legacy = any(_legacy_folders(spec.root, canvas_ids) or (spec.has_trash and _legacy_trash(spec.root, canvas_ids))
-                     for spec in pending)
-    if any_legacy and not projects and not trash and live:
+    if not projects and not trash and live:
         # The open canvas hasn't become a project yet (GET /api/projects makes
         # "Recovered canvas" from it). Wait for that, so its assets can go there.
         report["status"] = "skipped: the open canvas isn't a project yet"
         return report
     names = {pid: str(project.get("name") or "Untitled project") for pid, project in projects.items()}
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    for spec in pending:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    known_after: dict[str, dict[str, str]] = {}
+    for spec in roots:
+        if spec not in pending:
+            continue
         run = _Run(spec, stamp, names)
         users = project_users(catalog, live, spec.kind) if spec.kind in REFERENCE_KEYS else {}
         stopped: OSError | None = None
         try:
             _rehome_root(spec, run, canvas_ids, users)
         except OSError as exc:
-            # Leave this root unmarked: the next start finishes it (a moved
-            # file is no longer in the old folder, and one written but not yet
-            # removed there is recognised).
+            # The next start carries on: a moved file is no longer in the old
+            # folder, and one written but not yet removed there is recognised.
             logger.exception("Project re-home: %s store stopped part way", spec.kind)
             report["status"] = f"partial: {spec.kind} store: {type(exc).__name__}: {exc}"
             stopped = exc
-        log_path = _write_log(spec, run, stopped) if run.moved or run.skipped else None
+        known = state["knownSkips"].get(spec.kind, {})
+        seen: dict[str, str] = {}
+        new_skips = []
+        for item in run.skipped:
+            fingerprint = _fingerprint(Path(item["file"]))
+            seen[item["file"]] = fingerprint
+            if known.get(item["file"]) != fingerprint:
+                new_skips.append(item)
+        known_after[spec.kind] = seen
+        run.skipped = new_skips
+        log_path = _write_log(spec, run, stopped) if run.moved or run.skipped or stopped else None
         if log_path:
             report["logs"].append(str(log_path))
         report["moved"] += len(run.moved)
         report["global"] += sum(1 for item in run.moved if item["to"] == "Global")
         report["skipped"] += len(run.skipped)
-        if stopped is None:
-            marker["roots"][spec.kind] = {"root": _root_key(spec.root), "ranAt": datetime.now(timezone.utc).isoformat(),
-                                          "moved": len(run.moved), "skipped": len(run.skipped),
-                                          "log": str(log_path) if log_path else None}
-            _write_json_atomic(_marker_path(state_dir), marker)
+    # Remember this start's skips (a root with nothing old-style left has none).
+    known_after = {kind: value for kind, value in known_after.items() if value}
+    if known_after != {kind: value for kind, value in state["knownSkips"].items() if value}:
+        _write_json_atomic(_state_path(state_dir), {"version": 2, "knownSkips": known_after})
     return report
 
 

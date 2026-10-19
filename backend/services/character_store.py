@@ -81,6 +81,13 @@ def _char_root() -> Path:
     return Path.home() / ".nebula" / "characters"
 
 
+def store_root() -> Path:
+    """This store's root folder, resolved now (env var, else ~/.nebula/...).
+    Public so other code (services/asset_project_rehome.py) finds the same
+    folder this store writes to."""
+    return _char_root()
+
+
 def _scope_dir(char_root: Path, project_id: str | None) -> Path:
     """Return the directory for a given scope.
 

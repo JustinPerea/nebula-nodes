@@ -1,5 +1,6 @@
-"""The one-time re-home of project assets saved under the old install-wide id
-(services/asset_project_rehome.py), rule R1: by use, else Global."""
+"""The startup re-home of project assets saved under an old-style project id
+(services/asset_project_rehome.py), rule R1: by use, else Global. It runs on
+every start."""
 from __future__ import annotations
 
 import json
@@ -162,39 +163,91 @@ def test_canvas_project_folders_and_globals_are_untouched(env):
 
     report = env.run()
 
-    assert report["moved"] == 0 and report["logs"] == []
+    assert report == {"status": "nothing to do", "moved": 0, "global": 0, "skipped": 0, "logs": []}
     assert {path: path.read_bytes() for path in env.boards.rglob("*.json")} == files
     assert not (env.boards.parent / "moodboard-backups").exists()
-    assert (env.state / "migrations" / rehome.MARKER_NAME).exists()
+    assert not (env.state / "migrations").exists()
     assert in_a and in_old and global_board
 
 
-def test_a_collision_is_skipped_never_overwritten(env):
+def test_a_collision_is_skipped_never_overwritten_and_logged_once(env):
     board = _board()
     env.projects(("A", [], []), active="A")
     existing = env.boards / "_global" / f"{board['id']}.json"
     existing.parent.mkdir(parents=True, exist_ok=True)
     existing.write_text(json.dumps({"id": board["id"], "name": "Someone else"}), encoding="utf-8")
+    source = env.boards / OLD / f"{board['id']}.json"
 
     report = env.run()
 
     assert report["moved"] == 0 and report["skipped"] == 1
     assert _read(existing)["name"] == "Someone else"
-    assert (env.boards / OLD / f"{board['id']}.json").exists()
+    assert source.exists()
     log = _read(Path(report["logs"][0]))
     assert "already exists" in log["skipped"][0]["reason"]
 
+    # The same skip on the next starts: tried again, not logged again.
+    for _ in range(2):
+        assert env.run() == {"status": "done", "moved": 0, "global": 0, "skipped": 0, "logs": []}
+    assert len(list((env.boards.parent / "moodboard-backups").iterdir())) == 1
 
-def test_runs_once_and_is_a_no_op_after(env):
+    # The old file changed: that's a new skip, logged.
+    source.write_text(json.dumps({**_read(source), "name": "Board, edited by an older build"}), encoding="utf-8")
+    changed = env.run()
+    assert changed["skipped"] == 1 and len(changed["logs"]) == 1
+
+    # Once the collision is gone the move happens, and the remembered skip goes.
+    existing.unlink()
+    assert env.run()["moved"] == 1
+    assert _read(existing)["name"] == "Board, edited by an older build"
+    assert env.run()["status"] == "nothing to do"
+    assert _read(env.state / "migrations" / rehome.MARKER_NAME) == {"version": 2, "knownSkips": {}}
+
+
+def test_runs_every_start_so_a_later_old_folder_asset_is_rehomed(env):
+    """An older build or the desktop app on the same ~/.nebula can still file
+    an asset under the old id after the first re-home."""
+    board = _board()
+    ids = env.projects(("A", [board["id"]], []), active="A")
+    assert env.run()["moved"] == 1
+    # A start with nothing old-style: no backup, no log.
+    assert env.run() == {"status": "nothing to do", "moved": 0, "global": 0, "skipped": 0, "logs": []}
+    assert len(list((env.boards.parent / "moodboard-backups").iterdir())) == 1
+
+    late = _board(name="Late")
+    report = env.run()
+
+    assert report["moved"] == 1 and report["global"] == 1
+    assert (env.boards / "_global" / f"{late['id']}.json").exists()
+    assert not (env.boards / OLD).exists()
+    assert (env.boards / ids["A"] / f"{board['id']}.json").exists()
+    assert len(list((env.boards.parent / "moodboard-backups").iterdir())) == 2
+
+
+def test_a_marker_from_the_run_once_version_still_rehomes(env):
     board = _board()
     env.projects(("A", [board["id"]], []), active="A")
+    marker = env.state / "migrations" / rehome.MARKER_NAME
+    marker.parent.mkdir(parents=True)
+    marker.write_text(json.dumps({"version": 1, "roots": {"moodboard": {"root": str(env.boards.resolve())}}}),
+                      encoding="utf-8")
     assert env.run()["moved"] == 1
-    # An old folder that shows up later (or a project deleted after the
-    # re-home) isn't touched again.
-    late = _board(name="Late")
-    again = env.run()
-    assert again == {"status": "already done", "moved": 0, "global": 0, "skipped": 0, "logs": []}
-    assert (env.boards / OLD / f"{late['id']}.json").exists()
+
+
+def test_roots_come_from_each_stores_own_resolver(tmp_path, monkeypatch):
+    from services import character_store, moodboard_store, preset_store
+
+    for name in ("NEBULA_MOODBOARD_ROOT", "NEBULA_CHARACTER_ROOT", "NEBULA_PRESET_ROOT"):
+        monkeypatch.setenv(name, str(tmp_path / name))
+    assert [(spec.kind, spec.root, spec.has_trash) for spec in rehome.default_roots()] == [
+        ("moodboard", moodboard_store.store_root(), True),
+        ("character", character_store.store_root(), True),
+        ("preset", preset_store.store_root(), False),
+    ]
+    assert moodboard_store.store_root() == tmp_path / "NEBULA_MOODBOARD_ROOT"
+    # A store that resolves differently is followed, not re-derived.
+    monkeypatch.setattr(preset_store, "_root", lambda: tmp_path / "elsewhere")
+    assert rehome.default_roots()[2].root == tmp_path / "elsewhere"
 
 
 def test_an_unreadable_catalog_changes_nothing_and_writes_no_marker(env):
@@ -217,11 +270,11 @@ def test_waits_while_the_open_canvas_is_not_a_project_yet(env):
     assert not (env.state / "migrations" / rehome.MARKER_NAME).exists()
 
 
-def test_a_fresh_install_gets_only_the_marker(env):
+def test_a_fresh_install_writes_nothing(env):
     report = env.run()
-    assert report["moved"] == 0 and report["logs"] == []
+    assert report["status"] == "nothing to do" and report["logs"] == []
     assert not env.boards.exists() and not env.characters.exists() and not env.presets.exists()
-    assert sorted(path.name for path in env.state.rglob("*")) == sorted(["migrations", rehome.MARKER_NAME])
+    assert not env.state.exists() or list(env.state.rglob("*")) == []
 
 
 def test_finishes_a_move_an_earlier_run_left_half_done(env):

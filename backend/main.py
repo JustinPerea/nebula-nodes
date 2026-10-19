@@ -2311,10 +2311,11 @@ async def _moodboard_brief_fields_startup() -> None:
 
 @app.on_event("startup")
 async def _asset_project_rehome_startup() -> None:
-    """Once: move project Characters, Moodboards and Styles saved under the
-    old install-wide project id into canvas projects or Global, backing each
-    file up first (services/asset_project_rehome.py). After the brief-fields
-    migration, so both see the same files."""
+    """Every start: move project Characters, Moodboards and Styles saved under
+    an old-style project id (not a canvas project) into canvas projects or
+    Global, backing each file up first (services/asset_project_rehome.py).
+    Silent when there's nothing to move. After the brief-fields migration, so
+    both see the same files."""
     from services.asset_project_rehome import rehome_legacy_assets
 
     if os.environ.get("NEBULA_NO_ASSET_REHOME") == "1":  # the test suite (tests/conftest.py)
@@ -2329,7 +2330,7 @@ async def _asset_project_rehome_startup() -> None:
     except Exception as exc:  # never block startup; it runs again next start
         print(f"[main] project asset re-home skipped: {type(exc).__name__}: {exc}", flush=True)
         return
-    if report["status"] == "already done":
+    if report["status"] == "nothing to do":
         return
     if report["moved"] or report["skipped"] or report["status"] != "done":
         logs = ", ".join(report["logs"]) or "none"
