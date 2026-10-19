@@ -136,7 +136,7 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
 def _weight(raw: Any, default: float = 1.0) -> float:
     try:
         weight = float(raw)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
     return max(0.0, min(1.0, weight)) if weight == weight else default
 
@@ -162,7 +162,7 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
         if isinstance(image, dict) and image.get("id"):
             saved.setdefault(str(image["id"]), deque()).append(image)
     measured = layout.analysis_sizes(board.get("analysis"))
-    frame_ids = {f.get("id") for f in board.get("frames") or [] if isinstance(f, dict)}
+    frame_ids = {f.get("id") for f in layout.frames_of(board)}
     now = _now_iso()
 
     normalized: list[dict[str, Any]] = []
@@ -187,18 +187,20 @@ def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] 
             "privateNote": _private_note(merged.get("privateNote"), index),
             "excluded": bool(merged.get("excluded", False)),
         }
-        if before is not None:
-            cards = before.get("placements")
-            if cards and "weight" in sent and image["weight"] != _weight(before.get("weight", 1.0)):
+        if before is not None and layout.has_card(before):
+            cards = before["placements"]
+            if "weight" in sent and image["weight"] != _weight(before.get("weight", 1.0)):
                 cards = layout.rescale(cards, image["weight"], layout.image_aspect(image, measured))
-            if cards is not None:
-                image["placements"] = cards
+            image["placements"] = cards
+        elif before is not None:
+            # Saved with no card that can be drawn (only a hand-edited or
+            # foreign file): Nebula places it, as for a new image.
+            image.pop("placements", None)
         elif raw.get("placements"):
             asked[index] = raw["placements"]
         normalized.append(image)
 
-    taken = {str(p.get("id")) for image in normalized for p in image.get("placements") or []
-             if isinstance(p, dict)}
+    taken = {str(p.get("id")) for image in normalized for p in layout.cards_of(image)}
     for index, cards in asked.items():
         image = normalized[index]
         aspect = layout.image_aspect(image, measured)
@@ -246,11 +248,12 @@ def _with_layout_fields(board: dict[str, Any]) -> dict[str, Any]:
     missing = {key: value for key, value in defaults.items() if key not in board}
     if missing:
         board = {**board, **missing}
+    images = board.get("images")
     if len(missing) < len(defaults) or any(isinstance(img, dict) and "placements" in img
-                                           for img in board.get("images") or []):
+                                           for img in (images if isinstance(images, list) else [])):
         try:
             layout.check_board_layout(board)
-        except ValueError as exc:
+        except Exception as exc:  # noqa: BLE001 - only logged: whatever a file holds, the board opens
             logging.getLogger(__name__).warning("Moodboard %s: its saved layout is out of bounds: %s",
                                                 board.get("id"), exc)
     return board
@@ -364,6 +367,15 @@ def _set_override(moodboard: dict[str, Any], value: Any, *, previous: Any, by: s
     _guard_override(previous, by, "replace")
     moodboard["briefOverride"] = {"text": text, "basis": brief.brief_basis(moodboard), "updatedAt": _now_iso(),
                                   "by": by}
+
+
+def _stamp_layout(moodboard: dict[str, Any]) -> None:
+    """Stamp ``layoutVersion`` on a board a write is about to save, but only
+    when every image has a card: if laying the board out failed in memory,
+    stamping would make the next read take the cards as saved (none) rather
+    than lay the board out again."""
+    if layout.is_laid_out(moodboard):
+        moodboard["layoutVersion"] = LAYOUT_VERSION
 
 
 def _refuse_layout_fields(fields: dict[str, Any]) -> None:
@@ -537,7 +549,7 @@ class MoodboardStore:
         if override_sent:
             _set_override(moodboard, override_value, previous=moodboard.get("briefOverride"), by=by)
 
-        moodboard["layoutVersion"] = LAYOUT_VERSION
+        _stamp_layout(moodboard)
         moodboard["version"] = int(moodboard.get("version", 1)) + 1
         moodboard["updatedAt"] = _now_iso()
         _write_json(path, moodboard)
@@ -564,7 +576,7 @@ class MoodboardStore:
                              "briefOverride: {\"text\": ...} with PUT /api/moodboards/{id}.")
         _guard_override(override, by, "keep")
         moodboard["briefOverride"] = {**override, "basis": _brief().brief_basis(moodboard), "updatedAt": _now_iso()}
-        moodboard["layoutVersion"] = LAYOUT_VERSION
+        _stamp_layout(moodboard)
         moodboard["version"] = int(moodboard.get("version", 1)) + 1
         moodboard["updatedAt"] = _now_iso()
         _write_json(path, moodboard)

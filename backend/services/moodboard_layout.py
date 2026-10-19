@@ -86,15 +86,24 @@ def size_for(weight: float, aspect: float) -> tuple[int, int]:
     return max(1, round(math.sqrt(area * aspect))), max(1, round(math.sqrt(area / aspect)))
 
 
+def _finite(value: Any) -> float | None:
+    """``value`` as a finite float, or None. A hand-edited or foreign file
+    can hold anything: text, null, or an integer too big for a float."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def card_weight(image_weight: Any) -> float:
     """The card weight an image is laid out at when nothing says otherwise:
     its own weight, at least MIN_WEIGHT. Weight 0 (set aside) shows at full
     size (Q8), so it doesn't shrink to nothing."""
-    try:
-        weight = float(image_weight)
-    except (TypeError, ValueError):
-        return 1.0
-    if not math.isfinite(weight) or weight <= 0:
+    weight = _finite(image_weight)
+    if weight is None or weight <= 0:
         return 1.0
     return clamp_weight(weight)
 
@@ -141,7 +150,10 @@ def file_aspect(url: str) -> float | None:
     depends on it) together with the resolved file's identity; a later read
     reuses it only while one stat shows that same file, unchanged and with
     one link. Anything else runs the full check again. Only the ratio is
-    kept, never a path handed out."""
+    kept, never a path handed out.
+
+    A url Nebula can't resolve at all (an unknown ``~user``, a null byte)
+    is None like any other unreadable file, so the board still lays out."""
     from services.file_access import access_scope
     from services.moodboard_analysis import resolve_moodboard_image_path
 
@@ -155,12 +167,12 @@ def file_aspect(url: str) -> float | None:
         if info is not None and info.st_nlink <= 1 and (
                 info.st_dev, info.st_ino, info.st_mtime_ns, info.st_size) == hit[1:5]:
             return hit[5]
-    path = resolve_moodboard_image_path(url)
-    if path is None:
-        return None
     try:
+        path = resolve_moodboard_image_path(url)
+        if path is None:
+            return None
         info = path.stat()
-    except OSError:
+    except Exception:  # Path.expanduser and Path.resolve raise more than OSError
         return None
     size = _header_size(str(path), info.st_mtime_ns, info.st_size)
     aspect = size[0] / size[1] if size else None
@@ -177,11 +189,8 @@ def analysis_sizes(analysis: Any) -> dict[str, tuple[float, float]]:
     for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
-        try:
-            width, height = float(item.get("width") or 0), float(item.get("height") or 0)
-        except (TypeError, ValueError):
-            continue
-        if width > 0 and height > 0:
+        width, height = _finite(item.get("width") or 0), _finite(item.get("height") or 0)
+        if width and height and width > 0 and height > 0:
             for key in (f"id:{item.get('id')}", f"url:{item.get('url')}"):
                 sizes.setdefault(key, (width, height))
     return sizes
@@ -229,20 +238,21 @@ def rescale(placements: list[dict[str, Any]], image_weight: float, aspect: float
     ones stopping at MIN_WEIGHT (section 4.3). Each keeps its top-left
     corner; ``aspect`` is the image's. Weight 0 (set aside) keeps the cards
     as they are."""
-    if image_weight <= 0 or not placements:
+    if image_weight <= 0 or not isinstance(placements, list):
         return placements
-    largest = max(float(p.get("weight") or 0) for p in placements)
+    weights = [_finite(p.get("weight")) or 0.0 if isinstance(p, dict) else None for p in placements]
+    largest = max((w for w in weights if w is not None), default=0.0)
     target = clamp_weight(image_weight)
     if largest <= 0 or abs(largest - target) < 1e-9:
         return placements
-    return [resized(p, float(p.get("weight") or 0) * target / largest, aspect) for p in placements]
+    return [resized(p, w * target / largest, aspect) if w is not None else p for p, w in zip(placements, weights)]
 
 
 def _number(value: Any, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{label} must be a number")
-    number = float(value)
-    if not math.isfinite(number):
+    number = _finite(value)
+    if number is None:
         raise ValueError(f"{label} must be a finite number")
     return number
 
@@ -320,13 +330,37 @@ Rect = tuple[float, float, float, float]  # x, y, w, h
 def _rect(p: Any) -> Rect | None:
     if not isinstance(p, dict):
         return None
-    try:
-        x, y, w, h = (float(p[key]) for key in ("x", "y", "w", "h"))
-    except (KeyError, TypeError, ValueError):
-        return None
-    if not all(math.isfinite(v) for v in (x, y, w, h)) or w <= 0 or h <= 0:
+    x, y, w, h = (_finite(p.get(key)) for key in ("x", "y", "w", "h"))
+    if x is None or y is None or w is None or h is None or w <= 0 or h <= 0:
         return None
     return x, y, w, h
+
+
+def cards_of(image: Any) -> list[dict[str, Any]]:
+    """An image's saved placements that are objects. A file can hold
+    anything here (a hand edit, a foreign tool), so a value that isn't a
+    list reads as none."""
+    cards = image.get("placements") if isinstance(image, dict) else None
+    return [p for p in cards if isinstance(p, dict)] if isinstance(cards, list) else []
+
+
+def frames_of(board: Any) -> list[dict[str, Any]]:
+    """A board's saved frames that are objects; anything else reads as none."""
+    frames = board.get("frames") if isinstance(board, dict) else None
+    return [f for f in frames if isinstance(f, dict)] if isinstance(frames, list) else []
+
+
+def has_card(image: Any) -> bool:
+    """Whether an image has a card that can be drawn (a placement with a
+    usable x, y, w and h)."""
+    return any(_rect(p) for p in cards_of(image))
+
+
+def is_laid_out(board: dict[str, Any]) -> bool:
+    """Whether every image on ``board`` has a card that can be drawn: what a
+    write checks before it stamps ``layoutVersion``."""
+    images = board.get("images")
+    return isinstance(images, list) and all(has_card(image) for image in images if isinstance(image, dict))
 
 
 def _too_close(a: Rect, b: Rect, gap: float) -> bool:
@@ -335,20 +369,14 @@ def _too_close(a: Rect, b: Rect, gap: float) -> bool:
 
 
 def _card_rects(images: Iterable[Any]) -> list[Rect]:
-    rects = []
-    for image in images:
-        for p in (image.get("placements") or []) if isinstance(image, dict) else []:
-            rect = _rect(p)
-            if rect:
-                rects.append(rect)
-    return rects
+    return [rect for image in images for rect in map(_rect, cards_of(image)) if rect]
 
 
 def _last_card(images: list[Any]) -> Rect | None:
     """The last-added card: the newest placement of the highest-numbered
     image that has one."""
     for image in reversed(images):
-        cards = [p for p in (image.get("placements") or []) if _rect(p)] if isinstance(image, dict) else []
+        cards = [p for p in cards_of(image) if _rect(p)]
         if cards:
             newest = max(range(len(cards)), key=lambda i: (str(cards[i].get("placedAt") or ""), i))
             return _rect(cards[newest])
@@ -358,18 +386,22 @@ def _last_card(images: list[Any]) -> Rect | None:
 def place(board: dict[str, Any], sizes: list[tuple[int, int]]) -> list[tuple[int, int]]:
     """Top-left corners for new cards of ``sizes``, in order, each after the
     one before: the first after the board's last-added card. A card goes in
-    that card's row when it fits (PLACE_GAP from every card and frame, and
-    within the row's width), else at the start of a new row under the whole
-    board. Never on top of anything. An empty board starts at 0, 0."""
+    that card's row when it fits, else at the start of a new row under the
+    whole board. Never on top of anything. An empty board starts at 0, 0.
+
+    It fits when it is PLACE_GAP from every card and frame, the row stays
+    within ROW_LIMIT (or the board's width, if wider), and the row holds
+    fewer than GRID_COLUMNS cards up to the anchor. The last rule keeps an
+    old board's 6-column grid 6 wide when its cards are narrower than 16:9
+    (six portrait or square cards are well under ROW_LIMIT). A row's cards
+    are those beside the anchor: overlapping its height, left of the spot."""
     images = list(board.get("images") or [])
-    rects = _card_rects(images)
-    for frame in board.get("frames") or []:
-        rect = _rect(frame)
-        if rect:
-            rects.append(rect)
+    cards = _card_rects(images)
+    frames = [rect for rect in map(_rect, frames_of(board)) if rect]
     anchor = _last_card(images)
     out: list[tuple[int, int]] = []
     for w, h in sizes:
+        rects = cards + frames
         spot: tuple[float, float] | None = None
         if not rects:
             spot = (0, 0)
@@ -379,14 +411,16 @@ def place(board: dict[str, Any], sizes: list[tuple[int, int]]) -> list[tuple[int
             bottom = max(r[1] + r[3] for r in rects)
             if anchor is not None:
                 x, y = anchor[0] + anchor[2] + PLACE_GAP, anchor[1]
-                fits = x + w <= max(right, left + ROW_LIMIT)
+                in_row = sum(1 for r in cards if r[0] < x and r[1] < anchor[1] + anchor[3]
+                             and anchor[1] < r[1] + r[3])
+                fits = in_row < GRID_COLUMNS and x + w <= max(right, left + ROW_LIMIT)
                 if fits and not any(_too_close((x, y, w, h), r, PLACE_GAP) for r in rects):
                     spot = (x, y)
             if spot is None:
                 spot = (left, bottom + PLACE_GAP)
         corner = (round(spot[0]), round(spot[1]))
         rect = (corner[0], corner[1], w, h)
-        rects.append(rect)
+        cards.append(rect)
         anchor = rect
         out.append(corner)
     return out
@@ -442,14 +476,20 @@ def legacy_layout(board: dict[str, Any]) -> dict[str, Any]:
 def ensure_layout(board: dict[str, Any]) -> dict[str, Any]:
     """``board`` with a placement on every image, in memory: an old board
     (no ``layoutVersion``) gets ``legacy_layout``; a laid-out board's image
-    that somehow has none gets a spot from ``place``. Never stamps
-    ``layoutVersion``: only a write does."""
+    with no card that can be drawn gets a spot from ``place``. Never stamps
+    ``layoutVersion``: only a write does.
+
+    A board stamped ``layoutVersion`` where no image has a card also gets
+    ``legacy_layout``. An older Nebula leaves exactly that when it edits a
+    laid-out board (it drops image keys it doesn't know but keeps the
+    board's), and the grid is what this version saved for an old board, so
+    it comes back unchanged."""
     if not isinstance(board.get("images"), list):
         return board
-    if board.get("layoutVersion") is None:
+    if board.get("layoutVersion") is None or not any(has_card(image) for image in board["images"]):
         return legacy_layout(board)
     missing = [i for i, image in enumerate(board["images"])
-               if isinstance(image, dict) and not image.get("placements")]
+               if isinstance(image, dict) and not has_card(image)]
     if not missing:
         return board
     measured = analysis_sizes(board.get("analysis"))
@@ -569,7 +609,9 @@ def check_image_placements(images: Any, frame_ids: set[str]) -> None:
 
 
 def check_board_layout(board: dict[str, Any]) -> None:
-    """Section 4.10's limits on a saved board's layout. Raises ValueError."""
+    """Section 4.10's limits on a saved board's layout. Raises ValueError
+    (anything else it raises is a bug in the check, but readers treat it
+    the same way: the board still opens)."""
     frames = board.get("frames", [])
     check_frames(frames)
     check_suggestions(board.get("suggestions", []))

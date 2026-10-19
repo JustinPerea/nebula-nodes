@@ -104,6 +104,7 @@ Placement rules:
   - For a steering image, `image.weight` is the largest placement weight (Q4), so a double membership never counts twice in the whole-board roll-up.
   - A resize recomputes it.
   - A `weight` edit that doesn't come from a resize (CLI, MCP, the List view slider) scales every placement by the same factor, so the largest equals W. Smaller placements are clamped at `MIN_WEIGHT`.
+    - *(PR1: built on PUT. Each card keeps its top-left corner and nothing else moves, so a card that grows may cover a neighbour, as a drag resize can. Moving it to free space would break the person's arrangement and, from PR5, its frame. Pinned by `test_a_weight_raised_by_put_grows_the_card_where_it_is`. Open question for the coordinator.)*
   - Migration, saving, moves and frame operations never recompute it. That keeps the hash, and so every old analysis and brief, current.
 - The live weight readout while resizing is frontend-only: `onResize` updates the badge, and `onResizeEnd` sends one `resize` op.
 
@@ -162,6 +163,7 @@ Placement rules:
    - The aspect ratio comes from the image header through `resolve_moodboard_image_path` (`moodboard_analysis.py:388`), upright (EXIF orientation applied, as thumbnails show it), cached per URL and agent workspace while the file is unchanged. If the file can't be read, `analysis.images[].width/height`; if neither, 4:3. *(Built in PR1 header first: the analysis measures stored pixels, which are sideways for a phone photo with an EXIF turn.)*
    - `placedBy: "person"`, since the order was theirs.
 3. **The first write saves that layout and stamps `layoutVersion: 1`.** Since the layout is deterministic, nothing moves. Opening a board without editing it writes nothing, because `initialize` loads with `dirty: false`.
+   - *(PR1: a write stamps only when every image has a card. A board with `layoutVersion` where no image has a card reads with the grid again: an older Nebula's edit leaves exactly that, since it drops unknown image keys and keeps board keys. Cards placed or moved after the grid are lost in that case. Keeping placements in a board-level map keyed by image id would survive it; open question for the coordinator, see PR1's implementation notes.)*
 4. **`frames`, `suggestions` and `readings` read as empty.** There is no Unsorted frame until Analyze runs or the person makes one.
 5. **The brief and Krea outputs for every old board stay identical.** This is pinned by a golden file captured on main before PR1 (PR1 tests).
 
@@ -265,6 +267,7 @@ With nobody looking, or a stale report, `look` describes the whole board.
 
 - **With a fresh view:** free rectangles inside the visible area, next to the visible cards first.
 - **Otherwise:** after the last-added card. That means its row if the row has room, else a new row under the board.
+  - *(PR1: "room" is 24 px from everything, within six full-weight 16:9 cards' width (3,080 px) or the board's width if wider, and fewer than six cards in the row up to the anchor. The six-card rule keeps an old board's grid 6 wide when its cards are portrait or square.)*
 - **Spacing:** a 24 px gap, never overlapping.
 - **`--in <look>`:** free space inside that frame; the frame grows to fit.
 - **`--at x,y`:** exact.

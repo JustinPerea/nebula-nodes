@@ -225,6 +225,13 @@ def _rects(board: dict) -> list[tuple[int, int, int, int]]:
     return [(p["x"], p["y"], p["w"], p["h"]) for image in board["images"] for p in image["placements"]]
 
 
+def _spots(board: dict) -> dict[str, list[tuple]]:
+    """Each image's cards without ``placedAt``: a grid laid out again after
+    an edit is the same grid, stamped with the board's new time."""
+    return {image["id"]: [(p["id"], p["x"], p["y"], p["w"], p["h"], p["weight"]) for p in image["placements"]]
+            for image in board["images"]}
+
+
 def _overlaps(a, b, gap: int = 0) -> bool:
     return (a[0] < b[0] + b[2] + gap and b[0] < a[0] + a[2] + gap
             and a[1] < b[1] + b[3] + gap and b[1] < a[1] + a[3] + gap)
@@ -336,6 +343,30 @@ def test_cli_add_on_an_old_board_saves_the_grid_with_the_new_image_last(app, roo
     assert on_disk["layoutVersion"] == 1 and _placements(on_disk) == _placements(board)
 
 
+@pytest.mark.parametrize("size", [(18, 32), (32, 32)], ids=["portrait", "square"])
+def test_cli_add_on_a_full_grid_row_of_narrow_cards_starts_a_new_row(app, root, tmp_path, size):
+    """Six portrait or square cards are much narrower than six 16:9 ones, so
+    width alone would let a 7th card into the grid's row."""
+    from services.moodboard_layout import PLACE_GAP
+    from services.moodboard_store import MoodboardStore
+
+    raw = old_board()
+    raw["images"] = [{**image, "url": _image_url(f"narrow-{n}.png", size, (30 * n, 60, 60)), "weight": 1.0,
+                      "excluded": False} for n, image in enumerate(raw["images"][:6])]
+    write_board(root, raw)
+    read = MoodboardStore().get("oldboard0001")
+    png = tmp_path / "next.png"
+    Image.new("RGB", size, (10, 200, 10)).save(png)
+
+    board, added, _ = boards.add_to_board(app.api, "oldboard0001", [str(png)])
+
+    assert added == 1
+    assert _placements({"images": board["images"][:-1]}) == _placements(read)
+    card = board["images"][-1]["placements"][0]
+    rects = _rects(read)
+    assert (card["x"], card["y"]) == (min(r[0] for r in rects), max(r[1] + r[3] for r in rects) + PLACE_GAP)
+
+
 def test_new_images_fill_the_row_then_start_a_new_one(client):
     from services.moodboard_layout import PLACE_GAP, ROW_LIMIT
 
@@ -359,14 +390,16 @@ def test_new_images_fill_the_row_then_start_a_new_one(client):
 # -- what a write may and may not set ---------------------------------------------
 
 def test_a_new_image_takes_the_spot_it_asks_for(client, person):
-    from services.moodboard_layout import FULL_AREA
+    from services.moodboard_layout import FULL_AREA, MIN_WEIGHT
 
     url = _image_url("asked.png", (32, 24), (90, 90, 200))
+    wide = _image_url("asked-wide.png", (32, 18), (90, 200, 90))
     created = client.post("/api/moodboards", headers=person.headers, json={"name": "Drop", "images": [
         {"url": url, "placements": [{"x": 300.4, "y": -120, "w": 999, "h": 1, "placedBy": "analyze"}]},
-        {"url": url, "weight": 0.5, "placements": [{"x": 0, "y": 900, "weight": 1.0}]}]})
+        {"url": url, "weight": 0.5, "placements": [{"x": 0, "y": 900, "weight": 1.0}]},
+        {"url": wide, "placements": [{"x": 0, "y": 2000, "w": 240, "h": 135}]}]})
     assert created.status_code == 200, created.text
-    first, second = (image["placements"][0] for image in created.json()["images"])
+    first, second, third = (image["placements"][0] for image in created.json()["images"])
     # Where it asked; the size is written from the weight and the image's 4:3.
     assert (first["x"], first["y"]) == (300, -120)
     assert abs(first["w"] / first["h"] - 4 / 3) < 0.01
@@ -374,8 +407,11 @@ def test_a_new_image_takes_the_spot_it_asks_for(client, person):
     # Who placed it is the server's call, not the client's.
     assert first["placedBy"] == "person"
     # With no weight sent, the image weighs what its card shows; with one, the card follows it.
-    assert created.json()["images"][0]["weight"] == first["weight"]
-    assert second["weight"] == 0.5 and created.json()["images"][1]["weight"] == 0.5
+    # 999 x 1 is under the smallest card, so it shows (and weighs) MIN_WEIGHT.
+    images = created.json()["images"]
+    assert first["weight"] == MIN_WEIGHT and images[0]["weight"] == MIN_WEIGHT
+    assert second["weight"] == 0.5 and images[1]["weight"] == 0.5
+    assert (third["w"], third["h"]) == (240, 135) and third["weight"] == 0.25 and images[2]["weight"] == 0.25
 
 
 @pytest.mark.parametrize("placements, message", [
@@ -433,6 +469,24 @@ def test_a_weight_set_by_the_cli_resizes_the_card(app, root):
     assert updated["images"][1]["placements"] == fixture_board()["images"][1]["placements"]
 
 
+def test_a_weight_raised_by_put_grows_the_card_where_it_is(app, root):
+    """A weight set outside the Board view (CLI --weight, MCP, the List
+    slider) scales the image's cards from their top-left corners and moves
+    nothing, even when the bigger card now covers a neighbour: as a drag
+    resize in the Board view does, the person's arrangement stays theirs."""
+    board = fixture_board()
+    board["images"][0]["weight"] = 0.25
+    board["images"][0]["placements"] = [_placement("pl-a", 0, 67, 240, 135, 0.25)]
+    board["images"][1]["placements"] = [_placement("pl-b", 280, 0, 416, 312)]
+    write_board(root, board)
+
+    updated, _, _ = boards.update_board(app.api, BOARD_ID, images=[{"image": 1, "weight": 1.0}])
+
+    grown = updated["images"][0]["placements"][0]
+    assert (grown["x"], grown["y"], grown["w"], grown["h"], grown["weight"]) == (0, 67, 480, 270, 1.0)
+    assert updated["images"][1]["placements"] == board["images"][1]["placements"]
+
+
 def test_an_image_left_out_is_removed_with_its_cards(client, root):
     write_board(root, fixture_board())
     images = client.get(f"/api/moodboards/{BOARD_ID}").json()["images"]
@@ -458,6 +512,159 @@ def test_a_photo_turned_by_exif_lays_out_upright(root):
 
 
 # -- every other writer keeps the layout --------------------------------------------
+
+def test_put_keeps_keys_this_version_does_not_know(client, root):
+    """A later Nebula may add its own keys to an image. Moodboard Studio and
+    the CLI send only the keys they know, and the saved ones stay."""
+    board = fixture_board()
+    board["images"][0]["futureKey"] = {"kept": True}
+    path = write_board(root, board)
+    read = client.get(f"/api/moodboards/{BOARD_ID}").json()
+    images = [{key: image[key] for key in ("id", "url", "weight", "notes", "privateNote", "excluded")}
+              for image in read["images"]]
+    images[1]["notes"] = "cool shadows"
+
+    assert client.put(f"/api/moodboards/{BOARD_ID}", json={"images": images}).status_code == 200
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["images"][0]["futureKey"] == {"kept": True}
+    assert saved["images"][1]["notes"] == "cool shadows"
+
+
+def test_images_with_the_same_id_merge_in_order(client, root):
+    """Only a hand-edited file has two images with one id. Each copy sent
+    merges with the saved copy in the same place, so neither loses its keys."""
+    board = fixture_board()
+    board["images"][1]["id"] = "img-a"
+    path = write_board(root, board)
+    images = [{"id": "img-a", "url": image["url"]} for image in board["images"]]
+
+    assert client.put(f"/api/moodboards/{BOARD_ID}", json={"images": images}).status_code == 200
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert [image["privateNote"] for image in saved["images"]] == [LABEL, ""]
+    assert [image["notes"] for image in saved["images"]] == ["the orange accent", ""]
+    assert [image["placements"] for image in saved["images"]] == [image["placements"] for image in board["images"]]
+
+
+def test_keep_on_an_old_board_saves_the_grid_it_read(root):
+    from services.moodboard_store import MoodboardStore
+
+    raw = old_board()
+    raw["briefOverride"] = {"text": "Warm editorial light.", "basis": "stale", "by": "agent",
+                            "updatedAt": "2026-09-02T00:00:00+00:00"}
+    path = write_board(root, raw)
+    store = MoodboardStore()
+    read = store.get("oldboard0001")
+
+    store.keep_brief_override("oldboard0001")
+
+    on_disk = json.loads(path.read_text(encoding="utf-8"))
+    assert on_disk["layoutVersion"] == 1
+    assert _placements(on_disk) == _placements(read)
+    assert _placements(store.get("oldboard0001")) == _placements(read)
+
+
+def test_a_board_an_older_nebula_edited_reads_with_the_grid_it_saved(root):
+    """An older Nebula sharing ~/.nebula (the desktop app, a worktree on an
+    older branch) drops image keys it doesn't know, so its first edit of a
+    laid-out board loses every card but keeps ``layoutVersion``. The board
+    must read as the grid this version saved, not be placed again."""
+    from services.moodboard_store import IMAGE_KEYS, MoodboardStore
+
+    path = write_board(root, old_board())
+    store = MoodboardStore()
+    read = store.get("oldboard0001")
+    store.update("oldboard0001", name="Renamed")
+
+    # What an older Nebula's PUT leaves on disk.
+    older = json.loads(path.read_text(encoding="utf-8"))
+    older["images"] = [{key: image[key] for key in IMAGE_KEYS if key in image} for image in older["images"]]
+    older["images"][0]["notes"] = "edited in an older Nebula"
+    path.write_text(json.dumps(older), encoding="utf-8")
+
+    assert older["layoutVersion"] == 1
+    assert _spots(store.get("oldboard0001")) == _spots(read)
+
+
+# Odd values a hand-edited or foreign board file can hold. None of them can
+# come through PUT; each used to make the list, GET or an edit fail.
+ODD_LAYOUTS = {
+    "a card x too big for a float": lambda b: b["images"][0]["placements"][0].__setitem__("x", 10 ** 400),
+    "placements that aren't a list": lambda b: b["images"][0].__setitem__("placements", 5),
+    "frames that aren't a list": lambda b: b.__setitem__("frames", 5),
+    "a frame side too big for a float": lambda b: b.__setitem__("frames", [{
+        "id": "0123456789ab", "name": "A", "kind": "look", "x": 0, "y": 0, "w": 10 ** 400, "h": 200,
+        "namedBy": "person"}]),
+    "a card that isn't an object": lambda b: b["images"][1]["placements"].append("card"),
+    "a weight too big for a float": lambda b: b["images"][1].__setitem__("weight", 10 ** 400),
+}
+
+
+@pytest.mark.parametrize("odd", list(ODD_LAYOUTS))
+def test_a_board_with_an_odd_layout_on_disk_still_lists_opens_and_edits(client, root, odd):
+    board = fixture_board()
+    ODD_LAYOUTS[odd](board)
+    path = root / "_global" / f"{BOARD_ID}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(board), encoding="utf-8")  # json.dumps: 10 ** 400 stays an integer
+    other = fixture_board()
+    other["id"] = "fineboard001"
+    write_board(root, other)
+
+    listed = client.get("/api/moodboards?scope=global")
+    assert listed.status_code == 200 and len(listed.json()) == 2
+    read = client.get(f"/api/moodboards/{BOARD_ID}")
+    assert read.status_code == 200, read.text
+    assert all(any(isinstance(p, dict) for p in image["placements"]) for image in read.json()["images"])
+    assert client.put(f"/api/moodboards/{BOARD_ID}", json={"name": "Renamed"}).status_code == 200
+    images = [{key: image[key] for key in ("id", "url", "notes")} for image in board["images"]]
+    images[0]["notes"] = "edited"
+    response = client.put(f"/api/moodboards/{BOARD_ID}", json={"images": images})
+    assert response.status_code == 200, response.text
+    assert response.json()["images"][0]["notes"] == "edited"
+
+
+@pytest.mark.parametrize("bad_url", ["~nosuchuserzz/x.png", "/tmp/a\x00b.png"])
+def test_an_image_whose_url_cant_be_resolved_still_lays_out(client, root, bad_url):
+    """Resolving these raises (an unknown ~user, a null byte) rather than
+    saying "not found". The image lays out at 4:3 and the rest of the board
+    keeps its grid."""
+    raw = old_board()
+    raw["images"] = raw["images"][:3]
+    raw["images"][1]["url"] = bad_url
+    path = write_board(root, raw)
+
+    read = client.get("/api/moodboards/oldboard0001").json()
+    cards = [image["placements"][0] for image in read["images"]]
+    assert abs(cards[1]["w"] / cards[1]["h"] - 4 / 3) < 0.01
+    assert client.put("/api/moodboards/oldboard0001", json={"name": "Renamed"}).status_code == 200
+    on_disk = json.loads(path.read_text(encoding="utf-8"))
+    assert on_disk["layoutVersion"] == 1 and _placements(on_disk) == _placements(read)
+    images = [{key: image[key] for key in ("id", "url", "notes")} for image in read["images"]]
+    images[0]["notes"] = "edited"
+    assert client.put("/api/moodboards/oldboard0001", json={"images": images}).status_code == 200
+
+
+def test_an_edit_that_could_not_lay_the_board_out_does_not_stamp_it(root, monkeypatch):
+    """If laying an old board out fails, the edit still saves, but without
+    ``layoutVersion``: the next read lays the board out again instead of
+    taking it as a board with no cards."""
+    from services import moodboard_layout as layout
+    from services.moodboard_store import MoodboardStore
+
+    path = write_board(root, old_board())
+    store = MoodboardStore()
+    read = store.get("oldboard0001")
+    real = layout.ensure_layout
+
+    def broken(board):
+        raise RuntimeError("no layout today")
+
+    monkeypatch.setattr(layout, "ensure_layout", broken)
+    store.update("oldboard0001", name="Renamed")
+    assert "layoutVersion" not in json.loads(path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(layout, "ensure_layout", real)
+    assert _spots(store.get("oldboard0001")) == _spots(read)
 
 def test_trash_and_restore_keep_the_file_as_it_was(client, root):
     path = write_board(root, fixture_board())
