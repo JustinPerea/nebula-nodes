@@ -29,7 +29,21 @@ class FetchBlocked(Exception):
     pass
 
 
+class BlockedAddress(FetchBlocked):
+    """The host is, or resolves to, an address off the public internet."""
+
+
 class FetchError(Exception):
+    pass
+
+
+class FetchStatus(FetchError):
+    def __init__(self, status: int):
+        super().__init__(f"HTTP {status}")
+        self.status = status
+
+
+class FetchTooLarge(FetchError):
     pass
 
 
@@ -63,7 +77,7 @@ def resolve_pinned(host: str, port: int) -> ipaddress.IPv4Address | ipaddress.IP
     literal = parse_literal_host(host)
     if literal is not None:
         if ip_blocked(literal):
-            raise FetchBlocked(f"blocked address {literal}")
+            raise BlockedAddress(f"blocked address {literal}")
         return literal
     try:
         infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
@@ -74,7 +88,7 @@ def resolve_pinned(host: str, port: int) -> ipaddress.IPv4Address | ipaddress.IP
         raise FetchError(f"no addresses for {host}")
     for ip in ips:
         if ip_blocked(ip):
-            raise FetchBlocked(f"{host} resolves to blocked address {ip}")
+            raise BlockedAddress(f"{host} resolves to blocked address {ip}")
     return ips[0]
 
 
@@ -100,7 +114,7 @@ async def safe_fetch(url: str, *, max_bytes: int, accept: str = "*/*", range_byt
         except TimeoutError as exc:
             raise FetchError(f"DNS lookup for {host} timed out") from exc
         if ip_blocked(ip):
-            raise FetchBlocked(f"blocked address {ip}")
+            raise BlockedAddress(f"blocked address {ip}")
         ip_host = f"[{ip}]" if ip.version == 6 else str(ip)
         target = urlunsplit((parts.scheme, f"{ip_host}:{port}", parts.path or "/", parts.query, ""))
         host_header = host if parts.port is None else f"{host}:{parts.port}"
@@ -120,17 +134,17 @@ async def safe_fetch(url: str, *, max_bytes: int, accept: str = "*/*", range_byt
                     current = urljoin(current, location)
                     continue
                 if response.status_code >= 400:
-                    raise FetchError(f"HTTP {response.status_code}")
+                    raise FetchStatus(response.status_code)
                 declared = int(response.headers.get("content-length") or 0)
                 if declared > max_bytes and not range_bytes:
-                    raise FetchError(f"response exceeds the {max_bytes}-byte cap")
+                    raise FetchTooLarge(f"response exceeds the {max_bytes}-byte cap")
                 buf = bytearray()
                 async for chunk in response.aiter_bytes():
                     buf.extend(chunk)
                     if len(buf) > max_bytes:
                         if range_bytes:
                             break
-                        raise FetchError(f"response exceeds the {max_bytes}-byte cap")
+                        raise FetchTooLarge(f"response exceeds the {max_bytes}-byte cap")
                 return Fetched(url, current, response.headers.get("content-type", ""), bytes(buf),
                                response.status_code)
             finally:

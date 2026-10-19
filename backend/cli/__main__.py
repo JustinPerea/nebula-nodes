@@ -283,7 +283,14 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--brand")
     csub.add_parser("status", help="Worker, meter and queue status")
 
+    # -- Moodboards --
+    from .commands import moodboard as moodboard_cmd
+    moodboard_cmd.add_parser(sub)
+
     # -- Outside apps --
+    from .commands import skill as skill_cmd
+    skill_cmd.add_parser(sub)
+
     mcp_p = sub.add_parser("mcp", help="Connect an outside agent app (Hermes, Claude Code, Codex...) to Nebula's MCP server")
     mcp_sub = mcp_p.add_subparsers(dest="mcp_cmd", required=True)
     from services.agent_connect import CLIENTS
@@ -364,6 +371,11 @@ def default_url(environ: dict[str, str] | None = None, *, strict: bool = True) -
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    if args.command == "skill":
+        # Installs files on this machine; needs no backend.
+        from .commands import skill
+
+        sys.exit(skill.run_install(args))
     if args.url is None and args.command:
         # mcp connect sends the token only to an address that passed the check.
         args.url = default_url(strict=args.command != "mcp")
@@ -382,12 +394,13 @@ def main() -> None:
     client = NebulaClient(args.url)
 
     from .commands import (
-        apply, canvas, commons, context, nodes, keys, graph, execute, quick, path, pins, projects, proposals,
-        selection, spend, trash,
+        apply, canvas, commons, context, nodes, keys, graph, execute, moodboard, quick, path, pins, projects,
+        proposals, selection, spend, trash,
     )
 
     dispatch = {
         "commons": lambda: commons.run(client, args),
+        "moodboard": lambda: moodboard.run(client, args),
         "context": lambda: context.run(client),
         "nodes": lambda: nodes.run_list(client, query=args.query, category=args.category),
         "info": lambda: nodes.run_info(client, args.node_id),

@@ -55,6 +55,10 @@ The server exposes these tools for building and running (see
 - `view_output`: a node's output as an image (videos as three frames, image
   lists as tiles), or as text.
 - `get_spend_limits`: the limits and what this session has used.
+- `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
+  `moodboard_update`, `moodboard_analyze`, `moodboard_delete`: the boards in
+  Moodboard Studio. See
+  [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
   characters, projects), and bring one back with the same id. See
   [Recently deleted](#recently-deleted).
@@ -1025,6 +1029,77 @@ nebula project open <id>            # switch the canvas (not while a run is goin
 nebula trash list                   # Recently deleted boards, characters, projects
 nebula trash restore [kind] <id>    # bring one back with the same id
 ```
+
+### Moodboards from the CLI and MCP
+
+`nebula moodboard` and the `moodboard_*` MCP tools edit the boards Moodboard
+Studio shows. Both use `backend/moodboard_client.py`.
+
+```bash
+nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
+nebula moodboard show "Nature + tech"      # numbered images, settings, analysis
+nebula moodboard add <board> more.png
+nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --exclude 5 --strength 0.6
+nebula moodboard analyze <board>
+nebula moodboard list                      # boards for every project, plus the open project's
+nebula moodboard delete <board>
+```
+
+- A board is named by its id or exact name; an image by its number or id
+  from `show`. `--json` prints the board as JSON (the MCP tools return the
+  same shape).
+- Images can be files, folders (the images directly inside, in name order,
+  so `2.png` comes before `10.png`), http(s) links or Nebula outputs
+  (`/api/outputs/...`, used as they are).
+- Links are downloaded by the CLI or the MCP server process, never by the
+  backend, with the guarded fetcher Commons uses for links
+  (`backend/commons/net.py`): public web addresses only, so never this
+  computer, its local network or a cloud metadata address (checked on every
+  redirect, 3 at most, and the connection goes to the address that was
+  checked); ports 80 and 443; no user name or password in the link. Then a
+  PNG, JPEG, GIF or WebP content type whose bytes match, 20 MB at most, 60
+  seconds in all. For an image anywhere else, save it and add the file. The
+  bytes go through `POST /api/uploads`, like Moodboard Studio's Add Images.
+  Everything is read and downloaded before the first upload, so one bad
+  source changes nothing.
+- An in-app chat's turn reads local files only from its own workspace (as
+  with Commons); a relative path means that workspace. Every image found in
+  a folder is checked the same way, and the check runs again when the file
+  is read (which follows no links), so a link can't lead outside it.
+- Like Moodboard Studio, any change but a rename clears the board's
+  analysis, so run `analyze` again. `--remove` takes an image off the board;
+  its file stays, and the command prints the URL to add it back.
+- `moodboard_update` (and `set --json`) returns `previous`: the settings
+  before the change. Passing them back undoes it.
+- Deleting: where Nebula keeps deleted boards in Recently deleted, anyone
+  may delete one, agents included, because it can be restored. Where a
+  delete is for good (a Nebula without Recently deleted), `nebula moodboard
+  delete` and `moodboard_delete` refuse for everyone; the person deletes the
+  board in Moodboard Studio. The client never decides who is the person:
+  that would be a check any client could skip.
+- `moodboard_create` and `moodboard_add` are marked open-world because they
+  fetch links; `moodboard_delete` is marked destructive.
+
+### The nebula skill
+
+`skills/nebula/SKILL.md` teaches Claude Code and Codex the `nebula` CLI. It
+is for agents outside Nebula, so it lives apart from `.agents/skills/`, the
+provider knowledge Nebula's own chats read (they get their own primers).
+Install it once per machine:
+
+```bash
+backend/.venv/bin/python -m nebula skill install          # link it (git pull keeps it current)
+backend/.venv/bin/python -m nebula skill install --copy   # or copy it
+backend/.venv/bin/python -m nebula skill install --for codex
+```
+
+It goes to `~/.claude/skills/nebula` (Claude Code) and
+`~/.agents/skills/nebula` (Codex's user skill folder), for each app set up on
+the machine. Anything already there is moved, not deleted, to
+`skill-backups/nebula.backup-YYYYMMDD-HHMMSS` next to the skills folder
+(`~/.claude/skill-backups/`, `~/.agents/skill-backups/`). The backups sit
+outside the skills folder so they don't load as a second `nebula` skill.
+A copy records its checkout in `.installed-from`.
 
 `nebula context` lists the definition ids that can run here: with your keys,
 free, on the signed-in Krea account (marked `*`), or with a Nous sign-in.
