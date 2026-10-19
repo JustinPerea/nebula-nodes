@@ -34,6 +34,7 @@ import { downloadWorldAsset } from '../../lib/worldDownload';
 import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
+import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 import { JevResultView, type JevResultInputs } from './JevResult';
 import { JevCardField } from './JevCardField';
 import { isJevNode, jevBrandStyle, parseJevOutputs, JEV_BOX, JEV_BRAND, JEV_DECIDE, JEV_PICK_BEST } from '../../lib/jev';
@@ -560,8 +561,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {imageInputPreview && (
-        <div className="model-node__preview">
-          <img
+        <div className="model-node__preview model-node__preview--overview">
+          <OverviewImage
             src={imageInputPreview}
             alt="Image input"
             className={imageClassName}
@@ -573,8 +574,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {showMaskComposite && maskSourcePreview && maskOverlayData && (
-        <div className="model-node__preview model-node__mask-composite">
-          <img
+        <div className="model-node__preview model-node__mask-composite model-node__preview--overview">
+          <OverviewImage
             src={maskSourcePreview}
             alt="Mask source"
             className={imageClassName}
@@ -591,8 +592,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {isMaskPainter && maskSourcePreview && !maskOverlayData && (
-        <div className="model-node__preview">
-          <img
+        <div className="model-node__preview model-node__preview--overview">
+          <OverviewImage
             src={maskSourcePreview}
             alt="Mask source preview"
             className={imageClassName}
@@ -649,8 +650,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {finalImageOutput && !showJevResult && !worldOutput && !imageInputPreview && !isImageCompare && !(isMaskPainter && maskSourcePreview) && (
-        <div className="model-node__preview">
-          <img
+        <div className="model-node__preview model-node__preview--overview">
+          <OverviewImage
             src={finalImageOutput}
             alt="Generated output"
             className={imageClassName}
@@ -692,7 +693,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {finalSvgOutput && !streamingSvgPreview && (
-        <div className="model-node__preview">
+        <div className="model-node__preview model-node__preview--overview">
           <img
             src={finalSvgOutput}
             alt="Generated SVG"
@@ -731,7 +732,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {previewComplete && videoOutput && typeof videoOutput.value === 'string' && (
-        <div className="model-node__preview">
+        <div className="model-node__preview model-node__preview--overview">
           <video
             src={videoOutput.value}
             controls
@@ -739,6 +740,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
             className="model-node__preview-video nodrag nowheel"
             onMouseDown={(e) => e.stopPropagation()}
           />
+          <OverviewVideoStill src={videoOutput.value} />
           <button
             type="button"
             className={`model-node__loop-toggle nodrag ${videoLoop ? 'model-node__loop-toggle--on' : ''}`}

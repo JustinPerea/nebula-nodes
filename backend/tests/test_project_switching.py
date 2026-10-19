@@ -141,6 +141,14 @@ def test_the_tab_an_agent_switched_away_saves_its_last_changes_until_the_next_sw
     snapshot = store.read()["projects"][project_id]["snapshot"]
     assert snapshot["viewport"] == {"x": 0, "y": 0, "zoom": 1}
     assert {node["id"] for node in snapshot["nodes"]} == {backend_node, "local-sticky"}
+    # A tab that isn't the person's hands off its edits but never its view (gap 19).
+    tab["viewport"] = {"x": -900, "y": -400, "zoom": 4}
+    tab["nodes"].append(_rf("other-sticky", "from a tab without the person link"))
+    theirs = client.put(f"/api/projects/{project_id}", json={"snapshot": tab, "workspaceRevision": old_revision})
+    assert theirs.status_code == 200, theirs.text
+    snapshot = store.read()["projects"][project_id]["snapshot"]
+    assert snapshot["viewport"] == {"x": 0, "y": 0, "zoom": 1}
+    assert {node["id"] for node in snapshot["nodes"]} == {backend_node, "local-sticky", "other-sticky"}
     # The next switch ends it: a stale save is the usual conflict again.
     _create(client, "Later", store.read()["workspaceRevision"], headers=person.headers)
     late = client.put(f"/api/projects/{project_id}", json={"snapshot": tab, "workspaceRevision": old_revision},

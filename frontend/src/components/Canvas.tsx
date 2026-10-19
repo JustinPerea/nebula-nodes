@@ -49,6 +49,7 @@ import { CHARACTER_DRAG_MIME, MOODBOARD_DRAG_MIME } from '../lib/dragMime';
 import { apiFetch } from '../lib/backend';
 import { CANVAS_INTERACTION_PROPS } from '../lib/canvasNavigation';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../lib/canvasFit';
+import { CANVAS_LOD_ZOOM } from '../lib/canvasOverview';
 import { isCanvasShortcutTarget } from '../lib/canvasShortcutScope';
 import { NODE_RENAME_EVENT } from '../lib/keyboardShortcuts';
 import { publishCanvasSelection, selectedNodeIds } from '../lib/canvasSelection';
@@ -195,7 +196,10 @@ function useSlavaHandleMagnetism() {
  * Reads live zoom from the React Flow store and writes a `data-lod` attribute on
  * the canvas wrapper when zoomed out past `threshold`. Selecting only the zoom
  * scalar (`transform[2]`) means this re-renders on zoom change but NOT on pan,
- * and it returns null so there is no DOM diff — node components never re-render.
+ * and it returns null so there is no DOM diff. It also sets the UI store's
+ * `canvasZoomedOut`, which changes only when the cutoff is crossed: nodes read
+ * it to swap their images for thumbnails (lib/canvasOverview.ts), so they
+ * re-render once per crossing, never per zoom step.
  * Must live inside the React Flow provider context (rendered as a <ReactFlow> child).
  */
 function ZoomLodController({
@@ -209,14 +213,17 @@ function ZoomLodController({
 }) {
   const zoom = useStore((s) => s.transform[2]);
   useEffect(() => {
+    const zoomedOut = enabled && zoom < threshold;
+    useUIStore.getState().setCanvasZoomedOut(zoomedOut);
     const el = wrapperRef.current;
     if (!el) return;
     if (!enabled) {
       delete el.dataset.lod;
       return;
     }
-    el.dataset.lod = zoom < threshold ? 'low' : 'high';
+    el.dataset.lod = zoomedOut ? 'low' : 'high';
   }, [zoom, threshold, enabled, wrapperRef]);
+  useEffect(() => () => useUIStore.getState().setCanvasZoomedOut(false), []);
   return null;
 }
 
@@ -758,7 +765,7 @@ export function Canvas() {
           className={isSlavaSkin ? 'slava-canvas-background' : undefined}
           patternClassName={isSlavaSkin ? 'slava-canvas-background__dot' : undefined}
         />
-        <ZoomLodController wrapperRef={wrapperRef} threshold={0.4} enabled={canvasLowDetail} />
+        <ZoomLodController wrapperRef={wrapperRef} threshold={CANVAS_LOD_ZOOM} enabled={canvasLowDetail} />
         <CanvasFocusController />
         <Panel position="top-center" className="selection-toolbar-panel">
           <SelectionToolbar />
