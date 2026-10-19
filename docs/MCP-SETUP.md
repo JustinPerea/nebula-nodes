@@ -68,7 +68,9 @@ The server exposes these tools for building and running (see
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_analyze`, `moodboard_delete`: the boards in
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
-  hand-written brief, and the brief generators get). See
+  hand-written brief, and the brief generators get). `moodboard_analyze`
+  with `dry_run` previews an analysis, optionally with other colour
+  thresholds, and saves nothing. See
   [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
   characters, projects), and bring one back with the same id. See
@@ -1151,6 +1153,7 @@ nebula moodboard set <board> --unavoid "neon signage" --keep-out-color "#0000FF"
 nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --keep-brief
 nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
 nebula moodboard analyze <board>
+nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
 nebula moodboard list                      # boards for every project, plus the open project's
 nebula moodboard delete <board>
 ```
@@ -1162,7 +1165,7 @@ nebula moodboard delete <board>
   board is Global, for every project. A node that names a board from another
   project still shows, runs and opens it there; the board stays in its own
   project. Boards filed under an old-style id (the backend's folder name, from
-  older builds) are moved at startup (contract 07, section 1.8).
+  older builds) are moved at startup (contract 07, section 1.9).
 - A board is named by its id or exact name; an image by its number or id
   from `show`. `--json` prints the board as JSON (the MCP tools return the
   same shape).
@@ -1208,6 +1211,22 @@ nebula moodboard delete <board>
   anything is sent, and never cut short. Only the person may change or Keep
   the person's own hand-written brief; the refusal says so in a sentence,
   and nothing in that call is saved.
+- Each colour in `analysis.colors` lists `sources`: the images it comes
+  from, by `number` (as `show` numbers them, excluded images counted) and
+  `id`, with `share` (the colour's share of that image) and `contribution`
+  (its part of the board share), largest first. `show` prints them as
+  `#4 0.35%, #5 0.26%`. An analysis from before sources existed has none;
+  `analyze` again to see them.
+- `analyze --dry-run` (`moodboard_analyze` with `dry_run`) calls
+  `POST /api/moodboards/{id}/analyze/dry-run`: the analysis and the brief
+  generators would get, plus `changes` against what's saved (palette and
+  accents added, removed, nudged or reordered; the brief and negatives
+  before and after). It saves nothing, so agents may run it without the
+  person. `--accent-min-chroma` / `accent_min_chroma` (0-150, default 40),
+  `--accent-separation` / `accent_separation` (0-100, default 10) and
+  `--merge-delta-e` / `merge_delta_e` (0-50, default 5) try other colour
+  thresholds for that run only; without the dry run they are refused.
+  On a Nebula without the dry run it says so and analyzes nothing.
 - Like Moodboard Studio, changing images, notes, mode or strength clears the
   board's analysis, so run `analyze` again; a rename and the brief fields
   keep it. `--remove` takes an image off the board; its file stays, and the
