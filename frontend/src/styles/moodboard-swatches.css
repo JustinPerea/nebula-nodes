@@ -1,0 +1,38 @@
+/* Colour swatches of a moodboard: the board's palette and accents in Moodboard
+ * Studio (MoodboardColors.tsx, MoodboardBrief.tsx) and the same chips on a
+ * canvas card that previews a Moodboard bundle (MoodboardBundlePreview.tsx).
+ * Kept apart from moodboard-studio.css so the canvas card can load them
+ * without the whole Studio stylesheet. */
+
+body.app-slava-restraint .moodboard-swatches {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+body.app-slava-restraint .moodboard-swatches__label {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body.app-slava-restraint .moodboard-palette {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+body.app-slava-restraint .moodboard-palette__swatch {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 3px;
+}
+
+body.app-slava-restraint .moodboard-chip__swatch {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 2px;
+}

@@ -15,6 +15,8 @@ import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { useDelayedUnmount } from '../../hooks/useDelayedUnmount';
 import { MaskPainterModal } from './MaskPainterModal';
 import { JevResultDetails } from './JevResultDetails';
+import { StructuredOutputs } from '../nodes/StructuredValuePreview';
+import { structuredOutputEntries } from '../../lib/structuredValue';
 import { isJevNode, parseJevOutputs } from '../../lib/jev';
 import { allParamDefinitions, paramDefinitionsForRun, providerLabel, routeById, routeSwitch, selectRoute, shownRouteId, visibleParams as visibleParamsFor, withWiredBlockers } from '../../lib/directRoute';
 import { definitionSnap, definitionStartShapeNote, sizeNote } from '../../lib/makerSizes';
@@ -1124,6 +1126,22 @@ export function Inspector({ embedded = false }: InspectorProps) {
         })()}
 
         {visibleParams.map((param) => renderParamSection(param, 'definition'))}
+
+        {/* The run's values that aren't media (a Moodboard bundle, a list, an
+            object...), whole: the card shows them clamped, and this is where
+            the full brief or JSON can be read and copied. */}
+        {nodeData.state === 'complete' && !(isJevNode(nodeData.definitionId) && parseJevOutputs(nodeData.definitionId, nodeData.outputs)) && (() => {
+          const entries = structuredOutputEntries(nodeData.outputs);
+          if (entries.length === 0) return null;
+          const labels = Object.fromEntries([...(definition?.displayOutputs ?? []), ...(definition?.outputPorts ?? [])]
+            .map((port) => [port.id, port.label]));
+          return (
+            <section className="inspector__section inspector__last-output" aria-label="Last output">
+              <div className="inspector__label">Last output</div>
+              <StructuredOutputs outputs={entries} variant="full" labels={labels} />
+            </section>
+          );
+        })()}
 
         {/* What the last run said beside its outputs (the executed event's
             notes), e.g. the size a maker made when it couldn't make the one

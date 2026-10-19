@@ -35,6 +35,7 @@ import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
 import { OverviewImage, OverviewVideoStill } from './OverviewImage';
+import { StructuredOutputs } from './StructuredValuePreview';
 import { JevResultView, type JevResultInputs } from './JevResult';
 import { JevCardField } from './JevCardField';
 import { isJevNode, jevBrandStyle, parseJevOutputs, JEV_BOX, JEV_BRAND, JEV_DECIDE, JEV_PICK_BEST } from '../../lib/jev';
@@ -63,6 +64,11 @@ function filenameFor(nodeLabel: string, nodeId: string, url: string, fallbackExt
   const shortId = /^n\d+$/.test(nodeId) ? nodeId : nodeId.slice(0, 6);
   const slug = nodeLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'output';
   return `${slug}-${shortId}.${urlExt}`;
+}
+
+/** Each output's label, for a card that shows several structured values. */
+function portLabels(definition: { outputPorts: Array<{ id: string; label: string }>; displayOutputs?: Array<{ id: string; label: string }> }): Record<string, string> {
+  return Object.fromEntries([...(definition.displayOutputs ?? []), ...definition.outputPorts].map((port) => [port.id, port.label]));
 }
 
 function ModelNodeComponent({ id, data, selected }: NodeProps) {
@@ -301,6 +307,21 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     && !worldOutput
     && !shouldRenderSpatial
     && (isInlineTextNode || Boolean(displayText && !isInlineTextNode));
+  // Whether any renderer above drew this run's output. When none did (a
+  // Moodboard bundle, an Array, a Character, an object typed Any, a Text port
+  // holding a non-string...), the run's values are drawn as structured
+  // values instead of a bare "Output ready".
+  const drewOutput = showJevResult
+    || isImageSurface
+    || isInlineTextNode
+    || Boolean(displayText)
+    || Boolean(worldOutput)
+    || shouldRenderSpatial
+    || (videoOutput !== undefined && typeof videoOutput.value === 'string')
+    || (meshOutput !== undefined && typeof meshOutput.value === 'string')
+    || (audioOutput !== undefined && typeof audioOutput.value === 'string');
+  const structuredOutputs = previewComplete && !drewOutput ? Object.entries(previewOutputs) : [];
+  const isStructuredSurface = structuredOutputs.length > 0;
   const isWorldSurface = previewComplete && Boolean(worldOutput);
   const imageClassName = isSlavaSkin ? 'model-node__preview-image' : 'model-node__preview-image nodrag';
   const downloadableOutput =
@@ -382,7 +403,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
 
   return (
     <div
-      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''}${isJev ? ' model-node--jev' : ''}${showJevResult ? ' model-node--jev-surface' : ''} ${switchable ? ' model-node--switchable' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
+      className={`model-node ${stateClass}${isImageSurface ? ' model-node--image-surface' : ''}${isWorldSurface ? ' model-node--world-surface' : ''}${shouldRenderSpatial ? ' model-node--spatial-surface' : ''}${isTextSurface ? ' model-node--text-surface' : ''}${isStructuredSurface ? ' model-node--structured-surface' : ''}${isInlineTextNode ? ' model-node--inline-text' : ''}${isTextInput ? ' model-node--text-input' : ''}${isImageInput ? ' model-node--image-input' : ''}${isStickyNote ? ' model-node--sticky-note' : ''}${isJev ? ' model-node--jev' : ''}${showJevResult ? ' model-node--jev-surface' : ''} ${switchable ? ' model-node--switchable' : ''} ${isNodeSelected ? 'model-node--selected' : ''}${entranceClass}`}
       onClick={() => selectNode(id)}
       style={isJev ? jevBrandStyle() : { ['--node-category-color' as string]: categoryColor }}
     >
@@ -835,9 +856,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {previewComplete && !imageOutput && !textOutput && !videoOutput && !meshOutput && !worldOutput && !audioOutput && !svgOutput && !spatialOutput && Object.keys(previewOutputs).length > 0 && (
-        <div className="model-node__preview">
-          <div className="model-node__preview-placeholder">Output ready</div>
+      {isStructuredSurface && (
+        <div className="model-node__preview model-node__preview--structured">
+          <StructuredOutputs outputs={structuredOutputs} labels={portLabels(definition)} />
         </div>
       )}
 

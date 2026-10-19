@@ -1,0 +1,441 @@
+/*
+ * Structured outputs (components/nodes/StructuredValuePreview.tsx and
+ * MoodboardBundlePreview.tsx): a value no media renderer draws, on a canvas
+ * card (Preview, or any node whose run gave only such values) and in the
+ * Inspector's "Last output".
+ *
+ * A card with one is a structured surface: laid out like a text surface
+ * (header on top, content padded below, one fixed width) so a Moodboard
+ * bundle reads as the board and a list or object reads as text. Quiet type,
+ * Moodboard Studio's swatch chips at card size.
+ *
+ * Motion: "Read all" opens a clamped block in place, max-height on the
+ * provider switcher's sampled spring (k 500, c 36: about 1% overshoot over
+ * 320ms). Reduced motion switches at once.
+ */
+
+body.app-slava-restraint {
+  --structured-spring: linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1);
+  --structured-open: 320ms;
+}
+
+/* -- the card ------------------------------------------------------------ */
+
+body.app-slava-restraint .model-node--structured-surface {
+  width: var(--sr-node-text-max-width);
+  min-width: var(--sr-node-text-max-width);
+  max-width: var(--sr-node-text-max-width);
+}
+
+body.app-slava-restraint .model-node--structured-surface .model-node__card {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--sr-radius-panel);
+}
+
+body.app-slava-restraint .model-node--structured-surface .model-node__header {
+  flex: 0 0 auto;
+  min-height: var(--sr-node-text-header-min-height);
+  padding: var(--sr-node-text-header-padding);
+  border-radius: var(--sr-radius-panel) var(--sr-radius-panel) 0 0;
+}
+
+body.app-slava-restraint .model-node--structured-surface .model-node__preview--structured,
+body.app-slava-restraint .model-node__ports--input + .model-node__preview--structured {
+  margin: 0;
+  padding: var(--sr-node-text-content-padding);
+  border-radius: 0 0 var(--sr-radius-panel) var(--sr-radius-panel);
+  background: transparent;
+  overflow: visible;
+}
+
+/* -- shared layout ----------------------------------------------------------- */
+
+.structured-outputs {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.structured-preview {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.structured-preview__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.structured-preview__title,
+.structured-preview__type {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.structured-preview__meta {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.structured-preview__thumbs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.structured-preview__thumbs--1 { grid-template-columns: minmax(0, 1fr); }
+.structured-preview__thumbs--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.structured-preview__thumbs--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.structured-preview--full .structured-preview__thumbs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.structured-preview__thumb {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+
+.structured-preview__thumbs--1 .structured-preview__thumb {
+  aspect-ratio: auto;
+  max-height: 240px;
+}
+
+.structured-preview__thumb img,
+.structured-preview__thumb video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.structured-preview__thumbs--1 .structured-preview__thumb img,
+.structured-preview__thumbs--1 .structured-preview__thumb video {
+  height: auto;
+  max-height: 240px;
+  object-fit: contain;
+}
+
+.structured-preview__thumb-more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.structured-preview__swatch-rows {
+  display: grid;
+  gap: 6px;
+}
+
+.structured-preview__swatch-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.structured-preview__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.structured-preview__status {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.structured-preview__brief,
+.structured-preview__text,
+.structured-preview__empty,
+.structured-preview__note {
+  margin: 0;
+}
+
+.structured-preview__text,
+.structured-preview__brief {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.structured-preview__list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.structured-preview__item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.structured-preview__fields {
+  display: grid;
+  margin: 0;
+}
+
+.structured-preview__field {
+  display: grid;
+  grid-template-columns: minmax(64px, 38%) minmax(0, 1fr);
+  gap: 10px;
+  min-height: 20px;
+  align-items: baseline;
+}
+
+.structured-preview__field dt,
+.structured-preview__field dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.structured-preview__json {
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.structured-preview__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.structured-preview__audio {
+  display: grid;
+  gap: 6px;
+}
+
+.structured-preview__audio audio {
+  width: 100%;
+}
+
+/* -- Read all ---------------------------------------------------------------- */
+
+.structured-expandable {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.structured-expandable__body {
+  --expandable-line-height: 17.4px;
+  min-width: 0;
+  max-height: calc(var(--expandable-lines, 4) * var(--expandable-line-height));
+  overflow: hidden;
+}
+
+.structured-expandable--open .structured-expandable__body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.structured-expandable--clamped:not(.structured-expandable--open) .structured-expandable__body {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+}
+
+.structured-preview--record .structured-expandable__body {
+  --expandable-line-height: 20px;
+}
+
+.structured-expandable__toggle {
+  justify-self: start;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+/* -- Slava visuals ----------------------------------------------------------- */
+
+body.app-slava-restraint .structured-preview {
+  color: var(--sr-ink);
+  font-family: var(--sr-ui);
+  font-size: var(--sr-type-body);
+  line-height: 1.45;
+}
+
+body.app-slava-restraint .structured-preview__title {
+  color: var(--sr-ink);
+  font-size: var(--sr-type-control);
+  font-weight: 500;
+}
+
+body.app-slava-restraint .structured-preview__type,
+body.app-slava-restraint .structured-preview__port {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+body.app-slava-restraint .structured-preview__meta {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-meta);
+}
+
+/* The card's .model-node__preview img rule (width 100%, height auto) would
+ * leave a band under a landscape image; thumbnails fill their square. */
+body.app-slava-restraint .structured-preview .structured-preview__thumb img,
+body.app-slava-restraint .structured-preview .structured-preview__thumb video {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  object-fit: cover;
+}
+
+body.app-slava-restraint .structured-preview .structured-preview__thumbs--1 .structured-preview__thumb img,
+body.app-slava-restraint .structured-preview .structured-preview__thumbs--1 .structured-preview__thumb video {
+  height: auto;
+  object-fit: contain;
+}
+
+body.app-slava-restraint .structured-preview__thumb {
+  border: 1px solid var(--sr-edge);
+  border-radius: 4px;
+  background: var(--sr-node-preview-bg);
+}
+
+body.app-slava-restraint .structured-preview__thumb-more {
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--sr-ink);
+  font-family: var(--sr-mono);
+  font-size: var(--sr-type-body);
+}
+
+body.app-slava-restraint .structured-preview .structured-preview__swatch-label {
+  font-size: var(--sr-type-meta);
+}
+
+body.app-slava-restraint .structured-preview .structured-preview__swatches {
+  gap: 4px;
+}
+
+/* Studio's .moodboard-palette__swatch at card size. Three classes so the
+ * Studio sheet, when it loads later, doesn't size these back to 28px. */
+body.app-slava-restraint .structured-preview .structured-preview__swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
+body.app-slava-restraint .structured-preview--full .structured-preview__swatch {
+  width: 20px;
+  height: 20px;
+}
+
+body.app-slava-restraint .structured-preview__swatch-more,
+body.app-slava-restraint .structured-preview__note,
+body.app-slava-restraint .structured-preview__item--more {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .structured-preview__brief,
+body.app-slava-restraint .structured-preview__text {
+  color: var(--sr-ink-light);
+  font-size: var(--sr-type-body);
+  line-height: 1.45;
+}
+
+body.app-slava-restraint .structured-preview__empty {
+  color: var(--sr-ink-meta);
+  font-size: var(--sr-type-body);
+}
+
+body.app-slava-restraint .structured-preview__status {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+body.app-slava-restraint .structured-preview__status-item + .structured-preview__status-item::before {
+  content: '·';
+  padding: 0 6px;
+  color: var(--sr-ink-faint);
+}
+
+body.app-slava-restraint .structured-preview__item {
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .structured-preview__field dt {
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: 10.5px;
+}
+
+body.app-slava-restraint .structured-preview__field dd {
+  color: var(--sr-ink-light);
+}
+
+body.app-slava-restraint .structured-preview__json {
+  padding: 8px 10px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--sr-ink-light);
+  font-family: var(--sr-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  scrollbar-color: var(--sr-node-scrollbar-color) transparent;
+}
+
+body.app-slava-restraint .structured-expandable--open .structured-expandable__body {
+  scrollbar-color: var(--sr-node-scrollbar-color) transparent;
+}
+
+body.app-slava-restraint .structured-expandable__toggle,
+body.app-slava-restraint .structured-preview__copy {
+  border: 0;
+  background: transparent;
+  color: var(--sr-ink-light);
+  font-family: var(--sr-ui);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .structured-preview__copy {
+  padding: 3px 8px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .structured-expandable__toggle:hover,
+body.app-slava-restraint .structured-preview__copy:hover {
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .structured-expandable__toggle:focus-visible,
+body.app-slava-restraint .structured-preview__copy:focus-visible {
+  outline: 1px solid var(--sr-ink-light);
+  outline-offset: 2px;
+}
+
+body.app-slava-restraint .structured-expandable__body {
+  transition: max-height var(--structured-open) var(--structured-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .structured-expandable__body {
+    transition: none;
+  }
+}
