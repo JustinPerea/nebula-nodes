@@ -74,6 +74,18 @@ def build_parser() -> argparse.ArgumentParser:
     project_open_p = project_sub.add_parser("open", help="Switch the canvas to a saved project")
     project_open_p.add_argument("project_id", help="Project id (from `nebula projects`)")
 
+    trash_p = sub.add_parser(
+        "trash", help="Recently deleted moodboards, characters and projects: list them or restore one")
+    trash_sub = trash_p.add_subparsers(dest="trash_cmd", required=True)
+    trash_list_p = trash_sub.add_parser("list", help="What's in Recently deleted, newest first")
+    trash_list_p.add_argument("--kind", choices=["moodboard", "character", "project"], help="Only this kind")
+    trash_list_p.add_argument("--json", action="store_true", help="Print the raw JSON")
+    trash_restore_p = trash_sub.add_parser(
+        "restore", help="Bring one back with the same id (nodes that point at it work again)")
+    trash_restore_p.add_argument("target", nargs="+", metavar="[kind] id",
+                                 help="The id from `nebula trash list`, optionally after its kind "
+                                      "(moodboard, character or project)")
+
     sub.add_parser("graph", help="Show current graph state")
     sub.add_parser("selection", help="Show nodes currently selected on the canvas")
 
@@ -371,7 +383,7 @@ def main() -> None:
 
     from .commands import (
         apply, canvas, commons, context, nodes, keys, graph, execute, quick, path, pins, projects, proposals,
-        selection, spend,
+        selection, spend, trash,
     )
 
     dispatch = {
@@ -388,6 +400,7 @@ def main() -> None:
         "rename": lambda: graph.run_rename(client, args.node_ref, " ".join(args.label)),
         "move": lambda: graph.run_move(client, args.moves),
         "projects": lambda: projects.run_list(client),
+        "trash": lambda: trash.run(client, args),
         "project": lambda: projects.run_open(client, args.project_id),
         "graph": lambda: graph.run_show(client),
         "selection": lambda: selection.run(client),

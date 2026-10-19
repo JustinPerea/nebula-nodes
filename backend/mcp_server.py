@@ -43,6 +43,8 @@ Workflow:
 
 Spending: the person sets limits (get_spend_limits). A run over a limit, or with a node that has no list price, is refused; send the same plan as propose_change. The person accepts or rejects it in Nebula; agents cannot accept, and get_proposal waits for the decision. Use propose_change too when the change is theirs to decide (reworking their graph, a costly run).
 
+Deleted moodboards, characters and projects go to Recently deleted: list_trash shows them and restore_from_trash brings one back with the same id. Deleting for good is the person's alone.
+
 Answer the person's pins with resolve_pin. Use wait_for_canvas_change to wait for them instead of polling. If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
 """
 
@@ -576,6 +578,34 @@ def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
     run needs a proposal). Runs over a limit must go through propose_change,
     and so does billing any Krea node differently from the canvas."""
     return _canvas_call("GET", "/api/agent/spend", ctx)
+
+
+# -- Recently deleted -----------------------------------------------------------
+
+@mcp.tool(annotations=_READ)
+def list_trash(kind: str | None = None, ctx: Context | None = None) -> dict[str, Any]:
+    """List Recently deleted: moodboards, characters and projects, newest first.
+
+    `kind` ("moodboard", "character" or "project") narrows the list. Each item
+    has its id, name, when it was deleted and who deleted it (`deletedBy`:
+    `kind` is person, agent, system or anonymous; an agent's `name` is the
+    one it gave itself, so only kind "person" means the person). Projects also have
+    `purgeAt`, when they are removed for good; boards and characters stay
+    until the person deletes them for good."""
+    params = {"kind": kind} if kind else None
+    return _canvas_call("GET", "/api/trash", ctx, params=params)
+
+
+@mcp.tool(annotations=_EDIT)
+def restore_from_trash(kind: str, id: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Bring a moodboard, character or project back from Recently deleted.
+
+    It comes back with the same id and contents, so a Moodboard or Character
+    node that points at it runs again. A project comes back closed. Any
+    agent may restore; only the person can delete for good."""
+    from urllib.parse import quote
+
+    return _canvas_call("POST", f"/api/trash/{quote(kind, safe='')}/{quote(id, safe='')}/restore", ctx)
 
 
 # -- commons (smart moodboard) ------------------------------------------------

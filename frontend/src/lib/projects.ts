@@ -15,7 +15,7 @@ export interface ProjectSnapshot {
   createDraft?: CreateDraft | null;
 }
 export interface SavedProject extends ProjectSummary { snapshot: ProjectSnapshot }
-export interface TrashedProject extends ProjectSummary { deletedAt: string; purgeAt: string }
+export interface TrashedProject extends ProjectSummary { deletedAt: string; purgeAt: string; deletedBy?: { kind: string; name: string } }
 export interface ProjectList {
   projects: ProjectSummary[]; trash?: TrashedProject[]; activeProjectId: string | null;
   workspaceRevision: string; migratedProjectId?: string | null;
@@ -70,8 +70,10 @@ export const restoreProject = (id: string) =>
   request<{ project: ProjectSummary; workspaceRevision: string }>(`/api/projects/${encodeURIComponent(id)}/restore`, { method: 'POST' }).then((result) => result.project);
 export const purgeTrashedProject = (id: string) =>
   request<{ trash: TrashedProject[] }>(`/api/projects/trash/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((result) => result.trash);
-export const emptyProjectTrash = () =>
-  request<{ trash: TrashedProject[] }>('/api/projects/trash/empty', { method: 'POST' }).then((result) => result.trash);
+/** Deletes for good only `ids` (what the list showed), so a project an agent
+ * deleted after it loaded stays restorable. */
+export const emptyProjectTrash = (ids: string[]) =>
+  request<{ trash: TrashedProject[] }>('/api/projects/trash/empty', json('POST', { ids })).then((result) => result.trash);
 /** `paramsVersion`: the one-time param upgrades the tab's canvas had when it
  * loaded (lib/savedParamsUpgrades.ts). The backend upgrades the copy from it. */
 export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number) =>
