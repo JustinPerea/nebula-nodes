@@ -551,6 +551,7 @@ def migrate_store(root: Path, backup_root: Path) -> dict[str, Any]:
     moved. Restoring a backup file undoes that board. Boards already migrated
     are not touched, so running it again does nothing.
     """
+    from services.asset_trash import RECORD_SUFFIX, is_trash_folder
     from services.moodboard_store import _write_json
 
     report: dict[str, Any] = {"migrated": [], "skipped": [], "backupDir": None}
@@ -559,7 +560,12 @@ def migrate_store(root: Path, backup_root: Path) -> dict[str, Any]:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_dir = backup_root / f"brief-fields-{stamp}"
     for scope in sorted(p for p in root.iterdir() if p.is_dir()):
-        for path in sorted(scope.glob("*.json")):
+        files = sorted(scope.glob("*.json"))
+        if is_trash_folder(scope):
+            # Boards in Recently deleted migrate too, so a restore brings one
+            # back with its fields. The trash records beside them aren't boards.
+            files = [path for path in files if not path.name.endswith(RECORD_SUFFIX)]
+        for path in files:
             try:
                 board = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:

@@ -477,6 +477,25 @@ def test_migrating_the_store_backs_up_every_file_and_runs_once(tmp_path, monkeyp
     assert again["migrated"] == [] and len(list(backups.iterdir())) == 1
 
 
+def test_a_board_in_recently_deleted_migrates_and_its_trash_record_stays(tmp_path, monkeypatch):
+    root = tmp_path / "moodboards"
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(root))
+    (root / "_global").mkdir(parents=True)
+    board = _old_board(tmp_path, negatives="random artifacts, chrome text")
+    (root / "_global" / f"{board['id']}.json").write_text(json.dumps(board))
+    MoodboardStore().delete(board["id"], deleted_by={"kind": "person", "name": "You"})
+    record = root / ".trash" / f"{board['id']}.trash.json"
+    record_before = record.read_text()
+
+    report = migrate_brief_fields()
+
+    assert [r["id"] for r in report["migrated"]] == [board["id"]] and report["skipped"] == []
+    assert record.read_text() == record_before
+    MoodboardStore().restore(board["id"])
+    saved = json.loads((root / "_global" / f"{board['id']}.json").read_text())
+    assert saved["briefVersion"] == 1 and saved["avoid"] == ["chrome text"]
+
+
 def test_a_board_read_before_the_startup_migration_still_has_its_fields(tmp_path, monkeypatch):
     root = tmp_path / "moodboards"
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(root))

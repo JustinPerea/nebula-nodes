@@ -7862,6 +7862,11 @@ def _stored_asset(kind: str, asset_id: str) -> dict[str, Any] | None:
         return None
 
 
+def _asset_out(kind: str, asset: dict[str, Any]) -> dict[str, Any]:
+    """A saved board or character as the API returns it (a board with its brief)."""
+    return _moodboard_out(asset) if kind == "moodboard" else asset
+
+
 def _trashed_asset(kind: str, asset_id: str) -> dict[str, Any] | None:
     store = _moodboard_store() if kind == "moodboard" else _char_store()
     try:
@@ -10947,10 +10952,11 @@ async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
         # and the caller gets what it asked for.
         live = _stored_asset(kind, item_id)
         if live is not None:
-            return {"restored": kind, "id": item_id, "asset": live, "alreadyRestored": True}
+            return {"restored": kind, "id": item_id, "asset": _asset_out(kind, live), "alreadyRestored": True}
         raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
     await _broadcast_stored_asset(kind, asset)
-    return {"restored": kind, "id": item_id, "asset": asset}
+    # Read back through the store, as GET does (a board gets its brief).
+    return {"restored": kind, "id": item_id, "asset": _asset_out(kind, _stored_asset(kind, item_id) or asset)}
 
 
 @app.delete("/api/trash/{kind}/{item_id}")
