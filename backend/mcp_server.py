@@ -44,7 +44,7 @@ Workflow:
 Spending: the person sets limits (get_spend_limits). A run over a limit, or with a node that has no list price, is refused; send the same plan as propose_change. The person accepts or rejects it in Nebula; agents cannot accept, and get_proposal waits for the decision. Use propose_change too when the change is theirs to decide (reworking their graph, a costly run).
 
 Projects: list_projects, open_project, new_project. Start new work in a new project rather than emptying the person's canvas; they can switch back.
-Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette. A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt); analysis.styleBrief is not. Only the person may change their own hand-written brief.
+Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing). A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt); analysis.styleBrief is not. Only the person may change their own hand-written brief.
 Deleted moodboards, characters and projects go to Recently deleted: list_trash shows them and restore_from_trash brings one back with the same id. Deleting for good is the person's alone.
 
 Answer the person's pins with resolve_pin. Use wait_for_canvas_change to wait for them instead of polling. If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
@@ -937,12 +937,34 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
                                       openWorldHint=False))
-def moodboard_analyze(board: str, ctx: Context | None = None) -> dict[str, Any]:
+def moodboard_analyze(board: str, dry_run: bool = False, accent_min_chroma: float | None = None,
+                      accent_separation: float | None = None, merge_delta_e: float | None = None,
+                      ctx: Context | None = None) -> dict[str, Any]:
     """Analyze a moodboard: palette, separate accent colours and keywords.
     Returns the board with its new analysis and the `brief` generators get
-    now. Direction, Avoid, pinned colours and a hand-written brief stay."""
+    now. Direction, Avoid, pinned colours and a hand-written brief stay.
+    Each colour in analysis.colors lists `sources`: the images it comes from
+    by their board number and id, with its share of each image and its
+    contribution to the board share.
+
+    `dry_run` saves nothing (no person needed): it returns `analysis`, the
+    `brief` generators would get, and `changes` against what's saved
+    (palette and accents added, removed, nudged or reordered; the brief and
+    negatives before and after). With it, `accent_min_chroma` (0-150,
+    default 40), `accent_separation` (dE00 0-100, default 10) and
+    `merge_delta_e` (dE00 0-50, default 5) try other colour thresholds for
+    that run only; without `dry_run` they are refused, since nothing saves
+    custom thresholds."""
     import moodboard_client as boards
 
+    thresholds = {"accent_min_chroma": accent_min_chroma, "accent_separation": accent_separation,
+                  "merge_delta_e": merge_delta_e}
+    if dry_run:
+        return _board_call(boards.dry_run_board, _api(), board, thresholds=thresholds,
+                           headers=_board_headers(ctx))
+    if any(value is not None for value in thresholds.values()):
+        raise RuntimeError("accent_min_chroma, accent_separation and merge_delta_e work only with dry_run: "
+                           "nothing saves custom thresholds")
     return boards.brief(_board_call(boards.analyze_board, _api(), board, _board_headers(ctx)))
 
 

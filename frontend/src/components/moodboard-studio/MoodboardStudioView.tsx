@@ -21,6 +21,7 @@ import { getCurrentProject } from '../../lib/currentProject';
 import type { AssetScope } from '../../store/uiStore';
 import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardImage, MoodboardPinnedColors } from '../../types';
 import { BriefFields, BriefPanel } from './MoodboardBrief';
+import { BoardSwatches, ImageColors, SourcesOutdated } from './MoodboardColors';
 import { overrideAuthor } from './briefAuthor';
 import { AutoGrowTextarea } from '../AutoGrowTextarea';
 import { emptyRailMessage } from './railEmpty';
@@ -522,14 +523,16 @@ export function MoodboardStudioView() {
                 </label>
               </div>
               <div className="moodboard-grid">
-                {draft.images.map((img) => (
+                {draft.images.map((img, index) => (
                   <div key={img.id} className={`moodboard-tile ${img.excluded ? 'moodboard-tile--excluded' : ''}`}>
                     <div className="moodboard-tile__image">
                       <img src={backendAssetUrlSync(img.url)} alt="" draggable={false} />
+                      <span className="moodboard-tile__number" aria-label={`Image ${index + 1}`}>#{index + 1}</span>
                       <button type="button" className="moodboard-tile__remove" onClick={() => removeImage(img.id)}>
                         x
                       </button>
                     </div>
+                    <ImageColors analysis={analysis} imageId={img.id} />
                     <div className="moodboard-tile__controls">
                       <label>
                         <span>Weight {img.weight.toFixed(2)}</span>
@@ -614,8 +617,9 @@ export function MoodboardStudioView() {
 
               {analysis ? (
                 <div className="moodboard-analysis__body">
-                  <Swatches label="Palette" colors={analysis.palette} />
-                  <Swatches label="Accents" colors={analysis.accents ?? []} />
+                  <BoardSwatches label="Palette" role="dominant" analysis={analysis} />
+                  <BoardSwatches label="Accents" role="accent" analysis={analysis} />
+                  <SourcesOutdated analysis={analysis} />
                   <div className="moodboard-analysis__summary">{analysis.summary}</div>
                   {analysis.version < 2 && (
                     <div className="moodboard-analysis__outdated">
@@ -637,20 +641,6 @@ export function MoodboardStudioView() {
           error={deleting.error} onDismiss={deleting.dismiss}
           onUndo={() => { void deleting.undo().then((asset) => { if (asset) openRestored(asset.id, asset.scope); }); }} />
       )}
-    </div>
-  );
-}
-
-function Swatches({ label, colors }: { label: string; colors: string[] }) {
-  if (colors.length === 0) return null;
-  return (
-    <div className="moodboard-swatches">
-      <span className="moodboard-swatches__label">{label}</span>
-      <div className="moodboard-palette" role="list" aria-label={label}>
-        {colors.map((color) => (
-          <span key={color} role="listitem" className="moodboard-palette__swatch" style={{ backgroundColor: color }} title={color} />
-        ))}
-      </div>
     </div>
   );
 }

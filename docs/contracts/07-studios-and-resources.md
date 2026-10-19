@@ -57,10 +57,26 @@ Every moodboard API response adds `brief`, computed on each read and never saved
 | `PUT /api/moodboards/{id}` | Any subset, including the four brief fields | Update. `briefOverride: {text}` sets the override; `briefOverride: null` removes it (the brief goes back to generated). Send only `text`: `basis` and `updatedAt` are refused (422) |
 | `POST /api/moodboards/{id}/brief-override/keep` | — | Keep the override for the board as it is now (clears `stale`). 404 for an unknown board; 409 when there is no override (the message says to set one with `PUT`); 403 when an agent asks to keep the person's text |
 | `POST /api/moodboards/{id}/analyze` | — | Analyze again. Keeps the brief fields and the override |
+| `POST /api/moodboards/{id}/analyze/dry-run` | optional `{thresholds: {accentMinChroma, accentSeparation, mergeDeltaE}}` | What Analyze would give, saving nothing (1.8). 422 for a threshold out of range or an unknown key |
 
 The board keeps no history, so replacing or removing the person's hand-written brief can't be undone. A `PUT` that would replace or remove an override with `by: "person"` (or no `by`), or a Keep of one, is refused unless it comes from the person: 403 with the person gate's `code` (`agent_refused` for an agent marker, `person_required` without this launch's person token), and nothing in that request is saved. An agent may still change every other field, which marks the override stale for the person to answer, and may change an override an agent wrote.
 
 Sending the same override text again keeps its original `basis`, so a client that saves the whole board on every change doesn't hide the "changed since you edited this" state. New text is stamped with the board as it is after the update.
+
+### 1.3a The analysis's colours (version 4)
+
+`analysis.palette` and `analysis.accents` are hex lists in rank order. `analysis.colors` holds the same colours with detail:
+
+| Key | Meaning |
+|-----|---------|
+| `hex`, `role` | The colour, `dominant` (palette) or `accent` |
+| `share` | The part of the weighted board it covers: the sum over images of (image weight ÷ total weight) × its share of the image |
+| `images` | How many images it comes from |
+| `sources` | Each image it comes from, largest contribution first (then board number): `number` (the image's place among all the board's images, 1-based, excluded ones included, as Moodboard Studio and `nebula moodboard show` number them), `id`, `share` (the colour's share of that image; two colours of one image that merge add up) and `contribution` (that image's part of `share`) |
+
+`analysis.images[]` lists each analyzed image (excluded ones are left out) with its `number`, `colors` (`hex`, `share`, `accent`), `palette` and `accents`. Weight-0 images are analyzed but never appear in `sources`.
+
+Analyses before version 4 have no `sources` or `number`. They stay current (the source hash didn't change), so a board isn't marked out of date; the Studio and CLI say to analyze again to see the sources.
 
 ### 1.4 How a board reaches a generator
 
@@ -93,6 +109,26 @@ Each image carries `privateNote` (1.1). `--private-note IMAGE=TEXT` and `{"image
 
 `#moodboard/<id>` opens Moodboard Studio on that board (`frontend/src/hooks/useMoodboardDeepLink.ts`). The scope it opens with is a hint; the board's own `projectId` decides where the Studio and its rail land. While the Studio shows a saved board the hash names it (replaced in place, no history entries), and leaving the Studio clears it. Loading the app with the link goes into the open project; with none it waits on Projects. Double-clicking a Moodboard (or Character) node, double-clicking an item in the Assets panel, the node's Open button and the Studio's rail all open a board without changing the graph; only "Add to canvas" or a drag from the Assets panel adds a node.
 
+### 1.8 Dry run
+
+`POST /api/moodboards/{id}/analyze/dry-run` (`moodboard_analysis.dry_run`) runs the same analysis as Analyze and saves nothing: no board write, no `updatedAt` or `version` change, no broadcast. Anyone may call it, agents included. It returns:
+
+| Key | Meaning |
+|-----|---------|
+| `dryRun`, `id`, `name` | `true`, and the board |
+| `thresholds`, `defaults` | The thresholds used and the defaults |
+| `saved` | `{analyzed, current}`: whether the board has a saved analysis and whether it still describes the board. When it is out of date, `changes` include edits to the board, not only the thresholds |
+| `analysis` | The analysis it would save (1.3a) |
+| `brief` | `compose` (1.2) with that analysis: what generators would get |
+| `changes.palette`, `changes.accents` | `{before, after, added, removed, nudged, reordered, changed}`. `nudged` pairs a removed and an added colour within dE00 2 (`{from, to}`); `reordered` compares the colours on both lists |
+| `changes.brief`, `changes.generatedBrief`, `changes.negativePrompt` | `{before, after, changed}` against the saved board's `brief` |
+
+`thresholds` are Commons' measurement constants (`commons/measure.py`), for this call only: `accentMinChroma` (CIELAB chroma 0–150, default 40), `accentSeparation` (dE00 0–100, default 10) and `mergeDeltaE` (dE00 0–50, default 5; it also sets the board roll-up's merge). One left out or null keeps its default. Nothing saves custom thresholds, and Analyze always uses the defaults. The pinned-colour rule ("within dE00 5 of a kept-out colour") is not a threshold here.
+
+It is a route of its own, not a flag on `/analyze`: an older backend ignores a body it doesn't know and would analyze and save; this route is missing there (404), and the CLI and MCP then say so rather than analyze.
+
+`nebula moodboard analyze <board> --dry-run [--accent-min-chroma N --accent-separation N --merge-delta-e N] [--json]` and `moodboard_analyze(dry_run=True, accent_min_chroma=…, accent_separation=…, merge_delta_e=…)` call it; thresholds without the dry run are refused. `nebula moodboard show` prints each palette and accent colour with its share and source images (`#4 0.35%, #5 0.26%`: image number and the colour's share of it).
+
 ---
 
 ## Changelog
@@ -102,3 +138,4 @@ Each image carries `privateNote` (1.1). `--private-note IMAGE=TEXT` and `{"image
 | 2026-10-18 | Moodboard: brief fields, computed `brief`, override and Keep, migration |
 | 2026-10-19 | Moodboard: `images[].privateNote`, `#moodboard/<id>` links, opening a board never edits the canvas |
 | 2026-10-19 | Moodboard: brief fields and the computed brief from the CLI and MCP (1.6) |
+| 2026-10-19 | Moodboard: colour sources in the analysis (1.3a, analysis version 4) and the dry run (1.8) |

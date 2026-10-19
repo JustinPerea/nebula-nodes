@@ -10574,6 +10574,23 @@ class MoodboardUpdate(BaseModel):
     briefOverride: MoodboardBriefOverrideModel | None = None
 
 
+class MoodboardThresholdsModel(BaseModel):
+    """Colour thresholds for a dry run (services/moodboard_analysis.Thresholds).
+    Any left out keep Commons' defaults; ranges are checked by the service."""
+    model_config = ConfigDict(extra="forbid")
+
+    accentMinChroma: Any = None
+    accentSeparation: Any = None
+    mergeDeltaE: Any = None
+
+
+class MoodboardDryRunRequest(BaseModel):
+    """The optional body of POST /api/moodboards/{id}/analyze/dry-run."""
+    model_config = ConfigDict(extra="forbid")
+
+    thresholds: MoodboardThresholdsModel | None = None
+
+
 class PresetCreate(BaseModel):
     name: str
     category: str = "Style"
@@ -10867,6 +10884,35 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     await _broadcast_stored_asset("moodboard", moodboard)
     return _moodboard_out(moodboard)
+
+
+@app.post("/api/moodboards/{moodboard_id}/analyze/dry-run")
+async def dry_run_moodboard_analysis(moodboard_id: str, body: MoodboardDryRunRequest | None = None) -> dict:
+    """What Analyze would give now, saving nothing: no board write, no
+    broadcast. Returns the analysis, the brief generators would get, and what
+    changed from the saved ones (services/moodboard_analysis.dry_run).
+
+    ``thresholds`` tries other colour thresholds; nothing saves them, and
+    Analyze always uses the defaults. A route of its own rather than a flag
+    on /analyze: an older backend ignores a body it doesn't know, so a flag
+    sent there would analyze and save; this route is simply missing (404).
+    Agents may call it freely, since it changes nothing."""
+    from services.moodboard_analysis import dry_run, parse_thresholds
+
+    request = body or MoodboardDryRunRequest()
+    try:
+        thresholds = parse_thresholds(
+            request.thresholds.model_dump(exclude_unset=True) if request.thresholds else None)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    try:
+        moodboard = _moodboard_store().get(moodboard_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    if moodboard is None:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    # It reads every image file, so it runs off the event loop.
+    return await asyncio.to_thread(dry_run, moodboard, thresholds)
 
 
 @app.delete("/api/moodboards/{moodboard_id}")

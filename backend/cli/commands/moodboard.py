@@ -1,4 +1,4 @@
-"""nebula moodboard list|show|new|add|set|analyze|delete.
+"""nebula moodboard list|show|new|add|set|analyze [--dry-run]|delete.
 
 The boards Moodboard Studio edits, from the terminal. The work is in
 moodboard_client.py, which the MCP server's moodboard tools share; this file
@@ -132,10 +132,105 @@ def _print_board(board: dict[str, Any]) -> None:
     print("  Analysis:")
     if analysis.get("summary"):
         print(f"    {analysis['summary']}")
-    for label, key in (("Palette", "palette"), ("Accents", "accents"), ("Keywords", "keywords")):
-        values = analysis.get(key) or []
-        if values:
-            print(f"    {label}: {' '.join(str(value) for value in values)}")
+    _print_colours(analysis, board.get("id"))
+    if analysis.get("keywords"):
+        print(f"    Keywords: {' '.join(str(value) for value in analysis['keywords'])}")
+
+
+def _pct(share: Any) -> str:
+    """A share (0 to 1) as a percentage, with a decimal or two for small ones."""
+    try:
+        value = float(share) * 100
+    except (TypeError, ValueError):
+        return "?"
+    if value >= 10 or value == 0:
+        return f"{value:.0f}%"
+    return f"{value:.1f}%" if value >= 1 else f"{value:.2f}%"
+
+
+def _sources_text(colour: dict[str, Any]) -> str:
+    """The images a board colour comes from: "#2 44%, #5 3%" (its share of each)."""
+    return ", ".join(f"#{source.get('number')} {_pct(source.get('share'))}" for source in colour.get("sources") or [])
+
+
+def _print_colours(analysis: dict[str, Any], board_id: Any, indent: str = "    ") -> None:
+    """Palette and accents, each colour with its share of the board and the
+    images it comes from. An analysis saved before sources existed lists the
+    colours alone and says how to see them."""
+    colours = [c for c in analysis.get("colors") or [] if isinstance(c, dict)]
+    with_sources = bool(colours) and all("sources" in c for c in colours)
+    for label, key, role in (("Palette", "palette", "dominant"), ("Accents", "accents", "accent")):
+        hexes = analysis.get(key) or []
+        if not hexes:
+            continue
+        if not with_sources:
+            print(f"{indent}{label}: {' '.join(str(value) for value in hexes)}")
+            continue
+        print(f"{indent}{label} (share of the board · images it comes from, with its share of each):")
+        for colour in (c for c in colours if c.get("role") == role):
+            print(f"{indent}  {colour.get('hex')}  {_pct(colour.get('share')):>6}  {_sources_text(colour)}")
+    if (analysis.get("palette") or analysis.get("accents")) and not with_sources:
+        print(f"{indent}Analyze again to see which images each colour comes from: "
+              f"`nebula moodboard analyze {board_id}`")
+
+
+def _print_list_change(label: str, change: dict[str, Any]) -> None:
+    if not change.get("changed"):
+        print(f"    {label}: unchanged")
+        return
+    print(f"    {label}: changed")
+    parts = []
+    if change.get("added"):
+        parts.append(f"added {' '.join(change['added'])}")
+    if change.get("removed"):
+        parts.append(f"removed {' '.join(change['removed'])}")
+    if change.get("nudged"):
+        parts.append("nudged " + ", ".join(f"{pair['from']} → {pair['to']}" for pair in change["nudged"]))
+    if change.get("reordered"):
+        parts.append("order changed")
+    print(f"      {'; '.join(parts)}")
+    print(f"      was: {' '.join(change.get('before') or []) or '(none)'}")
+
+
+def _print_dry_run(result: dict[str, Any]) -> None:
+    thresholds, defaults = result.get("thresholds") or {}, result.get("defaults") or {}
+    print(f"Dry run for {result.get('name')} ({result.get('id')}). Nothing was saved.")
+    names = (("accentMinChroma", "accent min chroma"), ("accentSeparation", "accent separation"),
+             ("mergeDeltaE", "merge dE"))
+    parts = []
+    for key, name in names:
+        value = thresholds.get(key)
+        tried = f"{value:g}" if isinstance(value, (int, float)) else "?"
+        if value != defaults.get(key) and isinstance(defaults.get(key), (int, float)):
+            tried += f" (default {defaults[key]:g})"
+        parts.append(f"{name} {tried}")
+    print(f"  Thresholds: {' · '.join(parts)}")
+    saved = result.get("saved") or {}
+    if not saved.get("analyzed"):
+        print("  The board has no saved analysis, so everything below is new.")
+    elif not saved.get("current"):
+        print("  The saved analysis is out of date, so the changes include edits to the board.")
+    analysis = result.get("analysis") or {}
+    print("  Would give:")
+    _print_colours(analysis, result.get("id"))
+    changes = result.get("changes") or {}
+    print("  Compared with what's saved:")
+    _print_list_change("Palette", changes.get("palette") or {})
+    _print_list_change("Accents", changes.get("accents") or {})
+    brief_change, generated = changes.get("brief") or {}, changes.get("generatedBrief") or {}
+    if brief_change.get("changed"):
+        print("    Brief generators get: changed")
+        print(f"      was: {brief_change.get('before') or '(none)'}")
+        print(f"      now: {brief_change.get('after') or '(none)'}")
+    elif generated.get("changed"):
+        print("    Brief generators get: unchanged (a hand-written brief stays); the generated brief would change")
+    else:
+        print("    Brief generators get: unchanged")
+    negatives = changes.get("negativePrompt") or {}
+    if negatives.get("changed"):
+        print(f"    Negative prompt: changed\n      was: {negatives.get('before')}\n      now: {negatives.get('after')}")
+    else:
+        print(f"    Negative prompt: unchanged ({negatives.get('after') or 'none'})")
 
 
 def _added_line(count: int, skipped: int) -> str:
@@ -231,6 +326,17 @@ def run(client: NebulaClient, args) -> None:
             if not board.get("analysis"):
                 print(f"Its analysis is out of date now: `nebula moodboard analyze {board.get('id')}`")
         elif verb == "analyze":
+            thresholds = {key: getattr(args, key) for key in boards.THRESHOLD_FIELDS}
+            if not args.dry_run:
+                if any(value is not None for value in thresholds.values()):
+                    _fail("thresholds work only with --dry-run: nothing saves custom thresholds")
+            else:
+                result = boards.dry_run_board(api, args.board, thresholds=thresholds, headers=headers)
+                if args.json:
+                    _print_json(result)
+                else:
+                    _print_dry_run(result)
+                return
             board = boards.analyze_board(api, args.board, headers)
             if args.json:
                 _print_json(boards.brief(board))
@@ -345,8 +451,20 @@ def add_parser(sub) -> None:
                             "as a file or - for stdin")
     set_p.add_argument("--json", action="store_true", help="Print JSON")
 
-    analyze_p = msub.add_parser("analyze", help="Analyze a board (palette, accents, brief)")
+    analyze_p = msub.add_parser(
+        "analyze", help="Analyze a board (palette, accents, brief)",
+        description=("--dry-run shows what analyzing would give and what would change, saving nothing. "
+                     "With it, the threshold flags try other colour settings for that run only."))
     analyze_p.add_argument("board", help=board_help)
+    analyze_p.add_argument("--dry-run", dest="dry_run", action="store_true",
+                           help="Show the analysis, the brief and what would change; save nothing")
+    analyze_p.add_argument("--accent-min-chroma", dest="accent_min_chroma", type=float, metavar="N",
+                           help="How saturated an accent must be, CIELAB chroma 0 to 150 (default 40; dry run only)")
+    analyze_p.add_argument("--accent-separation", dest="accent_separation", type=float, metavar="N",
+                           help="How far an accent must sit from the main colours, dE00 0 to 100 "
+                                "(default 10; dry run only)")
+    analyze_p.add_argument("--merge-delta-e", dest="merge_delta_e", type=float, metavar="N",
+                           help="Colours closer than this merge, dE00 0 to 50 (default 5; dry run only)")
     analyze_p.add_argument("--json", action="store_true", help="Print JSON")
 
     delete_p = msub.add_parser(

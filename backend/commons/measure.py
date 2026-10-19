@@ -9,6 +9,10 @@ by index and never emits hex (§6.1 step 3).
 
 Accent `share` is the fraction of all pixels in that accent cluster; those
 pixels also count toward a main entry, so accent shares overlap main shares.
+
+``measure_image`` takes the three thresholds as optional overrides (a moodboard
+dry run tries other values). Left out, each is the module constant, read at
+call time, so every existing caller measures exactly as before.
 """
 from __future__ import annotations
 
@@ -42,15 +46,15 @@ def _assign(points: np.ndarray, centers: np.ndarray) -> np.ndarray:
     return np.argmin(((points[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2), axis=1)
 
 
-def _merge(entries: list[list]) -> list[list]:
-    """Greedily merge the closest pair under MERGE_DELTA_E until none remain."""
+def _merge(entries: list[list], merge_delta_e: float) -> list[list]:
+    """Greedily merge the closest pair under ``merge_delta_e`` until none remain."""
     items = [[np.asarray(c, dtype=np.float64), float(s)] for c, s in entries if s > 0]
     while len(items) > 1:
         best: tuple[float, int, int] | None = None
         for i in range(len(items)):
             for j in range(i + 1, len(items)):
                 d = float(delta_e00(items[i][0], items[j][0]))
-                if d < MERGE_DELTA_E and (best is None or d < best[0]):
+                if d < merge_delta_e and (best is None or d < best[0]):
                     best = (d, i, j)
         if best is None:
             break
@@ -61,18 +65,19 @@ def _merge(entries: list[list]) -> list[list]:
     return items
 
 
-def _palette(lab: np.ndarray) -> list[dict]:
+def _palette(lab: np.ndarray, accent_min_chroma: float, accent_separation: float,
+             merge_delta_e: float) -> list[dict]:
     n = lab.shape[0]
     centers = _kmeans_lab(lab, K)
     labels = _assign(lab, centers)
     shares = np.bincount(labels, minlength=len(centers)) / float(n)
-    mains = _merge([[c, s] for c, s in zip(centers, shares)])
+    mains = _merge([[c, s] for c, s in zip(centers, shares)], merge_delta_e)
     mains.sort(key=lambda it: (-round(it[1], 6), float(it[0][0])))
 
     main_centers = np.array([c for c, _ in mains])
     chroma = np.hypot(lab[:, 1], lab[:, 2])
     nearest_main = np.min(delta_e00(lab[:, None, :], main_centers[None, :, :]), axis=1)
-    candidates = lab[(chroma >= ACCENT_MIN_CHROMA) & (nearest_main >= ACCENT_SEPARATION)]
+    candidates = lab[(chroma >= accent_min_chroma) & (nearest_main >= accent_separation)]
 
     accents: list[list] = []
     if candidates.shape[0] >= max(1, int(ACCENT_MIN_SHARE * n)):
@@ -83,7 +88,7 @@ def _palette(lab: np.ndarray) -> list[dict]:
             if not (ACCENT_MIN_SHARE <= share <= ACCENT_MAX_SHARE):
                 continue
             existing = [m[0] for m in mains] + [a[0] for a in accents]
-            if min(float(delta_e00(c, e)) for e in existing) >= MERGE_DELTA_E:
+            if min(float(delta_e00(c, e)) for e in existing) >= merge_delta_e:
                 accents.append([c, share])
         accents.sort(key=lambda it: (-round(it[1], 6), float(it[0][0])))
 
@@ -91,7 +96,7 @@ def _palette(lab: np.ndarray) -> list[dict]:
     for c, s in mains:
         c_chroma = float(np.hypot(c[1], c[2]))
         out.append({"hex": lab_to_hex(c), "share": round(s, 4),
-                    "is_accent": bool(s < ACCENT_MAX_SHARE and c_chroma >= ACCENT_MIN_CHROMA)})
+                    "is_accent": bool(s < ACCENT_MAX_SHARE and c_chroma >= accent_min_chroma)})
     for c, s in accents:
         out.append({"hex": lab_to_hex(c), "share": round(s, 4), "is_accent": True})
     for index, entry in enumerate(out):
@@ -99,12 +104,18 @@ def _palette(lab: np.ndarray) -> list[dict]:
     return [{"index": e["index"], "hex": e["hex"], "share": e["share"], "is_accent": e["is_accent"]} for e in out]
 
 
-def measure_image(img: Image.Image) -> dict:
+def measure_image(img: Image.Image, *, accent_min_chroma: float | None = None,
+                  accent_separation: float | None = None, merge_delta_e: float | None = None) -> dict:
     rgb = _downsampled_rgb(img)
     lab = rgb_to_lab(rgb.reshape(-1, 3).astype(np.float64))
     w, h = img.size
     return {
-        "palette": _palette(lab),
+        "palette": _palette(
+            lab,
+            ACCENT_MIN_CHROMA if accent_min_chroma is None else float(accent_min_chroma),
+            ACCENT_SEPARATION if accent_separation is None else float(accent_separation),
+            MERGE_DELTA_E if merge_delta_e is None else float(merge_delta_e),
+        ),
         "value_range": {
             "low": round(float(np.percentile(lab[:, 0], 2)), 1),
             "high": round(float(np.percentile(lab[:, 0], 98)), 1),

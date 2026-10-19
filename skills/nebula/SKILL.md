@@ -141,10 +141,22 @@ nebula moodboard set <board> --unavoid "neon signage" --unpin-color "#0000FF"
 nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --keep-brief
 nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
 nebula moodboard analyze <board>
+nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
 nebula moodboard list
 nebula moodboard delete <board>
 ```
 
+- `show` lists each palette and accent colour with its share of the board
+  and the images it comes from (`#4 0.35%, #5 0.26%`: image number from
+  `show`, and the colour's share of that image); `--json` has the full
+  `sources` (number, id, share, contribution). An older analysis has none
+  until you `analyze` again.
+- `analyze --dry-run` shows what analyzing would give and what would change
+  (palette and accents added, removed or reordered; the brief generators get;
+  the negatives), and saves nothing, so you can run it without asking. With
+  it, `--accent-min-chroma` (0-150, default 40), `--accent-separation`
+  (0-100, default 10) and `--merge-delta-e` (0-50, default 5) try other
+  colour thresholds for that run only. Nothing saves custom thresholds.
 - Images can be files, folders (their images in name order), http(s) image
   links, or Nebula outputs (`/api/outputs/...`). Links are downloaded on your
   machine (PNG, JPEG, GIF or WebP, up to 20 MB), then uploaded to Nebula.
