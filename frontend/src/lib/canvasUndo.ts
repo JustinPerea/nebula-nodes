@@ -337,3 +337,76 @@ export function restoreRequest(
   const empty = !body.nodes.length && !body.remove.length && !body.wire.length && !body.unwire.length;
   return empty ? null : body;
 }
+
+// -- a finished arrange -----------------------------------------------------------
+
+type Point = { x: number; y: number };
+
+/** A whole-canvas undo snapshot (graphStore's UndoSnapshot). */
+interface CanvasSnapshot {
+  nodes: Node<NodeData>[];
+  edges: Edge[];
+}
+
+function addedBy(entry: ForeignEdit | CanvasSnapshot, id: string): entry is ForeignEdit {
+  return isForeignEdit(entry) && entry.before.nodes[id] === null && Boolean(entry.after.nodes[id]);
+}
+
+/**
+ * Make a finished arrange part of the agent edit that asked for it, instead
+ * of a step of its own. `history` is every step, oldest first: the undo
+ * stack, then the redo stack from its top down. `positions` are where the
+ * arrange put the nodes, `shown` where this canvas had them before.
+ *
+ * The step that added the nodes (the newest foreign edit that did, on either
+ * stack) gets the arranged positions in its `after`, so redoing it puts the
+ * nodes there. Every later step still holds the positions the nodes had
+ * before the arrange (a snapshot of the person's next edit holds the whole
+ * canvas), so where one does, it gets the arranged ones too: undoing the
+ * person's later edit must not put the agent's nodes back where they were.
+ * With no such step (this tab opened after the edit, or the step fell off
+ * the stack) only the steps it has are changed.
+ *
+ * Changes the entries in place: the undo notice's button and a refused
+ * restore find their step by identity.
+ */
+export function foldArrange(
+  history: Array<ForeignEdit | CanvasSnapshot>,
+  positions: Record<string, Point>,
+  shown: Record<string, Point | undefined>,
+): void {
+  const ids = Object.keys(positions);
+  let start = -1;
+  for (let index = history.length - 1; index >= 0 && start < 0; index -= 1) {
+    if (ids.some((id) => addedBy(history[index], id))) start = index;
+  }
+  const adding = start >= 0 ? history[start] as ForeignEdit : null;
+  // Where each node was before the arrange: as the agent's edit placed it, else as this canvas shows it.
+  const was: Record<string, Point | undefined> = Object.fromEntries(ids.map((id) => {
+    const placed = adding && addedBy(adding, id) ? adding.after.nodes[id] : null;
+    return [id, placed ? placed.position : shown[id]];
+  }));
+  const arranged = (node: Node<NodeData>): Node<NodeData> => {
+    const to = positions[node.id];
+    const from = was[node.id];
+    if (!to || !from || node.position?.x !== from.x || node.position?.y !== from.y) return node;
+    return { ...node, position: { ...to } };
+  };
+  if (adding) {
+    for (const id of ids) {
+      if (addedBy(adding, id)) adding.after.nodes[id] = arranged(adding.after.nodes[id]!);
+    }
+  }
+  for (const entry of history.slice(start + 1)) {
+    if (isForeignEdit(entry)) {
+      for (const slice of [entry.before, entry.after]) {
+        for (const id of ids) {
+          const node = slice.nodes[id];
+          if (node) slice.nodes[id] = arranged(node);
+        }
+      }
+    } else if (entry.nodes.some((node) => node.id in positions)) {
+      entry.nodes = entry.nodes.map(arranged);
+    }
+  }
+}
