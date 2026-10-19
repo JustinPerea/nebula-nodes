@@ -504,6 +504,7 @@ Runs alongside PR3 and PR5.
   - **Resize:** a corner `NodeResizeControl` with `keepAspectRatio`. The weight readout in `onResize` pops on each 0.05 step. One `resize` op is sent in `onResizeEnd`. Size is capped at full weight.
   - **Badges:** `#n · w`, a dot for each note, and a set-aside dim with desaturation.
   - **Sliders:** the side panel loses the weight slider. The List view slider now resizes the card.
+  - **Measure follows steering edits (Q9):** the Studio runs the free `analyze_moodboard` 1.5 s after the last steering edit (resize, set aside, add, remove, steering note), so the colours never sit cleared until Analyze. One run at a time; a newer edit cancels the wait.
   - **Motion tokens** in `moodboard-canvas.css`, sampled by a new `lib/springs.ts` as `linear()` curves, following `provider-switcher.css:7-12` and `asset-trash.css:138`:
     - `--mb-spring-move`: k 380, c 34, about 420 ms. Programmatic moves: add, sort, arrange, undo, agent edits.
     - `--mb-spring-pop`: k 500, c 36, 320 ms. Badges, chips, count ticks.
