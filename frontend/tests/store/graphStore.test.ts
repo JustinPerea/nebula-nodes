@@ -622,7 +622,7 @@ describe('graphStore', () => {
 
     expect(nodeId).toBe('n1');
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://localhost:8000/api/graph/export', { headers: expect.any(Headers) });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://localhost:8000/api/graph', { method: 'DELETE', headers: expect.any(Headers) });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://localhost:8000/api/graph?force=true', { method: 'DELETE', headers: expect.any(Headers) });
     expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8000/api/graph/node');
     expect(fetchMock.mock.calls[2][1]).toMatchObject({ method: 'POST' });
     expect(useGraphStore.getState().backendFreshStartPending).toBe(false);

@@ -6,6 +6,9 @@ interface CharacterStudioToolbarProps {
   saveState: SaveState;
   saveError: string | null;
   onRetry: () => void;
+  /** Shown for a saved Character: moves it to Recently deleted. */
+  onDelete?: () => void;
+  deleteDisabled?: boolean;
 }
 
 const SAVE_LABEL: Record<SaveState, string> = {
@@ -25,6 +28,8 @@ export function CharacterStudioToolbar({
   saveState,
   saveError,
   onRetry,
+  onDelete,
+  deleteDisabled = false,
 }: CharacterStudioToolbarProps) {
   const exitCharacterEditor = useUIStore((s) => s.exitCharacterEditor);
   const label = SAVE_LABEL[saveState];
@@ -47,6 +52,17 @@ export function CharacterStudioToolbar({
           title={saveError ?? 'Retry save'}
         >
           Retry
+        </button>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          className="character-studio-toolbar__retry"
+          title="Move to Recently deleted"
+          disabled={deleteDisabled}
+          onClick={onDelete}
+        >
+          Delete
         </button>
       )}
     </WorkspaceHeader>

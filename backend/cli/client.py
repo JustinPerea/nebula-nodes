@@ -190,8 +190,10 @@ class NebulaClient:
                 ) from exc
             raise RuntimeError(exc.detail) from exc
 
-    def clear_graph(self) -> dict[str, Any]:
-        return self._request("DELETE", "/api/graph")
+    def clear_graph(self, force: bool = False) -> dict[str, Any]:
+        """Empty the open project. The backend refuses a project that has
+        nodes without force (409), whoever asks."""
+        return self._request("DELETE", "/api/graph", params={"force": "true"} if force else None)
 
     def import_graph(self, body: dict[str, Any]) -> dict[str, Any]:
         """Replace the graph with a saved one in one step (POST /api/graph/import)."""
@@ -216,9 +218,19 @@ class NebulaClient:
     def list_projects(self) -> dict[str, Any]:
         return self._request("GET", "/api/projects")
 
+    def create_project(self, name: str, workspace_revision: str) -> dict[str, Any]:
+        return self._request("POST", "/api/projects", json={"name": name, "workspaceRevision": workspace_revision})
+
     def open_project(self, project_id: str, workspace_revision: str) -> dict[str, Any]:
         return self._request("POST", f"/api/projects/{quote(project_id, safe='')}/open",
                              json={"workspaceRevision": workspace_revision})
+
+    # -- Recently deleted --
+    def list_trash(self, kind: str | None = None) -> dict[str, Any]:
+        return self._request("GET", "/api/trash", params={"kind": kind} if kind else None)
+
+    def restore_trashed(self, kind: str, item_id: str) -> dict[str, Any]:
+        return self._request("POST", f"/api/trash/{quote(kind, safe='')}/{quote(item_id, safe='')}/restore")
 
     # -- Execution --
     def run_graph(self, target_node_id: str | None = None, wait: float | None = None) -> dict[str, Any]:

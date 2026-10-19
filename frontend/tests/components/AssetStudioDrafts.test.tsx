@@ -8,8 +8,16 @@ vi.mock('../../src/lib/api', async (original) => ({ ...await original<typeof imp
   fetchCharacters: api.characters, fetchMoodboards: api.boards, createCharacter: api.createCharacter,
   updateCharacter: api.updateCharacter, createMoodboard: api.createBoard, updateMoodboard: api.updateBoard,
   analyzeMoodboard: api.analyze }));
+// Only `/api/uploads` goes to the upload mock. The Studios' Recently deleted
+// list also fetches, and must get its own Response, not the upload's.
 vi.mock('../../src/lib/backend', async (original) => ({ ...await original<typeof import('../../src/lib/backend')>(),
-  apiFetch: api.upload }));
+  apiFetch: (path: string, init?: RequestInit) => {
+    if (path === '/api/uploads') return api.upload(path, init);
+    const json = { headers: { 'content-type': 'application/json' } };
+    return Promise.resolve(path.startsWith('/api/trash')
+      ? new Response(JSON.stringify({ items: [] }), json)
+      : new Response(JSON.stringify({ detail: 'not found' }), { ...json, status: 404 }));
+  } }));
 vi.mock('../../src/lib/currentProject', () => ({ getCurrentProject: api.project }));
 vi.mock('../../src/components/character-studio/CharacterTestPanel', () => ({ CharacterTestPanel: () => null }));
 

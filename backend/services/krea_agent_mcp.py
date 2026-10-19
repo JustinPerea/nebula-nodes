@@ -40,7 +40,11 @@ NEBULA_MCP_TOOLS = (
     "propose_change", "get_proposal", "withdraw_proposal",
     "find_nodes", "describe_node", "edit_canvas", "remove_from_canvas",
     "run_nodes", "get_run", "cancel_run", "view_output", "get_spend_limits",
+    "list_projects", "open_project", "new_project",
+    "list_trash", "restore_from_trash",
     "commons_search", "commons_get", "commons_add", "commons_comment", "commons_borrow",
+    "moodboard_list", "moodboard_get", "moodboard_create", "moodboard_add", "moodboard_update",
+    "moodboard_analyze", "moodboard_delete",
 )
 # In-app Codex may wait this long for one tool call (run_nodes/get_run wait up
 # to 45 s by default and 300 s at most); Codex's own default is 60 s.

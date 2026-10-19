@@ -72,7 +72,7 @@ def test_stale_authoring_put_keeps_completed_media_variations_and_selection_afte
     exported = reloaded.get_state()["nodes"][0]
     assert exported["params"]["scene"] == saved
     assert exported["outputs"]["shot_a"]["value"] == "https://fixture.example/other.png"
-    broadcast.assert_awaited_once_with()
+    broadcast.assert_awaited_once_with(edit=True)
 
 
 @pytest.mark.parametrize("canonical_runtime", [

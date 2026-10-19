@@ -4,6 +4,7 @@ import json
 import copy
 import math
 import os
+import re
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -11,6 +12,16 @@ from uuid import uuid4
 from services.file_access import require_allowed_path, validate_file_references
 from services.retired_nodes import migrate_graph, migrate_node
 from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrade_flat_nodes
+
+
+SHORT_ID_RE = re.compile(r"n([0-9]{1,9})")
+# How far an explicit id (add_node's node_id) may sit above the counter. The
+# counter moves past a restored id, so an unbounded one (n999999999) would
+# make every later id too long for SHORT_ID_RE, and undo could never put
+# those nodes back. Ids above the counter are legitimate after an import or
+# Clear resets it (undoing them brings the old ids back), so this is a
+# ceiling, not "no higher than the counter".
+MAX_ID_JUMP = 1_000_000
 
 
 class CLIGraph:
@@ -59,6 +70,7 @@ class CLIGraph:
         params: dict[str, Any],
         position: dict[str, float] | None = None,
         outputs: dict[str, Any] | None = None,
+        node_id: str | None = None,
     ) -> str:
         """Add a node and return its short sequential ID (e.g. 'n1').
 
@@ -66,9 +78,25 @@ class CLIGraph:
         path so loaded graphs preserve their layout and any previously-generated
         results. Nodes created through `nebula create` omit both and get
         auto-laid-out by the export function.
+
+        *node_id* puts a removed node back under its old id (undo on the
+        canvas, POST /api/graph/restore). It must be a short id that isn't in
+        use, and no higher than the counter or MAX_ID_JUMP; the counter moves
+        past it so no later node can reuse it.
         """
-        self._counter += 1
-        short_id = f"n{self._counter}"
+        if node_id is None:
+            self._counter += 1
+            short_id = f"n{self._counter}"
+        else:
+            match = SHORT_ID_RE.fullmatch(node_id)
+            if match is None:
+                raise ValueError(f"'{node_id}' is not a short node id like n3")
+            if node_id in self.nodes:
+                raise ValueError(f"Node '{node_id}' already exists")
+            if int(match.group(1)) > max(self._counter, MAX_ID_JUMP):
+                raise ValueError(f"'{node_id}' is higher than any id this graph has handed out")
+            short_id = node_id
+            self._counter = max(self._counter, int(match.group(1)))
         node: dict[str, Any] = {
             "id": short_id,
             "definitionId": definition_id,
@@ -113,6 +141,13 @@ class CLIGraph:
         if node_id not in self.nodes:
             raise ValueError(f"Node '{node_id}' not found")
         self.nodes[node_id]["params"].update(params)
+        self._maybe_persist()
+
+    def set_params(self, node_id: str, params: dict[str, Any]) -> None:
+        """Replace the node's params (``update_params`` merges)."""
+        if node_id not in self.nodes:
+            raise ValueError(f"Node '{node_id}' not found")
+        self.nodes[node_id]["params"] = dict(params)
         self._maybe_persist()
 
     def set_label(self, node_id: str, label: str | None) -> None:

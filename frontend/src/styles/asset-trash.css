@@ -1,0 +1,208 @@
+/* Recently deleted inside Moodboard Studio and Character Studio, the Undo
+   toast after a delete, and the Restore error on a canvas card.
+   components/asset-trash/AssetTrash.tsx, components/nodes/RestoreTrashedAsset.tsx */
+
+body.app-slava-restraint .asset-trash {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--sr-edge);
+}
+
+body.app-slava-restraint .asset-trash__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+body.app-slava-restraint .asset-trash__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 6px 0 2px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--sr-ink-light);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .asset-trash__toggle:hover { color: var(--sr-ink); background: var(--sr-pending-soft); }
+body.app-slava-restraint .asset-trash__toggle svg { width: 13px; height: 13px; transition: transform 220ms cubic-bezier(0.34, 1.36, 0.64, 1); }
+body.app-slava-restraint .asset-trash__toggle[aria-expanded='true'] svg { transform: rotate(90deg); }
+
+body.app-slava-restraint .asset-trash__count {
+  margin-left: 2px;
+  color: var(--sr-ink-meta);
+  font-family: var(--sr-mono);
+  font-size: 10px;
+}
+
+body.app-slava-restraint .asset-trash__note,
+body.app-slava-restraint .asset-trash__error {
+  margin: 0;
+  color: var(--sr-ink-meta);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+body.app-slava-restraint .asset-trash__error { color: var(--sr-danger); }
+
+body.app-slava-restraint .asset-trash__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+body.app-slava-restraint .asset-trash__row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 6px 8px;
+  padding: 6px;
+  border: 1px dashed var(--sr-edge-strong);
+  border-radius: 3px;
+}
+
+body.app-slava-restraint .asset-trash__thumb {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.24);
+  opacity: 0.6;
+}
+
+body.app-slava-restraint .asset-trash__thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+body.app-slava-restraint .asset-trash__meta { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+
+body.app-slava-restraint .asset-trash__name {
+  overflow: hidden;
+  color: var(--sr-ink-light);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .asset-trash__sub { color: var(--sr-ink-meta); font-size: 10px; line-height: 1.35; }
+
+body.app-slava-restraint .asset-trash__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+body.app-slava-restraint .asset-trash__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 2px;
+  background: none;
+  color: var(--sr-ink);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .asset-trash__button svg { width: 12px; height: 12px; }
+body.app-slava-restraint .asset-trash__button:hover:not(:disabled) { border-color: #f59e0b; color: #f59e0b; }
+body.app-slava-restraint .asset-trash__button:disabled { opacity: var(--sr-disabled-opacity); cursor: default; }
+
+body.app-slava-restraint .asset-trash__button--danger,
+body.app-slava-restraint .asset-trash__button--danger:hover:not(:disabled) {
+  border-color: var(--sr-danger);
+  background: var(--sr-danger);
+  color: #fff;
+  font-weight: 600;
+}
+
+body.app-slava-restraint .asset-trash__confirm { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+body.app-slava-restraint .asset-trash__confirm-prompt { width: 100%; color: var(--sr-ink-light); font-size: 11px; }
+
+body.app-slava-restraint .asset-trash__toast {
+  --asset-trash-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100vw - 32px);
+  padding: 6px 6px 6px 16px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 6px;
+  background: var(--sr-canvas-elevated);
+  color: var(--sr-ink);
+  font-size: 13px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+  transform: translateX(-50%);
+  animation: asset-trash-toast-in 420ms var(--asset-trash-spring) both;
+}
+
+body.app-slava-restraint .asset-trash__toast-text { min-width: 0; margin-right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+body.app-slava-restraint .asset-trash__toast-undo {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--sr-ink);
+  border-radius: 2px;
+  background: var(--sr-ink);
+  color: var(--sr-canvas);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+body.app-slava-restraint .asset-trash__toast-undo:disabled { opacity: var(--sr-disabled-opacity); cursor: default; }
+
+body.app-slava-restraint .asset-trash__toast-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--sr-ink-meta);
+  cursor: pointer;
+}
+
+body.app-slava-restraint .asset-trash__toast-close:hover { background: var(--sr-pending-soft); color: var(--sr-ink); }
+body.app-slava-restraint .asset-trash__toast-close svg { width: 14px; height: 14px; }
+
+body.app-slava-restraint .moodboard-node__open-error,
+body.app-slava-restraint .character-node__open-error {
+  margin-top: 4px;
+  color: var(--sr-danger);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+@keyframes asset-trash-toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px) scale(0.98); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.app-slava-restraint .asset-trash__toast { animation: none; }
+  body.app-slava-restraint .asset-trash__toggle svg { transition: none; }
+}

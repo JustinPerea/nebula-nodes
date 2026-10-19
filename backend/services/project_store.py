@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
+from services import project_cover
 from services.saved_graph_upgrades import PARAMS_VERSION, catalog_params_behind, upgrade_catalog
 
 MAX_PROJECT_BYTES = 16 * 1024 * 1024
@@ -57,9 +58,19 @@ def empty_snapshot() -> dict[str, Any]:
 
 
 def metadata(project: dict[str, Any]) -> dict[str, Any]:
-    return {key: copy.deepcopy(project[key]) for key in (
+    found = {key: copy.deepcopy(project[key]) for key in (
         "id", "name", "createdAt", "updatedAt", "lastOpenedAt", "nodeCount", "edgeCount", "thumbnail",
     )}
+    # Saved before covers existed: refresh_metadata fills it on the next write
+    # (the listing backfills it, see needs_cover).
+    found["cover"] = copy.deepcopy(project.get("cover"))
+    if project.get("createdBy"):
+        found["createdBy"] = copy.deepcopy(project["createdBy"])
+    return found
+
+
+def needs_cover(project: dict[str, Any]) -> bool:
+    return "cover" not in project
 
 
 def public_project(project: dict[str, Any]) -> dict[str, Any]:
@@ -70,16 +81,10 @@ def refresh_metadata(project: dict[str, Any], *, touch: bool = True) -> None:
     snapshot = project["snapshot"]
     project["nodeCount"] = len(snapshot["nodes"])
     project["edgeCount"] = len(snapshot["edges"])
-    project["thumbnail"] = None
-    for node in reversed(snapshot["nodes"]):
-        for port in (node.get("data", {}).get("outputs") or {}).values():
-            if isinstance(port, dict) and port.get("type") == "Image":
-                value = port.get("value")
-                if isinstance(value, str) and len(value) <= 8192 and value.startswith(("/api/outputs/", "http://", "https://")):
-                    project["thumbnail"] = value
-                    break
-        if project["thumbnail"]:
-            break
+    # The card's picture (services/project_cover.py). `thumbnail` stays its
+    # first image for clients from before covers.
+    project["cover"] = project_cover.cover(snapshot, project.get("coverPin"))
+    project["thumbnail"] = project_cover.first_image(project["cover"])
     if touch:
         project["updatedAt"] = now()
 
@@ -90,13 +95,21 @@ def purge_at(entry: dict[str, Any]) -> str:
 
 
 def trash_metadata(entry: dict[str, Any]) -> dict[str, Any]:
-    return {**metadata(entry), "deletedAt": entry["deletedAt"], "purgeAt": purge_at(entry)}
+    result = {**metadata(entry), "deletedAt": entry["deletedAt"], "purgeAt": purge_at(entry)}
+    # Projects deleted before 2026-10-18 didn't record who deleted them.
+    if isinstance(entry.get("deletedBy"), dict):
+        result["deletedBy"] = entry["deletedBy"]
+    return result
 
 
-def move_to_trash(catalog: dict[str, Any], project_id: str) -> dict[str, Any]:
-    """Move a project, pins and all, out of the list and into the trash."""
+def move_to_trash(catalog: dict[str, Any], project_id: str,
+                  deleted_by: dict[str, str] | None = None) -> dict[str, Any]:
+    """Move a project, pins and all, out of the list and into the trash.
+    ``deleted_by`` is who asked (services/canvas_events.actor_record)."""
     entry = catalog["projects"].pop(project_id)
     entry["deletedAt"] = now()
+    if deleted_by:
+        entry["deletedBy"] = dict(deleted_by)
     catalog.setdefault("trash", {})[project_id] = entry
     if catalog.get("migratedProjectId") == project_id:
         catalog.pop("migratedProjectId", None)
@@ -107,6 +120,7 @@ def restore_from_trash(catalog: dict[str, Any], project_id: str) -> dict[str, An
     """Put a trashed project back in the list. It comes back closed."""
     entry = catalog["trash"].pop(project_id)
     entry.pop("deletedAt", None)
+    entry.pop("deletedBy", None)
     catalog["projects"][project_id] = entry
     return entry
 

@@ -120,6 +120,17 @@ describe('ProjectHome', () => {
     vi.useRealTimers();
   });
 
+  it('says an agent deleted a project from its kind, even when it calls itself "You"', () => {
+    const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    render(<ProjectHome {...props({ trash: [
+      { ...project({ id: 'a', name: 'By agent' }), ...base, deletedBy: { kind: 'agent', name: 'Y\u043eu' } },
+      { ...project({ id: 'p', name: 'By person' }), ...base, deletedBy: { kind: 'person', name: 'You' } },
+    ] })} />);
+    fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+    expect(screen.getByRole('listitem', { name: 'By agent' }).textContent).toContain('by Y\u043eu (agent)');
+    expect(screen.getByRole('listitem', { name: 'By person' }).textContent).not.toContain(' by ');
+  });
+
   it('hides Recently deleted when the trash is empty', () => {
     render(<ProjectHome {...props({ trash: [] })} />);
     expect(screen.queryByRole('button', { name: /Recently deleted/ })).toBeNull();
@@ -140,6 +151,46 @@ describe('ProjectHome', () => {
     fireEvent.error(image!);
     expect(card.querySelector('img')).toBeNull();
     expect(card.querySelector('.project-home__graph')).toBeTruthy();
+  });
+
+  it('shows the project’s cover image, and a 2x2 mosaic when it has only references', () => {
+    render(<ProjectHome {...props({ projects: [
+      project({ id: 'made', name: 'Made', thumbnail: '/api/outputs/old.png', cover: { source: 'output', images: ['/api/outputs/new.png'] } }),
+      project({ id: 'refs', name: 'Refs', cover: { source: 'references', images: ['/api/outputs/a.png', '/api/outputs/b.png', '/api/outputs/c.png', '/api/outputs/d.png'] } }),
+    ] })} />);
+    const made = screen.getByRole('article', { name: 'Made' });
+    expect([...made.querySelectorAll('img')].map((img) => img.getAttribute('src'))).toEqual(['http://127.0.0.1:8060/api/outputs/new.png']);
+    const refs = screen.getByRole('article', { name: 'Refs' });
+    const mosaic = within(refs).getByTestId('project-cover-mosaic');
+    expect(mosaic.className).toContain('project-home__mosaic--4');
+    expect(mosaic.querySelectorAll('img')).toHaveLength(4);
+    // A broken tile drops out; the rest stay.
+    fireEvent.error(mosaic.querySelector('img')!);
+    expect(refs.querySelectorAll('img')).toHaveLength(3);
+  });
+
+  it('lets the person pin a cover from the project’s images, or go back to automatic', async () => {
+    const onPinCover = vi.fn();
+    const loadCoverChoices = vi.fn(async () => ({
+      images: [{ url: '/api/outputs/new.png', kind: 'output' as const }, { url: '/api/outputs/ref.png', kind: 'reference' as const }],
+      pinned: '/api/outputs/ref.png', cover: { source: 'pinned' as const, images: ['/api/outputs/ref.png'] },
+    }));
+    render(<ProjectHome {...props({ loadCoverChoices, onPinCover })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a cover for Glass campaign' }));
+    expect(loadCoverChoices).toHaveBeenCalledWith('glass');
+    const pinned = await screen.findByRole('button', { name: 'Use this reference as the cover' });
+    expect(pinned.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Use this image as the cover' }));
+    expect(onPinCover).toHaveBeenCalledWith('glass', '/api/outputs/new.png');
+    expect(screen.queryByRole('group', { name: 'Cover for Glass campaign' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a cover for Glass campaign' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Automatic' }));
+    expect(onPinCover).toHaveBeenLastCalledWith('glass', null);
+  });
+
+  it('names the agent that made a project', () => {
+    render(<ProjectHome {...props({ projects: [project({ createdBy: { kind: 'agent', name: 'Claude Code' } })] })} />);
+    expect(screen.getByText(/Made by Claude Code/)).toBeTruthy();
   });
 
   it('displays a load failure with a retry action rather than the first-install empty state', () => {

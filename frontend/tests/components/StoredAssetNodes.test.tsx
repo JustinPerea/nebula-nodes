@@ -48,6 +48,8 @@ function board(id: string, name: string, images: number): Moodboard {
 }
 
 let boards: Record<string, Moodboard>;
+/** Boards in Recently deleted: GET answers 404 with code "in_trash" (backend main.py _asset_not_found). */
+let trashedBoards: Record<string, Moodboard>;
 let posted: Array<{ path: string; body: unknown }>;
 
 function reply(body: unknown, status = 200) {
@@ -56,15 +58,31 @@ function reply(body: unknown, status = 200) {
 
 beforeEach(() => {
   boards = { gm: board('gm', 'Good Machines', 3), other: board('other', 'Other board', 1) };
+  trashedBoards = {};
   posted = [];
   net.apiFetch.mockReset().mockImplementation(async (path: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
+    const restore = /^\/api\/trash\/moodboard\/([^/]+)\/restore$/.exec(path);
+    if (method === 'POST' && restore && trashedBoards[restore[1]]) {
+      boards[restore[1]] = trashedBoards[restore[1]];
+      delete trashedBoards[restore[1]];
+      return reply({ status: 'restored' });
+    }
     if (method !== 'GET') {
       posted.push({ path, body: init?.body ? JSON.parse(String(init.body)) : null });
       return reply({ id: 'n9' });
     }
     const one = /^\/api\/moodboards\/([^?]+)$/.exec(path);
-    if (one) return boards[one[1]] ? reply(boards[one[1]]) : reply({ detail: 'not found' }, 404);
+    if (one) {
+      if (boards[one[1]]) return reply(boards[one[1]]);
+      const gone = trashedBoards[one[1]];
+      if (gone) {
+        return reply({ detail: 'in Recently deleted', code: 'in_trash', trashed: {
+          kind: 'moodboard', id: gone.id, name: gone.name, thumbnail: gone.thumbnail,
+          deletedAt: '2026-10-18T00:00:00Z', deletedBy: { kind: 'agent', name: 'Claude' } } }, 404);
+      }
+      return reply({ detail: 'not found' }, 404);
+    }
     if (path.startsWith('/api/moodboards?scope=global')) return reply(Object.values(boards));
     if (path.startsWith('/api/moodboards?scope=project')) return reply([]);
     if (path === '/api/characters/c1') {
@@ -107,14 +125,30 @@ describe('Moodboard card', () => {
     expect(screen.getByText('4 images · look')).toBeVisible();
   });
 
-  it('says the board is gone when it is deleted, and offers no Open button', async () => {
+  it('says a deleted board is in Recently deleted, offers Restore and no Open button', async () => {
     card(MoodboardNode, { moodboard: 'gm' }, true);
     await screen.findByText('Good Machines');
     expect(screen.getByRole('button', { name: 'Open Moodboard' })).toBeVisible();
+    trashedBoards.gm = boards.gm;
+    delete boards.gm;
+    emit({ type: 'storedAssetChanged', kind: 'moodboard', id: 'gm', deleted: true });
+    expect(await screen.findByText('In Recently deleted')).toBeVisible();
+    expect(screen.getByText('Good Machines')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Open Moodboard' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    expect(await screen.findByText('3 images · look')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Open Moodboard' })).toBeVisible();
+  });
+
+  it('says the board is gone when it is deleted for good, and offers no Open button', async () => {
+    card(MoodboardNode, { moodboard: 'gm' }, true);
+    await screen.findByText('Good Machines');
+    delete boards.gm;
     emit({ type: 'storedAssetChanged', kind: 'moodboard', id: 'gm', deleted: true });
     expect(await screen.findByText('Board not found')).toBeVisible();
-    expect(screen.getByText('#gm was deleted or never existed')).toBeVisible();
+    expect(screen.getByText('#gm was deleted for good or never existed')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Open Moodboard' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull();
   });
 
   it('asks for a board when none is chosen', () => {
@@ -208,6 +242,6 @@ describe('Inspector', () => {
     useUIStore.setState({ selectedNodeId: 'n2' });
     render(<Inspector embedded />);
     expect(await screen.findByRole('option', { name: 'Not found (#gone)' })).toBeInTheDocument();
-    expect(screen.getByText('This board was deleted or never existed. Pick another.')).toBeVisible();
+    expect(screen.getByText('This board was deleted for good or never existed. Pick another.')).toBeVisible();
   });
 });

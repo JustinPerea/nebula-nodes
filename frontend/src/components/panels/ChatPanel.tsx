@@ -820,9 +820,13 @@ export function ChatPanel() {
       const form = new FormData();
       form.append('file', file);
       form.append('create_node', 'true');
+      // The upload adds a node to the canvas: one undo step, taken before the
+      // backend's graphSync can add it.
+      const undoStep = useGraphStore.getState().beginUndoStep();
       try {
         const resp = await apiFetch('/api/uploads', { method: 'POST', body: form });
         if (!resp.ok) {
+          useGraphStore.getState().cancelUndoStep(undoStep);
           const detail = await resp.text().catch(() => '');
           const errMsg =
             resp.status === 413
@@ -879,6 +883,7 @@ export function ChatPanel() {
         const textarea = document.querySelector<HTMLTextAreaElement>('.chat-panel__textarea');
         if (textarea) insertAtCaret(textarea, `@${body.nodeId}`);
       } catch {
+        useGraphStore.getState().cancelUndoStep(undoStep);
         setPendingImages((prev) => {
           const prior = prev.find((p) => p.id === chipId);
           // URL.revokeObjectURL is idempotent — safe inside a StrictMode-
@@ -1412,7 +1417,13 @@ export function ChatPanel() {
       // Also wipe cli_graph on the backend so Claude starts with a clean canvas,
       // not whatever nodes accumulated from prior sessions. graphSync handles the
       // frontend side — cli-origin nodes drop out, library-dragged work survives.
-      apiFetch('/api/graph', { method: 'DELETE' }).catch(() => {});
+      // One undo step, so the person can bring the canvas back.
+      const undoStep = useGraphStore.getState().beginUndoStep();
+      // force: typing /clear is the person's confirmation (the backend
+      // refuses a clear of a project with nodes without it).
+      apiFetch('/api/graph?force=true', { method: 'DELETE' }).then((response) => {
+        if (!response.ok) useGraphStore.getState().cancelUndoStep(undoStep);
+      }).catch(() => useGraphStore.getState().cancelUndoStep(undoStep));
       setMessages([
         {
           role: 'assistant',

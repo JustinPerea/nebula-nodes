@@ -23,6 +23,19 @@ export type AgentCursorAnchor =
   | { nodeId: string; handle?: string }
   | { x: number; y: number };
 
+/** graphSync.projectSwitch: who opened or made a project, and what was open
+ * before (backend main.py _switch_notice). */
+export interface ProjectSwitch {
+  actor: { kind: 'agent' | 'anonymous' | string; name?: string; color?: string };
+  projectId: string;
+  projectName: string;
+  previousProjectId: string | null;
+  previousProjectName: string | null;
+  /** The revision the canvas had before the switch. */
+  previousRevision: string;
+  created?: boolean;
+}
+
 export interface AgentPresenceEvent {
   type: 'agentPresence';
   agent: { id: string; name: string; color: string; verified: boolean };
@@ -217,6 +230,9 @@ export type ExecutionEvent = (
       moved?: string[];
       activeProjectId?: string | null;
       workspaceRevision?: string;
+      /** Someone other than the person (an agent, a script) opened or made a
+       * project: the canvas follows and offers the way back. */
+      projectSwitch?: ProjectSwitch;
       providerRecoveries?: ProviderRecoveryCheckpoint[];
       providerStartAmbiguities?: ProviderStartAmbiguity[];
       executionStatuses?: ExecutionStatusResult[];
@@ -234,6 +250,8 @@ type EventHandler = (event: ExecutionEvent) => void;
 class WebSocketClient {
   private ws: WebSocket | null = null;
   private handlers: Set<EventHandler> = new Set();
+  /** Run before `handlers` (see subscribeFirst). */
+  private firstHandlers: Set<EventHandler> = new Set();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private path: string;
   private connecting = false;
@@ -298,7 +316,7 @@ class WebSocketClient {
               reportPersonRequired();
               return;
             }
-            for (const handler of this.handlers) {
+            for (const handler of [...this.firstHandlers, ...this.handlers]) {
               handler(parsed);
             }
           } catch (err) {
@@ -338,6 +356,17 @@ class WebSocketClient {
       this.ws.close();
       this.ws = null;
     }
+  }
+
+  /** Like subscribe, but the handler sees each event before ordinary ones.
+   * The project coordinator needs the canvas as it was before a graphSync
+   * replaces it (an agent switched projects), and the graph store subscribes
+   * first, at module load. */
+  subscribeFirst(handler: EventHandler): () => void {
+    this.firstHandlers.add(handler);
+    return () => {
+      this.firstHandlers.delete(handler);
+    };
   }
 
   subscribe(handler: EventHandler): () => void {

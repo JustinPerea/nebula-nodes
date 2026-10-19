@@ -182,6 +182,8 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().trash.map((p) => p.id)).toEqual(['gamma']);
     expect(useProjectStore.getState().lastDeleted).toBeNull();
     await useProjectStore.getState().emptyTrash();
+    // Only what the list showed, so a project an agent deleted since stays.
+    expect(projects.emptyProjectTrash).toHaveBeenCalledWith(['gamma']);
     expect(useProjectStore.getState().trash).toEqual([]);
     expect(useProjectStore.getState().projects.map((p) => p.id)).toEqual(['alpha']);
   });
@@ -278,7 +280,7 @@ describe('saved project coordinator', () => {
   it('recovers dirty work durably before reloading a workspace changed in another tab', async () => {
     await useProjectStore.getState().initialize();
     let socketHandler!: (event: ExecutionEvent) => void;
-    vi.spyOn(wsClient, 'subscribe').mockImplementation((handler) => { socketHandler = handler; return () => {}; });
+    vi.spyOn(wsClient, 'subscribeFirst').mockImplementation((handler) => { socketHandler = handler; return () => {}; });
     unsubscribe = subscribeProjectAutosave();
     useGraphStore.setState({ nodes: [{ ...project().snapshot.nodes[0], data: { ...project().snapshot.nodes[0].data,
       params: { value: 'Unsaved alpha edits' } } }] });
@@ -309,7 +311,7 @@ describe('saved project coordinator', () => {
     // the same id shortcuts to a canvas with no project context.
     await useProjectStore.getState().initialize();
     let socketHandler!: (event: ExecutionEvent) => void;
-    vi.spyOn(wsClient, 'subscribe').mockImplementation((handler) => { socketHandler = handler; return () => {}; });
+    vi.spyOn(wsClient, 'subscribeFirst').mockImplementation((handler) => { socketHandler = handler; return () => {}; });
     unsubscribe = subscribeProjectAutosave();
     socketHandler({ type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, workspaceRevision: 'rev-b', nodes: [], edges: [], empty: true });
     vi.mocked(projects.listProjects).mockResolvedValue({ projects: [project()], activeProjectId: null,
