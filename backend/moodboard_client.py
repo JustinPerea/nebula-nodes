@@ -550,8 +550,9 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
     that must appear and `keep_out_colors` colours to keep out;
     `brief_override` sets the hand-written brief ("" goes back to the
     generated one); `keep_brief` keeps a hand-written brief that is marked
-    stale. Only the person may change or keep the person's own brief: the
-    backend refuses, and the refusal comes back as a MoodboardError."""
+    stale. Only the person may change or keep the person's own brief: that,
+    or a Keep with no hand-written brief, stops the whole call before
+    anything is saved, as a MoodboardError (the backend refuses it too)."""
     board = get_board(api, ref, headers)
     original = [dict(image) for image in board.get("images") or []]
     current = [dict(image) for image in original]
@@ -609,14 +610,30 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
     if pinned_colors is not None or pin_colors or keep_out_colors or unpin_colors:
         body["pinnedColors"] = _new_pinned(board.get("pinnedColors") or {}, pinned_colors, pin_colors,
                                            keep_out_colors, unpin_colors)
+    saved_override = _override(board)
     if brief_override is not None:
         try:
             text = rules.normalize_override_text(brief_override)
         except ValueError as exc:
             raise MoodboardError(f"the hand-written brief: {exc}") from exc
-        saved = board.get("briefOverride") if isinstance(board.get("briefOverride"), dict) else {}
-        if text != str(saved.get("text") or "").strip():
+        if text != str((saved_override or {}).get("text") or "").strip():
+            if saved_override and saved_override["by"] == "person":
+                raise MoodboardError(_PERSON_BRIEF.format(action="replace" if text else "remove",
+                                                          option="brief_override (--brief, --clear-brief)"))
             body["briefOverride"] = {"text": text} if text else None
+    # Keep runs after the PUT (it keeps the brief for the board as it ends
+    # up), so one the backend would refuse stops here, before anything is
+    # saved. New text is already written against the board as it ends up.
+    if keep_brief:
+        if "briefOverride" in body:
+            if body["briefOverride"] is None:
+                raise MoodboardError("This change clears the hand-written brief, so it leaves no hand-written "
+                                     "brief to keep. Nothing was changed.")
+            keep_brief = False
+        elif saved_override is None:
+            raise MoodboardError("This board has no hand-written brief to keep. Nothing was changed.")
+        elif saved_override["by"] == "person":
+            raise MoodboardError(_PERSON_BRIEF.format(action="keep", option="keep_brief (--keep-brief)"))
     if not body and not keep_brief:
         raise MoodboardError("nothing to change")
     if content_changed:
@@ -626,17 +643,23 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
         updated = _send(api, "PUT", f"/api/moodboards/{board['id']}", json=body, headers=headers)
     if keep_brief:
         updated = _send(api, "POST", f"/api/moodboards/{board['id']}/brief-override/keep", headers=headers)
-    return updated, removed, previous_settings(board)
+    return updated, removed, previous_settings(board, brief="briefOverride" in body)
 
 
-def previous_settings(board: dict[str, Any]) -> dict[str, Any]:
+_PERSON_BRIEF = ("The person wrote this board's brief by hand, so an agent can't {action} it: the board keeps no "
+                 "history, and their text would be lost. Nothing was changed: leave {option} out to make the "
+                 "other changes, or ask the person to change it in Moodboard Studio.")
+
+
+def previous_settings(board: dict[str, Any], *, brief: bool = False) -> dict[str, Any]:
     """What `update_board` takes to put a board back the way it was: its
     settings, each image's weight, notes and excluded, by image id, and the
     brief fields (pass them as update_board's keyword arguments).
 
-    `brief_override` is the agent's own text ("" for none). It is left out
-    when the person wrote the brief: an agent can't change that text, so a
-    restore leaves it alone instead of being refused."""
+    `brief_override` (the agent's own text, "" for none) is there only when
+    the change touched the hand-written brief (`brief`), so undoing anything
+    else never touches a brief the person wrote since. An agent can only
+    change its own text, so it is never the person's."""
     previous: dict[str, Any] = {
         "name": board.get("name"), "notes": board.get("notes"), "mode": board.get("mode"),
         "strength": board.get("strength"),
@@ -653,8 +676,8 @@ def previous_settings(board: dict[str, Any]) -> dict[str, Any]:
         "pinned_colors": {"include": list(pinned.get("include") or []),
                           "exclude": list(pinned.get("exclude") or [])},
     })
-    override = _override(board)
-    if override is None or override["by"] == "agent":
+    if brief:
+        override = _override(board)
         previous["brief_override"] = override["text"] if override else ""
     return previous
 

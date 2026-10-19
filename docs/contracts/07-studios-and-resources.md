@@ -84,7 +84,7 @@ Boards saved before the brief fields (no `briefVersion`) are migrated once at ba
 
 `nebula moodboard set` and `moodboard_update` change the brief fields: Direction (`""` clears), Avoid (replace, add, remove), pinned colours (replace both lists, add to either, remove from either), the override (set, or `""` for the generated brief), and Keep (`--keep-brief` / `keep_brief`, then `POST .../brief-override/keep`). Values are checked against the limits in 1.1 before anything is sent; nothing is cut short. Brief fields keep the analysis; changes to images, notes, mode or strength that change a value clear it. A 403 for the person's override comes back as the store's sentence, without the canvas-tab advice in the gate's `person_required` text.
 
-The result's `previous` puts the board back when passed as the same call's arguments: settings, image settings, `direction`, `avoid`, `pinned_colors` and `brief_override` (the agent's own text, or `""` for none). It leaves `brief_override` out when the person wrote the override, so a restore doesn't trip on text the agent can't change.
+The result's `previous` puts the board back when passed as the same call's arguments: settings, image settings, `direction`, `avoid`, `pinned_colors` and `brief_override` (the agent's own text, or `""` for none). `brief_override` is there only when the change touched the override, so undoing anything else never touches a brief the person wrote since. A call that would replace, clear or Keep the person's override, or Keep with no override, is refused before anything is sent and changes nothing; the message says to leave that argument out.
 
 ---
 

@@ -1181,15 +1181,18 @@ nebula moodboard delete <board>
   (`brief_override`, `""` for the generated brief) and `--keep-brief`
   (`keep_brief`). Values are checked against the backend's limits before
   anything is sent, and never cut short. Only the person may change or Keep
-  the person's own hand-written brief; the refusal says so in a sentence.
+  the person's own hand-written brief; the refusal says so in a sentence,
+  and nothing in that call is saved.
 - Like Moodboard Studio, changing images, notes, mode or strength clears the
   board's analysis, so run `analyze` again; a rename and the brief fields
   keep it. `--remove` takes an image off the board; its file stays, and the
   command prints the URL to add it back.
 - `moodboard_update` (and `set --json`) returns `previous`: the settings
   before the change, the brief fields included. Passing them back undoes it.
-  It leaves out the hand-written brief when the person wrote it, so the undo
-  doesn't trip on text an agent can't change.
+  It has the hand-written brief only when the change touched it, so undoing
+  anything else leaves a brief the person wrote since alone. If the person
+  replaced your brief since, the undo is refused with nothing saved: send it
+  again without `brief_override`.
 - Deleting: where Nebula keeps deleted boards in Recently deleted, anyone
   may delete one, agents included, because it can be restored. Where a
   delete is for good (a Nebula without Recently deleted), `nebula moodboard

@@ -828,6 +828,70 @@ def test_previous_never_makes_a_restore_trip_on_the_persons_brief(app, tmp_path)
     assert restored["briefOverride"]["text"] == "The person's words."
 
 
+def test_previous_leaves_the_brief_alone_when_the_change_didnt_touch_it(app, tmp_path):
+    # The person writes a brief between an agent's change and its undo: the
+    # undo puts back what the agent changed and leaves their text alone.
+    board = _analyzed_board(app, tmp_path)
+    _, _, previous = boards.update_board(app.api, board["id"], direction="Agent direction", avoid_add=["x"])
+    assert "brief_override" not in previous
+    _person_override(board["id"], "Written after the change.")
+    restored, _, _ = boards.update_board(app.api, board["id"], **previous)
+    assert restored["direction"] == "" and restored["avoid"] == []
+    assert restored["briefOverride"]["text"] == "Written after the change."
+
+
+def test_an_undo_that_would_replace_the_persons_new_brief_changes_nothing_and_says_how(app, tmp_path):
+    # The agent changed its own brief, then the person wrote theirs: putting
+    # the agent's text back would replace the person's, so nothing is sent
+    # and the agent is told to leave brief_override out.
+    board = _analyzed_board(app, tmp_path)
+    _, _, previous = boards.update_board(app.api, board["id"], direction="Agent direction",
+                                         brief_override="Agent text.")
+    assert previous["brief_override"] == ""
+    _person_override(board["id"], "The person's words.")
+    with pytest.raises(boards.MoodboardError, match="Nothing was changed") as caught:
+        boards.update_board(app.api, board["id"], **previous)
+    assert "brief_override" in str(caught.value)
+    after = boards.get_board(app.api, board["id"])
+    assert after["direction"] == "Agent direction"
+    assert after["briefOverride"]["text"] == "The person's words."
+    retry = {key: value for key, value in previous.items() if key != "brief_override"}
+    restored, _, _ = boards.update_board(app.api, board["id"], **retry)
+    assert restored["direction"] == "" and restored["briefOverride"]["text"] == "The person's words."
+
+
+def test_keep_brief_is_checked_before_anything_is_saved(app, tmp_path):
+    # Keep goes after the other changes (it keeps the brief for the board as
+    # it ends up), so a Keep that would be refused must stop the whole call
+    # before anything is saved.
+    person = _analyzed_board(app, tmp_path, "Person board")
+    _person_override(person["id"], "The person's words.")
+    with pytest.raises(boards.MoodboardError, match="The person wrote this board's brief by hand"):
+        boards.update_board(app.api, person["id"], direction="Agent direction", keep_brief=True)
+    assert boards.get_board(app.api, person["id"])["direction"] == ""
+
+    plain = _analyzed_board(app, tmp_path, "No brief")
+    for kwargs in ({"avoid_add": ["neon"]}, {"keep_brief": True}):
+        with pytest.raises(boards.MoodboardError, match="no hand-written brief to keep"):
+            boards.update_board(app.api, plain["id"], **{**kwargs, "keep_brief": True})
+    assert boards.get_board(app.api, plain["id"])["avoid"] == []
+
+    boards.update_board(app.api, plain["id"], brief_override="Agent text.")
+    with pytest.raises(boards.MoodboardError, match="no hand-written brief to keep"):
+        boards.update_board(app.api, plain["id"], brief_override="", direction="d", keep_brief=True)
+    assert boards.get_board(app.api, plain["id"])["direction"] == ""
+
+    # The agent's own brief: the other changes and the Keep both land, and
+    # the brief isn't marked changed-since.
+    updated, _, previous = boards.update_board(app.api, plain["id"], direction="New direction", keep_brief=True)
+    assert updated["direction"] == "New direction"
+    assert boards.brief(updated)["briefOverride"]["stale"] is False
+    assert previous["direction"] == ""
+    updated, _, _ = boards.update_board(app.api, plain["id"], brief_override="Fresh text.", avoid_add=["y"],
+                                        keep_brief=True)
+    assert boards.brief(updated)["briefOverride"]["stale"] is False
+
+
 def test_cli_set_and_show_the_brief(app, tmp_path, capsys):
     import json
 

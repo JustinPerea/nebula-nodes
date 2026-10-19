@@ -164,7 +164,8 @@ nebula moodboard delete <board>
 - `--brief` writes the brief by hand; `--clear-brief` goes back to the
   generated one. When the board changes after, `show` says so:
   `--keep-brief` keeps yours. If the person wrote the brief, it's theirs:
-  changing or keeping it is refused, so ask them.
+  changing or keeping it is refused and nothing in that command is saved, so
+  leave those flags out or ask them.
 - Changing images, notes, mode or strength clears the analysis: run
   `analyze` again before you use the board. A rename and the brief fields
   keep it.

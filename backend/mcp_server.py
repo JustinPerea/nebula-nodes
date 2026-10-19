@@ -907,10 +907,12 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
     replaces both (at most 12 each). `brief_override` writes the brief by
     hand ("" goes back to the generated one); `keep_brief` keeps your
     hand-written brief after the board changed. The person's own
-    hand-written brief is theirs: changing or keeping it is refused.
+    hand-written brief is theirs: changing or keeping it is refused, and
+    nothing in that call is saved.
 
     `previous` holds the settings before the change; pass them back to
-    moodboard_update to undo it. Changing images, notes, mode or strength
+    moodboard_update to undo it (it has `brief_override` only when the change
+    touched the brief). Changing images, notes, mode or strength
     clears the analysis (run moodboard_analyze again); a rename and the brief
     fields keep it."""
     import moodboard_client as boards
