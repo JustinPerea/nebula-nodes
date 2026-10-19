@@ -133,6 +133,7 @@ nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --projec
 nebula moodboard show "Nature + tech"          # settings, the brief generators get, images, analysis
 nebula moodboard add <board> more.png ./more-refs
 nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --exclude 5
+nebula moodboard set <board> --private-note 2="PAINTERLY (liked)"   # a label, never sent anywhere
 nebula moodboard set <board> --mode world --strength 0.6 --notes "warm, quiet"
 nebula moodboard set <board> --direction "quiet coastal mornings" --avoid "neon signage" \
   --pin-color "#E8593C" --keep-out-color "#0000FF"
@@ -166,6 +167,11 @@ nebula moodboard delete <board>
 - Weights and strength run from 0 to 1. `--exclude` keeps an image on the
   board without letting it steer; `--include` undoes that. `--remove` takes
   an image off the board (its file stays).
+- `--image-note` steers (the analysis reads it). `--private-note` is a label
+  for whoever looks at the board, like "PAINTERLY (liked)": no analysis,
+  brief, generator or node output gets it, and changing it keeps the
+  analysis. `show` prints it marked private; `show --json` has it as each
+  image's `privateNote`. Read it, but never put it in a prompt.
 - The brief generators get is `brief.styleBrief` in `show --json` (and
   `brief.negativePrompt` their negatives); `show` prints it with who wrote
   it. Don't use `analysis.styleBrief`: it leaves out Direction, pinned

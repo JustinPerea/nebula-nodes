@@ -513,7 +513,11 @@ export interface MoodboardImage {
   id: string;
   url: string;
   weight: number;
+  /** Steers: the analysis and the brief read it. */
   notes: string;
+  /** The person's own label ("PAINTERLY (liked)"). Never sent anywhere: not
+   * the analysis, the brief, a generator or the node's outputs. */
+  privateNote?: string;
   excluded: boolean;
 }
 

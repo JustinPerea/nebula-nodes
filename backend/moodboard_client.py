@@ -28,7 +28,9 @@ A source is one of:
 Board edits follow Moodboard Studio: any change to images, notes, mode or
 strength clears the saved analysis (it described the old board); a rename
 keeps it, and so do the brief fields (Direction, Avoid, pinned colours, the
-hand-written brief), which aren't analysis inputs. The brief generators get
+hand-written brief), which aren't analysis inputs, and so does an image's
+private note (`privateNote`, the person's own label, which nothing that
+generates ever sees). The brief generators get
 is the backend's `brief` (services/moodboard_brief.compose), passed on as it
 came, never rebuilt here from the analysis.
 """
@@ -560,7 +562,7 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
                  brief_override: str | None = None, keep_brief: bool = False,
                  headers: dict[str, str] | None = None) -> tuple[dict[str, Any], list[str], dict[str, Any]]:
     """Change a board. `images` is a list of {"image": number or id, "weight",
-    "notes", "excluded"}; `remove` takes images off the board (their files
+    "notes", "privateNote", "excluded"}; `remove` takes images off the board (their files
     stay, and the returned URLs can be added back). Returns (board, removed
     URLs, the settings before the change), so any change can be put back.
 
@@ -599,9 +601,16 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
         if not isinstance(edit, dict) or "image" not in edit:
             raise MoodboardError('each image change needs "image": its number or id')
         target = current[find_image(current, edit["image"])]
-        unknown = set(edit) - {"image", "weight", "notes", "excluded"}
+        unknown = set(edit) - {"image", "weight", "notes", "privateNote", "excluded"}
         if unknown:
             raise MoodboardError(f"unknown image setting: {', '.join(sorted(unknown))}")
+        if edit.get("privateNote") is not None:
+            if "privateNote" not in target:
+                raise MoodboardError("this version of Nebula has no private notes on images. Nothing was changed.")
+            note = str(edit["privateNote"])
+            if len(note) > PRIVATE_NOTE_LIMIT:
+                raise MoodboardError(f"a private note holds at most {PRIVATE_NOTE_LIMIT} characters")
+            target["privateNote"] = note
         if "weight" in edit and edit["weight"] is not None:
             target["weight"] = _check_unit("weight", edit["weight"])
         if "notes" in edit and edit["notes"] is not None:
@@ -617,7 +626,8 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
         images_changed = True
     if images_changed:
         body["images"] = current
-        content_changed |= current != original
+        # A private note isn't an analysis input, so changing only that keeps it.
+        content_changed |= _steering(current) != _steering(original)
     # The brief fields aren't analysis inputs, so they keep the analysis
     # (as in Moodboard Studio).
     rules = _brief_rules()
@@ -706,8 +716,18 @@ _NOTHING_KEPT = ("Nothing was changed: leave keep_brief (--keep-brief) out to ma
 _OTHERS_SAVED = "The other changes were saved; `previous` puts them back."
 
 
+# The backend's cap on an image's private note (services/moodboard_store.py).
+PRIVATE_NOTE_LIMIT = 2000
+
+
+def _steering(images: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Images without their private notes: what the analysis reads."""
+    return [{key: value for key, value in image.items() if key != "privateNote"} for image in images]
+
+
 # Every key previous_settings can return: update_board's arguments that put
-# a board back (`nebula moodboard set --restore` checks against it).
+# a board back (`nebula moodboard set --restore` checks against it). Each
+# image in `images` carries its weight, notes, private note and excluded.
 RESTORE_KEYS = ("name", "notes", "mode", "strength", "images", "direction", "avoid", "pinned_colors",
                 "brief_override")
 
@@ -715,8 +735,9 @@ RESTORE_KEYS = ("name", "notes", "mode", "strength", "images", "direction", "avo
 def previous_settings(board: dict[str, Any], *, brief: bool = False,
                       skip: Iterable[str] = ()) -> dict[str, Any]:
     """What `update_board` takes to put a board back the way it was: its
-    settings, each image's weight, notes and excluded, by image id, and the
-    brief fields (pass them as update_board's keyword arguments).
+    settings, each image's weight, notes, private note and excluded, by image
+    id, and the brief fields (pass them as update_board's keyword arguments).
+    A Nebula without private notes sends none, and `previous` has none.
 
     `skip` names images the change took off the board. They aren't in
     `images`, which only sets images that are there: they come back from
@@ -731,6 +752,7 @@ def previous_settings(board: dict[str, Any], *, brief: bool = False,
         "name": board.get("name"), "notes": board.get("notes"), "mode": board.get("mode"),
         "strength": board.get("strength"),
         "images": [{"image": image.get("id"), "weight": image.get("weight"), "notes": image.get("notes"),
+                    **({"privateNote": image.get("privateNote") or ""} if "privateNote" in image else {}),
                     "excluded": image.get("excluded")}
                    for image in board.get("images") or [] if str(image.get("id")) not in gone],
     }
@@ -847,6 +869,10 @@ def brief(board: dict[str, Any]) -> dict[str, Any]:
     """A board as an agent needs it: settings, the brief fields, the brief
     generators get, numbered images, and the analysis.
 
+    An image's `privateNote` is the person's own label for it, shown to
+    whoever inspects the board; nothing that generates gets it, so don't put
+    it in a prompt. Its `notes` are the ones that steer.
+
     `brief` is the backend's composed brief as it sent it (`styleBrief` is
     the text generators get, `negativePrompt` their negatives); None when
     this Nebula doesn't send one. The analysis's own `styleBrief` leaves out
@@ -866,7 +892,8 @@ def brief(board: dict[str, Any]) -> dict[str, Any]:
         "briefOverride": _override(board),
         "brief": composed if isinstance(composed, dict) else None,
         "images": [
-            {"number": index + 1, **{key: image.get(key) for key in ("id", "url", "weight", "notes", "excluded")}}
+            {"number": index + 1, **{key: image.get(key) for key in ("id", "url", "weight", "notes", "excluded")},
+             **({"privateNote": image.get("privateNote") or ""} if "privateNote" in image else {})}
             for index, image in enumerate(board.get("images") or [])
         ],
         "analysis": analysis,

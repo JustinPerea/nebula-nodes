@@ -5,6 +5,7 @@ import { NodeSettingsAction } from './NodeSettingsAction';
 import { RestoreTrashedAsset } from './RestoreTrashedAsset';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { useOpenOnDoubleClick } from './useOpenOnDoubleClick';
 import '../../styles/moodboard-node.css';
 
 // The node stores only the board's id (its `moodboard` param, which agents
@@ -37,9 +38,14 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
         : status === 'error' ? "Couldn't load this board" : 'Loading…';
   // A board in Recently deleted keeps its name and picture here, with Restore.
   const trashed = status === 'trashed';
+  const canOpen = Boolean(boardId) && status !== 'missing' && !trashed;
+  // Double-click opens the board, selected or not, at any zoom; the Open
+  // button below shows while the node is selected.
+  const cardRef = useOpenOnDoubleClick<HTMLDivElement>(canOpen ? () => enterMoodboardEditor(boardId) : null);
 
   return (
-    <div className={`moodboard-node ${selected ? 'moodboard-node--selected' : ''}`} data-moodboard-status={status} data-node-inspector-anchor={id}>
+    <div ref={cardRef} className={`moodboard-node ${selected ? 'moodboard-node--selected' : ''}`} data-moodboard-status={status}
+      data-node-inspector-anchor={id} title={canOpen ? 'Double-click to open in Moodboard Studio' : undefined}>
       <div className="moodboard-node__title">Moodboard</div>
       <NodeSettingsAction id={id} />
       <div className="moodboard-node__name">{name}</div>
@@ -52,7 +58,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
       </div>
       <div className="moodboard-node__meta">{trashed ? 'In Recently deleted' : meta}</div>
       {trashed && <RestoreTrashedAsset kind="moodboard" id={boardId} className="moodboard-node__open" />}
-      {selected && boardId && status !== 'missing' && !trashed && (
+      {selected && canOpen && (
         <button
           type="button"
           className="moodboard-node__open nodrag"

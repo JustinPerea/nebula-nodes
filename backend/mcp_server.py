@@ -44,7 +44,7 @@ Workflow:
 Spending: the person sets limits (get_spend_limits). A run over a limit, or with a node that has no list price, is refused; send the same plan as propose_change. The person accepts or rejects it in Nebula; agents cannot accept, and get_proposal waits for the decision. Use propose_change too when the change is theirs to decide (reworking their graph, a costly run).
 
 Projects: list_projects, open_project, new_project. Start new work in a new project rather than emptying the person's canvas; they can switch back.
-Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing). A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt); analysis.styleBrief is not. Only the person may change their own hand-written brief.
+Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing). A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt); analysis.styleBrief is not. Only the person may change their own hand-written brief.
 Deleted moodboards, characters and projects go to Recently deleted: list_trash shows them and restore_from_trash brings one back with the same id. Deleting for good is the person's alone.
 
 Answer the person's pins with resolve_pin. Use wait_for_canvas_change to wait for them instead of polling. If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
@@ -839,7 +839,9 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     """One moodboard by id or exact name: settings, the brief fields
     (direction, avoid, pinnedColors, briefOverride with who wrote it and
     whether it is stale), `brief`, numbered images (id, url, weight, notes,
-    excluded) and analysis (palette, accents, ...).
+    excluded, privateNote) and analysis (palette, accents, ...). An image's
+    `privateNote` is the person's own label for it: read it, but never put it
+    in a prompt (nothing that generates gets it).
 
     `brief` is what generators get, as Nebula composed it: `styleBrief` (the
     hand-written brief when there is one, else the generated one),
@@ -899,8 +901,10 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
                      unpin_colors: list[str] | None = None, brief_override: str | None = None,
                      keep_brief: bool = False, ctx: Context | None = None) -> dict[str, Any]:
     """Change a moodboard. `images`: changes to single images, each
-    {"image": its number or id, "weight": 0-1, "notes": "...", "excluded": true}
-    (excluded images stay on the board but stop steering). `remove` takes
+    {"image": its number or id, "weight": 0-1, "notes": "...", "privateNote": "...", "excluded": true}
+    (excluded images stay on the board but stop steering). `privateNote` is
+    the person's own label ("PAINTERLY (liked)"); it isn't sent anywhere, so
+    it keeps the analysis. `remove` takes
     images off the board by number or id; their files stay, and the result's
     `removed` URLs can be added back with moodboard_add.
 

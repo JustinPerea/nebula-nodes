@@ -1147,6 +1147,7 @@ nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --projec
 nebula moodboard show "Nature + tech"      # settings, the brief generators get, images, analysis
 nebula moodboard add <board> more.png
 nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --exclude 5 --strength 0.6
+nebula moodboard set <board> --private-note 2="PAINTERLY (liked)"   # a label, never sent anywhere
 nebula moodboard set <board> --direction "quiet coastal mornings" --avoid "neon signage" --pin-color "#E8593C"
 nebula moodboard set <board> --unavoid "neon signage" --keep-out-color "#0000FF" --unpin-color "#E8593C"
 nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --keep-brief
@@ -1160,6 +1161,14 @@ nebula moodboard delete <board>
 - A board is named by its id or exact name; an image by its number or id
   from `show`. `--json` prints the board as JSON (the MCP tools return the
   same shape).
+- Each image has `notes`, which steer (the analysis reads them), and
+  `privateNote`, the person's own label (`--private-note`, or
+  `{"image": 2, "privateNote": "..."}` in `moodboard_update`). The private
+  note is shown to whoever inspects the board (`show`, `moodboard_get`,
+  Moodboard Studio) and nowhere else: not the analysis or its source hash,
+  not `brief`, not the negative prompt, not the Moodboard node's outputs.
+  Changing it keeps the analysis, and `previous` puts it back like any other
+  image setting.
 - Images can be files, folders (the images directly inside, in name order,
   so `2.png` comes before `10.png`), http(s) links or Nebula outputs
   (`/api/outputs/...`, used as they are).
