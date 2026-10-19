@@ -19,6 +19,9 @@ Shape of one entry (keyed by node definition id)::
       "provider": "google",                          # dual-route nodes: whose price this is
       "plus": "input images",                        # a known cost the vendor doesn't publish
       "defaults": {"duration": 8},                   # what the handler sends when unset
+      "whitespaceUnset": ["moodboard_id"],           # params the handler strips: a value of
+                                                     # only whitespace sends nothing, so it
+                                                     # prices as unset
       "unconfirmed": true,                           # the page doesn't state this price exactly
                                                      # (also on one row: that row's price only)
       "notes": "...",
@@ -263,6 +266,10 @@ def _validate_entry(
             problems.append(f"{where} checked is not a real date")
     if "unconfirmed" in entry and not isinstance(entry.get("unconfirmed"), bool):
         problems.append(f"{where} unconfirmed must be true or false")
+    blank = entry.get("whitespaceUnset")
+    if blank is not None and (not isinstance(blank, list)
+                              or not all(isinstance(key, str) for key in blank)):
+        problems.append(f"{where} whitespaceUnset must be a list of param keys")
     sources = entry.get("sources")
     if not isinstance(sources, list) or not sources:
         problems.append(f"{where} needs at least one source")
@@ -323,6 +330,9 @@ def _validate_entry(
     for key in entry.get("multiplyBy") or []:
         if key not in known_keys:
             problems.append(f"{where} multiplyBy names unknown param '{key}'")
+    for key in blank if isinstance(blank, list) else []:
+        if key not in params:
+            problems.append(f"{where} whitespaceUnset names unknown param '{key}'")
 
 
 def _utility_entry_problems(where: str, entry: Mapping[str, Any], definition: Mapping[str, Any]) -> list[str]:
@@ -443,6 +453,10 @@ def _price_values(entry: Mapping[str, Any], definition: Mapping[str, Any], param
     priced = priced_keys(entry)
     # Price what will run: a retired value is replaced before the run (retired_nodes).
     params = migrate_params(str(definition.get("id") or ""), dict(params or {}))
+    # A param the handler strips sends nothing when it's only whitespace.
+    for key in entry.get("whitespaceUnset") or []:
+        if isinstance(params.get(key), str) and not params[key].strip():
+            params[key] = ""
     values = effective_params(entry, definition, params)
     if VIDEO_MODE in priced:
         values[VIDEO_MODE] = video_mode(wired)

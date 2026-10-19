@@ -25,6 +25,9 @@ export interface PriceEntry {
   extras?: PriceRow[];
   multiplyBy?: string[];
   defaults?: Record<string, unknown>;
+  /** Params the handler strips: a value of only whitespace sends nothing, so
+   * it prices as unset (model_pricing.py `whitespaceUnset`). */
+  whitespaceUnset?: string[];
   provider?: string;
   plus?: string;
   /** The provider's page doesn't state this price exactly (a higher page
@@ -190,6 +193,10 @@ export function entryForRoute(entry: PriceEntry | undefined, provider: string | 
  * price reads a RUN_TIME_VARIABLES quantity). The wired ports also give the
  * VIDEO_MODE and REFERENCES a row may match. A `routes` entry prices the route
  * `routeProvider` names. */
+/** Only whitespace as Python's str.strip() sees it, since the handlers strip
+ * with it (JS trim() also strips U+FEFF and keeps U+001C-001F and U+0085). */
+const PYTHON_BLANK = /^[\t\n\v\f\r \x1c-\x1f\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$/;
+
 /** The values an entry's rows are matched against: the effective params
  * plus the price variables read from the wired ports (model_pricing._price_values). */
 function priceValues(
@@ -199,7 +206,13 @@ function priceValues(
   ports: string[],
 ): Record<string, unknown> {
   const priced = pricedKeys(entry);
-  const values = effectiveParams(entry, definition, params);
+  // A param the handler strips sends nothing when it's only whitespace.
+  const cleaned: Record<string, unknown> = { ...(params ?? {}) };
+  for (const key of entry.whitespaceUnset ?? []) {
+    const value = cleaned[key];
+    if (typeof value === 'string' && PYTHON_BLANK.test(value)) cleaned[key] = '';
+  }
+  const values = effectiveParams(entry, definition, cleaned);
   if (priced.has(VIDEO_MODE)) values[VIDEO_MODE] = videoMode(ports);
   if (priced.has(REFERENCES)) values[REFERENCES] = references(ports);
   const wiredSet = new Set(ports);

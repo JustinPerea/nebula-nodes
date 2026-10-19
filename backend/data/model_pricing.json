@@ -3061,8 +3061,10 @@
             "(wired style_images)": "no",
             "(wired image_style_references)": "no"
           },
-          "price": 0.03,
-          "unconfirmed": true
+          "price": [
+            0.03,
+            0.04
+          ]
         },
         {
           "match": {
@@ -3082,8 +3084,10 @@
             "moodboard_id": "",
             "(wired moodboard)": "no"
           },
-          "price": 0.035,
-          "unconfirmed": true
+          "price": [
+            0.035,
+            0.04
+          ]
         },
         {
           "match": {
@@ -3107,8 +3111,7 @@
           "price": [
             0.035,
             0.04
-          ],
-          "unconfirmed": true
+          ]
         },
         {
           "match": {
@@ -3124,8 +3127,7 @@
             "_kreaAuth": "api-token",
             "variant": "medium"
           },
-          "price": 0.04,
-          "unconfirmed": true
+          "price": 0.04
         },
         {
           "match": {
@@ -3149,8 +3151,10 @@
             "(wired style_images)": "no",
             "(wired image_style_references)": "no"
           },
-          "price": 0.06,
-          "unconfirmed": true
+          "price": [
+            0.06,
+            0.07
+          ]
         },
         {
           "match": {
@@ -3170,8 +3174,10 @@
             "moodboard_id": "",
             "(wired moodboard)": "no"
           },
-          "price": 0.065,
-          "unconfirmed": true
+          "price": [
+            0.065,
+            0.07
+          ]
         },
         {
           "match": {
@@ -3195,8 +3201,7 @@
           "price": [
             0.065,
             0.07
-          ],
-          "unconfirmed": true
+          ]
         },
         {
           "match": {
@@ -3212,11 +3217,10 @@
             "_kreaAuth": "api-token",
             "variant": "large"
           },
-          "price": 0.07,
-          "unconfirmed": true
+          "price": 0.07
         }
       ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a moodboard (a moodboard with style references bills the moodboard price). An input counts when its field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or an image-to-image source bill, so rows for runs with styles or style_id are unconfirmed. A wired moodboard is a Nebula board (sent as style references) or a Krea moodboard id (billed as a moodboard), which only the wired value tells apart, so it is the range between the two.",
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a moodboard (a moodboard with style references bills the moodboard price). An input counts when its field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or an image-to-image source bill, so a run with styles or style_id is the range from the tier its references give up to the moodboard price, the highest tier Krea lists. A wired moodboard is a Nebula board (sent as style references) or a Krea moodboard id (billed as a moodboard), which only the wired value tells apart, so it is the range between the two.",
       "sources": [
         {
           "url": "https://api.krea.ai/openapi.json",
@@ -3232,7 +3236,11 @@
         }
       ],
       "checked": "2026-10-19",
-      "generatedBy": "scripts/sync-krea-catalog.py"
+      "generatedBy": "scripts/sync-krea-catalog.py",
+      "whitespaceUnset": [
+        "moodboard_id",
+        "style_id"
+      ]
     },
     "krea-3": {
       "routes": {
@@ -4478,8 +4486,10 @@
             "image_style_references": "",
             "(wired image_style_references)": "no"
           },
-          "price": 0.06,
-          "unconfirmed": true
+          "price": [
+            0.06,
+            0.07
+          ]
         },
         {
           "match": {
@@ -4499,8 +4509,10 @@
             "moodboards": "",
             "(wired moodboards)": "no"
           },
-          "price": 0.065,
-          "unconfirmed": true
+          "price": [
+            0.065,
+            0.07
+          ]
         },
         {
           "match": {
@@ -4516,11 +4528,10 @@
           "match": {
             "_kreaAuth": "api-token"
           },
-          "price": 0.07,
-          "unconfirmed": true
+          "price": 0.07
         }
       ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a moodboard (a moodboard with style references bills the moodboard price). An input counts when its field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or an image-to-image source bill, so rows for runs with styles or image_url are unconfirmed.",
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a moodboard (a moodboard with style references bills the moodboard price). An input counts when its field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or an image-to-image source bill, so a run with styles or image_url is the range from the tier its references give up to the moodboard price, the highest tier Krea lists.",
       "sources": [
         {
           "url": "https://api.krea.ai/openapi.json",
@@ -4532,7 +4543,12 @@
         }
       ],
       "checked": "2026-10-19",
-      "generatedBy": "scripts/sync-krea-catalog.py"
+      "generatedBy": "scripts/sync-krea-catalog.py",
+      "whitespaceUnset": [
+        "image_style_references",
+        "moodboards",
+        "styles"
+      ]
     },
     "krea-image-krea-krea-2-medium": {
       "currency": "usd",
@@ -4571,8 +4587,10 @@
             "image_style_references": "",
             "(wired image_style_references)": "no"
           },
-          "price": 0.03,
-          "unconfirmed": true
+          "price": [
+            0.03,
+            0.04
+          ]
         },
         {
           "match": {
@@ -4592,8 +4610,10 @@
             "moodboards": "",
             "(wired moodboards)": "no"
           },
-          "price": 0.035,
-          "unconfirmed": true
+          "price": [
+            0.035,
+            0.04
+          ]
         },
         {
           "match": {
@@ -4609,11 +4629,10 @@
           "match": {
             "_kreaAuth": "api-token"
           },
-          "price": 0.04,
-          "unconfirmed": true
+          "price": 0.04
         }
       ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a moodboard (a moodboard with style references bills the moodboard price). An input counts when its field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or an image-to-image source bill, so rows for runs with styles or image_url are unconfirmed.",
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a moodboard (a moodboard with style references bills the moodboard price). An input counts when its field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or an image-to-image source bill, so a run with styles or image_url is the range from the tier its references give up to the moodboard price, the highest tier Krea lists.",
       "sources": [
         {
           "url": "https://api.krea.ai/openapi.json",
@@ -4625,7 +4644,12 @@
         }
       ],
       "checked": "2026-10-19",
-      "generatedBy": "scripts/sync-krea-catalog.py"
+      "generatedBy": "scripts/sync-krea-catalog.py",
+      "whitespaceUnset": [
+        "image_style_references",
+        "moodboards",
+        "styles"
+      ]
     },
     "krea-image-krea-krea-2-medium-turbo": {
       "currency": "usd",
@@ -4664,8 +4688,10 @@
             "image_style_references": "",
             "(wired image_style_references)": "no"
           },
-          "price": 0.015,
-          "unconfirmed": true
+          "price": [
+            0.015,
+            0.02
+          ]
         },
         {
           "match": {
@@ -4685,8 +4711,10 @@
             "moodboards": "",
             "(wired moodboards)": "no"
           },
-          "price": 0.0175,
-          "unconfirmed": true
+          "price": [
+            0.0175,
+            0.02
+          ]
         },
         {
           "match": {
@@ -4702,11 +4730,10 @@
           "match": {
             "_kreaAuth": "api-token"
           },
-          "price": 0.02,
-          "unconfirmed": true
+          "price": 0.02
         }
       ],
-      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a moodboard (a moodboard with style references bills the moodboard price). An input counts when its field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or an image-to-image source bill, so rows for runs with styles or image_url are unconfirmed.",
+      "notes": "API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a moodboard (a moodboard with style references bills the moodboard price). An input counts when its field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or an image-to-image source bill, so a run with styles or image_url is the range from the tier its references give up to the moodboard price, the highest tier Krea lists.",
       "sources": [
         {
           "url": "https://api.krea.ai/openapi.json",
@@ -4714,7 +4741,12 @@
         }
       ],
       "checked": "2026-10-19",
-      "generatedBy": "scripts/sync-krea-catalog.py"
+      "generatedBy": "scripts/sync-krea-catalog.py",
+      "whitespaceUnset": [
+        "image_style_references",
+        "moodboards",
+        "styles"
+      ]
     },
     "krea-image-meta-muse-image": {
       "currency": "usd",

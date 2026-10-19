@@ -284,9 +284,58 @@ def test_krea_2_billing_tiers_are_priced_from_the_catalog():
                     "krea-image-krea-krea-2-medium-turbo", "krea-2-generate"):
         assert node_id in entries and node_id not in skipped
         assert entries[node_id]["generatedBy"] == SYNC.PRICING_GENERATOR
-    # The Krea 2 guide states Medium and Large; a drift from the OpenAPI stops the script.
+    # The pinned Krea 2 guide states Medium and Large; a drift from the OpenAPI stops the script.
     model = dict(CATALOG["models"]["krea-image-krea-krea-2-medium"])
     points = [{**point, "amount": point["amount"] + 0.01} for point in model["pricing"]["price_points"]]
     model["pricing"] = {**model["pricing"], "price_points": points}
     with pytest.raises(ValueError, match="differ from the guide"):
         SYNC.k2_catalog_entry("krea-image-krea-krea-2-medium", model, CATALOG, {}, {})
+    # So does a change to the guide alone (pinned by --refresh-guide / --refresh).
+    moved = {**CATALOG, SYNC.K2_GUIDE_KEY: {**CATALOG[SYNC.K2_GUIDE_KEY],
+                                            "prices": {"medium": [0.03, 0.035, 0.05]}}}
+    with pytest.raises(ValueError, match="differ from the guide"):
+        SYNC.k2_catalog_entry("krea-image-krea-krea-2-medium", CATALOG["models"]["krea-image-krea-krea-2-medium"],
+                              moved, {}, {})
+    turbo = {**CATALOG, SYNC.K2_GUIDE_KEY: {**CATALOG[SYNC.K2_GUIDE_KEY],
+                                            "prices": {**CATALOG[SYNC.K2_GUIDE_KEY]["prices"], "turbo": [1, 2, 3]}}}
+    with pytest.raises(ValueError, match="'turbo'"):
+        SYNC.pricing_entries(turbo, REGISTRY)
+
+
+K2_GUIDE_PRICING = """# Krea 2 API overview
+
+## Pricing
+
+| Variant | Text-to-image | With style references | With moodboards |
+| - | - | - | - |
+| **Medium** | \\$0.030 | \\$0.035 | \\$0.040 |
+| **Large** | \\$0.060 | \\$0.065 | \\$0.070 |
+
+<Note>
+  Combining moodboards **with** style references does not increase the price per generation — you pay the moodboard rate (\\$0.040 Medium / \\$0.070 Large).
+</Note>
+
+## Endpoints
+"""
+
+
+def test_the_krea_2_guide_pricing_is_parsed_and_pinned():
+    guide = SYNC.parse_k2_guide(K2_GUIDE_PRICING, "2026-10-19")
+    assert guide["prices"] == {"medium": [0.03, 0.035, 0.04], "large": [0.06, 0.065, 0.07]}
+    # The pinned catalog holds what the guide said, quoted as the source.
+    assert {key: CATALOG[SYNC.K2_GUIDE_KEY][key] for key in ("prices", "quote")} == \
+        {key: guide[key] for key in ("prices", "quote")}
+    assert guide["quote"].startswith("| **Medium** | $0.030 | $0.035 | $0.040 | ... | **Large** |")
+
+
+@pytest.mark.parametrize("change, message", [
+    # A new note in the section (say, which tier a LoRA bills) needs a human re-read.
+    (lambda text: text.replace("</Note>", "</Note>\n\nLoRA styles bill the style reference rate."), "doesn't read"),
+    (lambda text: text.replace("With moodboards |", "With moodboards | With LoRAs |"), "doesn't read"),
+    (lambda text: text.replace("you pay the moodboard rate", "you pay both rates"), "doesn't read"),
+    (lambda text: text.replace("0.070 Large)", "0.075 Large)"), "don't match"),
+    (lambda text: text.replace("## Pricing", "## Prices"), "no '## Pricing'"),
+])
+def test_a_krea_2_guide_change_stops_the_refresh(change, message):
+    with pytest.raises(ValueError, match=message):
+        SYNC.parse_k2_guide(change(K2_GUIDE_PRICING), "2026-10-19")

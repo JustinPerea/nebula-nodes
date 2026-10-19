@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES). The `tiered` node prices by `(wired refs)`, read from the wired ports: `yes` with an edge into `refs`, else `no` (model_pricing.WIRED_PREFIX / pricing.ts WIRED_PREFIX); every row that reads the `refs` param also reads `(wired refs)`, so a wire into `refs` is priced, not unknown, while the `loose` node's row reads `refs` alone and stays unpriced with it wired. Krea 2 prices by k2BillingTier this way (shippedRunCases).",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES). The `tiered` node prices by `(wired refs)`, read from the wired ports: `yes` with an edge into `refs`, else `no` (model_pricing.WIRED_PREFIX / pricing.ts WIRED_PREFIX); every row that reads the `refs` param also reads `(wired refs)`, so a wire into `refs` is priced, not unknown, while the `loose` node's row reads `refs` alone and stays unpriced with it wired. Krea 2 prices by k2BillingTier this way (shippedRunCases), and its entries list the params the handler strips in `whitespaceUnset`, so a whitespace-only value there prices as unset (only those params: `tiered` counts a whitespace `refs` as set).",
   "definitions": {
     "img": {
       "id": "img",
@@ -1856,6 +1856,18 @@
         "refs"
       ],
       "expected": null
+    },
+    {
+      "name": "a param not in whitespaceUnset counts a whitespace-only value as set",
+      "nodeId": "tiered",
+      "params": {
+        "refs": " "
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.035,
+        "high": 0.035
+      }
     }
   ],
   "runCases": [
@@ -2784,6 +2796,148 @@
       "nodeId": "krea-image-krea-krea-2-medium-turbo",
       "params": {
         "image_style_references": "[{\"url\": \"https://x/a.png\"}]"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.0175,
+        "high": 0.0175,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 Medium (Krea) with an image-to-image source wired is the range up to the moodboard tier (the tier isn't stated)",
+      "nodeId": "krea-image-krea-krea-2-medium",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [
+        "image_url"
+      ],
+      "expected": {
+        "low": 0.03,
+        "high": 0.04,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 Medium (Krea) with a LoRA and style references is the range from the style reference tier up",
+      "nodeId": "krea-image-krea-krea-2-medium",
+      "params": {
+        "styles": "[{\"id\": \"s\", \"strength\": 1}]"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [
+        "image_style_references"
+      ],
+      "expected": {
+        "low": 0.035,
+        "high": 0.04,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 with a LoRA style id is the range up to the moodboard tier",
+      "nodeId": "krea-2-generate",
+      "params": {
+        "style_id": "st-1"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.03,
+        "high": 0.04,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 Large with a Krea moodboard id and a LoRA bills the moodboard tier, the highest",
+      "nodeId": "krea-2-generate",
+      "params": {
+        "variant": "large",
+        "moodboard_id": "mb-1",
+        "style_id": "st-1"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.07,
+        "high": 0.07,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 with a whitespace-only moodboard id sends none, so bills text to image",
+      "nodeId": "krea-2-generate",
+      "params": {
+        "moodboard_id": "  ",
+        "style_id": "\t"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.03,
+        "high": 0.03,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 Medium (Krea) with whitespace-only style references sends none (the gateway drops it)",
+      "nodeId": "krea-image-krea-krea-2-medium",
+      "params": {
+        "image_style_references": " \n"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.03,
+        "high": 0.03,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 Large (Krea) counts whitespace as Python's strip() does (U+001C is whitespace)",
+      "nodeId": "krea-image-krea-krea-2-large",
+      "params": {
+        "moodboards": "\u001c",
+        "styles": " "
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.06,
+        "high": 0.06,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 Turbo (Krea) doesn't count U+FEFF as whitespace (Python's strip() keeps it)",
+      "nodeId": "krea-image-krea-krea-2-medium-turbo",
+      "params": {
+        "image_style_references": "\ufeff"
       },
       "apiKeys": {
         "KREA_API_TOKEN": "set"

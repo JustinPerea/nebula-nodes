@@ -435,16 +435,51 @@ def test_a_wired_board_on_krea_2_is_the_range_from_style_references_to_moodboard
     assert _krea_2_estimate("krea-2-generate", {"variant": "large", "moodboard_id": "mb-1"}) == (0.07, 0.07)
 
 
-def test_krea_2_rows_for_loras_and_image_to_image_are_unconfirmed():
-    entry = model_pricing.load_pricing()["nodes"]["krea-image-krea-krea-2-medium"]
-    definition = NodeRegistry().get_all()["krea-image-krea-krea-2-medium"]
-    values = model_pricing._price_values(entry, definition, {"styles": '[{"id": "s", "strength": 1}]'}, ())
-    row = next(row for row in entry["rows"] if model_pricing._matches(values, row["match"]))
-    assert row["price"] == 0.03 and row.get("unconfirmed") is True
-    plain = model_pricing._price_values(entry, definition, {}, ())
-    row = next(row for row in entry["rows"] if model_pricing._matches(plain, row["match"]))
-    assert row["price"] == 0.03 and "unconfirmed" not in row
-    assert _krea_2_estimate("krea-image-krea-krea-2-medium", wired=["image_url"]) == (0.03, 0.03)
+def test_krea_2_loras_and_image_to_image_price_up_to_the_highest_tier():
+    """Krea doesn't say which tier a LoRA or an image-to-image source bills,
+    so those runs are the range from the tier their references give up to the
+    moodboard tier, the highest Krea lists; an agent's limit checks the top."""
+    styles = {"styles": '[{"id": "s", "strength": 1}]'}
+    assert _krea_2_estimate("krea-image-krea-krea-2-medium", wired=["image_url"]) == (0.03, 0.04)
+    assert _krea_2_estimate("krea-image-krea-krea-2-medium", styles) == (0.03, 0.04)
+    assert _krea_2_estimate("krea-image-krea-krea-2-large", styles, wired=["image_style_references"]) == (0.065, 0.07)
+    assert _krea_2_estimate("krea-image-krea-krea-2-medium-turbo", wired=["styles", "moodboards"]) == (0.02, 0.02)
+    assert _krea_2_estimate("krea-2-generate", {"style_id": "st"}) == (0.03, 0.04)
+    assert _krea_2_estimate("krea-2-generate", {"style_id": "st"}, wired=["moodboard"]) == (0.035, 0.04)
+    # No Krea 2 row carries an `unconfirmed` flag nothing would show.
+    table = model_pricing.load_pricing()["nodes"]
+    assert not [row for node_id in KREA_2_TIERS for row in table[node_id]["rows"] if "unconfirmed" in row]
+
+
+@pytest.mark.parametrize("node_id, params", [
+    ("krea-2-generate", {"moodboard_id": "  "}),
+    ("krea-2-generate", {"style_id": "\t\n"}),
+    ("krea-image-krea-krea-2-medium", {"image_style_references": " "}),
+    ("krea-image-krea-krea-2-large", {"moodboards": " ", "styles": "  "}),
+    ("krea-image-krea-krea-2-medium-turbo", {"image_style_references": "\u001c"}),
+])
+def test_a_whitespace_only_krea_2_field_sends_nothing_so_bills_text_to_image(node_id, params):
+    # handlers/krea.py strips moodboard_id/style_id; the gateway drops a
+    # whitespace-only jsonParams field, so neither reaches Krea.
+    text, _, _ = KREA_2_TIERS[node_id]
+    assert _krea_2_estimate(node_id, params) == (text, text)
+
+
+def test_whitespace_unset_applies_only_to_the_params_it_names():
+    definition = {"id": "tiered", "apiProvider": "krea", "params": [{"key": "refs"}, {"key": "other"}],
+                  "inputPorts": []}
+    entry = {"currency": "usd", "per": "request", "checked": "2026-10-19",
+             "sources": [{"url": "https://example.com", "quote": "x"}], "whitespaceUnset": ["refs"],
+             "rows": [{"match": {"refs": "", "other": ""}, "price": 1}, {"match": {}, "price": 2}]}
+    assert model_pricing.validate_pricing({"nodes": {"tiered": entry}}, {"tiered": definition}) == []
+    assert model_pricing.estimate_node(entry, definition, {"refs": " \t"})["low"] == 1
+    assert model_pricing.estimate_node(entry, definition, {"other": " "})["low"] == 2
+    bad = {**entry, "whitespaceUnset": ["nope"]}
+    assert any("whitespaceUnset names unknown param 'nope'" in p
+               for p in model_pricing.validate_pricing({"nodes": {"tiered": bad}}, {"tiered": definition}))
+    bad = {**entry, "whitespaceUnset": "refs"}
+    assert any("whitespaceUnset must be a list" in p
+               for p in model_pricing.validate_pricing({"nodes": {"tiered": bad}}, {"tiered": definition}))
 
 
 def test_a_wired_port_variable_prices_a_wire_into_a_param_it_reads():
