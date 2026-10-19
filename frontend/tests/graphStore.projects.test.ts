@@ -298,4 +298,45 @@ describe('copy in one project, paste in another (Justin, P2: "copy the node mood
     useGraphStore.getState().pasteClipboard();
     expect(useGraphStore.getState().nodes.map((n) => n.data.params)).toEqual([{ value: 'A' }, { value: 'A' }]);
   });
+
+  it('a paste from another project lands at the middle of the view, clear of what is there, keeping its layout', () => {
+    const board = { ...moodboardNode('n1'), position: { x: 0, y: 0 }, measured: { width: 300, height: 420 } };
+    const text = { ...node('A', 'n2'), selected: true, position: { x: 360, y: 60 }, measured: { width: 280, height: 160 } };
+    openProject('A', [board, text]);
+    useGraphStore.getState().copySelected();
+    // B already has a node exactly where A's were, and one in the middle of the view.
+    const there = { ...node('B', 'n1'), selected: false, position: { x: 0, y: 0 }, measured: { width: 300, height: 420 } };
+    const middle = { ...node('B2', 'n2'), selected: false, position: { x: 900, y: 450 }, measured: { width: 300, height: 300 } };
+    openProject('B', [there, middle]);
+
+    useGraphStore.getState().pasteClipboard({ view: { x: -200, y: -100, width: 2400, height: 1400 } });
+
+    const [pastedBoard, pastedText] = useGraphStore.getState().nodes.slice(2);
+    expect({ dx: pastedText.position.x - pastedBoard.position.x, dy: pastedText.position.y - pastedBoard.position.y })
+      .toEqual({ dx: 360, dy: 60 });
+    const box = { x: pastedBoard.position.x, y: pastedBoard.position.y, width: 640, height: 420 };
+    for (const existing of [there, middle]) {
+      const r = { ...existing.position, ...existing.measured! };
+      expect(box.x < r.x + r.width && r.x < box.x + box.width && box.y < r.y + r.height && r.y < box.y + box.height).toBe(false);
+    }
+    // In the view (-200..2200 x -100..1300), though its middle is taken.
+    expect(box.x >= -200 && box.y >= -100 && box.x + box.width <= 2200 && box.y + box.height <= 1300).toBe(true);
+  });
+
+  it('a paste from another project with a free view centre sits right on it', () => {
+    openProject('A', [{ ...moodboardNode('n1'), position: { x: 5000, y: 5000 }, measured: { width: 300, height: 400 } }]);
+    useGraphStore.getState().copySelected();
+    openProject('B', [{ ...node('B', 'n1'), selected: false, position: { x: 0, y: 0 }, measured: { width: 300, height: 200 } }]);
+    useGraphStore.getState().pasteClipboard({ view: { x: -1800, y: 1500, width: 1600, height: 1000 } });
+    expect(useGraphStore.getState().nodes[1].position).toEqual({ x: -1150, y: 1800 });
+  });
+
+  it('a paste on the canvas it was copied from is still +20 px, whatever the view', () => {
+    openProject('A', [{ ...node('A', 'n1'), selected: true, position: { x: 100, y: 200 } }]);
+    useGraphStore.getState().copySelected();
+    const pasted = useGraphStore.getState().pasteClipboard({ view: { x: 8200, y: 8500, width: 1600, height: 1000 } });
+    expect(useGraphStore.getState().nodes.map((n) => n.position)).toEqual([{ x: 100, y: 200 }, { x: 120, y: 220 }]);
+    expect(pasted).toEqual([useGraphStore.getState().nodes[1].id]);
+  });
 });
+

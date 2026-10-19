@@ -96,6 +96,7 @@ import { validateManifest } from '../lib/video/manifestValidator';
 import { componentTypeToCanvasDefId, pruneTrackItemsForDeletedNode } from '../lib/video/mirroring';
 import { isPortCompatible } from '../lib/portCompatibility';
 import { getProjectContext } from '../lib/projectContext';
+import { boundingRect, findOpenGroupOffset, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
 import { withParamDefaults } from '../lib/paramDefaults';
 
 export type TrackItemOrderAction = 'send-to-back' | 'send-backward' | 'bring-forward' | 'bring-to-front';
@@ -666,7 +667,12 @@ interface GraphState {
   // Clipboard
   clipboard: CanvasClipboard | null;
   copySelected: () => void;
-  pasteClipboard: () => void;
+  /** Paste what Cmd+C copied. Same load: +20 px from the copies, as before.
+   *  From another load (another project, or this one reopened): centred in
+   *  `view` (the visible canvas in flow coordinates, which Canvas passes),
+   *  then moved to the nearest spot clear of the nodes already here, in view
+   *  if one is, keeping its own layout. Returns the new nodes' ids. */
+  pasteClipboard: (target?: { view?: NodeRect }) => string[];
 
   // Selection & batch ops
   selectAll: () => void;
@@ -1724,9 +1730,6 @@ function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
     || state.providerStartAmbiguities.some((ambiguity) => ambiguity.nodeId === nodeId);
 }
 
-/** Clone the provider state attached to the source node, not a stale object
- * captured before the paid-start recovery event arrived. Returning null is a
- * fail-closed signal for an ambiguous source that has no safe ID to copy. */
 /**
  * What Cmd+C copied. It survives opening another project, so nodes copy from
  * one project to another (a Moodboard node keeps pointing at its board).
@@ -1783,6 +1786,34 @@ function clipboardPasteParams(
   return result;
 }
 
+/** A node's box in flow coordinates, with the size the canvas measured if it has rendered. */
+function nodeRect(node: Node<NodeData>): NodeRect {
+  return {
+    x: node.position.x, y: node.position.y,
+    width: node.measured?.width ?? node.width ?? UNMEASURED_NODE_SIZE.width,
+    height: node.measured?.height ?? node.height ?? UNMEASURED_NODE_SIZE.height,
+  };
+}
+
+/** How far to move the clipboard's nodes on paste. The copies' own
+ * coordinates mean nothing on another canvas, so a paste from another load
+ * goes to the middle of the view (or, with no view given, where it was) and
+ * then clear of what's there. On the canvas it came from it stays +20 px. */
+function pasteOffset(
+  state: GraphState,
+  clipboard: CanvasClipboard,
+  view: NodeRect | undefined,
+): { x: number; y: number } {
+  if (sameCanvas(clipboard.source)) return { x: 20, y: 20 };
+  const group = clipboard.nodes.map(nodeRect);
+  const box = view ?? boundingRect(group);
+  const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  return findOpenGroupOffset(group, state.nodes.map(nodeRect), center, view);
+}
+
+/** Clone the provider state attached to the source node, not a stale object
+ * captured before the paid-start recovery event arrived. Returning null is a
+ * fail-closed signal for an ambiguous source that has no safe ID to copy. */
 function providerSafeCloneParams(
   state: GraphState,
   node: Node<NodeData>,
@@ -2762,18 +2793,19 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     } });
   },
 
-  pasteClipboard: () => {
+  pasteClipboard: (target) => {
     const state = get();
     const { clipboard, isExecuting } = state;
-    if (isExecuting) return;
-    if (!clipboard || clipboard.nodes.length === 0) return;
+    if (isExecuting) return [];
+    if (!clipboard || clipboard.nodes.length === 0) return [];
 
     const safeParams = clipboardPasteParams(state, clipboard);
     if (!safeParams) {
       warnUnsafeProviderClone();
-      return;
+      return [];
     }
 
+    const offset = pasteOffset(state, clipboard, target?.view);
     pushUndo(set, get);
 
     const idMap = new Map<string, string>();
@@ -2783,7 +2815,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return {
         ...node,
         id: newId,
-        position: { x: node.position.x + 20, y: node.position.y + 20 },
+        position: { x: node.position.x + offset.x, y: node.position.y + offset.y },
         selected: true,
         data: {
           ...node.data,
@@ -2818,6 +2850,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       ],
       edges: [...state.edges, ...newEdges],
     }));
+    return newNodes.map((node) => node.id);
   },
 
   // ---------------------------------------------------------------------------
