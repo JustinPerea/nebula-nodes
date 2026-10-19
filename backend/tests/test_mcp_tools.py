@@ -90,7 +90,7 @@ def test_find_and_describe_follow_the_readiness_rule(nebula):
     assert all("nano" in row["id"] or "nano" in row["name"].lower() for row in everything["nodes"])
 
     described = mcp_server.describe_node("nano-banana")
-    assert [port["id"] for port in described["inputs"]] == ["prompt", "images"]
+    assert [port["id"] for port in described["inputs"]] == ["prompt", "images", "moodboard"]
     assert any(param["key"] == "aspect_ratio" and "16:9" in param["options"] for param in described["params"])
     with pytest.raises(NebulaAPIError, match="Close matches: nano-banana"):
         mcp_server.describe_node("nano-bananna")

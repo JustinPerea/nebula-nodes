@@ -32,6 +32,13 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -6809,6 +6816,13 @@
         "required": false,
         "multiple": true,
         "role": "identity"
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -7016,6 +7030,13 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -7295,6 +7316,13 @@
         "required": true,
         "multiple": true,
         "role": "identity"
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -8839,6 +8867,13 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -10725,6 +10760,13 @@
         "label": "Mask",
         "dataType": "Mask",
         "required": false
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -14305,6 +14347,13 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -14678,6 +14727,13 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -14809,6 +14865,13 @@
         "dataType": "Image",
         "required": true,
         "multiple": true
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -14950,6 +15013,13 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -15103,6 +15173,13 @@
         "label": "Mask",
         "dataType": "Mask",
         "required": false
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -15243,6 +15320,13 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -15446,6 +15530,13 @@
         "label": "Mask",
         "dataType": "Mask",
         "required": false
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -15649,6 +15740,13 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [
@@ -15793,6 +15891,13 @@
         "label": "Prompt",
         "dataType": "Text",
         "required": true
+      },
+      {
+        "id": "moodboard",
+        "label": "Moodboard",
+        "dataType": "Moodboard",
+        "required": false,
+        "maxConnections": 1
       }
     ],
     "outputPorts": [

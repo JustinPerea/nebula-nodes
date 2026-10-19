@@ -347,7 +347,7 @@ nebula-moodboard:moodboard -> krea-2-generate:moodboard
 - Use `krea-style-search` to find style IDs, then `krea-style` to pass one into `krea-2-generate`.
 - Use `krea-style-train` when the user wants to create a new Krea style from images. Its `style` output can feed directly into `krea-2-generate.styles`.
 - Krea moodboards are referenced by existing ID. The verified Krea API docs did not expose public moodboard create/list endpoints, so Nebula cannot create Krea-owned moodboards directly yet.
-- Nebula-native moodboards are separate provider-neutral assets. When wired into Krea 2, representative images become Krea image style references and the extracted style brief is appended to the prompt.
+- Nebula-native moodboards are separate provider-neutral assets. When wired into Krea 2, representative images become Krea image style references. The board's brief joins the prompt, and so does its Avoid list ("Keep these out of the image: ..."), because Krea 2 follows written instructions. The engine adds both for every generator with a Moodboard port (`backend/services/moodboard_brief.py`), not the Krea handler. The board's own fields (`direction`, `avoid`, `pinnedColors`, `briefOverride`) are set through `PUT /api/moodboards/{id}`; see `docs/contracts/07-studios-and-resources.md`.
 - `krea-2-generate` accepts at most 10 image style references and at most 1 moodboard.
 - `krea-style` strength supports `-2..2`; image style reference and moodboard strengths support `0..1`.
 
@@ -358,7 +358,7 @@ Wrapper nodes intentionally emit provider-specific objects on `Any` ports:
 - Image style reference: `{ kind: "krea_image_style_reference", image, strength }`
 - Style: `{ kind: "krea_style", id, strength }`
 - Krea moodboard: `{ kind: "krea_moodboard", id, strength }`
-- Nebula moodboard: `{ kind: "nebula_moodboard", moodboardId, name, mode, strength, images, analysis, styleBrief, negativePrompt, palette, accents, representativeImages, providerHints }` (`palette` is the dominant colours, ranked by image weight × share; `accents` are small saturated colours kept apart; `representativeImages` are heaviest first)
+- Nebula moodboard: `{ kind: "nebula_moodboard", moodboardId, name, mode, strength, images, analysis, styleBrief, negativePrompt, avoid, avoidPrompt, direction, pinnedColors, briefOverride, palette, accents, representativeImages, providerHints }` (`styleBrief` is the person's override when they wrote one, else the generated brief with their Direction first; `negativePrompt` is defects only plus the Avoid list; colours they kept out are dropped from `palette` and `accents`) (`palette` is the dominant colours, ranked by image weight × share; `accents` are small saturated colours kept apart; `representativeImages` are heaviest first)
 
 Do not hand-roll these shapes unless necessary. Prefer the wrapper nodes so the graph is inspectable and users can tune strengths from the UI.
 

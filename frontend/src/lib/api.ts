@@ -659,8 +659,35 @@ export async function deleteCharacter(id: string): Promise<TrashedItem> {
 // Moodboard CRUD helpers
 // ---------------------------------------------------------------------------
 
-type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'createdAt' | 'updatedAt'>;
+type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'createdAt' | 'updatedAt' | 'brief' | 'briefOverride'>
+  & { briefOverride?: { text: string } | null };
 type MoodboardUpdateInput = Partial<MoodboardCreateInput>;
+
+/** The backend's reason a moodboard call was refused (a string, or FastAPI's
+ *  list of field errors), so Studio can say what to fix. */
+async function moodboardError(response: Response, what: string): Promise<Error> {
+  let detail = '';
+  try {
+    const body = (await response.json()).detail;
+    if (typeof body === 'string') detail = body;
+    else if (Array.isArray(body)) {
+      detail = body.map((item: { loc?: unknown[]; msg?: string }) =>
+        [Array.isArray(item.loc) ? item.loc.filter((part) => part !== 'body').join('.') : '', item.msg ?? '']
+          .filter(Boolean).join(': ')).join('; ');
+    }
+  } catch { /* not JSON */ }
+  return new Error(detail ? `${what} failed: ${detail}` : `${what} failed: ${response.status}`);
+}
+
+/** Why a write to a saved board failed: that it went to Recently deleted
+ * meanwhile (saveFailure), else the backend's reason (moodboardError). */
+async function moodboardWriteError(response: Response, what: string): Promise<Error> {
+  if (response.status === 404) {
+    const trashed = await saveFailure(response.clone(), 'moodboard', '');
+    if (trashed.message) return trashed;
+  }
+  return moodboardError(response, what);
+}
 
 export async function fetchMoodboards(scope: 'project' | 'global', projectId?: string): Promise<Moodboard[]> {
   const params = new URLSearchParams({ scope });
@@ -684,7 +711,7 @@ export async function createMoodboard(body: MoodboardCreateInput): Promise<Moodb
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error(`Create moodboard failed: ${response.status}`);
+  if (!response.ok) throw await moodboardError(response, 'Create moodboard');
   return response.json();
 }
 
@@ -694,13 +721,21 @@ export async function updateMoodboard(id: string, body: MoodboardUpdateInput): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw await saveFailure(response, 'moodboard', `Update moodboard failed: ${response.status}`);
+  if (!response.ok) throw await moodboardWriteError(response, 'Save');
   return response.json();
 }
 
 export async function analyzeMoodboard(id: string): Promise<Moodboard> {
   const response = await apiFetch(`/api/moodboards/${id}/analyze`, { method: 'POST' });
   if (!response.ok) throw new Error(`Analyze moodboard failed: ${response.status}`);
+  return response.json();
+}
+
+/** Keep a board's hand-written brief after the board changed: clears
+ *  "board changed since you edited this" until the next change. */
+export async function keepMoodboardBriefOverride(id: string): Promise<Moodboard> {
+  const response = await apiFetch(`/api/moodboards/${encodeURIComponent(id)}/brief-override/keep`, { method: 'POST' });
+  if (!response.ok) throw await moodboardWriteError(response, 'Keep brief');
   return response.json();
 }
 

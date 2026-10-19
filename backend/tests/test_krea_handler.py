@@ -151,8 +151,9 @@ async def test_generate_adapts_native_nebula_moodboard_to_krea_style_refs() -> N
         )
 
     body = captured["body"]
-    assert body["prompt"].startswith("A product photograph")
-    assert "Use amber editorial lighting." in body["prompt"]
+    # The brief joins the prompt in the engine, for every generator
+    # (services/moodboard_brief.apply_to_generator), not here a second time.
+    assert body["prompt"] == "A product photograph"
     assert body["image_style_references"] == [
         {"url": "https://assets.example/a.png", "strength": 0.3},
         {"url": "https://assets.example/b.png", "strength": 0.6},

@@ -612,6 +612,20 @@ APPROVED_PARAM_FIELD_CHANGES["nebula-moodboard"] = {
     "moodboard": {"type": ("string", "moodboard"), "required": (False, True), "hidden": (True, None)},
 }
 
+# Gap 14 (2026-10-18): image generators take an optional Moodboard input. The
+# engine folds a wired board's brief into the prompt (and its Avoid list only
+# for instruction-following models; services/moodboard_brief.py). The port is
+# appended last; nothing else about these nodes changes.
+_MOODBOARD_PORT = {"id": "moodboard", "label": "Moodboard", "dataType": "Moodboard", "required": False,
+                   "maxConnections": 1}
+for _node_id in (
+    "fast-sdxl", "flux-2-pro", "nano-banana", "nano-banana-fal", "nano-banana-fal-edit",
+    "gpt-image-1-generate", "gpt-image-1-edit", "gpt-image-1-5", "gpt-image-1-5-edit",
+    "gpt-image-2-generate", "gpt-image-2-edit", "gpt-image-2-5-generate", "gpt-image-2-5-edit",
+    "gpt-image-2-fal-generate", "gpt-image-2-fal-edit",
+):
+    APPROVED_INPUT_PORT_ADDITIONS[_node_id] = [*APPROVED_INPUT_PORT_ADDITIONS.get(_node_id, []), _MOODBOARD_PORT]
+
 
 def _without_role_additions(node_id: str, node: dict[str, Any]) -> dict[str, Any]:
     """Normalize exact approved deltas without mutating shared fixture data."""

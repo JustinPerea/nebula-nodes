@@ -92,7 +92,7 @@ describe('shared model discovery', () => {
   });
 
   it('summarizes declared required/optional ports and bounds long rows', () => {
-    expect(modelInputSummary(NODE_DEFINITIONS['nano-banana'])).toBe('Prompt + Images (optional) → Image + Text');
+    expect(modelInputSummary(NODE_DEFINITIONS['nano-banana'])).toBe('Prompt + Images (optional) + Moodboard (optional) → Image + Text');
     expect(modelInputSummary(NODE_DEFINITIONS['paper-source'])).toBe('No connected inputs → Image');
     expect(modelInputSummary(kling)).toBe('Prompt (optional) + Start image (optional) + End image (optional) + 1 more → Video + All videos + All artifacts + 1 more');
   });

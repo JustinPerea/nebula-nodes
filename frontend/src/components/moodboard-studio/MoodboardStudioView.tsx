@@ -4,7 +4,9 @@ import { useUIStore } from '../../store/uiStore';
 import {
   analyzeMoodboard,
   createMoodboard,
+  fetchMoodboard,
   fetchMoodboards,
+  keepMoodboardBriefOverride,
   lookupStoredAsset,
   updateMoodboard,
 } from '../../lib/api';
@@ -17,7 +19,9 @@ import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftSto
 import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 import { getCurrentProject } from '../../lib/currentProject';
 import type { AssetScope } from '../../store/uiStore';
-import type { Moodboard, MoodboardAnalysis, MoodboardImage } from '../../types';
+import type { Moodboard, MoodboardAnalysis, MoodboardBrief, MoodboardImage, MoodboardPinnedColors } from '../../types';
+import { BriefFields, BriefPanel } from './MoodboardBrief';
+import { overrideAuthor } from './briefAuthor';
 import '../../styles/moodboard-studio.css';
 
 interface MoodboardDraft {
@@ -27,6 +31,13 @@ interface MoodboardDraft {
   mode: Moodboard['mode'];
   strength: number;
   analysis: MoodboardAnalysis | null;
+  // The person's brief fields live on the board, beside the analysis, so
+  // analyzing again (or a board change that clears the analysis) keeps them.
+  direction: string;
+  avoid: string[];
+  pinnedColors: MoodboardPinnedColors;
+  /** Only the text is sent; the server keeps when it was written. */
+  briefOverride: { text: string } | null;
   projectId?: string;
 }
 
@@ -38,6 +49,10 @@ function emptyDraft(): MoodboardDraft {
     mode: 'look',
     strength: 0.7,
     analysis: null,
+    direction: '',
+    avoid: [],
+    pinnedColors: { include: [], exclude: [] },
+    briefOverride: null,
   };
 }
 
@@ -49,7 +64,22 @@ function moodboardToDraft(m: Moodboard): MoodboardDraft {
     mode: m.mode,
     strength: m.strength,
     analysis: m.analysis,
+    direction: m.direction ?? '',
+    avoid: [...(m.avoid ?? [])],
+    pinnedColors: { include: [...(m.pinnedColors?.include ?? [])], exclude: [...(m.pinnedColors?.exclude ?? [])] },
+    briefOverride: m.briefOverride?.text ? { text: m.briefOverride.text } : null,
     projectId: m.projectId,
+  };
+}
+
+/** A draft as an older store entry may hold it (saved before the brief fields). */
+function withBriefFields(draft: MoodboardDraft): MoodboardDraft {
+  return {
+    ...draft,
+    direction: draft.direction ?? '',
+    avoid: draft.avoid ?? [],
+    pinnedColors: draft.pinnedColors ?? { include: [], exclude: [] },
+    briefOverride: draft.briefOverride ?? null,
   };
 }
 
@@ -63,10 +93,6 @@ function createDraftImage(url: string): MoodboardImage {
   };
 }
 
-function normalizeAnalysisText(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
-
 export function MoodboardStudioView() {
   const moodboardEditorId = useUIStore((s) => s.moodboardEditorId);
   const moodboardEditorScope = useUIStore((s) => s.moodboardEditorScope);
@@ -74,10 +100,21 @@ export function MoodboardStudioView() {
   const exitMoodboardEditor = useUIStore((s) => s.exitMoodboardEditor);
 
   const studio = useAssetStudioDraft('moodboard', moodboardEditorScope, moodboardEditorId, emptyDraft);
-  const { draft, savedId, thumbnail, saveState, saveError, loadError, loaded,
+  const { draft: storedDraft, savedId, thumbnail, saveState, saveError, loadError, loaded,
     dirty, pendingSaveId, pendingAnalysisId, key, revision, epoch, projectId, projectReady, verifyProject, setDraft, initialize, patch } = studio;
+  const draft = withBriefFields(storedDraft);
   const loading = !loaded;
   const [uploading, setUploading] = useState(false);
+  // What generators get from the saved board (computed by the backend on
+  // every read and save), for the board it belongs to.
+  // The saved override comes with it, so Studio can say who wrote it.
+  const [serverBrief, setServerBrief] = useState<
+    { id: string; brief: MoodboardBrief; override: Moodboard['briefOverride'] } | null>(null);
+  const brief = serverBrief && serverBrief.id === savedId ? serverBrief.brief : null;
+  const savedOverride = serverBrief && serverBrief.id === savedId ? serverBrief.override : null;
+  const rememberBrief = useCallback((board: Moodboard) => {
+    if (board.brief) setServerBrief({ id: board.id, brief: board.brief, override: board.briefOverride ?? null });
+  }, []);
   const analyzing = Boolean(pendingAnalysisId);
   const [railScope, setRailScope] = useState<AssetScope>(moodboardEditorScope);
   const mounted = useRef(true);
@@ -111,6 +148,7 @@ export function MoodboardStudioView() {
           .find((candidate) => candidate.id === moodboardEditorId && (moodboardEditorScope !== 'project' || candidate.projectId === projectId));
         if (found) {
           setRailScope(found.projectId ? 'project' : 'global');
+          rememberBrief(found);
           initialize(moodboardToDraft(found), found.id, found.thumbnail);
         } else {
           const fresh = moodboardEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft();
@@ -127,7 +165,16 @@ export function MoodboardStudioView() {
       });
     }
     return () => { cancelled = true; };
-  }, [key, revision, loaded, projectReady, projectId, moodboardEditorId, moodboardEditorScope, initialize, patch, isDraftId, isCurrent]);
+  }, [key, revision, loaded, projectReady, projectId, moodboardEditorId, moodboardEditorScope, initialize, patch, isDraftId, isCurrent, rememberBrief]);
+
+  // A draft kept from an earlier visit loads without a fetch; read its brief.
+  const needsBrief = loaded && Boolean(savedId) && !brief;
+  useEffect(() => {
+    if (!needsBrief || !savedId) return;
+    let cancelled = false;
+    void fetchMoodboard(savedId).then((board) => { if (!cancelled && board) rememberBrief(board); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [needsBrief, savedId, rememberBrief]);
 
   useEffect(() => {
     if (isDraftId && loaded && savedId && isCurrent()) enterMoodboardEditor(savedId, moodboardEditorScope);
@@ -142,9 +189,10 @@ export function MoodboardStudioView() {
     const attempt = store.beginSave(key);
     if (!attempt) return null;
     try {
-      const body = { ...currentDraft, name: currentDraft.name.trim() };
+      const body = { ...withBriefFields(currentDraft), name: currentDraft.name.trim() };
       const result = attempt.entry.savedId
         ? await updateMoodboard(attempt.entry.savedId, body) : await createMoodboard(body);
+      rememberBrief(result);
       if (!store.finishSave(key, attempt.id, attempt.revision, result.id, result.thumbnail)) return null;
       if (!attempt.entry.savedId) {
         const createdScope: AssetScope = result.projectId ? 'project' : 'global';
@@ -160,7 +208,7 @@ export function MoodboardStudioView() {
       store.failSave(key, attempt.id, err instanceof Error ? err.message : 'Save failed. Retry?');
       return null;
     }
-  }, [key, isCurrent, verifyProject, enterMoodboardEditor]);
+  }, [key, isCurrent, verifyProject, enterMoodboardEditor, rememberBrief]);
 
   useEffect(() => {
     if (!loaded || !dirty || !canSave || pendingSaveId || saveState === 'error') return;
@@ -220,7 +268,10 @@ export function MoodboardStudioView() {
 
   const runAnalyze = async () => {
     if (!isCurrent() || !await verifyProject() || !isCurrent()) return;
-    const id = dirty || !savedId ? await persist() : savedId;
+    // Read from the store, not this render: a change made just before (such
+    // as Regenerate dropping the override) must be saved first.
+    const entry = useAssetStudioDraftStore.getState().entries[key];
+    const id = entry?.dirty || !entry?.savedId ? await persist() : entry.savedId;
     if (!id || !mounted.current) return;
     const ui = useUIStore.getState();
     if (ui.viewMode !== 'moodboard-editor') return;
@@ -246,6 +297,7 @@ export function MoodboardStudioView() {
     };
     try {
       const updated = await analyzeMoodboard(id);
+      rememberBrief(updated);
       if (ownsAnalysis()) store.patch(targetKey, { draft: moodboardToDraft(updated), savedId: updated.id,
         thumbnail: updated.thumbnail, dirty: false, loaded: true, saveState: 'saved' });
     } catch (err) {
@@ -255,12 +307,26 @@ export function MoodboardStudioView() {
     }
   };
 
-  const updateAnalysis = (patch: Partial<MoodboardAnalysis>) => {
-    setDraft((current) => {
-      const base = current.analysis;
-      if (!base) return current;
-      return { ...current, analysis: { ...base, ...patch } };
-    });
+  // Brief fields don't feed the analysis, so changing them keeps it.
+  const setBriefFields = (fields: Partial<Pick<MoodboardDraft, 'direction' | 'avoid' | 'pinnedColors' | 'briefOverride'>>) => {
+    setDraft((current) => ({ ...withBriefFields(current), ...fields }));
+  };
+
+  const keepOverride = async () => {
+    if (!isCurrent()) return;
+    const id = dirty || !savedId ? await persist() : savedId;
+    if (!id || !isCurrent()) return;
+    try {
+      rememberBrief(await keepMoodboardBriefOverride(id));
+    } catch (err) {
+      if (isCurrent()) patch({ saveError: err instanceof Error ? err.message : 'Keep failed.' });
+    }
+  };
+
+  const regenerateBrief = () => {
+    setBriefFields({ briefOverride: null });
+    // The generated brief needs an analysis of the board as it is now.
+    if (!draft.analysis) void runAnalyze();
   };
 
   const deleting = useAssetDelete('moodboard');
@@ -400,7 +466,7 @@ export function MoodboardStudioView() {
                     rows={3}
                     value={draft.notes}
                     onChange={(event) => setDraft({ ...draft, analysis: null, notes: event.target.value })}
-                    placeholder="What should the board preserve or avoid?"
+                    placeholder="Anything the board should carry, in your words."
                   />
                 </label>
               </div>
@@ -475,6 +541,13 @@ export function MoodboardStudioView() {
               </div>
             </section>
 
+            <BriefFields
+              direction={draft.direction}
+              avoid={draft.avoid}
+              pinnedColors={draft.pinnedColors}
+              onChange={setBriefFields}
+            />
+
             <section className="moodboard-analysis">
               <div className="moodboard-analysis__head">
                 <div>
@@ -488,24 +561,19 @@ export function MoodboardStudioView() {
                 </button>
               </div>
 
+              <BriefPanel
+                brief={brief}
+                override={draft.briefOverride}
+                author={overrideAuthor(savedOverride, draft.briefOverride)}
+                saving={dirty || Boolean(pendingSaveId)}
+                busy={analyzing}
+                onEdit={(text) => setBriefFields({ briefOverride: { text } })}
+                onKeep={() => void keepOverride()}
+                onRegenerate={regenerateBrief}
+              />
+
               {analysis ? (
                 <div className="moodboard-analysis__body">
-                  <label className="moodboard-field">
-                    <span>Style brief</span>
-                    <textarea
-                      rows={5}
-                      value={normalizeAnalysisText(analysis.styleBrief)}
-                      onChange={(event) => updateAnalysis({ styleBrief: event.target.value })}
-                    />
-                  </label>
-                  <label className="moodboard-field">
-                    <span>Negative prompt</span>
-                    <textarea
-                      rows={3}
-                      value={normalizeAnalysisText(analysis.negativePrompt)}
-                      onChange={(event) => updateAnalysis({ negativePrompt: event.target.value })}
-                    />
-                  </label>
                   <Swatches label="Palette" colors={analysis.palette} />
                   <Swatches label="Accents" colors={analysis.accents ?? []} />
                   <div className="moodboard-analysis__summary">{analysis.summary}</div>
