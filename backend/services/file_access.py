@@ -53,6 +53,15 @@ def _identity_contains(candidate: Path, protected: Path) -> bool:
     return False
 
 
+def access_scope() -> str:
+    """What ``require_allowed_path``'s answer depends on besides the path and
+    the file: the active agent workspace ("" for none). Code that keeps an
+    answer for a file (services/moodboard_layout.file_aspect) keys it on this."""
+    from services.agent_workspaces import active_workspace
+
+    return str(active_workspace() or "")
+
+
 def require_allowed_path(value: str | Path) -> Path:
     """Return a canonical path, rejecting protected names and file aliases.
 

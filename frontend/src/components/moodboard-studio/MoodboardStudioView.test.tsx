@@ -26,6 +26,7 @@ vi.mock('../../hooks/useAssetDelete', () => ({
 }));
 
 import { MoodboardStudioView } from './MoodboardStudioView';
+import { patchSteers } from './steering';
 import { emptyRailMessage } from '../../lib/assetHome';
 import { setOpenProject } from '../../test/projectState';
 import { useUIStore } from '../../store/uiStore';
@@ -129,6 +130,35 @@ describe('Moodboard Studio private note', () => {
     await waitFor(() => expect(api.updateMoodboard.mock.calls.at(-1)![1].images[0].notes).toBe('the orange'),
       { timeout: 3000 });
     expect(api.updateMoodboard.mock.calls.at(-1)![1].analysis).toBeNull();
+  });
+});
+
+describe('Moodboard Studio and the board layout', () => {
+  const card = { id: 'c1', frameId: null, x: 40, y: 80, w: 480, h: 270, weight: 1, placedBy: 'person',
+    placedAt: '2026-10-19T00:00:00+00:00' };
+
+  it('saves without the board layout and sends each image back with its cards', async () => {
+    boards.g1 = board({
+      images: [{ id: 'i1', url: '/api/outputs/a.png', weight: 1, notes: '', privateNote: '', excluded: false,
+        placements: [card] }],
+      layoutVersion: 1, frames: [], suggestions: [], readings: {},
+    } as Partial<Moodboard>);
+    await openStudio('g1', 'global', 'Global board');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Private note' }), { target: { value: 'liked' } });
+
+    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    const [, body] = api.updateMoodboard.mock.calls.at(-1)!;
+    for (const key of ['layoutVersion', 'frames', 'suggestions', 'readings', 'lastRead']) expect(body).not.toHaveProperty(key);
+    expect(body.images[0].placements).toEqual([card]);
+    expect(body.analysis).toEqual(analysis);
+  });
+
+  it('clears the analysis only for what it reads', () => {
+    expect(patchSteers({ privateNote: 'x' })).toBe(false);
+    expect(patchSteers({ placements: [card as never] })).toBe(false);
+    for (const patch of [{ weight: 0.5 }, { notes: 'x' }, { excluded: true }, { url: '/api/outputs/b.png' }]) {
+      expect(patchSteers(patch)).toBe(true);
+    }
   });
 });
 

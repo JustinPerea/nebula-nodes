@@ -495,7 +495,9 @@ def get_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None) -
     if len(matches) > 1:
         ids = ", ".join(str(board.get("id")) for board in matches)
         raise MoodboardError(f"{len(matches)} boards are named '{ref}' ({ids}); use the id")
-    return matches[0]
+    # A list leaves out what only a board read gives (an old board's layout),
+    # so read the one that matched.
+    return api.request("GET", f"/api/moodboards/{matches[0]['id']}", headers=headers)
 
 
 def _image_entry(url: str) -> dict[str, Any]:
@@ -830,9 +832,15 @@ _OTHERS_SAVED = "The other changes were saved; `previous` puts them back."
 PRIVATE_NOTE_LIMIT = 2000
 
 
+# The image keys the analysis reads (services/moodboard_analysis.source_hash).
+# Not the private note, and not the layout: moving or resizing a card keeps
+# the analysis.
+STEERING_KEYS = ("url", "weight", "notes", "excluded")
+
+
 def _steering(images: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Images without their private notes: what the analysis reads."""
-    return [{key: value for key, value in image.items() if key != "privateNote"} for image in images]
+    """What the analysis reads of each image (``STEERING_KEYS``)."""
+    return [{key: image.get(key) for key in STEERING_KEYS} for image in images]
 
 
 # Every key previous_settings can return: update_board's arguments that put
@@ -975,9 +983,14 @@ def _override(board: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def brief(board: dict[str, Any]) -> dict[str, Any]:
+def brief(board: dict[str, Any], *, layout: bool = False) -> dict[str, Any]:
     """A board as an agent needs it: settings, the brief fields, the brief
     generators get, numbered images, and the analysis.
+
+    `layout` adds where the cards sit: each image's `placements` (one card
+    each: x, y, w, h in board pixels, its weight, and `frameId`, the frame it
+    is in, null for none) and the board's `frames`. `nebula moodboard show
+    --json` and moodboard_get ask for it; lists and edits leave it out.
 
     An image's `privateNote` is the person's own label for it, shown to
     whoever inspects the board; nothing that generates gets it, so don't put
@@ -989,7 +1002,7 @@ def brief(board: dict[str, Any]) -> dict[str, Any]:
     Direction, pinned colours and any hand-written brief, so it is not it."""
     analysis = board.get("analysis") or None
     composed = board.get("brief")
-    return {
+    view = {
         "id": board.get("id"),
         "name": board.get("name"),
         "projectId": board.get("projectId"),
@@ -1009,3 +1022,9 @@ def brief(board: dict[str, Any]) -> dict[str, Any]:
         "analysis": analysis,
         "updatedAt": board.get("updatedAt"),
     }
+    if layout:
+        for image, shown in zip(board.get("images") or [], view["images"]):
+            if isinstance(image, dict) and isinstance(image.get("placements"), list):
+                shown["placements"] = image["placements"]
+        view["frames"] = board.get("frames") if isinstance(board.get("frames"), list) else []
+    return view

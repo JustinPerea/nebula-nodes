@@ -9,6 +9,16 @@ Moodboards are provider-neutral creative-direction assets. They can later be
 adapted to Krea, GPT Image, Gemini, Seedream, etc. without changing the saved
 resource shape.
 
+Each image may also carry ``placements``: its cards on the board canvas
+(services/moodboard_layout.py). Writes keep them: a PUT merges images by id,
+so a key a client leaves out keeps its saved value, and an image already on
+the board keeps its cards whatever the client sends. A new image gets the
+cards it asks for, else the server places it. The board-level layout
+(``frames``, ``suggestions``, ``readings``, ``layoutVersion``) is never set
+through ``create`` or ``update``. A board saved before layouts existed reads
+with one (``get``, ``update``; ``list`` skips it) and its file is left alone
+until the next edit, which saves that layout and stamps ``layoutVersion``.
+
 The person's brief fields (``direction``, ``avoid``, ``pinnedColors``,
 ``briefOverride``) sit on the board beside ``analysis``, so analyzing again
 never drops them; services/moodboard_brief.py describes them. A board saved
@@ -18,7 +28,7 @@ Each image may carry a ``privateNote``: the person's own label ("PAINTERLY
 (liked)"). It is for whoever looks at the board, the person or an agent, and
 nothing else: it isn't an analysis input (``source_hash`` leaves it out), and
 it never reaches the brief, a generator or the Moodboard node's outputs
-(``without_private``). The image's ``notes`` are the ones that steer.
+(``output_image``). The image's ``notes`` are the ones that steer.
 """
 from __future__ import annotations
 
@@ -26,12 +36,14 @@ import json
 import logging
 import os
 import re
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from services import asset_trash
+from services import moodboard_layout as layout
 from services.asset_trash import is_trash_folder
 
 _PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -39,14 +51,19 @@ _MOODBOARD_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _VALID_MODES = {"look", "world", "subject"}
 # The longest private note an image keeps (Moodboard Studio stops typing there).
 PRIVATE_NOTE_LIMIT = 2000
-# Image fields that are the person's alone: never sent to the analysis, the
-# brief, a generator or a node's outputs.
-PRIVATE_IMAGE_KEYS = ("privateNote",)
-
-
-def without_private(image: dict[str, Any]) -> dict[str, Any]:
-    """An image as anything that steers or generates may see it."""
-    return {key: value for key, value in image.items() if key not in PRIVATE_IMAGE_KEYS}
+# The image fields a client sets; anything else on a saved image (a later
+# Nebula's) is kept as it is.
+IMAGE_KEYS = ("id", "url", "weight", "notes", "privateNote", "excluded")
+# The image fields generators and the Moodboard node's outputs get
+# (handlers/moodboard.py): never the private note (the person's alone) or
+# the layout.
+OUTPUT_IMAGE_KEYS = ("id", "url", "weight", "notes", "excluded")
+# The board's layout, saved beside its images. Only board edits and the
+# server's own placement of new images write it, never a PUT or a create.
+LAYOUT_VERSION = 1
+LAYOUT_BOARD_KEYS = ("frames", "suggestions", "readings", "layoutVersion", "lastRead")
+LAYOUT_REFUSED = ("can't be set with PUT or when making a board: a board's layout is written only by board "
+                  "edits, and new images are placed by Nebula (or where their placements ask)")
 
 
 def _private_note(raw: Any, index: int) -> str:
@@ -116,31 +133,130 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def _normalize_images(images: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+def _weight(raw: Any, default: float = 1.0) -> float:
+    try:
+        weight = float(raw)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return max(0.0, min(1.0, weight)) if weight == weight else default
+
+
+def _normalize_images(images: list[dict[str, Any]] | None, *, stored: list[Any] | None = None,
+                      board: dict[str, Any] | None = None, by: str = "agent") -> list[dict[str, Any]]:
     """Images as saved. Only writes call this, so a bad image is refused rather
-    than dropped (a board that silently lost its images looked like a success)."""
+    than dropped (a board that silently lost its images looked like a success).
+
+    ``stored`` is the board's images as saved (laid out). Each image is merged
+    with the saved image of the same id: a key the client left out keeps its
+    saved value, and the saved image's ``placements`` (and any key this
+    version doesn't know) are kept whatever the client sent, so a stale tab
+    or an echoing CLI can't undo a layout edit. A weight changed here scales
+    its cards (section 4.3). An image left out of ``images`` is removed.
+
+    A new image takes the ``placements`` it asks for (checked; ``placedBy``
+    is ``by``), else Nebula places it after the last-added card. ``board``
+    gives the frames and the saved analysis (for aspect ratios)."""
+    board = board or {}
+    saved: dict[str, deque[dict[str, Any]]] = {}
+    for image in stored or []:
+        if isinstance(image, dict) and image.get("id"):
+            saved.setdefault(str(image["id"]), deque()).append(image)
+    measured = layout.analysis_sizes(board.get("analysis"))
+    frame_ids = {f.get("id") for f in layout.frames_of(board)}
+    now = _now_iso()
+
     normalized: list[dict[str, Any]] = []
+    asked: dict[int, Any] = {}  # index -> the placements a new image asked for
     for index, raw in enumerate(images or []):
         if not isinstance(raw, dict):
             raise ValueError(f"images[{index}] must be an object")
-        url = str(raw.get("url") or "").strip()
+        raw_id = raw.get("id")
+        queue = saved.get(str(raw_id)) if raw_id else None
+        before = queue.popleft() if queue else None
+        sent = {key: raw[key] for key in IMAGE_KEYS if key in raw}
+        merged = {**(before or {}), **sent}
+        url = str(merged.get("url") or "").strip()
         if not url:
             raise ValueError(f"images[{index}].url is empty")
-        image_id = str(raw.get("id") or uuid4().hex[:12])
-        weight_raw = raw.get("weight", 1.0)
-        try:
-            weight = max(0.0, min(1.0, float(weight_raw)))
-        except (TypeError, ValueError):
-            weight = 1.0
-        normalized.append({
-            "id": image_id,
+        image: dict[str, Any] = {
+            **(before or {}),
+            "id": str(merged.get("id") or uuid4().hex[:12]),
             "url": url,
-            "weight": weight,
-            "notes": str(raw.get("notes") or ""),
-            "privateNote": _private_note(raw.get("privateNote"), index),
-            "excluded": bool(raw.get("excluded", False)),
-        })
+            "weight": _weight(merged.get("weight", 1.0)),
+            "notes": str(merged.get("notes") or ""),
+            "privateNote": _private_note(merged.get("privateNote"), index),
+            "excluded": bool(merged.get("excluded", False)),
+        }
+        if before is not None and layout.has_card(before):
+            cards = before["placements"]
+            if "weight" in sent and image["weight"] != _weight(before.get("weight", 1.0)):
+                cards = layout.rescale(cards, image["weight"], layout.image_aspect(image, measured))
+            image["placements"] = cards
+        elif before is not None:
+            # Saved with no card that can be drawn (only a hand-edited or
+            # foreign file): Nebula places it, as for a new image.
+            image.pop("placements", None)
+        elif raw.get("placements"):
+            asked[index] = raw["placements"]
+        normalized.append(image)
+
+    taken = {str(p.get("id")) for image in normalized for p in layout.cards_of(image)}
+    for index, cards in asked.items():
+        image = normalized[index]
+        aspect = layout.image_aspect(image, measured)
+        made = layout.normalize_placements(cards, label=f"images[{index}].placements", aspect=aspect,
+                                           frame_ids=frame_ids, taken=taken, placed_by=by, placed_at=now)
+        sent_weight = "weight" in (images or [])[index]
+        fill = layout.card_weight(image["weight"]) if sent_weight else 1.0
+        made = [p if p["weight"] is not None else layout.resized(p, fill, aspect) for p in made]
+        if sent_weight:
+            made = layout.rescale(made, image["weight"], aspect)
+        else:
+            # No weight sent: the image weighs what its largest card shows.
+            image["weight"] = max(p["weight"] for p in made)
+        image["placements"] = made
+
+    unplaced = [i for i, image in enumerate(normalized) if "placements" not in image]
+    if unplaced:
+        sizes = [layout.size_for(layout.card_weight(normalized[i]["weight"]),
+                                 layout.image_aspect(normalized[i], measured)) for i in unplaced]
+        # In order, each after the one before: images placed so far, then these.
+        corners = layout.place({**board, "images": normalized}, sizes)
+        for i, (w, h), (x, y) in zip(unplaced, sizes, corners):
+            pid = layout.new_placement_id()
+            while pid in taken:
+                pid = layout.new_placement_id()
+            taken.add(pid)
+            normalized[i]["placements"] = [{
+                "id": pid, "frameId": None, "x": x, "y": y, "w": w, "h": h,
+                "weight": layout.card_weight(normalized[i]["weight"]), "placedBy": by, "placedAt": now}]
     return normalized
+
+
+def output_image(image: dict[str, Any]) -> dict[str, Any]:
+    """An image as generators and the Moodboard node's outputs see it: only
+    ``OUTPUT_IMAGE_KEYS`` (never the private note or the layout)."""
+    return {key: image[key] for key in OUTPUT_IMAGE_KEYS if key in image}
+
+
+def _with_layout_fields(board: dict[str, Any]) -> dict[str, Any]:
+    """A board read from disk with its layout fields: ``frames``,
+    ``suggestions`` and ``readings`` read as empty when absent. Saved ones are
+    checked (section 4.10); a board that fails still opens as saved, and the
+    problem is logged."""
+    defaults = {"frames": [], "suggestions": [], "readings": {}}
+    missing = {key: value for key, value in defaults.items() if key not in board}
+    if missing:
+        board = {**board, **missing}
+    images = board.get("images")
+    if len(missing) < len(defaults) or any(isinstance(img, dict) and "placements" in img
+                                           for img in (images if isinstance(images, list) else [])):
+        try:
+            layout.check_board_layout(board)
+        except Exception as exc:  # noqa: BLE001 - only logged: whatever a file holds, the board opens
+            logging.getLogger(__name__).warning("Moodboard %s: its saved layout is out of bounds: %s",
+                                                board.get("id"), exc)
+    return board
 
 
 def _with_image_defaults(board: dict[str, Any]) -> dict[str, Any]:
@@ -159,16 +275,24 @@ def _brief():
     return moodboard_brief
 
 
-def _migrated(board: dict[str, Any]) -> dict[str, Any]:
+def _migrated(board: dict[str, Any], *, layout_board: bool = False) -> dict[str, Any]:
     """A board read from disk, with its brief fields (migrated in memory if
-    the startup migration hasn't written them yet)."""
-    board = _with_image_defaults(board)
+    the startup migration hasn't written them yet) and its layout fields.
+    ``layout_board``: also lay it out in memory (an old board gets the grid;
+    services/moodboard_layout.ensure_layout). Nothing is written here."""
+    board = _with_layout_fields(_with_image_defaults(board))
     try:
         result = _brief().migrate_board(board)
     except Exception:  # an odd old board still opens, without its migrated fields
         logging.getLogger(__name__).exception("Moodboard %s: brief fields not migrated", board.get("id"))
-        return board
-    return board if result is None else result[0]
+        result = None
+    board = board if result is None else result[0]
+    if layout_board:
+        try:
+            board = layout.ensure_layout(board)
+        except Exception:  # an odd old board still opens, without a layout
+            logging.getLogger(__name__).exception("Moodboard %s: not laid out", board.get("id"))
+    return board
 
 
 OVERRIDE_AUTHORS = ("person", "agent")
@@ -245,6 +369,21 @@ def _set_override(moodboard: dict[str, Any], value: Any, *, previous: Any, by: s
                                   "by": by}
 
 
+def _stamp_layout(moodboard: dict[str, Any]) -> None:
+    """Stamp ``layoutVersion`` on a board a write is about to save, but only
+    when every image has a card: if laying the board out failed in memory,
+    stamping would make the next read take the cards as saved (none) rather
+    than lay the board out again."""
+    if layout.is_laid_out(moodboard):
+        moodboard["layoutVersion"] = LAYOUT_VERSION
+
+
+def _refuse_layout_fields(fields: dict[str, Any]) -> None:
+    sent = [key for key in LAYOUT_BOARD_KEYS if key in fields]
+    if sent:
+        raise ValueError(f"{', '.join(sent)} {LAYOUT_REFUSED}")
+
+
 def _normalize_analysis(analysis: dict[str, Any] | None) -> dict[str, Any] | None:
     if analysis is None:
         return None
@@ -270,7 +409,12 @@ class MoodboardStore:
         pinnedColors: dict[str, Any] | None = None,
         briefOverride: dict[str, Any] | None = None,
         by: str = "agent",
+        **extra: Any,
     ) -> dict[str, Any]:
+        """A new board. Its images are laid out from the start (the cards
+        they ask for, else placed by Nebula), so it is saved with
+        ``layoutVersion``. ``by`` ("person" or "agent") stamps the cards and
+        any hand-written brief."""
         brief = _brief()
         name = str(name or "").strip()
         if not name:
@@ -282,9 +426,14 @@ class MoodboardStore:
         except (TypeError, ValueError):
             strength_value = 0.7
 
+        _refuse_layout_fields(extra)
+        if extra:
+            raise TypeError(f"create() got unexpected keyword arguments: {', '.join(sorted(extra))}")
+        if by not in OVERRIDE_AUTHORS:
+            raise ValueError(f"author must be one of {OVERRIDE_AUTHORS}")
         moodboard_id = uuid4().hex[:12]
         now = _now_iso()
-        normalized_images = _normalize_images(images)
+        normalized_images = _normalize_images(images, by=by)
         moodboard: dict[str, Any] = {
             "id": moodboard_id,
             "name": name,
@@ -299,6 +448,10 @@ class MoodboardStore:
             "pinnedColors": brief.normalize_pinned_colors(pinnedColors),
             "briefOverride": None,
             "briefVersion": brief.BRIEF_FIELDS_VERSION,
+            "layoutVersion": LAYOUT_VERSION,
+            "frames": [],
+            "suggestions": [],
+            "readings": {},
             "thumbnail": normalized_images[0]["url"] if normalized_images else "",
             "projectId": projectId,
             "createdAt": now,
@@ -312,11 +465,15 @@ class MoodboardStore:
         _write_json(scope_dir / f"{moodboard_id}.json", moodboard)
         return moodboard
 
-    def get(self, moodboard_id: str) -> dict[str, Any] | None:
+    def get(self, moodboard_id: str, *, laid_out: bool = True) -> dict[str, Any] | None:
+        """A board as saved, laid out in memory (an old board reads with
+        the grid it will be saved with on its next edit). ``laid_out=False``
+        skips that, for readers that never look at the layout (the
+        Moodboard node). Reading writes nothing."""
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
             return None
-        return _migrated(json.loads(path.read_text(encoding="utf-8")))
+        return _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=laid_out)
 
     def list(self, scope: str, projectId: str | None = None) -> list[dict[str, Any]]:
         root = _moodboard_root()
@@ -341,11 +498,19 @@ class MoodboardStore:
 
     def update(self, moodboard_id: str, *, by: str = "agent", **fields: Any) -> dict[str, Any]:
         """Change a board's fields. ``by`` is who asked ("person" only when the
-        route's person gate says so); it matters only for ``briefOverride``."""
+        route's person gate says so); it matters for ``briefOverride`` and
+        stamps the cards of new images (``placedBy``).
+
+        ``images`` merges by id (see ``_normalize_images``). The board is
+        laid out before the change, so an old board's first write saves the
+        grid it read with and stamps ``layoutVersion``: nothing moves."""
+        if by not in OVERRIDE_AUTHORS:
+            raise ValueError(f"author must be one of {OVERRIDE_AUTHORS}")
+        _refuse_layout_fields(fields)
         path = _find_moodboard_file(_moodboard_root(), moodboard_id)
         if path is None:
             raise KeyError(f"Moodboard '{moodboard_id}' not found")
-        moodboard = _migrated(json.loads(path.read_text(encoding="utf-8")))
+        moodboard = _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True)
         brief = _brief()
 
         immutable = {"id", "createdAt", "projectId"}
@@ -360,7 +525,7 @@ class MoodboardStore:
                     raise ValueError(f"{key} can't change")
                 continue
             if key == "images":
-                moodboard[key] = _normalize_images(value)
+                moodboard[key] = _normalize_images(value, stored=moodboard.get("images"), board=moodboard, by=by)
                 moodboard["thumbnail"] = moodboard[key][0]["url"] if moodboard[key] else ""
             elif key == "mode":
                 if value not in _VALID_MODES:
@@ -384,6 +549,7 @@ class MoodboardStore:
         if override_sent:
             _set_override(moodboard, override_value, previous=moodboard.get("briefOverride"), by=by)
 
+        _stamp_layout(moodboard)
         moodboard["version"] = int(moodboard.get("version", 1)) + 1
         moodboard["updatedAt"] = _now_iso()
         _write_json(path, moodboard)
@@ -403,13 +569,14 @@ class MoodboardStore:
             raise KeyError(f"Moodboard '{moodboard_id}' not found") from None
         if path is None:
             raise KeyError(f"Moodboard '{moodboard_id}' not found")
-        moodboard = _migrated(json.loads(path.read_text(encoding="utf-8")))
+        moodboard = _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True)
         override = moodboard.get("briefOverride")
         if not isinstance(override, dict) or not str(override.get("text") or "").strip():
             raise ValueError("This board has no hand-written brief to keep. To write one, send "
                              "briefOverride: {\"text\": ...} with PUT /api/moodboards/{id}.")
         _guard_override(override, by, "keep")
         moodboard["briefOverride"] = {**override, "basis": _brief().brief_basis(moodboard), "updatedAt": _now_iso()}
+        _stamp_layout(moodboard)
         moodboard["version"] = int(moodboard.get("version", 1)) + 1
         moodboard["updatedAt"] = _now_iso()
         _write_json(path, moodboard)
@@ -438,11 +605,14 @@ class MoodboardStore:
                         if sub.is_dir() and not is_trash_folder(sub) and (sub / f"{moodboard_id}.json").is_file())
         if len(copies) > 1:
             raise FileExistsError(f"there is a copy with this id in each of {', '.join(copies)}")
+        # The file moves as saved (move_asset changes only projectId), so an
+        # old board stays unlaid-out on disk; the board returned is laid out
+        # in memory, as get() reads it.
         before = _migrated(json.loads(path.read_text(encoding="utf-8")))
         if (before.get("projectId") or None) == target and path.parent.name == (target or GLOBAL_DIR):
-            return before, before, False
+            return before, _migrated(json.loads(path.read_text(encoding="utf-8")), layout_board=True), False
         moved_to = move_asset("moodboard", root, path, target)
-        return before, _migrated(json.loads(moved_to.read_text(encoding="utf-8"))), True
+        return before, _migrated(json.loads(moved_to.read_text(encoding="utf-8")), layout_board=True), True
 
     def delete(self, moodboard_id: str, deleted_by: dict[str, Any] | None = None) -> dict[str, Any]:
         """Move the board to Recently deleted (services/asset_trash.py) and

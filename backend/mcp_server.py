@@ -841,9 +841,12 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     """One moodboard by id or exact name: settings, the brief fields
     (direction, avoid, pinnedColors, briefOverride with who wrote it and
     whether it is stale), `brief`, numbered images (id, url, weight, notes,
-    excluded, privateNote) and analysis (palette, accents, ...). An image's
-    `privateNote` is the person's own label for it: read it, but never put it
-    in a prompt (nothing that generates gets it).
+    excluded, privateNote, placements) and analysis (palette, accents, ...).
+    An image's `privateNote` is the person's own label for it: read it, but
+    never put it in a prompt (nothing that generates gets it). `placements`
+    are its cards on the board (x, y, w, h in board pixels, weight, and
+    `frameId`: the frame it is in, null for none); `frames` lists the board's
+    frames. The layout never steers generation.
 
     `brief` is what generators get, as Nebula composed it: `styleBrief` (the
     hand-written brief when there is one, else the generated one),
@@ -852,7 +855,7 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     brief: it leaves out Direction, pinned colours and a hand-written brief."""
     import moodboard_client as boards
 
-    return boards.brief(_board_call(boards.get_board, _api(), board, _board_headers(ctx)))
+    return boards.brief(_board_call(boards.get_board, _api(), board, _board_headers(ctx)), layout=True)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
