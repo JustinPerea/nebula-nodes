@@ -1184,6 +1184,17 @@ nebula moodboard delete <board>
 - A board is named by its id or exact name; an image by its number or id
   from `show`. `--json` prints the board as JSON (the MCP tools return the
   same shape).
+- `show --json` and `moodboard_get` add the board's layout: each image's
+  `placements` (its cards: `x`, `y`, `w`, `h` in board pixels, `weight`,
+  `frameId` for the frame it is in or null, `placedBy`, `placedAt`) and the
+  board's `frames` (contract 07, section 1.1). Lists and the results of
+  edits leave it out. A card's area is its weight (full weight is a 480x270
+  card). The layout never steers, so it isn't in the analysis, the brief or
+  the node's outputs. Images you add land after the last card, in its row
+  if there is room, else in a new row; a weight you set resizes the
+  image's cards. The CLI and MCP can't move cards yet. Through the API, a
+  `PUT` keeps what it leaves out (images merge by id) and keeps the saved
+  cards of images already on the board.
 - Each image has `notes`, which steer (the analysis reads them), and
   `privateNote`, the person's own label (`--private-note`, or
   `{"image": 2, "privateNote": "..."}` in `moodboard_update`). The private

@@ -1,0 +1,473 @@
+{
+  "id": "8d2e6b0c4a17",
+  "name": "Overcast concrete",
+  "version": 3,
+  "images": [
+    {
+      "id": "e2b1f6d3a011",
+      "url": "/api/outputs/moodboard-golden/glacier-16x9.png",
+      "weight": 1.0,
+      "notes": "",
+      "excluded": false
+    },
+    {
+      "id": "e2b1f6d3a012",
+      "url": "/api/outputs/moodboard-golden/olive-market-4x3.png",
+      "weight": 0.5,
+      "notes": "",
+      "excluded": false
+    },
+    {
+      "id": "e2b1f6d3a013",
+      "url": "/api/outputs/moodboard-golden/ink-wash-1x1.png",
+      "weight": 1.0,
+      "notes": "this concrete",
+      "excluded": false
+    },
+    {
+      "id": "e2b1f6d3a014",
+      "url": "https://images.example.com/refs/brutalist-stair.jpg",
+      "weight": 1.0,
+      "notes": "",
+      "excluded": false
+    },
+    {
+      "id": "e2b1f6d3a015",
+      "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
+      "weight": 0.0,
+      "notes": "",
+      "excluded": false
+    },
+    {
+      "id": "e2b1f6d3a016",
+      "url": "/api/outputs/moodboard-golden/teal-pool-9x16.png",
+      "weight": 0.7,
+      "notes": "",
+      "excluded": false
+    }
+  ],
+  "notes": "brutalist concrete, overcast",
+  "mode": "world",
+  "strength": 0.85,
+  "analysis": {
+    "version": 2,
+    "sourceHash": "4a3c36f18971268b",
+    "mode": "world",
+    "modeIntent": "world, materials, environment, and production design",
+    "strength": 0.85,
+    "summary": "6 reference image(s) analyzed as world. Palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1. Accents: #ff7800, #e61e1e, #ffe600, #c8003c. Notes emphasize: brutalist concrete, overcast",
+    "tasteProfile": "world, materials, environment, and production design; cues: palette-led, worldbuilding, environmental continuity, high color energy, brutalist, concrete; colors: #404045, #5a5a60, #88adcb, #075a68.",
+    "styleBrief": "Raw board-formed concrete under a flat overcast sky. Cold blue-grey light, wet surfaces, no sun. Keep the architecture monumental and empty.",
+    "negativePrompt": "unrelated style drift, conflicting palettes, random artifacts, generic locations, mixed eras, inconsistent materials, text overlays, lens flare",
+    "keywords": [
+      "palette-led",
+      "worldbuilding",
+      "environmental continuity",
+      "high color energy",
+      "brutalist",
+      "concrete",
+      "overcast"
+    ],
+    "avoids": [
+      "unrelated style drift",
+      "conflicting palettes",
+      "random artifacts",
+      "generic locations",
+      "mixed eras",
+      "inconsistent materials"
+    ],
+    "palette": [
+      "#404045",
+      "#5a5a60",
+      "#88adcb",
+      "#075a68",
+      "#a5c8e1",
+      "#28282c",
+      "#7198b9",
+      "#94853e"
+    ],
+    "accents": [
+      "#ff7800",
+      "#e61e1e",
+      "#ffe600",
+      "#c8003c"
+    ],
+    "colors": [
+      {
+        "hex": "#404045",
+        "share": 0.1093,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#5a5a60",
+        "share": 0.1018,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#88adcb",
+        "share": 0.0977,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#075a68",
+        "share": 0.0784,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#a5c8e1",
+        "share": 0.0777,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#28282c",
+        "share": 0.0619,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#7198b9",
+        "share": 0.0541,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#94853e",
+        "share": 0.0518,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#ff7800",
+        "share": 0.0087,
+        "role": "accent",
+        "images": 1
+      },
+      {
+        "hex": "#e61e1e",
+        "share": 0.0076,
+        "role": "accent",
+        "images": 1
+      },
+      {
+        "hex": "#ffe600",
+        "share": 0.0061,
+        "role": "accent",
+        "images": 1
+      },
+      {
+        "hex": "#c8003c",
+        "share": 0.0042,
+        "role": "accent",
+        "images": 1
+      }
+    ],
+    "lighting": "balanced mid-key lighting",
+    "composition": "balanced square-to-standard framing",
+    "materials": [],
+    "textures": [],
+    "motifs": [],
+    "subjectBias": [],
+    "representativeImages": [
+      "/api/outputs/moodboard-golden/glacier-16x9.png",
+      "/api/outputs/moodboard-golden/ink-wash-1x1.png",
+      "/api/outputs/moodboard-golden/teal-pool-9x16.png",
+      "/api/outputs/moodboard-golden/olive-market-4x3.png"
+    ],
+    "providerHints": {
+      "krea": {
+        "strategy": "image_style_references",
+        "representativeImages": [
+          "/api/outputs/moodboard-golden/glacier-16x9.png",
+          "/api/outputs/moodboard-golden/ink-wash-1x1.png",
+          "/api/outputs/moodboard-golden/teal-pool-9x16.png",
+          "/api/outputs/moodboard-golden/olive-market-4x3.png"
+        ],
+        "strength": 0.85,
+        "styleBrief": "Use the Nebula moodboard 'Overcast concrete' as world direction at strength 0.85. World, materials, environment, and production design. Color palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1, #28282c, #7198b9, #94853e. Accent colors, used sparingly: #ff7800, #e61e1e, #ffe600, #c8003c. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, brutalist, concrete, overcast. User notes: brutalist concrete, overcast"
+      },
+      "generic": {
+        "promptSuffix": "Use the Nebula moodboard 'Overcast concrete' as world direction at strength 0.85. World, materials, environment, and production design. Color palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1, #28282c, #7198b9, #94853e. Accent colors, used sparingly: #ff7800, #e61e1e, #ffe600, #c8003c. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, brutalist, concrete, overcast. User notes: brutalist concrete, overcast",
+        "negativePrompt": "unrelated style drift, conflicting palettes, random artifacts, generic locations, mixed eras, inconsistent materials",
+        "palette": [
+          "#404045",
+          "#5a5a60",
+          "#88adcb",
+          "#075a68",
+          "#a5c8e1",
+          "#28282c",
+          "#7198b9",
+          "#94853e"
+        ],
+        "accents": [
+          "#ff7800",
+          "#e61e1e",
+          "#ffe600",
+          "#c8003c"
+        ]
+      }
+    },
+    "images": [
+      {
+        "id": "e2b1f6d3a011",
+        "url": "/api/outputs/moodboard-golden/glacier-16x9.png",
+        "weight": 1.0,
+        "notes": "",
+        "status": "analyzed",
+        "width": 96,
+        "height": 54,
+        "palette": [
+          "#88adcb",
+          "#a5c8e1",
+          "#7198b9",
+          "#6087ab",
+          "#4d749b"
+        ],
+        "accents": [
+          "#ff7800"
+        ],
+        "colors": [
+          {
+            "hex": "#88adcb",
+            "share": 0.3127,
+            "accent": false
+          },
+          {
+            "hex": "#a5c8e1",
+            "share": 0.2488,
+            "accent": false
+          },
+          {
+            "hex": "#7198b9",
+            "share": 0.1732,
+            "accent": false
+          },
+          {
+            "hex": "#6087ab",
+            "share": 0.1275,
+            "accent": false
+          },
+          {
+            "hex": "#4d749b",
+            "share": 0.11,
+            "accent": false
+          },
+          {
+            "hex": "#ff7800",
+            "share": 0.0278,
+            "accent": true
+          }
+        ],
+        "lightness": 160.5,
+        "saturation": 95.364
+      },
+      {
+        "id": "e2b1f6d3a012",
+        "url": "/api/outputs/moodboard-golden/olive-market-4x3.png",
+        "weight": 0.5,
+        "notes": "",
+        "status": "analyzed",
+        "width": 80,
+        "height": 60,
+        "palette": [
+          "#94853e",
+          "#ad964b",
+          "#7a712f",
+          "#c3a759"
+        ],
+        "accents": [
+          "#c8003c"
+        ],
+        "colors": [
+          {
+            "hex": "#94853e",
+            "share": 0.3317,
+            "accent": false
+          },
+          {
+            "hex": "#ad964b",
+            "share": 0.286,
+            "accent": false
+          },
+          {
+            "hex": "#7a712f",
+            "share": 0.2627,
+            "accent": false
+          },
+          {
+            "hex": "#c3a759",
+            "share": 0.0925,
+            "accent": false
+          },
+          {
+            "hex": "#c8003c",
+            "share": 0.0271,
+            "accent": true
+          }
+        ],
+        "lightness": 108.421,
+        "saturation": 151.706
+      },
+      {
+        "id": "e2b1f6d3a013",
+        "url": "/api/outputs/moodboard-golden/ink-wash-1x1.png",
+        "weight": 1.0,
+        "notes": "this concrete",
+        "status": "analyzed",
+        "width": 64,
+        "height": 64,
+        "palette": [
+          "#404045",
+          "#5a5a60",
+          "#28282c",
+          "#727278"
+        ],
+        "accents": [
+          "#e61e1e"
+        ],
+        "colors": [
+          {
+            "hex": "#404045",
+            "share": 0.3496,
+            "accent": false
+          },
+          {
+            "hex": "#5a5a60",
+            "share": 0.3259,
+            "accent": false
+          },
+          {
+            "hex": "#28282c",
+            "share": 0.198,
+            "accent": false
+          },
+          {
+            "hex": "#727278",
+            "share": 0.1021,
+            "accent": false
+          },
+          {
+            "hex": "#e61e1e",
+            "share": 0.0244,
+            "accent": true
+          }
+        ],
+        "lightness": 76.971,
+        "saturation": 23.036
+      },
+      {
+        "id": "e2b1f6d3a014",
+        "url": "https://images.example.com/refs/brutalist-stair.jpg",
+        "weight": 1.0,
+        "notes": "",
+        "status": "unresolved",
+        "palette": []
+      },
+      {
+        "id": "e2b1f6d3a015",
+        "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
+        "weight": 0.0,
+        "notes": "",
+        "status": "analyzed",
+        "width": 60,
+        "height": 80,
+        "palette": [
+          "#e5b49c",
+          "#d39d87",
+          "#c38a75"
+        ],
+        "accents": [
+          "#3c1ea0"
+        ],
+        "colors": [
+          {
+            "hex": "#e5b49c",
+            "share": 0.426,
+            "accent": false
+          },
+          {
+            "hex": "#d39d87",
+            "share": 0.3535,
+            "accent": false
+          },
+          {
+            "hex": "#c38a75",
+            "share": 0.1933,
+            "accent": false
+          },
+          {
+            "hex": "#3c1ea0",
+            "share": 0.0271,
+            "accent": true
+          }
+        ],
+        "lightness": 175.865,
+        "saturation": 91.926
+      },
+      {
+        "id": "e2b1f6d3a016",
+        "url": "/api/outputs/moodboard-golden/teal-pool-9x16.png",
+        "weight": 0.7,
+        "notes": "",
+        "status": "analyzed",
+        "width": 54,
+        "height": 96,
+        "palette": [
+          "#075a68",
+          "#076e7a",
+          "#073144",
+          "#074354",
+          "#097d88"
+        ],
+        "accents": [
+          "#ffe600"
+        ],
+        "colors": [
+          {
+            "hex": "#075a68",
+            "share": 0.3584,
+            "accent": false
+          },
+          {
+            "hex": "#076e7a",
+            "share": 0.1971,
+            "accent": false
+          },
+          {
+            "hex": "#073144",
+            "share": 0.1723,
+            "accent": false
+          },
+          {
+            "hex": "#074354",
+            "share": 0.1233,
+            "accent": false
+          },
+          {
+            "hex": "#097d88",
+            "share": 0.1211,
+            "accent": false
+          },
+          {
+            "hex": "#ffe600",
+            "share": 0.0278,
+            "accent": true
+          }
+        ],
+        "lightness": 57.32,
+        "saturation": 235.351
+      }
+    ],
+    "warnings": [
+      "Could not resolve image: https://images.example.com/refs/brutalist-stair.jpg"
+    ]
+  },
+  "thumbnail": "/api/outputs/moodboard-golden/glacier-16x9.png",
+  "projectId": "proj-golden",
+  "createdAt": "2026-10-18T18:11:52.004417+00:00",
+  "updatedAt": "2026-10-18T18:40:27.551982+00:00"
+}

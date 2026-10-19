@@ -1,0 +1,43 @@
+{
+  "id": "c47a9e21f05b",
+  "name": "Portrait studies",
+  "version": 1,
+  "images": [
+    {
+      "id": "f3c2a7e4b021",
+      "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
+      "weight": 1.0,
+      "notes": "",
+      "excluded": false
+    },
+    {
+      "id": "f3c2a7e4b022",
+      "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
+      "weight": 0.0,
+      "notes": "",
+      "excluded": false
+    },
+    {
+      "id": "f3c2a7e4b023",
+      "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png",
+      "weight": 1.0,
+      "notes": "",
+      "excluded": true
+    },
+    {
+      "id": "f3c2a7e4b024",
+      "url": "/api/outputs/moodboard-golden/paper-studio-1x1.png",
+      "weight": 0.4,
+      "notes": "background tone",
+      "excluded": false
+    }
+  ],
+  "notes": "",
+  "mode": "subject",
+  "strength": 0.6,
+  "analysis": null,
+  "thumbnail": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
+  "projectId": null,
+  "createdAt": "2026-10-18T19:20:03.640118+00:00",
+  "updatedAt": "2026-10-18T19:20:03.640118+00:00"
+}

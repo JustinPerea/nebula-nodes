@@ -1,0 +1,662 @@
+{
+  "id": "a92f5c08e3d1",
+  "name": "Harbour town",
+  "version": 5,
+  "images": [
+    {
+      "id": "c6f5daa7e051",
+      "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
+      "weight": 1.0,
+      "notes": "",
+      "privateNote": "HERO (liked)",
+      "excluded": false
+    },
+    {
+      "id": "c6f5daa7e052",
+      "url": "/api/outputs/moodboard-golden/glacier-16x9.png",
+      "weight": 0.9,
+      "notes": "",
+      "privateNote": "",
+      "excluded": false
+    },
+    {
+      "id": "c6f5daa7e053",
+      "url": "/api/outputs/moodboard-golden/moss-stone-4x3.png",
+      "weight": 0.0,
+      "notes": "",
+      "privateNote": "keep for later",
+      "excluded": false
+    },
+    {
+      "id": "c6f5daa7e054",
+      "url": "/api/outputs/moodboard-golden/paper-studio-1x1.png",
+      "weight": 1.0,
+      "notes": "",
+      "privateNote": "",
+      "excluded": true
+    },
+    {
+      "id": "c6f5daa7e055",
+      "url": "https://images.example.com/refs/coastal-fog.jpg",
+      "weight": 1.0,
+      "notes": "",
+      "privateNote": "",
+      "excluded": false
+    },
+    {
+      "id": "c6f5daa7e056",
+      "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
+      "weight": 0.4,
+      "notes": "",
+      "privateNote": "",
+      "excluded": false
+    },
+    {
+      "id": "c6f5daa7e057",
+      "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png",
+      "weight": 0.6,
+      "notes": "neon edge light",
+      "privateNote": "",
+      "excluded": false
+    },
+    {
+      "id": "c6f5daa7e058",
+      "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
+      "weight": 1.0,
+      "notes": "",
+      "privateNote": "skin tone ref",
+      "excluded": false
+    }
+  ],
+  "notes": "rain-soaked harbour town",
+  "mode": "world",
+  "strength": 0.75,
+  "analysis": {
+    "version": 4,
+    "sourceHash": "99159f1bcb568810",
+    "mode": "world",
+    "modeIntent": "world, materials, environment, and production design",
+    "strength": 0.75,
+    "summary": "7 reference image(s) analyzed as world. Palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1. Accents: #ff285a, #3c1ea0, #ff7800, #00ffa0. Notes emphasize: rain-soaked harbour town",
+    "tasteProfile": "world, materials, environment, and production design; cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town; colors: #e5b49c, #d39d87, #2c1046, #88adcb.",
+    "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town.",
+    "negativePrompt": "blurry, low-detail artifacts",
+    "keywords": [
+      "palette-led",
+      "worldbuilding",
+      "environmental continuity",
+      "high color energy",
+      "harbour",
+      "town"
+    ],
+    "avoids": [
+      "blurry",
+      "low-detail artifacts"
+    ],
+    "palette": [
+      "#e5b49c",
+      "#d39d87",
+      "#2c1046",
+      "#88adcb",
+      "#a5c8e1",
+      "#c38a75",
+      "#190e2e",
+      "#6a4849"
+    ],
+    "accents": [
+      "#ff285a",
+      "#3c1ea0",
+      "#ff7800",
+      "#00ffa0"
+    ],
+    "colors": [
+      {
+        "hex": "#e5b49c",
+        "share": 0.1092,
+        "role": "dominant",
+        "images": 1,
+        "sources": [
+          {
+            "number": 8,
+            "id": "c6f5daa7e058",
+            "share": 0.426,
+            "contribution": 0.1092
+          }
+        ]
+      },
+      {
+        "hex": "#d39d87",
+        "share": 0.0906,
+        "role": "dominant",
+        "images": 1,
+        "sources": [
+          {
+            "number": 8,
+            "id": "c6f5daa7e058",
+            "share": 0.3535,
+            "contribution": 0.0906
+          }
+        ]
+      },
+      {
+        "hex": "#2c1046",
+        "share": 0.0881,
+        "role": "dominant",
+        "images": 1,
+        "sources": [
+          {
+            "number": 7,
+            "id": "c6f5daa7e057",
+            "share": 0.5725,
+            "contribution": 0.0881
+          }
+        ]
+      },
+      {
+        "hex": "#88adcb",
+        "share": 0.0722,
+        "role": "dominant",
+        "images": 1,
+        "sources": [
+          {
+            "number": 2,
+            "id": "c6f5daa7e052",
+            "share": 0.3127,
+            "contribution": 0.0722
+          }
+        ]
+      },
+      {
+        "hex": "#a5c8e1",
+        "share": 0.0574,
+        "role": "dominant",
+        "images": 1,
+        "sources": [
+          {
+            "number": 2,
+            "id": "c6f5daa7e052",
+            "share": 0.2488,
+            "contribution": 0.0574
+          }
+        ]
+      },
+      {
+        "hex": "#c38a75",
+        "share": 0.0496,
+        "role": "dominant",
+        "images": 1,
+        "sources": [
+          {
+            "number": 8,
+            "id": "c6f5daa7e058",
+            "share": 0.1933,
+            "contribution": 0.0496
+          }
+        ]
+      },
+      {
+        "hex": "#190e2e",
+        "share": 0.0465,
+        "role": "dominant",
+        "images": 1,
+        "sources": [
+          {
+            "number": 7,
+            "id": "c6f5daa7e057",
+            "share": 0.3021,
+            "contribution": 0.0465
+          }
+        ]
+      },
+      {
+        "hex": "#6a4849",
+        "share": 0.0437,
+        "role": "dominant",
+        "images": 1,
+        "sources": [
+          {
+            "number": 1,
+            "id": "c6f5daa7e051",
+            "share": 0.1703,
+            "contribution": 0.0437
+          }
+        ]
+      },
+      {
+        "hex": "#ff285a",
+        "share": 0.0071,
+        "role": "accent",
+        "images": 1,
+        "sources": [
+          {
+            "number": 1,
+            "id": "c6f5daa7e051",
+            "share": 0.0278,
+            "contribution": 0.0071
+          }
+        ]
+      },
+      {
+        "hex": "#3c1ea0",
+        "share": 0.0069,
+        "role": "accent",
+        "images": 1,
+        "sources": [
+          {
+            "number": 8,
+            "id": "c6f5daa7e058",
+            "share": 0.0271,
+            "contribution": 0.0069
+          }
+        ]
+      },
+      {
+        "hex": "#ff7800",
+        "share": 0.0064,
+        "role": "accent",
+        "images": 1,
+        "sources": [
+          {
+            "number": 2,
+            "id": "c6f5daa7e052",
+            "share": 0.0278,
+            "contribution": 0.0064
+          }
+        ]
+      },
+      {
+        "hex": "#00ffa0",
+        "share": 0.0043,
+        "role": "accent",
+        "images": 1,
+        "sources": [
+          {
+            "number": 7,
+            "id": "c6f5daa7e057",
+            "share": 0.0278,
+            "contribution": 0.0043
+          }
+        ]
+      }
+    ],
+    "lighting": "balanced mid-key lighting",
+    "composition": "balanced square-to-standard framing",
+    "materials": [],
+    "textures": [],
+    "motifs": [],
+    "subjectBias": [],
+    "representativeImages": [
+      "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
+      "/api/outputs/moodboard-golden/peach-skin-3x4.png",
+      "/api/outputs/moodboard-golden/glacier-16x9.png",
+      "/api/outputs/moodboard-golden/neon-alley-9x16.png",
+      "/api/outputs/moodboard-golden/rust-portrait-3x4.png"
+    ],
+    "providerHints": {
+      "krea": {
+        "strategy": "image_style_references",
+        "representativeImages": [
+          "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
+          "/api/outputs/moodboard-golden/peach-skin-3x4.png",
+          "/api/outputs/moodboard-golden/glacier-16x9.png",
+          "/api/outputs/moodboard-golden/neon-alley-9x16.png",
+          "/api/outputs/moodboard-golden/rust-portrait-3x4.png"
+        ],
+        "strength": 0.75,
+        "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town."
+      },
+      "generic": {
+        "promptSuffix": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town.",
+        "negativePrompt": "blurry, low-detail artifacts",
+        "palette": [
+          "#e5b49c",
+          "#d39d87",
+          "#2c1046",
+          "#88adcb",
+          "#a5c8e1",
+          "#c38a75",
+          "#190e2e",
+          "#6a4849"
+        ],
+        "accents": [
+          "#ff285a",
+          "#3c1ea0",
+          "#ff7800",
+          "#00ffa0"
+        ]
+      }
+    },
+    "images": [
+      {
+        "number": 1,
+        "id": "c6f5daa7e051",
+        "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
+        "weight": 1.0,
+        "notes": "",
+        "status": "analyzed",
+        "width": 96,
+        "height": 54,
+        "palette": [
+          "#6a4849",
+          "#845447",
+          "#503c4b",
+          "#37304b",
+          "#c67141",
+          "#22254a",
+          "#a36041"
+        ],
+        "accents": [
+          "#ff285a"
+        ],
+        "colors": [
+          {
+            "hex": "#6a4849",
+            "share": 0.1703,
+            "accent": false
+          },
+          {
+            "hex": "#845447",
+            "share": 0.1634,
+            "accent": false
+          },
+          {
+            "hex": "#503c4b",
+            "share": 0.1466,
+            "accent": false
+          },
+          {
+            "hex": "#37304b",
+            "share": 0.1308,
+            "accent": false
+          },
+          {
+            "hex": "#c67141",
+            "share": 0.1231,
+            "accent": false
+          },
+          {
+            "hex": "#22254a",
+            "share": 0.1219,
+            "accent": false
+          },
+          {
+            "hex": "#a36041",
+            "share": 0.1161,
+            "accent": false
+          },
+          {
+            "hex": "#ff285a",
+            "share": 0.0278,
+            "accent": true
+          }
+        ],
+        "lightness": 90.307,
+        "saturation": 117.331
+      },
+      {
+        "number": 2,
+        "id": "c6f5daa7e052",
+        "url": "/api/outputs/moodboard-golden/glacier-16x9.png",
+        "weight": 0.9,
+        "notes": "",
+        "status": "analyzed",
+        "width": 96,
+        "height": 54,
+        "palette": [
+          "#88adcb",
+          "#a5c8e1",
+          "#7198b9",
+          "#6087ab",
+          "#4d749b"
+        ],
+        "accents": [
+          "#ff7800"
+        ],
+        "colors": [
+          {
+            "hex": "#88adcb",
+            "share": 0.3127,
+            "accent": false
+          },
+          {
+            "hex": "#a5c8e1",
+            "share": 0.2488,
+            "accent": false
+          },
+          {
+            "hex": "#7198b9",
+            "share": 0.1732,
+            "accent": false
+          },
+          {
+            "hex": "#6087ab",
+            "share": 0.1275,
+            "accent": false
+          },
+          {
+            "hex": "#4d749b",
+            "share": 0.11,
+            "accent": false
+          },
+          {
+            "hex": "#ff7800",
+            "share": 0.0278,
+            "accent": true
+          }
+        ],
+        "lightness": 160.5,
+        "saturation": 95.364
+      },
+      {
+        "number": 3,
+        "id": "c6f5daa7e053",
+        "url": "/api/outputs/moodboard-golden/moss-stone-4x3.png",
+        "weight": 0.0,
+        "notes": "",
+        "status": "analyzed",
+        "width": 80,
+        "height": 60,
+        "palette": [
+          "#576846",
+          "#7c856a",
+          "#697758",
+          "#435833",
+          "#91967f"
+        ],
+        "accents": [
+          "#fad214"
+        ],
+        "colors": [
+          {
+            "hex": "#576846",
+            "share": 0.3131,
+            "accent": false
+          },
+          {
+            "hex": "#7c856a",
+            "share": 0.2921,
+            "accent": false
+          },
+          {
+            "hex": "#697758",
+            "share": 0.1787,
+            "accent": false
+          },
+          {
+            "hex": "#435833",
+            "share": 0.1196,
+            "accent": false
+          },
+          {
+            "hex": "#91967f",
+            "share": 0.0694,
+            "accent": false
+          },
+          {
+            "hex": "#fad214",
+            "share": 0.0271,
+            "accent": true
+          }
+        ],
+        "lightness": 102.089,
+        "saturation": 75.946
+      },
+      {
+        "number": 5,
+        "id": "c6f5daa7e055",
+        "url": "https://images.example.com/refs/coastal-fog.jpg",
+        "weight": 1.0,
+        "notes": "",
+        "status": "unresolved",
+        "palette": []
+      },
+      {
+        "number": 6,
+        "id": "c6f5daa7e056",
+        "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
+        "weight": 0.4,
+        "notes": "",
+        "status": "analyzed",
+        "width": 60,
+        "height": 80,
+        "palette": [
+          "#6a311b",
+          "#4e2516",
+          "#2f1a13",
+          "#813c21"
+        ],
+        "accents": [
+          "#28c8be"
+        ],
+        "colors": [
+          {
+            "hex": "#6a311b",
+            "share": 0.3575,
+            "accent": false
+          },
+          {
+            "hex": "#4e2516",
+            "share": 0.2913,
+            "accent": false
+          },
+          {
+            "hex": "#2f1a13",
+            "share": 0.1973,
+            "accent": false
+          },
+          {
+            "hex": "#813c21",
+            "share": 0.1269,
+            "accent": false
+          },
+          {
+            "hex": "#28c8be",
+            "share": 0.0271,
+            "accent": true
+          }
+        ],
+        "lightness": 58.613,
+        "saturation": 179.452
+      },
+      {
+        "number": 7,
+        "id": "c6f5daa7e057",
+        "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png",
+        "weight": 0.6,
+        "notes": "neon edge light",
+        "status": "analyzed",
+        "width": 54,
+        "height": 96,
+        "palette": [
+          "#2c1046",
+          "#190e2e",
+          "#0e091e"
+        ],
+        "accents": [
+          "#00ffa0"
+        ],
+        "colors": [
+          {
+            "hex": "#2c1046",
+            "share": 0.5725,
+            "accent": false
+          },
+          {
+            "hex": "#190e2e",
+            "share": 0.3021,
+            "accent": false
+          },
+          {
+            "hex": "#0e091e",
+            "share": 0.0976,
+            "accent": false
+          },
+          {
+            "hex": "#00ffa0",
+            "share": 0.0278,
+            "accent": true
+          }
+        ],
+        "lightness": 39.165,
+        "saturation": 192.645
+      },
+      {
+        "number": 8,
+        "id": "c6f5daa7e058",
+        "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
+        "weight": 1.0,
+        "notes": "",
+        "status": "analyzed",
+        "width": 60,
+        "height": 80,
+        "palette": [
+          "#e5b49c",
+          "#d39d87",
+          "#c38a75"
+        ],
+        "accents": [
+          "#3c1ea0"
+        ],
+        "colors": [
+          {
+            "hex": "#e5b49c",
+            "share": 0.426,
+            "accent": false
+          },
+          {
+            "hex": "#d39d87",
+            "share": 0.3535,
+            "accent": false
+          },
+          {
+            "hex": "#c38a75",
+            "share": 0.1933,
+            "accent": false
+          },
+          {
+            "hex": "#3c1ea0",
+            "share": 0.0271,
+            "accent": true
+          }
+        ],
+        "lightness": 175.865,
+        "saturation": 91.926
+      }
+    ],
+    "warnings": [
+      "Could not resolve image: https://images.example.com/refs/coastal-fog.jpg"
+    ]
+  },
+  "direction": "",
+  "avoid": [],
+  "pinnedColors": {
+    "include": [],
+    "exclude": []
+  },
+  "briefOverride": null,
+  "briefVersion": 1,
+  "thumbnail": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
+  "projectId": null,
+  "createdAt": "2026-10-19T15:40:12.553901+00:00",
+  "updatedAt": "2026-10-19T16:02:37.019844+00:00"
+}

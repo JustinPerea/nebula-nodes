@@ -659,7 +659,9 @@ export async function deleteCharacter(id: string): Promise<TrashedItem> {
 // Moodboard CRUD helpers
 // ---------------------------------------------------------------------------
 
-type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'createdAt' | 'updatedAt' | 'brief' | 'briefOverride'>
+// The board's layout fields are never sent: the backend refuses them on a save.
+type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'createdAt' | 'updatedAt' | 'brief'
+  | 'briefOverride' | 'layoutVersion' | 'frames' | 'suggestions' | 'readings'>
   & { briefOverride?: { text: string } | null };
 type MoodboardUpdateInput = Partial<MoodboardCreateInput>;
 

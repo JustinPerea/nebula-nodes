@@ -1,0 +1,418 @@
+{
+  "id": "e1d74b2a9f36",
+  "name": "Noon market",
+  "version": 4,
+  "images": [
+    {
+      "id": "b5e4c9a6d041",
+      "url": "/api/outputs/moodboard-golden/olive-market-4x3.png",
+      "weight": 1.0,
+      "notes": "",
+      "excluded": false
+    },
+    {
+      "id": "b5e4c9a6d042",
+      "url": "/api/outputs/moodboard-golden/ink-wash-1x1.png",
+      "weight": 0.2,
+      "notes": "",
+      "excluded": false
+    },
+    {
+      "id": "b5e4c9a6d043",
+      "url": "/api/outputs/moodboard-golden/glacier-16x9.png",
+      "weight": 1.0,
+      "notes": "",
+      "excluded": false
+    },
+    {
+      "id": "b5e4c9a6d044",
+      "url": "/api/outputs/moodboard-golden/teal-pool-9x16.png",
+      "weight": 0.5,
+      "notes": "",
+      "excluded": false
+    }
+  ],
+  "notes": "market stalls at noon",
+  "mode": "look",
+  "strength": 0.7,
+  "analysis": {
+    "version": 3,
+    "sourceHash": "b48b2756300804e5",
+    "mode": "look",
+    "modeIntent": "visual style only; the subject comes from the prompt",
+    "strength": 0.7,
+    "summary": "4 reference image(s) analyzed as look. Palette: #94853e, #88adcb, #ad964b, #7a712f, #a5c8e1. Accents: #ff7800, #c8003c, #e61e1e, #ffe600. Notes emphasize: market stalls at noon",
+    "tasteProfile": "visual style only; the subject comes from the prompt; cues: palette-led, style consistency, visual language, high color energy, market, stalls; colors: #94853e, #88adcb, #ad964b, #7a712f.",
+    "styleBrief": "Use the Nebula moodboard 'Noon market' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #94853e, #88adcb, #ad964b, #7a712f, #a5c8e1, #404045, #5a5a60, #075a68. Accent colors, used sparingly: #ff7800, #c8003c, #e61e1e, #ffe600. Visual cues: palette-led, style consistency, visual language, high color energy, market, stalls, noon. Notes: market stalls at noon.",
+    "negativePrompt": "blurry, low-detail artifacts",
+    "keywords": [
+      "palette-led",
+      "style consistency",
+      "visual language",
+      "high color energy",
+      "market",
+      "stalls",
+      "noon"
+    ],
+    "avoids": [
+      "blurry",
+      "low-detail artifacts"
+    ],
+    "palette": [
+      "#94853e",
+      "#88adcb",
+      "#ad964b",
+      "#7a712f",
+      "#a5c8e1",
+      "#404045",
+      "#5a5a60",
+      "#075a68"
+    ],
+    "accents": [
+      "#ff7800",
+      "#c8003c",
+      "#e61e1e",
+      "#ffe600"
+    ],
+    "colors": [
+      {
+        "hex": "#94853e",
+        "share": 0.1037,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#88adcb",
+        "share": 0.0977,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#ad964b",
+        "share": 0.0894,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#7a712f",
+        "share": 0.0821,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#a5c8e1",
+        "share": 0.0777,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#404045",
+        "share": 0.0765,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#5a5a60",
+        "share": 0.0713,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#075a68",
+        "share": 0.056,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#ff7800",
+        "share": 0.0087,
+        "role": "accent",
+        "images": 1
+      },
+      {
+        "hex": "#c8003c",
+        "share": 0.0085,
+        "role": "accent",
+        "images": 1
+      },
+      {
+        "hex": "#e61e1e",
+        "share": 0.0053,
+        "role": "accent",
+        "images": 1
+      },
+      {
+        "hex": "#ffe600",
+        "share": 0.0043,
+        "role": "accent",
+        "images": 1
+      }
+    ],
+    "lighting": "balanced mid-key lighting",
+    "composition": "balanced square-to-standard framing",
+    "materials": [],
+    "textures": [],
+    "motifs": [],
+    "subjectBias": [],
+    "representativeImages": [
+      "/api/outputs/moodboard-golden/olive-market-4x3.png",
+      "/api/outputs/moodboard-golden/glacier-16x9.png",
+      "/api/outputs/moodboard-golden/ink-wash-1x1.png",
+      "/api/outputs/moodboard-golden/teal-pool-9x16.png"
+    ],
+    "providerHints": {
+      "krea": {
+        "strategy": "image_style_references",
+        "representativeImages": [
+          "/api/outputs/moodboard-golden/olive-market-4x3.png",
+          "/api/outputs/moodboard-golden/glacier-16x9.png",
+          "/api/outputs/moodboard-golden/ink-wash-1x1.png",
+          "/api/outputs/moodboard-golden/teal-pool-9x16.png"
+        ],
+        "strength": 0.7,
+        "styleBrief": "Use the Nebula moodboard 'Noon market' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #94853e, #88adcb, #ad964b, #7a712f, #a5c8e1, #404045, #5a5a60, #075a68. Accent colors, used sparingly: #ff7800, #c8003c, #e61e1e, #ffe600. Visual cues: palette-led, style consistency, visual language, high color energy, market, stalls, noon. Notes: market stalls at noon."
+      },
+      "generic": {
+        "promptSuffix": "Use the Nebula moodboard 'Noon market' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #94853e, #88adcb, #ad964b, #7a712f, #a5c8e1, #404045, #5a5a60, #075a68. Accent colors, used sparingly: #ff7800, #c8003c, #e61e1e, #ffe600. Visual cues: palette-led, style consistency, visual language, high color energy, market, stalls, noon. Notes: market stalls at noon.",
+        "negativePrompt": "blurry, low-detail artifacts",
+        "palette": [
+          "#94853e",
+          "#88adcb",
+          "#ad964b",
+          "#7a712f",
+          "#a5c8e1",
+          "#404045",
+          "#5a5a60",
+          "#075a68"
+        ],
+        "accents": [
+          "#ff7800",
+          "#c8003c",
+          "#e61e1e",
+          "#ffe600"
+        ]
+      }
+    },
+    "images": [
+      {
+        "id": "b5e4c9a6d041",
+        "url": "/api/outputs/moodboard-golden/olive-market-4x3.png",
+        "weight": 1.0,
+        "notes": "",
+        "status": "analyzed",
+        "width": 80,
+        "height": 60,
+        "palette": [
+          "#94853e",
+          "#ad964b",
+          "#7a712f",
+          "#c3a759"
+        ],
+        "accents": [
+          "#c8003c"
+        ],
+        "colors": [
+          {
+            "hex": "#94853e",
+            "share": 0.3317,
+            "accent": false
+          },
+          {
+            "hex": "#ad964b",
+            "share": 0.286,
+            "accent": false
+          },
+          {
+            "hex": "#7a712f",
+            "share": 0.2627,
+            "accent": false
+          },
+          {
+            "hex": "#c3a759",
+            "share": 0.0925,
+            "accent": false
+          },
+          {
+            "hex": "#c8003c",
+            "share": 0.0271,
+            "accent": true
+          }
+        ],
+        "lightness": 108.421,
+        "saturation": 151.706
+      },
+      {
+        "id": "b5e4c9a6d042",
+        "url": "/api/outputs/moodboard-golden/ink-wash-1x1.png",
+        "weight": 0.7,
+        "notes": "",
+        "status": "analyzed",
+        "width": 64,
+        "height": 64,
+        "palette": [
+          "#404045",
+          "#5a5a60",
+          "#28282c",
+          "#727278"
+        ],
+        "accents": [
+          "#e61e1e"
+        ],
+        "colors": [
+          {
+            "hex": "#404045",
+            "share": 0.3496,
+            "accent": false
+          },
+          {
+            "hex": "#5a5a60",
+            "share": 0.3259,
+            "accent": false
+          },
+          {
+            "hex": "#28282c",
+            "share": 0.198,
+            "accent": false
+          },
+          {
+            "hex": "#727278",
+            "share": 0.1021,
+            "accent": false
+          },
+          {
+            "hex": "#e61e1e",
+            "share": 0.0244,
+            "accent": true
+          }
+        ],
+        "lightness": 76.971,
+        "saturation": 23.036
+      },
+      {
+        "id": "b5e4c9a6d043",
+        "url": "/api/outputs/moodboard-golden/glacier-16x9.png",
+        "weight": 1.0,
+        "notes": "",
+        "status": "analyzed",
+        "width": 96,
+        "height": 54,
+        "palette": [
+          "#88adcb",
+          "#a5c8e1",
+          "#7198b9",
+          "#6087ab",
+          "#4d749b"
+        ],
+        "accents": [
+          "#ff7800"
+        ],
+        "colors": [
+          {
+            "hex": "#88adcb",
+            "share": 0.3127,
+            "accent": false
+          },
+          {
+            "hex": "#a5c8e1",
+            "share": 0.2488,
+            "accent": false
+          },
+          {
+            "hex": "#7198b9",
+            "share": 0.1732,
+            "accent": false
+          },
+          {
+            "hex": "#6087ab",
+            "share": 0.1275,
+            "accent": false
+          },
+          {
+            "hex": "#4d749b",
+            "share": 0.11,
+            "accent": false
+          },
+          {
+            "hex": "#ff7800",
+            "share": 0.0278,
+            "accent": true
+          }
+        ],
+        "lightness": 160.5,
+        "saturation": 95.364
+      },
+      {
+        "id": "b5e4c9a6d044",
+        "url": "/api/outputs/moodboard-golden/teal-pool-9x16.png",
+        "weight": 0.5,
+        "notes": "",
+        "status": "analyzed",
+        "width": 54,
+        "height": 96,
+        "palette": [
+          "#075a68",
+          "#076e7a",
+          "#073144",
+          "#074354",
+          "#097d88"
+        ],
+        "accents": [
+          "#ffe600"
+        ],
+        "colors": [
+          {
+            "hex": "#075a68",
+            "share": 0.3584,
+            "accent": false
+          },
+          {
+            "hex": "#076e7a",
+            "share": 0.1971,
+            "accent": false
+          },
+          {
+            "hex": "#073144",
+            "share": 0.1723,
+            "accent": false
+          },
+          {
+            "hex": "#074354",
+            "share": 0.1233,
+            "accent": false
+          },
+          {
+            "hex": "#097d88",
+            "share": 0.1211,
+            "accent": false
+          },
+          {
+            "hex": "#ffe600",
+            "share": 0.0278,
+            "accent": true
+          }
+        ],
+        "lightness": 57.32,
+        "saturation": 235.351
+      }
+    ],
+    "warnings": []
+  },
+  "direction": "Busy market colour, sun-bleached.",
+  "avoid": [
+    "logos"
+  ],
+  "pinnedColors": {
+    "include": [],
+    "exclude": []
+  },
+  "briefOverride": {
+    "text": "Sun-bleached market awnings in olive and teal, hard noon shadows, dense stalls.",
+    "basis": "8b8536e8e822960c",
+    "updatedAt": "2026-10-18T21:49:02.381559+00:00"
+  },
+  "briefVersion": 1,
+  "thumbnail": "/api/outputs/moodboard-golden/olive-market-4x3.png",
+  "projectId": "proj-golden",
+  "createdAt": "2026-10-18T21:30:44.215006+00:00",
+  "updatedAt": "2026-10-18T21:58:31.660472+00:00"
+}
