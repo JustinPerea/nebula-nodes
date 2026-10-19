@@ -67,7 +67,8 @@ The server exposes these tools for building and running (see
   on an open canvas the person can undo it.
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_analyze`, `moodboard_delete`: the boards in
-  Moodboard Studio. See
+  Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
+  hand-written brief, and the brief generators get). See
   [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
   characters, projects), and bring one back with the same id. See
@@ -1141,9 +1142,13 @@ Studio shows. Both use `backend/moodboard_client.py`.
 
 ```bash
 nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
-nebula moodboard show "Nature + tech"      # numbered images, settings, analysis
+nebula moodboard show "Nature + tech"      # settings, the brief generators get, images, analysis
 nebula moodboard add <board> more.png
 nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --exclude 5 --strength 0.6
+nebula moodboard set <board> --direction "quiet coastal mornings" --avoid "neon signage" --pin-color "#E8593C"
+nebula moodboard set <board> --unavoid "neon signage" --keep-out-color "#0000FF" --unpin-color "#E8593C"
+nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --keep-brief
+nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
 nebula moodboard analyze <board>
 nebula moodboard list                      # boards for every project, plus the open project's
 nebula moodboard delete <board>
@@ -1170,11 +1175,39 @@ nebula moodboard delete <board>
   with Commons); a relative path means that workspace. Every image found in
   a folder is checked the same way, and the check runs again when the file
   is read (which follows no links), so a link can't lead outside it.
-- Like Moodboard Studio, any change but a rename clears the board's
-  analysis, so run `analyze` again. `--remove` takes an image off the board;
-  its file stays, and the command prints the URL to add it back.
+- Each board comes with its brief fields (`direction`, `avoid`,
+  `pinnedColors`, `briefOverride` with `by` and `stale`) and `brief`, the
+  backend's computed brief (`styleBrief` is what generators get,
+  `negativePrompt` their negatives). On a Nebula too old to send `brief` it
+  is `null`; the client never offers `analysis.styleBrief` in its place,
+  since that leaves out Direction, pinned colours and a hand-written brief.
+- `set` and `moodboard_update` change the brief fields: `--direction` /
+  `direction` (`""` clears), `--avoid` / `--unavoid` / `--clear-avoid`
+  (`avoid_add`, `avoid_remove`, `avoid` to replace), `--pin-color`,
+  `--keep-out-color`, `--unpin-color` (`pin_colors`, `keep_out_colors`,
+  `unpin_colors`, `pinned_colors` to replace), `--brief` / `--clear-brief`
+  (`brief_override`, `""` for the generated brief) and `--keep-brief`
+  (`keep_brief`). Values are checked against the backend's limits before
+  anything is sent, and never cut short. Only the person may change or Keep
+  the person's own hand-written brief; the refusal says so in a sentence,
+  and nothing in that call is saved.
+- Like Moodboard Studio, changing images, notes, mode or strength clears the
+  board's analysis, so run `analyze` again; a rename and the brief fields
+  keep it. `--remove` takes an image off the board; its file stays, and the
+  command prints the URL to add it back.
 - `moodboard_update` (and `set --json`) returns `previous`: the settings
-  before the change. Passing them back undoes it.
+  before the change, the brief fields included. Passing them back undoes it:
+  to `moodboard_update` as they are, or `nebula moodboard set <board>
+  --restore <file>` with the saved `set --json` output (or just `previous`).
+  Images the change took off aren't in `previous`; `removed` has their URLs
+  for `moodboard_add` / `nebula moodboard add`.
+  It has the hand-written brief only when the change touched it, so undoing
+  anything else leaves a brief the person wrote since alone. If the person
+  replaced your brief since, the undo is refused with nothing saved: send it
+  again without `brief_override`. If Keep fails after the other changes were
+  saved (the person wrote or removed the brief while the call ran), the error
+  says so and carries the `previous` that puts them back (in the MCP error
+  text; on stderr from the CLI).
 - Deleting: where Nebula keeps deleted boards in Recently deleted, anyone
   may delete one, agents included, because it can be restored. Where a
   delete is for good (a Nebula without Recently deleted), `nebula moodboard

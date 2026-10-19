@@ -7,7 +7,9 @@ parses arguments and prints.
 from __future__ import annotations
 
 import json
+import shlex
 import sys
+from pathlib import Path
 from typing import Any
 
 import moodboard_client as boards
@@ -25,6 +27,32 @@ def _print_json(data: Any) -> None:
     print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
+def _changes_flags(args) -> bool:
+    """Whether `set` was given any change besides the image edits."""
+    values = (args.name, args.notes, args.mode, args.strength, args.direction, args.brief)
+    lists = (args.avoid, args.unavoid, args.pin_color, args.keep_out_color, args.unpin_color)
+    return (any(value is not None for value in values) or any(lists)
+            or args.clear_avoid or args.clear_brief or args.keep_brief)
+
+
+def _read_previous(source: str) -> dict[str, Any]:
+    """The `previous` an earlier `set --json` printed, from a file or stdin
+    (-): the object itself, or that whole output."""
+    try:
+        text = sys.stdin.read() if source == "-" else Path(source).expanduser().read_text(encoding="utf-8")
+        data = json.loads(text)
+    except (OSError, ValueError) as exc:
+        _fail(f"--restore: can't read {source}: {exc}")
+    if isinstance(data, dict) and isinstance(data.get("previous"), dict):
+        data = data["previous"]
+    if not isinstance(data, dict) or not data:
+        _fail("--restore takes the `previous` object that `nebula moodboard set --json` printed")
+    unknown = sorted(set(data) - set(boards.RESTORE_KEYS))
+    if unknown:
+        _fail(f"--restore: `previous` has no setting called {', '.join(unknown)}")
+    return data
+
+
 def _pairs(items: list[str], flag: str) -> list[tuple[str, str]]:
     pairs = []
     for item in items:
@@ -40,6 +68,38 @@ def _scope_label(board: dict[str, Any]) -> str:
     return f"project {project}" if project else "all projects"
 
 
+_OVERRIDE_AUTHOR = {"person": "written by the person", "agent": "written by an agent"}
+
+
+def _print_brief(board: dict[str, Any]) -> None:
+    """The brief generators get, as the backend composed it. Never the
+    analysis's own styleBrief: that leaves out Direction, pinned colours and
+    a hand-written brief."""
+    summary = boards.brief(board)
+    composed, override, board_id = summary["brief"], summary["briefOverride"], board.get("id")
+    if composed is None:
+        print("  Brief sent to generators: this version of Nebula doesn't say which brief generators get. "
+              "Open the board in Moodboard Studio to see it.")
+        return
+    source = _OVERRIDE_AUTHOR[override["by"]] if override else "generated"
+    print(f"  Brief sent to generators ({source}):")
+    if composed.get("styleBrief"):
+        print(f"    {composed['styleBrief']}")
+    else:
+        print(f"    Not built yet: `nebula moodboard analyze {board_id}`")
+    if override and override.get("stale"):
+        if override["by"] == "agent":
+            print(f"    The board changed since this was written. Keep it with `nebula moodboard set {board_id} "
+                  "--keep-brief`, or go back to the generated brief with `--clear-brief`.")
+        else:
+            print("    The board changed since the person wrote this. Only they can keep or replace it, "
+                  "in Moodboard Studio.")
+    if composed.get("negativePrompt"):
+        print(f"  Negative prompt: {composed['negativePrompt']}")
+    if composed.get("avoidPrompt"):
+        print(f"  Added to the prompt for GPT Image, Nano Banana and Krea 2: {composed['avoidPrompt']}")
+
+
 def _print_board(board: dict[str, Any]) -> None:
     images = board.get("images") or []
     strength = board.get("strength")
@@ -48,12 +108,21 @@ def _print_board(board: dict[str, Any]) -> None:
     print(f"  {board.get('mode')} · strength {strength_text} · {_scope_label(board)}")
     if board.get("notes"):
         print(f"  Notes: {board['notes']}")
+    if board.get("direction"):
+        print(f"  Direction: {board['direction']}")
+    if board.get("avoid"):
+        print(f"  Avoid: {', '.join(board['avoid'])}")
+    pinned = board.get("pinnedColors") if isinstance(board.get("pinnedColors"), dict) else {}
+    for label, key in (("Colors that must appear", "include"), ("Colors to keep out", "exclude")):
+        if pinned.get(key):
+            print(f"  {label}: {' '.join(pinned[key])}")
     print(f"  Images ({len(images)}):")
     for index, image in enumerate(images, start=1):
         flags = "  excluded" if image.get("excluded") else ""
         note = f'  "{image["notes"]}"' if image.get("notes") else ""
         print(f"    {index:>2}  {image.get('id')}  weight {float(image.get('weight', 1)):.2f}{flags}  "
               f"{image.get('url')}{note}")
+    _print_brief(board)
     analysis = board.get("analysis")
     if not analysis:
         print(f"  Not analyzed since its last change. `nebula moodboard analyze {board.get('id')}`")
@@ -65,9 +134,6 @@ def _print_board(board: dict[str, Any]) -> None:
         values = analysis.get(key) or []
         if values:
             print(f"    {label}: {' '.join(str(value) for value in values)}")
-    for label, key in (("Brief", "styleBrief"), ("Avoid", "negativePrompt")):
-        if analysis.get(key):
-            print(f"    {label}: {analysis[key]}")
 
 
 def _added_line(count: int, skipped: int) -> str:
@@ -135,9 +201,23 @@ def run(client: NebulaClient, args) -> None:
                 edits.setdefault(image, {"image": image})["excluded"] = True
             for image in args.include:
                 edits.setdefault(image, {"image": image})["excluded"] = False
-            board, removed, previous = boards.update_board(
-                api, args.board, name=args.name, notes=args.notes, mode=args.mode, strength=args.strength,
-                images=list(edits.values()), remove=args.remove, headers=headers)
+            if args.brief is not None and args.clear_brief:
+                _fail("--brief and --clear-brief can't go together")
+            if args.clear_avoid and args.unavoid:
+                _fail("--clear-avoid empties the Avoid list, so --unavoid has nothing to take off")
+            if args.restore is not None:
+                if edits or args.remove or _changes_flags(args):
+                    _fail("--restore puts back a whole `previous`, so it can't go with other changes")
+                board, removed, previous = boards.update_board(api, args.board, **_read_previous(args.restore),
+                                                               headers=headers)
+            else:
+                board, removed, previous = boards.update_board(
+                    api, args.board, name=args.name, notes=args.notes, mode=args.mode, strength=args.strength,
+                    images=list(edits.values()), remove=args.remove, direction=args.direction,
+                    avoid=[] if args.clear_avoid else None, avoid_add=args.avoid, avoid_remove=args.unavoid,
+                    pin_colors=args.pin_color, keep_out_colors=args.keep_out_color,
+                    unpin_colors=args.unpin_color, brief_override="" if args.clear_brief else args.brief,
+                    keep_brief=args.keep_brief, headers=headers)
             if args.json:
                 _print_json({**boards.brief(board), "removed": removed, "previous": previous})
                 return
@@ -160,6 +240,14 @@ def run(client: NebulaClient, args) -> None:
             else:
                 print(f"Deleted {result.get('name')} ({result.get('id')}).")
     except boards.MoodboardError as exc:
+        if exc.previous is not None:
+            # Part of the change was saved: say how to put it back.
+            print(f"error: {exc}", file=sys.stderr)
+            board_ref = shlex.quote(exc.board_id or getattr(args, "board", "<board>"))
+            print(f"To put the board back, save this as a file and run "
+                  f"`nebula moodboard set {board_ref} --restore <file>`:", file=sys.stderr)
+            print(json.dumps({"previous": exc.previous}, indent=2, ensure_ascii=False), file=sys.stderr)
+            sys.exit(1)
         _fail(str(exc))
     except NebulaAPIError as exc:
         if exc.kind == "connect":
@@ -185,7 +273,8 @@ def add_parser(sub) -> None:
                         help="Only boards that belong to no project")
     list_p.add_argument("--json", action="store_true", help="Print JSON")
 
-    show_p = msub.add_parser("show", help="Show a board: settings, numbered images and analysis")
+    show_p = msub.add_parser(
+        "show", help="Show a board: settings, the brief generators get, numbered images and analysis")
     show_p.add_argument("board", help=board_help)
     show_p.add_argument("--json", action="store_true", help="Print JSON")
 
@@ -205,7 +294,7 @@ def add_parser(sub) -> None:
     add_p.add_argument("sources", nargs="+", metavar="image", help="Files, folders, http(s) links or Nebula outputs")
     add_p.add_argument("--json", action="store_true", help="Print JSON")
 
-    set_p = msub.add_parser("set", help="Change a board's images and settings")
+    set_p = msub.add_parser("set", help="Change a board's images, settings and brief")
     set_p.add_argument("board", help=board_help)
     set_p.add_argument("--weight", action="append", default=[], metavar="IMAGE=W",
                        help="How much one image counts, 0 to 1, e.g. --weight 2=0.5 (repeatable)")
@@ -221,6 +310,31 @@ def add_parser(sub) -> None:
     set_p.add_argument("--notes", help="Notes for the whole board")
     set_p.add_argument("--mode", choices=boards.MODES)
     set_p.add_argument("--strength", type=float, help="How strongly it steers, 0 to 1")
+    brief_g = set_p.add_argument_group(
+        "the brief", "What generators get from the board. These keep the analysis.")
+    brief_g.add_argument("--direction", metavar="TEXT",
+                         help='What the board is for, in positive words ("" clears it)')
+    brief_g.add_argument("--avoid", action="append", default=[], metavar="TEXT",
+                         help="Add something to keep out of the image (repeatable)")
+    brief_g.add_argument("--unavoid", action="append", default=[], metavar="TEXT",
+                         help="Take something off the Avoid list (repeatable)")
+    brief_g.add_argument("--clear-avoid", dest="clear_avoid", action="store_true",
+                         help="Empty the Avoid list first (with --avoid, replaces it)")
+    brief_g.add_argument("--pin-color", dest="pin_color", action="append", default=[], metavar="HEX",
+                         help="A colour that must appear, e.g. --pin-color \"#E8593C\" (repeatable)")
+    brief_g.add_argument("--keep-out-color", dest="keep_out_color", action="append", default=[], metavar="HEX",
+                         help="A colour to keep out (repeatable)")
+    brief_g.add_argument("--unpin-color", dest="unpin_color", action="append", default=[], metavar="HEX",
+                         help="Take a colour off either list (repeatable)")
+    brief_g.add_argument("--brief", metavar="TEXT",
+                         help="Write the brief by hand; generators get it instead of the generated one")
+    brief_g.add_argument("--clear-brief", dest="clear_brief", action="store_true",
+                         help="Go back to the generated brief")
+    brief_g.add_argument("--keep-brief", dest="keep_brief", action="store_true",
+                         help="Keep a hand-written brief after the board changed (clears \"changed since\")")
+    set_p.add_argument("--restore", metavar="FILE",
+                       help="Undo a change: the `previous` from `set --json` (or its whole output), "
+                            "as a file or - for stdin")
     set_p.add_argument("--json", action="store_true", help="Print JSON")
 
     analyze_p = msub.add_parser("analyze", help="Analyze a board (palette, accents, brief)")

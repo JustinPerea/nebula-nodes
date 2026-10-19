@@ -654,6 +654,9 @@ def test_an_agent_cannot_replace_remove_or_keep_the_persons_brief(client, person
         assert "wrote this board's brief by hand" in response.json()["detail"]
     keep = client.post(f"/api/moodboards/{board['id']}/brief-override/keep", headers=AGENT)
     assert keep.status_code == 403 and keep.json()["code"] == "agent_refused"
+    # Keeping loses nothing, so its reason isn't replace's.
+    assert "only they can keep it" in keep.json()["detail"]
+    assert "would be lost" not in keep.json()["detail"] and "mark as kept" not in keep.json()["detail"]
     # Nothing changed, not even the Direction sent beside a refused override.
     after = client.get(f"/api/moodboards/{board['id']}").json()
     assert after["briefOverride"] == saved and after["direction"] == ""
