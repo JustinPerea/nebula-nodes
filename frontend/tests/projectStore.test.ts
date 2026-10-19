@@ -174,6 +174,8 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().trash.map((p) => p.id)).toEqual(['gamma']);
     expect(useProjectStore.getState().lastDeleted).toBeNull();
     await useProjectStore.getState().emptyTrash();
+    // Only what the list showed, so a project an agent deleted since stays.
+    expect(projects.emptyProjectTrash).toHaveBeenCalledWith(['gamma']);
     expect(useProjectStore.getState().trash).toEqual([]);
     expect(useProjectStore.getState().projects.map((p) => p.id)).toEqual(['alpha']);
   });

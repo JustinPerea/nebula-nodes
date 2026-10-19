@@ -120,6 +120,17 @@ describe('ProjectHome', () => {
     vi.useRealTimers();
   });
 
+  it('says an agent deleted a project from its kind, even when it calls itself "You"', () => {
+    const base = { deletedAt: '2026-10-10T11:00:00Z', purgeAt: '2026-11-09T11:00:00Z' };
+    render(<ProjectHome {...props({ trash: [
+      { ...project({ id: 'a', name: 'By agent' }), ...base, deletedBy: { kind: 'agent', name: 'Y\u043eu' } },
+      { ...project({ id: 'p', name: 'By person' }), ...base, deletedBy: { kind: 'person', name: 'You' } },
+    ] })} />);
+    fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
+    expect(screen.getByRole('listitem', { name: 'By agent' }).textContent).toContain('by Y\u043eu (agent)');
+    expect(screen.getByRole('listitem', { name: 'By person' }).textContent).not.toContain(' by ');
+  });
+
   it('hides Recently deleted when the trash is empty', () => {
     render(<ProjectHome {...props({ trash: [] })} />);
     expect(screen.queryByRole('button', { name: /Recently deleted/ })).toBeNull();

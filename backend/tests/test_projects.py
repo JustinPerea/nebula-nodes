@@ -482,7 +482,8 @@ def test_unsaved_edits_to_a_project_deleted_elsewhere_can_still_be_recovered(wor
     assert recovered.json()["project"]["snapshot"] == snapshot
     assert client.post("/api/projects/recover", json=body).json() == recovered.json()
     # Gone for good: the copy is still made, under a generic name.
-    assert client.request("DELETE", f"/api/projects/trash/{first['project']['id']}", headers=person.headers).status_code == 200
+    assert client.request("DELETE", f"/api/projects/trash/{first['project']['id']}",
+                          headers=person.headers).status_code == 200
     body["recoveryId"] = uuid4().hex
     gone = client.post("/api/projects/recover", json=body)
     assert gone.status_code == 200, gone.text
@@ -551,17 +552,37 @@ def test_trash_can_be_purged_one_at_a_time_or_emptied(workspace, person):
         assert client.request("DELETE", f"/api/projects/trash/{a['project']['id']}", headers=headers).status_code == 403
         assert client.post("/api/projects/trash/empty", headers=headers).status_code == 403
     assert len(store.read()["trash"]) == 2
-    purged = client.request("DELETE", f"/api/projects/trash/{a['project']['id']}", headers=person.headers)
+    me = person.headers
+    purged = client.request("DELETE", f"/api/projects/trash/{a['project']['id']}", headers=me)
     assert purged.status_code == 200
     assert [entry["id"] for entry in purged.json()["trash"]] == [b["project"]["id"]]
-    assert client.request("DELETE", f"/api/projects/trash/{a['project']['id']}", headers=person.headers).status_code == 404
+    assert client.request("DELETE", f"/api/projects/trash/{a['project']['id']}", headers=me).status_code == 404
     # Purging only reaches the trash, never a live project.
-    assert client.request("DELETE", f"/api/projects/trash/{c['project']['id']}", headers=person.headers).status_code == 404
-    assert client.request("DELETE", "/api/projects/trash/not-an-id", headers=person.headers).status_code == 400
-    assert client.post("/api/projects/trash/empty", headers=person.headers).json() == {"trash": []}
+    assert client.request("DELETE", f"/api/projects/trash/{c['project']['id']}", headers=me).status_code == 404
+    assert client.request("DELETE", "/api/projects/trash/not-an-id", headers=me).status_code == 400
+    assert client.post("/api/projects/trash/empty", headers=me).json() == {"trash": []}
     catalog = store.read()
     assert catalog["trash"] == {}
     assert list(catalog["projects"]) == [c["project"]["id"]]
+
+
+def test_only_the_person_deletes_a_project_for_good(workspace, person):
+    """Deleting for good can't be undone, so agents and unnamed clients are
+    refused and told they can restore instead. Restoring stays open to them."""
+    client, graph, store, _ = workspace
+    a = create(client, "A")
+    b = create(client, "B", a["workspaceRevision"])
+    _trash(client, a["project"]["id"], b["workspaceRevision"])
+    for headers in ({"X-Nebula-Agent": "Claude"}, {}):
+        for method, path in (("DELETE", f"/api/projects/trash/{a['project']['id']}"),
+                             ("POST", "/api/projects/trash/empty")):
+            refused = client.request(method, path, headers=headers)
+            assert refused.status_code == 403, (headers, path)
+            assert "restore it instead" in refused.json()["detail"]
+    assert a["project"]["id"] in store.read()["trash"]
+    restored = client.post(f"/api/projects/{a['project']['id']}/restore", headers={"X-Nebula-Agent": "Claude"})
+    assert restored.status_code == 200, restored.text
+    assert a["project"]["id"] in store.read()["projects"]
 
 
 def test_trash_expires_after_thirty_days(workspace):

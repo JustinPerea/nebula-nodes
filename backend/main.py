@@ -134,6 +134,7 @@ from services.canvas_events import (
     MOVE_THRESHOLD_PX,
     TooManyWaiters,
     actor_for_headers,
+    actor_record,
     actor_label,
     canvas_events,
     param_changes,
@@ -141,6 +142,7 @@ from services.canvas_events import (
 )
 from services.canvas_pins import CanvasPins, PinError, pin_summary
 from services import person_session
+from services import asset_trash
 from services.child_env import scrubbed_env
 from services.person_gate import (
     PERSON_HEADER,
@@ -7801,6 +7803,14 @@ def _stored_asset(kind: str, asset_id: str) -> dict[str, Any] | None:
         return None
 
 
+def _trashed_asset(kind: str, asset_id: str) -> dict[str, Any] | None:
+    store = _moodboard_store() if kind == "moodboard" else _char_store()
+    try:
+        return store.trashed(asset_id)
+    except ValueError:
+        return None
+
+
 def _check_asset_refs(definition_id: str, params: Mapping[str, Any], label: str, *,
                       before: Mapping[str, Any] | None = None, must_exist: bool | None = None) -> None:
     """400 unless each asset-reference param (a Moodboard's ``moodboard``, a
@@ -7823,6 +7833,11 @@ def _check_asset_refs(definition_id: str, params: Mapping[str, Any], label: str,
             raise HTTPException(status_code=400, detail=(
                 f"{label}.{key} must be a {source['noun']} id; {source['list']} lists them"))
         if must_exist and _stored_asset(kind, value.strip()) is None:
+            if _trashed_asset(kind, value.strip()) is not None:
+                raise HTTPException(status_code=400, detail=(
+                    f"{label}.{key}: {source['noun']} {value.strip()[:64]!r} is in Recently deleted; "
+                    f"restore it first (POST /api/trash/{kind}/{value.strip()[:64]}/restore, "
+                    f"or nebula trash restore {kind} {value.strip()[:64]})"))
             raise HTTPException(status_code=400, detail=(
                 f"{label}.{key}: there's no {source['noun']} {value.strip()[:64]!r}; {source['list']} lists them"))
 
@@ -9581,7 +9596,8 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
         if deleting_active:
             fences.enter_context(_paid_graph_mutation("delete the open project"))
             _project_replacement_guard("delete the open project")
-        trashed = move_to_trash(catalog, project_id)
+        trashed = move_to_trash(catalog, project_id,
+                                actor_record(actor_for_headers(current_request_headers())))
         if deleting_active:
             catalog["activeProjectId"] = None
             catalog["workspaceRevision"] = uuid4().hex
@@ -9629,9 +9645,8 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
 
 @app.delete("/api/projects/trash/{project_id}")
 async def purge_trashed_project(project_id: str) -> dict[str, Any]:
-    # For good, so the person's alone: agents may move a project to the
-    # trash, where it can be restored, but never empty it.
-    require_person(current_request_headers())
+    # Deleting for good can't be undone, so only the person may (agents restore).
+    require_person(current_request_headers(), hint=_RESTORE_HINT)
     with project_store.transaction() as catalog:
         _trashed_or_404(project_id, catalog)
         del catalog["trash"][project_id]
@@ -9640,13 +9655,36 @@ async def purge_trashed_project(project_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/projects/trash/empty")
-async def empty_project_trash() -> dict[str, Any]:
-    require_person(current_request_headers())
+async def empty_project_trash(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Delete the trashed projects for good. Person only. With ``{"ids": [...]}``
+    (what the person's list showed) only those go, so a project an agent
+    deleted after the list loaded stays restorable."""
+    require_person(current_request_headers(), hint=_RESTORE_HINT)
+    shown = _shown_trash_ids(body, "ids")
     with project_store.transaction() as catalog:
-        if catalog.get("trash"):
-            catalog["trash"] = {}
+        trash = catalog.get("trash") or {}
+        doomed = [project_id for project_id in trash if shown is None or project_id in shown]
+        for project_id in doomed:
+            del trash[project_id]
+        if doomed:
             project_store.commit(catalog)
-        return {"trash": []}
+        return {"trash": _trash_listing(catalog)}
+
+
+def _shown_trash_ids(body: dict[str, Any] | None, key: str) -> set[str] | None:
+    """The ids an empty request says the person was shown, or None when it
+    doesn't say (then everything that matches goes, as before)."""
+    if not body or key not in body:
+        return None
+    raw = body.get(key)
+    if not isinstance(raw, list) or len(raw) > 10_000 or not all(isinstance(value, str) for value in raw):
+        raise HTTPException(status_code=400, detail=f"{key} must be a list of ids")
+    for value in raw:
+        try:
+            validate_project_id(value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return set(raw)
 
 
 def _display_positions(
@@ -10491,7 +10529,7 @@ async def get_character(char_id: str) -> dict:
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
     if char is None:
-        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+        return _asset_not_found("character", char_id)
     return char
 
 
@@ -10502,7 +10540,11 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     try:
         character = store.update(char_id, **updates)
-    except (KeyError, ValueError):
+    except KeyError:
+        # In Recently deleted (an agent may have deleted it): say so, so the
+        # Studio can tell the person to restore it and keep their edits.
+        return _asset_not_found("character", char_id)
+    except ValueError:
         raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
     await _broadcast_stored_asset("character", character)
     return character
@@ -10510,14 +10552,15 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
 
 @app.delete("/api/characters/{char_id}")
 async def delete_character(char_id: str) -> dict:
-    """Delete a Character by id."""
+    """Move a Character to Recently deleted. Anyone, agents included, may:
+    it can be restored (POST /api/trash/character/{id}/restore)."""
     store = _char_store()
     try:
-        store.delete(char_id)
+        record = store.delete(char_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
     await _broadcast_stored_asset("character", None, char_id, deleted=True)
-    return {"status": "deleted", "id": char_id}
+    return {"status": "trashed", "id": char_id, "trashed": record}
 
 
 # ---------- Moodboards: provider-neutral creative-direction store ----------
@@ -10560,7 +10603,7 @@ async def get_moodboard(moodboard_id: str) -> dict:
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     if moodboard is None:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        return _asset_not_found("moodboard", moodboard_id)
     return moodboard
 
 
@@ -10579,7 +10622,9 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     try:
         moodboard = store.update(moodboard_id, **updates)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        # In Recently deleted (an agent may have deleted it): say so, so the
+        # Studio can tell the person to restore it and keep their edits.
+        return _asset_not_found("moodboard", moodboard_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
@@ -10610,13 +10655,202 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
 
 @app.delete("/api/moodboards/{moodboard_id}")
 async def delete_moodboard(moodboard_id: str) -> dict:
+    """Move a board to Recently deleted. Anyone, agents included, may: it
+    can be restored (POST /api/trash/moodboard/{id}/restore)."""
     store = _moodboard_store()
     try:
-        store.delete(moodboard_id)
+        record = store.delete(moodboard_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
-    return {"status": "deleted", "id": moodboard_id}
+    return {"status": "trashed", "id": moodboard_id, "trashed": record}
+
+
+# ---------- Recently deleted: moodboards, characters and projects ----------
+#
+# Deleting a board, a character or a project moves it here, and anyone,
+# agents included, may restore it. Deleting for good can't be undone, so it is
+# the person's alone (services/person_gate.py). Boards and characters stay
+# until the person deletes them for good; projects keep their 30-day expiry
+# (services/project_store.py TRASH_RETENTION).
+
+TRASH_KINDS = ("moodboard", "character", "project")
+_RESTORE_HINT = ("Deleting for good can't be undone, so only the person can. You can restore it instead: "
+                 "nebula trash restore <kind> <id>, the restore_from_trash tool, or "
+                 "POST /api/trash/<kind>/<id>/restore.")
+
+
+def _trash_kind(kind: str) -> str:
+    if kind not in TRASH_KINDS:
+        raise HTTPException(status_code=400, detail=f"kind must be one of {', '.join(TRASH_KINDS)}")
+    return kind
+
+
+def _asset_store(kind: str):
+    return _moodboard_store() if kind == "moodboard" else _char_store()
+
+
+def _asset_noun(kind: str) -> str:
+    return "Moodboard" if kind == "moodboard" else "Character"
+
+
+def _asset_not_found(kind: str, asset_id: str) -> JSONResponse:
+    """404 for a board or character that isn't live. When it is in Recently
+    deleted the body says so (code "in_trash", with the trash record), so a
+    card can offer Restore instead of "not found"."""
+    record = _trashed_asset(kind, asset_id)
+    if record is None:
+        return JSONResponse(status_code=404, content={"detail": f"{_asset_noun(kind)} '{asset_id}' not found"})
+    return JSONResponse(status_code=404, content={
+        "detail": (f"{_asset_noun(kind)} '{asset_id}' is in Recently deleted. Restore it with "
+                   f"nebula trash restore {kind} {asset_id} (POST /api/trash/{kind}/{asset_id}/restore)."),
+        "code": "in_trash",
+        "trashed": record,
+    })
+
+
+def _trash_scope(scope: str | None, project_id: str | None) -> None:
+    _validate_project_id_param(project_id)
+    if scope not in (None, "global", "project"):
+        raise HTTPException(status_code=400, detail="scope must be global or project")
+    if scope == "project" and not project_id:
+        raise HTTPException(status_code=400, detail="projectId is required for scope=project")
+
+
+def _project_trash_items() -> list[dict[str, Any]]:
+    with project_store.transaction() as catalog:
+        if purge_expired_trash(catalog):
+            project_store.commit(catalog)
+        return [{"kind": "project", **entry} for entry in _trash_listing(catalog)]
+
+
+@app.get("/api/trash")
+async def list_trash(kind: str | None = None, scope: str | None = None,
+                     projectId: str | None = None) -> dict[str, Any]:
+    """What's in Recently deleted, newest first. ``kind`` narrows it to
+    moodboards, characters or projects; ``scope`` (global, or project with
+    ``projectId``) narrows boards and characters the way their lists do."""
+    if kind is not None:
+        _trash_kind(kind)
+    _trash_scope(scope, projectId)
+    items: list[dict[str, Any]] = []
+    for asset_kind in ("moodboard", "character"):
+        if kind in (None, asset_kind):
+            try:
+                items.extend(_asset_store(asset_kind).list_trash(scope=scope, projectId=projectId))
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if kind in (None, "project") and scope is None:
+        items.extend(_project_trash_items())
+    items.sort(key=lambda item: str(item.get("deletedAt") or ""), reverse=True)
+    return {"items": items}
+
+
+@app.post("/api/trash/{kind}/{item_id}/restore")
+async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
+    """Bring something back from Recently deleted with the same id and
+    contents. Agents may: a restore undoes a delete."""
+    _trash_kind(kind)
+    if kind == "project":
+        result = await restore_saved_project(item_id)
+        return {"restored": "project", "id": item_id, **result}
+    try:
+        asset = _asset_store(kind).restore(item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except asset_trash.AlreadyLive:
+        raise HTTPException(status_code=409, detail=(
+            f"{_asset_noun(kind)} '{item_id}' is already back; nothing to restore"))
+    except KeyError:
+        # Already restored (another tab, an agent, or a retry): nothing to do,
+        # and the caller gets what it asked for.
+        live = _stored_asset(kind, item_id)
+        if live is not None:
+            return {"restored": kind, "id": item_id, "asset": live, "alreadyRestored": True}
+        raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
+    await _broadcast_stored_asset(kind, asset)
+    return {"restored": kind, "id": item_id, "asset": asset}
+
+
+@app.delete("/api/trash/{kind}/{item_id}")
+async def purge_trashed(kind: str, item_id: str) -> dict[str, Any]:
+    """Delete one item for good. Only the person may."""
+    _trash_kind(kind)
+    require_person(current_request_headers(), hint=_RESTORE_HINT)
+    if kind == "project":
+        await purge_trashed_project(item_id)
+        return {"purged": "project", "id": item_id}
+    try:
+        _asset_store(kind).purge(item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
+    # A card that showed it "in Recently deleted" now says it's gone.
+    await _broadcast_stored_asset(kind, None, item_id, deleted=True)
+    return {"purged": kind, "id": item_id}
+
+
+@app.post("/api/trash/empty")
+async def empty_trash(kind: str | None = None, scope: str | None = None,
+                      projectId: str | None = None, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Delete for good everything ``GET /api/trash`` lists with the same
+    filters. Only the person may.
+
+    The canvas sends ``{"items": [{"kind", "id"}, ...]}``, what its list
+    showed, and then only those go: an agent's delete that landed after the
+    list loaded stays restorable. Without ``items`` everything listed goes."""
+    if kind is not None:
+        _trash_kind(kind)
+    _trash_scope(scope, projectId)
+    require_person(current_request_headers(), hint=_RESTORE_HINT)
+    shown = _shown_trash_items(body)
+    purged = 0
+    for asset_kind in ("moodboard", "character"):
+        if kind in (None, asset_kind):
+            store = _asset_store(asset_kind)
+            for record in store.list_trash(scope=scope, projectId=projectId):
+                if shown is not None and (asset_kind, record["id"]) not in shown:
+                    continue
+                try:
+                    store.purge(record["id"])
+                except KeyError:
+                    continue
+                purged += 1
+                await _broadcast_stored_asset(asset_kind, None, record["id"], deleted=True)
+    if kind in (None, "project") and scope is None:
+        with project_store.transaction() as catalog:
+            trash = catalog.get("trash") or {}
+            doomed = [project_id for project_id in trash if shown is None or ("project", project_id) in shown]
+            for project_id in doomed:
+                del trash[project_id]
+            if doomed:
+                purged += len(doomed)
+                project_store.commit(catalog)
+    return {"purged": purged}
+
+
+def _shown_trash_items(body: dict[str, Any] | None) -> set[tuple[str, str]] | None:
+    """``items`` from an empty request as {(kind, id)}, or None when absent."""
+    if not body or "items" not in body:
+        return None
+    raw = body.get("items")
+    if not isinstance(raw, list) or len(raw) > 10_000:
+        raise HTTPException(status_code=400, detail="items must be a list of {kind, id}")
+    shown: set[tuple[str, str]] = set()
+    for item in raw:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+            raise HTTPException(status_code=400, detail="items must be a list of {kind, id}")
+        item_kind = _trash_kind(str(item.get("kind")))
+        try:
+            if item_kind == "project":
+                validate_project_id(item["id"])
+            else:
+                asset_trash.validate_id(item["id"])
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        shown.add((item_kind, item["id"]))
+    return shown
 
 
 # ---------- Presets: named styles / prompt fragments + params ----------

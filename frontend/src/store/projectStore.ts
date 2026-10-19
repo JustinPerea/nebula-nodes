@@ -591,7 +591,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (get().busy) return;
     set({ busy: true, error: null });
     try {
-      const trash = await api.emptyProjectTrash();
+      const trash = await api.emptyProjectTrash(get().trash.map((entry) => entry.id));
       set({ trash, lastDeleted: null });
     } catch (error) { showError(error); }
     finally { set({ busy: false }); }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
 import { coverImages, type CoverChoices, type ProjectCover } from '../../lib/projects';
+import { actorLabel } from '../../lib/trash';
 import { CrabMark } from '../brand/CrabMark';
 import '../../styles/project-home.css';
 
@@ -22,6 +23,8 @@ export interface ProjectSummary {
 export interface TrashedProject extends ProjectSummary {
   deletedAt: string;
   purgeAt: string;
+  /** Who deleted it: you, an agent by name, or an unnamed client. Missing on older entries. */
+  deletedBy?: { kind: string; name: string };
 }
 
 export interface ProjectHomeProps {
@@ -218,6 +221,12 @@ function deletedDate(value: string): string {
     : 'Deleted';
 }
 
+function deletedByNote(entry: TrashedProject): string {
+  const by = entry.deletedBy;
+  if (!by || by.kind === 'person') return '';
+  return ` by ${actorLabel(by)}`;
+}
+
 /** Two-step button for the irreversible actions: first press arms, second confirms. */
 function ConfirmInline({ label, confirmLabel, prompt, busy, onConfirm, className }: {
   label: string; confirmLabel: string; prompt: string; busy: boolean; onConfirm: () => void; className?: string;
@@ -268,7 +277,7 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
             {trash.map((entry) => (
               <li key={entry.id} className="project-home__trash-row" aria-label={entry.name}>
                 <span className="project-home__trash-name">{entry.name}</span>
-                <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)} · {removalNote(entry.purgeAt, now)}</span>
+                <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.purgeAt, now)}</span>
                 <span className="project-home__trash-actions">
                   <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
                   <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone." busy={busy}

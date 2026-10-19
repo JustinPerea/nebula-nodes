@@ -63,6 +63,13 @@ The server exposes these tools for building and running (see
   the person's work. Clearing a project that has nodes needs an explicit
   force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
   on an open canvas the person can undo it.
+- `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
+  `moodboard_update`, `moodboard_analyze`, `moodboard_delete`: the boards in
+  Moodboard Studio. See
+  [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
+- `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
+  characters, projects), and bring one back with the same id. See
+  [Recently deleted](#recently-deleted).
 
 And these canvas tools:
 
@@ -261,6 +268,10 @@ Person-only, refused with 403 `person_required` otherwise:
   (`/api/agent/spend/apps`; see Connect your agent below);
 - starting any `/ws/chat` turn (Claude, Codex), so no chat
   workspace or agent token is minted without the person;
+- deleting for good from Recently deleted (`DELETE /api/trash/{kind}/{id}`,
+  `POST /api/trash/empty`, `DELETE /api/projects/trash/{id}`,
+  `POST /api/projects/trash/empty`). It can't be undone. The refusal tells an
+  agent it can restore instead (see Recently deleted below);
 - `POST /api/enhance-prompt`, the Create button's rewrite. The gate comes
   first; then prompts over 4,000 characters get a 413 that says so, and more
   than 20 calls a minute get a 429. Each call logs provider, length and outcome
@@ -823,6 +834,45 @@ the shared outside budget, until the person revokes it, which deletes the
 file. Apps connected before token files keep the token in their config until
 they are revoked and connected again.
 
+### Recently deleted
+
+Deleting a moodboard, a character or a project doesn't remove it. It moves to
+Recently deleted with who deleted it (you, an agent by name, or an unnamed
+client) and when. Agents may delete boards and characters
+(`DELETE /api/moodboards/{id}`, `DELETE /api/characters/{id}`), because anyone
+can undo it:
+
+- `GET /api/trash` lists it, newest first. `kind` (`moodboard`, `character`,
+  `project`) narrows it; `scope` (`global`, or `project` with `projectId`)
+  narrows boards and characters the way their lists do.
+- `POST /api/trash/{kind}/{id}/restore` brings one back with the same id and
+  contents, so a Moodboard or Character node that points at it runs again. A
+  project comes back closed. Agents may restore. Restoring one that is already
+  back is a no-op (200, `alreadyRestored: true`). MCP: `list_trash`,
+  `restore_from_trash`. CLI: `nebula trash list`, `nebula trash restore [kind] <id>`.
+- Deleting for good is person-only (see the list above). The person does it
+  from Moodboard Studio, Character Studio or Projects. Emptying sends what the
+  person's list showed (`{"items": [{kind, id}]}` to `/api/trash/empty`,
+  `{"ids": [...]}` to `/api/projects/trash/empty`) and only those go, so an
+  agent's delete that lands after the list loaded stays restorable.
+- "Deleted by" is attribution, never permission. `deletedBy.kind` says who:
+  `person`, `agent`, `system` or `anonymous`. An agent names itself, so its
+  `name` proves nothing; the canvas and CLI label every agent from `kind`
+  ("Claude (agent)") and only `kind: "person"` reads as "you". Names are
+  stored NFKC-normalized, without control, format (zero-width, bidi),
+  private-use or surrogate characters.
+
+A board or character in Recently deleted answers `GET` and `PUT` with 404 and
+`code: "in_trash"` plus its trash record. Its node card and the Inspector say
+it's in Recently deleted and offer Restore. Running the node fails with a
+message that says how to restore it, and `edit_canvas` refuses to point a node
+at it.
+
+Boards and characters stay until the person deletes them for good: there is
+no timer. Projects keep their 30-day expiry. Files live in
+`<store>/.trash/<id>.json` with a `<id>.trash.json` record beside them
+(`backend/services/asset_trash.py`).
+
 ### Building and running over MCP
 
 `edit_canvas` and `remove_from_canvas` send one body to `POST /api/graph/apply`
@@ -987,6 +1037,8 @@ nebula project open <id>            # switch the canvas (not while a run is goin
 nebula project new "Logo ideas"     # start a new, empty project and open it
 nebula clear                        # refused when the canvas has nodes
 nebula clear --force                # clears it anyway; the person can undo it
+nebula trash list                   # Recently deleted boards, characters, projects
+nebula trash restore [kind] <id>    # bring one back with the same id
 ```
 
 Opening or starting a project keeps the one that was open as it is. When an
@@ -1003,6 +1055,77 @@ send it after the person confirms). It's a check of intent, not of who is
 asking. With the canvas open, a clear is one undo step: Undo (or Cmd-Z)
 brings back every node, wire, name and output. With no canvas open there is
 nothing to undo it from, so prefer `nebula project new`.
+
+### Moodboards from the CLI and MCP
+
+`nebula moodboard` and the `moodboard_*` MCP tools edit the boards Moodboard
+Studio shows. Both use `backend/moodboard_client.py`.
+
+```bash
+nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
+nebula moodboard show "Nature + tech"      # numbered images, settings, analysis
+nebula moodboard add <board> more.png
+nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --exclude 5 --strength 0.6
+nebula moodboard analyze <board>
+nebula moodboard list                      # boards for every project, plus the open project's
+nebula moodboard delete <board>
+```
+
+- A board is named by its id or exact name; an image by its number or id
+  from `show`. `--json` prints the board as JSON (the MCP tools return the
+  same shape).
+- Images can be files, folders (the images directly inside, in name order,
+  so `2.png` comes before `10.png`), http(s) links or Nebula outputs
+  (`/api/outputs/...`, used as they are).
+- Links are downloaded by the CLI or the MCP server process, never by the
+  backend, with the guarded fetcher Commons uses for links
+  (`backend/commons/net.py`): public web addresses only, so never this
+  computer, its local network or a cloud metadata address (checked on every
+  redirect, 3 at most, and the connection goes to the address that was
+  checked); ports 80 and 443; no user name or password in the link. Then a
+  PNG, JPEG, GIF or WebP content type whose bytes match, 20 MB at most, 60
+  seconds in all. For an image anywhere else, save it and add the file. The
+  bytes go through `POST /api/uploads`, like Moodboard Studio's Add Images.
+  Everything is read and downloaded before the first upload, so one bad
+  source changes nothing.
+- An in-app chat's turn reads local files only from its own workspace (as
+  with Commons); a relative path means that workspace. Every image found in
+  a folder is checked the same way, and the check runs again when the file
+  is read (which follows no links), so a link can't lead outside it.
+- Like Moodboard Studio, any change but a rename clears the board's
+  analysis, so run `analyze` again. `--remove` takes an image off the board;
+  its file stays, and the command prints the URL to add it back.
+- `moodboard_update` (and `set --json`) returns `previous`: the settings
+  before the change. Passing them back undoes it.
+- Deleting: where Nebula keeps deleted boards in Recently deleted, anyone
+  may delete one, agents included, because it can be restored. Where a
+  delete is for good (a Nebula without Recently deleted), `nebula moodboard
+  delete` and `moodboard_delete` refuse for everyone; the person deletes the
+  board in Moodboard Studio. The client never decides who is the person:
+  that would be a check any client could skip.
+- `moodboard_create` and `moodboard_add` are marked open-world because they
+  fetch links; `moodboard_delete` is marked destructive.
+
+### The nebula skill
+
+`skills/nebula/SKILL.md` teaches Claude Code and Codex the `nebula` CLI. It
+is for agents outside Nebula, so it lives apart from `.agents/skills/`, the
+provider knowledge Nebula's own chats read (they get their own primers).
+Install it once per machine:
+
+```bash
+backend/.venv/bin/python -m nebula skill install          # link it (git pull keeps it current)
+backend/.venv/bin/python -m nebula skill install --copy   # or copy it
+backend/.venv/bin/python -m nebula skill install --for codex
+```
+
+It goes to `~/.claude/skills/nebula` (Claude Code) and
+`~/.agents/skills/nebula` (Codex's user skill folder), for each app set up on
+the machine. Anything already there is moved, not deleted, to
+`skill-backups/nebula.backup-YYYYMMDD-HHMMSS` next to the skills folder
+(`~/.claude/skill-backups/`, `~/.agents/skill-backups/`). The backups sit
+outside the skills folder so they don't load as a second `nebula` skill.
+A copy records its checkout in `.installed-from`.
 
 `nebula context` lists the definition ids that can run here: with your keys,
 free, on the signed-in Krea account (marked `*`), or with a Nous sign-in.

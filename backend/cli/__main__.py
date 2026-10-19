@@ -79,6 +79,18 @@ def build_parser() -> argparse.ArgumentParser:
     project_open_p = project_sub.add_parser("open", help="Switch the canvas to a saved project")
     project_open_p.add_argument("project_id", help="Project id (from `nebula projects`)")
 
+    trash_p = sub.add_parser(
+        "trash", help="Recently deleted moodboards, characters and projects: list them or restore one")
+    trash_sub = trash_p.add_subparsers(dest="trash_cmd", required=True)
+    trash_list_p = trash_sub.add_parser("list", help="What's in Recently deleted, newest first")
+    trash_list_p.add_argument("--kind", choices=["moodboard", "character", "project"], help="Only this kind")
+    trash_list_p.add_argument("--json", action="store_true", help="Print the raw JSON")
+    trash_restore_p = trash_sub.add_parser(
+        "restore", help="Bring one back with the same id (nodes that point at it work again)")
+    trash_restore_p.add_argument("target", nargs="+", metavar="[kind] id",
+                                 help="The id from `nebula trash list`, optionally after its kind "
+                                      "(moodboard, character or project)")
+
     sub.add_parser("graph", help="Show current graph state")
     sub.add_parser("selection", help="Show nodes currently selected on the canvas")
 
@@ -283,7 +295,14 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--brand")
     csub.add_parser("status", help="Worker, meter and queue status")
 
+    # -- Moodboards --
+    from .commands import moodboard as moodboard_cmd
+    moodboard_cmd.add_parser(sub)
+
     # -- Outside apps --
+    from .commands import skill as skill_cmd
+    skill_cmd.add_parser(sub)
+
     mcp_p = sub.add_parser("mcp", help="Connect an outside agent app (Hermes, Claude Code, Codex...) to Nebula's MCP server")
     mcp_sub = mcp_p.add_subparsers(dest="mcp_cmd", required=True)
     from services.agent_connect import CLIENTS
@@ -364,6 +383,11 @@ def default_url(environ: dict[str, str] | None = None, *, strict: bool = True) -
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    if args.command == "skill":
+        # Installs files on this machine; needs no backend.
+        from .commands import skill
+
+        sys.exit(skill.run_install(args))
     if args.url is None and args.command:
         # mcp connect sends the token only to an address that passed the check.
         args.url = default_url(strict=args.command != "mcp")
@@ -382,12 +406,13 @@ def main() -> None:
     client = NebulaClient(args.url)
 
     from .commands import (
-        apply, canvas, commons, context, nodes, keys, graph, execute, quick, path, pins, projects, proposals,
-        selection, spend,
+        apply, canvas, commons, context, nodes, keys, graph, execute, moodboard, quick, path, pins, projects,
+        proposals, selection, spend, trash,
     )
 
     dispatch = {
         "commons": lambda: commons.run(client, args),
+        "moodboard": lambda: moodboard.run(client, args),
         "context": lambda: context.run(client),
         "nodes": lambda: nodes.run_list(client, query=args.query, category=args.category),
         "info": lambda: nodes.run_info(client, args.node_id),
@@ -400,6 +425,7 @@ def main() -> None:
         "rename": lambda: graph.run_rename(client, args.node_ref, " ".join(args.label)),
         "move": lambda: graph.run_move(client, args.moves),
         "projects": lambda: projects.run_list(client),
+        "trash": lambda: trash.run(client, args),
         "project": lambda: (projects.run_new(client, " ".join(args.name)) if args.project_command == "new"
                             else projects.run_open(client, args.project_id)),
         "graph": lambda: graph.run_show(client),

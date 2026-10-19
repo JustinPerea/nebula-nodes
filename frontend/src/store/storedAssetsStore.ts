@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { fetchCharacter, fetchMoodboard } from '../lib/api';
+import { lookupStoredAsset } from '../lib/api';
+import type { TrashedItem } from '../lib/trash';
 import { wsClient, type StoredAssetChangedEvent } from '../lib/wsClient';
 import type { Character, Moodboard } from '../types';
 
@@ -11,7 +12,9 @@ import type { Character, Moodboard } from '../types';
  * `moodboard` / `character` param (backend services/agent_params.py), so an
  * agent can point one at a board. The card looks the asset up here, which
  * keeps its name, thumbnail and count current: the backend broadcasts
- * `storedAssetChanged` whenever one is saved, analysed or deleted.
+ * `storedAssetChanged` whenever one is saved, analysed, deleted or restored.
+ * A deleted one is usually in Recently deleted (`trashed`), so the card can
+ * offer Restore instead of saying it's gone.
  */
 
 export type StoredAssetKind = 'moodboard' | 'character';
@@ -27,9 +30,11 @@ export interface StoredAssetSummary {
 }
 
 export interface StoredAssetEntry {
-  status: 'loading' | 'ready' | 'missing' | 'error';
+  status: 'loading' | 'ready' | 'trashed' | 'missing' | 'error';
   /** Kept while a refetch runs, so the card doesn't flash empty. */
   summary: StoredAssetSummary | null;
+  /** When it's in Recently deleted: who deleted it and when. */
+  trashed?: TrashedItem;
 }
 
 export function moodboardSummary(moodboard: Moodboard): StoredAssetSummary {
@@ -107,11 +112,18 @@ export const useStoredAssetsStore = create<StoredAssetsState>((set, get) => {
     const previous = get().entries[key]?.summary ?? null;
     if (get().entries[key]?.status !== 'ready') put(key, { status: 'loading', summary: previous });
     try {
-      const summary = kind === 'moodboard'
-        ? await fetchMoodboard(id).then((asset) => (asset ? moodboardSummary(asset) : null))
-        : await fetchCharacter(id).then((asset) => (asset ? characterSummary(asset) : null));
+      const found = await lookupStoredAsset(kind, id);
       if (latestRequest.get(key) !== request) return;
-      put(key, summary ? { status: 'ready', summary } : { status: 'missing', summary: null });
+      if (found.status === 'ready') {
+        const summary = kind === 'moodboard'
+          ? moodboardSummary(found.asset as Moodboard) : characterSummary(found.asset as Character);
+        put(key, { status: 'ready', summary });
+      } else if (found.status === 'trashed') {
+        put(key, { status: 'trashed', trashed: found.trashed,
+          summary: { id, name: found.trashed.name, thumbnail: found.trashed.thumbnail ?? '' } });
+      } else {
+        put(key, { status: 'missing', summary: null });
+      }
     } catch {
       if (latestRequest.get(key) !== request) return;
       put(key, { status: 'error', summary: previous });
@@ -133,15 +145,12 @@ export const useStoredAssetsStore = create<StoredAssetsState>((set, get) => {
       put(key, { status: 'loading', summary });
       void load(kind, summary.id);
     },
-    applyChange: ({ kind, id, deleted }) => {
+    applyChange: ({ kind, id }) => {
       const key = keyOf(kind, id);
       if (!get().entries[key]) return; // no card shows it
-      if (deleted) {
-        latestRequest.delete(key);
-        put(key, { status: 'missing', summary: null });
-      } else {
-        void load(kind, id);
-      }
+      // Deleted or not, fetch it again: a delete usually lands in Recently
+      // deleted, and the card offers Restore.
+      void load(kind, id);
     },
     refreshAll: async () => {
       await Promise.all(Object.keys(get().entries).map((key) => {
