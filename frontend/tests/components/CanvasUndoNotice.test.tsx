@@ -1,0 +1,72 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { Node } from '@xyflow/react';
+import type { NodeData } from '../../src/types';
+
+vi.mock('../../src/lib/wsClient', () => ({
+  wsClient: { connect: vi.fn(), subscribe: vi.fn(), disconnect: vi.fn() },
+}));
+vi.mock('../../src/lib/backend', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/lib/backend')>(),
+  apiFetch: async () => new Response('{}', { status: 200 }),
+}));
+
+import { useGraphStore } from '../../src/store/graphStore';
+import { wsClient, type ExecutionEvent } from '../../src/lib/wsClient';
+import { GRAPH_PARAMS_VERSION } from '../../src/lib/savedParamsUpgrades';
+import { CanvasUndoNotice, UNDO_NOTICE_MS } from '../../src/components/canvas/CanvasUndoNotice';
+
+const node = (id: string): Node<NodeData> => ({
+  id, type: 'model-node', position: { x: 0, y: 0 },
+  data: { label: 'Text Input', definitionId: 'text-input', params: { value: id }, state: 'idle', outputs: {} },
+});
+
+function agentAdds(id: string) {
+  const event = {
+    type: 'graphSync', paramsVersion: GRAPH_PARAMS_VERSION, empty: false, edges: [],
+    nodes: [...useGraphStore.getState().nodes, node(id)],
+    edit: { actor: { kind: 'agent', name: 'Claude', color: '#d97757' } },
+  } as unknown as ExecutionEvent;
+  for (const [handler] of vi.mocked(wsClient.subscribe).mock.calls) (handler as (e: ExecutionEvent) => void)(event);
+}
+
+beforeEach(() => {
+  useGraphStore.setState({ nodes: [node('n1')], edges: [], undoStack: [], redoStack: [], undoNotice: null,
+    isExecuting: false, providerRecoveries: [], providerStartAmbiguities: [] });
+});
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+describe('CanvasUndoNotice', () => {
+  it('names the agent, undoes its edit, then offers Redo', () => {
+    render(<CanvasUndoNotice />);
+    act(() => agentAdds('n2'));
+    expect(screen.getByRole('status')).toHaveTextContent('Claude changed the canvas');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(useGraphStore.getState().nodes.map((n) => n.id)).toEqual(['n1']);
+    expect(screen.getByRole('status')).toHaveTextContent('Undid Claude’s edit');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+    expect(useGraphStore.getState().nodes.map((n) => n.id)).toEqual(['n1', 'n2']);
+  });
+
+  it('hides Undo once another step is on top, so it never undoes something else', () => {
+    render(<CanvasUndoNotice />);
+    act(() => agentAdds('n2'));
+    const notice = useGraphStore.getState().undoNotice;
+    act(() => useGraphStore.getState().updateNodeData('n1', { params: { value: 'typed' } }));
+    act(() => useGraphStore.setState({ undoNotice: notice }));
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+  });
+
+  it('goes away on its own', () => {
+    vi.useFakeTimers();
+    render(<CanvasUndoNotice />);
+    act(() => agentAdds('n2'));
+    act(() => { vi.advanceTimersByTime(UNDO_NOTICE_MS + 10); });
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+});
