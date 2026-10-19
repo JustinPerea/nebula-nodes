@@ -42,10 +42,11 @@ so your cursor and edits show under your name. `nebula apply` and
    up. Only use nodes it lists.
 2. `nebula projects`: saved projects; `*` is the one open on the canvas.
    Start new work in a new project (`nebula project new "<name>"`) or open
-   the right one (`nebula project open <id>`). If `nebula project new`
-   isn't in `nebula --help` yet, ask the person to make a new project in the
-   app. **Never run `nebula clear` to
-   make room**: it wipes the person's open canvas.
+   the right one (`nebula project open <id>`). The person's canvas follows,
+   names you, and offers them a button back. **Never run `nebula clear` to
+   make room**: a new project keeps their work. `nebula clear` refuses on a
+   canvas with nodes, and `--force` clears it anyway. With their canvas open
+   that is one undo step for them; with none open it can't be undone yet.
 3. `nebula look`: the canvas as data (nodes, wires, outputs, selection, pins
    the person left for you). `nebula selection` is what they have selected.
 
@@ -208,7 +209,7 @@ Wires must match types; `Any` connects to anything.
 ## Rules
 
 1. Run `nebula context` first, and only use nodes it lists.
-2. Never `nebula clear` a canvas you didn't make. Use a new project.
+2. Start a new project rather than clearing a canvas you didn't make.
 3. Check ports with `nebula info` before wiring.
 4. Spending is the person's own money with their providers. Stay inside
    their limits and propose anything bigger.
