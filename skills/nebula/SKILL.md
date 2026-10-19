@@ -121,17 +121,23 @@ back.
 ## Moodboards
 
 Moodboards are the boards in Moodboard Studio: reference images with weights
-and notes, analyzed into a palette, accent colours and a style brief. A
+and notes, analyzed into a palette and accent colours, plus the brief fields:
+Direction (what the board is for), Avoid (things to keep out), pinned colours
+(must appear / keep out) and an optional hand-written brief. A
 `nebula-moodboard` node puts a board on the canvas (param `moodboard` = the
-board id), with outputs `style_brief`, `negative_prompt`,
+board id), with outputs `moodboard`, `style_brief`, `negative_prompt`,
 `representative_images` and `palette`.
 
 ```bash
 nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
-nebula moodboard show "Nature + tech"          # numbered images, settings, analysis
+nebula moodboard show "Nature + tech"          # settings, the brief generators get, images, analysis
 nebula moodboard add <board> more.png ./more-refs
 nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --exclude 5
 nebula moodboard set <board> --mode world --strength 0.6 --notes "warm, quiet"
+nebula moodboard set <board> --direction "quiet coastal mornings" --avoid "neon signage" \
+  --pin-color "#E8593C" --keep-out-color "#0000FF"
+nebula moodboard set <board> --unavoid "neon signage" --unpin-color "#0000FF"
+nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --keep-brief
 nebula moodboard analyze <board>
 nebula moodboard list
 nebula moodboard delete <board>
@@ -147,12 +153,27 @@ nebula moodboard delete <board>
 - Weights and strength run from 0 to 1. `--exclude` keeps an image on the
   board without letting it steer; `--include` undoes that. `--remove` takes
   an image off the board (its file stays).
-- Any change but a rename clears the analysis. Run `analyze` again before
-  you use the board.
+- The brief generators get is `brief.styleBrief` in `show --json` (and
+  `brief.negativePrompt` their negatives); `show` prints it with who wrote
+  it. Don't use `analysis.styleBrief`: it leaves out Direction, pinned
+  colours and any hand-written brief.
+- `--avoid`, `--pin-color` and `--keep-out-color` add (repeatable);
+  `--unavoid` and `--unpin-color` take off; `--clear-avoid` empties the list
+  first; `--direction ""` clears Direction. Limits: 40 Avoid items of 200
+  characters, 12 colours per list.
+- `--brief` writes the brief by hand; `--clear-brief` goes back to the
+  generated one. When the board changes after, `show` says so:
+  `--keep-brief` keeps yours. If the person wrote the brief, it's theirs:
+  changing or keeping it is refused, so ask them.
+- Changing images, notes, mode or strength clears the analysis: run
+  `analyze` again before you use the board. A rename and the brief fields
+  keep it.
 - Without `--project` a board belongs to no project, so every project can
   use it.
-- `set --json` returns `previous`, the settings before your change. Pass
-  them back to undo it.
+- `set --json` returns `previous`, the settings before your change
+  (including Direction, Avoid, pinned colours and your own hand-written
+  brief). Set them back with the same flags (or pass them to the MCP tool
+  `moodboard_update` as they are) to undo it.
 - `delete` moves a board to Recently deleted, and
   `nebula trash restore moodboard <id>` brings it back. If this Nebula has no
   Recently deleted, a delete would be for good, so it's refused: ask the

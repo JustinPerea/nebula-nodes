@@ -44,7 +44,7 @@ Workflow:
 Spending: the person sets limits (get_spend_limits). A run over a limit, or with a node that has no list price, is refused; send the same plan as propose_change. The person accepts or rejects it in Nebula; agents cannot accept, and get_proposal waits for the decision. Use propose_change too when the change is theirs to decide (reworking their graph, a costly run).
 
 Projects: list_projects, open_project, new_project. Start new work in a new project rather than emptying the person's canvas; they can switch back.
-Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights and notes, moodboard_analyze reads its palette and brief.
+Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette. A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt); analysis.styleBrief is not. Only the person may change their own hand-written brief.
 Deleted moodboards, characters and projects go to Recently deleted: list_trash shows them and restore_from_trash brings one back with the same id. Deleting for good is the person's alone.
 
 Answer the person's pins with resolve_pin. Use wait_for_canvas_change to wait for them instead of polling. If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
@@ -812,7 +812,8 @@ def moodboard_list(project_id: str | None = None, ctx: Context | None = None) ->
     """List moodboards: those for every project, plus one project's own.
 
     `project_id` defaults to the project open on the canvas; pass "none" for
-    only the boards that belong to no project. Each board comes with its
+    only the boards that belong to no project. Each board comes as
+    moodboard_get gives it: the brief fields, `brief` (what generators get),
     numbered images and its analysis (null when it changed since the last
     moodboard_analyze).
     """
@@ -830,8 +831,16 @@ def moodboard_list(project_id: str | None = None, ctx: Context | None = None) ->
 
 @mcp.tool(annotations=_READ)
 def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
-    """One moodboard by id or exact name: settings, numbered images (id, url,
-    weight, notes, excluded) and analysis (palette, accents, styleBrief, ...)."""
+    """One moodboard by id or exact name: settings, the brief fields
+    (direction, avoid, pinnedColors, briefOverride with who wrote it and
+    whether it is stale), `brief`, numbered images (id, url, weight, notes,
+    excluded) and analysis (palette, accents, ...).
+
+    `brief` is what generators get, as Nebula composed it: `styleBrief` (the
+    hand-written brief when there is one, else the generated one),
+    `negativePrompt`, `avoidPrompt` and `override` {active, stale}. It is
+    null on a Nebula too old to send it. Don't use analysis.styleBrief as the
+    brief: it leaves out Direction, pinned colours and a hand-written brief."""
     import moodboard_client as boards
 
     return boards.brief(_board_call(boards.get_board, _api(), board, _board_headers(ctx)))
@@ -878,27 +887,49 @@ async def moodboard_add(board: str, sources: list[str], ctx: Context | None = No
 @mcp.tool(annotations=_EDIT)
 def moodboard_update(board: str, images: list[dict] | None = None, remove: list[str] | None = None,
                      name: str | None = None, notes: str | None = None, mode: str | None = None,
-                     strength: float | None = None, ctx: Context | None = None) -> dict[str, Any]:
+                     strength: float | None = None, direction: str | None = None,
+                     avoid: list[str] | None = None, avoid_add: list[str] | None = None,
+                     avoid_remove: list[str] | None = None, pinned_colors: dict | None = None,
+                     pin_colors: list[str] | None = None, keep_out_colors: list[str] | None = None,
+                     unpin_colors: list[str] | None = None, brief_override: str | None = None,
+                     keep_brief: bool = False, ctx: Context | None = None) -> dict[str, Any]:
     """Change a moodboard. `images`: changes to single images, each
     {"image": its number or id, "weight": 0-1, "notes": "...", "excluded": true}
     (excluded images stay on the board but stop steering). `remove` takes
     images off the board by number or id; their files stay, and the result's
-    `removed` URLs can be added back with moodboard_add. `previous` holds the
-    settings before the change; pass them back to moodboard_update to undo it.
-    Any change but a rename clears the analysis; run moodboard_analyze again."""
+    `removed` URLs can be added back with moodboard_add.
+
+    The brief: `direction` is what the board is for ("" clears it). `avoid`
+    replaces the Avoid list; `avoid_remove` and `avoid_add` take items off and
+    add them (at most 40, 200 characters each). `pin_colors` adds hex colours
+    that must appear, `keep_out_colors` colours to keep out, `unpin_colors`
+    takes a colour off either list, `pinned_colors` {"include", "exclude"}
+    replaces both (at most 12 each). `brief_override` writes the brief by
+    hand ("" goes back to the generated one); `keep_brief` keeps your
+    hand-written brief after the board changed. The person's own
+    hand-written brief is theirs: changing or keeping it is refused.
+
+    `previous` holds the settings before the change; pass them back to
+    moodboard_update to undo it. Changing images, notes, mode or strength
+    clears the analysis (run moodboard_analyze again); a rename and the brief
+    fields keep it."""
     import moodboard_client as boards
 
-    updated, removed, previous = _board_call(boards.update_board, _api(), board, name=name, notes=notes,
-                                             mode=mode, strength=strength, images=images, remove=remove,
-                                             headers=_board_headers(ctx))
+    updated, removed, previous = _board_call(
+        boards.update_board, _api(), board, name=name, notes=notes, mode=mode, strength=strength,
+        images=images, remove=remove, direction=direction, avoid=avoid, avoid_add=avoid_add,
+        avoid_remove=avoid_remove, pinned_colors=pinned_colors, pin_colors=pin_colors,
+        keep_out_colors=keep_out_colors, unpin_colors=unpin_colors, brief_override=brief_override,
+        keep_brief=keep_brief, headers=_board_headers(ctx))
     return {**boards.brief(updated), "removed": removed, "previous": previous}
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
                                       openWorldHint=False))
 def moodboard_analyze(board: str, ctx: Context | None = None) -> dict[str, Any]:
-    """Analyze a moodboard: palette, separate accent colours, keywords, a style
-    brief and things to avoid. Returns the board with its new analysis."""
+    """Analyze a moodboard: palette, separate accent colours and keywords.
+    Returns the board with its new analysis and the `brief` generators get
+    now. Direction, Avoid, pinned colours and a hand-written brief stay."""
     import moodboard_client as boards
 
     return boards.brief(_board_call(boards.analyze_board, _api(), board, _board_headers(ctx)))

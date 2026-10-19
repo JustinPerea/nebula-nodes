@@ -644,3 +644,271 @@ def test_an_in_app_turns_workspace_reaches_the_mcp_tools_worker_thread(app, tmp_
         with pytest.raises(Exception, match="outside this chat's workspace"):
             asyncio.run(go())
     assert boards.list_boards(app.api) == []
+
+
+# -- the brief: Direction, Avoid, pinned colours and the override (#73 x #76) ---------
+# Agents used to read analysis.styleBrief as the board's brief, but generators
+# get what services/moodboard_brief.compose makes of the board: the override
+# when there is one, Direction and pinned colours, Avoid in the negatives.
+
+def _person_override(board_id: str, text: str) -> None:
+    """Write a hand-written brief as the person would, in Moodboard Studio."""
+    from services.moodboard_store import MoodboardStore
+
+    MoodboardStore().update(board_id, by="person", briefOverride={"text": text})
+
+
+def _analyzed_board(app, tmp_path, name="Brief board"):
+    board, _ = boards.create_board(app.api, name, [str(_png(tmp_path / f"{name}.png", (232, 89, 60)))])
+    boards.analyze_board(app.api, board["id"])
+    return boards.get_board(app.api, board["id"])
+
+
+def test_brief_carries_the_board_fields_and_the_brief_generators_get(app, tmp_path):
+    board = _analyzed_board(app, tmp_path)
+    boards.update_board(app.api, board["id"], direction="Quiet coastal mornings", avoid_add=["neon signage"],
+                        pin_colors=["#E8593C"], keep_out_colors=["#00f"])
+    out = boards.brief(boards.get_board(app.api, board["id"]))
+    assert out["direction"] == "Quiet coastal mornings"
+    assert out["avoid"] == ["neon signage"]
+    assert out["pinnedColors"] == {"include": ["#e8593c"], "exclude": ["#0000ff"]}
+    assert out["briefOverride"] is None
+    # The composed brief, exactly as the backend computed it.
+    from services.moodboard_brief import compose
+    assert out["brief"] == compose(boards.get_board(app.api, board["id"]))
+    assert out["brief"]["styleBrief"].startswith("Quiet coastal mornings.")
+    assert "neon signage" in out["brief"]["negativePrompt"]
+    assert out["analysis"]  # brief fields don't clear the analysis
+
+
+def test_brief_never_passes_the_analysis_off_as_the_brief_on_an_older_backend():
+    # An older Nebula sends no computed `brief`: say so (null), never fall
+    # back to analysis.styleBrief.
+    old = {"id": "mb_old", "name": "Old", "images": [], "analysis": {"styleBrief": "analysis text"}}
+    out = boards.brief(old)
+    assert out["brief"] is None
+    assert out["briefOverride"] is None and out["direction"] is None
+
+
+def test_brief_says_whose_override_it_is_and_whether_it_is_stale(app, tmp_path):
+    board = _analyzed_board(app, tmp_path)
+    boards.update_board(app.api, board["id"], brief_override="An agent's own brief.")
+    out = boards.brief(boards.get_board(app.api, board["id"]))
+    assert out["briefOverride"]["text"] == "An agent's own brief."
+    assert out["briefOverride"]["by"] == "agent"
+    assert out["briefOverride"]["stale"] is False and out["briefOverride"]["updatedAt"]
+    assert out["brief"]["styleBrief"] == "An agent's own brief."
+    assert out["brief"]["override"] == {"active": True, "stale": False}
+
+    boards.update_board(app.api, board["id"], direction="Something new")
+    out = boards.brief(boards.get_board(app.api, board["id"]))
+    assert out["briefOverride"]["stale"] is True
+
+    # Keep: the agent may clear the stale badge on its own text.
+    kept, _, _ = boards.update_board(app.api, board["id"], keep_brief=True)
+    assert boards.brief(kept)["briefOverride"]["stale"] is False
+
+    other = _analyzed_board(app, tmp_path, "Person board")
+    _person_override(other["id"], "The person's words.")
+    assert boards.brief(boards.get_board(app.api, other["id"]))["briefOverride"]["by"] == "person"
+
+
+def test_update_board_sets_and_clears_direction_and_adds_and_removes_avoid(app, tmp_path):
+    board = _analyzed_board(app, tmp_path)
+    updated, _, _ = boards.update_board(app.api, board["id"], direction="  Warm dusk  ",
+                                        avoid_add=["neon signage", "lens flare", "Neon Signage"])
+    assert updated["direction"] == "Warm dusk"
+    assert updated["avoid"] == ["neon signage", "lens flare"]
+    assert updated["analysis"]  # brief fields survive: they aren't analysis inputs
+
+    updated, _, _ = boards.update_board(app.api, board["id"], avoid_remove=["LENS FLARE"], avoid_add=["text"])
+    assert updated["avoid"] == ["neon signage", "text"]
+    updated, _, _ = boards.update_board(app.api, board["id"], avoid=["only this"])
+    assert updated["avoid"] == ["only this"]
+    updated, _, _ = boards.update_board(app.api, board["id"], direction="", avoid=[])
+    assert updated["direction"] == "" and updated["avoid"] == []
+
+    with pytest.raises(boards.MoodboardError, match="isn't on the Avoid list"):
+        boards.update_board(app.api, board["id"], avoid_remove=["never added"])
+
+
+def test_update_board_pins_and_unpins_colours(app, tmp_path):
+    board = _analyzed_board(app, tmp_path)
+    updated, _, _ = boards.update_board(app.api, board["id"], pin_colors=["#E8593C", "abc"],
+                                        keep_out_colors=["#123456"])
+    assert updated["pinnedColors"] == {"include": ["#e8593c", "#aabbcc"], "exclude": ["#123456"]}
+    assert updated["analysis"]
+    updated, _, _ = boards.update_board(app.api, board["id"], unpin_colors=["#ABC", "#123456"])
+    assert updated["pinnedColors"] == {"include": ["#e8593c"], "exclude": []}
+    updated, _, _ = boards.update_board(app.api, board["id"],
+                                        pinned_colors={"include": [], "exclude": ["#e8593c"]})
+    assert updated["pinnedColors"] == {"include": [], "exclude": ["#e8593c"]}
+
+    with pytest.raises(boards.MoodboardError, match="isn't a pinned"):
+        boards.update_board(app.api, board["id"], unpin_colors=["#010101"])
+
+
+@pytest.mark.parametrize("kwargs, message", [
+    ({"avoid_add": [f"item {n}" for n in range(41)]}, "at most 40"),
+    ({"avoid_add": ["x" * 201]}, "200 characters"),
+    ({"pin_colors": ["red"]}, "not a hex colour"),
+    ({"pin_colors": [f"#{n:06x}" for n in range(13)]}, "at most 12"),
+    ({"pin_colors": ["#e8593c"], "keep_out_colors": ["#E8593C"]}, "both"),
+    ({"direction": "d" * 4001}, "4000 characters"),
+    ({"brief_override": "b" * 20001}, "20000 characters"),
+])
+def test_update_board_refuses_what_the_backend_would_and_never_truncates(app, tmp_path, kwargs, message):
+    board = _analyzed_board(app, tmp_path)
+    with pytest.raises(boards.MoodboardError, match=message):
+        boards.update_board(app.api, board["id"], **kwargs)
+    after = boards.get_board(app.api, board["id"])
+    assert after["avoid"] == [] and after["direction"] == "" and after["briefOverride"] is None
+    assert after["pinnedColors"] == {"include": [], "exclude": []}
+
+
+def test_update_board_sets_and_clears_an_agents_override(app, tmp_path):
+    board = _analyzed_board(app, tmp_path)
+    updated, _, _ = boards.update_board(app.api, board["id"], brief_override="Hand-tuned brief.")
+    assert updated["brief"]["styleBrief"] == "Hand-tuned brief."
+    assert updated["analysis"]
+    updated, _, _ = boards.update_board(app.api, board["id"], brief_override="")
+    assert updated["briefOverride"] is None
+    assert updated["brief"]["styleBrief"] == updated["brief"]["generatedStyleBrief"] != ""
+
+
+def test_an_agent_is_told_plainly_it_cant_change_the_persons_brief(app, tmp_path, capsys):
+    board = _analyzed_board(app, tmp_path)
+    _person_override(board["id"], "The person's words.")
+    for kwargs in ({"brief_override": "mine now"}, {"brief_override": ""}, {"keep_brief": True}):
+        with pytest.raises(boards.MoodboardError, match="The person wrote this board's brief by hand") as caught:
+            boards.update_board(app.api, board["id"], **kwargs)
+        assert "This tab isn't" not in str(caught.value)
+    with pytest.raises(SystemExit):
+        _cli(app, ["moodboard", "set", board["id"], "--brief", "mine now"], capsys)
+    err = capsys.readouterr().err
+    assert err.startswith("error: The person wrote this board's brief by hand") and "Traceback" not in err
+    with pytest.raises(Exception, match="The person wrote this board's brief by hand"):
+        asyncio.run(mcp_server.mcp.call_tool("moodboard_update", {"board": board["id"], "brief_override": "x"}))
+    assert boards.get_board(app.api, board["id"])["briefOverride"]["text"] == "The person's words."
+
+
+def test_brief_field_changes_hand_back_what_puts_them_back(app, tmp_path):
+    board = _analyzed_board(app, tmp_path)
+    boards.update_board(app.api, board["id"], direction="Before", avoid_add=["a"], pin_colors=["#111111"],
+                        brief_override="Agent text before.")
+    before = boards.get_board(app.api, board["id"])
+    _, _, previous = boards.update_board(app.api, board["id"], direction="After", avoid_add=["b"],
+                                         unpin_colors=["#111111"], keep_out_colors=["#222222"],
+                                         brief_override="Agent text after.")
+    assert previous["direction"] == "Before" and previous["avoid"] == ["a"]
+    assert previous["pinned_colors"] == {"include": ["#111111"], "exclude": []}
+    assert previous["brief_override"] == "Agent text before."
+    restored, _, _ = boards.update_board(app.api, board["id"], **previous)
+    for key in ("direction", "avoid", "pinnedColors"):
+        assert restored[key] == before[key]
+    assert restored["briefOverride"]["text"] == "Agent text before."
+    # Undoing a brief-only change keeps the analysis.
+    assert restored["analysis"]
+
+    # No override before: previous clears the agent's new one.
+    fresh = _analyzed_board(app, tmp_path, "Fresh")
+    _, _, previous = boards.update_board(app.api, fresh["id"], brief_override="New agent text.")
+    assert previous["brief_override"] == ""
+    restored, _, _ = boards.update_board(app.api, fresh["id"], **previous)
+    assert restored["briefOverride"] is None
+
+
+def test_previous_never_makes_a_restore_trip_on_the_persons_brief(app, tmp_path):
+    board = _analyzed_board(app, tmp_path)
+    _person_override(board["id"], "The person's words.")
+    _, _, previous = boards.update_board(app.api, board["id"], direction="Agent direction", avoid_add=["x"])
+    assert "brief_override" not in previous
+    restored, _, _ = boards.update_board(app.api, board["id"], **previous)
+    assert restored["direction"] == "" and restored["avoid"] == []
+    assert restored["briefOverride"]["text"] == "The person's words."
+
+
+def test_cli_set_and_show_the_brief(app, tmp_path, capsys):
+    import json
+
+    board = _analyzed_board(app, tmp_path)
+    out = _cli(app, ["moodboard", "set", board["id"], "--direction", "Quiet coastal mornings",
+                     "--avoid", "neon signage", "--avoid", "lens flare", "--pin-color", "#E8593C",
+                     "--keep-out-color", "#0000ff", "--json"], capsys)
+    data = json.loads(out)
+    assert data["direction"] == "Quiet coastal mornings"
+    assert data["avoid"] == ["neon signage", "lens flare"]
+    assert data["pinnedColors"] == {"include": ["#e8593c"], "exclude": ["#0000ff"]}
+    assert data["brief"]["styleBrief"].startswith("Quiet coastal mornings.")
+    assert data["previous"]["direction"] == "" and data["previous"]["avoid"] == []
+    assert data["analysis"]
+
+    _cli(app, ["moodboard", "set", board["id"], "--unavoid", "lens flare", "--unpin-color", "#0000FF"], capsys)
+    data = json.loads(_cli(app, ["moodboard", "show", board["id"], "--json"], capsys))
+    assert data["avoid"] == ["neon signage"] and data["pinnedColors"]["exclude"] == []
+    assert data["brief"]["negativePrompt"] == "blurry, low-detail artifacts, neon signage"
+
+    shown = _cli(app, ["moodboard", "show", board["id"]], capsys)
+    assert "Direction: Quiet coastal mornings" in shown
+    assert "Avoid: neon signage" in shown
+    assert "#e8593c" in shown
+    assert "Brief sent to generators (generated)" in shown
+    assert data["brief"]["styleBrief"] in shown
+    assert "Negative prompt: blurry, low-detail artifacts, neon signage" in shown
+    # The analysis's own text isn't shown as the brief.
+    analysis_brief = boards.get_board(app.api, board["id"])["analysis"]["styleBrief"]
+    assert analysis_brief not in shown
+
+    _cli(app, ["moodboard", "set", board["id"], "--brief", "My own brief.", "--direction", "Changed"], capsys)
+    shown = _cli(app, ["moodboard", "show", board["id"]], capsys)
+    assert "Brief sent to generators (written by an agent)" in shown and "My own brief." in shown
+    _cli(app, ["moodboard", "set", board["id"], "--direction", "Changed again"], capsys)
+    shown = _cli(app, ["moodboard", "show", board["id"]], capsys)
+    assert "changed since" in shown and "--keep-brief" in shown
+    _cli(app, ["moodboard", "set", board["id"], "--keep-brief"], capsys)
+    assert "changed since" not in _cli(app, ["moodboard", "show", board["id"]], capsys)
+    _cli(app, ["moodboard", "set", board["id"], "--clear-brief", "--clear-avoid", "--direction", ""], capsys)
+    data = json.loads(_cli(app, ["moodboard", "show", board["id"], "--json"], capsys))
+    assert data["briefOverride"] is None and data["avoid"] == [] and data["direction"] == ""
+
+    person = _analyzed_board(app, tmp_path, "Person board")
+    _person_override(person["id"], "The person's words.")
+    assert "Brief sent to generators (written by the person)" in _cli(app, ["moodboard", "show", person["id"]],
+                                                                       capsys)
+
+
+def test_show_says_when_this_nebula_sends_no_brief(capsys, monkeypatch):
+    old = {"id": "mb_old", "name": "Old", "mode": "look", "strength": 0.7, "images": [],
+           "analysis": {"styleBrief": "analysis text", "negativePrompt": "old negatives", "summary": "s"}}
+
+    class _OldAPI:
+        def request(self, method, path, **kwargs):
+            assert (method, path) == ("GET", "/api/moodboards/mb_old")
+            return old
+
+    monkeypatch.setattr(NebulaClient, "api", property(lambda self: _OldAPI()))
+    moodboard_cmd.run(NebulaClient("http://testserver"), build_parser().parse_args(["moodboard", "show", "mb_old"]))
+    shown = capsys.readouterr().out
+    assert "doesn't say which brief generators get" in shown
+    assert "analysis text" not in shown and "old negatives" not in shown
+
+
+def test_mcp_get_and_update_carry_the_brief(app, tmp_path):
+    board = _analyzed_board(app, tmp_path)
+    updated = mcp_server.moodboard_update(board["id"], direction="Warm dusk", avoid_add=["neon"],
+                                          pin_colors=["#E8593C"], brief_override="Agent brief.")
+    assert updated["direction"] == "Warm dusk" and updated["avoid"] == ["neon"]
+    assert updated["pinnedColors"]["include"] == ["#e8593c"]
+    assert updated["briefOverride"]["by"] == "agent"
+    assert updated["brief"]["styleBrief"] == "Agent brief."
+    assert updated["analysis"]
+    got = mcp_server.moodboard_get(board["id"])
+    assert got["brief"] == updated["brief"]
+    listed = next(b for b in mcp_server.moodboard_list(project_id="none") if b["id"] == board["id"])
+    assert listed["brief"]["styleBrief"] == "Agent brief."
+    # Undo through the same tool.
+    restored = mcp_server.moodboard_update(board["id"], **updated["previous"])
+    assert restored["direction"] == "" and restored["avoid"] == [] and restored["briefOverride"] is None
+    assert restored["pinnedColors"] == {"include": [], "exclude": []}
+    kept = mcp_server.moodboard_update(board["id"], avoid=["a", "b"], unpin_colors=None)
+    assert kept["avoid"] == ["a", "b"]

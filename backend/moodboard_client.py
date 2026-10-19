@@ -27,7 +27,10 @@ A source is one of:
 
 Board edits follow Moodboard Studio: any change to images, notes, mode or
 strength clears the saved analysis (it described the old board); a rename
-keeps it.
+keeps it, and so do the brief fields (Direction, Avoid, pinned colours, the
+hand-written brief), which aren't analysis inputs. The brief generators get
+is the backend's `brief` (services/moodboard_brief.compose), passed on as it
+came, never rebuilt here from the analysis.
 """
 from __future__ import annotations
 
@@ -449,16 +452,109 @@ def find_image(images: list[dict[str, Any]], ref: Any) -> int:
                          "from `nebula moodboard show`")
 
 
+def _brief_rules():
+    # The backend's own limits and normalising, so a refused value fails here
+    # with its reason, before anything is sent.
+    from services import moodboard_brief
+    return moodboard_brief
+
+
+def _avoid_key(text: str) -> str:
+    return " ".join(str(text).split()).strip(" ,.").casefold()
+
+
+def _new_avoid(current: list[str], avoid: list[str] | None, add: list[str] | None,
+               drop: list[str] | None) -> list[str]:
+    rules = _brief_rules()
+    if any(isinstance(value, str) for value in (avoid, add, drop)):
+        raise MoodboardError("Avoid items go in a list, one item each")
+    items = list(current if avoid is None else avoid)
+    for item in drop or []:
+        keys = [_avoid_key(existing) for existing in items]
+        if _avoid_key(item) not in keys:
+            raise MoodboardError(f"'{item}' isn't on the Avoid list ({', '.join(items) or 'it is empty'})")
+        items.pop(keys.index(_avoid_key(item)))
+    for item in add or []:
+        if len(_avoid_key(item)) > rules.AVOID_ITEM_LIMIT:
+            raise MoodboardError(f"an Avoid item can be at most {rules.AVOID_ITEM_LIMIT} characters: "
+                                 f"'{str(item)[:60]}...'")
+        items.append(item)
+    try:
+        return rules.normalize_avoid(items)
+    except ValueError as exc:
+        raise MoodboardError(f"Avoid: {exc}; take some off first") from exc
+
+
+def _new_pinned(current: dict[str, Any], pinned: dict[str, Any] | None, include: list[str] | None,
+                exclude: list[str] | None, drop: list[str] | None) -> dict[str, list[str]]:
+    rules = _brief_rules()
+    base = current if pinned is None else pinned
+    if not isinstance(base, dict):
+        raise MoodboardError('pinned colours are {"include": [...], "exclude": [...]}')
+    lists = {key: list(base.get(key) or []) for key in ("include", "exclude")}
+    try:
+        lists = {key: [rules.normalize_hex(colour) for colour in colours] for key, colours in lists.items()}
+        for colour in drop or []:
+            hex_value = rules.normalize_hex(colour)
+            if hex_value not in lists["include"] + lists["exclude"]:
+                raise MoodboardError(f"{colour} isn't a pinned or kept-out colour on this board")
+            lists = {key: [c for c in colours if c != hex_value] for key, colours in lists.items()}
+        for key, added in (("include", include), ("exclude", exclude)):
+            lists[key].extend(rules.normalize_hex(colour) for colour in added or [])
+        unknown = set(base) - {"include", "exclude"}
+        return rules.normalize_pinned_colors({**{key: base[key] for key in unknown}, **lists})
+    except MoodboardError:
+        raise
+    except ValueError as exc:
+        hint = " (unpin it from the other list first)" if "both" in str(exc) else ""
+        raise MoodboardError(f"pinned colours: {exc}{hint}") from exc
+
+
+def _refusal(exc: NebulaAPIError) -> MoodboardError:
+    """The backend's 403 for an agent touching the person's brief, as one
+    plain sentence. The person gate adds how a canvas tab connects as the
+    person, which is no help to a CLI or MCP caller, so that part is dropped."""
+    from services.person_gate import PERSON_REQUIRED_DETAIL
+
+    detail = str(exc.detail).replace(PERSON_REQUIRED_DETAIL, "").strip()
+    return MoodboardError(detail)
+
+
+def _send(api: NebulaAPI, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+    try:
+        return api.request(method, path, **kwargs)
+    except NebulaAPIError as exc:
+        if exc.status == 403:
+            raise _refusal(exc) from exc
+        raise
+
+
 def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: str | None = None,
                  mode: str | None = None, strength: float | None = None,
                  images: list[dict[str, Any]] | None = None, remove: list[Any] | None = None,
+                 direction: str | None = None, avoid: list[str] | None = None,
+                 avoid_add: list[str] | None = None, avoid_remove: list[str] | None = None,
+                 pinned_colors: dict[str, Any] | None = None, pin_colors: list[str] | None = None,
+                 keep_out_colors: list[str] | None = None, unpin_colors: list[str] | None = None,
+                 brief_override: str | None = None, keep_brief: bool = False,
                  headers: dict[str, str] | None = None) -> tuple[dict[str, Any], list[str], dict[str, Any]]:
     """Change a board. `images` is a list of {"image": number or id, "weight",
     "notes", "excluded"}; `remove` takes images off the board (their files
     stay, and the returned URLs can be added back). Returns (board, removed
-    URLs, the settings before the change), so any change can be put back."""
+    URLs, the settings before the change), so any change can be put back.
+
+    The brief fields: `direction` ("" clears it); `avoid` replaces the Avoid
+    list, `avoid_remove` then `avoid_add` take items off and add them;
+    `pinned_colors` ({"include", "exclude"}) replaces the pinned colours,
+    `unpin_colors` takes a colour off either list, `pin_colors` adds colours
+    that must appear and `keep_out_colors` colours to keep out;
+    `brief_override` sets the hand-written brief ("" goes back to the
+    generated one); `keep_brief` keeps a hand-written brief that is marked
+    stale. Only the person may change or keep the person's own brief: the
+    backend refuses, and the refusal comes back as a MoodboardError."""
     board = get_board(api, ref, headers)
-    current = [dict(image) for image in board.get("images") or []]
+    original = [dict(image) for image in board.get("images") or []]
+    current = [dict(image) for image in original]
     body: dict[str, Any] = {}
     content_changed = False
     if name is not None:
@@ -467,15 +563,15 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
         body["name"] = name.strip()
     if notes is not None:
         body["notes"] = notes
-        content_changed = True
+        content_changed |= notes != board.get("notes")
     if mode is not None:
         if mode not in MODES:
             raise MoodboardError(f"mode must be one of {', '.join(MODES)}")
         body["mode"] = mode
-        content_changed = True
+        content_changed |= mode != board.get("mode")
     if strength is not None:
         body["strength"] = _check_unit("strength", strength)
-        content_changed = True
+        content_changed |= body["strength"] != board.get("strength")
     images_changed = False
     for edit in images or []:
         if not isinstance(edit, dict) or "image" not in edit:
@@ -499,26 +595,68 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
         images_changed = True
     if images_changed:
         body["images"] = current
-        content_changed = True
-    if not body:
+        content_changed |= current != original
+    # The brief fields aren't analysis inputs, so they keep the analysis
+    # (as in Moodboard Studio).
+    rules = _brief_rules()
+    if direction is not None:
+        try:
+            body["direction"] = rules.normalize_direction(direction)
+        except ValueError as exc:
+            raise MoodboardError(f"Direction: {exc}") from exc
+    if avoid is not None or avoid_add or avoid_remove:
+        body["avoid"] = _new_avoid(list(board.get("avoid") or []), avoid, avoid_add, avoid_remove)
+    if pinned_colors is not None or pin_colors or keep_out_colors or unpin_colors:
+        body["pinnedColors"] = _new_pinned(board.get("pinnedColors") or {}, pinned_colors, pin_colors,
+                                           keep_out_colors, unpin_colors)
+    if brief_override is not None:
+        try:
+            text = rules.normalize_override_text(brief_override)
+        except ValueError as exc:
+            raise MoodboardError(f"the hand-written brief: {exc}") from exc
+        saved = board.get("briefOverride") if isinstance(board.get("briefOverride"), dict) else {}
+        if text != str(saved.get("text") or "").strip():
+            body["briefOverride"] = {"text": text} if text else None
+    if not body and not keep_brief:
         raise MoodboardError("nothing to change")
     if content_changed:
         body["analysis"] = None
-    updated = api.request("PUT", f"/api/moodboards/{board['id']}", json=body, headers=headers)
+    updated = board
+    if body:
+        updated = _send(api, "PUT", f"/api/moodboards/{board['id']}", json=body, headers=headers)
+    if keep_brief:
+        updated = _send(api, "POST", f"/api/moodboards/{board['id']}/brief-override/keep", headers=headers)
     return updated, removed, previous_settings(board)
 
 
 def previous_settings(board: dict[str, Any]) -> dict[str, Any]:
     """What `update_board` takes to put a board back the way it was: its
-    settings and each image's weight, notes and excluded, by image id (pass
-    them as update_board's name, notes, mode, strength and images)."""
-    return {
+    settings, each image's weight, notes and excluded, by image id, and the
+    brief fields (pass them as update_board's keyword arguments).
+
+    `brief_override` is the agent's own text ("" for none). It is left out
+    when the person wrote the brief: an agent can't change that text, so a
+    restore leaves it alone instead of being refused."""
+    previous: dict[str, Any] = {
         "name": board.get("name"), "notes": board.get("notes"), "mode": board.get("mode"),
         "strength": board.get("strength"),
         "images": [{"image": image.get("id"), "weight": image.get("weight"), "notes": image.get("notes"),
                     "excluded": image.get("excluded")}
                    for image in board.get("images") or []],
     }
+    if "direction" not in board:
+        return previous  # an older Nebula: no brief fields to put back
+    pinned = board.get("pinnedColors") if isinstance(board.get("pinnedColors"), dict) else {}
+    previous.update({
+        "direction": board.get("direction") or "",
+        "avoid": list(board.get("avoid") or []),
+        "pinned_colors": {"include": list(pinned.get("include") or []),
+                          "exclude": list(pinned.get("exclude") or [])},
+    })
+    override = _override(board)
+    if override is None or override["by"] == "agent":
+        previous["brief_override"] = override["text"] if override else ""
+    return previous
 
 
 def analyze_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
@@ -563,9 +701,34 @@ def delete_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None
             "previous": brief(board) if not trashed else None}
 
 
+def _override(board: dict[str, Any]) -> dict[str, Any] | None:
+    """The board's hand-written brief, if any: its text, who wrote it, when,
+    and whether the board changed since (from the backend's `brief`; None
+    when this Nebula doesn't say). Anything not stamped "agent" is the
+    person's, as the backend counts it (moodboard_store.person_wrote)."""
+    saved = board.get("briefOverride")
+    if not isinstance(saved, dict) or not str(saved.get("text") or "").strip():
+        return None
+    composed = board.get("brief") if isinstance(board.get("brief"), dict) else None
+    flags = composed.get("override") if composed and isinstance(composed.get("override"), dict) else None
+    return {
+        "text": saved.get("text"),
+        "by": "agent" if saved.get("by") == "agent" else "person",
+        "updatedAt": saved.get("updatedAt"),
+        "stale": bool(flags.get("stale")) if flags is not None else None,
+    }
+
+
 def brief(board: dict[str, Any]) -> dict[str, Any]:
-    """A board as an agent needs it: settings, numbered images, and the analysis."""
+    """A board as an agent needs it: settings, the brief fields, the brief
+    generators get, numbered images, and the analysis.
+
+    `brief` is the backend's composed brief as it sent it (`styleBrief` is
+    the text generators get, `negativePrompt` their negatives); None when
+    this Nebula doesn't send one. The analysis's own `styleBrief` leaves out
+    Direction, pinned colours and any hand-written brief, so it is not it."""
     analysis = board.get("analysis") or None
+    composed = board.get("brief")
     return {
         "id": board.get("id"),
         "name": board.get("name"),
@@ -573,6 +736,11 @@ def brief(board: dict[str, Any]) -> dict[str, Any]:
         "mode": board.get("mode"),
         "strength": board.get("strength"),
         "notes": board.get("notes"),
+        "direction": board.get("direction"),
+        "avoid": board.get("avoid"),
+        "pinnedColors": board.get("pinnedColors"),
+        "briefOverride": _override(board),
+        "brief": composed if isinstance(composed, dict) else None,
         "images": [
             {"number": index + 1, **{key: image.get(key) for key in ("id", "url", "weight", "notes", "excluded")}}
             for index, image in enumerate(board.get("images") or [])

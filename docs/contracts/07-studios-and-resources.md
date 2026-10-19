@@ -78,6 +78,14 @@ Boards saved before the brief fields (no `briefVersion`) are migrated once at ba
 - Nothing is lost: the saved `analysis` keeps its old `styleBrief` and `negativePrompt`, and the backup holds the file as it was. A backup copied back is migrated again on the next start, with the same result.
 - Running the migration again changes nothing. A file that can't be read is logged and left alone. A board with a higher `briefVersion` (saved by a newer Nebula) is left as it is. A board file edited by hand into an odd shape still lists and opens (its `brief` is `null` if it can't be composed), and a failing migration never stops the backend from starting.
 
+### 1.6 From the CLI and MCP
+
+`nebula moodboard` and the `moodboard_*` MCP tools (`backend/moodboard_client.py`) return each board with `direction`, `avoid`, `pinnedColors`, `briefOverride` (`{text, by, updatedAt, stale}` or null; `by` is `agent` only when stamped so, else `person`) and `brief`, the backend's computed brief from 1.2 passed on as it came. On a backend that doesn't send `brief`, it is `null`: the client never rebuilds it, and never offers `analysis.styleBrief` in its place.
+
+`nebula moodboard set` and `moodboard_update` change the brief fields: Direction (`""` clears), Avoid (replace, add, remove), pinned colours (replace both lists, add to either, remove from either), the override (set, or `""` for the generated brief), and Keep (`--keep-brief` / `keep_brief`, then `POST .../brief-override/keep`). Values are checked against the limits in 1.1 before anything is sent; nothing is cut short. Brief fields keep the analysis; changes to images, notes, mode or strength that change a value clear it. A 403 for the person's override comes back as the store's sentence, without the canvas-tab advice in the gate's `person_required` text.
+
+The result's `previous` puts the board back when passed as the same call's arguments: settings, image settings, `direction`, `avoid`, `pinned_colors` and `brief_override` (the agent's own text, or `""` for none). It leaves `brief_override` out when the person wrote the override, so a restore doesn't trip on text the agent can't change.
+
 ---
 
 ## Changelog
@@ -85,3 +93,4 @@ Boards saved before the brief fields (no `briefVersion`) are migrated once at ba
 | Date | Change |
 |------|--------|
 | 2026-10-18 | Moodboard: brief fields, computed `brief`, override and Keep, migration |
+| 2026-10-19 | Moodboard: brief fields and the computed brief from the CLI and MCP (1.6) |
