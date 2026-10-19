@@ -12,6 +12,13 @@ from services.moodboard_brief import compose
 from services.moodboard_store import MoodboardStore
 
 
+def _in_trash(moodboard_id: str) -> bool:
+    try:
+        return MoodboardStore().trashed(moodboard_id) is not None
+    except ValueError:
+        return False
+
+
 async def handle_moodboard_node(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
@@ -32,7 +39,10 @@ async def handle_moodboard_node(
     except ValueError:  # not an id the store can hold
         moodboard = None
     if moodboard is None:
-        raise ValueError(f"Moodboard {moodboard_id!r} not found; it may have been deleted. "
+        if _in_trash(moodboard_id):
+            raise ValueError(f"Moodboard {moodboard_id!r} is in Recently deleted. Restore it (Moodboard Studio, "
+                             f"or nebula trash restore moodboard {moodboard_id}) and run again.")
+        raise ValueError(f"Moodboard {moodboard_id!r} not found; it may have been deleted for good. "
                          "Pick another board for this node.")
 
     analysis = moodboard.get("analysis")

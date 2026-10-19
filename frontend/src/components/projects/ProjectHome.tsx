@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, Check, ChevronRight, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronRight, ImageIcon, Pencil, Plus, RotateCcw, Search, Settings, Trash2, X } from 'lucide-react';
 import { backendAssetUrlSync } from '../../lib/backend';
+import { coverImages, type CoverChoices, type ProjectCover } from '../../lib/projects';
+import { actorLabel } from '../../lib/trash';
 import { CrabMark } from '../brand/CrabMark';
 import '../../styles/project-home.css';
 
@@ -13,11 +15,16 @@ export interface ProjectSummary {
   nodeCount: number;
   edgeCount: number;
   thumbnail: string | null;
+  /** Missing from a backend older than covers; then `thumbnail` is used. */
+  cover?: ProjectCover | null;
+  createdBy?: { kind: 'agent'; name: string };
 }
 
 export interface TrashedProject extends ProjectSummary {
   deletedAt: string;
   purgeAt: string;
+  /** Who deleted it: you, an agent by name, or an unnamed client. Missing on older entries. */
+  deletedBy?: { kind: string; name: string };
 }
 
 export interface ProjectHomeProps {
@@ -39,6 +46,9 @@ export interface ProjectHomeProps {
   /** Settings (API keys included) opens from home too, so a first run needn't start a project to add keys. */
   settingsOpen?: boolean;
   onToggleSettings?: () => void;
+  /** Cover picker: the project's images, and pinning one (null = automatic). */
+  loadCoverChoices?: (id: string) => Promise<CoverChoices>;
+  onPinCover?: (id: string, url: string | null) => void;
 }
 
 const UNDO_VISIBLE_MS = 8000;
@@ -63,14 +73,61 @@ function NodeGraphPlaceholder() {
   );
 }
 
-function ProjectPreview({ thumbnail }: { thumbnail: string | null }) {
-  const [failed, setFailed] = useState(false);
+function ProjectPreview({ project }: { project: Pick<ProjectSummary, 'cover' | 'thumbnail'> }) {
+  const [failed, setFailed] = useState<string[]>([]);
+  const { images, mosaic } = coverImages(project);
+  const shown = images.filter((url) => !failed.includes(url));
+  const fail = (url: string) => setFailed((current) => [...current, url]);
   return (
-    <div className={`project-home__preview${thumbnail && !failed ? ' project-home__preview--image' : ''}`}>
-      {thumbnail && !failed ? (
-        <img src={backendAssetUrlSync(thumbnail)} alt="" loading="lazy" onError={() => setFailed(true)} />
-      ) : <NodeGraphPlaceholder />}
+    <div className={`project-home__preview${shown.length ? ' project-home__preview--image' : ''}`}>
+      {shown.length === 0 ? <NodeGraphPlaceholder /> : mosaic && shown.length > 1 ? (
+        <div className={`project-home__mosaic project-home__mosaic--${shown.length}`} data-testid="project-cover-mosaic">
+          {shown.map((url) => <img key={url} src={backendAssetUrlSync(url)} alt="" loading="lazy" onError={() => fail(url)} />)}
+        </div>
+      ) : <img src={backendAssetUrlSync(shown[0])} alt="" loading="lazy" onError={() => fail(shown[0])} />}
       <span className="project-home__preview-open"><ArrowUpRight aria-hidden="true" /></span>
+    </div>
+  );
+}
+
+/** Pick the card's picture from the project's own images (the person only;
+ * the backend refuses agents), or go back to automatic. */
+function CoverPicker({ project, busy, load, onPin, onClose }: {
+  project: ProjectSummary; busy: boolean; load: (id: string) => Promise<CoverChoices>;
+  onPin: (url: string | null) => void; onClose: () => void;
+}) {
+  const [choices, setChoices] = useState<CoverChoices | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    load(project.id).then((found) => { if (live) setChoices(found); })
+      .catch((error: unknown) => { if (live) setFailed(error instanceof Error ? error.message : 'Could not load the images.'); });
+    return () => { live = false; };
+  }, [load, project.id]);
+  const pinned = choices?.pinned ?? null;
+  return (
+    <div className="project-home__cover-picker" role="group" aria-label={`Cover for ${project.name}`}
+      onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onClose(); } }}>
+      <div className="project-home__cover-picker-head">
+        <span>Cover</span>
+        <button type="button" className="project-home__cover-auto" aria-pressed={!pinned} disabled={busy || !choices}
+          onClick={() => { onPin(null); onClose(); }}>Automatic</button>
+        <button type="button" className="project-home__cover-close" aria-label="Close cover picker" onClick={onClose}><X aria-hidden="true" /></button>
+      </div>
+      {failed ? <p className="project-home__cover-note">{failed}</p>
+        : !choices ? <p className="project-home__cover-note">Loading images…</p>
+          : choices.images.length === 0 ? <p className="project-home__cover-note">No images in this project yet.</p>
+            : (
+              <div className="project-home__cover-grid">
+                {choices.images.map((choice) => (
+                  <button key={choice.url} type="button" className="project-home__cover-choice" aria-pressed={pinned === choice.url}
+                    aria-label={`Use this ${choice.kind === 'reference' ? 'reference' : 'image'} as the cover`} disabled={busy}
+                    onClick={() => { onPin(choice.url); onClose(); }}>
+                    <img src={backendAssetUrlSync(choice.url)} alt="" loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            )}
     </div>
   );
 }
@@ -88,8 +145,10 @@ function recentTimestamp(project: ProjectSummary) {
   return Number.isFinite(updated) ? updated : 0;
 }
 
-function ProjectCard({ project, busy, onOpen, onRename, onDelete }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete'> & { project: ProjectSummary }) {
+function ProjectCard({ project, busy, onOpen, onRename, onDelete, loadCoverChoices, onPinCover }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary }) {
   const [editing, setEditing] = useState(false);
+  const [choosingCover, setChoosingCover] = useState(false);
+  const coverButton = useRef<HTMLButtonElement>(null);
   const [name, setName] = useState(project.name);
   const renameButton = useRef<HTMLButtonElement>(null);
   const trimmed = name.trim();
@@ -102,13 +161,18 @@ function ProjectCard({ project, busy, onOpen, onRename, onDelete }: Pick<Project
   return (
     <article className="project-home__card" aria-label={project.name}>
       <button type="button" className="project-home__open" disabled={busy || editing} onClick={() => onOpen(project.id)} aria-label={`Open ${project.name}`}>
-        <ProjectPreview key={project.thumbnail ?? 'placeholder'} thumbnail={project.thumbnail} />
+        <ProjectPreview key={coverImages(project).images.join('|') || 'placeholder'} project={project} />
         <span className="project-home__card-name">{project.name}</span>
-        <span className="project-home__card-date">{editedDate(project.updatedAt)}</span>
+        <span className="project-home__card-date">{editedDate(project.updatedAt)}{project.createdBy ? ` · Made by ${project.createdBy.name}` : ''}</span>
       </button>
       <div className="project-home__card-footer">
         <span><span>{project.nodeCount} {project.nodeCount === 1 ? 'node' : 'nodes'}</span><span aria-hidden="true"> · </span><span>{project.edgeCount} {project.edgeCount === 1 ? 'connection' : 'connections'}</span></span>
         <span className="project-home__card-actions">
+          {loadCoverChoices && onPinCover && (
+            <button type="button" className="project-home__rename" ref={coverButton} aria-label={`Choose a cover for ${project.name}`}
+              title={project.cover?.source === 'pinned' ? 'Cover: pinned' : 'Choose cover'} aria-expanded={choosingCover}
+              disabled={busy || editing} onClick={() => setChoosingCover(!choosingCover)}><ImageIcon aria-hidden="true" /></button>
+          )}
           <button type="button" className="project-home__rename" ref={renameButton} aria-label={`Rename ${project.name}`} aria-expanded={editing} disabled={busy} onClick={() => {
             if (editing) finishRename();
             else { setName(project.name); setEditing(true); }
@@ -117,6 +181,10 @@ function ProjectCard({ project, busy, onOpen, onRename, onDelete }: Pick<Project
             title="Move to Recently deleted" disabled={busy || editing} onClick={() => onDelete(project.id)}><Trash2 aria-hidden="true" /></button>
         </span>
       </div>
+      {choosingCover && loadCoverChoices && onPinCover && (
+        <CoverPicker project={project} busy={busy} load={loadCoverChoices} onPin={(url) => onPinCover(project.id, url)}
+          onClose={() => { setChoosingCover(false); requestAnimationFrame(() => coverButton.current?.focus()); }} />
+      )}
       {editing && (
         <form className="project-home__rename-form" aria-label={`Rename ${project.name}`} onSubmit={(event) => {
           event.preventDefault();
@@ -151,6 +219,12 @@ function deletedDate(value: string): string {
   return Number.isFinite(date.getTime())
     ? `Deleted ${new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)}`
     : 'Deleted';
+}
+
+function deletedByNote(entry: TrashedProject): string {
+  const by = entry.deletedBy;
+  if (!by || by.kind === 'person') return '';
+  return ` by ${actorLabel(by)}`;
 }
 
 /** Two-step button for the irreversible actions: first press arms, second confirms. */
@@ -203,7 +277,7 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash }: {
             {trash.map((entry) => (
               <li key={entry.id} className="project-home__trash-row" aria-label={entry.name}>
                 <span className="project-home__trash-name">{entry.name}</span>
-                <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)} · {removalNote(entry.purgeAt, now)}</span>
+                <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.purgeAt, now)}</span>
                 <span className="project-home__trash-actions">
                   <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
                   <ConfirmInline label="Delete forever" confirmLabel="Delete forever" prompt="This can’t be undone." busy={busy}
@@ -242,7 +316,7 @@ const noop = () => {};
 
 export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, onRename, onDelete, onRetry,
   trash = [], lastDeleted = null, onRestore = noop, onPurge = noop, onEmptyTrash = noop, onDismissUndo = noop,
-  settingsOpen = false, onToggleSettings }: ProjectHomeProps) {
+  settingsOpen = false, onToggleSettings, loadCoverChoices, onPinCover }: ProjectHomeProps) {
   const [query, setQuery] = useState('');
   const visibleProjects = useMemo(() => projects
     .filter((project) => project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
@@ -272,7 +346,7 @@ export function ProjectHome({ projects, loading, busy, error, onCreate, onOpen, 
             {projects.length > 0 && <div className="project-home__search"><Search aria-hidden="true" /><label className="project-home__sr-only" htmlFor="project-home-search">Search projects</label><input id="project-home-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></div>}
           </div>
           {loading ? <div className="project-home__loading" role="status"><span className="project-home__loading-dot" />Loading your projects…</div>
-            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={busy} onOpen={onOpen} onRename={onRename} onDelete={onDelete} />)}</div>
+            : visibleProjects.length > 0 ? <div className="project-home__grid">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} busy={busy} onOpen={onOpen} onRename={onRename} onDelete={onDelete} loadCoverChoices={loadCoverChoices} onPinCover={onPinCover} />)}</div>
               : projects.length > 0 ? <div className="project-home__empty" role="status"><Search className="project-home__empty-search" aria-hidden="true" /><h3>No projects match “{query.trim()}”</h3><p>Try another name or clear your search.</p><button type="button" className="project-home__secondary" onClick={() => setQuery('')}>Clear search</button></div>
                 : !error && <div className="project-home__empty"><div className="project-home__empty-graph"><NodeGraphPlaceholder /></div><h3>Your first project starts here.</h3><p>Connect ideas, models and media on a canvas of your own.</p><button type="button" className="project-home__secondary" disabled={busy} onClick={() => onCreate()}><Plus aria-hidden="true" />Create your first project</button></div>}
         </section>

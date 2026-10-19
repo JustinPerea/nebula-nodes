@@ -86,9 +86,13 @@ async def person_gate_error(request, exc: PersonGateError):
     return JSONResponse(status_code=exc.status, content={"detail": exc.detail, "code": exc.code})
 
 
-def require_person(headers: Mapping[str, str] | None) -> None:
-    """Raise PersonGateError(403) unless this request is the person."""
+def require_person(headers: Mapping[str, str] | None, *, hint: str = "") -> None:
+    """Raise PersonGateError(403) unless this request is the person.
+
+    ``hint`` is added to the refusal to say what the caller can do instead
+    (deleting for good refuses with "you can restore it")."""
+    suffix = f" {hint}" if hint else ""
     if has_agent_marker(headers):
-        raise PersonGateError(403, "Only the person can do this from the Nebula canvas.", AGENT_REFUSED)
+        raise PersonGateError(403, "Only the person can do this from the Nebula canvas." + suffix, AGENT_REFUSED)
     if not has_person_token(headers):
-        raise PersonGateError(403, PERSON_REQUIRED_DETAIL, PERSON_REQUIRED)
+        raise PersonGateError(403, PERSON_REQUIRED_DETAIL + suffix, PERSON_REQUIRED)

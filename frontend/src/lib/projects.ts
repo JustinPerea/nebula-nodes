@@ -4,18 +4,40 @@ import type { RunRecord } from './runHistory';
 import type { CreateDraft } from '../store/createDraftStore';
 import { apiFetch } from './backend';
 
+/** The card's picture (backend services/project_cover.py): a pinned image,
+ * the newest made image, or up to four input references for a mosaic. */
+export interface ProjectCover {
+  source: 'pinned' | 'output' | 'references';
+  images: string[];
+}
 export interface ProjectSummary {
   id: string; name: string; createdAt: string; updatedAt: string;
   lastOpenedAt: string | null; nodeCount: number; edgeCount: number;
   thumbnail: string | null;
+  /** Missing from a backend older than covers. */
+  cover?: ProjectCover | null;
+  /** Set when an agent made the project. */
+  createdBy?: { kind: 'agent'; name: string };
 }
+/** The pictures a card shows: one image, or up to four input references as
+ * a mosaic when the project has made nothing yet. */
+export function coverImages(project: Pick<ProjectSummary, 'cover' | 'thumbnail'>): { images: string[]; mosaic: boolean } {
+  const cover = project.cover;
+  if (cover && cover.images.length > 0) {
+    const mosaic = cover.source === 'references' && cover.images.length > 1;
+    return { images: mosaic ? cover.images.slice(0, 4) : cover.images.slice(0, 1), mosaic };
+  }
+  return { images: project.thumbnail ? [project.thumbnail] : [], mosaic: false };
+}
+export interface CoverChoice { url: string; kind: 'output' | 'reference' }
+export interface CoverChoices { images: CoverChoice[]; pinned: string | null; cover: ProjectCover | null }
 export interface ProjectSnapshot {
   nodes: Node<NodeData>[]; edges: Edge[]; runHistory: RunRecord[];
   viewport: Viewport | null; createSessionId: string | null;
   createDraft?: CreateDraft | null;
 }
 export interface SavedProject extends ProjectSummary { snapshot: ProjectSnapshot }
-export interface TrashedProject extends ProjectSummary { deletedAt: string; purgeAt: string }
+export interface TrashedProject extends ProjectSummary { deletedAt: string; purgeAt: string; deletedBy?: { kind: string; name: string } }
 export interface ProjectList {
   projects: ProjectSummary[]; trash?: TrashedProject[]; activeProjectId: string | null;
   workspaceRevision: string; migratedProjectId?: string | null;
@@ -70,8 +92,15 @@ export const restoreProject = (id: string) =>
   request<{ project: ProjectSummary; workspaceRevision: string }>(`/api/projects/${encodeURIComponent(id)}/restore`, { method: 'POST' }).then((result) => result.project);
 export const purgeTrashedProject = (id: string) =>
   request<{ trash: TrashedProject[] }>(`/api/projects/trash/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((result) => result.trash);
-export const emptyProjectTrash = () =>
-  request<{ trash: TrashedProject[] }>('/api/projects/trash/empty', { method: 'POST' }).then((result) => result.trash);
+/** Deletes for good only `ids` (what the list showed), so a project an agent
+ * deleted after it loaded stays restorable. */
+export const emptyProjectTrash = (ids: string[]) =>
+  request<{ trash: TrashedProject[] }>('/api/projects/trash/empty', json('POST', { ids })).then((result) => result.trash);
+export const listCoverChoices = (id: string) =>
+  request<CoverChoices>(`/api/projects/${encodeURIComponent(id)}/covers`);
+/** Pin one of the project's images as its cover, or `null` for automatic. */
+export const pinProjectCover = (id: string, url: string | null) =>
+  request<{ project: ProjectSummary }>(`/api/projects/${encodeURIComponent(id)}/cover`, json('PUT', { url })).then((result) => result.project);
 /** `paramsVersion`: the one-time param upgrades the tab's canvas had when it
  * loaded (lib/savedParamsUpgrades.ts). The backend upgrades the copy from it. */
 export const recoverProject = (sourceProjectId: string, snapshot: ProjectSnapshot, recoveryId: string, paramsVersion: number) =>

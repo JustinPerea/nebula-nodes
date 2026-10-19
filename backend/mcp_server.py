@@ -37,11 +37,15 @@ Nebula Nodes is a node-graph studio for AI images, video and audio. You work on 
 Workflow:
 1. look_at_canvas: nodes, wires, outputs, the person's selection and pins. Read get_selected_nodes before acting on "these" or "the selected".
 2. find_nodes / describe_node: pick a node type that can run here (runsWith) and learn its ports, params and price. A node with `routes` runs on one provider each: each route's `params` are what that provider offers (a setting it lacks is absent or has `onlyWhen`); `_provider` changes go through propose_change.
-3. edit_canvas: add nodes (refs like "+img"), wires, param changes, renames and moves in one call; all of it lands or none of it. remove_from_canvas deletes nodes or wires.
+3. edit_canvas: add nodes (refs like "+img"), wires, param changes, renames and moves in one call; all of it lands or none of it. Set arrange=true to have the canvas lay out the new nodes by their real size. remove_from_canvas deletes nodes or wires.
 4. run_nodes: runs a node and what feeds it. It returns outputs with small previews, or status "running" with a runId: then get_run(runId) or cancel_run(runId).
 5. view_output: look at any node's output again.
 
 Spending: the person sets limits (get_spend_limits). A run over a limit, or with a node that has no list price, is refused; send the same plan as propose_change. The person accepts or rejects it in Nebula; agents cannot accept, and get_proposal waits for the decision. Use propose_change too when the change is theirs to decide (reworking their graph, a costly run).
+
+Projects: list_projects, open_project, new_project. Start new work in a new project rather than emptying the person's canvas; they can switch back.
+Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights and notes, moodboard_analyze reads its palette and brief.
+Deleted moodboards, characters and projects go to Recently deleted: list_trash shows them and restore_from_trash brings one back with the same id. Deleting for good is the person's alone.
 
 Answer the person's pins with resolve_pin. Use wait_for_canvas_change to wait for them instead of polling. If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
 """
@@ -386,6 +390,7 @@ def edit_canvas(
     params: list[dict] | None = None,
     rename: dict[str, str] | None = None,
     move: dict[str, dict] | None = None,
+    arrange: bool | dict | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Change the canvas directly, all at once: every part applies, or none does.
@@ -399,8 +404,12 @@ def edit_canvas(
     - `params`: changes to existing nodes [{"nodeId": "n4", "params": {...}}].
     - `rename`: {"n4" or "+img": "Hero shot"} ("" restores the model's name).
     - `move`: {"n4" or "+img": {"x": 0, "y": 0}}. New nodes are placed for you.
+    - `arrange`: true (or {"direction": "right" or "down", "gap": 120}) to have
+      the canvas lay out this call's new nodes by their real size once it has
+      drawn them, starting where they were placed. Other nodes never move. With
+      no canvas open, the first one to open does it; the result's `arrange` says which.
     - `note`: one line on what this is for; shown beside your cursor.
-    Limits per call: 12 new nodes, 24 wires, 12 param changes.
+    No limit on how much one call adds; it all lands or none of it does.
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
@@ -409,8 +418,67 @@ def edit_canvas(
     """
     body: dict[str, Any] = {key: value for key, value in {
         "note": note, "nodes": nodes, "edges": edges, "params": params, "rename": rename, "move": move,
+        "arrange": arrange,
     }.items() if value}
     return _canvas_call("POST", "/api/graph/apply", ctx, json=body)
+
+
+# -- projects ---------------------------------------------------------------------
+
+def _project_line(project: dict[str, Any], active: str | None) -> dict[str, Any]:
+    return {"id": project.get("id"), "name": project.get("name"), "open": project.get("id") == active,
+            "nodes": project.get("nodeCount", 0), "updatedAt": project.get("updatedAt")}
+
+
+@mcp.tool(annotations=_READ)
+def list_projects(ctx: Context | None = None) -> dict[str, Any]:
+    """The person's saved projects, most recently edited first. `open` marks
+    the one on the canvas now."""
+    listing = _canvas_call("GET", "/api/projects", ctx)
+    active = listing.get("activeProjectId")
+    return {"projects": [_project_line(project, active) for project in listing.get("projects") or []],
+            "openProjectId": active}
+
+
+def _switch(path: str, body: dict[str, Any], ctx: Context | None) -> dict[str, Any]:
+    listing = _canvas_call("GET", "/api/projects", ctx)
+    previous_id = listing.get("activeProjectId")
+    previous = next((p for p in listing.get("projects") or [] if p.get("id") == previous_id), None)
+    result = _canvas_call("POST", path, ctx, timeout=30.0,
+                          json={**body, "workspaceRevision": listing.get("workspaceRevision", "")})
+    project = result.get("project") or {}
+    reply: dict[str, Any] = {"project": {"id": project.get("id"), "name": project.get("name"),
+                                         "nodes": len((project.get("snapshot") or {}).get("nodes") or [])}}
+    if previous and previous_id != project.get("id"):
+        reply["previousProject"] = {"id": previous_id, "name": previous.get("name")}
+        reply["note"] = (f"The canvas now shows {project.get('name')}. {previous.get('name')} is saved as it was; "
+                         f"open_project('{previous_id}') goes back.")
+    if result.get("warnings"):
+        reply["warnings"] = result["warnings"]
+    return reply
+
+
+@mcp.tool(annotations=_EDIT)
+def new_project(name: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Start a new, empty project and open it on the canvas.
+
+    Use it to start fresh work instead of clearing the canvas: the project
+    that was open is saved as it is. The person's canvas follows, names you,
+    and offers them a way back. Refused while a run is going.
+    """
+    return _switch("/api/projects", {"name": name}, ctx)
+
+
+@mcp.tool(annotations=_EDIT)
+def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Switch the canvas to a saved project (ids from list_projects).
+
+    The project that was open is saved as it is. The person's canvas follows,
+    names you, and offers them a way back. Refused while a run is going.
+    """
+    from urllib.parse import quote
+
+    return _switch(f"/api/projects/{quote(project_id, safe='')}/open", {}, ctx)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False))
@@ -578,6 +646,34 @@ def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
     return _canvas_call("GET", "/api/agent/spend", ctx)
 
 
+# -- Recently deleted -----------------------------------------------------------
+
+@mcp.tool(annotations=_READ)
+def list_trash(kind: str | None = None, ctx: Context | None = None) -> dict[str, Any]:
+    """List Recently deleted: moodboards, characters and projects, newest first.
+
+    `kind` ("moodboard", "character" or "project") narrows the list. Each item
+    has its id, name, when it was deleted and who deleted it (`deletedBy`:
+    `kind` is person, agent, system or anonymous; an agent's `name` is the
+    one it gave itself, so only kind "person" means the person). Projects also have
+    `purgeAt`, when they are removed for good; boards and characters stay
+    until the person deletes them for good."""
+    params = {"kind": kind} if kind else None
+    return _canvas_call("GET", "/api/trash", ctx, params=params)
+
+
+@mcp.tool(annotations=_EDIT)
+def restore_from_trash(kind: str, id: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Bring a moodboard, character or project back from Recently deleted.
+
+    It comes back with the same id and contents, so a Moodboard or Character
+    node that points at it runs again. A project comes back closed. Any
+    agent may restore; only the person can delete for good."""
+    from urllib.parse import quote
+
+    return _canvas_call("POST", f"/api/trash/{quote(kind, safe='')}/{quote(id, safe='')}/restore", ctx)
+
+
 # -- commons (smart moodboard) ------------------------------------------------
 
 def _client_name(ctx: Context | None) -> str:
@@ -692,6 +788,135 @@ def commons_borrow(id: str, attribute: str, value: Any, used_in: dict, why: str,
     return _commons_call("POST", "/api/commons/borrow", _client_name(ctx),
                          json={"id": id, "attribute": attribute, "value": value, "used_in": used_in, "why": why,
                                "region_id": region_id, "brand": brand})
+
+
+# -- moodboards (Moodboard Studio's boards) -------------------------------------
+# The work is in moodboard_client.py, shared with `nebula moodboard`. Links are
+# downloaded by this process, never by the backend.
+
+def _board_headers(ctx: Context | None) -> dict[str, str]:
+    return {"X-Nebula-Agent": _cursor_name(ctx)}
+
+
+def _board_call(fn, *args: Any, **kwargs: Any) -> Any:
+    import moodboard_client
+
+    try:
+        return fn(*args, **kwargs)
+    except moodboard_client.MoodboardError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
+@mcp.tool(annotations=_READ)
+def moodboard_list(project_id: str | None = None, ctx: Context | None = None) -> list[dict[str, Any]]:
+    """List moodboards: those for every project, plus one project's own.
+
+    `project_id` defaults to the project open on the canvas; pass "none" for
+    only the boards that belong to no project. Each board comes with its
+    numbered images and its analysis (null when it changed since the last
+    moodboard_analyze).
+    """
+    import moodboard_client as boards
+
+    api, headers = _api(), _board_headers(ctx)
+    if project_id == "none":
+        project = None
+    elif project_id:
+        project = _board_call(boards.resolve_project, api, project_id, headers)
+    else:
+        project = boards.active_project(api, headers)
+    return [boards.brief(board) for board in boards.list_boards(api, project=project, headers=headers)]
+
+
+@mcp.tool(annotations=_READ)
+def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
+    """One moodboard by id or exact name: settings, numbered images (id, url,
+    weight, notes, excluded) and analysis (palette, accents, styleBrief, ...)."""
+    import moodboard_client as boards
+
+    return boards.brief(_board_call(boards.get_board, _api(), board, _board_headers(ctx)))
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
+async def moodboard_create(name: str, sources: list[str] | None = None, project_id: str | None = None,
+                           mode: str = "look", strength: float = 0.7, notes: str = "",
+                           ctx: Context | None = None) -> dict[str, Any]:
+    """Make a moodboard (it shows in Moodboard Studio) from image sources.
+
+    `sources`: local image files, folders (their images, in name order),
+    http(s) image links, or Nebula outputs ("/api/outputs/..."). Links are
+    downloaded by this server (PNG, JPEG, GIF or WebP, up to 20 MB each), then
+    uploaded to Nebula. Only public web links: not this computer, its local
+    network, or ports other than 80 and 443; save such an image as a file. `project_id`: keep the board in one project
+    ("current" = the open one); by default every project can use it. `mode`:
+    look, world or subject. `strength` and image weights run 0 to 1. Run
+    moodboard_analyze after to get its palette and brief.
+    """
+    import moodboard_client as boards
+
+    headers = _board_headers(ctx)
+    # Off the event loop: downloads can take a while.
+    board, skipped = await anyio.to_thread.run_sync(lambda: _board_call(
+        boards.create_board, _api(), name, sources or [], project=project_id, mode=mode,
+        strength=strength, notes=notes, headers=headers))
+    return {**boards.brief(board), "duplicatesSkipped": skipped}
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
+async def moodboard_add(board: str, sources: list[str], ctx: Context | None = None) -> dict[str, Any]:
+    """Add images to a moodboard: files, folders, http(s) image links or Nebula
+    outputs, as in moodboard_create. Images already on the board are skipped.
+    Adding clears the board's analysis; run moodboard_analyze again."""
+    import moodboard_client as boards
+
+    headers = _board_headers(ctx)
+    updated, added, skipped = await anyio.to_thread.run_sync(lambda: _board_call(
+        boards.add_to_board, _api(), board, sources, headers=headers))
+    return {**boards.brief(updated), "added": added, "duplicatesSkipped": skipped}
+
+
+@mcp.tool(annotations=_EDIT)
+def moodboard_update(board: str, images: list[dict] | None = None, remove: list[str] | None = None,
+                     name: str | None = None, notes: str | None = None, mode: str | None = None,
+                     strength: float | None = None, ctx: Context | None = None) -> dict[str, Any]:
+    """Change a moodboard. `images`: changes to single images, each
+    {"image": its number or id, "weight": 0-1, "notes": "...", "excluded": true}
+    (excluded images stay on the board but stop steering). `remove` takes
+    images off the board by number or id; their files stay, and the result's
+    `removed` URLs can be added back with moodboard_add. `previous` holds the
+    settings before the change; pass them back to moodboard_update to undo it.
+    Any change but a rename clears the analysis; run moodboard_analyze again."""
+    import moodboard_client as boards
+
+    updated, removed, previous = _board_call(boards.update_board, _api(), board, name=name, notes=notes,
+                                             mode=mode, strength=strength, images=images, remove=remove,
+                                             headers=_board_headers(ctx))
+    return {**boards.brief(updated), "removed": removed, "previous": previous}
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
+                                      openWorldHint=False))
+def moodboard_analyze(board: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Analyze a moodboard: palette, separate accent colours, keywords, a style
+    brief and things to avoid. Returns the board with its new analysis."""
+    import moodboard_client as boards
+
+    return boards.brief(_board_call(boards.analyze_board, _api(), board, _board_headers(ctx)))
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,
+                                      openWorldHint=False))
+def moodboard_delete(board: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Delete a moodboard by id or exact name. Its image files stay in Nebula.
+
+    The board goes to Recently deleted, and restore_from_trash brings it back
+    with the same id. On a Nebula without Recently deleted a delete is for
+    good, so this refuses: only the person can delete then, in Moodboard
+    Studio. You can still take images off a board or rename it with
+    moodboard_update."""
+    import moodboard_client as boards
+
+    return _board_call(boards.delete_board, _api(), board, _board_headers(ctx))
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

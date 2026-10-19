@@ -7,8 +7,11 @@ import {
   fetchMoodboard,
   fetchMoodboards,
   keepMoodboardBriefOverride,
+  lookupStoredAsset,
   updateMoodboard,
 } from '../../lib/api';
+import { RecentlyDeletedAssets, UndoDeleteToast } from '../asset-trash/AssetTrash';
+import { useAssetDelete } from '../../hooks/useAssetDelete';
 import { apiFetch, backendAssetUrlSync } from '../../lib/backend';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import { useAssetStudioDraft } from '../../hooks/useAssetStudioDraft';
@@ -148,8 +151,14 @@ export function MoodboardStudioView() {
           rememberBrief(found);
           initialize(moodboardToDraft(found), found.id, found.thumbnail);
         } else {
-          initialize(moodboardEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft(),
-            null, '', 'Moodboard not found. Add images to save a new one.');
+          const fresh = moodboardEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft();
+          // In Recently deleted? Say so; the list in the rail restores it.
+          void lookupStoredAsset('moodboard', moodboardEditorId!).catch(() => null).then((found) => {
+            if (!current()) return;
+            initialize(fresh, null, '', found?.status === 'trashed'
+              ? 'This board is in Recently deleted. Restore it from the list on the left.'
+              : 'Moodboard not found. Add images to save a new one.');
+          });
         }
       }).catch((err) => {
         if (current()) patch({ loadError: err instanceof Error ? err.message : 'Failed to load Moodboard.' });
@@ -320,6 +329,35 @@ export function MoodboardStudioView() {
     if (!draft.analysis) void runAnalyze();
   };
 
+  const deleting = useAssetDelete('moodboard');
+  const deleteBoard = async () => {
+    if (!savedId || !isCurrent()) return;
+    const scope = moodboardEditorScope;
+    const deletedKey = key;
+    // Save edits made since the last autosave first, so Undo and Restore
+    // bring back what the person last saw. If that save fails, don't delete.
+    if (dirty && canSave) {
+      await persist();
+      if (!mounted.current || useAssetStudioDraftStore.getState().entries[deletedKey]?.dirty) return;
+    }
+    const removed = await deleting.remove({ id: savedId, name: draft.name.trim(), scope });
+    if (!removed || !mounted.current) return;
+    const store = useAssetStudioDraftStore.getState();
+    // Forget the session draft, so reopening it after a restore loads what was saved.
+    store.reset(deletedKey, emptyDraft());
+    const ui = useUIStore.getState();
+    if (ui.viewMode !== 'moodboard-editor') return;
+    store.reset(assetStudioDraftKey('moodboard', scope, NEW_MOODBOARD_SENTINEL, store.projectId),
+      scope === 'project' && store.projectId ? { ...emptyDraft(), projectId: store.projectId } : emptyDraft());
+    setRailScope(scope);
+    enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
+  };
+  const openRestored = (id: string, scope: AssetScope) => {
+    if (!mounted.current || useUIStore.getState().viewMode !== 'moodboard-editor') return;
+    setRailScope(scope);
+    enterMoodboardEditor(id, scope);
+  };
+
   const previewThumbnail = thumbnail || draft.images.find((img) => !img.excluded)?.url || '';
   const analysis = draft.analysis;
 
@@ -334,6 +372,12 @@ export function MoodboardStudioView() {
             Retry
           </button>
         )}
+        {savedId && !isDraftId && (
+          <button type="button" className="moodboard-studio-toolbar__button" title="Move to Recently deleted"
+            disabled={deleting.busy || Boolean(pendingSaveId) || analyzing} onClick={() => void deleteBoard()}>
+            Delete
+          </button>
+        )}
       </WorkspaceHeader>
 
       <aside className="moodboard-studio-view__rail">
@@ -341,6 +385,7 @@ export function MoodboardStudioView() {
           key={railScope}
           activeId={savedId ?? (isDraftId ? NEW_MOODBOARD_SENTINEL : moodboardEditorId)}
           initialScope={railScope}
+          refreshKey={deleting.refreshKey}
           onSelect={(id, scope) => {
             setRailScope(scope);
             enterMoodboardEditor(id, scope);
@@ -370,6 +415,9 @@ export function MoodboardStudioView() {
         ) : (
           <>
             {loadError && <div className="moodboard-studio__notice moodboard-studio__notice--warn">{loadError}</div>}
+            {deleting.error && !deleting.lastDeleted && (
+              <div className="moodboard-studio__notice moodboard-studio__notice--error" role="alert">{deleting.error}</div>
+            )}
             {saveError && <div className="moodboard-studio__notice moodboard-studio__notice--error">{saveError}</div>}
 
             <section className="moodboard-def">
@@ -544,6 +592,11 @@ export function MoodboardStudioView() {
           </>
         )}
       </main>
+      {deleting.lastDeleted && (
+        <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
+          error={deleting.error} onDismiss={deleting.dismiss}
+          onUndo={() => { void deleting.undo().then((asset) => { if (asset) openRestored(asset.id, asset.scope); }); }} />
+      )}
     </div>
   );
 }
@@ -565,15 +618,20 @@ function Swatches({ label, colors }: { label: string; colors: string[] }) {
 function MoodboardRail({
   activeId,
   initialScope,
+  refreshKey,
   onSelect,
   onNew,
 }: {
   activeId: string | null;
   initialScope: AssetScope;
+  refreshKey?: unknown;
   onSelect: (id: string, scope: AssetScope) => void;
   onNew: (scope: AssetScope) => void;
 }) {
   const [scope, setScope] = useState<AssetScope>(initialScope);
+  // Bumped when Recently deleted changes (a delete or restore elsewhere), to list again.
+  const [relistKey, setRelistKey] = useState(0);
+  const relist = useCallback(() => setRelistKey((value) => value + 1), []);
   const [moodboards, setMoodboards] = useState<Moodboard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -599,7 +657,7 @@ function MoodboardRail({
     return () => {
       cancelled = true;
     };
-  }, [scope, activeId]);
+  }, [scope, activeId, refreshKey, relistKey]);
 
   return (
     <div className="moodboard-rail">
@@ -645,6 +703,8 @@ function MoodboardRail({
           </button>
         ))}
       </div>
+      <RecentlyDeletedAssets kind="moodboard" scope={scope} refreshKey={`${String(refreshKey)}:${activeId}`}
+        onRestored={(item) => onSelect(item.id, scope)} onTrashChanged={relist} />
     </div>
   );
 }

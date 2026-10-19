@@ -37,6 +37,13 @@ from models.graph import GraphNode, PortValueDict
 from services.character_store import CharacterStore
 
 
+def _in_trash(character_id: str) -> bool:
+    try:
+        return CharacterStore().trashed(character_id) is not None
+    except ValueError:
+        return False
+
+
 async def handle_character_node(
     node: GraphNode,
     inputs: dict[str, PortValueDict],
@@ -58,7 +65,10 @@ async def handle_character_node(
     except ValueError:  # not an id the store can hold
         character = None
     if character is None:
-        raise ValueError(f"Character {character_id!r} not found; it may have been deleted. "
+        if _in_trash(character_id):
+            raise ValueError(f"Character {character_id!r} is in Recently deleted. Restore it (Character Studio, "
+                             f"or nebula trash restore character {character_id}) and run again.")
+        raise ValueError(f"Character {character_id!r} not found; it may have been deleted for good. "
                          "Pick another character for this node.")
 
     # Build the lightweight bundle. referenceViews + frozenTraitString are

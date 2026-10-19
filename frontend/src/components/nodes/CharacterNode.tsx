@@ -2,6 +2,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUIStore } from '../../store/uiStore';
 import { storedAssetId, useStoredAsset } from '../../store/storedAssetsStore';
 import { NodeSettingsAction } from './NodeSettingsAction';
+import { RestoreTrashedAsset } from './RestoreTrashedAsset';
 import { PORT_COLORS } from '../../lib/portCompatibility';
 import { backendAssetUrlSync } from '../../lib/backend';
 import '../../styles/character-node.css';
@@ -26,8 +27,9 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
   // Surface the id (short) so an unnamed-but-attached character is still
   // identifiable on the canvas.
   const summary = status === 'empty' ? 'no character attached'
-    : status === 'missing' ? `#${characterId} was deleted or never existed`
-      : `#${characterId}`;
+    : status === 'missing' ? `#${characterId} was deleted for good or never existed`
+      : status === 'trashed' ? 'In Recently deleted'
+        : `#${characterId}`;
 
   return (
     <div className={`character-node ${selected ? 'character-node--selected' : ''}`} data-character-status={status} data-node-inspector-anchor={id}>
@@ -44,7 +46,11 @@ export function CharacterNode({ id, data, selected }: NodeProps) {
 
       <div className="character-node__summary">{summary}</div>
 
-      {selected && characterId && status !== 'missing' && (
+      {status === 'trashed' && (
+        <RestoreTrashedAsset kind="character" id={characterId} className="character-node__open" />
+      )}
+
+      {selected && characterId && status !== 'missing' && status !== 'trashed' && (
         <button
           type="button"
           className="character-node__open nodrag"

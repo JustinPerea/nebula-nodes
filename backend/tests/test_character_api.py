@@ -242,10 +242,12 @@ class TestCharacterDelete:
 
         del_resp = client.delete(f"/api/characters/{char_id}")
         assert del_resp.status_code == 200
-        assert del_resp.json()["status"] == "deleted"
+        assert del_resp.json()["status"] == "trashed"
 
         get_resp = client.get(f"/api/characters/{char_id}")
         assert get_resp.status_code == 404
+        # Not gone: it says it's in Recently deleted, so a card can offer Restore.
+        assert get_resp.json()["code"] == "in_trash"
 
     def test_delete_missing_id_returns_404(self, client):
         resp = client.delete("/api/characters/doesnotexist1")

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { fetchCharacters, fetchMoodboards } from '../../lib/api';
 import { wsClient } from '../../lib/wsClient';
+import { RestoreTrashedAsset } from '../nodes/RestoreTrashedAsset';
 import { useUIStore } from '../../store/uiStore';
 import {
   characterSummary,
@@ -63,6 +64,8 @@ export function StoredAssetPicker({ kind, label, value, onChange }: StoredAssetP
 
   const listed = options?.some((option) => option.id === value) ?? false;
   const missing = current?.status === 'missing';
+  // In Recently deleted: say so and offer Restore (same id, so the node works again).
+  const trashed = current?.status === 'trashed';
   const open = () => (kind === 'moodboard' ? enterMoodboardEditor(value) : enterCharacterEditor(value));
 
   return (
@@ -76,7 +79,8 @@ export function StoredAssetPicker({ kind, label, value, onChange }: StoredAssetP
         {!value && <option value="">{options === null ? 'Loading…' : `Choose a ${NOUN[kind]}…`}</option>}
         {value && !listed && (
           <option value={value}>
-            {missing ? `Not found (#${value})` : current?.summary?.name || `#${value}`}
+            {missing ? `Not found (#${value})`
+              : `${current?.summary?.name || `#${value}`}${trashed ? ' (in Recently deleted)' : ''}`}
           </option>
         )}
         {(options ?? []).map((option) => (
@@ -87,9 +91,15 @@ export function StoredAssetPicker({ kind, label, value, onChange }: StoredAssetP
         <div className="inspector__notice" role="note">No saved {NOUN[kind]}s yet. Make one from the Assets panel.</div>
       )}
       {missing && (
-        <div className="inspector__notice" role="note">This {NOUN[kind]} was deleted or never existed. Pick another.</div>
+        <div className="inspector__notice" role="note">This {NOUN[kind]} was deleted for good or never existed. Pick another.</div>
       )}
-      {value && !missing && (
+      {trashed && (
+        <>
+          <div className="inspector__notice" role="note">This {NOUN[kind]} is in Recently deleted. Restore it to use it again.</div>
+          <RestoreTrashedAsset kind={kind} id={value} className="inspector__action-button" />
+        </>
+      )}
+      {value && !missing && !trashed && (
         <button type="button" className="inspector__action-button" onClick={open}>
           <ExternalLink className="inspector__action-icon" size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
           <span>Open {kind === 'moodboard' ? 'Moodboard' : 'Character'}</span>

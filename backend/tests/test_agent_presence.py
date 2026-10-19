@@ -333,7 +333,7 @@ def test_clearing_the_canvas_forgets_cursors_anchored_to_its_nodes(api):
     client.post("/api/graph/node", json={"definitionId": "text-input", "params": {"value": "a"}}, headers=agent)
     assert client.get("/api/canvas/snapshot").json()["agents"]
 
-    assert client.delete("/api/graph").status_code == 200
+    assert client.delete("/api/graph?force=true").status_code == 200
     assert client.get("/api/canvas/snapshot").json()["agents"] == []
 
 

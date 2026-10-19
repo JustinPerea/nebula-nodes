@@ -3,6 +3,7 @@
 On-disk layout mirrors CharacterStore:
     MOODBOARD_ROOT/<projectId>/<id>.json
     MOODBOARD_ROOT/_global/<id>.json
+    MOODBOARD_ROOT/.trash/          deleted boards (services/asset_trash.py)
 
 Moodboards are provider-neutral creative-direction assets. They can later be
 adapted to Krea, GPT Image, Gemini, Seedream, etc. without changing the saved
@@ -23,6 +24,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+from services import asset_trash
+from services.asset_trash import is_trash_folder
 
 _PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _MOODBOARD_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -63,7 +67,8 @@ def _find_moodboard_file(root: Path, moodboard_id: str) -> Path | None:
     if not root.exists():
         return None
     for sub in root.iterdir():
-        if not sub.is_dir():
+        # Skip the trash (``.trash``): a deleted board isn't found until restored.
+        if not sub.is_dir() or is_trash_folder(sub):
             continue
         candidate = sub / f"{moodboard_id}.json"
         if candidate.exists():
@@ -353,11 +358,37 @@ class MoodboardStore:
         _write_json(path, moodboard)
         return moodboard
 
-    def delete(self, moodboard_id: str) -> None:
-        path = _find_moodboard_file(_moodboard_root(), moodboard_id)
+    def delete(self, moodboard_id: str, deleted_by: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Move the board to Recently deleted (services/asset_trash.py) and
+        return the trash record. ``deleted_by`` is who asked, as
+        services/canvas_events.actor_record gives it."""
+        root = _moodboard_root()
+        path = _find_moodboard_file(root, moodboard_id)
         if path is None:
             raise KeyError(f"Moodboard '{moodboard_id}' not found")
-        path.unlink()
+        return asset_trash.move_to_trash(root, path, kind="moodboard", deleted_by=deleted_by)
+
+    # -- Recently deleted --------------------------------------------------
+
+    def trashed(self, moodboard_id: str) -> dict[str, Any] | None:
+        """The trash record when this board is in Recently deleted, else None."""
+        _validate_moodboard_id(moodboard_id)
+        return asset_trash.trashed(_moodboard_root(), moodboard_id)
+
+    def list_trash(self, scope: str | None = None, projectId: str | None = None) -> list[dict[str, Any]]:
+        if projectId is not None:
+            _validate_project_id(projectId)
+        return asset_trash.list_trashed(_moodboard_root(), scope=scope, project_id=projectId)
+
+    def restore(self, moodboard_id: str) -> dict[str, Any]:
+        """Bring a trashed board back with the same id and contents."""
+        _validate_moodboard_id(moodboard_id)
+        return asset_trash.restore(_moodboard_root(), moodboard_id)
+
+    def purge(self, moodboard_id: str) -> None:
+        """Delete a trashed board for good. Only the person may (main.py)."""
+        _validate_moodboard_id(moodboard_id)
+        asset_trash.purge(_moodboard_root(), moodboard_id)
 
 
 def migrate_brief_fields() -> dict[str, Any]:
