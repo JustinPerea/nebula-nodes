@@ -79,4 +79,18 @@ describe('MoodboardColors', () => {
     rerender(<ImageColors analysis={null} imageId="b" />);
     expect(container.innerHTML).toBe('');
   });
+
+  it('shows nothing, rather than failing, for a stored analysis missing its lists', () => {
+    // POST /api/moodboards takes any `analysis` object, so one an agent made may lack these.
+    const partial = analysis({ images: undefined, palette: undefined, accents: undefined, colors: undefined } as unknown as Partial<MoodboardAnalysis>);
+    const { container } = render(
+      <>
+        <BoardSwatches label="Palette" role="dominant" analysis={partial} />
+        <BoardSwatches label="Accents" role="accent" analysis={partial} />
+        <SourcesOutdated analysis={partial} />
+        <ImageColors analysis={partial} imageId="b" />
+      </>,
+    );
+    expect(container.innerHTML).toBe('');
+  });
 });

@@ -10,7 +10,9 @@ export function BoardSwatches({ label, role, analysis }: {
   role: MoodboardColor['role'];
   analysis: MoodboardAnalysis;
 }) {
-  const hexes = role === 'dominant' ? analysis.palette : analysis.accents ?? [];
+  // A saved analysis is stored JSON (an agent can create a board with one), so
+  // a list may be missing: show nothing rather than fail the whole Studio.
+  const hexes = (role === 'dominant' ? analysis.palette : analysis.accents) ?? [];
   if (hexes.length === 0) return null;
   const colors = (analysis.colors ?? []).filter((color) => color.role === role);
   return (
@@ -60,7 +62,7 @@ function BoardColor({ color }: { color: MoodboardColor }) {
 
 /** The note under the board swatches for an analysis without sources. */
 export function SourcesOutdated({ analysis }: { analysis: MoodboardAnalysis }) {
-  if (hasSources(analysis) || (analysis.palette.length === 0 && (analysis.accents ?? []).length === 0)) return null;
+  if (hasSources(analysis) || ((analysis.palette ?? []).length === 0 && (analysis.accents ?? []).length === 0)) return null;
   return (
     <div className="moodboard-colors__hint">Analyze again to see which images each color comes from.</div>
   );
@@ -70,7 +72,7 @@ export function SourcesOutdated({ analysis }: { analysis: MoodboardAnalysis }) {
  *  of the image. Nothing until the board is analyzed, or for an image the
  *  analysis left out (excluded) or couldn't read. */
 export function ImageColors({ analysis, imageId }: { analysis: MoodboardAnalysis | null; imageId: string }) {
-  const item = analysis?.images.find((image) => image.id === imageId);
+  const item = analysis?.images?.find((image) => image.id === imageId);
   const colors = item?.colors ?? [];
   if (colors.length === 0) return null;
   return (
