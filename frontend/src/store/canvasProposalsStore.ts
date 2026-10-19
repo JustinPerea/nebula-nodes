@@ -204,9 +204,14 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
     const entry = get().proposals[id];
     if (!entry || entry.closing || get().pending[id]) return;
     set((state) => ({ pending: { ...state.pending, [id]: 'accept' }, errors: without(state.errors, id) }));
+    // Accepting is one undo step: the canvas before the proposal's nodes
+    // arrive, taken before the backend's graphSync can bring them.
+    const undoStep = useGraphStore.getState().beginUndoStep();
+    let accepted = false;
     try {
       const result = await acceptProposal(id, entry.acceptKey, get().drag[id] ?? {});
-      useGraphStore.getState().adoptAcceptedProposal(result);
+      accepted = true;
+      useGraphStore.getState().adoptAcceptedProposal(result, { undoStep });
       get().close({ proposalId: id, status: 'accepted' });
       if (result.runNodeIds.length > 0) {
         if (useGraphStore.getState().isExecuting) {
@@ -217,6 +222,7 @@ export const useCanvasProposalsStore = create<CanvasProposalsState>((set, get) =
         }
       }
     } catch (error) {
+      if (!accepted) useGraphStore.getState().cancelUndoStep(undoStep);
       const message = error instanceof ProposalRequestError && error.status === 403
         ? 'Only the canvas can accept this. Reload the page.'
         : error instanceof Error ? error.message : String(error);

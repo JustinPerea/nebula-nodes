@@ -27,7 +27,8 @@ from commons import net
 from cli.__main__ import build_parser
 from cli.client import NebulaClient
 from cli.commands import moodboard as moodboard_cmd
-from nebula_api import NebulaAPI
+from cli.commands import trash as trash_cmd
+from nebula_api import NebulaAPI, NebulaAPIError
 
 
 def _png(path: Path, color=(200, 80, 40), size=(24, 16)) -> Path:
@@ -145,11 +146,15 @@ def test_new_from_a_folder_and_a_link_then_set_analyze_and_delete(app, web, tmp_
     out = _cli(app, ["moodboard", "list", "--global"], capsys)
     assert board["id"] in out and "Renamed" in out
 
-    # This backend deletes for good, so the CLI doesn't delete: Studio does.
-    with pytest.raises(SystemExit):
-        _cli(app, ["moodboard", "delete", "Renamed"], capsys)
-    assert "Moodboard Studio" in capsys.readouterr().err
-    assert boards.get_board(app.api, board["id"])["name"] == "Renamed"
+    # This Nebula has Recently deleted, so the CLI may delete: a restore undoes it.
+    out = _cli(app, ["moodboard", "delete", "Renamed"], capsys)
+    assert "Recently deleted" in out and f"nebula trash restore moodboard {board['id']}" in out
+    with pytest.raises(boards.MoodboardError, match="no board"):
+        boards.get_board(app.api, board["id"])
+    assert trash_cmd.run_restore(app, ["moodboard", board["id"]]) == 0
+    assert "Restored moodboard" in capsys.readouterr().out
+    restored = boards.get_board(app.api, board["id"])
+    assert restored["name"] == "Renamed" and len(restored["images"]) == 4
 
 
 def _cli_hash(path: Path) -> str:
@@ -482,9 +487,12 @@ def test_mcp_tools_make_change_analyze_and_delete_a_board(app, web, tmp_path):
     with pytest.raises(RuntimeError, match="no image '9'"):
         mcp_server.moodboard_update(made["id"], remove=["9"])
 
-    # This backend has no Recently deleted, so a delete would be for good: refused.
-    with pytest.raises(RuntimeError, match="the person can delete it in Moodboard Studio"):
-        mcp_server.moodboard_delete(made["id"])
+    # This Nebula has Recently deleted: the delete is restorable, with the same id.
+    deleted = mcp_server.moodboard_delete(made["id"])
+    assert deleted["restorable"] is True and deleted["status"] == "trashed"
+    with pytest.raises(RuntimeError, match="no board"):
+        mcp_server.moodboard_get(made["id"])
+    mcp_server._api().request("POST", f"/api/trash/moodboard/{made['id']}/restore")
     assert mcp_server.moodboard_get(made["id"])["id"] == made["id"]
 
 
@@ -520,14 +528,23 @@ def test_mcp_tools_run_off_the_event_loop_without_errors(app, tmp_path):
 # -- agents may do what can be undone -------------------------------------------------
 
 def test_nothing_in_the_client_deletes_a_board_for_good(app, tmp_path, capsys, monkeypatch):
-    # Where a delete can't be undone, the CLI and MCP refuse for everyone,
-    # with what to do instead. The client never decides who the person is
-    # (a terminal, a typed name or an unset agent name proves nothing).
+    # On a Nebula without Recently deleted (an older backend, no /api/trash) a
+    # delete can't be undone, so the CLI and MCP refuse for everyone, with
+    # what to do instead. The client never decides who the person is (a
+    # terminal, a typed name or an unset agent name proves nothing).
     board, _ = boards.create_board(app.api, "Keep me", [str(_png(tmp_path / "a.png"))])
     deletes = []
-    original = app.api.request
-    monkeypatch.setattr(app.api, "request", lambda method, path, **kw: (
-        deletes.append(path) if method == "DELETE" else None) or original(method, path, **kw))
+    original = NebulaAPI.request
+
+    def older_backend(self, method, path, **kw):
+        if method == "DELETE":
+            deletes.append(path)
+        if method == "GET" and path == "/api/trash":
+            raise NebulaAPIError("Not Found", status=404)
+        return original(self, method, path, **kw)
+
+    # On the class: the CLI and the MCP server each make their own NebulaAPI.
+    monkeypatch.setattr(NebulaAPI, "request", older_backend)
     monkeypatch.setattr(moodboard_cmd.sys.stdin, "isatty", lambda: True, raising=False)
     monkeypatch.setattr(moodboard_cmd.sys.stdout, "isatty", lambda: True, raising=False)
     monkeypatch.setattr("builtins.input", lambda prompt="": "Keep me")

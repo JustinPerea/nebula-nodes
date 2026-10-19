@@ -212,6 +212,13 @@ class NebulaClient:
         return self._request("POST", f"/api/projects/{quote(project_id, safe='')}/open",
                              json={"workspaceRevision": workspace_revision})
 
+    # -- Recently deleted --
+    def list_trash(self, kind: str | None = None) -> dict[str, Any]:
+        return self._request("GET", "/api/trash", params={"kind": kind} if kind else None)
+
+    def restore_trashed(self, kind: str, item_id: str) -> dict[str, Any]:
+        return self._request("POST", f"/api/trash/{quote(kind, safe='')}/{quote(item_id, safe='')}/restore")
+
     # -- Execution --
     def run_graph(self, target_node_id: str | None = None, wait: float | None = None) -> dict[str, Any]:
         """Start a run. With `wait`, return {"status": "running", "runId"} if it

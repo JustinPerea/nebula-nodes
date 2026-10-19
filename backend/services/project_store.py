@@ -90,13 +90,21 @@ def purge_at(entry: dict[str, Any]) -> str:
 
 
 def trash_metadata(entry: dict[str, Any]) -> dict[str, Any]:
-    return {**metadata(entry), "deletedAt": entry["deletedAt"], "purgeAt": purge_at(entry)}
+    result = {**metadata(entry), "deletedAt": entry["deletedAt"], "purgeAt": purge_at(entry)}
+    # Projects deleted before 2026-10-18 didn't record who deleted them.
+    if isinstance(entry.get("deletedBy"), dict):
+        result["deletedBy"] = entry["deletedBy"]
+    return result
 
 
-def move_to_trash(catalog: dict[str, Any], project_id: str) -> dict[str, Any]:
-    """Move a project, pins and all, out of the list and into the trash."""
+def move_to_trash(catalog: dict[str, Any], project_id: str,
+                  deleted_by: dict[str, str] | None = None) -> dict[str, Any]:
+    """Move a project, pins and all, out of the list and into the trash.
+    ``deleted_by`` is who asked (services/canvas_events.actor_record)."""
     entry = catalog["projects"].pop(project_id)
     entry["deletedAt"] = now()
+    if deleted_by:
+        entry["deletedBy"] = dict(deleted_by)
     catalog.setdefault("trash", {})[project_id] = entry
     if catalog.get("migratedProjectId") == project_id:
         catalog.pop("migratedProjectId", None)
@@ -107,6 +115,7 @@ def restore_from_trash(catalog: dict[str, Any], project_id: str) -> dict[str, An
     """Put a trashed project back in the list. It comes back closed."""
     entry = catalog["trash"].pop(project_id)
     entry.pop("deletedAt", None)
+    entry.pop("deletedBy", None)
     catalog["projects"][project_id] = entry
     return entry
 

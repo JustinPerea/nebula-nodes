@@ -13,6 +13,7 @@ import {
 import { useCanvasProposalsStore, type ProposalEntry } from '../../store/canvasProposalsStore';
 import { useGraphStore } from '../../store/graphStore';
 import '../../styles/canvasProposals.css';
+import { CanvasUndoNotice } from './CanvasUndoNotice';
 
 /** How long Accept/Reject ignore clicks after the shown proposal changes on its own. */
 const SWITCH_GUARD_MS = 600;
@@ -53,6 +54,8 @@ export function ProposalBar() {
   const runDeferred = useCanvasProposalsStore((s) => s.runDeferred);
   const dismissDeferred = useCanvasProposalsStore((s) => s.dismissDeferred);
   const isExecuting = useGraphStore((s) => s.isExecuting);
+  // The undo notice shares this panel, so the two stack instead of overlap.
+  const hasUndoNotice = useGraphStore((s) => Boolean(s.undoNotice));
   const { fitBounds, getInternalNode } = useReactFlow();
   // Track the shown proposal by id, never by position: a proposal that
   // arrives while the person is reading another must not take its place
@@ -95,7 +98,7 @@ export function ProposalBar() {
     };
   }, [currentId]);
 
-  if (open.length === 0 && !deferredRun) return null;
+  if (open.length === 0 && !deferredRun && !hasUndoNotice) return null;
 
   const page = (step: number) => {
     const next = open[(position + step + open.length) % open.length];
@@ -270,6 +273,7 @@ export function ProposalBar() {
           </div>
         </div>
       )}
+      <CanvasUndoNotice />
     </Panel>
   );
 }
