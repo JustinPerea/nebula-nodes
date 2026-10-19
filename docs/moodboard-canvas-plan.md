@@ -159,7 +159,7 @@ Placement rules:
 2. **`get` and `update` lay the board out in memory** with `moodboard_layout.legacy_layout(board)`, called from `_migrated` (`moodboard_store.py:162`) behind a flag. `list` skips it, so the rail stays cheap. `moodboard_client.get_board` refetches by id after a name match (`:487-494`), so `show "Name"` gets the layout too.
    - It is a deterministic grid in number order: 6 columns, 40 px gaps, row height set by the tallest card.
    - Each card's area is `max(weight, MIN_WEIGHT) × FULL_AREA`. Weight-0 cards are full size.
-   - The aspect ratio comes from `analysis.images[].width/height` if analyzed. Otherwise it comes from the image header through `resolve_moodboard_image_path` (`moodboard_analysis.py:388`), cached by path and mtime. If neither works, 4:3.
+   - The aspect ratio comes from the image header through `resolve_moodboard_image_path` (`moodboard_analysis.py:388`), upright (EXIF orientation applied, as thumbnails show it), cached per URL and agent workspace while the file is unchanged. If the file can't be read, `analysis.images[].width/height`; if neither, 4:3. *(Built in PR1 header first: the analysis measures stored pixels, which are sideways for a phone photo with an EXIF turn.)*
    - `placedBy: "person"`, since the order was theirs.
 3. **The first write saves that layout and stamps `layoutVersion: 1`.** Since the layout is deterministic, nothing moves. Opening a board without editing it writes nothing, because `initialize` loads with `dirty: false`.
 4. **`frames`, `suggestions` and `readings` read as empty.** There is no Unsorted frame until Analyze runs or the person makes one.
@@ -335,7 +335,7 @@ With nobody looking, or a stale report, `look` describes the whole board.
   - **`moodboard_client.py`:**
     - `_steering` uses explicit keys.
     - `get_board` refetches by id after a name match.
-    - `brief()` adds `placements` and the board's `frames`.
+    - `brief()` adds `placements` and the board's `frames`. *(Built as `brief(board, layout=True)`, used by `show --json` and `moodboard_get`; the default view stays as the golden file pins it. See PR1's implementation notes.)*
   - **`types/index.ts`:** optional fields.
   - **`moodboardToDraft`** keeps placements.
 - **What the person sees.** Nothing. `nebula moodboard show --json` lists placements.
