@@ -1395,6 +1395,8 @@ Each point was checked against the code (main `12257250`, `e457b51d` on #18, `fe
 - Krea 2's real reference limit (Nebula's 10 is its own number) and the effect of strength sums above 1 (PR15, Q21).
 - Reference limits on fal for Kling O3 Ref, `gpt-image-1-5-edit` and the fal GPT Image copies, `nano-banana-fal-edit`, Ideogram v3 style count, `meshy-image-to-image`, Quiver per model, and the Krea Gemini Omni, Wan 3.0 and Grok video references.
 - Nano Banana 2.1's image limits: the note's line likely joins it with 3.1 Flash; Nebula sends it text only until Google's page is re-read (PR14).
+  GM's 2026-10-19 comparison sent five separate references to `gemini-nano-banana-2.1` through `/api/quick` and all runs succeeded, so 2.1 does take images; its limit is still unconfirmed.
+- Which of Google's per-role counts limits board images on Gemini 3 Pro Image (6 object, 5 character, 3 style (r)). Board images in `look` mode are style references by meaning, which would cap them at 3, but Gemini has no role field, and the same comparison sent five to Gemini 3 Pro Image with no error. PR14 settles it from Google's page and states the cap it uses.
 - What every Krea `style_images` model does with the images, except Seedream 4 (they default to text until verified); whether Nebula's Krea Seedream 4 param carries `strength`; Ideogram 3 and Runway gen-4 style meaning **on Krea's gateway** (verified on the makers' own APIs only).
 - Whether Krea's routes refuse a start frame plus references on Hailuo 3, H3 Max and Gemini Omni (treated as refusing until checked, PR17).
 - Whether Ideogram v3 reads a plain "first style reference matters most" line (paid comparison).
