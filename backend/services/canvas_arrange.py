@@ -11,7 +11,11 @@ placed, and the first canvas that opens lays them out.
 A canvas finishes a request with PUT /api/graph/layout and its `arrangeId`.
 The first write wins and closes the request; a second open tab's write for
 the same id changes nothing and is told so. Only that edit's new nodes may be
-positioned by that write, so the person's own nodes never move.
+positioned by that write, so the person's own nodes never move. When the
+person's canvas writes it, it is part of the agent's edit, not a new one: the
+graphSync carries `arranged: {id, nodeIds}` instead of `edit`, and each canvas
+folds the positions into the undo step that added the nodes (main.py
+update_graph_layout, frontend lib/canvasUndo.ts foldArrange).
 
 A request shrinks when one of its nodes gets an explicit position (the
 person drags it, or an agent moves it): that position wins. It closes when

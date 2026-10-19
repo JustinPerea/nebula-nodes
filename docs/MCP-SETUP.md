@@ -921,8 +921,14 @@ their images), lays them out with the
 same size-aware layout as Auto-layout, and saves the positions with
 `PUT /api/graph/layout` and `arrangeId`. The first write for an id wins; a
 second open tab gets `already-arranged` and changes nothing, and every tab
-takes the winning positions from the next graphSync. The write is a normal
-move, and the activity log credits the agent.
+takes the winning positions from the next graphSync. The arrange is part of
+the agent's edit, not an edit of its own: that graphSync carries `arranged:
+{id, nodeIds}` and no `edit`, and each canvas puts the positions into the
+undo step that added those nodes. So Undo removes the nodes, and Redo puts
+them back arranged. The activity log credits the agent. Only the person's
+canvas finishes an arrange this way; a write with an `arrangeId` from
+anyone else (an agent or script can read it off a graphSync) is a normal
+move, its own undo step, credited to whoever wrote it.
 
 The edit's reply has `arrange: {id, nodeIds, direction, gap, status,
 message}`. `status` is `waiting` when a canvas is open, or
@@ -935,7 +941,8 @@ drops open requests; the nodes keep the positions they were placed at.
 
 Every graph edit an agent makes (`edit_canvas`, `remove_from_canvas`,
 `nebula apply`, `set`, `create`, `delete`, `wire`, `move`, `nebula graph
-load`, the layout route) is one undo step on each open canvas. The canvas shows "Claude changed the
+load`, the layout route) is one undo step on each open canvas (a canvas
+finishing an agent's `arrange` joins that agent's step instead; see above). The canvas shows "Claude changed the
 canvas" with an Undo button, and Cmd-Z works too. Undo puts back exactly
 what that edit changed: deleted nodes come back with their params, outputs,
 name and wires, and new nodes go away with their wires. Redo (Cmd-Shift-Z)
