@@ -187,15 +187,22 @@ export function entryForRoute(entry: PriceEntry | undefined, provider: string | 
   return routed && typeof routed === 'object' ? routed : undefined;
 }
 
-/** One run of this node, or null when it's unpriced (no entry, no matching
- * row, the run bills a different provider than the entry prices, a setting
- * the price reads arrives by wire, so it's only known at run time, or the
- * price reads a RUN_TIME_VARIABLES quantity). The wired ports also give the
- * VIDEO_MODE and REFERENCES a row may match. A `routes` entry prices the route
- * `routeProvider` names. */
-/** Only whitespace as Python's str.strip() sees it, since the handlers strip
- * with it (JS trim() also strips U+FEFF and keeps U+001C-001F and U+0085). */
-const PYTHON_BLANK = /^[\t\n\v\f\r \x1c-\x1f\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$/;
+/** Whitespace as Python's str.strip() sees it, since the handlers strip with
+ * it (JS trim() also strips U+FEFF and keeps U+001C-001F and U+0085). Code
+ * points rather than a regex, which can't hold the control characters lint-clean. */
+const PYTHON_WHITESPACE = new Set<number>([
+  0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x85, 0xa0, 0x1680,
+  0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a,
+  0x2028, 0x2029, 0x202f, 0x205f, 0x3000,
+]);
+
+function isPythonBlank(value: string): boolean {
+  for (const char of value) {
+    if (!PYTHON_WHITESPACE.has(char.codePointAt(0) ?? -1)) return false;
+  }
+  return true;
+}
+
 
 /** The values an entry's rows are matched against: the effective params
  * plus the price variables read from the wired ports (model_pricing._price_values). */
@@ -210,7 +217,7 @@ function priceValues(
   const cleaned: Record<string, unknown> = { ...(params ?? {}) };
   for (const key of entry.whitespaceUnset ?? []) {
     const value = cleaned[key];
-    if (typeof value === 'string' && PYTHON_BLANK.test(value)) cleaned[key] = '';
+    if (typeof value === 'string' && isPythonBlank(value)) cleaned[key] = '';
   }
   const values = effectiveParams(entry, definition, cleaned);
   if (priced.has(VIDEO_MODE)) values[VIDEO_MODE] = videoMode(ports);
@@ -223,6 +230,12 @@ function priceValues(
   return values;
 }
 
+/** One run of this node, or null when it's unpriced (no entry, no matching
+ * row, the run bills a different provider than the entry prices, a setting
+ * the price reads arrives by wire, so it's only known at run time, or the
+ * price reads a RUN_TIME_VARIABLES quantity). The wired ports also give the
+ * VIDEO_MODE and REFERENCES a row may match. A `routes` entry prices the route
+ * `routeProvider` names. */
 export function estimateNode(
   priceEntry: PriceEntry | undefined,
   definition: Partial<ModelNodeDefinition>,
