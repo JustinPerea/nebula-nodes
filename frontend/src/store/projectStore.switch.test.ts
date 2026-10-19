@@ -23,6 +23,7 @@ import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { wsClient } from '../lib/wsClient';
 import type { ProjectSwitch } from '../lib/wsClient';
 import { useGraphStore } from './graphStore';
+import { useUIStore } from './uiStore';
 import { subscribeProjectAutosave, switchMessage, useProjectStore } from './projectStore';
 import type { ProjectSnapshot, ProjectSummary, SavedProject } from '../lib/projects';
 
@@ -147,5 +148,32 @@ describe('following an agent’s project switch', () => {
     socket()({ type: 'graphSync', workspaceRevision: 'r2', paramsVersion: GRAPH_PARAMS_VERSION,
       projectSwitch: { ...agentSwitch, previousRevision: 'r0' } } as never);
     expect(useProjectStore.getState()).toMatchObject({ initialized: false, switchNotice: null });
+  });
+});
+
+describe('the Nodes panel when a project opens (design-canvas gap 19)', () => {
+  const followSwitch = async () => {
+    socket()({ type: 'graphSync', workspaceRevision: 'r2', activeProjectId: 'p2', graphReplaced: true,
+      paramsVersion: GRAPH_PARAMS_VERSION, projectSwitch: agentSwitch } as never);
+    await vi.waitFor(() => expect(useProjectStore.getState().switchNotice).not.toBeNull());
+  };
+
+  it('stays closed on a project with nodes', async () => {
+    const withNodes: ProjectSnapshot = { ...empty, nodes: [{
+      id: 'n7', type: 'model', position: { x: 0, y: 0 },
+      data: { definitionId: 'text-input', label: 'Prompt', params: { value: 'x' }, outputs: {} },
+    }] as never };
+    vi.mocked(api.getProject).mockResolvedValue(saved(sketches, withNodes));
+    useUIStore.setState({ leftDock: 'library' });
+    await followSwitch();
+    expect(useUIStore.getState().leftDock).toBeNull();
+    expect(useUIStore.getState().panels.library.visible).toBe(false);
+  });
+
+  it('opens on an empty canvas, ready for its first node', async () => {
+    useUIStore.setState({ leftDock: null });
+    await followSwitch();
+    expect(useUIStore.getState().leftDock).toBe('library');
+    expect(useUIStore.getState().panels.library.visible).toBe(true);
   });
 });

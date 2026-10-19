@@ -21,6 +21,7 @@ import { useSelectionActionSlot } from '../../lib/selectionActionSlot';
 import '../../styles/nodes.css';
 import { NodeLabel } from './NodeLabel';
 import { NodeRunStatus } from './NodeRunStatus';
+import { OverviewImage, OverviewVideoStill } from './OverviewImage';
 
 function isDynamicData(data: NodeData): data is DynamicNodeData {
   return 'isDynamic' in data && (data as DynamicNodeData).isDynamic === true;
@@ -188,8 +189,8 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {previewImageSrc && !worldOutput && (
-        <div className="model-node__preview">
-          <img
+        <div className="model-node__preview model-node__preview--overview">
+          <OverviewImage
             src={previewImageSrc}
             className={isStreamingImage ? 'model-node__preview-image--streaming' : 'model-node__preview-image'}
             alt={isStreamingImage ? 'Streaming preview' : !imageOutput && svgOutput ? 'Generated SVG' : 'Generated image'}
@@ -213,7 +214,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
       )}
 
       {previewComplete && videoOutput && typeof videoOutput.value === 'string' && (
-        <div className="model-node__preview">
+        <div className="model-node__preview model-node__preview--overview">
           <video
             src={videoOutput.value}
             controls
@@ -221,6 +222,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
             className="model-node__preview-video nodrag nowheel"
             onMouseDown={(e) => e.stopPropagation()}
           />
+          <OverviewVideoStill src={videoOutput.value} />
           <button
             type="button"
             className={`model-node__loop-toggle nodrag ${videoLoop ? 'model-node__loop-toggle--on' : ''}`}

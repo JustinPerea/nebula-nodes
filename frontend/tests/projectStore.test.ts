@@ -12,6 +12,12 @@ import { RUN_HISTORY_STORAGE_KEY } from '../src/lib/runHistory';
 import { wsClient, type ExecutionEvent } from '../src/lib/wsClient';
 import { GRAPH_PARAMS_VERSION } from '../src/lib/savedParamsUpgrades';
 
+// These tests are the person's own tab, whose zoom and pan are the project's
+// saved view (a tab without the person link saves edits only, gap 19).
+vi.mock('../src/lib/personSession', async (original) => ({
+  ...await original<typeof import('../src/lib/personSession')>(),
+  holdsPersonCredential: () => true,
+}));
 vi.mock('../src/lib/projects', async (original) => ({
   ...await original<typeof import('../src/lib/projects')>(),
   listProjects: vi.fn(), getProject: vi.fn(), saveProject: vi.fn(),

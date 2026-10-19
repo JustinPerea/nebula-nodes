@@ -8,6 +8,7 @@ import { rewriteBackendAssetUrls } from '../lib/backend';
 import { normalizeRuntimeMediaParams } from '../lib/graphFile';
 import { GRAPH_PARAMS_VERSION } from '../lib/savedParamsUpgrades';
 import { getProjectContext, setProjectContext } from '../lib/projectContext';
+import { holdsPersonCredential } from '../lib/personSession';
 import { backendParamsVersion, onParamsOutdated, reloadPage } from '../lib/paramsOutdated';
 import { clearPersistedRunHistory, loadRunHistory } from '../lib/runHistory';
 import * as api from '../lib/projects';
@@ -65,6 +66,11 @@ let saveQueue: Promise<unknown> = Promise.resolve();
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSaved = '';
 let applying = false;
+/** The view the open project was saved with. A tab that isn't connected as
+ * the person (an agent's browser) keeps its own zoom and pan while open but
+ * saves this one, so looking around there is never an unsaved edit; the
+ * backend keeps the stored view for its saves anyway (design-canvas gap 19). */
+let projectViewport: ProjectSnapshot['viewport'] = null;
 let pendingRecovery: { sourceProjectId: string; snapshot: ProjectSnapshot; recoveryId: string; paramsVersion: number } | null = null;
 /** The one-time param upgrades the canvas had when it was loaded. Every
  * project the backend returns is already upgraded to the backend's version,
@@ -108,7 +114,7 @@ export function captureProjectSnapshot(): ProjectSnapshot {
       type: edge.type, data: edge.data,
     })),
     runHistory: graph.runHistory,
-    viewport: ui.canvasViewport,
+    viewport: holdsPersonCredential() ? ui.canvasViewport : projectViewport,
     createSessionId: ui.createSessionId,
     createDraft: draft ?? null,
   };
@@ -148,7 +154,8 @@ function applyProject(project: SavedProject, revision: string, bootstrap = false
         ...state.drafts, [sessionId]: structuredClone(draft),
       } }));
     }
-    useUIStore.getState().resetPanelsForFreshCanvas();
+    useUIStore.getState().resetPanelsForFreshCanvas({ canvasEmpty: snapshot.nodes.length === 0 });
+    projectViewport = snapshot.viewport ?? null;
     useUIStore.setState({ viewMode: 'canvas', createSessionId: sessionId, canvasViewport: snapshot.viewport,
       commonsReturnView: 'canvas' });
     useProjectStore.setState({
@@ -536,6 +543,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           setProjectContext(null);
           useGraphStore.getState().loadProjectGraph([], [], []);
           useUIStore.getState().resetPanelsForFreshCanvas();
+          projectViewport = null;
           useUIStore.setState({ createSessionId: null, canvasViewport: null });
         } finally { applying = false; }
         lastSaved = '';
@@ -628,6 +636,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         const saved = await api.saveProject(context.id, snapshot, context.revision);
         if (getProjectContext()?.revision !== context.revision) return false;
         lastSaved = fingerprint;
+        if (holdsPersonCredential()) projectViewport = snapshot.viewport ?? null;
         updateSummary(saved);
         const dirty = JSON.stringify(captureProjectSnapshot()) !== lastSaved;
         set({ dirty, saveStatus: dirty ? 'unsaved' : 'saved' });
