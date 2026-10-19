@@ -1155,6 +1155,14 @@ nebula moodboard list                      # boards for every project, plus the 
 nebula moodboard delete <board>
 ```
 
+- "Project" is a canvas project, the same one the app's Project tabs show:
+  `--project current` (`project_id="current"`) is the one open on the canvas,
+  otherwise an id from `nebula projects` / `list_projects`. An id that isn't a
+  canvas project, or one in Recently deleted, is refused (422). Without it a
+  board is Global, for every project. A node that names a board from another
+  project still shows, runs and opens it there; the board stays in its own
+  project. Older boards filed under the backend's folder name were moved once
+  at startup (contract 07, section 1.8).
 - A board is named by its id or exact name; an image by its number or id
   from `show`. `--json` prints the board as JSON (the MCP tools return the
   same shape).

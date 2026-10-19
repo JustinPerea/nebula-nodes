@@ -18,7 +18,7 @@ from services.output import OUTPUT_ROOT
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, canvas_project):
     import main as main_module
 
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
@@ -82,8 +82,8 @@ def test_update_refuses_fields_it_does_not_know(client):
     assert response.json()["detail"][0]["loc"][-1] == "imageUrls"
 
 
-def test_the_put_moodboard_studio_sends_round_trips_and_clears_the_analysis(client):
-    project_id = "project-one"
+def test_the_put_moodboard_studio_sends_round_trips_and_clears_the_analysis(client, canvas_project):
+    project_id = canvas_project
     board = _create(client, projectId=project_id)
     analyzed = client.post(f"/api/moodboards/{board['id']}/analyze").json()
     assert analyzed["analysis"]["palette"]
@@ -108,8 +108,8 @@ def test_a_put_without_analysis_keeps_it(client):
     assert renamed["analysis"] == analyzed["analysis"]
 
 
-def test_a_board_cannot_move_to_another_project(client):
-    board = _create(client, projectId="project-one")
+def test_a_board_cannot_move_to_another_project(client, canvas_project):
+    board = _create(client, projectId=canvas_project)
 
     response = client.put(f"/api/moodboards/{board['id']}", json={"name": "Moved", "projectId": "project-two"})
 

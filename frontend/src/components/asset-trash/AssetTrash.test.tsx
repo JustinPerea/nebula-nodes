@@ -21,6 +21,7 @@ vi.mock('../../lib/wsClient', () => ({
 import { RecentlyDeletedAssets, UndoDeleteToast, UNDO_VISIBLE_MS } from './AssetTrash';
 import { RestoreTrashedAsset } from '../nodes/RestoreTrashedAsset';
 import { useStoredAssetsStore } from '../../store/storedAssetsStore';
+import { publishOpenProject } from '../../lib/currentProject';
 
 const board = (overrides: Partial<TrashedItem> = {}): TrashedItem => ({
   kind: 'moodboard', id: 'b1', name: 'Warm editorial', thumbnail: '/api/outputs/a.png', projectId: null,
@@ -33,6 +34,7 @@ beforeEach(() => {
   trash.restoreTrashed.mockResolvedValue(undefined);
   trash.purgeTrashed.mockResolvedValue(undefined);
   trash.emptyTrash.mockResolvedValue(undefined);
+  publishOpenProject({ id: 'p1', name: 'Project' });
 });
 
 afterEach(() => { vi.useRealTimers(); });
@@ -112,7 +114,7 @@ describe('RecentlyDeletedAssets', () => {
     expect(screen.getByRole('group', { name: 'Delete all 2 characters for good?' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Delete all' }));
     await waitFor(() => expect(trash.emptyTrash).toHaveBeenCalledWith(
-      { kind: 'character', scope: 'project' },
+      { kind: 'character', scope: 'project', projectId: 'p1' },
       [expect.objectContaining({ id: 'b1' }), expect.objectContaining({ id: 'b2' })],
     ));
   });

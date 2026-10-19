@@ -12,6 +12,8 @@ import { NEW_CHARACTER_SENTINEL, NEW_MOODBOARD_SENTINEL } from '../../lib/studio
 import { findAvailableNodePosition } from '../../lib/nodePlacement';
 import type { Character, Moodboard } from '../../types';
 import { ScrollFade } from '../ScrollFade';
+import { NO_PROJECT_OPEN, useCurrentProject } from '../../lib/currentProject';
+import { wsClient } from '../../lib/wsClient';
 import '../../styles/panels.css';
 import '../../styles/character-studio.css';
 import '../../styles/moodboard-studio.css';
@@ -52,29 +54,47 @@ export function AssetsPanel() {
   // The selected item, as "<tab>:<id>", so it belongs to one tab.
   const [selected, setSelected] = useState<string | null>(null);
 
-  const [characters, setCharacters] = useState<Character[]>([]);
-  const [moodboards, setMoodboards] = useState<Moodboard[]>([]);
-  const [presets, setPresets] = useState<Preset[]>([]);
+  // The Project tab is the canvas project open now (lib/currentProject):
+  // switching projects lists the new one's assets.
+  const project = useCurrentProject();
+  const projectId = scope === 'project' ? project?.id ?? null : null;
+  const noProject = scope === 'project' && !projectId;
+  // Each list remembers the tab, scope and project it was fetched for, so a
+  // list from before a switch is never shown under the new one.
+  const listKey = `${scope}:${projectId ?? ''}`;
+  const [characterList, setCharacters] = useState<{ for: string; items: Character[] }>({ for: '', items: [] });
+  const [moodboardList, setMoodboards] = useState<{ for: string; items: Moodboard[] }>({ for: '', items: [] });
+  const [presetList, setPresets] = useState<{ for: string; items: Preset[] }>({ for: '', items: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [relistKey, setRelistKey] = useState(0);
+
+  // A board or Character saved or deleted elsewhere (the Studio, an agent,
+  // the CLI) shows up without reopening the panel.
+  useEffect(() => wsClient.subscribe((event) => {
+    if (event.type === 'storedAssetChanged') setRelistKey((value) => value + 1);
+  }), []);
 
   useEffect(() => {
+    // No project open: nothing to fetch; the list says to open one.
+    if (noProject) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading gate before async fetch; not derived state, does not cascade
     setLoading(true);
     setError(null);
-    // A list that arrives after the tab or scope changed is dropped: shown
-    // under the new tab, its items would open with the wrong scope.
+    // A list that arrives after the tab, scope or project changed is dropped:
+    // shown under the new one, its items would open with the wrong scope.
+    const id = projectId ?? undefined;
     const load = async () => {
       if (tab === 'characters') {
-        const list = await fetchCharacters(scope);
-        if (!cancelled) setCharacters(list);
+        const list = await fetchCharacters(scope, id);
+        if (!cancelled) setCharacters({ for: listKey, items: list });
       } else if (tab === 'moodboards') {
-        const list = await fetchMoodboards(scope);
-        if (!cancelled) setMoodboards(list);
+        const list = await fetchMoodboards(scope, id);
+        if (!cancelled) setMoodboards({ for: listKey, items: list });
       } else {
-        const list = await fetchPresets(scope);
-        if (!cancelled) setPresets(list);
+        const list = await fetchPresets(scope, id);
+        if (!cancelled) setPresets({ for: listKey, items: list });
       }
     };
     load()
@@ -87,8 +107,18 @@ export function AssetsPanel() {
     return () => {
       cancelled = true;
     };
-  }, [tab, scope]);
+  }, [tab, scope, projectId, noProject, listKey, relistKey]);
 
+  const characters = useMemo(() => (characterList.for === listKey && !noProject ? characterList.items : []),
+    [characterList, listKey, noProject]);
+  const moodboards = useMemo(() => (moodboardList.for === listKey && !noProject ? moodboardList.items : []),
+    [moodboardList, listKey, noProject]);
+  const presets = useMemo(() => (presetList.for === listKey && !noProject ? presetList.items : []),
+    [presetList, listKey, noProject]);
+  // "Loading" only until this tab's list arrives; a refresh keeps it showing.
+  const shownFor = { characters: characterList.for, moodboards: moodboardList.for, styles: presetList.for }[tab];
+  const busy = !noProject && loading && shownFor !== listKey;
+  const failed = noProject ? null : error;
   const q = query.trim().toLowerCase();
   const filteredCharacters = useMemo(
     () => characters.filter((c) => !q || (c.name || '').toLowerCase().includes(q)),
@@ -122,6 +152,7 @@ export function AssetsPanel() {
   };
 
   const handleNew = () => {
+    if (noProject) return;
     if (tab === 'characters') enterCharacterEditor(NEW_CHARACTER_SENTINEL, scope);
     else if (tab === 'moodboards') enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, scope);
   };
@@ -169,6 +200,7 @@ export function AssetsPanel() {
             role="tab"
             aria-selected={scope === 'project'}
             className={`character-palette__scope-tab ${scope === 'project' ? 'character-palette__scope-tab--active' : ''}`}
+            title={project ? `Assets in ${project.name}` : NO_PROJECT_OPEN}
             onClick={() => setScope('project')}
           >
             Project
@@ -192,18 +224,24 @@ export function AssetsPanel() {
         />
 
         {tab !== 'styles' && (
-          <button type="button" className="character-palette__new" onClick={handleNew}>
+          <button type="button" className="character-palette__new" onClick={handleNew} disabled={noProject}
+            title={noProject ? NO_PROJECT_OPEN : undefined}>
             + New {tab === 'characters' ? 'Character' : 'Moodboard'}
           </button>
         )}
 
         <ScrollFade className="character-palette__list">
-          {loading && <div className="character-palette__empty">Loading…</div>}
-          {error && !loading && (
-            <div className="character-palette__empty character-palette__empty--error">{error}</div>
+          {noProject && (
+            <div className="character-palette__empty">
+              Open a project to see its {TABS.find((t) => t.id === tab)?.label ?? 'assets'}.
+            </div>
+          )}
+          {busy && <div className="character-palette__empty">Loading…</div>}
+          {failed && !busy && (
+            <div className="character-palette__empty character-palette__empty--error">{failed}</div>
           )}
 
-          {!loading && !error && tab === 'characters' && (
+          {!noProject && !busy && !failed && tab === 'characters' && (
             filteredCharacters.length === 0 ? (
               <div className="character-palette__empty">No Characters{q ? ' match' : ' yet'}.</div>
             ) : (
@@ -225,7 +263,7 @@ export function AssetsPanel() {
             )
           )}
 
-          {!loading && !error && tab === 'moodboards' && (
+          {!noProject && !busy && !failed && tab === 'moodboards' && (
             filteredMoodboards.length === 0 ? (
               <div className="character-palette__empty">No Moodboards{q ? ' match' : ' yet'}.</div>
             ) : (
@@ -248,7 +286,7 @@ export function AssetsPanel() {
             )
           )}
 
-          {!loading && !error && tab === 'styles' && (
+          {!noProject && !busy && !failed && tab === 'styles' && (
             filteredPresets.length === 0 ? (
               <div className="character-palette__empty">No Styles{q ? ' match' : ' yet'}.</div>
             ) : (

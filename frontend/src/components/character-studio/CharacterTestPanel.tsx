@@ -3,6 +3,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useGraphStore } from '../../store/graphStore';
 import type { CharacterDraft } from './CharacterStudioView';
 import { assetStudioDraftKey, resolveAssetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
+import { currentProject } from '../../lib/currentProject';
 
 interface CharacterTestPanelProps {
   /** The saved Character id, or null while the draft is still unsaved. */
@@ -42,8 +43,9 @@ export function CharacterTestPanel({
     if (!characterId || !canTest || pending) return;
     const selected = useUIStore.getState();
     const drafts = useAssetStudioDraftStore.getState();
+    const projectId = currentProject()?.id ?? null;
     const key = resolveAssetStudioDraftKey(drafts, assetStudioDraftKey('character', selected.characterEditorScope,
-      selected.characterEditorId, drafts.projectId));
+      selected.characterEditorId, projectId));
     const epoch = drafts.entries[key]?.epoch;
     setPending(true);
     try {
@@ -59,7 +61,7 @@ export function CharacterTestPanel({
       if (nodeId && mounted.current && current.viewMode === 'character-editor'
         && current.characterEditorId === selected.characterEditorId
         && current.characterEditorScope === selected.characterEditorScope
-        && (current.characterEditorScope !== 'project' || currentDrafts.projectId === drafts.projectId)
+        && (current.characterEditorScope !== 'project' || (currentProject()?.id ?? null) === projectId)
         && currentDrafts.entries[key]?.epoch === epoch) exitCharacterEditor();
     } catch (err) {
       console.error('[character] test-on-canvas drop failed:', err);

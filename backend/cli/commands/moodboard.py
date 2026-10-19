@@ -272,7 +272,8 @@ def add_parser(sub) -> None:
     msub = moodboard_p.add_subparsers(dest="moodboard_cmd", required=True)
 
     list_p = msub.add_parser("list", help="List boards: those for every project, plus the open project's")
-    list_p.add_argument("--project", help="A project id (or 'current') instead of the open project")
+    list_p.add_argument("--project", help="A canvas project id (from `nebula projects`) or 'current' "
+                                          "instead of the open project")
     list_p.add_argument("--global", dest="global_only", action="store_true",
                         help="Only boards that belong to no project")
     list_p.add_argument("--json", action="store_true", help="Print JSON")
@@ -285,7 +286,8 @@ def add_parser(sub) -> None:
     new_p = msub.add_parser("new", help="Make a board from files, folders and links")
     new_p.add_argument("name", help="Board name")
     new_p.add_argument("sources", nargs="*", metavar="image", help="Files, folders, http(s) links or Nebula outputs")
-    new_p.add_argument("--project", help="Keep the board in this project ('current' = the open one). "
+    new_p.add_argument("--project", help="Keep the board in this canvas project: 'current' = the one open "
+                                         "on the canvas, or an id from `nebula projects`. "
                                          "Default: no project, so every project can use it")
     new_p.add_argument("--mode", choices=boards.MODES, default="look",
                        help="look (style), world (setting) or subject (default: look)")

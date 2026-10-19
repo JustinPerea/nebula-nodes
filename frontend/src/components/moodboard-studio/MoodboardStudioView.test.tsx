@@ -13,7 +13,6 @@ const api = vi.hoisted(() => ({
   updateMoodboard: vi.fn(),
 }));
 vi.mock('../../lib/api', () => api);
-vi.mock('../../lib/currentProject', () => ({ getCurrentProject: () => Promise.resolve({ id: 'p1', name: 'Project' }) }));
 vi.mock('../../lib/backend', () => ({ apiFetch: vi.fn(), backendAssetUrlSync: (url: string) => url }));
 vi.mock('../../lib/wsClient', () => ({ wsClient: { subscribe: () => () => {}, connect: () => {}, send: () => {} } }));
 vi.mock('../WorkspaceHeader', () => ({
@@ -26,9 +25,11 @@ vi.mock('../../hooks/useAssetDelete', () => ({
 }));
 
 import { MoodboardStudioView } from './MoodboardStudioView';
-import { emptyRailMessage } from './railEmpty';
+import { emptyRailMessage } from '../../lib/assetHome';
+import { setOpenProject } from '../../test/projectState';
 import { useUIStore } from '../../store/uiStore';
-import { useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
+import { assetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
+import { NEW_MOODBOARD_SENTINEL } from '../../lib/studioSentinels';
 
 const analysis = { version: 2, sourceHash: 'h1', summary: 'Warm.', palette: ['#e8593c'], accents: [] };
 
@@ -51,12 +52,14 @@ beforeEach(() => {
   boards.p1 = board({ id: 'p1b', name: 'Project board', projectId: 'p1' });
   boards.p1b = boards.p1;
   api.fetchMoodboard.mockImplementation(async (id: string) => boards[id] ?? null);
-  api.fetchMoodboards.mockImplementation(async (scope: string) => Object.values(boards)
+  api.fetchMoodboards.mockImplementation(async (scope: string, projectId?: string) => Object.values(boards)
     .filter((item, index, all) => all.indexOf(item) === index)
-    .filter((item) => (scope === 'project' ? Boolean(item.projectId) : !item.projectId)));
+    .filter((item) => (scope === 'project' ? item.projectId === projectId : !item.projectId)));
+  api.createMoodboard.mockImplementation(async (body: Partial<Moodboard>) => ({ ...board(), ...body, id: 'made1' }));
   api.updateMoodboard.mockImplementation(async (id: string, body: Partial<Moodboard>) => ({ ...boards[id], ...body }));
   api.lookupStoredAsset.mockResolvedValue({ status: 'missing' });
-  useAssetStudioDraftStore.setState({ entries: {}, aliases: {}, projectId: null });
+  useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
+  setOpenProject(['p1', 'Project'], [['pA', 'Shoot A']]);
 });
 
 async function openStudio(id: string, scope: 'global' | 'project', name: string) {
@@ -92,8 +95,10 @@ describe('Moodboard Studio rail', () => {
     await openStudio('g1', 'global', 'Global board');
     fireEvent.click(tab('Project'));
     expect(await screen.findByText('No project moodboards. This board is Global.')).toBeTruthy();
-    expect(emptyRailMessage('global', 'project')).toBe('No global moodboards. This board is in this project.');
-    expect(emptyRailMessage('project', null)).toBe('No project moodboards yet.');
+    expect(emptyRailMessage('moodboard', 'global', { scope: 'project', here: true }))
+      .toBe('No global moodboards. This board is in this project.');
+    expect(emptyRailMessage('moodboard', 'project', null)).toBe('No project moodboards yet.');
+    expect(emptyRailMessage('moodboard', 'project', null, false)).toBe('Open a project to see its moodboards.');
   });
 });
 
@@ -114,5 +119,65 @@ describe('Moodboard Studio private note', () => {
     await waitFor(() => expect(api.updateMoodboard.mock.calls.at(-1)![1].images[0].notes).toBe('the orange'),
       { timeout: 3000 });
     expect(api.updateMoodboard.mock.calls.at(-1)![1].analysis).toBeNull();
+  });
+});
+
+describe('Moodboard Studio and the open canvas project', () => {
+  it("opens another project's board (a pasted node, a link) and says where it lives; saving keeps it there", async () => {
+    boards.pa1 = board({ id: 'pa1', name: 'Shoot A board', projectId: 'pA' });
+    await openStudio('pa1', 'global', 'Shoot A board');
+
+    await waitFor(() => expect(tab('Project').getAttribute('aria-selected')).toBe('true'));
+    expect(await screen.findByText('This board is in Shoot A.')).toBeTruthy();
+    // Its own project's list isn't this one: no "lost board" reading.
+    expect(api.fetchMoodboards).toHaveBeenCalledWith('project', 'p1');
+
+    fireEvent.change(screen.getByDisplayValue('Shoot A board'), { target: { value: 'Shoot A board, edited' } });
+    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    const [id, body] = api.updateMoodboard.mock.calls.at(-1)!;
+    expect(id).toBe('pa1');
+    expect(body.projectId).toBe('pA');
+    expect(api.createMoodboard).not.toHaveBeenCalled();
+  });
+
+  it('says "another project" when that project is not known here', async () => {
+    boards.px = board({ id: 'px', name: 'Far board', projectId: 'pX' });
+    await openStudio('px', 'project', 'Far board');
+    expect(await screen.findByText('This board is in another project.')).toBeTruthy();
+  });
+
+  it('with no project open, the Project tab says to open one and New is off', async () => {
+    setOpenProject(null);
+    await openStudio('g1', 'global', 'Global board');
+    fireEvent.click(tab('Project'));
+    expect(await screen.findByText('Open a project to see its moodboards.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: '+ New Moodboard' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(api.fetchMoodboards).not.toHaveBeenCalledWith('project', expect.anything());
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('a new project draft is filed under the project it was started in, never the one opened after', async () => {
+    act(() => { useUIStore.getState().enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, 'project'); });
+    render(<MoodboardStudioView />);
+    await screen.findByDisplayValue('Untitled Moodboard');
+    const p1Key = assetStudioDraftKey('moodboard', 'project', NEW_MOODBOARD_SENTINEL, 'p1');
+    // Name it and add an image, then an agent opens another project before the autosave.
+    act(() => {
+      useAssetStudioDraftStore.getState().edit(p1Key, (draft) => ({ ...(draft as object), name: 'For p1',
+        images: [{ id: 'i9', url: '/api/outputs/z.png', weight: 1, notes: '', privateNote: '', excluded: false }] }));
+    });
+    act(() => { setOpenProject(['p2', 'Second'], [['p1', 'Project']]); });
+
+    // The Studio shows p2's own new draft; p1's is kept, not saved into p2.
+    await screen.findByDisplayValue('Untitled Moodboard');
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    expect(api.createMoodboard).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.fetchMoodboards).toHaveBeenCalledWith('project', 'p2'));
+
+    // Back in p1, it saves there.
+    act(() => { setOpenProject(['p1', 'Project'], [['p2', 'Second']]); });
+    expect(await screen.findByDisplayValue('For p1')).toBeTruthy();
+    await waitFor(() => expect(api.createMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    expect(api.createMoodboard.mock.calls.every(([body]) => body.projectId === 'p1')).toBe(true);
   });
 });

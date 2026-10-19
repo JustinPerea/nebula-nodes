@@ -10,7 +10,9 @@ import { UndoDeleteToast } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import type { Character } from '../../types';
 import { NEW_CHARACTER_SENTINEL } from '../../lib/studioSentinels';
-import { getCurrentProject } from '../../lib/currentProject';
+import { NO_PROJECT_OPEN, currentProject } from '../../lib/currentProject';
+import { useProjectName } from '../../hooks/useProjectName';
+import { assetHome, type AssetHome } from '../../lib/assetHome';
 import type { AssetScope } from '../../store/uiStore';
 import { useAssetStudioDraft } from '../../hooks/useAssetStudioDraft';
 import { assetStudioDraftKey, useAssetStudioDraftStore } from '../../store/assetStudioDraftStore';
@@ -93,7 +95,7 @@ export function CharacterStudioView() {
     const ui = useUIStore.getState();
     return mounted.current && ui.viewMode === 'character-editor' && ui.characterEditorId === characterEditorId
       && ui.characterEditorScope === characterEditorScope
-      && projectReady && (characterEditorScope !== 'project' || useAssetStudioDraftStore.getState().projectId === projectId)
+      && projectReady && (characterEditorScope !== 'project' || (currentProject()?.id ?? null) === projectId)
       && useAssetStudioDraftStore.getState().entries[key]?.epoch === epoch;
   }, [characterEditorId, characterEditorScope, key, epoch, projectReady, projectId]);
 
@@ -185,19 +187,17 @@ export function CharacterStudioView() {
     enterCharacterEditor(id, scope);
   };
 
-  const handleNewCharacter = async (scope: AssetScope) => {
+  const handleNewCharacter = (scope: AssetScope) => {
     if (!isCurrent()) return;
-    try {
-      const currentProject = scope === 'project' ? await getCurrentProject() : null;
-      if (!isCurrent()) return;
-      const store = useAssetStudioDraftStore.getState();
-      if (currentProject) store.setProjectId(currentProject.id);
-      store.reset(assetStudioDraftKey('character', scope, NEW_CHARACTER_SENTINEL, currentProject?.id), emptyDraft());
-      setRailScope(scope);
-      enterCharacterEditor(NEW_CHARACTER_SENTINEL, scope);
-    } catch (err) {
-      if (isCurrent()) patch({ saveError: err instanceof Error ? err.message : 'Failed to resolve project.' });
+    const project = scope === 'project' ? currentProject() : null;
+    if (scope === 'project' && !project) {
+      patch({ saveError: NO_PROJECT_OPEN });
+      return;
     }
+    useAssetStudioDraftStore.getState().reset(
+      assetStudioDraftKey('character', scope, NEW_CHARACTER_SENTINEL, project?.id), emptyDraft());
+    setRailScope(scope);
+    enterCharacterEditor(NEW_CHARACTER_SENTINEL, scope);
   };
 
   const belowMinViews = draft.referenceViews.length < MIN_REFERENCE_VIEWS;
@@ -219,8 +219,9 @@ export function CharacterStudioView() {
     // Forget the session draft, so reopening it after a restore loads what was saved.
     store.reset(deletedKey, emptyDraft());
     if (useUIStore.getState().viewMode !== 'character-editor') return;
-    store.reset(assetStudioDraftKey('character', scope, NEW_CHARACTER_SENTINEL, store.projectId),
-      scope === 'project' && store.projectId ? { ...emptyDraft(), projectId: store.projectId } : emptyDraft());
+    const openProjectId = currentProject()?.id ?? null;
+    store.reset(assetStudioDraftKey('character', scope, NEW_CHARACTER_SENTINEL, openProjectId),
+      scope === 'project' && openProjectId ? { ...emptyDraft(), projectId: openProjectId } : emptyDraft());
     setRailScope(scope);
     enterCharacterEditor(NEW_CHARACTER_SENTINEL, scope);
   };
@@ -230,6 +231,15 @@ export function CharacterStudioView() {
     setRailScope(asset.scope);
     enterCharacterEditor(asset.id, asset.scope);
   };
+
+  // Where the open Character lives, once it's saved: its own projectId says,
+  // whatever scope it was opened with (a node's Open button guesses, and a
+  // draft kept from an earlier visit loads without a fetch). The rail opens
+  // on that scope, and says so when it's another project's Character.
+  const characterProjectName = useProjectName(draft.projectId);
+  const characterHome: AssetHome | null = loaded && savedId
+    ? assetHome(draft.projectId, projectId, characterProjectName) : null;
+  const shownRailScope = characterHome?.scope ?? railScope;
 
   return (
     <div className="character-studio-view">
@@ -243,12 +253,14 @@ export function CharacterStudioView() {
 
       <aside className="character-studio-view__rail">
         <CharacterLibraryRail
-          key={railScope}
+          key={shownRailScope}
           activeId={savedId ?? (isDraftId ? NEW_CHARACTER_SENTINEL : characterEditorId)}
-          initialScope={railScope}
+          initialScope={shownRailScope}
+          characterHome={characterHome}
+          projectId={projectId}
           refreshKey={deleting.refreshKey}
           onSelect={handleSelectCharacter}
-          onNew={(scope) => { void handleNewCharacter(scope); }}
+          onNew={handleNewCharacter}
         />
       </aside>
 

@@ -44,6 +44,10 @@ os.environ["NEBULA_SETTINGS_PATH"] = str(_TEST_SETTINGS_PATH)
 _TEST_COMMONS_DIR = Path(tempfile.mkdtemp(prefix="nebula-test-commons-"))
 os.environ["NEBULA_COMMONS_ROOT"] = str(_TEST_COMMONS_DIR)
 os.environ["NEBULA_COMMONS_NO_STARTUP_SCAN"] = "1"
+# The one-time project re-home (services/asset_project_rehome.py) would move
+# other tests' boards out of made-up project folders when a TestClient starts
+# the app; tests/test_asset_project_rehome.py runs it directly.
+os.environ["NEBULA_NO_ASSET_REHOME"] = "1"
 # Ordinary tests exercise the released default: Commons remains inactive.
 os.environ.pop("NEBULA_COMMONS_ENABLED", None)
 
@@ -81,6 +85,25 @@ def isolated_commons_opt_in(request, monkeypatch):
     }
     if (name.startswith("test_commons_") and not controls_activation) or name == "test_agent_workspace_authority.py":
         monkeypatch.setenv("NEBULA_COMMONS_ENABLED", "1")
+
+
+@pytest.fixture
+def canvas_project(tmp_path, monkeypatch) -> str:
+    """The id of a real canvas project, in a project store of this test's own
+    (main.project_store). A new project Character, Moodboard or Style must name
+    one (main._require_canvas_project). It is open on the canvas, as the
+    project "current" means."""
+    import main
+    from services.project_store import ProjectStore, make_project
+
+    store = ProjectStore(tmp_path / "canvas-projects")
+    with store.transaction() as catalog:
+        project = make_project("Test project")
+        catalog["projects"][project["id"]] = project
+        catalog["activeProjectId"] = project["id"]
+        store.commit(catalog)
+    monkeypatch.setattr(main, "project_store", store)
+    return project["id"]
 
 
 @pytest.fixture

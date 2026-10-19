@@ -176,8 +176,14 @@ nebula moodboard delete <board>
 - Changing images, notes, mode or strength clears the analysis: run
   `analyze` again before you use the board. A rename and the brief fields
   keep it.
-- Without `--project` a board belongs to no project, so every project can
-  use it.
+- Without `--project` a board is Global: it belongs to no project, so every
+  project can use it. `--project current` keeps it in the project open on the
+  canvas (the `*` in `nebula projects`), which is the project the person's
+  Project tab shows; `--project <id>` takes an id from `nebula projects`. An
+  id that isn't a project, or one in Recently deleted, is refused.
+- A Moodboard (or Character) node names its board by id, so it works in any
+  project: copied into another project it still shows the board, runs, and
+  opens it, and the board stays in the project it lives in.
 - `set --json` returns `previous`, the settings before your change
   (including Direction, Avoid, pinned colours and your own hand-written
   brief). To undo it, save that output and run

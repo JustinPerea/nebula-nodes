@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search, Bookmark } from 'lucide-react';
 import { fetchPresets, type Preset } from '../../lib/createPresets';
 import { PresetCard } from './PresetCard';
+import { useCurrentProjectId } from '../../lib/currentProject';
 
 export interface PresetLibraryProps {
   onApply: (preset: Preset) => void;
@@ -16,13 +17,17 @@ export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey, savi
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('All');
 
+  // This project's styles are the open canvas project's (lib/currentProject);
+  // with none open, only the global ones show.
+  const projectId = useCurrentProjectId();
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchPresets('global'), fetchPresets('project')])
-      .then(([g, p]) => { if (!cancelled) setPresets([...p, ...g]); })
-      .catch(() => { if (!cancelled) setPresets([]); });
+    Promise.all([
+      fetchPresets('global').catch(() => [] as Preset[]),
+      projectId ? fetchPresets('project', projectId).catch(() => [] as Preset[]) : Promise.resolve([] as Preset[]),
+    ]).then(([g, p]) => { if (!cancelled) setPresets([...p, ...g]); });
     return () => { cancelled = true; };
-  }, [reloadKey]);
+  }, [reloadKey, projectId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };

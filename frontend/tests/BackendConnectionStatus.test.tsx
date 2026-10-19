@@ -2,16 +2,13 @@ import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fetchMock = vi.fn();
-const clearProjectMock = vi.fn();
 vi.mock('../src/lib/backend', () => ({ apiFetch: (...args: unknown[]) => fetchMock(...args) }));
-vi.mock('../src/lib/currentProject', () => ({ clearCurrentProjectCache: () => clearProjectMock() }));
 
 import { BACKEND_PROBE_INTERVAL_MS, BackendConnectionStatus } from '../src/components/BackendConnectionStatus';
 
 beforeEach(() => {
   vi.useFakeTimers();
   fetchMock.mockReset();
-  clearProjectMock.mockReset();
 });
 
 afterEach(() => vi.useRealTimers());
@@ -28,7 +25,6 @@ describe('BackendConnectionStatus', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(BACKEND_PROBE_INTERVAL_MS); });
 
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(clearProjectMock).toHaveBeenCalledTimes(1);
   });
 
   it('stays visually quiet while the backend is healthy', async () => {

@@ -11,6 +11,7 @@ vi.mock('../../src/lib/createPresets', async (original) => ({ ...await original<
 
 import { AssetsPanel } from '../../src/components/panels/AssetsPanel';
 import { useUIStore } from '../../src/store/uiStore';
+import { publishOpenProject } from '../../src/lib/currentProject';
 
 const initialUI = useUIStore.getState();
 const board = (id: string, name: string, projectId?: string): Moodboard => ({ id, name, version: 1,
@@ -28,6 +29,7 @@ beforeEach(() => {
   for (const mock of Object.values(api)) mock.mockReset();
   api.characters.mockResolvedValue([]);
   api.presets.mockResolvedValue([]);
+  publishOpenProject({ id: 'project-one', name: 'First project' });
 });
 afterEach(() => { cleanup(); useUIStore.setState(initialUI, true); });
 

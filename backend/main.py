@@ -173,7 +173,6 @@ from services.local_guard import host_allowed
 from services import run_approvals as approvals
 from services.run_approvals import RunApprovals
 from services.zoom_manifest import init_manifest, append_entry
-from services.project_context import get_current_project
 from routes.openrouter_proxy import router as openrouter_router
 from routes.replicate_proxy import router as replicate_router
 from routes.fal_proxy import router as fal_router
@@ -2308,6 +2307,34 @@ async def _moodboard_brief_fields_startup() -> None:
         await asyncio.to_thread(migrate_brief_fields)
     except Exception as exc:  # never block startup; boards still migrate in memory on read
         print(f"[main] moodboard brief migration skipped: {type(exc).__name__}: {exc}", flush=True)
+
+
+@app.on_event("startup")
+async def _asset_project_rehome_startup() -> None:
+    """Once: move project Characters, Moodboards and Styles saved under the
+    old install-wide project id into canvas projects or Global, backing each
+    file up first (services/asset_project_rehome.py). After the brief-fields
+    migration, so both see the same files."""
+    from services.asset_project_rehome import rehome_legacy_assets
+
+    if os.environ.get("NEBULA_NO_ASSET_REHOME") == "1":  # the test suite (tests/conftest.py)
+        return
+
+    def read_catalog() -> dict[str, Any] | None:
+        return project_store.read() if project_store.path.exists() else None
+
+    try:
+        report = await asyncio.to_thread(
+            rehome_legacy_assets, read_catalog, _STATE_DIR, live_nodes=list(cli_graph.nodes.values()))
+    except Exception as exc:  # never block startup; it runs again next start
+        print(f"[main] project asset re-home skipped: {type(exc).__name__}: {exc}", flush=True)
+        return
+    if report["status"] == "already done":
+        return
+    if report["moved"] or report["skipped"] or report["status"] != "done":
+        logs = ", ".join(report["logs"]) or "none"
+        print(f"[main] project asset re-home ({report['status']}): {report['moved']} moved "
+              f"({report['global']} to Global), {report['skipped']} skipped; logs: {logs}", flush=True)
 
 
 @app.on_event("startup")
@@ -4812,8 +4839,15 @@ async def release_run_approval(approval_id: str) -> dict[str, Any]:
 
 @app.get("/api/project")
 async def current_project() -> dict[str, str]:
-    """Identity for the single local project served by this backend."""
-    return get_current_project()
+    """The project open on the canvas, ``{id, name}``: what "this project"
+    means for project-scoped Characters, Moodboards and Styles, in the app,
+    the CLI and MCP alike. 404 when no project is open."""
+    catalog = project_store.read()
+    active = catalog.get("activeProjectId")
+    project = catalog["projects"].get(active) if active else None
+    if project is None:
+        raise HTTPException(status_code=404, detail="No project is open.")
+    return {"id": active, "name": str(project.get("name") or "")}
 
 
 @app.get("/api/health/providers")
@@ -10659,6 +10693,27 @@ def _validate_project_id_param(project_id: str | None) -> None:
         raise HTTPException(status_code=400, detail="invalid projectId")
 
 
+def _require_canvas_project(project_id: str | None) -> None:
+    """A new project-scoped Character, Moodboard or Style must name a canvas
+    project in the catalog (GET /api/projects), else 422. A project in
+    Recently deleted doesn't count: nothing can open it, so nothing would show
+    the asset. None or "" is Global. Lists still take any safe id."""
+    _validate_project_id_param(project_id)
+    if not project_id:
+        return
+    catalog = project_store.read()
+    if project_id in catalog["projects"]:
+        return
+    trashed = (catalog.get("trash") or {}).get(project_id)
+    if trashed is not None:
+        raise HTTPException(status_code=422, detail=(
+            f"The project “{trashed.get('name') or project_id}” is in Recently deleted. Restore it first, "
+            "or leave projectId out to save this as Global."))
+    raise HTTPException(status_code=422, detail=(
+        f"No project has the id '{project_id}'. Use the id of a project from GET /api/projects "
+        "(activeProjectId is the one open on the canvas), or leave projectId out to save this as Global."))
+
+
 async def _broadcast_stored_asset(kind: str, asset: Mapping[str, Any] | None, asset_id: str = "",
                                   *, deleted: bool = False) -> None:
     """Tell canvases a saved moodboard or character changed, so a card that
@@ -10689,7 +10744,7 @@ async def list_characters(scope: str = "global", projectId: str | None = None) -
 @app.post("/api/characters")
 async def create_character(body: CharacterCreate) -> dict:
     """Create a new Character."""
-    _validate_project_id_param(body.projectId)
+    _require_canvas_project(body.projectId)
     store = _char_store()
     try:
         character = store.create(
@@ -10764,7 +10819,7 @@ async def list_moodboards(scope: str = "global", projectId: str | None = None) -
 
 @app.post("/api/moodboards")
 async def create_moodboard(body: MoodboardCreate) -> dict:
-    _validate_project_id_param(body.projectId)
+    _require_canvas_project(body.projectId)
     store = _moodboard_store()
     try:
         moodboard = store.create(
@@ -11083,7 +11138,11 @@ async def list_presets(scope: str = "global", projectId: str | None = None) -> l
 
 @app.post("/api/presets")
 async def create_preset(body: PresetCreate) -> dict:
-    _validate_project_id_param(body.projectId)
+    # Only a project Style is filed under projectId (services/preset_store.py).
+    if body.scope == "project":
+        _require_canvas_project(body.projectId)
+    else:
+        _validate_project_id_param(body.projectId)
     # Create's "Save current" sends the version its draft is at. Main's bundle
     # (a tab open across an update) POSTs without the key, and nothing else
     # posts presets (no agent, CLI or MCP tool), so a body without it holds

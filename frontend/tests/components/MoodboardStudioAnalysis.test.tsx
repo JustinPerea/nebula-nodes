@@ -2,14 +2,14 @@ import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Moodboard, MoodboardAnalysis } from '../../src/types';
 
-const api = vi.hoisted(() => ({ boards: vi.fn(), board: vi.fn(), project: vi.fn() }));
+const api = vi.hoisted(() => ({ boards: vi.fn(), board: vi.fn() }));
 vi.mock('../../src/lib/api', async (original) => ({ ...await original<typeof import('../../src/lib/api')>(),
   fetchMoodboards: api.boards, fetchMoodboard: api.board }));
-vi.mock('../../src/lib/currentProject', () => ({ getCurrentProject: api.project }));
 
 import { MoodboardStudioView } from '../../src/components/moodboard-studio/MoodboardStudioView';
 import { useUIStore } from '../../src/store/uiStore';
 import { useAssetStudioDraftStore } from '../../src/store/assetStudioDraftStore';
+import { setOpenProject } from '../../src/test/projectState';
 
 const initialUI = useUIStore.getState();
 const analysis = (fields: Partial<MoodboardAnalysis>): MoodboardAnalysis => ({
@@ -34,11 +34,11 @@ const swatches = (label: string) => within(screen.getByRole('list', { name: labe
 
 beforeEach(() => {
   useUIStore.setState(initialUI, true);
-  useAssetStudioDraftStore.setState({ entries: {}, aliases: {}, projectId: null });
-  api.boards.mockReset(); api.board.mockReset(); api.project.mockResolvedValue({ id: 'project-one', name: 'First project' });
+  useAssetStudioDraftStore.setState({ entries: {}, aliases: {} });
+  api.boards.mockReset(); api.board.mockReset(); setOpenProject(['project-one', 'First project']);
 });
 afterEach(() => { cleanup(); useUIStore.setState(initialUI, true);
-  useAssetStudioDraftStore.setState({ entries: {}, aliases: {}, projectId: null }); });
+  useAssetStudioDraftStore.setState({ entries: {}, aliases: {} }); });
 
 describe('Moodboard Studio extraction', () => {
   it('shows accent colors apart from the palette', async () => {

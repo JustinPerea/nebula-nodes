@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { fetchCharacters, fetchMoodboards } from '../../lib/api';
 import { wsClient } from '../../lib/wsClient';
+import { useCurrentProjectId } from '../../lib/currentProject';
 import { RestoreTrashedAsset } from '../nodes/RestoreTrashedAsset';
 import { useUIStore } from '../../store/uiStore';
 import {
@@ -21,13 +22,15 @@ interface StoredAssetPickerProps {
 
 const NOUN: Record<StoredAssetKind, string> = { moodboard: 'board', character: 'character' };
 
-/** Global and this project's saved assets, by name. A scope that can't be
- *  read (no open project yet) is left out, not an error. */
-async function listAssets(kind: StoredAssetKind): Promise<StoredAssetSummary[]> {
-  const scopes = ['global', 'project'] as const;
+/** Global and the open canvas project's saved assets, by name. With no
+ *  project open (or a scope that can't be read) that list is left out, not an
+ *  error. A node already pointing at another project's asset still shows it:
+ *  the picker adds the current value (see `listed` below). */
+async function listAssets(kind: StoredAssetKind, projectId: string | null): Promise<StoredAssetSummary[]> {
+  const scopes = projectId ? (['global', 'project'] as const) : (['global'] as const);
   const lists = await Promise.all(scopes.map((scope) => (kind === 'moodboard'
-    ? fetchMoodboards(scope).then((items) => items.map(moodboardSummary))
-    : fetchCharacters(scope).then((items) => items.map(characterSummary))
+    ? fetchMoodboards(scope, projectId ?? undefined).then((items) => items.map(moodboardSummary))
+    : fetchCharacters(scope, projectId ?? undefined).then((items) => items.map(characterSummary))
   ).catch(() => [] as StoredAssetSummary[])));
   const byId = new Map<string, StoredAssetSummary>();
   for (const item of lists.flat()) byId.set(item.id, item);
@@ -43,11 +46,12 @@ export function StoredAssetPicker({ kind, label, value, onChange }: StoredAssetP
   const enterCharacterEditor = useUIStore((s) => s.enterCharacterEditor);
   const current = useStoredAsset(kind, value);
   const [options, setOptions] = useState<StoredAssetSummary[] | null>(null);
+  const projectId = useCurrentProjectId();
 
   useEffect(() => {
     let cancelled = false;
     const load = () => {
-      void listAssets(kind).then((items) => {
+      void listAssets(kind, projectId).then((items) => {
         if (!cancelled) setOptions(items);
       });
     };
@@ -60,7 +64,7 @@ export function StoredAssetPicker({ kind, label, value, onChange }: StoredAssetP
       cancelled = true;
       unsubscribe();
     };
-  }, [kind]);
+  }, [kind, projectId]);
 
   const listed = options?.some((option) => option.id === value) ?? false;
   const missing = current?.status === 'missing';

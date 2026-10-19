@@ -816,8 +816,9 @@ def _board_call(fn, *args: Any, **kwargs: Any) -> Any:
 def moodboard_list(project_id: str | None = None, ctx: Context | None = None) -> list[dict[str, Any]]:
     """List moodboards: those for every project, plus one project's own.
 
-    `project_id` defaults to the project open on the canvas; pass "none" for
-    only the boards that belong to no project. Each board comes as
+    `project_id` (a canvas project's id, or "current") defaults to the project
+    open on the canvas, as its Project tab in the app shows; pass "none" for
+    only the boards that belong to no project (Global). Each board comes as
     moodboard_get gives it: the brief fields, `brief` (what generators get),
     numbered images and its analysis (null when it changed since the last
     moodboard_analyze).
@@ -863,8 +864,9 @@ async def moodboard_create(name: str, sources: list[str] | None = None, project_
     http(s) image links, or Nebula outputs ("/api/outputs/..."). Links are
     downloaded by this server (PNG, JPEG, GIF or WebP, up to 20 MB each), then
     uploaded to Nebula. Only public web links: not this computer, its local
-    network, or ports other than 80 and 443; save such an image as a file. `project_id`: keep the board in one project
-    ("current" = the open one); by default every project can use it. `mode`:
+    network, or ports other than 80 and 443; save such an image as a file. `project_id`: keep the board in one canvas
+    project, the same "project" the Studio's and Assets panel's Project tab show ("current" = the one open on the
+    canvas; else a project id from list_projects); by default it's Global and every project can use it. `mode`:
     look, world or subject. `strength` and image weights run 0 to 1. Run
     moodboard_analyze after to get its palette and brief.
     """
