@@ -130,6 +130,21 @@ def test_leave_out_takes_a_warning_out():
     assert brief["mayClash"] == []
 
 
+def test_a_warm_direction_leaves_avoided_reds_out():
+    brief = compose(gm_board(direction="Warm evening light.", avoid=["red, orange or pink flowers"],
+                             pinnedColors={"include": [], "exclude": []}))
+    assert sorted(hexes(brief["leftOut"])) == sorted([BRICK, SALMON, RUST])
+    for hex_value in (BRICK, SALMON, RUST):
+        assert hex_value not in brief["styleBrief"]
+
+
+def test_no_people_keeps_the_red_flowers_and_blue_sky_the_direction_asks_for():
+    brief = compose(gm_board(direction="No people, red flowers and a blue sky.", avoid=[],
+                             pinnedColors={"include": [], "exclude": []}))
+    assert brief["leftOut"] == [] and brief["mayClash"] == []
+    assert BRICK in brief["styleBrief"] and SALMON in brief["styleBrief"] and BLUE in brief["styleBrief"]
+
+
 # -- the advanced options --------------------------------------------------------
 
 def test_every_clash_mode_is_known():
@@ -255,6 +270,41 @@ def test_reading_an_old_board_writes_nothing(tmp_path, monkeypatch):
     assert moodboard_brief.with_brief(board)["brief"]["leftOut"]
     assert (path.read_bytes(), path.stat().st_mtime_ns) == before
     assert "colorCheck" not in json.loads(path.read_text())
+
+
+def test_startup_saves_the_check_on_boards_saved_before_it(tmp_path, monkeypatch):
+    """An old board gets its check once at startup, so generations and reads
+    stop running it; running again writes nothing."""
+    import asyncio
+
+    import main as main_module
+    from services import moodboard_colour_words
+
+    monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
+    folder = tmp_path / "moodboards" / "_global"
+    folder.mkdir(parents=True)
+    path = folder / "gmtestboard1.json"
+    path.write_text(json.dumps(gm_board()), encoding="utf-8")
+    trash = tmp_path / "moodboards" / ".trash"
+    trash.mkdir()
+    (trash / "gmtestboard2.json").write_text(json.dumps(gm_board(id="gmtestboard2")), encoding="utf-8")
+
+    asyncio.run(main_module._moodboard_brief_fields_startup())
+    saved = json.loads(path.read_text())
+    assert saved["colorCheck"]["basis"] == moodboard_brief.colour_check_basis(saved)
+    assert {f["hex"] for f in saved["colorCheck"]["findings"]} >= {BRICK, SALMON, RUST}
+    assert "colorCheck" in json.loads((trash / "gmtestboard2.json").read_text())
+    assert {k: v for k, v in saved.items() if k != "colorCheck"} == gm_board()
+
+    calls = []
+    real = moodboard_colour_words.check
+    monkeypatch.setattr(moodboard_colour_words, "check", lambda *a, **k: calls.append(1) or real(*a, **k))
+    for _ in range(3):
+        compose(MoodboardStore().get("gmtestboard1"))
+    assert calls == []
+    before = path.stat().st_mtime_ns
+    assert moodboard_brief.save_colour_checks(tmp_path / "moodboards")["saved"] == []
+    assert path.stat().st_mtime_ns == before
 
 
 # -- the store and routes -------------------------------------------------------------
@@ -383,7 +433,17 @@ def test_a_node_sending_notes_is_the_persons_call(monkeypatch):
     assert refusal(None, {"send_notes": "board"}) is None
     assert refusal({}, {"send_notes": "no"}) is None
     assert refusal({"send_notes": "yes"}, {"send_notes": "board"}) is None
-    assert refusal({"send_notes": "yes"}, {"send_notes": "yes", "moodboard": "x"}) is None
+    # A "yes" is for the board it was set on: pointing it at another board
+    # would send that board's notes.
+    moved = refusal({"moodboard": "aaaaaaaaaaaa", "send_notes": "yes"},
+                    {"moodboard": "bbbbbbbbbbbb", "send_notes": "yes"})
+    assert moved and "another board" in moved
+    assert refusal({"moodboard": "aaaaaaaaaaaa", "send_notes": "yes"},
+                   {"moodboard": "aaaaaaaaaaaa", "send_notes": "yes"}) is None   # unchanged
+    assert refusal({"moodboard": "aaaaaaaaaaaa", "send_notes": "yes"},
+                   {"moodboard": "bbbbbbbbbbbb", "send_notes": "board"}) is None  # closed in the same edit
+    assert refusal({"moodboard": "aaaaaaaaaaaa", "send_notes": "board"},
+                   {"moodboard": "bbbbbbbbbbbb", "send_notes": "board"}) is None  # follows board B's own switch
     monkeypatch.setattr(main, "_is_person_request", lambda: True)
     assert refusal({}, {"send_notes": "yes"}) is None
 
@@ -463,6 +523,12 @@ def test_cli_set_flags_and_restore(app, tmp_path, capsys):
     assert out["colorChoices"] == {"keep": ["#e8593c"], "leaveOut": []}
     assert out["brief"]["palette"] == ["#e8593c"] and hexes(out["brief"]["kept"]) == ["#e8593c"]
     assert out["previous"]["color_choices"] == {"keep": [], "leaveOut": []}
+    # A change that doesn't touch notes doesn't carry send_notes: undoing it
+    # never asks to send notes the person has since turned on.
+    assert "send_notes" not in out["previous"]
+    flagged = json.loads(_cli(app, ["moodboard", "set", board["id"], "--clash-mode", "flag", "--json"], capsys))
+    assert "send_notes" not in flagged["previous"] and flagged["previous"]["clash_mode"] == "leave-out"
+    _cli(app, ["moodboard", "set", board["id"], "--clash-mode", "leave-out"], capsys)
     shown = _cli(app, ["moodboard", "show", board["id"]], capsys)
     assert "Kept anyway" in shown and "--reset-color" in shown
 

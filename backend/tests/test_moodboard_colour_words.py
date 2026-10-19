@@ -211,3 +211,79 @@ def test_scope_swap_blue_sky_still_names_blue():
 def test_pinned_colours_are_checked_but_carry_their_role():
     findings = check("", ["red, orange or pink flowers"], [], [PIN])
     assert [(f["hex"], f["role"], f["level"]) for f in findings] == [(PIN, "pinned", "conflict")]
+
+
+# -- review fixes (gap 18 review, 2026-10-19) ------------------------------------
+
+@pytest.mark.parametrize("direction", [
+    "No people, red flowers and a blue sky.",
+    "No people, warm red poppies in the foreground.",
+    "Without people, with red roses and a blue sky.",
+    "without text, blue sky, red flowers",
+])
+def test_a_negation_ends_with_the_noun_it_governs(direction):
+    """The colours after "No people," are what the person asked for: allowances,
+    never exclusions."""
+    rules_findings = check(direction, [], colours(palette=[], accents=[(BRICK, 0.002), (SALMON, 0.002),
+                                                                         (BLUE, 0.002)]), [])
+    assert rules_findings == []
+    from services.moodboard_colour_words import parse
+
+    rules = parse(direction, [])
+    assert rules.exclusions == []
+    assert {term.name for term in rules.allowances} >= ({"red"} if "blue" not in direction else {"red", "blue"})
+
+
+@pytest.mark.parametrize(("direction", "excluded"), [
+    ("No red or orange flowers.", {"red", "orange"}),
+    ("no red, orange or pink flowers, blue sky", {"red", "orange", "pink"}),
+    ("No people or red flowers.", {"red"}),        # "or" carries the negation on
+    ("no red", {"red"}),
+])
+def test_a_negation_still_covers_its_own_list(direction, excluded):
+    from services.moodboard_colour_words import parse
+
+    rules = parse(direction, [])
+    assert {term.name for term in rules.exclusions} == excluded
+    assert not ({term.name for term in rules.allowances} & excluded)
+
+
+def test_no_people_then_blue_sky_allows_blue():
+    from services.moodboard_colour_words import parse
+
+    rules = parse("without text, blue sky", [])
+    assert [term.name for term in rules.allowances] == ["blue"] and rules.exclusions == []
+
+
+def test_a_warm_direction_never_softens_an_avoid():
+    """A temperature word only names a side of the wheel: Avoid colours stay conflicts."""
+    findings = check("Warm evening light.", ["red, orange or pink flowers"], colours(), [])
+    levels = worst(findings)
+    for hex_value in (BRICK, SALMON, RUST):
+        assert levels[hex_value] == "conflict", hex_value
+    assert not any("may clash" in f["reason"] for f in findings)
+
+
+def test_an_allowance_arc_alone_never_softens_an_avoid():
+    """'pale blue' covers pale blues (C < 0.08), not a C 0.21 blue."""
+    levels = worst(check("Pale blue sky.", ["blue"], colours(palette=[], accents=[(BLUE, 0.002)]), []))
+    assert levels == {BLUE: "conflict"}
+    # A pale blue is named by the allowance, so it only may clash.
+    pale = worst(check("Pale blue sky.", ["blue"], colours(palette=[], accents=[("#b4c8e6", 0.002)]), []))
+    assert pale == {"#b4c8e6": "warning"}
+
+
+@pytest.mark.parametrize("hex_value", ["#1a0505", "#201008", "#3a0a0a"])
+def test_near_black_shadows_are_not_brown_conflicts(hex_value):
+    lightness, chroma, _hue = oklch(hex_value)
+    assert lightness < 0.25 and chroma < 0.08
+    assert worst(check("", ["brown"], colours(palette=[(hex_value, 0.2)], accents=[]), [])).get(hex_value) != "conflict"
+
+
+def test_a_real_brown_still_conflicts_with_avoid_brown():
+    assert worst(check("", ["brown"], colours(palette=[("#7b4a24", 0.2)], accents=[]), [])) == {"#7b4a24": "conflict"}
+
+
+def test_sage_stays_a_soft_colour():
+    # A muted green conflicts with Avoid "sage" from C 0.03, as before.
+    assert worst(check("", ["sage"], colours(palette=[("#8a9a80", 0.2)], accents=[]), [])) == {"#8a9a80": "conflict"}

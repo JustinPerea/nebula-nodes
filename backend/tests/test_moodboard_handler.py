@@ -180,6 +180,16 @@ async def test_the_bundle_carries_no_notes_and_no_left_out_colour(tmp_path, monk
                  bundle["providerHints"]["generic"]["promptSuffix"]):
         assert orange not in text and "liquid" not in text
     assert {"leftOut", "mayClash", "pinnedClashes", "notesSent"} <= set(bundle)
+    # Nor do the analysis's colour lists name it: an LLM node reading the
+    # bundle on an Any port can't put it back.
+    assert view["palette"] == bundle["palette"] and view["accents"] == bundle["accents"]
+    assert orange not in [c["hex"] for c in view["colors"]]
+    assert orange in [c["hex"] for c in analysis["colors"]]
+    for image in view["images"]:
+        for key in ("palette", "accents"):
+            assert orange not in image.get(key, [])
+        assert orange not in [c["hex"] for c in image.get("colors", [])]
+    assert orange not in str(view)
     # The saved analysis is left as it was.
     assert "liquid" in MoodboardStore().get(board["id"])["analysis"]["keywords"]
 

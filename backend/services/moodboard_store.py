@@ -544,3 +544,10 @@ def migrate_brief_fields() -> dict[str, Any]:
     """
     root = _moodboard_root()
     return _brief().migrate_store(root, root.parent / "moodboard-backups")
+
+
+def save_colour_checks() -> dict[str, Any]:
+    """Save the colour check on boards that lack a current one (gap 18):
+    boards saved before it, or after a lexicon change. Run at startup after
+    ``migrate_brief_fields``."""
+    return _brief().save_colour_checks(_moodboard_root())

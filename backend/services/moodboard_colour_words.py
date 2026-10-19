@@ -21,9 +21,10 @@ Research/topics/colour-text-contradiction-detection-2026-10.md):
    with no noun takes the head's), *cast* (cast, tint, varnish, wash, glaze,
    toning) or *global* (palette words, style words such as tonalist, or the
    term standing alone). Every Avoid term is an exclusion; in the Direction a
-   term after no / not / without / never / avoid / minus (up to the clause's
-   end or "but") is one too, and never an allowance. Every other Direction
-   term is an allowance: it protects colours, never removes them. A hex in
+   term after no / not / without / never / avoid / minus is one too, up to
+   the end of the noun phrase it governs (a comma, "and" or "&" after its
+   noun, "but", or the clause's end), and never an allowance. Every other
+   Direction term is an allowance: it protects colours, never removes them. A hex in
    the text matches colours within dE00 5. Unknown words are ignored.
 2. **Match in OKLCH** (Ottosson's OKLab) by hue arcs and chroma gates, not by
    colour distance: CIEDE2000 is only valid for small differences, so it is
@@ -34,7 +35,9 @@ Research/topics/colour-text-contradiction-detection-2026-10.md):
    style words set a chroma ceiling (silver: C < 0.04; tonalist: C < 0.08):
    a large colour over it conflicts; a small one is exempt when an object
    allowance in the Direction covers it, a warning when it's only in an
-   allowance's hue arc.
+   allowance's hue arc. An exclusion is softened to a warning only by an
+   allowance that names the colour (``cover``), never by a hue arc alone or
+   a temperature word.
 
 Results have two levels: ``conflict`` (the words rule the colour out) and
 ``warning`` (it may clash; the Direction allows that hue, or it's muted).
@@ -54,7 +57,7 @@ from typing import Any, Iterable
 
 # Bumped whenever the table or the rules change: it is part of each saved
 # check's basis, so every board's check runs again.
-LEXICON_VERSION = 1
+LEXICON_VERSION = 2
 FOUND_BY = "words"
 
 # -- the one table ------------------------------------------------------------
@@ -116,6 +119,11 @@ HUES: dict[str, Gate] = {
     "magenta": _MAGENTA, "fuchsia": _MAGENTA,
     "cream": _CREAM, "ivory": _CREAM,
 }
+# Hue words that name a soft colour: their upper chroma bound is what the
+# word means, so they conflict from HUE_FLOOR. Brown's bound only separates it
+# from orange; it conflicts from CONFLICT_CHROMA like any hue, so a board's
+# near-black shadows (C 0.03-0.04) are at most a warning under "brown".
+SOFT_HUES = {"sage", "lilac", "lavender", "cream", "ivory"}
 # Temperature words standing alone. As an allowance they name a side of the
 # wheel, not a colour, so they never exempt one: only "in its arc".
 TEMPERATURES: dict[str, Gate] = {"warm": _g((350, 110)), "cool": _g((165, 320))}
@@ -417,11 +425,20 @@ def _segment(text: str, items: list[_Item], source: str, rules: Rules, *, quote:
     """Read one head or list. Returns whether a negation is still open at its end."""
     negation_start: int | None = None if not negated else (items[0].start if items else None)
     negated_at: list[bool] = []
+    # A negation governs one noun phrase: "no red or orange flowers" negates
+    # both colours, "No people, red flowers" only the people. Once a noun has
+    # followed the negator, the next comma, "and" or "&" closes it; "or" and
+    # "/" carry it on ("no people or red flowers").
+    noun_seen = False
     for item in items:
         if item.kind == "negator":
-            negated, negation_start = True, item.start
+            negated, negation_start, noun_seen = True, item.start, False
         elif item.kind == "but":
-            negated, negation_start = False, None
+            negated, negation_start, noun_seen = False, None, False
+        elif negated and noun_seen and item.kind == "join" and item.word not in ("or", "/"):
+            negated, negation_start, noun_seen = False, None, False
+        elif negated and item.kind in ("noun", "palette"):
+            noun_seen = True
         negated_at.append(negated)
 
     terms_here: list[tuple[int, Term]] = []
@@ -456,7 +473,7 @@ def _term(text: str, items: list[_Item], index: int, *, source: str, exclusion: 
         kind, gate = "hue", HUES[name]
     elif kind == "hue":
         gate = HUES[name]
-        chroma_gated = gate.cmax is not None
+        chroma_gated = name in SOFT_HUES
     elif kind == "neutral":
         gate = NEUTRALS[name]
         if item.partner:  # the grey of "blue-grey": a grey on that hue's side
@@ -656,6 +673,13 @@ def check(direction: str, avoid: Iterable[str], colours: Iterable[dict[str, Any]
     def protecting(colour: _Colour) -> list[tuple[Term, str]]:
         return [(term, hit) for term in rules.allowances if (hit := _allowance_hit(term, colour))]
 
+    def covering(colour: _Colour) -> list[tuple[Term, str]]:
+        # Only an allowance that names this colour softens an Avoid: a hue
+        # within its gates, a reference colour's headroom or a hex. Being in
+        # an allowance's hue arc (and any temperature word, which is only
+        # ever "arc") leaves the conflict as it is.
+        return [(term, hit) for term, hit in protecting(colour) if hit == "cover"]
+
     for term in rules.exclusions:
         if term.scope == "cast" and term.kind in ("hue", "temperature"):
             _cast(term, measured, pinned_colours, add)
@@ -666,7 +690,7 @@ def check(direction: str, avoid: Iterable[str], colours: Iterable[dict[str, Any]
             if level is None:
                 continue
             reason = _label(term)
-            protectors = protecting(colour)
+            protectors = covering(colour)
             if protectors:
                 level = "warning"
                 reason = f"{reason}. {_allows(_best_allowance(protectors))}, so it may clash."

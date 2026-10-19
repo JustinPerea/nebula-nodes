@@ -2301,12 +2301,18 @@ async def _personal_agents_shutdown() -> None:
 @app.on_event("startup")
 async def _moodboard_brief_fields_startup() -> None:
     """Give boards saved before Direction / Avoid / pinned colours existed those
-    fields, once, backing each file up first (services/moodboard_brief.py)."""
-    from services.moodboard_store import migrate_brief_fields
+    fields, once, backing each file up first (services/moodboard_brief.py).
+    Then save the colour check (gap 18) on boards whose saved one is missing
+    or stale, so it isn't run again on every generation and read."""
+    from services.moodboard_store import migrate_brief_fields, save_colour_checks
     try:
         await asyncio.to_thread(migrate_brief_fields)
     except Exception as exc:  # never block startup; boards still migrate in memory on read
         print(f"[main] moodboard brief migration skipped: {type(exc).__name__}: {exc}", flush=True)
+    try:
+        await asyncio.to_thread(save_colour_checks)
+    except Exception as exc:  # never block startup; the check runs in memory until a board is saved
+        print(f"[main] moodboard colour check not saved: {type(exc).__name__}: {exc}", flush=True)
 
 
 @app.on_event("startup")
@@ -7859,7 +7865,8 @@ PROVIDER_CHOICE_REFUSAL = (
 NOTES_TO_GENERATORS_REFUSAL = (
     "Sending a board's notes to generators (send_notes on a Moodboard node) is the person's call: "
     "notes are their words about the board, for them, their team and agents. Leave send_notes as it "
-    "is (an agent may set it to no), and propose the change instead with propose_change "
+    "is (an agent may set it to no), don't point a node that sends notes at another board (set "
+    "send_notes to board or no in the same edit), and propose the change instead with propose_change "
     "(`nebula propose`); the person accepts it on the canvas."
 )
 # How far each send_notes value opens the notes: "board" follows the board's
@@ -7872,6 +7879,16 @@ def _send_notes_rank(params: Mapping[str, Any] | None) -> int:
     return _SEND_NOTES_RANK.get(value if isinstance(value, str) else "board", 1)
 
 
+def _notes_opened(before: Mapping[str, Any] | None, after: Mapping[str, Any] | None) -> bool:
+    """Whether a Moodboard node edit sends notes the person didn't opt in to:
+    ``send_notes`` opened further, or a node on "yes" moved to another board."""
+    rank = _send_notes_rank(after)
+    if rank > _send_notes_rank(before):
+        return True
+    return (before is not None and rank == _SEND_NOTES_RANK["yes"]
+            and (before or {}).get("moodboard") != (after or {}).get("moodboard"))
+
+
 def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, Any] | None, Mapping[str, Any]]]) -> None:
     """403 when an edit that isn't the person's would change who bills a
     node's run: a route-table node's ``_provider``, or a Krea node's billing
@@ -7882,14 +7899,16 @@ def _refuse_agent_billing_change(changes: Iterable[tuple[str, str, Mapping[str, 
 
     The same gate keeps a Moodboard node's ``send_notes`` (gap 18, P4): an
     agent may close it (toward "no"), never open it (a new node may start on
-    "board", which follows the board's own switch)."""
+    "board", which follows the board's own switch). The person's "yes" is
+    for the board it was set on: an agent pointing a "yes" node at another
+    board would send that board's notes, so it is refused too."""
     if _is_person_request():
         return
     provider_switched: list[str] = []
     mode_switched: list[str] = []
     notes_opened: list[str] = []
     for label, definition_id, before, after in changes:
-        if definition_id == "nebula-moodboard" and _send_notes_rank(after) > _send_notes_rank(before):
+        if definition_id == "nebula-moodboard" and _notes_opened(before, after):
             notes_opened.append(label)
         choice = _billing_choice(definition_id, after)
         if choice is None:

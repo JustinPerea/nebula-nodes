@@ -379,3 +379,43 @@ describe('Moodboard Studio: what generators get', () => {
     await waitFor(() => expect(api.updateMoodboard.mock.calls.at(-1)?.[1].clashMode).toBe('flag'), { timeout: 3000 });
   });
 });
+
+describe('Moodboard Studio: choices the person saves', () => {
+  it('a new board starts with its notes held back from generators', async () => {
+    act(() => { useUIStore.getState().enterMoodboardEditor(NEW_MOODBOARD_SENTINEL, 'global'); });
+    render(<MoodboardStudioView />);
+    await screen.findByDisplayValue('Untitled Moodboard');
+    expect(screen.getByRole('switch', { name: 'Send these notes to generators' }).getAttribute('aria-checked'))
+      .toBe('false');
+    const key = assetStudioDraftKey('moodboard', 'global', NEW_MOODBOARD_SENTINEL, 'p1');
+    act(() => {
+      useAssetStudioDraftStore.getState().edit(key, (draft) => ({ ...(draft as object), name: 'Fresh',
+        images: [{ id: 'i9', url: '/api/outputs/z.png', weight: 1, notes: '', privateNote: '', excluded: false }] }));
+    });
+    await waitFor(() => expect(api.createMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    expect(api.createMoodboard.mock.calls[0][0].sendNotes).toBe(false);
+  });
+
+  it('Undo on a kept color saves it without that choice', async () => {
+    boards.g1 = board({
+      colorChoices: { keep: ['#e8593c'], leaveOut: [] },
+      brief: { ...leftOutBrief, leftOut: [], kept: [{ ...leftOutBrief.leftOut[0], why: 'choice' }] },
+    } as Partial<Moodboard>);
+    await openStudio('g1', 'global', 'Global board');
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo keeping #e8593c' }));
+    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    expect(api.updateMoodboard.mock.calls.at(-1)![1].colorChoices).toEqual({ keep: [], leaveOut: [] });
+  });
+
+  it('pinning a kept color to keep out drops it from Keep anyway, so the save is accepted', async () => {
+    boards.g1 = board({ colorChoices: { keep: ['#e8593c'], leaveOut: [] } } as Partial<Moodboard>);
+    await openStudio('g1', 'global', 'Global board');
+    const input = screen.getByLabelText('Colors to keep out: hex');
+    fireEvent.change(input, { target: { value: '#e8593c' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(api.updateMoodboard).toHaveBeenCalled(), { timeout: 3000 });
+    const [, body] = api.updateMoodboard.mock.calls.at(-1)!;
+    expect(body.pinnedColors.exclude).toEqual(['#e8593c']);
+    expect(body.colorChoices.keep).toEqual([]);
+  });
+});

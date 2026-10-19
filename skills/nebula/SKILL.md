@@ -200,7 +200,8 @@ nebula moodboard delete <board>
   turns it off; `--send-notes` is the person's call and refused for an
   agent. A Moodboard node's `send_notes` param (`board`, `yes`, `no`) can
   override it per node; moving it toward sending is also the person's, so
-  propose it.
+  propose it. That includes pointing a node on `yes` at another board: set
+  `send_notes` to `board` or `no` in the same edit, or propose it.
 - `--avoid`, `--pin-color` and `--keep-out-color` add (repeatable);
   `--unavoid` and `--unpin-color` take off; `--clear-avoid` empties the list
   first; `--direction ""` clears Direction. Limits: 40 Avoid items of 200

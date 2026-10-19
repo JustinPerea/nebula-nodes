@@ -670,10 +670,11 @@ def generator_analysis(board: dict[str, Any], analysis: dict[str, Any], brief: d
     generator (or an LLM node on an Any port) may read. Without the notes
     unless ``brief`` sent them: keywords measured only, the summary without
     its "Notes emphasize" tail, the taste profile rebuilt, no subject words
-    from the notes, image notes empty. Its colour sentences use the brief's
-    palette and accents, so a left-out colour isn't named. The measured
-    lists (``palette``, ``accents``, ``colors``, per-image colours) stay as
-    measured: ``leftOut`` says which went."""
+    from the notes, image notes empty. Its colours are the brief's:
+    ``palette``, ``accents`` and ``colors`` hold only what generators get,
+    and each image's colours drop the ones near a colour left out or pinned
+    to keep out, so an LLM node reading the bundle can't put a left-out
+    colour back. The bundle's ``leftOut`` names what went, with why."""
     from services.moodboard_analysis import _summary, _taste_profile
 
     view = copy.deepcopy(analysis)
@@ -690,6 +691,16 @@ def generator_analysis(board: dict[str, Any], analysis: dict[str, Any], brief: d
         view["subjectBias"] = []
         view["images"] = [{**item, "notes": ""} if isinstance(item, dict) and "notes" in item else item
                           for item in view.get("images") or []]
+    view["palette"], view["accents"] = palette, accents
+    sent = {("palette", h.lower()) for h in palette} | {("accent", h.lower()) for h in accents}
+    view["colors"] = [colour for colour in view.get("colors") or []
+                      if isinstance(colour, dict) and isinstance(colour.get("hex"), str)
+                      and ("accent" if colour.get("role") == "accent" else "palette", colour["hex"].lower()) in sent]
+    _, _, pinned = board_fields(board)
+    gone = _dedupe([*(str(item.get("hex")) for item in brief.get("leftOut") or []
+                      if isinstance(item, dict) and item.get("hex")), *pinned["exclude"]])
+    if gone:
+        view["images"] = [_without_colours(item, gone) for item in view.get("images") or []]
     view["styleBrief"] = _brief_text(board, analysis, direction="", include=[],
                                      palette=_brief_palette(analysis, palette), accents=accents,
                                      keywords=keywords, notes=notes)
@@ -698,6 +709,21 @@ def generator_analysis(board: dict[str, Any], analysis: dict[str, Any], brief: d
         hints["generic"]["palette"] = palette
         hints["generic"]["accents"] = accents
     return view
+
+
+def _without_colours(image: Any, gone: list[str]) -> Any:
+    """An analysis image without its colours near any of ``gone``."""
+    if not isinstance(image, dict):
+        return image
+    item = dict(image)
+    for key in ("palette", "accents"):
+        if isinstance(item.get(key), list):
+            item[key] = without_excluded(_str_list(item[key]), gone)
+    if isinstance(item.get("colors"), list):
+        kept = set(without_excluded([c["hex"] for c in item["colors"]
+                                     if isinstance(c, dict) and isinstance(c.get("hex"), str)], gone))
+        item["colors"] = [c for c in item["colors"] if isinstance(c, dict) and c.get("hex") in kept]
+    return item
 
 
 def with_brief(board: Any) -> Any:
@@ -1006,6 +1032,46 @@ def migrate_store(root: Path, backup_root: Path) -> dict[str, Any]:
         logger.warning(
             "Moodboard brief fields: migrated %d board(s), %d with moved negatives or an edited brief; "
             "backups and log in %s", len(report["migrated"]), len(moved), backup_dir)
+    return report
+
+
+def save_colour_checks(root: Path) -> dict[str, Any]:
+    """Save the colour check on every board file whose saved one is missing
+    or stale (a board saved before gap 18, or a ``LEXICON_VERSION`` bump),
+    so generations and API reads use the saved check instead of running it
+    each time. Only ``colorCheck`` is written: a cache of what the board
+    holds, so no backup. Boards in Recently deleted get one too. Running it
+    again does nothing."""
+    from services.asset_trash import RECORD_SUFFIX, is_trash_folder
+    from services.moodboard_store import _write_json
+
+    report: dict[str, Any] = {"saved": [], "skipped": []}
+    if not root.exists():
+        return report
+    for scope in sorted(p for p in root.iterdir() if p.is_dir()):
+        files = sorted(scope.glob("*.json"))
+        if is_trash_folder(scope):
+            files = [path for path in files if not path.name.endswith(RECORD_SUFFIX)]
+        for path in files:
+            try:
+                board = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                report["skipped"].append({"file": str(path), "reason": str(exc)})
+                continue
+            if not isinstance(board, dict):
+                continue
+            before = board.get("colorCheck")
+            refresh_colour_check(board)
+            if board.get("colorCheck") == before:
+                continue
+            try:
+                _write_json(path, board)
+            except OSError as exc:  # it is computed in memory on read until the next save
+                report["skipped"].append({"file": str(path), "reason": f"{type(exc).__name__}: {exc}"})
+                continue
+            report["saved"].append(str(path))
+    if report["saved"]:
+        logger.info("Moodboard colour check: saved on %d board(s)", len(report["saved"]))
     return report
 
 
