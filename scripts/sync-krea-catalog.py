@@ -61,6 +61,38 @@ UNPRICED_FIELD_NOTES = {
     "generate_audio": "Krea's price doesn't vary with generate_audio (x-krea-pricing dimensions: {dims}).",
 }
 
+# Price dimensions that aren't request fields but follow from them. Krea 2
+# bills by k2BillingTier: `text-to-image`, `srefs` (image style references)
+# or `moodboards`. The OpenAPI doesn't say what picks the tier; Krea's Krea 2
+# guide does for two of them: a style reference run costs the "With style
+# references" price, and "Combining moodboards with style references does not
+# increase the price per generation — you pay the moodboard rate". Nobody says
+# which tier LoRA `styles` or an `image_url` (image to image) run bills, so a
+# run with either is priced at the tier its references give, marked
+# unconfirmed. Each input is "set" when its param isn't empty or its port of
+# the same id is wired ((wired PORT), backend services/model_pricing.py).
+K2_TIER = "k2BillingTier"
+K2_GUIDE_URL = "https://www.krea.ai/docs/developers/krea-2/overview.md#pricing"
+K2_GUIDE_QUOTE = ("| **Medium** | $0.030 | $0.035 | $0.040 | ... | **Large** | $0.060 | $0.065 | $0.070 | ... "
+                  "Combining moodboards with style references does not increase the price per generation — "
+                  "you pay the moodboard rate ($0.040 Medium / $0.070 Large).")
+# Krea 2 guide's columns: Text-to-image, With style references, With moodboards.
+K2_GUIDE_PRICES = {"medium": (0.03, 0.035, 0.04), "large": (0.06, 0.065, 0.07)}
+# Request fields of the catalog nodes, by the tier they set.
+K2_CATALOG_INPUTS = {"srefs": ("image_style_references",), "moodboards": ("moodboards",),
+                     "either": (), "unstated": ("styles", "image_url")}
+# The hand-written Krea 2 node (handlers/krea.py handle_krea_generate) prices
+# from the same price points, one variant per catalog model. Its `moodboard`
+# port takes a Nebula board (sent as style references) or a Krea moodboard id
+# (sent as a moodboard), which only the wire's value tells apart, so a wired
+# board is the range from the style reference price to the moodboard price.
+K2_NODE = {"node": "krea-2-generate", "variant": "variant",
+           "variants": {"medium": "/generate/image/krea/krea-2/medium",
+                        "large": "/generate/image/krea/krea-2/large"},
+           "inputs": {"srefs": ("style_images", "image_style_references"), "moodboards": ("moodboard_id",),
+                      "either": ("moodboard",), "unstated": ("styles", "style_id")}}
+DERIVED_DIMENSIONS = {K2_TIER}
+
 
 # Krea copies that can also run on the model maker's own API with the
 # person's key (backend execution/maker_routes.py, services/node_route.py).
@@ -1128,7 +1160,8 @@ def refresh(raw, checked_on):
             # send; the rest can't be estimated before a run, so record why.
             fields = set(schema.get("properties", {}))
             unmapped = sorted({key for point in pricing.get("price_points") or []
-                               for key in point.get("dimensions", {}) if snake(key) not in fields})
+                               for key in point.get("dimensions", {})
+                               if snake(key) not in fields and key not in DERIVED_DIMENSIONS})
             if unmapped:
                 models[node_id]["pricingUnmapped"] = unmapped
             else:
@@ -1263,7 +1296,7 @@ def definitions(catalog):
     return result
 
 
-def pricing_entries(catalog):
+def pricing_entries(catalog, registry=None):
     """model_pricing.json entries for every Krea model whose price points map
     onto its own request fields. Returns (entries, skipped reasons)."""
     entries, skipped = {}, {}
@@ -1282,6 +1315,8 @@ def pricing_entries(catalog):
             if direct:
                 routes[direct[0]] = direct[1]
             entries[node_id] = {"routes": routes, "generatedBy": PRICING_GENERATOR}
+    if registry is not None:
+        entries[K2_NODE["node"]] = k2_node_entry(catalog, registry)
     return entries, skipped
 
 
@@ -1300,9 +1335,12 @@ def krea_entry(node_id, model, catalog, entries, skipped):
         skipped[node_id] = f"unsupported pricing {pricing.get('currency')}/{pricing.get('unit')}"
         return
     unmapped = sorted({key for point in points for key in point.get("dimensions", {})
-                       if snake(key) not in fields})
+                       if snake(key) not in fields and key not in DERIVED_DIMENSIONS})
     if unmapped:
         skipped[node_id] = "price depends on " + ", ".join(unmapped) + ", which the request doesn't set directly"
+        return
+    if any(K2_TIER in point.get("dimensions", {}) for point in points):
+        k2_catalog_entry(node_id, model, catalog, entries, skipped)
         return
     properties = model["requestSchema"].get("properties", {})
 
@@ -1331,9 +1369,7 @@ def krea_entry(node_id, model, catalog, entries, skipped):
     for field, note in UNPRICED_FIELD_NOTES.items():
         if field in properties and field not in dimensions:
             notes.append(note.format(dims=", ".join(dimensions) or "none"))
-    sources = [{"url": catalog["sourceUrl"],
-                "quote": f"x-krea-pricing on POST {model['endpoint']} "
-                         f"(spec sha256 {catalog['openapiSha256'][:12]})"}]
+    sources = [spec_source(model, catalog)]
     if guard.get("source"):
         sources.append(guard["source"])
     entries[node_id] = {
@@ -1342,9 +1378,126 @@ def krea_entry(node_id, model, catalog, entries, skipped):
         "rows": rows,
         "notes": " ".join(notes),
         "sources": sources,
-        "checked": catalog["fetchedAt"],
+        "checked": model.get("fetchedAt", catalog["fetchedAt"]),
         "generatedBy": PRICING_GENERATOR,
     }
+
+
+def spec_source(model, catalog):
+    """The OpenAPI source of a model's price, from the spec it was refreshed
+    from (an --only refresh stamps the entry with its own)."""
+    sha = model.get("openapiSha256", catalog["openapiSha256"])
+    return {"url": catalog["sourceUrl"],
+            "quote": f"x-krea-pricing on POST {model['endpoint']} (spec sha256 {sha[:12]})"}
+
+
+def k2_tier_prices(model):
+    """{tier: amount} from a Krea 2 model's price points; every tier must be there."""
+    prices = {point["dimensions"][K2_TIER]: point["amount"] for point in model["pricing"]["price_points"]
+              if set(point.get("dimensions", {})) == {K2_TIER}}
+    missing = {"text-to-image", "srefs", "moodboards"} - set(prices)
+    if missing or len(prices) != len(model["pricing"]["price_points"]):
+        raise ValueError(f"{model['endpoint']}: unexpected k2BillingTier price points {model['pricing']}")
+    return prices
+
+
+def k2_rows(prices, inputs, params, ports, base):
+    """Price rows for one Krea 2 model, first match wins (see K2_TIER).
+    ``inputs`` names the params/ports that set each tier; an input is empty
+    when its param is "" and its port (of the same id) isn't wired."""
+    def empty(names):
+        match = {}
+        for name in names:
+            if name in params:
+                match[name] = ""
+            if name in ports:
+                match[f"(wired {name})"] = "no"
+            if name not in params and name not in ports:
+                raise ValueError(f"Krea 2 tier input {name} is neither a param nor a port")
+        return match
+
+    no_mb, no_either = empty(inputs["moodboards"]), empty(inputs["either"])
+    no_srefs, no_other = empty(inputs["srefs"]), empty(inputs["unstated"])
+    ref, board = prices["srefs"], prices["moodboards"]
+    tiers = [({**no_mb, **no_either, **no_srefs}, prices["text-to-image"]),
+             ({**no_mb, **no_either}, ref)]
+    if inputs["either"]:
+        tiers.append((no_mb, [ref, board]))
+    tiers.append(({}, board))
+    rows, seen = [], []
+    for match, price in tiers:
+        for extra, unconfirmed in ((no_other, False), ({}, True)):
+            full = {**base, **match, **extra}
+            if full in seen:
+                continue
+            seen.append(full)
+            row = {"match": full, "price": price}
+            if unconfirmed:
+                row["unconfirmed"] = True
+            rows.append(row)
+    return rows
+
+
+K2_NOTES = ("API-token runs only. Krea account runs bill workspace compute units, which Krea doesn't publish per "
+            "option, so they stay unpriced. Krea 2 bills by k2BillingTier: text to image, style references, or a "
+            "moodboard (a moodboard with style references bills the moodboard price). An input counts when its "
+            "field is filled in or its port is wired ((wired PORT)). Krea doesn't say which tier LoRA styles or "
+            "an image-to-image source bill, so rows for runs with {unstated} are unconfirmed.")
+
+
+def k2_entry(rows, sources, checked, unstated):
+    return {"currency": "usd", "per": "request",
+            "priceParams": sorted({key for row in rows for key in row["match"]}),
+            "rows": rows, "notes": K2_NOTES.format(unstated=" or ".join(unstated)),
+            "sources": sources, "checked": checked, "generatedBy": PRICING_GENERATOR}
+
+
+def k2_guide_source(prices, variant):
+    """The Krea 2 guide's source, when its table states this variant's prices
+    (it doesn't list Turbo); a mismatch with the OpenAPI stops the script."""
+    if variant not in K2_GUIDE_PRICES:
+        return []
+    guide = dict(zip(("text-to-image", "srefs", "moodboards"), K2_GUIDE_PRICES[variant]))
+    if any(abs(prices[tier] - amount) > 1e-9 for tier, amount in guide.items()):
+        raise ValueError(f"Krea 2 {variant}: OpenAPI prices {prices} differ from the guide {guide}; re-check both")
+    return [{"url": K2_GUIDE_URL, "quote": K2_GUIDE_QUOTE}]
+
+
+def k2_catalog_entry(node_id, model, catalog, entries, skipped):
+    properties = set(model["requestSchema"].get("properties", {}))
+    ports = {port["id"] for port in model["inputPorts"]}
+    prices = k2_tier_prices(model)
+    variant = model["endpoint"].rsplit("/", 1)[-1]
+    rows = k2_rows(prices, K2_CATALOG_INPUTS, properties, ports, {"_kreaAuth": "api-token"})
+    sources = [spec_source(model, catalog), *k2_guide_source(prices, variant)]
+    entries[node_id] = k2_entry(rows, sources, model.get("fetchedAt", catalog["fetchedAt"]),
+                                K2_CATALOG_INPUTS["unstated"])
+
+
+def k2_node_entry(catalog, registry):
+    """The hand-written Krea 2 node's entry (K2_NODE), from its variants' catalog models."""
+    definition = registry[K2_NODE["node"]]
+    params = {param["key"] for param in definition["params"]}
+    ports = {port["id"] for port in definition["inputPorts"]}
+    by_endpoint = {model["endpoint"]: model for model in catalog["models"].values()}
+    options = {option["value"] for param in definition["params"] if param["key"] == K2_NODE["variant"]
+               for option in param["options"]}
+    if options != set(K2_NODE["variants"]):
+        raise ValueError(f"{K2_NODE['node']} variants {sorted(options)} don't match K2_NODE")
+    rows, sources, checked = [], [], []
+    for variant, endpoint in K2_NODE["variants"].items():
+        model = by_endpoint[endpoint]
+        prices = k2_tier_prices(model)
+        rows += k2_rows(prices, K2_NODE["inputs"], params, ports,
+                        {"_kreaAuth": "api-token", K2_NODE["variant"]: variant})
+        sources.append(spec_source(model, catalog))
+        sources += [source for source in k2_guide_source(prices, variant) if source not in sources]
+        checked.append(model.get("fetchedAt", catalog["fetchedAt"]))
+    entry = k2_entry(rows, sources, min(checked), K2_NODE["inputs"]["unstated"])
+    entry["notes"] += (" A wired moodboard is a Nebula board (sent as style references) or a Krea moodboard id "
+                       "(billed as a moodboard), which only the wired value tells apart, so it is the range "
+                       "between the two.")
+    return entry
 
 
 def pricing_source(source, entries):
@@ -1413,9 +1566,10 @@ def main():
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--openapi", type=Path)
     parser.add_argument("--date", default=datetime.date.today().isoformat())
-    parser.add_argument("--only", metavar="ENDPOINT",
-                        help="with --refresh or --openapi: refresh just this Krea endpoint's entry, which keeps "
-                             "its own fetchedAt and openapiSha256; every other entry stays as pinned")
+    parser.add_argument("--only", metavar="ENDPOINT", action="append",
+                        help="with --refresh or --openapi: refresh just this Krea endpoint's entry (repeat for "
+                             "several), which keeps its own fetchedAt and openapiSha256; every other entry stays "
+                             "as pinned")
     args = parser.parse_args()
     if args.check and (args.refresh or args.openapi):
         parser.error("--check is offline; refresh separately")
@@ -1429,7 +1583,9 @@ def main():
                 raw = response.read()
         catalog = refresh(raw, args.date)
         if args.only:
-            catalog = refresh_one(json.loads(CATALOG.read_text()), catalog, args.only)
+            fresh, catalog = catalog, json.loads(CATALOG.read_text())
+            for endpoint in args.only:
+                catalog = refresh_one(catalog, fresh, endpoint)
     else:
         catalog = json.loads(CATALOG.read_text())
     # A change to FOLDED reaches the pinned entries too (--check: drift).
@@ -1439,7 +1595,7 @@ def main():
     if problems:
         raise SystemExit("Folded Krea models don't match their nodes:\n  " + "\n  ".join(problems))
     generated = definitions(catalog)
-    prices, unpriced = pricing_entries(catalog)
+    prices, unpriced = pricing_entries(catalog, json.loads(REGISTRY.read_text()))
     expected = {
         CATALOG: json.dumps(catalog, indent=2, ensure_ascii=False) + "\n",
         REGISTRY: registry_source(REGISTRY.read_text(), generated),

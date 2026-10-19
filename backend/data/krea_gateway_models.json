@@ -201,9 +201,33 @@
         "image_style_references",
         "moodboards"
       ],
-      "pricingUnmapped": [
-        "k2BillingTier"
-      ]
+      "pricing": {
+        "type": "fixed",
+        "currency": "USD",
+        "unit": "request",
+        "price_points": [
+          {
+            "amount": 0.03,
+            "dimensions": {
+              "k2BillingTier": "text-to-image"
+            }
+          },
+          {
+            "amount": 0.035,
+            "dimensions": {
+              "k2BillingTier": "srefs"
+            }
+          },
+          {
+            "amount": 0.04,
+            "dimensions": {
+              "k2BillingTier": "moodboards"
+            }
+          }
+        ]
+      },
+      "fetchedAt": "2026-10-19",
+      "openapiSha256": "125dae8e751d45deee1cd65f5f18453c8f174726ca4756d1a28e01c3fbaa8afa"
     },
     "krea-image-krea-krea-2-large": {
       "endpoint": "/generate/image/krea/krea-2/large",
@@ -403,9 +427,33 @@
         "image_style_references",
         "moodboards"
       ],
-      "pricingUnmapped": [
-        "k2BillingTier"
-      ]
+      "pricing": {
+        "type": "fixed",
+        "currency": "USD",
+        "unit": "request",
+        "price_points": [
+          {
+            "amount": 0.06,
+            "dimensions": {
+              "k2BillingTier": "text-to-image"
+            }
+          },
+          {
+            "amount": 0.065,
+            "dimensions": {
+              "k2BillingTier": "srefs"
+            }
+          },
+          {
+            "amount": 0.07,
+            "dimensions": {
+              "k2BillingTier": "moodboards"
+            }
+          }
+        ]
+      },
+      "fetchedAt": "2026-10-19",
+      "openapiSha256": "125dae8e751d45deee1cd65f5f18453c8f174726ca4756d1a28e01c3fbaa8afa"
     },
     "krea-image-krea-krea-2-medium-turbo": {
       "endpoint": "/generate/image/krea/krea-2/medium-turbo",
@@ -605,9 +653,33 @@
         "image_style_references",
         "moodboards"
       ],
-      "pricingUnmapped": [
-        "k2BillingTier"
-      ]
+      "pricing": {
+        "type": "fixed",
+        "currency": "USD",
+        "unit": "request",
+        "price_points": [
+          {
+            "amount": 0.015,
+            "dimensions": {
+              "k2BillingTier": "text-to-image"
+            }
+          },
+          {
+            "amount": 0.0175,
+            "dimensions": {
+              "k2BillingTier": "srefs"
+            }
+          },
+          {
+            "amount": 0.02,
+            "dimensions": {
+              "k2BillingTier": "moodboards"
+            }
+          }
+        ]
+      },
+      "fetchedAt": "2026-10-19",
+      "openapiSha256": "125dae8e751d45deee1cd65f5f18453c8f174726ca4756d1a28e01c3fbaa8afa"
     },
     "krea-image-ideogram-ideogram-4-5": {
       "endpoint": "/generate/image/ideogram/ideogram-4.5",

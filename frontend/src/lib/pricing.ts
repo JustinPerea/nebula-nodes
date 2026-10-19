@@ -101,6 +101,39 @@ const IMAGE_PORTS = ['start_image', 'keyframes', 'end_image'];
  * exact base price. */
 export const REFERENCES = '(references)';
 const REFERENCE_PORTS = ['images'];
+/** `(wired PORT)`: `yes` when that input port has an edge in, else `no`
+ * (model_pricing.WIRED_PREFIX). Krea 2 prices by billing tier, and a tier's
+ * input can arrive by wire or be typed in the param of the same id. */
+export const WIRED_PREFIX = '(wired ';
+
+export function wiredKey(port: string): string {
+  return `${WIRED_PREFIX}${port})`;
+}
+
+/** The port a `(wired PORT)` price variable reads, else null. */
+export function wiredPort(key: string): string | null {
+  return key.startsWith(WIRED_PREFIX) && key.endsWith(')') ? key.slice(WIRED_PREFIX.length, -1) : null;
+}
+
+/** Params the entry reads only alongside `(wired X)` for the port of the
+ * same id (every row and extra matching X also matches `(wired X)`, and X
+ * isn't a multiplier), so a wire into X is priced, not unknown
+ * (model_pricing.wire_aware_keys). */
+export function wireAwareKeys(entry: PriceEntry): Set<string> {
+  const matched = [...(entry.rows ?? []), ...(entry.extras ?? [])].map((row) => row.match ?? {});
+  const factors = new Set(entry.multiplyBy ?? []);
+  const result = new Set<string>();
+  for (const match of matched) {
+    for (const key of Object.keys(match)) {
+      const port = wiredPort(key);
+      if (port === null || factors.has(port)) continue;
+      if (matched.every((other) => !Object.hasOwn(other, port) || Object.hasOwn(other, wiredKey(port)))) {
+        result.add(port);
+      }
+    }
+  }
+  return result;
+}
 /** Price variables known only once the run's source clip is (its length,
  * its output frame size): an entry that reads one is unpriced before the run
  * (model_pricing.RUN_TIME_VARIABLES). */
@@ -169,6 +202,11 @@ function priceValues(
   const values = effectiveParams(entry, definition, params);
   if (priced.has(VIDEO_MODE)) values[VIDEO_MODE] = videoMode(ports);
   if (priced.has(REFERENCES)) values[REFERENCES] = references(ports);
+  const wiredSet = new Set(ports);
+  for (const key of priced) {
+    const port = wiredPort(key);
+    if (port !== null) values[key] = wiredSet.has(port) ? 'yes' : 'no';
+  }
   return values;
 }
 
@@ -186,7 +224,8 @@ export function estimateNode(
   if (entry === priceEntry && entry.provider && routeProvider && entry.provider !== routeProvider) return null;
   const priced = pricedKeys(entry);
   const ports = [...wired];
-  if (ports.some((port) => priced.has(port)) || RUN_TIME_VARIABLES.some((key) => priced.has(key))) return null;
+  const aware = wireAwareKeys(entry);
+  if (ports.some((port) => priced.has(port) && !aware.has(port)) || RUN_TIME_VARIABLES.some((key) => priced.has(key))) return null;
   const values = priceValues(entry, definition, params, ports);
   const row = (entry.rows ?? []).find((candidate) => matches(values, candidate.match));
   if (!row) return null;

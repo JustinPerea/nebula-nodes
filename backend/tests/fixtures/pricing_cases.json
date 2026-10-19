@@ -1,5 +1,5 @@
 {
-  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES).",
+  "about": "Shared by backend/tests/test_model_pricing.py and frontend/tests/lib/pricing.test.ts so the two estimators agree. A case's optional `wired` lists input ports with an edge into them. The `table` node is a five-route table (services/node_route.py routes): its price entry keys each route by its `pricing` or id, `runCases` price a whole run (estimate_run / summarizeRunScope) with the keys in `apiKeys`, and `routeEstimateCases` give each route's price (estimate_routes / estimateRoutes). A route entry with `unconfirmed: true` is a price the provider's page doesn't state exactly (the switcher marks it with *; route_price_unconfirmed / routePriceUnconfirmed). The `moded` node prices by `(mode)`, a price variable read from the wired ports (v2v with start_video, i2v with start_image, keyframes or end_image, else t2v; model_pricing.VIDEO_MODE / pricing.ts VIDEO_MODE), and `tooled` by run-time quantities of its source clip ((source seconds), (output megapixels): RUN_TIME_VARIABLES), so it is unpriced before the run. `shippedRouteCases` price the registry's route-table nodes with the shipped table (backend/data/model_pricing.json): each route's price as a number, a [low, high] range, or null, and optionally `unconfirmed`: whether each route's price is marked at those params (route_price_unconfirmed / routePriceUnconfirmed; a row may carry its own `unconfirmed`, as FLUX.2's Flash and Klein rows on fal do). `shippedRunCases` price a whole run of a registry node on the shipped table (estimate_run / summarizeRunScope) with the keys in `apiKeys` and the ports in `wired` (one edge each). Krea 3 also prices by `(references)`, read from the wired ports: `some` with an edge into `images`, else `none` (model_pricing.REFERENCES / pricing.ts REFERENCES). The `tiered` node prices by `(wired refs)`, read from the wired ports: `yes` with an edge into `refs`, else `no` (model_pricing.WIRED_PREFIX / pricing.ts WIRED_PREFIX); every row that reads the `refs` param also reads `(wired refs)`, so a wire into `refs` is priced, not unknown, while the `loose` node's row reads `refs` alone and stays unpriced with it wired. Krea 2 prices by k2BillingTier this way (shippedRunCases).",
   "definitions": {
     "img": {
       "id": "img",
@@ -618,6 +618,34 @@
           ]
         }
       ]
+    },
+    "tiered": {
+      "id": "tiered",
+      "apiProvider": "krea",
+      "params": [
+        {
+          "key": "refs"
+        }
+      ],
+      "inputPorts": [
+        {
+          "id": "refs"
+        }
+      ]
+    },
+    "loose": {
+      "id": "loose",
+      "apiProvider": "krea",
+      "params": [
+        {
+          "key": "refs"
+        }
+      ],
+      "inputPorts": [
+        {
+          "id": "refs"
+        }
+      ]
     }
   },
   "pricing": {
@@ -1147,6 +1175,53 @@
           }
         ],
         "checked": "2026-10-15"
+      },
+      "tiered": {
+        "currency": "usd",
+        "per": "request",
+        "checked": "2026-10-19",
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "rows": [
+          {
+            "match": {
+              "refs": "",
+              "(wired refs)": "no"
+            },
+            "price": 0.03
+          },
+          {
+            "match": {},
+            "price": 0.035
+          }
+        ]
+      },
+      "loose": {
+        "currency": "usd",
+        "per": "request",
+        "checked": "2026-10-19",
+        "sources": [
+          {
+            "url": "https://example.com/pricing",
+            "quote": "fixture"
+          }
+        ],
+        "rows": [
+          {
+            "match": {
+              "refs": ""
+            },
+            "price": 0.03
+          },
+          {
+            "match": {},
+            "price": 0.035
+          }
+        ]
       }
     }
   },
@@ -1735,6 +1810,50 @@
       },
       "wired": [
         "video"
+      ],
+      "expected": null
+    },
+    {
+      "name": "a (wired PORT) row prices a run with nothing in refs at the base price",
+      "nodeId": "tiered",
+      "params": {},
+      "expected": {
+        "currency": "usd",
+        "low": 0.03,
+        "high": 0.03
+      }
+    },
+    {
+      "name": "a (wired PORT) entry prices refs typed in",
+      "nodeId": "tiered",
+      "params": {
+        "refs": "a"
+      },
+      "expected": {
+        "currency": "usd",
+        "low": 0.035,
+        "high": 0.035
+      }
+    },
+    {
+      "name": "a (wired PORT) entry prices a wire into the param it reads",
+      "nodeId": "tiered",
+      "params": {},
+      "wired": [
+        "refs"
+      ],
+      "expected": {
+        "currency": "usd",
+        "low": 0.035,
+        "high": 0.035
+      }
+    },
+    {
+      "name": "a row reading the param without (wired PORT) leaves a wired run unpriced",
+      "nodeId": "loose",
+      "params": {},
+      "wired": [
+        "refs"
       ],
       "expected": null
     }
@@ -2475,6 +2594,205 @@
         "low": null,
         "high": null,
         "unavailable": true,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 at its defaults bills text to image (Medium)",
+      "nodeId": "krea-2-generate",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.03,
+        "high": 0.03,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 Large bills Large's text-to-image price",
+      "nodeId": "krea-2-generate",
+      "params": {
+        "variant": "large"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.06,
+        "high": 0.06,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 with style images wired bills the style reference tier",
+      "nodeId": "krea-2-generate",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [
+        "style_images"
+      ],
+      "expected": {
+        "low": 0.035,
+        "high": 0.035,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 with a Krea moodboard id and style images bills the moodboard tier only",
+      "nodeId": "krea-2-generate",
+      "params": {
+        "moodboard_id": "mb-1"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [
+        "style_images"
+      ],
+      "expected": {
+        "low": 0.04,
+        "high": 0.04,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 with a board wired is the range from style references to moodboard",
+      "nodeId": "krea-2-generate",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [
+        "moodboard"
+      ],
+      "expected": {
+        "low": 0.035,
+        "high": 0.04,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 on the Krea plan is billed to the plan",
+      "nodeId": "krea-2-generate",
+      "params": {
+        "_kreaAuth": "mcp"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": null,
+        "high": null,
+        "unavailable": false,
+        "plan": true
+      }
+    },
+    {
+      "name": "Krea 2 Medium (Krea) at its defaults bills text to image",
+      "nodeId": "krea-image-krea-krea-2-medium",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.03,
+        "high": 0.03,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 Medium (Krea) with style references wired bills the style reference tier",
+      "nodeId": "krea-image-krea-krea-2-medium",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [
+        "image_style_references"
+      ],
+      "expected": {
+        "low": 0.035,
+        "high": 0.035,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 Large (Krea) at its defaults bills text to image",
+      "nodeId": "krea-image-krea-krea-2-large",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.06,
+        "high": 0.06,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 Large (Krea) with a moodboard and style references wired bills the moodboard tier",
+      "nodeId": "krea-image-krea-krea-2-large",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [
+        "image_style_references",
+        "moodboards"
+      ],
+      "expected": {
+        "low": 0.07,
+        "high": 0.07,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 Turbo (Krea) at its defaults bills text to image",
+      "nodeId": "krea-image-krea-krea-2-medium-turbo",
+      "params": {},
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.015,
+        "high": 0.015,
+        "unavailable": false,
+        "plan": false
+      }
+    },
+    {
+      "name": "Krea 2 Turbo (Krea) with style references typed in bills the style reference tier",
+      "nodeId": "krea-image-krea-krea-2-medium-turbo",
+      "params": {
+        "image_style_references": "[{\"url\": \"https://x/a.png\"}]"
+      },
+      "apiKeys": {
+        "KREA_API_TOKEN": "set"
+      },
+      "wired": [],
+      "expected": {
+        "low": 0.0175,
+        "high": 0.0175,
+        "unavailable": false,
         "plan": false
       }
     }

@@ -274,3 +274,19 @@ def test_folded_check_ties_each_krea_route_to_its_request_schema():
         "krea-3", lambda d, r: r.update(provider="fal")))
     assert any("creativity=1 sends 1" in p for p in _broken(
         "flux-video-upscale", lambda d, r: r.pop("valueMap")))
+
+
+def test_krea_2_billing_tiers_are_priced_from_the_catalog():
+    """k2BillingTier isn't a request field; the generator maps it onto the
+    reference inputs (K2_TIER) for the catalog nodes and krea-2-generate."""
+    entries, skipped = SYNC.pricing_entries(CATALOG, REGISTRY)
+    for node_id in ("krea-image-krea-krea-2-medium", "krea-image-krea-krea-2-large",
+                    "krea-image-krea-krea-2-medium-turbo", "krea-2-generate"):
+        assert node_id in entries and node_id not in skipped
+        assert entries[node_id]["generatedBy"] == SYNC.PRICING_GENERATOR
+    # The Krea 2 guide states Medium and Large; a drift from the OpenAPI stops the script.
+    model = dict(CATALOG["models"]["krea-image-krea-krea-2-medium"])
+    points = [{**point, "amount": point["amount"] + 0.01} for point in model["pricing"]["price_points"]]
+    model["pricing"] = {**model["pricing"], "price_points": points}
+    with pytest.raises(ValueError, match="differ from the guide"):
+        SYNC.k2_catalog_entry("krea-image-krea-krea-2-medium", model, CATALOG, {}, {})

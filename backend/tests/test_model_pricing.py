@@ -387,3 +387,81 @@ def test_references_reads_the_reference_image_port(wired, refs):
 ])
 def test_video_mode_follows_the_wired_ports_like_the_bfl_client(wired, mode):
     assert model_pricing.video_mode(wired) == mode
+
+
+# Krea 2 bills by k2BillingTier (Krea's OpenAPI x-krea-pricing, checked
+# 2026-10-19): text to image, style references, moodboard.
+KREA_2_TIERS = {
+    "krea-2-generate": (0.03, 0.035, 0.04),
+    "krea-image-krea-krea-2-medium": (0.03, 0.035, 0.04),
+    "krea-image-krea-krea-2-large": (0.06, 0.065, 0.07),
+    "krea-image-krea-krea-2-medium-turbo": (0.015, 0.0175, 0.02),
+}
+
+
+def _krea_2_estimate(node_id, params=None, wired=()):
+    item = {"id": "n1", "definitionId": node_id, "params": params or {}, "name": "Node"}
+    result = model_pricing.estimate_run([item], model_pricing.load_pricing(), NodeRegistry().get_all(),
+                                        {"KREA_API_TOKEN": "set"}, None, {"n1": set(wired)} if wired else None)
+    line = result["priced"].get("n1")
+    return None if line is None else (round(line["low"], 6), round(line["high"], 6))
+
+
+@pytest.mark.parametrize("node_id", sorted(KREA_2_TIERS))
+def test_every_krea_2_node_is_priced_at_its_defaults(node_id):
+    text, _, _ = KREA_2_TIERS[node_id]
+    assert _krea_2_estimate(node_id) == (text, text)
+
+
+@pytest.mark.parametrize("node_id", sorted(KREA_2_TIERS))
+def test_a_krea_2_style_reference_bills_the_style_reference_tier(node_id):
+    _, refs, board = KREA_2_TIERS[node_id]
+    port = "style_images" if node_id == "krea-2-generate" else "image_style_references"
+    assert _krea_2_estimate(node_id, wired=[port]) == (refs, refs)
+    # A moodboard with style references bills the moodboard price, not both.
+    if node_id == "krea-2-generate":
+        assert _krea_2_estimate(node_id, {"moodboard_id": "mb-1"}, wired=[port]) == (board, board)
+    else:
+        # Typed into the field rather than wired: the same tier.
+        typed = {"image_style_references": '[{"url": "https://x/a.png"}]'}
+        assert _krea_2_estimate(node_id, typed) == (refs, refs)
+        assert _krea_2_estimate(node_id, wired=[port, "moodboards"]) == (board, board)
+
+
+def test_a_wired_board_on_krea_2_is_the_range_from_style_references_to_moodboard():
+    # A Nebula board goes as style references, a Krea moodboard id as a moodboard.
+    assert _krea_2_estimate("krea-2-generate", wired=["moodboard"]) == (0.035, 0.04)
+    assert _krea_2_estimate("krea-2-generate", {"variant": "large"}) == (0.06, 0.06)
+    assert _krea_2_estimate("krea-2-generate", {"variant": "large", "moodboard_id": "mb-1"}) == (0.07, 0.07)
+
+
+def test_krea_2_rows_for_loras_and_image_to_image_are_unconfirmed():
+    entry = model_pricing.load_pricing()["nodes"]["krea-image-krea-krea-2-medium"]
+    definition = NodeRegistry().get_all()["krea-image-krea-krea-2-medium"]
+    values = model_pricing._price_values(entry, definition, {"styles": '[{"id": "s", "strength": 1}]'}, ())
+    row = next(row for row in entry["rows"] if model_pricing._matches(values, row["match"]))
+    assert row["price"] == 0.03 and row.get("unconfirmed") is True
+    plain = model_pricing._price_values(entry, definition, {}, ())
+    row = next(row for row in entry["rows"] if model_pricing._matches(plain, row["match"]))
+    assert row["price"] == 0.03 and "unconfirmed" not in row
+    assert _krea_2_estimate("krea-image-krea-krea-2-medium", wired=["image_url"]) == (0.03, 0.03)
+
+
+def test_a_wired_port_variable_prices_a_wire_into_a_param_it_reads():
+    definition = {"id": "tiered", "apiProvider": "krea", "params": [{"key": "refs"}],
+                  "inputPorts": [{"id": "refs"}]}
+    entry = {"currency": "usd", "per": "request", "checked": "2026-10-19",
+             "sources": [{"url": "https://example.com", "quote": "x"}],
+             "rows": [{"match": {"refs": "", "(wired refs)": "no"}, "price": 1},
+                      {"match": {}, "price": 2}]}
+    assert model_pricing.validate_pricing({"nodes": {"tiered": entry}}, {"tiered": definition}) == []
+    assert model_pricing.estimate_node(entry, definition, {}, wired=["refs"])["low"] == 2
+    assert model_pricing.estimate_node(entry, definition, {"refs": "a"})["low"] == 2
+    assert model_pricing.estimate_node(entry, definition, {})["low"] == 1
+    # A row that reads refs without (wired refs) leaves a wired run unpriced, as before.
+    loose = {**entry, "rows": [{"match": {"refs": ""}, "price": 1}, *entry["rows"]]}
+    assert model_pricing.estimate_node(loose, definition, {}, wired=["refs"]) is None
+    bad = {**entry, "rows": [{"match": {"(wired refs)": "maybe", "(wired nope)": "yes"}, "price": 1}]}
+    problems = model_pricing.validate_pricing({"nodes": {"tiered": bad}}, {"tiered": definition})
+    assert any("must be one of ('yes', 'no')" in p for p in problems)
+    assert any("unknown param '(wired nope)'" in p for p in problems)
