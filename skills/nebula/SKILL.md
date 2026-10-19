@@ -138,6 +138,7 @@ nebula moodboard set <board> --direction "quiet coastal mornings" --avoid "neon 
   --pin-color "#E8593C" --keep-out-color "#0000FF"
 nebula moodboard set <board> --unavoid "neon signage" --unpin-color "#0000FF"
 nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --keep-brief
+nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
 nebula moodboard analyze <board>
 nebula moodboard list
 nebula moodboard delete <board>
@@ -173,8 +174,13 @@ nebula moodboard delete <board>
   use it.
 - `set --json` returns `previous`, the settings before your change
   (including Direction, Avoid, pinned colours and your own hand-written
-  brief). Set them back with the same flags (or pass them to the MCP tool
-  `moodboard_update` as they are) to undo it.
+  brief). To undo it, save that output and run
+  `nebula moodboard set <board> --restore <file>` (`-` reads stdin), or
+  pass `previous` to the MCP tool `moodboard_update` as it is. Images you
+  took off with `--remove` aren't in it: add them back from `removed`
+  (`nebula moodboard add <board> <url>`). If a `--keep-brief` fails after
+  the other changes were saved, the error prints the `previous` that puts
+  them back.
 - `delete` moves a board to Recently deleted, and
   `nebula trash restore moodboard <id>` brings it back. If this Nebula has no
   Recently deleted, a delete would be for good, so it's refused: ask the

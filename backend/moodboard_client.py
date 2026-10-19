@@ -63,7 +63,17 @@ _BOARD_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 class MoodboardError(ValueError):
-    """Something the caller asked for that can't be done, said as the next step."""
+    """Something the caller asked for that can't be done, said as the next step.
+
+    `previous` is set when part of the call was saved before it failed: the
+    settings that put the board back, as update_board returns them, for the
+    board `board_id`."""
+
+    def __init__(self, message: str, *, previous: dict[str, Any] | None = None,
+                 board_id: str | None = None) -> None:
+        super().__init__(message)
+        self.previous = previous
+        self.board_id = board_id
 
 
 def sniff_image(data: bytes) -> str | None:
@@ -448,6 +458,8 @@ def find_image(images: list[dict[str, Any]], ref: Any) -> int:
             return index
     if text.isdigit() and 1 <= int(text) <= len(images):
         return int(text) - 1
+    if not images:
+        raise MoodboardError(f"no image '{text}': this board has no images now")
     raise MoodboardError(f"no image '{text}' on this board: use its number (1-{len(images)}) or id "
                          "from `nebula moodboard show`")
 
@@ -649,13 +661,36 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
     if content_changed:
         body["analysis"] = None
     updated = board
+    previous = previous_settings(board, brief="briefOverride" in body,
+                                 skip={str(image.get("id")) for image in original} - {
+                                     str(image.get("id")) for image in current})
     if body:
         updated = _send(api, "PUT", f"/api/moodboards/{board['id']}", json=body, headers=headers,
                         person_brief=refused_put)
     if keep_brief:
-        updated = _send(api, "POST", f"/api/moodboards/{board['id']}/brief-override/keep", headers=headers,
-                        person_brief=_PERSON_KEEP.format(outcome=_OTHERS_SAVED if body else _NOTHING_KEPT))
-    return updated, removed, previous_settings(board, brief="briefOverride" in body)
+        keep_path = f"/api/moodboards/{board['id']}/brief-override/keep"
+        if not body:
+            updated = _send(api, "POST", keep_path, headers=headers,
+                            person_brief=_PERSON_KEEP.format(outcome=_NOTHING_KEPT))
+        else:
+            # Only a race gets here (the person wrote or removed the brief
+            # since it was read): the PUT is saved, so hand back what undoes it.
+            try:
+                updated = _send(api, "POST", keep_path, headers=headers,
+                                person_brief=_PERSON_KEEP.format(outcome="").strip())
+            except (MoodboardError, NebulaAPIError) as exc:
+                if isinstance(exc, MoodboardError):
+                    reason = f"{exc} Ask the person to keep or regenerate it in Moodboard Studio."
+                elif exc.kind in ("connect", "timeout"):
+                    reason = ("Nebula didn't answer the Keep, so the brief may or may not have been kept "
+                              f"(`nebula moodboard show {board['id']}` says which).")
+                elif exc.status == 409:
+                    reason = "The board's hand-written brief was removed while this ran, so there is none to keep."
+                else:
+                    reason = f"Keeping the brief failed: {exc.detail}"
+                raise MoodboardError(f"{reason} {_OTHERS_SAVED}", previous=previous,
+                                     board_id=str(board["id"])) from exc
+    return updated, removed, previous
 
 
 _PERSON_BRIEF = ("The person wrote this board's brief by hand, so an agent can't {action} it: the board keeps no "
@@ -668,25 +703,36 @@ _PERSON_KEEP = ("The person wrote this board's brief by hand, so only they can k
                 "notice that the board changed since they wrote it. {outcome}")
 _NOTHING_KEPT = ("Nothing was changed: leave keep_brief (--keep-brief) out to make the other changes, or ask the "
                  "person to keep or regenerate it in Moodboard Studio.")
-_OTHERS_SAVED = ("The other changes were saved; the brief wasn't kept. Ask the person to keep or regenerate it in "
-                 "Moodboard Studio.")
+_OTHERS_SAVED = "The other changes were saved; `previous` puts them back."
 
 
-def previous_settings(board: dict[str, Any], *, brief: bool = False) -> dict[str, Any]:
+# Every key previous_settings can return: update_board's arguments that put
+# a board back (`nebula moodboard set --restore` checks against it).
+RESTORE_KEYS = ("name", "notes", "mode", "strength", "images", "direction", "avoid", "pinned_colors",
+                "brief_override")
+
+
+def previous_settings(board: dict[str, Any], *, brief: bool = False,
+                      skip: Iterable[str] = ()) -> dict[str, Any]:
     """What `update_board` takes to put a board back the way it was: its
     settings, each image's weight, notes and excluded, by image id, and the
     brief fields (pass them as update_board's keyword arguments).
+
+    `skip` names images the change took off the board. They aren't in
+    `images`, which only sets images that are there: they come back from
+    the change's `removed` URLs (`nebula moodboard add`, moodboard_add).
 
     `brief_override` (the agent's own text, "" for none) is there only when
     the change touched the hand-written brief (`brief`), so undoing anything
     else never touches a brief the person wrote since. An agent can only
     change its own text, so it is never the person's."""
+    gone = set(skip)
     previous: dict[str, Any] = {
         "name": board.get("name"), "notes": board.get("notes"), "mode": board.get("mode"),
         "strength": board.get("strength"),
         "images": [{"image": image.get("id"), "weight": image.get("weight"), "notes": image.get("notes"),
                     "excluded": image.get("excluded")}
-                   for image in board.get("images") or []],
+                   for image in board.get("images") or [] if str(image.get("id")) not in gone],
     }
     if "direction" not in board:
         return previous  # an older Nebula: no brief fields to put back

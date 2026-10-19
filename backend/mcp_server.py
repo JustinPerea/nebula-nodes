@@ -804,6 +804,11 @@ def _board_call(fn, *args: Any, **kwargs: Any) -> Any:
     try:
         return fn(*args, **kwargs)
     except moodboard_client.MoodboardError as exc:
+        if exc.previous is not None:
+            # Part of the change was saved; an error carries no fields, so the
+            # way back goes in its text.
+            raise RuntimeError(f"{exc} To put the board back, pass this `previous` to moodboard_update: "
+                               f"{_json.dumps(exc.previous, ensure_ascii=False)}") from exc
         raise RuntimeError(str(exc)) from exc
 
 

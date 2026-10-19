@@ -1030,3 +1030,154 @@ def test_mcp_get_and_update_carry_the_brief(app, tmp_path):
     assert restored["pinnedColors"] == {"include": [], "exclude": []}
     kept = mcp_server.moodboard_update(board["id"], avoid=["a", "b"], unpin_colors=None)
     assert kept["avoid"] == ["a", "b"]
+
+
+def test_a_keep_lost_to_a_race_hands_back_what_puts_the_saved_part_back(app, tmp_path, monkeypatch, capsys):
+    import json
+
+    board = _analyzed_board(app, tmp_path)
+    boards.update_board(app.api, board["id"], direction="Before", brief_override="Agent text.")
+    real_get_board = boards.get_board
+    read = real_get_board(app.api, board["id"])
+    _person_override(board["id"], "The person's words.")
+    _stale_read(monkeypatch, read)
+    with pytest.raises(boards.MoodboardError) as caught:
+        boards.update_board(app.api, board["id"], direction="Saved direction", avoid_add=["x"], keep_brief=True)
+    assert "The other changes were saved" in str(caught.value)
+    previous = caught.value.previous
+    assert previous["direction"] == "Before" and previous["avoid"] == []
+    assert "brief_override" not in previous
+    # The MCP tool and the CLI hand it on too.
+    with pytest.raises(Exception, match="pass this `previous` to moodboard_update") as mcp_caught:
+        asyncio.run(mcp_server.mcp.call_tool("moodboard_update", {
+            "board": board["id"], "direction": "Saved direction", "avoid_add": ["y"], "keep_brief": True}))
+    assert '"direction": "Before"' in str(mcp_caught.value)
+    with pytest.raises(SystemExit):
+        _cli(app, ["moodboard", "set", board["id"], "--direction", "Saved direction", "--keep-brief"], capsys)
+    err = capsys.readouterr().err
+    assert "The other changes were saved" in err and f"nebula moodboard set {board['id']} --restore" in err
+    printed = json.loads(err[err.index("{"):])
+    assert printed["previous"]["direction"] == "Before"
+
+    monkeypatch.setattr(boards, "get_board", real_get_board)
+    restored, _, _ = boards.update_board(app.api, board["id"], **previous)
+    assert restored["direction"] == "Before" and restored["avoid"] == []
+    assert restored["briefOverride"]["text"] == "The person's words."
+
+
+def test_a_keep_on_a_brief_removed_while_it_ran_says_so_and_hands_back_previous(app, tmp_path, monkeypatch):
+    from services.moodboard_store import MoodboardStore
+
+    board = _analyzed_board(app, tmp_path)
+    boards.update_board(app.api, board["id"], brief_override="Agent text.")
+    read = boards.get_board(app.api, board["id"])
+    MoodboardStore().update(board["id"], by="person", briefOverride=None)
+    _stale_read(monkeypatch, read)
+    with pytest.raises(boards.MoodboardError) as caught:
+        boards.update_board(app.api, board["id"], direction="Saved", keep_brief=True)
+    message = str(caught.value)
+    assert message.startswith("The board's hand-written brief was removed while this ran")
+    assert "The other changes were saved" in message and "PUT /api" not in message
+    assert caught.value.previous["direction"] == ""
+
+
+def test_cli_restore_undoes_a_set_from_its_previous(app, tmp_path, capsys):
+    import json
+
+    board = _analyzed_board(app, tmp_path)
+    _cli(app, ["moodboard", "set", board["id"], "--direction", "Before", "--avoid", "a", "--pin-color", "#111111",
+               "--brief", "Agent text before."], capsys)
+    before = boards.get_board(app.api, board["id"])
+    out = _cli(app, ["moodboard", "set", board["id"], "--direction", "After", "--avoid", "b", "--unpin-color",
+                     "#111111", "--keep-out-color", "#222222", "--brief", "Agent text after.", "--json"], capsys)
+    whole = tmp_path / "set-output.json"
+    whole.write_text(out, encoding="utf-8")
+    _cli(app, ["moodboard", "set", board["id"], "--restore", str(whole)], capsys)
+    restored = boards.get_board(app.api, board["id"])
+    for key in ("direction", "avoid", "pinnedColors"):
+        assert restored[key] == before[key]
+    assert restored["briefOverride"]["text"] == "Agent text before."
+    assert restored["analysis"]
+
+    # The `previous` object alone works too.
+    out = _cli(app, ["moodboard", "set", board["id"], "--direction", "Again", "--json"], capsys)
+    only = tmp_path / "previous.json"
+    only.write_text(json.dumps(json.loads(out)["previous"]), encoding="utf-8")
+    _cli(app, ["moodboard", "set", board["id"], "--restore", str(only)], capsys)
+    assert boards.get_board(app.api, board["id"])["direction"] == "Before"
+
+
+@pytest.mark.parametrize(("argv", "message"), [
+    (["--restore", "{file}", "--direction", "x"], "can't go with other changes"),
+    (["--restore", "{file}", "--weight", "1=0.5"], "can't go with other changes"),
+    (["--restore", "{bad}"], "has no setting called analysis"),
+    (["--restore", "{missing}"], "can't read"),
+    (["--clear-avoid", "--unavoid", "a"], "--unavoid has nothing to take off"),
+])
+def test_cli_set_refuses_what_cant_go_together(app, tmp_path, capsys, argv, message):
+    import json
+
+    board = _analyzed_board(app, tmp_path)
+    good = tmp_path / "good.json"
+    good.write_text(json.dumps({"direction": ""}), encoding="utf-8")
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"direction": "", "analysis": None}), encoding="utf-8")
+    paths = {"file": str(good), "bad": str(bad), "missing": str(tmp_path / "nope.json")}
+    argv = [arg.format(**paths) for arg in argv]
+    before = boards.get_board(app.api, board["id"])
+    with pytest.raises(SystemExit):
+        _cli(app, ["moodboard", "set", board["id"], *argv], capsys)
+    assert message in capsys.readouterr().err
+    assert boards.get_board(app.api, board["id"])["version"] == before["version"]
+
+
+def test_restore_after_a_remove_puts_back_the_rest_and_the_url_brings_the_image_back(app, tmp_path, capsys):
+    import json
+
+    board, _ = boards.create_board(app.api, "Two images", [str(_png(tmp_path / "a.png", (232, 89, 60))),
+                                                          str(_png(tmp_path / "b.png", (20, 40, 200)))])
+    out = _cli(app, ["moodboard", "set", board["id"], "--direction", "After", "--weight", "2=0.3",
+                     "--remove", "1", "--json"], capsys)
+    data = json.loads(out)
+    taken = board["images"][0]
+    assert [image["image"] for image in data["previous"]["images"]] == [board["images"][1]["id"]]
+    saved = tmp_path / "set-output.json"
+    saved.write_text(out, encoding="utf-8")
+    _cli(app, ["moodboard", "set", board["id"], "--restore", str(saved)], capsys)
+    restored = boards.get_board(app.api, board["id"])
+    assert restored["direction"] == "" and restored["images"][0]["weight"] == board["images"][1]["weight"]
+    _cli(app, ["moodboard", "add", board["id"], *data["removed"]], capsys)
+    assert taken["url"] in [image["url"] for image in boards.get_board(app.api, board["id"])["images"]]
+
+
+def test_a_lost_keep_names_the_board_by_id_in_the_restore_line(app, tmp_path, monkeypatch, capsys):
+    board = _analyzed_board(app, tmp_path, "Coastal mornings")
+    boards.update_board(app.api, board["id"], brief_override="Agent text.")
+    read = boards.get_board(app.api, board["id"])
+    _person_override(board["id"], "The person's words.")
+    _stale_read(monkeypatch, read)
+    with pytest.raises(SystemExit):
+        _cli(app, ["moodboard", "set", "Coastal mornings", "--name", "Renamed", "--keep-brief"], capsys)
+    err = capsys.readouterr().err
+    assert f"`nebula moodboard set {board['id']} --restore <file>`" in err
+    assert "set Coastal mornings --restore" not in err
+
+
+def test_a_keep_nebula_never_answered_doesnt_say_the_brief_wasnt_kept(app, tmp_path, monkeypatch):
+    board = _analyzed_board(app, tmp_path)
+    boards.update_board(app.api, board["id"], brief_override="Agent text.")
+    api = app.api
+    real_request = api.request
+
+    def request(method, path, **kwargs):
+        if path.endswith("/brief-override/keep"):
+            raise NebulaAPIError("timed out", kind="timeout")
+        return real_request(method, path, **kwargs)
+
+    monkeypatch.setattr(api, "request", request)
+    with pytest.raises(boards.MoodboardError) as caught:
+        boards.update_board(api, board["id"], direction="Saved", keep_brief=True)
+    message = str(caught.value)
+    assert "may or may not have been kept" in message and "wasn't kept" not in message
+    assert "The other changes were saved" in message
+    assert caught.value.previous["direction"] == "" and caught.value.board_id == board["id"]

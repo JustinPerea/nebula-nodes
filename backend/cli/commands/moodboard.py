@@ -7,7 +7,9 @@ parses arguments and prints.
 from __future__ import annotations
 
 import json
+import shlex
 import sys
+from pathlib import Path
 from typing import Any
 
 import moodboard_client as boards
@@ -23,6 +25,32 @@ def _fail(message: str) -> None:
 
 def _print_json(data: Any) -> None:
     print(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def _changes_flags(args) -> bool:
+    """Whether `set` was given any change besides the image edits."""
+    values = (args.name, args.notes, args.mode, args.strength, args.direction, args.brief)
+    lists = (args.avoid, args.unavoid, args.pin_color, args.keep_out_color, args.unpin_color)
+    return (any(value is not None for value in values) or any(lists)
+            or args.clear_avoid or args.clear_brief or args.keep_brief)
+
+
+def _read_previous(source: str) -> dict[str, Any]:
+    """The `previous` an earlier `set --json` printed, from a file or stdin
+    (-): the object itself, or that whole output."""
+    try:
+        text = sys.stdin.read() if source == "-" else Path(source).expanduser().read_text(encoding="utf-8")
+        data = json.loads(text)
+    except (OSError, ValueError) as exc:
+        _fail(f"--restore: can't read {source}: {exc}")
+    if isinstance(data, dict) and isinstance(data.get("previous"), dict):
+        data = data["previous"]
+    if not isinstance(data, dict) or not data:
+        _fail("--restore takes the `previous` object that `nebula moodboard set --json` printed")
+    unknown = sorted(set(data) - set(boards.RESTORE_KEYS))
+    if unknown:
+        _fail(f"--restore: `previous` has no setting called {', '.join(unknown)}")
+    return data
 
 
 def _pairs(items: list[str], flag: str) -> list[tuple[str, str]]:
@@ -175,13 +203,21 @@ def run(client: NebulaClient, args) -> None:
                 edits.setdefault(image, {"image": image})["excluded"] = False
             if args.brief is not None and args.clear_brief:
                 _fail("--brief and --clear-brief can't go together")
-            board, removed, previous = boards.update_board(
-                api, args.board, name=args.name, notes=args.notes, mode=args.mode, strength=args.strength,
-                images=list(edits.values()), remove=args.remove, direction=args.direction,
-                avoid=[] if args.clear_avoid else None, avoid_add=args.avoid, avoid_remove=args.unavoid,
-                pin_colors=args.pin_color, keep_out_colors=args.keep_out_color, unpin_colors=args.unpin_color,
-                brief_override="" if args.clear_brief else args.brief, keep_brief=args.keep_brief,
-                headers=headers)
+            if args.clear_avoid and args.unavoid:
+                _fail("--clear-avoid empties the Avoid list, so --unavoid has nothing to take off")
+            if args.restore is not None:
+                if edits or args.remove or _changes_flags(args):
+                    _fail("--restore puts back a whole `previous`, so it can't go with other changes")
+                board, removed, previous = boards.update_board(api, args.board, **_read_previous(args.restore),
+                                                               headers=headers)
+            else:
+                board, removed, previous = boards.update_board(
+                    api, args.board, name=args.name, notes=args.notes, mode=args.mode, strength=args.strength,
+                    images=list(edits.values()), remove=args.remove, direction=args.direction,
+                    avoid=[] if args.clear_avoid else None, avoid_add=args.avoid, avoid_remove=args.unavoid,
+                    pin_colors=args.pin_color, keep_out_colors=args.keep_out_color,
+                    unpin_colors=args.unpin_color, brief_override="" if args.clear_brief else args.brief,
+                    keep_brief=args.keep_brief, headers=headers)
             if args.json:
                 _print_json({**boards.brief(board), "removed": removed, "previous": previous})
                 return
@@ -204,6 +240,14 @@ def run(client: NebulaClient, args) -> None:
             else:
                 print(f"Deleted {result.get('name')} ({result.get('id')}).")
     except boards.MoodboardError as exc:
+        if exc.previous is not None:
+            # Part of the change was saved: say how to put it back.
+            print(f"error: {exc}", file=sys.stderr)
+            board_ref = shlex.quote(exc.board_id or getattr(args, "board", "<board>"))
+            print(f"To put the board back, save this as a file and run "
+                  f"`nebula moodboard set {board_ref} --restore <file>`:", file=sys.stderr)
+            print(json.dumps({"previous": exc.previous}, indent=2, ensure_ascii=False), file=sys.stderr)
+            sys.exit(1)
         _fail(str(exc))
     except NebulaAPIError as exc:
         if exc.kind == "connect":
@@ -288,6 +332,9 @@ def add_parser(sub) -> None:
                          help="Go back to the generated brief")
     brief_g.add_argument("--keep-brief", dest="keep_brief", action="store_true",
                          help="Keep a hand-written brief after the board changed (clears \"changed since\")")
+    set_p.add_argument("--restore", metavar="FILE",
+                       help="Undo a change: the `previous` from `set --json` (or its whole output), "
+                            "as a file or - for stdin")
     set_p.add_argument("--json", action="store_true", help="Print JSON")
 
     analyze_p = msub.add_parser("analyze", help="Analyze a board (palette, accents, brief)")

@@ -1141,6 +1141,7 @@ nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" -
 nebula moodboard set <board> --direction "quiet coastal mornings" --avoid "neon signage" --pin-color "#E8593C"
 nebula moodboard set <board> --unavoid "neon signage" --keep-out-color "#0000FF" --unpin-color "#E8593C"
 nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --keep-brief
+nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
 nebula moodboard analyze <board>
 nebula moodboard list                      # boards for every project, plus the open project's
 nebula moodboard delete <board>
@@ -1188,11 +1189,18 @@ nebula moodboard delete <board>
   keep it. `--remove` takes an image off the board; its file stays, and the
   command prints the URL to add it back.
 - `moodboard_update` (and `set --json`) returns `previous`: the settings
-  before the change, the brief fields included. Passing them back undoes it.
+  before the change, the brief fields included. Passing them back undoes it:
+  to `moodboard_update` as they are, or `nebula moodboard set <board>
+  --restore <file>` with the saved `set --json` output (or just `previous`).
+  Images the change took off aren't in `previous`; `removed` has their URLs
+  for `moodboard_add` / `nebula moodboard add`.
   It has the hand-written brief only when the change touched it, so undoing
   anything else leaves a brief the person wrote since alone. If the person
   replaced your brief since, the undo is refused with nothing saved: send it
-  again without `brief_override`.
+  again without `brief_override`. If Keep fails after the other changes were
+  saved (the person wrote or removed the brief while the call ran), the error
+  says so and carries the `previous` that puts them back (in the MCP error
+  text; on stderr from the CLI).
 - Deleting: where Nebula keeps deleted boards in Recently deleted, anyone
   may delete one, agents included, because it can be restored. Where a
   delete is for good (a Nebula without Recently deleted), `nebula moodboard
