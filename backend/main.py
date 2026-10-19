@@ -85,6 +85,7 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
+from services import output_thumbnail
 from services import project_cover
 from services.cli_graph import SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
@@ -9621,6 +9622,7 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
             historical.update({node_id: node["definitionId"] for node_id, node in cli_graph.nodes.items()})
             staged, candidate = _stage_project_snapshot(body["snapshot"], historical=historical)
             _refuse_agent_billing_in_project(candidate, cli_graph.nodes, _snapshot_nodes(project["snapshot"]))
+            _keep_person_viewport(staged, project["snapshot"])
             project["snapshot"] = staged
             project["_backendNodeIds"] = sorted(set(cli_graph.nodes) & {node["id"] for node in project["snapshot"]["nodes"]})
             project["_backendEdgeIds"] = sorted({edge["id"] for edge in cli_graph.edges} & {edge["id"] for edge in project["snapshot"]["edges"]})
@@ -9637,6 +9639,17 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
         return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
 
 
+def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> None:
+    """Only the person's own tab saves the project's view (design-canvas gap 19).
+
+    A save from any other tab (an agent's browser, a tab opened without the
+    person link) keeps the view the project already had, so looking around
+    there never moves it. Its nodes, wires and history still save.
+    """
+    if not _is_person_request():
+        staged["viewport"] = copy.deepcopy(stored.get("viewport"))
+
+
 def _save_handoff(project: dict[str, Any], raw: Any) -> None:
     """The last save from a tab whose project an agent switched away from.
 
@@ -9649,6 +9662,7 @@ def _save_handoff(project: dict[str, Any], raw: Any) -> None:
     historical = {node["id"]: node.get("data", {}).get("definitionId") for node in stored["nodes"]}
     staged, candidate = _stage_project_snapshot(raw, historical=historical)
     _refuse_agent_billing_in_project(candidate, _snapshot_nodes(stored))
+    _keep_person_viewport(staged, stored)
     backend_nodes = set(project.get("_backendNodeIds") or [])
     backend_edges = set(project.get("_backendEdgeIds") or [])
     stored_nodes = {node["id"]: node for node in stored["nodes"]}
@@ -11339,8 +11353,12 @@ _ACTIVE_OUTPUT_SUFFIXES = {".svg", ".svgz", ".html", ".htm", ".xhtml", ".xml"}
 _ACTIVE_OUTPUT_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; sandbox"
 
 
+# Thumbnails for the zoomed-out canvas (?thumb=1), made once and kept here.
+_THUMBNAIL_DIR = _STATE_DIR / "thumbnails"
+
+
 @app.get("/api/outputs/{rel:path}")
-async def serve_output(rel: str):
+async def serve_output(rel: str, thumb: bool = False):
     roots = [OUTPUT_ROOT] + ([DEFAULT_OUTPUT_ROOT] if DEFAULT_OUTPUT_ROOT != OUTPUT_ROOT else [])
     for root in roots:
         try:
@@ -11350,6 +11368,14 @@ async def serve_output(rel: str):
             continue
         if candidate.is_file():
             headers = {"X-Content-Type-Options": "nosniff"}
+            if thumb:
+                # A small still of an image or video; the canvas falls back to
+                # the file itself when there is none.
+                try:
+                    small = await output_thumbnail.thumbnail(candidate, _THUMBNAIL_DIR)
+                except output_thumbnail.ThumbnailUnavailable as exc:
+                    raise HTTPException(status_code=415, detail=str(exc)) from exc
+                return FileResponse(small, headers=headers)
             if candidate.suffix.lower() in _ACTIVE_OUTPUT_SUFFIXES:
                 headers["Content-Security-Policy"] = _ACTIVE_OUTPUT_CSP
             return FileResponse(candidate, headers=headers)

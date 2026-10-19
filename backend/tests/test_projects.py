@@ -92,7 +92,7 @@ def test_migrates_existing_canvas_once_without_replacing_it(workspace):
     assert document["snapshot"]["nodes"][0]["id"] == "n1"
 
 
-def test_preserves_ids_outputs_recipe_and_creator_state_on_switch(workspace):
+def test_preserves_ids_outputs_recipe_and_creator_state_on_switch(workspace, person):
     client, graph, store, broadcast = workspace
     first = create(client, "First")
     project_id = first["project"]["id"]
@@ -100,7 +100,8 @@ def test_preserves_ids_outputs_recipe_and_creator_state_on_switch(workspace):
     # Text input has no input handle; use a model prompt target for this edge.
     snapshot["nodes"][1]["data"].update({"definitionId": "nano-banana", "params": {}, "outputs": {}})
     snapshot["edges"][0]["targetHandle"] = "prompt"
-    saved = client.put(f"/api/projects/{project_id}", json={"workspaceRevision": first["workspaceRevision"], "snapshot": snapshot})
+    saved = client.put(f"/api/projects/{project_id}", json={"workspaceRevision": first["workspaceRevision"], "snapshot": snapshot},
+                       headers=person.headers)
     assert saved.status_code == 200, saved.text
     # Snapshot save intentionally does not replace the live graph.
     assert graph.nodes == {}
@@ -124,7 +125,7 @@ def test_preserves_ids_outputs_recipe_and_creator_state_on_switch(workspace):
     assert replacement["activeProjectId"] == project_id
 
 
-def test_latest_cli_changes_overlay_without_erasing_frontend_extras_or_history(workspace):
+def test_latest_cli_changes_overlay_without_erasing_frontend_extras_or_history(workspace, person):
     client, graph, _, _ = workspace
     graph.add_node("text-input", {"value": "old"})
     listing = client.get("/api/projects").json()
@@ -135,7 +136,8 @@ def test_latest_cli_changes_overlay_without_erasing_frontend_extras_or_history(w
     snapshot["nodes"].append(node("frontend-only", "view-only"))
     snapshot["runHistory"] = saved_snapshot()["runHistory"]
     snapshot["viewport"] = {"x": 9, "y": 2, "zoom": 1.3}
-    saved = client.put(f"/api/projects/{project_id}", json={"workspaceRevision": listing["workspaceRevision"], "snapshot": snapshot})
+    saved = client.put(f"/api/projects/{project_id}", json={"workspaceRevision": listing["workspaceRevision"], "snapshot": snapshot},
+                       headers=person.headers)
     assert saved.status_code == 200, saved.text
     graph.update_params("n1", {"value": "CLI edit"})
     added = graph.add_node("text-input", {"value": "CLI addition"})
@@ -149,6 +151,36 @@ def test_latest_cli_changes_overlay_without_erasing_frontend_extras_or_history(w
     graph.remove_node("n1")
     client.get("/api/projects")
     assert {n["id"] for n in client.get(f"/api/projects/{project_id}").json()["snapshot"]["nodes"]} == {added, "frontend-only"}
+
+
+def test_only_the_persons_tab_saves_the_view(workspace, person):
+    """Gap 19: a tab that isn't connected as the person (an agent's browser)
+    saves its edits but never the project's zoom and pan."""
+    client, _, _, _ = workspace
+    created = create(client)
+    project_id = created["project"]["id"]
+    revision = created["workspaceRevision"]
+    mine = {**saved_snapshot(), "edges": []}
+    mine["viewport"] = {"x": 10, "y": 20, "zoom": 0.7}
+    assert client.put(f"/api/projects/{project_id}", json={"workspaceRevision": revision, "snapshot": mine},
+                      headers=person.headers).status_code == 200
+
+    theirs = {**saved_snapshot(), "edges": []}
+    theirs["nodes"][1]["data"]["params"]["value"] = "Edited in the agent's tab"
+    theirs["nodes"][1]["data"]["outputs"]["text"]["value"] = "Edited in the agent's tab"
+    theirs["viewport"] = {"x": -900, "y": -400, "zoom": 4}
+    for headers in ({}, {"X-Nebula-Agent": "GM - Design"}, {**person.headers, "X-Nebula-Agent": "GM - Design"}):
+        response = client.put(f"/api/projects/{project_id}", json={"workspaceRevision": revision, "snapshot": theirs},
+                              headers=headers)
+        assert response.status_code == 200, response.text
+        stored = client.get(f"/api/projects/{project_id}").json()["snapshot"]
+        assert stored["viewport"] == {"x": 10, "y": 20, "zoom": 0.7}
+        assert stored["nodes"][1]["data"]["params"]["value"] == "Edited in the agent's tab"
+
+    theirs["viewport"] = {"x": 1, "y": 2, "zoom": 1.5}
+    assert client.put(f"/api/projects/{project_id}", json={"workspaceRevision": revision, "snapshot": theirs},
+                      headers=person.headers).status_code == 200
+    assert client.get(f"/api/projects/{project_id}").json()["snapshot"]["viewport"] == {"x": 1, "y": 2, "zoom": 1.5}
 
 
 @pytest.mark.parametrize("failure_at", ["prepare", "graph", "commit"])
