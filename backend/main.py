@@ -10588,6 +10588,26 @@ class CharacterUpdate(BaseModel):
 
 # Moodboard bodies refuse unknown fields: an image list sent under any other
 # key used to make a board with no images and a 200.
+class MoodboardPlacementModel(BaseModel):
+    """One card of an image on the board (services/moodboard_layout.py). On
+    an image already on the board it is ignored (the saved cards stay); on a
+    new image it is where the card goes. The server writes ``w``/``h`` from
+    the weight and stamps ``placedBy``/``placedAt``, so a client may send
+    just ``x`` and ``y``. Every key GET returns is accepted, so a client can
+    send back what it read."""
+    model_config = ConfigDict(extra="forbid")
+
+    id: str | None = None
+    frameId: str | None = None
+    x: float
+    y: float
+    w: float | None = None
+    h: float | None = None
+    weight: float | None = None
+    placedBy: str | None = None
+    placedAt: str | None = None
+
+
 class MoodboardImageModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -10598,6 +10618,9 @@ class MoodboardImageModel(BaseModel):
     # The person's own label, never sent anywhere (services/moodboard_store.py).
     privateNote: str = ""
     excluded: bool = False
+    # Where its cards sit (services/moodboard_layout.py). Ignored on an
+    # image already on the board; on a new one, where it goes.
+    placements: list[MoodboardPlacementModel] | None = None
 
 
 class MoodboardPinnedColorsModel(BaseModel):
@@ -10637,6 +10660,12 @@ class MoodboardCreate(BaseModel):
     sendNotes: Any = None
     # The saved colour check is the store's; a sent one is ignored.
     colorCheck: Any = None
+    # The board's layout: never set here (see _refuse_moodboard_layout).
+    frames: Any = None
+    suggestions: Any = None
+    readings: Any = None
+    layoutVersion: Any = None
+    lastRead: Any = None
 
 
 class MoodboardUpdate(BaseModel):
@@ -10664,6 +10693,12 @@ class MoodboardUpdate(BaseModel):
     colorChoices: Any = None
     sendNotes: Any = None
     colorCheck: Any = None
+    # The board's layout: never set here (see _refuse_moodboard_layout).
+    frames: Any = None
+    suggestions: Any = None
+    readings: Any = None
+    layoutVersion: Any = None
+    lastRead: Any = None
 
 
 class MoodboardThresholdsModel(BaseModel):
@@ -10744,6 +10779,18 @@ def _refuse_override_change(exc: Exception) -> NoReturn:
         gate.detail = f"{exc} {gate.detail}"
         raise
     raise HTTPException(status_code=403, detail=str(exc))  # unreachable: only non-persons are refused
+
+
+def _refuse_moodboard_layout(body: BaseModel) -> None:
+    """422 when a create or PUT body sets the board's layout (frames,
+    suggestions, readings, layoutVersion, lastRead). It is written only by
+    board edits and by Nebula placing new images; an image's own
+    ``placements`` are fine (services/moodboard_store.py)."""
+    from services.moodboard_store import LAYOUT_BOARD_KEYS, LAYOUT_REFUSED
+
+    sent = [key for key in LAYOUT_BOARD_KEYS if key in body.model_fields_set]
+    if sent:
+        raise HTTPException(status_code=422, detail=f"{', '.join(sent)} {LAYOUT_REFUSED}")
 
 
 def _moodboard_out(board: dict) -> dict:
@@ -10899,13 +10946,16 @@ async def list_moodboards(scope: str = "global", projectId: str | None = None) -
 
 @app.post("/api/moodboards")
 async def create_moodboard(body: MoodboardCreate) -> dict:
+    _refuse_moodboard_layout(body)
     from services.moodboard_store import NotesOptInProtected
     _require_canvas_project(body.projectId)
     store = _moodboard_store()
     try:
         moodboard = store.create(
             name=body.name,
-            images=[img.model_dump() for img in body.images],
+            # Only what was sent: an image's weight left out comes from its
+            # placements, if it asks for any.
+            images=[img.model_dump(exclude_unset=True) for img in body.images],
             notes=body.notes,
             mode=body.mode,
             strength=body.strength,
@@ -10932,7 +10982,10 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
 async def get_moodboard(moodboard_id: str) -> dict:
     store = _moodboard_store()
     try:
-        moodboard = store.get(moodboard_id)
+        # Off the event loop: an old board is laid out on read, and the first
+        # read of its image headers since Nebula started takes about 2 ms an
+        # image (services/moodboard_layout.file_aspect). Reading writes nothing.
+        moodboard = await asyncio.to_thread(store.get, moodboard_id)
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     if moodboard is None:
@@ -10942,6 +10995,7 @@ async def get_moodboard(moodboard_id: str) -> dict:
 
 @app.put("/api/moodboards/{moodboard_id}")
 async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
+    _refuse_moodboard_layout(body)
     store = _moodboard_store()
     updates = {
         key: value
@@ -10953,7 +11007,9 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     if "briefOverride" in body.model_fields_set and body.briefOverride is None:
         updates["briefOverride"] = None
     if "images" in updates:
-        updates["images"] = [img.model_dump() if hasattr(img, "model_dump") else img for img in body.images or []]
+        # Images merge by id: a key an image leaves out keeps its saved value
+        # (services/moodboard_store._normalize_images), so only what was sent.
+        updates["images"] = [img.model_dump(exclude_unset=True) for img in body.images or []]
     updates.pop("colorCheck", None)
     from services.moodboard_store import BriefOverrideProtected, NotesOptInProtected
     try:
@@ -10993,7 +11049,9 @@ async def keep_moodboard_brief_override(moodboard_id: str) -> dict:
 async def analyze_moodboard_route(moodboard_id: str) -> dict:
     store = _moodboard_store()
     try:
-        moodboard = store.get(moodboard_id)
+        # Laid out off the event loop, so saving the analysis below (which
+        # saves an old board's layout) finds its image headers already read.
+        moodboard = await asyncio.to_thread(store.get, moodboard_id)
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     if moodboard is None:
@@ -11031,7 +11089,7 @@ async def dry_run_moodboard_analysis(moodboard_id: str, body: MoodboardDryRunReq
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     try:
-        moodboard = _moodboard_store().get(moodboard_id)
+        moodboard = _moodboard_store().get(moodboard_id, laid_out=False)  # nor does the dry run
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     if moodboard is None:

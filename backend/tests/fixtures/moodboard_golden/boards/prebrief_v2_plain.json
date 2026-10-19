@@ -1,0 +1,460 @@
+{
+  "id": "3f9c1a7e2b40",
+  "name": "Coastal evenings",
+  "version": 2,
+  "images": [
+    {
+      "id": "d1a0e5c2f901",
+      "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
+      "weight": 1.0,
+      "notes": "the light we want",
+      "excluded": false
+    },
+    {
+      "id": "d1a0e5c2f902",
+      "url": "/api/outputs/moodboard-golden/moss-stone-4x3.png",
+      "weight": 0.6,
+      "notes": "",
+      "excluded": false
+    },
+    {
+      "id": "d1a0e5c2f903",
+      "url": "/api/outputs/moodboard-golden/paper-studio-1x1.png",
+      "weight": 1.0,
+      "notes": "",
+      "excluded": false
+    },
+    {
+      "id": "d1a0e5c2f904",
+      "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
+      "weight": 0.3,
+      "notes": "texture only",
+      "excluded": false
+    },
+    {
+      "id": "d1a0e5c2f905",
+      "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png",
+      "weight": 0.8,
+      "notes": "",
+      "excluded": false
+    }
+  ],
+  "notes": "quiet coastal evenings, film grain",
+  "mode": "look",
+  "strength": 0.7,
+  "analysis": {
+    "version": 2,
+    "sourceHash": "42b1fceff34a38b9",
+    "mode": "look",
+    "modeIntent": "visual style only; avoid copying specific subjects or identities",
+    "strength": 0.7,
+    "summary": "5 reference image(s) analyzed as look. Palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846. Accents: #ff285a, #145ae6, #00ffa0, #fad214. Notes emphasize: quiet coastal evenings, film grain",
+    "tasteProfile": "visual style only; avoid copying specific subjects or identities; cues: palette-led, style consistency, visual language, high color energy, quiet, coastal; colors: #cfc4b1, #2c1046, #e2d9c8, #190e2e.",
+    "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Visual style only; avoid copying specific subjects or identities. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. User notes: quiet coastal evenings, film grain",
+    "negativePrompt": "unrelated style drift, conflicting palettes, random artifacts, copying exact subjects, identity transfer, logo replication",
+    "keywords": [
+      "palette-led",
+      "style consistency",
+      "visual language",
+      "high color energy",
+      "quiet",
+      "coastal",
+      "evenings",
+      "film",
+      "grain"
+    ],
+    "avoids": [
+      "unrelated style drift",
+      "conflicting palettes",
+      "random artifacts",
+      "copying exact subjects",
+      "identity transfer",
+      "logo replication"
+    ],
+    "palette": [
+      "#cfc4b1",
+      "#2c1046",
+      "#e2d9c8",
+      "#190e2e",
+      "#576846",
+      "#7c856a",
+      "#6a4849",
+      "#845447"
+    ],
+    "accents": [
+      "#ff285a",
+      "#145ae6",
+      "#00ffa0",
+      "#fad214"
+    ],
+    "colors": [
+      {
+        "hex": "#cfc4b1",
+        "share": 0.1444,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#2c1046",
+        "share": 0.1238,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#e2d9c8",
+        "share": 0.1192,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#190e2e",
+        "share": 0.0653,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#576846",
+        "share": 0.0508,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#7c856a",
+        "share": 0.0474,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#6a4849",
+        "share": 0.046,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#845447",
+        "share": 0.0442,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#ff285a",
+        "share": 0.0075,
+        "role": "accent",
+        "images": 1
+      },
+      {
+        "hex": "#145ae6",
+        "share": 0.0066,
+        "role": "accent",
+        "images": 1
+      },
+      {
+        "hex": "#00ffa0",
+        "share": 0.006,
+        "role": "accent",
+        "images": 1
+      },
+      {
+        "hex": "#fad214",
+        "share": 0.0044,
+        "role": "accent",
+        "images": 1
+      }
+    ],
+    "lighting": "balanced mid-key lighting",
+    "composition": "balanced square-to-standard framing",
+    "materials": [],
+    "textures": [],
+    "motifs": [],
+    "subjectBias": [],
+    "representativeImages": [
+      "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
+      "/api/outputs/moodboard-golden/paper-studio-1x1.png",
+      "/api/outputs/moodboard-golden/neon-alley-9x16.png",
+      "/api/outputs/moodboard-golden/moss-stone-4x3.png",
+      "/api/outputs/moodboard-golden/rust-portrait-3x4.png"
+    ],
+    "providerHints": {
+      "krea": {
+        "strategy": "image_style_references",
+        "representativeImages": [
+          "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
+          "/api/outputs/moodboard-golden/paper-studio-1x1.png",
+          "/api/outputs/moodboard-golden/neon-alley-9x16.png",
+          "/api/outputs/moodboard-golden/moss-stone-4x3.png",
+          "/api/outputs/moodboard-golden/rust-portrait-3x4.png"
+        ],
+        "strength": 0.7,
+        "styleBrief": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Visual style only; avoid copying specific subjects or identities. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. User notes: quiet coastal evenings, film grain"
+      },
+      "generic": {
+        "promptSuffix": "Use the Nebula moodboard 'Coastal evenings' as look direction at strength 0.70. Visual style only; avoid copying specific subjects or identities. Color palette: #cfc4b1, #2c1046, #e2d9c8, #190e2e, #576846, #7c856a, #6a4849, #845447. Accent colors, used sparingly: #ff285a, #145ae6, #00ffa0, #fad214. Visual cues: palette-led, style consistency, visual language, high color energy, quiet, coastal, evenings, film, grain. User notes: quiet coastal evenings, film grain",
+        "negativePrompt": "unrelated style drift, conflicting palettes, random artifacts, copying exact subjects, identity transfer, logo replication",
+        "palette": [
+          "#cfc4b1",
+          "#2c1046",
+          "#e2d9c8",
+          "#190e2e",
+          "#576846",
+          "#7c856a",
+          "#6a4849",
+          "#845447"
+        ],
+        "accents": [
+          "#ff285a",
+          "#145ae6",
+          "#00ffa0",
+          "#fad214"
+        ]
+      }
+    },
+    "images": [
+      {
+        "id": "d1a0e5c2f901",
+        "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
+        "weight": 1.0,
+        "notes": "the light we want",
+        "status": "analyzed",
+        "width": 96,
+        "height": 54,
+        "palette": [
+          "#6a4849",
+          "#845447",
+          "#503c4b",
+          "#37304b",
+          "#c67141",
+          "#22254a",
+          "#a36041"
+        ],
+        "accents": [
+          "#ff285a"
+        ],
+        "colors": [
+          {
+            "hex": "#6a4849",
+            "share": 0.1703,
+            "accent": false
+          },
+          {
+            "hex": "#845447",
+            "share": 0.1634,
+            "accent": false
+          },
+          {
+            "hex": "#503c4b",
+            "share": 0.1466,
+            "accent": false
+          },
+          {
+            "hex": "#37304b",
+            "share": 0.1308,
+            "accent": false
+          },
+          {
+            "hex": "#c67141",
+            "share": 0.1231,
+            "accent": false
+          },
+          {
+            "hex": "#22254a",
+            "share": 0.1219,
+            "accent": false
+          },
+          {
+            "hex": "#a36041",
+            "share": 0.1161,
+            "accent": false
+          },
+          {
+            "hex": "#ff285a",
+            "share": 0.0278,
+            "accent": true
+          }
+        ],
+        "lightness": 90.307,
+        "saturation": 117.331
+      },
+      {
+        "id": "d1a0e5c2f902",
+        "url": "/api/outputs/moodboard-golden/moss-stone-4x3.png",
+        "weight": 0.6,
+        "notes": "",
+        "status": "analyzed",
+        "width": 80,
+        "height": 60,
+        "palette": [
+          "#576846",
+          "#7c856a",
+          "#697758",
+          "#435833",
+          "#91967f"
+        ],
+        "accents": [
+          "#fad214"
+        ],
+        "colors": [
+          {
+            "hex": "#576846",
+            "share": 0.3131,
+            "accent": false
+          },
+          {
+            "hex": "#7c856a",
+            "share": 0.2921,
+            "accent": false
+          },
+          {
+            "hex": "#697758",
+            "share": 0.1787,
+            "accent": false
+          },
+          {
+            "hex": "#435833",
+            "share": 0.1196,
+            "accent": false
+          },
+          {
+            "hex": "#91967f",
+            "share": 0.0694,
+            "accent": false
+          },
+          {
+            "hex": "#fad214",
+            "share": 0.0271,
+            "accent": true
+          }
+        ],
+        "lightness": 102.089,
+        "saturation": 75.946
+      },
+      {
+        "id": "d1a0e5c2f903",
+        "url": "/api/outputs/moodboard-golden/paper-studio-1x1.png",
+        "weight": 1.0,
+        "notes": "",
+        "status": "analyzed",
+        "width": 64,
+        "height": 64,
+        "palette": [
+          "#cfc4b1",
+          "#e2d9c8"
+        ],
+        "accents": [
+          "#145ae6"
+        ],
+        "colors": [
+          {
+            "hex": "#cfc4b1",
+            "share": 0.5344,
+            "accent": false
+          },
+          {
+            "hex": "#e2d9c8",
+            "share": 0.4412,
+            "accent": false
+          },
+          {
+            "hex": "#145ae6",
+            "share": 0.0244,
+            "accent": true
+          }
+        ],
+        "lightness": 199.714,
+        "saturation": 38.535
+      },
+      {
+        "id": "d1a0e5c2f904",
+        "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
+        "weight": 0.3,
+        "notes": "texture only",
+        "status": "analyzed",
+        "width": 60,
+        "height": 80,
+        "palette": [
+          "#6a311b",
+          "#4e2516",
+          "#2f1a13",
+          "#813c21"
+        ],
+        "accents": [
+          "#28c8be"
+        ],
+        "colors": [
+          {
+            "hex": "#6a311b",
+            "share": 0.3575,
+            "accent": false
+          },
+          {
+            "hex": "#4e2516",
+            "share": 0.2913,
+            "accent": false
+          },
+          {
+            "hex": "#2f1a13",
+            "share": 0.1973,
+            "accent": false
+          },
+          {
+            "hex": "#813c21",
+            "share": 0.1269,
+            "accent": false
+          },
+          {
+            "hex": "#28c8be",
+            "share": 0.0271,
+            "accent": true
+          }
+        ],
+        "lightness": 58.613,
+        "saturation": 179.452
+      },
+      {
+        "id": "d1a0e5c2f905",
+        "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png",
+        "weight": 0.8,
+        "notes": "",
+        "status": "analyzed",
+        "width": 54,
+        "height": 96,
+        "palette": [
+          "#2c1046",
+          "#190e2e",
+          "#0e091e"
+        ],
+        "accents": [
+          "#00ffa0"
+        ],
+        "colors": [
+          {
+            "hex": "#2c1046",
+            "share": 0.5725,
+            "accent": false
+          },
+          {
+            "hex": "#190e2e",
+            "share": 0.3021,
+            "accent": false
+          },
+          {
+            "hex": "#0e091e",
+            "share": 0.0976,
+            "accent": false
+          },
+          {
+            "hex": "#00ffa0",
+            "share": 0.0278,
+            "accent": true
+          }
+        ],
+        "lightness": 39.165,
+        "saturation": 192.645
+      }
+    ],
+    "warnings": []
+  },
+  "thumbnail": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png",
+  "projectId": null,
+  "createdAt": "2026-10-18T17:02:41.318204+00:00",
+  "updatedAt": "2026-10-18T17:05:09.771530+00:00"
+}

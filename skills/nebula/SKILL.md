@@ -169,6 +169,13 @@ nebula moodboard delete <board>
   other than 80 and 443. For those, save the image and add the file.
 - Name a board by its id or exact name, and an image by its number or id
   from `show`.
+- `show --json` (and MCP `moodboard_get`) also lists where each image's
+  card sits on the board: `placements` (x, y, w, h in board pixels, its
+  weight, and `frameId`, the frame it is in or null) and the board's
+  `frames`. A card's size is its weight (full weight is 480x270). The layout
+  never steers: it isn't in the analysis or the brief. New images land
+  after the last one, and `--weight` resizes the image's card. The CLI can't
+  move cards yet.
 - Weights and strength run from 0 to 1. `--exclude` keeps an image on the
   board without letting it steer; `--include` undoes that. `--remove` takes
   an image off the board (its file stays).

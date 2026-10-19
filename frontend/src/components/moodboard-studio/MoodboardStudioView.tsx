@@ -30,6 +30,7 @@ import { wsClient } from '../../lib/wsClient';
 import { moveChoices, type MoveChoice } from '../../lib/assetMove';
 import { useStudioAssetMove } from '../../hooks/useStudioAssetMove';
 import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
+import { patchSteers } from './steering';
 import '../../styles/moodboard-studio.css';
 
 interface MoodboardDraft {
@@ -73,6 +74,9 @@ function emptyDraft(): MoodboardDraft {
   };
 }
 
+// Board fields only: the layout (frames, layoutVersion, ...) is never sent
+// back, since the backend refuses it on a save. Images keep their
+// placements, which a save may send back: the backend keeps the saved ones.
 function moodboardToDraft(m: Moodboard): MoodboardDraft {
   return {
     name: m.name,
@@ -299,8 +303,9 @@ export function MoodboardStudioView() {
   };
 
   const updateImage = (id: string, patch: Partial<MoodboardImage>) => {
-    // A private note isn't an analysis input, so changing only that keeps it.
-    const steers = Object.keys(patch).some((field) => field !== 'privateNote');
+    // Only what the analysis reads clears it: a private note or a card's
+    // place keeps it.
+    const steers = patchSteers(patch);
     setDraft((current) => ({
       ...current,
       analysis: steers ? null : current.analysis,

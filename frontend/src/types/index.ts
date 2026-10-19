@@ -509,6 +509,24 @@ export interface WorldValue {
   cost?: Record<string, unknown> | number;
 }
 
+/** One card of an image on the board canvas (backend services/moodboard_layout.py).
+ *  Coordinates are absolute board pixels; `w * h` is `weight * 129600` (a
+ *  480x270 card is full weight). The server writes `w`/`h`, `placedBy` and
+ *  `placedAt`. */
+export interface MoodboardPlacement {
+  id: string;
+  /** The frame (look) it is in; null when it is in none. */
+  frameId: string | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** This card's weight (per frame). The image's `weight` is still the one that steers. */
+  weight: number;
+  placedBy: 'person' | 'agent' | 'analyze';
+  placedAt: string;
+}
+
 export interface MoodboardImage {
   id: string;
   url: string;
@@ -519,6 +537,24 @@ export interface MoodboardImage {
    * the analysis, the brief, a generator or the node's outputs. */
   privateNote?: string;
   excluded: boolean;
+  /** Where its cards sit. Every board read by id has them (an old board is
+   *  laid out on read); lists may not. A PUT keeps the saved ones for images
+   *  already on the board, whatever it sends. */
+  placements?: MoodboardPlacement[];
+}
+
+/** A look the person (or an agent, or Analyze) drew on the board. */
+export interface MoodboardFrame {
+  id: string;
+  name: string;
+  kind: 'look' | 'unsorted';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  createdBy?: string;
+  namedBy: 'person' | 'agent' | 'analyze';
+  createdAt?: string;
 }
 
 export interface MoodboardAnalysis {
@@ -667,6 +703,12 @@ export interface Moodboard {
   colorChoices?: { keep: string[]; leaveOut: string[] };
   sendNotes?: boolean;
   colorCheck?: unknown;
+  /** The board's layout. Written only by board edits and by the server
+   *  placing new images, never sent back on a save (the backend refuses it). */
+  layoutVersion?: number;
+  frames?: MoodboardFrame[];
+  suggestions?: Array<Record<string, unknown>>;
+  readings?: Record<string, Record<string, unknown>>;
   thumbnail: string;
   projectId?: string;
   createdAt: string;

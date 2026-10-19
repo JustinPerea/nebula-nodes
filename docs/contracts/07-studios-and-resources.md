@@ -2,14 +2,14 @@
 title: Nebula Contracts — Studios and Resources (Volume 7)
 status: draft
 contract_version: 1
-updated: 2026-10-18
+updated: 2026-10-19
 ---
 
 # Studios and resources (Volume 7)
 
 Saved assets that studios edit and bridge nodes read. This volume starts with the Moodboard; Character, Cinema and the video editors are not written up yet.
 
-**Oracle:** `backend/services/moodboard_store.py`, `backend/services/moodboard_brief.py`, `backend/services/moodboard_analysis.py`, `backend/handlers/moodboard.py`, `/api/moodboards/*` in `backend/main.py`
+**Oracle:** `backend/services/moodboard_store.py`, `backend/services/moodboard_layout.py`, `backend/services/moodboard_brief.py`, `backend/services/moodboard_analysis.py`, `backend/handlers/moodboard.py`, `/api/moodboards/*` in `backend/main.py`
 
 ---
 
@@ -22,8 +22,12 @@ A board is one JSON file under the moodboard root (`NEBULA_MOODBOARD_ROOT`, defa
 | Field | Type | Who writes it | Notes |
 |-------|------|---------------|-------|
 | `id`, `createdAt`, `projectId` | string | store | Fixed after create |
-| `name`, `notes`, `mode`, `strength`, `images` | — | person or agent | `mode` is `look`, `world` or `subject`; each image has `id`, `url`, `weight`, `notes`, `privateNote` and `excluded` |
-| `images[].privateNote` | string | person or agent | The person's own label for the image ("PAINTERLY (liked)"), up to 2000 characters. Shown wherever the board is inspected (Moodboard Studio, `nebula moodboard show`, `moodboard_get`), never sent anywhere: it isn't in `source_hash`, the analysis, `brief`, the negative prompt or the Moodboard node's outputs (`moodboard_store.without_private`). Changing it keeps the analysis. A board saved before it existed reads with `""`. `images[].notes` is the note that steers |
+| `name`, `notes`, `mode`, `strength`, `images` | — | person or agent | `mode` is `look`, `world` or `subject`; each image has `id`, `url`, `weight`, `notes`, `privateNote`, `excluded` and `placements` |
+| `images[].privateNote` | string | person or agent | The person's own label for the image ("PAINTERLY (liked)"), up to 2000 characters. Shown wherever the board is inspected (Moodboard Studio, `nebula moodboard show`, `moodboard_get`), never sent anywhere: it isn't in `source_hash`, the analysis, `brief`, the negative prompt or the Moodboard node's outputs (`moodboard_store.output_image`). Changing it keeps the analysis. A board saved before it existed reads with `""`. `images[].notes` is the note that steers |
+| `images[].placements` | object[] | board edits; the store, for a new image | The image's cards on the board canvas, 1 to 8, at most one per frame: `{id, frameId, x, y, w, h, weight, placedBy, placedAt}`. Coordinates are absolute board pixels (at most 1,000,000 from the origin). `frameId` is the frame (look) the card is in, or null; a card in no frame must be the image's only one. `w × h = weight × 129,600` (full weight is a 480×270 card), rounded to whole pixels at the image's aspect ratio (its file, upright; else the analysis's measurement; else 4:3); card weights run from 0.05 to 1. The server writes `w`, `h`, `placedBy` (`person`, `agent` or `analyze`, from who asked) and `placedAt`. The layout steers nothing: it isn't in `source_hash`, `brief_basis`, `brief` or the node's outputs, so moving or resizing a card keeps the analysis (`moodboard_layout.py`) |
+| `layoutVersion` | integer | store | `1` once the board's layout is saved. Absent on an old board, which reads with a layout (1.5) |
+| `frames` | object[] | board edits | The board's frames (looks): `{id (12 hex), name, kind: "look" or "unsorted", x, y, w, h, createdBy, namedBy, createdAt}`. At most 100, one Unsorted, names 1 to 60 characters and unique ignoring case, sides at least 160 px. Reads as `[]` when absent |
+| `suggestions`, `readings`, `lastRead` | — | Analyze | Reserved for Analyze (item 6): `suggestions` (at most 200) and `readings` (one per image, at most 2 KB each) read as `[]` and `{}` when absent. Nothing writes them yet |
 | `analysis` | object or null | Analyze | Colour reading of the images. Set to null when the images, weights, mode, strength or notes change (not an image's `privateNote`). Its own `styleBrief` and `negativePrompt` are the analyzer's; generators get `brief` (1.2), so change the brief through `briefOverride`, not here |
 | `direction` | string | person or agent | What the board is for, in positive words. Up to 4000 characters |
 | `avoid` | string[] | person or agent | Things to keep out of the image. Trimmed, de-duplicated (case-insensitive), at most 40 items of 200 characters |
@@ -31,6 +35,8 @@ A board is one JSON file under the moodboard root (`NEBULA_MOODBOARD_ROOT`, defa
 | `briefOverride` | `{text, basis, updatedAt, by}` or null | person or agent (text); store (`basis`, `updatedAt`, `by`) | A hand-written brief that replaces the generated one. `by` is `person` or `agent`, from the person gate (`services/person_gate.py`); none (an override the migration moved) counts as `person`. Only the person may replace, remove or Keep text the person wrote (1.3) |
 | `briefVersion` | integer | store | `1` once the board has the fields above (see 1.5) |
 | `version`, `updatedAt`, `thumbnail` | — | store | |
+
+**Layout is written only by board edits and by the server placing new images.** `layoutVersion`, `frames`, `suggestions`, `readings` and `lastRead` are refused (422) on create and on `PUT`. An image's `placements` are taken only for an image new to the board; on an image already there, the saved cards stay whatever the client sends (1.3). A saved layout that is out of bounds is logged, and the board still opens as saved. A file edited into an odd shape (`placements` or `frames` that aren't lists, numbers too big for a float) still lists, opens and saves: what can't be read as a card counts as none, and an image with no card that can be drawn is placed again.
 
 `direction`, `avoid`, `pinnedColors` and `briefOverride` live on the board, not inside `analysis`, so analyzing again never drops them. Changing them does not clear the analysis.
 
@@ -53,13 +59,22 @@ Every moodboard API response adds `brief`, computed on each read and never saved
 
 | Call | Body | Effect |
 |------|------|--------|
-| `POST /api/moodboards` | `name`, `images`, … plus optional `direction`, `avoid`, `pinnedColors`, `briefOverride: {text}` | Create |
-| `PUT /api/moodboards/{id}` | Any subset, including the four brief fields | Update. `briefOverride: {text}` sets the override; `briefOverride: null` removes it (the brief goes back to generated). Send only `text`: `basis` and `updatedAt` are refused (422) |
+| `POST /api/moodboards` | `name`, `images`, … plus optional `direction`, `avoid`, `pinnedColors`, `briefOverride: {text}` | Create. Each image is placed where its `placements` ask, else after the one before; the board is saved with `layoutVersion: 1` |
+| `GET /api/moodboards/{id}` | — | The board, laid out (an old board reads with its grid, 1.5). Reading writes nothing. `GET /api/moodboards` (the list) doesn't lay boards out |
+| `PUT /api/moodboards/{id}` | Any subset, including the four brief fields | Update. `briefOverride: {text}` sets the override; `briefOverride: null` removes it (the brief goes back to generated). Send only `text`: `basis` and `updatedAt` are refused (422). `images` merges by id (below) |
 | `POST /api/moodboards/{id}/brief-override/keep` | — | Keep the override for the board as it is now (clears `stale`). 404 for an unknown board; 409 when there is no override (the message says to set one with `PUT`); 403 when an agent asks to keep the person's text |
 | `POST /api/moodboards/{id}/analyze` | — | Analyze again. Keeps the brief fields and the override |
 | `POST /api/moodboards/{id}/analyze/dry-run` | optional `{thresholds: {accentMinChroma, accentSeparation, mergeDeltaE}}` | What Analyze would give, saving nothing (1.8). 422 for a threshold out of range or an unknown key |
 
 The board keeps no history, so replacing or removing the person's hand-written brief can't be undone. A `PUT` that would replace or remove an override with `by: "person"` (or no `by`), or a Keep of one, is refused unless it comes from the person: 403 with the person gate's `code` (`agent_refused` for an agent marker, `person_required` without this launch's person token), and nothing in that request is saved. An agent may still change every other field, which marks the override stale for the person to answer, and may change an override an agent wrote.
+
+**Images on `PUT` merge by id.** Each image in `images` is matched with the saved image of the same id:
+
+- A key the client leaves out keeps its saved value. Before item 6, a left-out key was reset to its default, so a client that didn't send `privateNote` erased it; now it keeps it.
+- On an image already on the board, `placements` are ignored: the saved cards stay, so a stale tab or a CLI that sends back what it read can't undo a layout edit. Everything `GET` returns may be sent back.
+- A `weight` that changes scales the image's cards by the same factor, so the largest equals the new weight (smaller ones stop at 0.05); weight 0 keeps them as they are. Each card keeps its top-left corner and nothing else moves, so a card that grows may cover its neighbour, as a resize in the Board view can.
+- An image new to the board (no id, or one the board doesn't have) takes the `placements` it sends, checked (frames must exist, at most 8, one per frame, ids unique), with `w`/`h` written from each card's `weight` (or from `w × h` when no weight is sent). With no weight sent, the image's weight is its largest card's. Without `placements`, Nebula places it after the last-added card: in that card's row when there is room (24 px from every card and frame, within six full-weight cards' width, and fewer than six cards in the row up to that card), else at the start of a new row under the board. The six-card rule keeps an old board's 6-column grid 6 wide when its cards are portrait or square. Never on top of anything.
+- An image left out of `images` is removed, as before.
 
 Sending the same override text again keeps its original `basis`, so a client that saves the whole board on every change doesn't hide the "changed since you edited this" state. New text is stamped with the board as it is after the update.
 
@@ -80,7 +95,7 @@ Analyses before version 4 have no `sources` or `number`. They stay current (the 
 
 ### 1.4 How a board reaches a generator
 
-The `nebula-moodboard` node emits a `Moodboard` bundle (`kind: "nebula_moodboard"`) carrying `styleBrief`, `negativePrompt`, `avoid`, `avoidPrompt`, `direction`, `pinnedColors`, `briefOverride` (`{active, stale}`), `palette`, `accents`, `images`, `representativeImages`, `analysis` and `providerHints`, plus what 1.11 adds (no notes unless sent, the left-out lists). A stale override is still used, and the run gets a note saying so. The node is not output-cached: its params name the board, not its contents.
+The `nebula-moodboard` node emits a `Moodboard` bundle (`kind: "nebula_moodboard"`) carrying `styleBrief`, `negativePrompt`, `avoid`, `avoidPrompt`, `direction`, `pinnedColors`, `briefOverride` (`{active, stale}`), `palette`, `accents`, `images`, `representativeImages`, `analysis` and `providerHints`, plus what 1.11 adds (no notes unless sent, the left-out lists). Each bundle image has exactly `id`, `url`, `weight`, `notes` and `excluded` (never the private note or the layout), and its `notes` is empty unless the board's notes are sent (1.11); excluded images are left out. A stale override is still used, and the run gets a note saying so. The node is not output-cached: its params name the board, not its contents.
 
 Image generators take it on an optional `moodboard` input port. The engine folds it in before the handler runs (Volume 2, section 7a, "Moodboard fold").
 
@@ -95,7 +110,20 @@ Boards saved before the brief fields (no `briefVersion`) are migrated once at ba
 - Nothing is lost: the saved `analysis` keeps its old `styleBrief` and `negativePrompt`, and the backup holds the file as it was. A backup copied back is migrated again on the next start, with the same result.
 - Running the migration again changes nothing. A file that can't be read is logged and left alone. A board with a higher `briefVersion` (saved by a newer Nebula) is left as it is. A board file edited by hand into an odd shape still lists and opens (its `brief` is `null` if it can't be composed), and a failing migration never stops the backend from starting.
 
+**Old boards read with a layout (item 6).** A board saved before layouts (no `layoutVersion`) is not migrated on disk: there is no startup step and no backup, and its file keeps its bytes, `version` and `updatedAt` until someone edits it.
+
+- `GET /api/moodboards/{id}` (and the store's `get` and `update`) lays it out in memory as a grid in number order: 6 columns, 40 px between cells, each column as wide as its widest card and each row as tall as its tallest, every card centred in its cell. A card's area is its weight (at least 0.05; weight 0 shows at full size) at the image's aspect ratio. `placedBy` is `person`, since the order was theirs, and each card's id is derived from the board and image, so every read gives the same layout. `frames`, `suggestions` and `readings` read as empty.
+- The list (`GET /api/moodboards`) doesn't lay boards out, so the rail stays cheap.
+- The first write (any `PUT`, Analyze's save, a Keep, the CLI or MCP) saves that same layout and stamps `layoutVersion: 1`. Nothing moves. A write stamps `layoutVersion` only when every image has a card, so if laying the board out fails, the next read lays it out again.
+- A board with `layoutVersion` where no image has a card reads with the same grid. An older Nebula leaves that when it edits a laid-out board (it drops image keys it doesn't know, `placements` among them, and keeps board keys). A board whose grid was saved comes back unchanged; cards placed or moved since are lost.
+- An image whose url can't be read, or can't even be resolved (an unknown `~user`, a null byte), lays out at the analysis's size, else 4:3.
+- Reading writes nothing. Moving a board, Recently deleted and its restore, the brief-fields migration and the re-home at start move or copy the file as it is, so they never write a layout either.
+- The layout never enters `source_hash` or `brief_basis`, so every saved analysis and hand-written brief stays current. The brief and the node's outputs for old boards are pinned by `backend/tests/test_moodboard_golden.py`.
+- Reading an image's aspect ratio runs the protected-path check (`services/file_access.py`), about 2 ms an image. The answer is kept per URL and agent workspace while one stat shows the same file unchanged, so later reads cost about 3 ms for 300 images. The `GET` route reads off the event loop.
+
 ### 1.6 From the CLI and MCP
+
+`nebula moodboard show --json` and `moodboard_get` also return the layout: each image's `placements` and the board's `frames` (1.1). Lists and the results of edits leave it out to stay short. A board named by name is read again by id, so it comes with its layout. A change that only moves or resizes cards never counts as a content change: the client compares only `url`, `weight`, `notes` and `excluded` (`moodboard_client.STEERING_KEYS`) to decide whether to clear the analysis, and so does Moodboard Studio (`moodboard-studio/steering.ts`).
 
 `nebula moodboard` and the `moodboard_*` MCP tools (`backend/moodboard_client.py`) return each board with `direction`, `avoid`, `pinnedColors`, `briefOverride` (`{text, by, updatedAt, stale}` or null; `by` is `agent` only when stamped so, else `person`) and `brief`, the backend's computed brief from 1.2 passed on as it came. On a backend that doesn't send `brief`, it is `null`: the client never rebuilds it, and never offers `analysis.styleBrief` in its place.
 
@@ -202,4 +230,5 @@ Design-canvas gap 18 (Justin's calls P1-P4, 2026-10-19). Where two parts of a bo
 | 2026-10-19 | Moodboard: colour sources in the analysis (1.3a, analysis version 4) and the dry run (1.8) |
 | 2026-10-19 | Moodboards, Characters and Styles: "project" is the canvas project everywhere, create routes check it, re-home of old-style assets at every start (1.9), nodes copy between projects |
 | 2026-10-19 | Moodboards and Characters: Move to Global / Move to <project> in both Studios, `POST .../move`, `nebula moodboard move`, `nebula character move`, `moodboard_move`, `character_move` (1.10) |
+| 2026-10-19 | Moodboard canvas, board model v2: `images[].placements`, `layoutVersion`, `frames`, `suggestions`, `readings` (1.1); `PUT` merges images by id, so a left-out key keeps its value (it used to reset to its default) and saved cards stay; layout fields refused on create and `PUT`; new images placed by the server; old boards read with a grid and save it on their first edit, and so does a board an older Nebula edited (1.5); odd layout files still list, open and save (1.1); node bundle images carry only output keys (1.4); `show --json` and `moodboard_get` list the layout (1.6) |
 | 2026-10-19 | Moodboard: the colour-word check, `clashMode`, `colorChoices`, `sendNotes`, `colorCheck`, the brief's left-out lists, notes only on opt-in, the node's `send_notes` (1.11) |
