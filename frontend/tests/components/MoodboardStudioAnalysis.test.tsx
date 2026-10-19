@@ -2,9 +2,9 @@ import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Moodboard, MoodboardAnalysis } from '../../src/types';
 
-const api = vi.hoisted(() => ({ boards: vi.fn(), project: vi.fn() }));
+const api = vi.hoisted(() => ({ boards: vi.fn(), board: vi.fn(), project: vi.fn() }));
 vi.mock('../../src/lib/api', async (original) => ({ ...await original<typeof import('../../src/lib/api')>(),
-  fetchMoodboards: api.boards }));
+  fetchMoodboards: api.boards, fetchMoodboard: api.board }));
 vi.mock('../../src/lib/currentProject', () => ({ getCurrentProject: api.project }));
 
 import { MoodboardStudioView } from '../../src/components/moodboard-studio/MoodboardStudioView';
@@ -24,6 +24,7 @@ const board = (fields: Partial<MoodboardAnalysis>): Moodboard => ({ id: 'board-a
 
 async function open(saved: Moodboard) {
   api.boards.mockImplementation(async (scope: string) => scope === 'global' ? [saved] : []);
+  api.board.mockImplementation(async (id: string) => (id === saved.id ? saved : null));
   useUIStore.getState().enterMoodboardEditor('board-a');
   render(<MoodboardStudioView />);
   await act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -34,7 +35,7 @@ const swatches = (label: string) => within(screen.getByRole('list', { name: labe
 beforeEach(() => {
   useUIStore.setState(initialUI, true);
   useAssetStudioDraftStore.setState({ entries: {}, aliases: {}, projectId: null });
-  api.boards.mockReset(); api.project.mockResolvedValue({ id: 'project-one', name: 'First project' });
+  api.boards.mockReset(); api.board.mockReset(); api.project.mockResolvedValue({ id: 'project-one', name: 'First project' });
 });
 afterEach(() => { cleanup(); useUIStore.setState(initialUI, true);
   useAssetStudioDraftStore.setState({ entries: {}, aliases: {}, projectId: null }); });

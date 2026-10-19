@@ -2,10 +2,11 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Character, Moodboard } from '../../src/types';
 
-const api = vi.hoisted(() => ({ characters: vi.fn(), boards: vi.fn(), createCharacter: vi.fn(),
+const api = vi.hoisted(() => ({ characters: vi.fn(), boards: vi.fn(), character: vi.fn(), board: vi.fn(), createCharacter: vi.fn(),
   updateCharacter: vi.fn(), createBoard: vi.fn(), updateBoard: vi.fn(), analyze: vi.fn(), upload: vi.fn(), project: vi.fn() }));
 vi.mock('../../src/lib/api', async (original) => ({ ...await original<typeof import('../../src/lib/api')>(),
-  fetchCharacters: api.characters, fetchMoodboards: api.boards, createCharacter: api.createCharacter,
+  fetchCharacters: api.characters, fetchMoodboards: api.boards, fetchCharacter: api.character, fetchMoodboard: api.board,
+  createCharacter: api.createCharacter,
   updateCharacter: api.updateCharacter, createMoodboard: api.createBoard, updateMoodboard: api.updateBoard,
   analyzeMoodboard: api.analyze }));
 // Only `/api/uploads` goes to the upload mock. The Studios' Recently deleted
@@ -59,6 +60,11 @@ beforeEach(() => {
   api.project.mockResolvedValue({ id: 'project-one', name: 'First project' });
   api.characters.mockImplementation(async (scope: string) => scope === 'global' ? [character(), character('character-b', 'Other character')] : []);
   api.boards.mockImplementation(async (scope: string) => scope === 'global' ? [board(), board('board-b', 'Other board')] : []);
+  // By id, from whatever the lists hold, so a test that changes a list changes this too.
+  api.character.mockImplementation(async (id: string) =>
+    [...await api.characters('global'), ...await api.characters('project')].find((c: Character) => c.id === id) ?? null);
+  api.board.mockImplementation(async (id: string) =>
+    [...await api.boards('global'), ...await api.boards('project')].find((b: Moodboard) => b.id === id) ?? null);
   api.createCharacter.mockResolvedValue(character('created-character'));
   api.updateCharacter.mockImplementation(async (id, body) => ({ ...character(id), ...body }));
   api.createBoard.mockResolvedValue(board('created-board'));
@@ -327,5 +333,48 @@ describe('asset studio workspace continuity', () => {
     expect(useAssetStudioDraftStore.getState().entries[firstKey].draft).toMatchObject({ notes: 'Old project direction', projectId: 'project-one' });
     expect(useAssetStudioDraftStore.getState().entries[assetStudioDraftKey('moodboard', 'project', 'new', 'project-two')].draft)
       .toMatchObject({ notes: '', projectId: 'project-two' });
+  });
+});
+
+describe('a stored asset opens in the scope it lives in', () => {
+  const projectBoard = { ...board('project-board', 'Project board'), projectId: 'project-one' };
+  const projectCharacter = { ...character('project-character', 'Project character'), projectId: 'project-one' };
+  async function settleAll() { for (let i = 0; i < 4; i++) await settle(); }
+
+  it('opens a project Moodboard from its node, which passes no scope', async () => {
+    api.boards.mockImplementation(async (scope: string) => scope === 'project' ? [projectBoard] : [board()]);
+    useUIStore.getState().enterMoodboardEditor('project-board');
+    render(<MoodboardStudioView />); await settleAll();
+    expect(useUIStore.getState().moodboardEditorScope).toBe('project');
+    expect(api.board).toHaveBeenCalledWith('project-board');
+    expect(screen.getByLabelText('Name')).toHaveValue('Project board');
+    expect(screen.queryByText(/not found/)).toBeNull();
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    expect(api.createBoard).not.toHaveBeenCalled();
+  });
+
+  it('opens a global Moodboard that a stale list showed under the Project tab', async () => {
+    useUIStore.getState().enterMoodboardEditor('board-a', 'project');
+    render(<MoodboardStudioView />); await settleAll();
+    expect(useUIStore.getState().moodboardEditorScope).toBe('global');
+    expect(screen.getByLabelText('Name')).toHaveValue('Original board');
+    expect(screen.queryByText(/not found/)).toBeNull();
+  });
+
+  it('opens a project Character from its node, which passes no scope', async () => {
+    api.characters.mockImplementation(async (scope: string) => scope === 'project' ? [projectCharacter] : [character()]);
+    useUIStore.getState().enterCharacterEditor('project-character');
+    render(<CharacterStudioView />); await settleAll();
+    expect(useUIStore.getState().characterEditorScope).toBe('project');
+    expect(api.character).toHaveBeenCalledWith('project-character');
+    expect(screen.getByLabelText('Name')).toHaveValue('Project character');
+    expect(screen.queryByText(/not found/)).toBeNull();
+  });
+
+  it('still says a deleted Moodboard is not found', async () => {
+    useUIStore.getState().enterMoodboardEditor('gone-board');
+    render(<MoodboardStudioView />); await settleAll();
+    expect(useUIStore.getState().moodboardEditorScope).toBe('global');
+    expect(screen.getByText('Moodboard not found. Add images to save a new one.')).toBeTruthy();
   });
 });

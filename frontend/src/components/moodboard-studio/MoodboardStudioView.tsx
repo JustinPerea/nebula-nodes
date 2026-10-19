@@ -139,33 +139,40 @@ export function MoodboardStudioView() {
     const current = () => !cancelled && isCurrent()
       && useAssetStudioDraftStore.getState().entries[key]?.revision === revision;
     patch({ loadError: null, saveError: null });
-    if (isDraftId) {
+    if (isDraftId || !moodboardEditorId) {
       initialize(moodboardEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft());
     } else {
-      void Promise.all([fetchMoodboards('global'), fetchMoodboards('project')]).then(([globalBoards, projectBoards]) => {
+      // Load the board by id. The scope it was opened with is only a hint (a
+      // node's Open button doesn't know it, and a list can be stale); the
+      // board's own projectId says where it lives.
+      void fetchMoodboard(moodboardEditorId).then((found) => {
         if (!current()) return;
-        const found = (moodboardEditorScope === 'project' ? projectBoards : globalBoards)
-          .find((candidate) => candidate.id === moodboardEditorId && (moodboardEditorScope !== 'project' || candidate.projectId === projectId));
-        if (found) {
-          setRailScope(found.projectId ? 'project' : 'global');
-          rememberBrief(found);
-          initialize(moodboardToDraft(found), found.id, found.thumbnail);
-        } else {
+        if (!found) {
           const fresh = moodboardEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft();
           // In Recently deleted? Say so; the list in the rail restores it.
-          void lookupStoredAsset('moodboard', moodboardEditorId!).catch(() => null).then((found) => {
+          void lookupStoredAsset('moodboard', moodboardEditorId!).catch(() => null).then((stored) => {
             if (!current()) return;
-            initialize(fresh, null, '', found?.status === 'trashed'
+            initialize(fresh, null, '', stored?.status === 'trashed'
               ? 'This board is in Recently deleted. Restore it from the list on the left.'
               : 'Moodboard not found. Add images to save a new one.');
           });
+          return;
         }
+        const scope: AssetScope = found.projectId ? 'project' : 'global';
+        if (scope !== moodboardEditorScope) {
+          enterMoodboardEditor(found.id, scope);
+          return;
+        }
+        setRailScope(scope);
+        rememberBrief(found);
+        initialize(moodboardToDraft(found), found.id, found.thumbnail);
       }).catch((err) => {
         if (current()) patch({ loadError: err instanceof Error ? err.message : 'Failed to load Moodboard.' });
       });
     }
     return () => { cancelled = true; };
-  }, [key, revision, loaded, projectReady, projectId, moodboardEditorId, moodboardEditorScope, initialize, patch, isDraftId, isCurrent, rememberBrief]);
+  }, [key, revision, loaded, projectReady, projectId, moodboardEditorId, moodboardEditorScope, initialize, patch, isDraftId, isCurrent,
+    enterMoodboardEditor, rememberBrief]);
 
   // A draft kept from an earlier visit loads without a fetch; read its brief.
   const needsBrief = loaded && Boolean(savedId) && !brief;
