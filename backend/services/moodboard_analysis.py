@@ -8,9 +8,18 @@ share, merged across images in CIELAB; accents roll up into their own list.
 Notes, mode and brightness fill in the rest. A vision reader can fill the
 empty fields later without changing the saved Moodboard resource.
 
+Each board colour lists its sources: the images it comes from, by their
+number on the board (1-based, every image in board order, excluded ones
+included, as `nebula moodboard show` numbers them), with the colour's share of
+that image and its contribution to the board share.
+
 The brief and negatives are written by services/moodboard_brief.py, which
 also joins in the person's Direction, Avoid and pinned colours (kept on the
 board, not here, so analyzing again can't drop them).
+
+``dry_run`` analyzes without saving anything, optionally with other colour
+thresholds (``Thresholds``), and says what would change. Nothing saves custom
+thresholds: a normal analysis always uses Commons' constants.
 """
 from __future__ import annotations
 
@@ -18,7 +27,8 @@ import copy
 import functools
 import hashlib
 import json
-from dataclasses import dataclass
+import math
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -27,9 +37,9 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 from commons.colour import delta_e00, hex_to_lab, lab_to_hex
-from commons.measure import MERGE_DELTA_E, measure_image
+from commons.measure import ACCENT_MIN_CHROMA, ACCENT_SEPARATION, MERGE_DELTA_E, measure_image
 from services.file_access import ProtectedPathError, require_allowed_path
-from services.moodboard_brief import DEFECT_NEGATIVES, generated_brief
+from services.moodboard_brief import DEFECT_NEGATIVES, compose, generated_brief
 from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT
 
 # 2: colours from Commons' measurement, ranked by weight × share, with accents
@@ -37,7 +47,10 @@ from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT
 # 3: negatives are defects only and the brief states intent positively; the
 # person's Direction, Avoid and pinned colours live on the board
 # (services/moodboard_brief.py).
-ANALYSIS_VERSION = 3
+# 4: each board colour lists its source images (``sources``) and each image
+# its number on the board. The colours themselves are as in 3, so a version 3
+# analysis stays current; it just has no sources until analyzed again.
+ANALYSIS_VERSION = 4
 PALETTE_SIZE = 8
 ACCENT_LIMIT = 4
 REPRESENTATIVE_LIMIT = 10
@@ -56,6 +69,56 @@ _PALETTE_WORDS = [
 ]
 
 
+@dataclass(frozen=True)
+class Thresholds:
+    """The colour thresholds an analysis uses: Commons' measurement constants.
+
+    ``accent_min_chroma``: how saturated (CIELAB chroma) a colour must be to
+    count as an accent. ``accent_separation``: how far (dE00) an accent's
+    pixels must sit from every main colour. ``merge_delta_e``: colours closer
+    than this (dE00) are one colour, within an image and across the board.
+    Only a dry run passes other values.
+    """
+
+    accent_min_chroma: float = ACCENT_MIN_CHROMA
+    accent_separation: float = ACCENT_SEPARATION
+    merge_delta_e: float = MERGE_DELTA_E
+
+    def as_json(self) -> dict[str, float]:
+        return {THRESHOLD_KEYS[key]: value for key, value in asdict(self).items()}
+
+
+# The API's names for the thresholds, and the values a dry run accepts.
+THRESHOLD_KEYS = {"accent_min_chroma": "accentMinChroma", "accent_separation": "accentSeparation",
+                  "merge_delta_e": "mergeDeltaE"}
+THRESHOLD_RANGES = {"accentMinChroma": (0.0, 150.0), "accentSeparation": (0.0, 100.0), "mergeDeltaE": (0.0, 50.0)}
+
+
+def parse_thresholds(raw: dict[str, Any] | None) -> Thresholds:
+    """Thresholds from ``{"accentMinChroma", "accentSeparation", "mergeDeltaE"}``;
+    a key left out (or null) keeps its default. Raises ValueError, naming the
+    field, for an unknown key or a value that isn't a number in range."""
+    if raw is None:
+        return Thresholds()
+    if not isinstance(raw, dict):
+        raise ValueError("thresholds must be an object")
+    unknown = sorted(set(raw) - set(THRESHOLD_RANGES))
+    if unknown:
+        raise ValueError(f"unknown threshold {', '.join(unknown)}: use {', '.join(THRESHOLD_RANGES)}")
+    values: dict[str, float] = {}
+    for attr, key in THRESHOLD_KEYS.items():
+        value = raw.get(key)
+        if value is None:
+            continue
+        low, high = THRESHOLD_RANGES[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError(f"{key} must be a number from {low:g} to {high:g}")
+        if not low <= value <= high:
+            raise ValueError(f"{key} must be from {low:g} to {high:g} (got {value:g})")
+        values[attr] = float(value)
+    return Thresholds(**values)
+
+
 def steers(weight: float) -> bool:
     """Whether an image with this weight shapes the board.
 
@@ -66,31 +129,39 @@ def steers(weight: float) -> bool:
     return weight > 0
 
 
-def analyze_moodboard(moodboard: dict[str, Any]) -> dict[str, Any]:
+def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | None = None) -> dict[str, Any]:
     """Return a stable creative-direction analysis for a Moodboard dict.
 
     It reads every image file, so code on the event loop runs it in a thread.
+    ``thresholds`` is for dry runs only; left out, Commons' constants apply.
     """
-    images = [
-        img for img in moodboard.get("images", [])
-        if isinstance(img, dict) and not bool(img.get("excluded"))
+    thresholds = thresholds or Thresholds()
+    # An image's number is its place among all the board's images, excluded
+    # ones included: what Moodboard Studio's grid and the CLI count.
+    numbered = [
+        (number, img) for number, img in enumerate(moodboard.get("images", []), start=1)
+        if isinstance(img, dict)
     ]
+    images = [img for _, img in numbered if not bool(img.get("excluded"))]
     notes = str(moodboard.get("notes") or "").strip()
     mode = str(moodboard.get("mode") or "look")
     strength = _clamp_float(moodboard.get("strength"), 0.7, 0.0, 1.0)
 
     per_image: list[dict[str, Any]] = []
-    weighted_colours: list[tuple[float, list[dict[str, Any]]]] = []
+    weighted_colours: list[_Steering] = []
     analyzed_urls: set[str] = set()
     warnings: list[str] = []
 
-    for img in images:
+    for number, img in numbered:
+        if bool(img.get("excluded")):
+            continue
         url = str(img.get("url") or "").strip()
         if not url:
             continue
         weight = _clamp_float(img.get("weight"), 1.0, 0.0, 1.0)
         local_path = resolve_moodboard_image_path(url)
         item: dict[str, Any] = {
+            "number": number,
             "id": str(img.get("id") or ""),
             "url": url,
             "weight": weight,
@@ -103,7 +174,7 @@ def analyze_moodboard(moodboard: dict[str, Any]) -> dict[str, Any]:
             per_image.append(item)
             continue
         try:
-            measured = _measure(local_path)
+            measured = _measure(local_path, thresholds)
         except (OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
             item["status"] = "error"
             item["error"] = str(exc)
@@ -124,13 +195,13 @@ def analyze_moodboard(moodboard: dict[str, Any]) -> dict[str, Any]:
         })
         analyzed_urls.add(url)
         if steers(weight):
-            weighted_colours.append((weight, colours))
+            weighted_colours.append(_Steering(weight, colours, number, item["id"]))
         per_image.append(item)
 
     if per_image and not any(steers(item["weight"]) for item in per_image):
         warnings.append("Every image has weight 0, so none of them shapes the board.")
 
-    dominant, accent = _roll_up(weighted_colours)
+    dominant, accent = _roll_up(weighted_colours, thresholds.merge_delta_e)
     palette = [colour["hex"] for colour in dominant]
     accents = [colour["hex"] for colour in accent]
     representative = rank_representative_images(images, only=analyzed_urls)
@@ -182,6 +253,91 @@ def analyze_moodboard(moodboard: dict[str, Any]) -> dict[str, Any]:
         "images": per_image,
         "warnings": warnings,
     }
+
+
+def dry_run(moodboard: dict[str, Any], thresholds: Thresholds | None = None) -> dict[str, Any]:
+    """What analyzing would give now, and how it differs from what's saved.
+
+    Saves nothing: the caller passes the board as read, and nothing here
+    writes. ``brief`` is what generators would get (moodboard_brief.compose
+    with the new analysis); ``changes`` compares the palette, accents, brief
+    and negatives with the board's saved analysis and brief. When the saved
+    analysis is out of date (``saved.current`` false), the changes include
+    edits to the board, not only the thresholds.
+    """
+    thresholds = thresholds or Thresholds()
+    analysis = analyze_moodboard(moodboard, thresholds=thresholds)
+    saved = moodboard.get("analysis") if isinstance(moodboard.get("analysis"), dict) else None
+    before = compose(moodboard, saved)
+    after = compose(moodboard, analysis)
+    return {
+        "dryRun": True,
+        "id": moodboard.get("id"),
+        "name": moodboard.get("name"),
+        "thresholds": thresholds.as_json(),
+        "defaults": Thresholds().as_json(),
+        "saved": {"analyzed": saved is not None, "current": analysis_is_current(moodboard, saved)},
+        "analysis": analysis,
+        "brief": after,
+        "changes": {
+            "palette": colour_changes(_hex_list(saved, "palette"), analysis["palette"]),
+            "accents": colour_changes(_hex_list(saved, "accents"), analysis["accents"]),
+            "brief": _text_change(before["styleBrief"], after["styleBrief"]),
+            "generatedBrief": _text_change(before["generatedStyleBrief"], after["generatedStyleBrief"]),
+            "negativePrompt": _text_change(before["negativePrompt"], after["negativePrompt"]),
+        },
+    }
+
+
+# Two colours this close (dE00) are the same colour nudged, not a swap.
+_NUDGE_DELTA_E = 2.0
+
+
+def colour_changes(before: list[str], after: list[str]) -> dict[str, Any]:
+    """How a colour list changed: colours added, removed, nudged (a removed
+    and an added colour within dE00 2 of each other, paired closest first)
+    and whether the colours on both lists changed order."""
+    removed = [c for c in before if c not in after]
+    added = [c for c in after if c not in before]
+    nudged: list[dict[str, str]] = []
+    pairs = sorted(
+        (float(delta_e00(hex_to_lab(old), hex_to_lab(new))), i, j)
+        for i, old in enumerate(removed) for j, new in enumerate(added)
+    )
+    used_old: set[int] = set()
+    used_new: set[int] = set()
+    for distance, i, j in pairs:
+        if distance >= _NUDGE_DELTA_E or i in used_old or j in used_new:
+            continue
+        used_old.add(i)
+        used_new.add(j)
+        nudged.append({"from": removed[i], "to": added[j]})
+    # Order compares what both lists hold, a nudged colour standing for its
+    # old self.
+    renamed = {pair["to"]: pair["from"] for pair in nudged}
+    kept_before = [c for c in before if c in after or c in renamed.values()]
+    kept_after = [renamed.get(c, c) for c in after if c in before or c in renamed]
+    removed = [c for i, c in enumerate(removed) if i not in used_old]
+    added = [c for j, c in enumerate(added) if j not in used_new]
+    reordered = kept_before != kept_after
+    return {
+        "before": list(before),
+        "after": list(after),
+        "added": added,
+        "removed": removed,
+        "nudged": nudged,
+        "reordered": reordered,
+        "changed": bool(added or removed or nudged or reordered),
+    }
+
+
+def _text_change(before: str, after: str) -> dict[str, Any]:
+    return {"before": before, "after": after, "changed": before != after}
+
+
+def _hex_list(analysis: dict[str, Any] | None, key: str) -> list[str]:
+    values = (analysis or {}).get(key)
+    return [str(v) for v in values if isinstance(v, str)] if isinstance(values, list) else []
 
 
 def analysis_is_current(moodboard: dict[str, Any], analysis: Any) -> bool:
@@ -316,17 +472,22 @@ def source_hash(moodboard: dict[str, Any], version: int = ANALYSIS_VERSION) -> s
     return hashlib.sha256(encoded).hexdigest()[:16]
 
 
-def _measure(path: Path) -> dict[str, Any]:
+def _measure(path: Path, thresholds: Thresholds) -> dict[str, Any]:
     stat = path.stat()
-    return copy.deepcopy(_measure_file(str(path), stat.st_mtime_ns, stat.st_size))
+    return copy.deepcopy(_measure_file(
+        str(path), stat.st_mtime_ns, stat.st_size,
+        thresholds.accent_min_chroma, thresholds.accent_separation, thresholds.merge_delta_e))
 
 
 @functools.lru_cache(maxsize=256)
-def _measure_file(path: str, mtime_ns: int, size: int) -> dict[str, Any]:
-    """Measure one image file. The key's mtime and size re-measure a changed file."""
+def _measure_file(path: str, mtime_ns: int, size: int, accent_min_chroma: float, accent_separation: float,
+                  merge_delta_e: float) -> dict[str, Any]:
+    """Measure one image file. The key's mtime and size re-measure a changed
+    file; the thresholds keep a dry run's measurement apart from the default."""
     with Image.open(path) as pil:
         rgb = pil.convert("RGB")
-    measured = measure_image(rgb)
+    measured = measure_image(rgb, accent_min_chroma=accent_min_chroma, accent_separation=accent_separation,
+                             merge_delta_e=merge_delta_e)
     lightness, saturation = _image_stats(rgb)
     return {
         "width": rgb.width,
@@ -341,14 +502,28 @@ def _measure_file(path: str, mtime_ns: int, size: int) -> dict[str, Any]:
 
 
 @dataclass
+class _Steering:
+    """An analyzed image that shapes the board: its weight, its colours, and
+    its number and id on the board (for a colour's sources)."""
+    weight: float
+    colours: list[dict[str, Any]]
+    number: int
+    id: str
+
+
+@dataclass
 class _Swatch:
     lab: np.ndarray
     share: float
     images: dict[int, float]  # image index → its part of the board's weight
+    # image index → this colour's share of that image. Two colours from one
+    # image that merge add up here; ``images`` (which ranks accents) doesn't.
+    sources: dict[int, float]
 
 
 def _roll_up(
-    weighted_colours: list[tuple[float, list[dict[str, Any]]]],
+    steering: list[_Steering],
+    merge_delta_e: float = MERGE_DELTA_E,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """The board's dominant palette and its accents, from each image's colours.
 
@@ -359,32 +534,35 @@ def _roll_up(
     carries them, then by share, since an accent is small by definition; one
     the dominant palette already holds is dropped.
     """
-    total = sum(weight for weight, _ in weighted_colours)
+    total = sum(image.weight for image in steering)
     if total <= 0:
         return [], []
+    parts = [image.weight / total for image in steering]
     dominant: list[_Swatch] = []
     accent: list[_Swatch] = []
-    for index, (weight, colours) in enumerate(weighted_colours):
-        part = weight / total
-        for colour in colours:
-            swatch = _Swatch(hex_to_lab(colour["hex"]), part * float(colour["share"]), {index: part})
+    for index, image in enumerate(steering):
+        part = parts[index]
+        for colour in image.colours:
+            share = float(colour["share"])
+            swatch = _Swatch(hex_to_lab(colour["hex"]), part * share, {index: part}, {index: share})
             (accent if colour["accent"] else dominant).append(swatch)
 
-    kept = sorted(_merge(dominant), key=lambda s: (-round(s.share, 6), float(s.lab[0])))[:PALETTE_SIZE]
+    kept = sorted(_merge(dominant, merge_delta_e),
+                  key=lambda s: (-round(s.share, 6), float(s.lab[0])))[:PALETTE_SIZE]
     kept_labs = np.array([s.lab for s in kept])
     accents = [
-        s for s in _merge(accent)
-        if not len(kept) or float(np.min(delta_e00(s.lab[None, :], kept_labs))) >= MERGE_DELTA_E
+        s for s in _merge(accent, merge_delta_e)
+        if not len(kept) or float(np.min(delta_e00(s.lab[None, :], kept_labs))) >= merge_delta_e
     ]
     accents.sort(key=lambda s: (-round(sum(s.images.values()), 6), -round(s.share, 6), float(s.lab[0])))
     return (
-        [_swatch_json(s, "dominant") for s in kept],
-        [_swatch_json(s, "accent") for s in accents[:ACCENT_LIMIT]],
+        [_swatch_json(s, "dominant", steering, parts) for s in kept],
+        [_swatch_json(s, "accent", steering, parts) for s in accents[:ACCENT_LIMIT]],
     )
 
 
-def _merge(swatches: list[_Swatch]) -> list[_Swatch]:
-    """Greedily merge the closest pair under dE00 5 until none remain.
+def _merge(swatches: list[_Swatch], merge_delta_e: float = MERGE_DELTA_E) -> list[_Swatch]:
+    """Greedily merge the closest pair under dE00 5 (``merge_delta_e``) until none remain.
 
     The same rule as commons.measure._merge, with the distances kept in a
     matrix so a board of many images stays fast.
@@ -399,12 +577,15 @@ def _merge(swatches: list[_Swatch]) -> list[_Swatch]:
     alive = np.ones(n, dtype=bool)
     while True:
         i, j = divmod(int(np.argmin(dist)), n)
-        if not dist[i, j] < MERGE_DELTA_E:
+        if not dist[i, j] < merge_delta_e:
             break
         a, b = items[i], items[j]
         share = a.share + b.share
         lab = (a.lab * a.share + b.lab * b.share) / share
-        items[i] = _Swatch(lab, share, {**a.images, **b.images})
+        sources = dict(a.sources)
+        for index, image_share in b.sources.items():
+            sources[index] = sources.get(index, 0.0) + image_share
+        items[i] = _Swatch(lab, share, {**a.images, **b.images}, sources)
         labs[i] = lab
         alive[j] = False
         row = np.where(alive, delta_e00(lab[None, :], labs), np.inf)
@@ -416,12 +597,24 @@ def _merge(swatches: list[_Swatch]) -> list[_Swatch]:
     return [items[k] for k in range(n) if alive[k]]
 
 
-def _swatch_json(swatch: _Swatch, role: str) -> dict[str, Any]:
+def _swatch_json(swatch: _Swatch, role: str, steering: list[_Steering], parts: list[float]) -> dict[str, Any]:
+    """A board colour as saved. ``sources``: each image it comes from, by its
+    number and id, with the colour's share of that image and its contribution
+    (the image's part of the board weight × that share), largest first."""
+    sources = sorted(
+        ((parts[index] * image_share, steering[index].number, steering[index].id, image_share)
+         for index, image_share in swatch.sources.items()),
+        key=lambda item: (-item[0], item[1]),
+    )
     return {
         "hex": lab_to_hex(swatch.lab),
         "share": round(swatch.share, 4),
         "role": role,
         "images": len(swatch.images),
+        "sources": [
+            {"number": number, "id": image_id, "share": round(image_share, 4), "contribution": round(contribution, 4)}
+            for contribution, number, image_id, image_share in sources
+        ],
     }
 
 

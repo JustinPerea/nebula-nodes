@@ -754,6 +754,40 @@ def analyze_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = Non
     return api.request("POST", f"/api/moodboards/{board['id']}/analyze", headers=headers, timeout=300.0)
 
 
+# The dry run's threshold names, as `nebula moodboard analyze --dry-run` and
+# moodboard_analyze take them, and the API's names for them.
+THRESHOLD_FIELDS = {"accent_min_chroma": "accentMinChroma", "accent_separation": "accentSeparation",
+                    "merge_delta_e": "mergeDeltaE"}
+
+DRY_RUN_UNSUPPORTED = ("this version of Nebula has no dry run for moodboard analysis, so nothing was analyzed "
+                       "or saved. Update Nebula to use it.")
+
+
+def dry_run_board(api: NebulaAPI, ref: str, *, thresholds: dict[str, float | None] | None = None,
+                  headers: dict[str, str] | None = None) -> dict[str, Any]:
+    """What analyzing the board would give, saving nothing: the analysis, the
+    brief generators would get, and what changed from the saved ones.
+
+    `thresholds` ({accent_min_chroma, accent_separation, merge_delta_e}; None
+    keeps the default) apply to this dry run only. The backend checks their
+    ranges. On a Nebula without the dry-run route this raises rather than
+    falling back to a saving analyze."""
+    board = get_board(api, ref, headers)
+    sent = {THRESHOLD_FIELDS[key]: value for key, value in (thresholds or {}).items() if value is not None}
+    body: dict[str, Any] = {"thresholds": sent} if sent else {}
+    try:
+        return api.request("POST", f"/api/moodboards/{board['id']}/analyze/dry-run", json=body,
+                           headers=headers, timeout=300.0)
+    except NebulaAPIError as exc:
+        # FastAPI's own "Not Found" means no such route; a missing board says
+        # "Moodboard '<id>' not found".
+        if exc.status == 405 or (exc.status == 404 and str(exc.detail).strip() == "Not Found"):
+            raise MoodboardError(DRY_RUN_UNSUPPORTED) from exc
+        if exc.status == 422:
+            raise MoodboardError(f"thresholds: {exc.detail}") from exc
+        raise
+
+
 def deletes_are_restorable(api: NebulaAPI, headers: dict[str, str] | None = None) -> bool:
     """True when this Nebula moves a deleted board to Recently deleted
     (`/api/trash` exists), so a delete can be undone. Older backends delete

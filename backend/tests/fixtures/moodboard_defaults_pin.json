@@ -1,0 +1,579 @@
+{
+  "accent": {
+    "palette": [
+      "#1e285a",
+      "#ebe1cd",
+      "#789678"
+    ],
+    "accents": [
+      "#ef6d1f",
+      "#155ae6"
+    ],
+    "colors": [
+      {
+        "hex": "#1e285a",
+        "share": 0.4,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#ebe1cd",
+        "share": 0.3986,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#789678",
+        "share": 0.199,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#ef6d1f",
+        "share": 0.0019,
+        "role": "accent",
+        "images": 2
+      },
+      {
+        "hex": "#155ae6",
+        "share": 0.0004,
+        "role": "accent",
+        "images": 1
+      }
+    ],
+    "styleBrief": "Use the Nebula moodboard 'Accent' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #1e285a, #ebe1cd, #789678. Accent colors, used sparingly: #ef6d1f, #155ae6. Visual cues: palette-led, style consistency, visual language.",
+    "negativePrompt": "blurry, low-detail artifacts",
+    "avoids": [
+      "blurry",
+      "low-detail artifacts"
+    ],
+    "keywords": [
+      "palette-led",
+      "style consistency",
+      "visual language"
+    ],
+    "summary": "3 reference image(s) analyzed as look. Palette: #1e285a, #ebe1cd, #789678. Accents: #ef6d1f, #155ae6.",
+    "imageColors": [
+      [
+        {
+          "hex": "#1e285a",
+          "share": 1.0,
+          "accent": false
+        }
+      ],
+      [
+        {
+          "hex": "#ebe1cd",
+          "share": 0.9965,
+          "accent": false
+        },
+        {
+          "hex": "#ef6d1f",
+          "share": 0.0035,
+          "accent": true
+        }
+      ],
+      [
+        {
+          "hex": "#789678",
+          "share": 0.9952,
+          "accent": false
+        },
+        {
+          "hex": "#ef6e1e",
+          "share": 0.0026,
+          "accent": true
+        },
+        {
+          "hex": "#155ae6",
+          "share": 0.0022,
+          "accent": true
+        }
+      ]
+    ],
+    "composed": {
+      "styleBrief": "Use the Nebula moodboard 'Accent' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #1e285a, #ebe1cd, #789678. Accent colors, used sparingly: #ef6d1f, #155ae6. Visual cues: palette-led, style consistency, visual language.",
+      "negativePrompt": "blurry, low-detail artifacts",
+      "avoidPrompt": "",
+      "palette": [
+        "#1e285a",
+        "#ebe1cd",
+        "#789678"
+      ],
+      "accents": [
+        "#ef6d1f",
+        "#155ae6"
+      ]
+    }
+  },
+  "brand": {
+    "palette": [
+      "#eae3cc",
+      "#29252d",
+      "#282b2b",
+      "#789678",
+      "#ecdece",
+      "#1e285a",
+      "#f06e1e"
+    ],
+    "accents": [],
+    "colors": [
+      {
+        "hex": "#eae3cc",
+        "share": 0.2288,
+        "role": "dominant",
+        "images": 2
+      },
+      {
+        "hex": "#29252d",
+        "share": 0.1695,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#282b2b",
+        "share": 0.1563,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#789678",
+        "share": 0.1468,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#ecdece",
+        "share": 0.1423,
+        "role": "dominant",
+        "images": 2
+      },
+      {
+        "hex": "#1e285a",
+        "share": 0.0962,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#f06e1e",
+        "share": 0.0588,
+        "role": "dominant",
+        "images": 1
+      }
+    ],
+    "styleBrief": "Use the Nebula moodboard 'Brand' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #eae3cc, #29252d, #282b2b, #789678, #ecdece, #1e285a, #f06e1e. Visual cues: palette-led, style consistency, visual language, warm, paper, accent. Notes: warm paper, one hot accent.",
+    "negativePrompt": "blurry, low-detail artifacts",
+    "avoids": [
+      "blurry",
+      "low-detail artifacts"
+    ],
+    "keywords": [
+      "palette-led",
+      "style consistency",
+      "visual language",
+      "warm",
+      "paper",
+      "accent"
+    ],
+    "summary": "4 reference image(s) analyzed as look. Palette: #eae3cc, #29252d, #282b2b, #789678, #ecdece. Notes emphasize: warm paper, one hot accent",
+    "imageColors": [
+      [
+        {
+          "hex": "#eae3cc",
+          "share": 0.443,
+          "accent": false
+        },
+        {
+          "hex": "#ecdece",
+          "share": 0.3053,
+          "accent": false
+        },
+        {
+          "hex": "#1e285a",
+          "share": 0.25,
+          "accent": false
+        },
+        {
+          "hex": "#f26e1f",
+          "share": 0.0017,
+          "accent": true
+        }
+      ],
+      [
+        {
+          "hex": "#789678",
+          "share": 0.636,
+          "accent": false
+        },
+        {
+          "hex": "#ebe2cc",
+          "share": 0.2533,
+          "accent": false
+        },
+        {
+          "hex": "#ecddcf",
+          "share": 0.1078,
+          "accent": false
+        },
+        {
+          "hex": "#ef6f1f",
+          "share": 0.0029,
+          "accent": true
+        }
+      ],
+      [
+        {
+          "hex": "#29252d",
+          "share": 0.4407,
+          "accent": false
+        },
+        {
+          "hex": "#282b2b",
+          "share": 0.4065,
+          "accent": false
+        },
+        {
+          "hex": "#f06e1e",
+          "share": 0.1528,
+          "accent": false
+        }
+      ],
+      [
+        {
+          "hex": "#dc1ea0",
+          "share": 1.0,
+          "accent": false
+        }
+      ]
+    ],
+    "composed": {
+      "styleBrief": "quiet product shots. Use the Nebula moodboard 'Brand' as look direction at strength 0.70. Take the visual style only: palette, light, texture and finish. The subject comes from the prompt. Color palette: #eae3cc, #29252d, #282b2b, #789678, #ecdece, #1e285a, #f06e1e. Make sure these colors appear: #e8593c. Visual cues: palette-led, style consistency, visual language, warm, paper, accent. Notes: warm paper, one hot accent.",
+      "negativePrompt": "blurry, low-detail artifacts, neon signage",
+      "avoidPrompt": "Keep these out of the image: neon signage.",
+      "palette": [
+        "#eae3cc",
+        "#29252d",
+        "#282b2b",
+        "#789678",
+        "#ecdece",
+        "#1e285a",
+        "#f06e1e"
+      ],
+      "accents": []
+    }
+  },
+  "shades": {
+    "palette": [
+      "#c46244",
+      "#29262d",
+      "#272c2a"
+    ],
+    "accents": [],
+    "colors": [
+      {
+        "hex": "#c46244",
+        "share": 0.8333,
+        "role": "dominant",
+        "images": 4
+      },
+      {
+        "hex": "#29262d",
+        "share": 0.1126,
+        "role": "dominant",
+        "images": 4
+      },
+      {
+        "hex": "#272c2a",
+        "share": 0.0541,
+        "role": "dominant",
+        "images": 4
+      }
+    ],
+    "styleBrief": "Use the Nebula moodboard 'Shades' as world direction at strength 0.50. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #c46244, #29262d, #272c2a. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy.",
+    "negativePrompt": "blurry, low-detail artifacts",
+    "avoids": [
+      "blurry",
+      "low-detail artifacts"
+    ],
+    "keywords": [
+      "palette-led",
+      "worldbuilding",
+      "environmental continuity",
+      "high color energy"
+    ],
+    "summary": "4 reference image(s) analyzed as world. Palette: #c46244, #29262d, #272c2a.",
+    "imageColors": [
+      [
+        {
+          "hex": "#be5f46",
+          "share": 0.8333,
+          "accent": false
+        },
+        {
+          "hex": "#28282c",
+          "share": 0.0739,
+          "accent": false
+        },
+        {
+          "hex": "#272c2a",
+          "share": 0.0485,
+          "accent": false
+        },
+        {
+          "hex": "#29242e",
+          "share": 0.0443,
+          "accent": false
+        }
+      ],
+      [
+        {
+          "hex": "#c46244",
+          "share": 0.8333,
+          "accent": false
+        },
+        {
+          "hex": "#28282c",
+          "share": 0.069,
+          "accent": false
+        },
+        {
+          "hex": "#29242e",
+          "share": 0.0519,
+          "accent": false
+        },
+        {
+          "hex": "#272c29",
+          "share": 0.0457,
+          "accent": false
+        }
+      ],
+      [
+        {
+          "hex": "#ca6542",
+          "share": 0.8333,
+          "accent": false
+        },
+        {
+          "hex": "#2a252d",
+          "share": 0.0861,
+          "accent": false
+        },
+        {
+          "hex": "#272b2b",
+          "share": 0.0806,
+          "accent": false
+        }
+      ],
+      [
+        {
+          "hex": "#d06840",
+          "share": 0.8333,
+          "accent": false
+        },
+        {
+          "hex": "#28262d",
+          "share": 0.1156,
+          "accent": false
+        },
+        {
+          "hex": "#272c2a",
+          "share": 0.0511,
+          "accent": false
+        }
+      ]
+    ],
+    "composed": {
+      "styleBrief": "Use the Nebula moodboard 'Shades' as world direction at strength 0.50. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #c46244, #29262d, #272c2a. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy.",
+      "negativePrompt": "blurry, low-detail artifacts",
+      "avoidPrompt": "",
+      "palette": [
+        "#c46244",
+        "#29262d",
+        "#272c2a"
+      ],
+      "accents": []
+    }
+  },
+  "busy": {
+    "palette": [
+      "#ebe1cd",
+      "#be5f46",
+      "#28283e",
+      "#165ae6",
+      "#f06e1f",
+      "#ecdbd1",
+      "#eae7c9",
+      "#798f7b"
+    ],
+    "accents": [
+      "#201f5c",
+      "#d91da1"
+    ],
+    "colors": [
+      {
+        "hex": "#ebe1cd",
+        "share": 0.282,
+        "role": "dominant",
+        "images": 2
+      },
+      {
+        "hex": "#be5f46",
+        "share": 0.2059,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#28283e",
+        "share": 0.1634,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#165ae6",
+        "share": 0.0981,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#f06e1f",
+        "share": 0.0654,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#ecdbd1",
+        "share": 0.0608,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#eae7c9",
+        "share": 0.0578,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#798f7b",
+        "share": 0.0362,
+        "role": "dominant",
+        "images": 1
+      },
+      {
+        "hex": "#201f5c",
+        "share": 0.0066,
+        "role": "accent",
+        "images": 1
+      },
+      {
+        "hex": "#d91da1",
+        "share": 0.0007,
+        "role": "accent",
+        "images": 1
+      }
+    ],
+    "styleBrief": "Use the Nebula moodboard 'Busy' as subject direction at strength 0.90. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #ebe1cd, #be5f46, #28283e, #165ae6, #f06e1f, #ecdbd1, #eae7c9, #798f7b. Accent colors, used sparingly: #201f5c, #d91da1. Visual cues: palette-led, subject continuity, silhouette consistency, high color energy, many, colours. Notes: many colours.",
+    "negativePrompt": "blurry, low-detail artifacts",
+    "avoids": [
+      "blurry",
+      "low-detail artifacts"
+    ],
+    "keywords": [
+      "palette-led",
+      "subject continuity",
+      "silhouette consistency",
+      "high color energy",
+      "many",
+      "colours"
+    ],
+    "summary": "2 reference image(s) analyzed as subject. Palette: #ebe1cd, #be5f46, #28283e, #165ae6, #f06e1f. Accents: #201f5c, #d91da1. Notes emphasize: many colours",
+    "imageColors": [
+      [
+        {
+          "hex": "#ebe1cd",
+          "share": 0.3322,
+          "accent": false
+        },
+        {
+          "hex": "#28283e",
+          "share": 0.2778,
+          "accent": false
+        },
+        {
+          "hex": "#165ae6",
+          "share": 0.1667,
+          "accent": false
+        },
+        {
+          "hex": "#f06e1f",
+          "share": 0.1111,
+          "accent": false
+        },
+        {
+          "hex": "#798f7b",
+          "share": 0.0616,
+          "accent": false
+        },
+        {
+          "hex": "#789c75",
+          "share": 0.0495,
+          "accent": false
+        },
+        {
+          "hex": "#d91da1",
+          "share": 0.0012,
+          "accent": true
+        },
+        {
+          "hex": "#201f5c",
+          "share": 0.0113,
+          "accent": true
+        }
+      ],
+      [
+        {
+          "hex": "#be5f46",
+          "share": 0.5,
+          "accent": false
+        },
+        {
+          "hex": "#ebe1cd",
+          "share": 0.2104,
+          "accent": false
+        },
+        {
+          "hex": "#ecdbd1",
+          "share": 0.1476,
+          "accent": false
+        },
+        {
+          "hex": "#eae7c9",
+          "share": 0.1403,
+          "accent": false
+        },
+        {
+          "hex": "#1659e6",
+          "share": 0.0017,
+          "accent": true
+        }
+      ]
+    ],
+    "composed": {
+      "styleBrief": "Use the Nebula moodboard 'Busy' as subject direction at strength 0.90. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #ebe1cd, #be5f46, #28283e, #165ae6, #f06e1f, #ecdbd1, #eae7c9, #798f7b. Accent colors, used sparingly: #d91da1. Visual cues: palette-led, subject continuity, silhouette consistency, high color energy, many, colours. Notes: many colours.",
+      "negativePrompt": "blurry, low-detail artifacts",
+      "avoidPrompt": "Keep these out of the image: colors close to #1e285a.",
+      "palette": [
+        "#ebe1cd",
+        "#be5f46",
+        "#28283e",
+        "#165ae6",
+        "#f06e1f",
+        "#ecdbd1",
+        "#eae7c9",
+        "#798f7b"
+      ],
+      "accents": [
+        "#d91da1"
+      ]
+    }
+  }
+}

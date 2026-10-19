@@ -63,7 +63,7 @@ def test_weights_decide_the_palette_order() -> None:
     assert _close(cream_first["palette"][0], CREAM) and _close(cream_first["palette"][1], NAVY)
     shares = [c["share"] for c in cream_first["colors"] if c["role"] == "dominant"]
     assert shares == sorted(shares, reverse=True) and abs(sum(shares) - 1.0) < 0.01
-    assert cream_first["version"] == ANALYSIS_VERSION == 3
+    assert cream_first["version"] == ANALYSIS_VERSION == 4
 
 
 def test_the_largest_colour_leads_not_the_darkest() -> None:

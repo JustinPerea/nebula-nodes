@@ -533,7 +533,7 @@ export interface MoodboardAnalysis {
   palette: string[];
   /** Small saturated colours kept apart from the palette (analysis version 2 on). */
   accents?: string[];
-  colors?: Array<{ hex: string; share: number; role: 'dominant' | 'accent'; images: number }>;
+  colors?: MoodboardColor[];
   lighting: string;
   composition: string;
   materials: string[];
@@ -542,8 +542,41 @@ export interface MoodboardAnalysis {
   subjectBias: string[];
   representativeImages: string[];
   providerHints: Record<string, unknown>;
-  images: Array<Record<string, unknown>>;
+  /** Each analyzed image (excluded ones are left out). `number` (version 4 on)
+   *  is its place among all the board's images, excluded ones included. */
+  images: Array<MoodboardAnalysisImage & Record<string, unknown>>;
   warnings: string[];
+}
+
+/** One image a board colour comes from (analysis version 4 on). */
+export interface MoodboardColorSource {
+  /** The image's number on the board, 1-based, counting every image in board order. */
+  number: number;
+  id: string;
+  /** This colour's share of that image's pixels. */
+  share: number;
+  /** The image's part of the board weight × `share`: what it adds to the board share. */
+  contribution: number;
+}
+
+export interface MoodboardColor {
+  hex: string;
+  /** The part of the weighted board this colour covers. */
+  share: number;
+  role: 'dominant' | 'accent';
+  /** How many images it comes from. */
+  images: number;
+  /** The images it comes from, largest contribution first. Missing before version 4. */
+  sources?: MoodboardColorSource[];
+}
+
+export interface MoodboardAnalysisImage {
+  number?: number;
+  id: string;
+  url: string;
+  weight: number;
+  status: 'analyzed' | 'unresolved' | 'error';
+  colors?: Array<{ hex: string; share: number; accent: boolean }>;
 }
 
 /** Hex colours the person pinned: ones that must appear, ones kept out. */

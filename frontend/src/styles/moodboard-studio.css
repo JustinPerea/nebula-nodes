@@ -617,3 +617,138 @@ body.app-slava-restraint .moodboard-brief__extras dd {
   color: var(--sr-ink);
   line-height: 1.4;
 }
+
+/* Board colours with their source images (MoodboardColors.tsx). */
+body.app-slava-restraint .moodboard-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+body.app-slava-restraint .moodboard-color {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  padding: 3px 8px 3px 3px;
+  color: var(--sr-ink);
+  font-size: 12px;
+  outline: none;
+}
+
+body.app-slava-restraint .moodboard-color[tabindex]:hover,
+body.app-slava-restraint .moodboard-color:focus-visible {
+  border-color: var(--sr-edge-strong);
+}
+
+body.app-slava-restraint .moodboard-color:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: 1px;
+}
+
+body.app-slava-restraint .moodboard-color__swatch {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 2px;
+}
+
+body.app-slava-restraint .moodboard-color__hex {
+  font-family: var(--sr-mono);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .moodboard-color__share {
+  font-variant-numeric: tabular-nums;
+}
+
+body.app-slava-restraint .moodboard-color__sources {
+  color: var(--sr-ink-meta);
+  font-size: 11px;
+}
+
+body.app-slava-restraint .moodboard-color__detail {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 5;
+  display: none;
+  min-width: 100%;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 3px;
+  padding: 6px 8px;
+  background: var(--sr-canvas);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .moodboard-color:hover .moodboard-color__detail,
+body.app-slava-restraint .moodboard-color:focus .moodboard-color__detail {
+  display: grid;
+  gap: 3px;
+}
+
+body.app-slava-restraint .moodboard-color__detail-row {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  gap: 10px;
+  color: var(--sr-ink-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+body.app-slava-restraint .moodboard-color__detail-row span:first-child {
+  color: var(--sr-ink);
+}
+
+body.app-slava-restraint .moodboard-colors__hint {
+  color: var(--sr-ink-meta);
+  font-size: 12px;
+}
+
+/* An image card's own colours. */
+body.app-slava-restraint .moodboard-tile__number {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  border-radius: 3px;
+  padding: 1px 5px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+body.app-slava-restraint .moodboard-image-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  padding: 8px 9px 0;
+  list-style: none;
+}
+
+body.app-slava-restraint .moodboard-image-colors__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--sr-ink-meta);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+body.app-slava-restraint .moodboard-image-colors__swatch {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--sr-edge-strong);
+  border-radius: 2px;
+}
+
+body.app-slava-restraint .moodboard-image-colors__item--accent .moodboard-image-colors__swatch {
+  border-radius: 50%;
+}
