@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ReactFlowProvider } from '@xyflow/react';
 import type { Moodboard } from '../../src/types';
 
 const api = vi.hoisted(() => ({ characters: vi.fn(), boards: vi.fn(), presets: vi.fn() }));
@@ -35,7 +36,8 @@ describe('AssetsPanel', () => {
     const globalList = deferred<Moodboard[]>();
     api.boards.mockImplementation((scope: string) => scope === 'global'
       ? globalList.promise : Promise.resolve([board('project-board', 'Project board', 'project-one')]));
-    render(<AssetsPanel />);
+    // The panel places "Add to canvas" nodes in the canvas view, so it lives in the flow's provider (App.tsx).
+    render(<ReactFlowProvider><AssetsPanel /></ReactFlowProvider>);
     await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Moodboards' })); });
     await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Project' })); });
     expect(await screen.findByText('Project board')).toBeTruthy();

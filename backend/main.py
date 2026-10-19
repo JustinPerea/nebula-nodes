@@ -10516,6 +10516,8 @@ class MoodboardImageModel(BaseModel):
     url: str
     weight: float = 1.0
     notes: str = ""
+    # The person's own label, never sent anywhere (services/moodboard_store.py).
+    privateNote: str = ""
     excluded: bool = False
 
 

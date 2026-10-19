@@ -619,3 +619,43 @@ body.app-slava-restraint .character-palette__list {
   gap: 6px;
   overflow-y: auto;
 }
+
+/* Assets panel items: a click selects (border + buttons), double-click opens. */
+body.app-slava-restraint .assets-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+body.app-slava-restraint .assets-item--selected .assets-item__select {
+  border-color: var(--sr-accent);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+body.app-slava-restraint .assets-item__select:focus-visible,
+body.app-slava-restraint .assets-item__action:focus-visible {
+  outline: 2px solid var(--sr-accent);
+  outline-offset: 1px;
+}
+
+body.app-slava-restraint .assets-item__actions {
+  display: flex;
+  gap: 4px;
+}
+
+body.app-slava-restraint .assets-item__action {
+  flex: 1;
+  background: none;
+  border: 1px solid var(--sr-edge);
+  border-radius: 3px;
+  color: var(--sr-ink);
+  padding: 4px 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+body.app-slava-restraint .assets-item__action:hover {
+  border-color: var(--sr-accent);
+  color: var(--sr-accent);
+}

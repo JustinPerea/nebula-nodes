@@ -13,6 +13,12 @@ The person's brief fields (``direction``, ``avoid``, ``pinnedColors``,
 ``briefOverride``) sit on the board beside ``analysis``, so analyzing again
 never drops them; services/moodboard_brief.py describes them. A board saved
 before they existed is migrated once (``briefVersion``).
+
+Each image may carry a ``privateNote``: the person's own label ("PAINTERLY
+(liked)"). It is for whoever looks at the board, the person or an agent, and
+nothing else: it isn't an analysis input (``source_hash`` leaves it out), and
+it never reaches the brief, a generator or the Moodboard node's outputs
+(``without_private``). The image's ``notes`` are the ones that steer.
 """
 from __future__ import annotations
 
@@ -31,6 +37,23 @@ from services.asset_trash import is_trash_folder
 _PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _MOODBOARD_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _VALID_MODES = {"look", "world", "subject"}
+# The longest private note an image keeps (Moodboard Studio stops typing there).
+PRIVATE_NOTE_LIMIT = 2000
+# Image fields that are the person's alone: never sent to the analysis, the
+# brief, a generator or a node's outputs.
+PRIVATE_IMAGE_KEYS = ("privateNote",)
+
+
+def without_private(image: dict[str, Any]) -> dict[str, Any]:
+    """An image as anything that steers or generates may see it."""
+    return {key: value for key, value in image.items() if key not in PRIVATE_IMAGE_KEYS}
+
+
+def _private_note(raw: Any, index: int) -> str:
+    text = str(raw or "")
+    if len(text) > PRIVATE_NOTE_LIMIT:
+        raise ValueError(f"images[{index}].privateNote is longer than {PRIVATE_NOTE_LIMIT} characters")
+    return text
 
 
 def _validate_project_id(project_id: str) -> str:
@@ -107,9 +130,21 @@ def _normalize_images(images: list[dict[str, Any]] | None) -> list[dict[str, Any
             "url": url,
             "weight": weight,
             "notes": str(raw.get("notes") or ""),
+            "privateNote": _private_note(raw.get("privateNote"), index),
             "excluded": bool(raw.get("excluded", False)),
         })
     return normalized
+
+
+def _with_image_defaults(board: dict[str, Any]) -> dict[str, Any]:
+    """A board read from disk, each image with every field (a board saved
+    before private notes reads with an empty one), so a client can tell this
+    Nebula keeps them."""
+    images = board.get("images")
+    if isinstance(images, list) and any(isinstance(img, dict) and "privateNote" not in img for img in images):
+        board = {**board, "images": [{**img, "privateNote": ""} if isinstance(img, dict) and "privateNote" not in img
+                                     else img for img in images]}
+    return board
 
 
 def _brief():
@@ -120,6 +155,7 @@ def _brief():
 def _migrated(board: dict[str, Any]) -> dict[str, Any]:
     """A board read from disk, with its brief fields (migrated in memory if
     the startup migration hasn't written them yet)."""
+    board = _with_image_defaults(board)
     try:
         result = _brief().migrate_board(board)
     except Exception:  # an odd old board still opens, without its migrated fields
