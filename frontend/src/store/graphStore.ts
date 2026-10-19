@@ -664,7 +664,7 @@ interface GraphState {
   dismissUndoNotice: () => void;
 
   // Clipboard
-  clipboard: { nodes: Node<NodeData>[]; edges: Edge[] } | null;
+  clipboard: CanvasClipboard | null;
   copySelected: () => void;
   pasteClipboard: () => void;
 
@@ -1727,6 +1727,62 @@ function nodeHasProviderSafety(state: GraphState, nodeId: string): boolean {
 /** Clone the provider state attached to the source node, not a stale object
  * captured before the paid-start recovery event arrived. Returning null is a
  * fail-closed signal for an ambiguous source that has no safe ID to copy. */
+/**
+ * What Cmd+C copied. It survives opening another project, so nodes copy from
+ * one project to another (a Moodboard node keeps pointing at its board).
+ *
+ * `source` names the canvas the nodes came from: its project and which load
+ * of it (`load` counts project loads). `params` holds each node's
+ * provider-safe params worked out at copy time against that canvas's own
+ * recovery checkpoints and start ambiguities, or null when cloning it wasn't
+ * safe then. Those lists are keyed by node id and node ids restart per
+ * project, so after a switch the open canvas's lists say nothing about these
+ * nodes (or, worse, name a different node with the same id).
+ */
+export interface CanvasClipboard {
+  nodes: Node<NodeData>[];
+  edges: Edge[];
+  source: { projectId: string | null; load: number };
+  params: Record<string, Record<string, unknown> | null>;
+}
+
+/** Bumped by every project load: a clipboard from an earlier load is foreign. */
+let canvasLoad = 0;
+
+function sameCanvas(source: CanvasClipboard['source']): boolean {
+  return source.load === canvasLoad && source.projectId === (getProjectContext()?.id ?? null);
+}
+
+/** The params to paste for each clipboard node, or null if any isn't safe to clone. */
+function clipboardPasteParams(
+  state: GraphState,
+  clipboard: CanvasClipboard,
+): Map<string, Record<string, unknown>> | null {
+  const result = new Map<string, Record<string, unknown>>();
+  const here = sameCanvas(clipboard.source);
+  for (const node of clipboard.nodes) {
+    if (here) {
+      // On the canvas it came from: check against what this canvas knows now
+      // (a checkpoint or an ambiguity may have arrived since the copy), as a
+      // duplicate does. Unchanged from before the clipboard outlived a switch.
+      const params = providerSafeCloneParams(state, node);
+      if (!params) return null;
+      result.set(node.id, params);
+      continue;
+    }
+    // From another canvas (or an earlier load of this one): what was unsafe
+    // when copied stays unsafe; else the copy-time params, and the node-local
+    // check that a blank paid World Labs start never becomes a new one.
+    const copied = clipboard.params[node.id];
+    if (!copied) return null;
+    if (runIncludesFreshPaidWorldLabsStart({
+      nodes: [{ id: node.id, definitionId: node.data.definitionId, params: copied, outputs: {} }], edges: [],
+    })) return null;
+    result.set(node.id, { ...copied });
+  }
+  return result;
+}
+
 function providerSafeCloneParams(
   state: GraphState,
   node: Node<NodeData>,
@@ -2697,7 +2753,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       (e) => selectedIds.has(e.source) && selectedIds.has(e.target)
     );
 
-    set({ clipboard: { nodes: selected, edges: internalEdges } });
+    const state = get();
+    const params: CanvasClipboard['params'] = {};
+    for (const node of selected) params[node.id] = providerSafeCloneParams(state, node);
+    set({ clipboard: {
+      nodes: selected, edges: internalEdges, params,
+      source: { projectId: getProjectContext()?.id ?? null, load: canvasLoad },
+    } });
   },
 
   pasteClipboard: () => {
@@ -2706,14 +2768,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (isExecuting) return;
     if (!clipboard || clipboard.nodes.length === 0) return;
 
-    const safeParams = new Map<string, Record<string, unknown>>();
-    for (const node of clipboard.nodes) {
-      const params = providerSafeCloneParams(state, node);
-      if (!params) {
-        warnUnsafeProviderClone();
-        return;
-      }
-      safeParams.set(node.id, params);
+    const safeParams = clipboardPasteParams(state, clipboard);
+    if (!safeParams) {
+      warnUnsafeProviderClone();
+      return;
     }
 
     pushUndo(set, get);
@@ -5195,6 +5253,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     currentRunId = null;
     lastUndoPush = 0;
     lastUndoNodeId = '';
+    canvasLoad += 1;
 
     for (const record of restoredHistory) {
       if (record.status !== 'running') continue;
@@ -5218,7 +5277,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set({
       nodes, edges, runHistory: persistedRunHistory(restoredHistory),
       ...ownershipState(), createLaunchingIds: [], createCancelledLaunchIds: [],
-      clipboard: null, undoStack: [], redoStack: [], backendFreshStartPending: false,
+      // The clipboard stays, so nodes copy across projects; the bumped load
+      // makes it paste with its copy-time params (see CanvasClipboard).
+      undoStack: [], redoStack: [], backendFreshStartPending: false,
       providerRecoveryWarning: null, providerRecoveries: [], providerStartAmbiguities: [],
       uncertainWorldLabsRunId: null,
     });

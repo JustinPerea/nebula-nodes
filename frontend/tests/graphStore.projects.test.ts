@@ -42,17 +42,20 @@ afterEach(() => {
 });
 
 describe('project graph replacement', () => {
-  it('replaces same-ID nodes/history and clears clipboard, editors and stale recovery state', () => {
+  it('replaces same-ID nodes/history and clears undo, editors and stale recovery state, keeping the clipboard', () => {
     setProjectContext({ id: 'A', revision: 'a' });
     useGraphStore.getState().loadProjectGraph([node('A')], [], [history('run-A')]);
-    useGraphStore.setState({ clipboard: { nodes: [node('A')], edges: [] },
+    useGraphStore.setState({ nodes: [{ ...node('A'), selected: true }] });
+    useGraphStore.getState().copySelected();
+    useGraphStore.setState({
       providerRecoveries: [{ runId: 'run-A', nodeId: 'n1', resumeOperationId: 'old-job', existingWorldId: null }] });
     useUIStore.setState({ editorTargetNodeId: 'n1', selectedNodeId: 'n1', selectedClipId: 'clip-A',
       isPlaying: true, renderedPreviewUrl: '/outputs/A.mp4', canvasViewport: { x: 10, y: 20, zoom: 1.3 },
       canvasFocusRequest: { nodeId: 'n1', requestId: 'A-focus' }, createSessionId: 'session-A' });
     setProjectContext({ id: 'B', revision: 'b' });
     expect(useGraphStore.getState().loadProjectGraph([node('B')], [], [history('run-B')])).toBe(true);
-    expect(useGraphStore.getState()).toMatchObject({ nodes: [node('B')], clipboard: null,
+    expect(useGraphStore.getState()).toMatchObject({ nodes: [node('B')],
+      clipboard: { nodes: [expect.objectContaining({ id: 'n1' })], source: { projectId: 'A' } },
       undoStack: [], redoStack: [], providerRecoveries: [], providerStartAmbiguities: [], isExecuting: false });
     expect(useUIStore.getState()).toMatchObject({ editorTargetNodeId: null, selectedNodeId: null,
       selectedClipId: null, isPlaying: false, renderedPreviewUrl: null, canvasViewport: null,
@@ -193,5 +196,106 @@ describe('project graph replacement', () => {
     useGraphStore.getState().reserveGraphImport();
     expect(await useGraphStore.getState().addNode('text-input', { x: 0, y: 0 })).toBeNull();
     expect(transport.fetch).not.toHaveBeenCalled(); useGraphStore.getState().releaseGraphImport();
+  });
+});
+
+function moodboardNode(id = 'n1', board = 'board-in-A'): Node<NodeData> {
+  return { id, type: 'nebula-moodboard', position: { x: 40, y: 60 }, selected: true,
+    data: { label: 'Moodboard', definitionId: 'nebula-moodboard', params: { moodboard: board }, state: 'complete',
+      outputs: { moodboard: { type: 'Moodboard', value: { moodboardId: board } } } } } as Node<NodeData>;
+}
+function worldNode(id: string, params: Record<string, unknown>): Node<NodeData> {
+  return { id, type: 'model-node', position: { x: 0, y: 0 }, selected: true,
+    data: { label: 'World Labs Environment', definitionId: 'worldlabs-environment', params, state: 'idle', outputs: {} } };
+}
+function openProject(id: string, nodes: Node<NodeData>[]) {
+  setProjectContext({ id, revision: id.toLowerCase() });
+  expect(useGraphStore.getState().loadProjectGraph(nodes, [], [])).toBe(true);
+}
+
+describe('copy in one project, paste in another (Justin, P2: "copy the node moodboards live in to a different project")', () => {
+  it('Cmd+C in A, open B, Cmd+V adds the nodes with params intact and outputs cleared; undo in B removes them', () => {
+    openProject('A', [moodboardNode('n1'), { ...node('A', 'n2'), selected: true }]);
+    useGraphStore.setState({ edges: [{ id: 'e1', source: 'n1', sourceHandle: 'moodboard', target: 'n2', targetHandle: 'in' }] });
+    useGraphStore.getState().copySelected();
+    openProject('B', [{ ...node('B', 'n1'), selected: false }]);
+
+    useGraphStore.getState().pasteClipboard();
+
+    const nodes = useGraphStore.getState().nodes;
+    expect(nodes).toHaveLength(3);
+    const [pastedBoard, pastedText] = nodes.slice(1);
+    expect(pastedBoard.data).toMatchObject({ definitionId: 'nebula-moodboard', params: { moodboard: 'board-in-A' },
+      state: 'idle', outputs: {} });
+    expect(pastedText.data.params).toEqual({ value: 'A' });
+    expect(nodes[0].data.params).toEqual({ value: 'B' });
+    expect(new Set(nodes.map((n) => n.id)).size).toBe(3);
+    expect(useGraphStore.getState().edges).toEqual([expect.objectContaining({ source: pastedBoard.id, target: pastedText.id })]);
+
+    useGraphStore.getState().undo();
+    expect(useGraphStore.getState().nodes.map((n) => n.data.params)).toEqual([{ value: 'B' }]);
+    expect(useGraphStore.getState().edges).toEqual([]);
+  });
+
+  it('a node with a provider-start ambiguity when copied still refuses after the switch, with the same warning', () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    openProject('A', [worldNode('n1', { existing_world_id: 'world-A' })]);
+    useGraphStore.setState({ providerStartAmbiguities: [{ runId: 'paid-A', nodeId: 'n1', kind: 'worldlabs-environment',
+      message: 'The paid start may have been accepted.', durable: true }] });
+    useGraphStore.getState().copySelected();
+    // Switching needs the ambiguity settled on A's side; B's lists start empty.
+    useGraphStore.setState({ providerStartAmbiguities: [] });
+    openProject('B', []);
+
+    useGraphStore.getState().pasteClipboard();
+
+    expect(useGraphStore.getState().nodes).toEqual([]);
+    expect(alert).toHaveBeenCalledWith(expect.stringContaining('separate paid operation'));
+  });
+
+  it("B's checkpoint for its own node with the same id never lands on A's pasted node", () => {
+    openProject('A', [worldNode('n1', { existing_world_id: 'world-A' })]);
+    useGraphStore.getState().copySelected();
+    openProject('B', [{ ...worldNode('n1', { existing_world_id: 'world-B' }), selected: false }]);
+    useGraphStore.getState().hydrateProviderRecoveries([{ runId: 'paid-B', nodeId: 'n1', resumeOperationId: 'operation-B',
+      existingWorldId: null, durable: true }]);
+
+    useGraphStore.getState().pasteClipboard();
+
+    expect(useGraphStore.getState().nodes.at(-1)!.data.params).toEqual({ existing_world_id: 'world-A' });
+  });
+
+  it("A's checkpoint at copy time travels with the node", () => {
+    openProject('A', [worldNode('n1', {})]);
+    useGraphStore.getState().hydrateProviderRecoveries([{ runId: 'paid-A', nodeId: 'n1', resumeOperationId: 'operation-A',
+      existingWorldId: null, durable: true }]);
+    useGraphStore.getState().copySelected();
+    openProject('B', []);
+
+    useGraphStore.getState().pasteClipboard();
+
+    expect(useGraphStore.getState().nodes.map((n) => n.data.params)).toEqual([{ resume_operation_id: 'operation-A' }]);
+  });
+
+  it('a blank paid World Labs node is never cloned into a new paid start, here or after a switch', () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    openProject('A', [worldNode('n1', {})]);
+    useGraphStore.getState().copySelected();
+    useGraphStore.getState().pasteClipboard();
+    openProject('B', []);
+    useGraphStore.getState().pasteClipboard();
+    expect(useGraphStore.getState().nodes).toEqual([]);
+    expect(alert).toHaveBeenCalledTimes(2);
+  });
+
+  it('pasting back into A after a round trip uses the copy-time params; pasting where it was copied re-checks as before', () => {
+    openProject('A', [{ ...node('A', 'n1'), selected: true }]);
+    useGraphStore.getState().copySelected();
+    useGraphStore.getState().pasteClipboard();
+    expect(useGraphStore.getState().nodes).toHaveLength(2);
+    openProject('B', []);
+    openProject('A', [node('A', 'n1')]);
+    useGraphStore.getState().pasteClipboard();
+    expect(useGraphStore.getState().nodes.map((n) => n.data.params)).toEqual([{ value: 'A' }, { value: 'A' }]);
   });
 });
