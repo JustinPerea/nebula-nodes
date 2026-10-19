@@ -892,6 +892,60 @@ def test_keep_brief_is_checked_before_anything_is_saved(app, tmp_path):
     assert boards.brief(updated)["briefOverride"]["stale"] is False
 
 
+def test_a_refused_keep_gives_the_keep_reason(app, tmp_path, capsys):
+    # Keeping loses nothing, so the refusal says why Keep is the person's
+    # call rather than reusing replace's "their text would be lost".
+    board = _analyzed_board(app, tmp_path)
+    _person_override(board["id"], "The person's words.")
+    with pytest.raises(boards.MoodboardError) as caught:
+        boards.update_board(app.api, board["id"], keep_brief=True)
+    message = str(caught.value)
+    assert message.startswith("The person wrote this board's brief by hand, so only they can keep it")
+    assert "would be lost" not in message and "keeps no history" not in message
+    assert "Nothing was changed" in message and "keep_brief (--keep-brief)" in message
+    with pytest.raises(SystemExit):
+        _cli(app, ["moodboard", "set", board["id"], "--keep-brief"], capsys)
+    err = capsys.readouterr().err
+    assert err.startswith("error: The person wrote this board's brief by hand, so only they can keep it")
+    with pytest.raises(Exception, match="so only they can keep it"):
+        asyncio.run(mcp_server.mcp.call_tool("moodboard_update", {"board": board["id"], "keep_brief": True}))
+
+
+def _stale_read(monkeypatch, board):
+    """The board as the agent read it, before the person wrote their brief:
+    the race where the backend's own 403 is what stops the change."""
+    monkeypatch.setattr(boards, "get_board", lambda api, ref, headers=None: board)
+
+
+def test_a_backend_refusal_in_a_race_reads_as_cli_and_mcp_wording(app, tmp_path, monkeypatch):
+    board = _analyzed_board(app, tmp_path)
+    boards.update_board(app.api, board["id"], brief_override="Agent text.")
+    real_get_board = boards.get_board
+    read = real_get_board(app.api, board["id"])
+    _person_override(board["id"], "The person's words.")
+    _stale_read(monkeypatch, read)
+    for kwargs, action in (({"brief_override": "mine now"}, "replace"), ({"brief_override": ""}, "remove")):
+        with pytest.raises(boards.MoodboardError) as caught:
+            boards.update_board(app.api, board["id"], direction="d", **kwargs)
+        message = str(caught.value)
+        assert message.startswith(f"The person wrote this board's brief by hand, so an agent can't {action} it")
+        assert "brief_override (--brief, --clear-brief)" in message and "Nothing was changed" in message
+        assert "Leave briefOverride out of the request" not in message
+    with pytest.raises(boards.MoodboardError) as caught:
+        boards.update_board(app.api, board["id"], keep_brief=True)
+    message = str(caught.value)
+    assert message.startswith("The person wrote this board's brief by hand, so only they can keep it")
+    assert "mark as kept" not in message and "Nothing was changed" in message
+    # A Keep refused after the other changes were saved says so.
+    with pytest.raises(boards.MoodboardError) as caught:
+        boards.update_board(app.api, board["id"], direction="Saved direction", keep_brief=True)
+    message = str(caught.value)
+    assert "Nothing was changed" not in message and "The other changes were saved" in message
+    after = real_get_board(app.api, board["id"])
+    assert after["direction"] == "Saved direction"
+    assert after["briefOverride"]["text"] == "The person's words."
+
+
 def test_cli_set_and_show_the_brief(app, tmp_path, capsys):
     import json
 

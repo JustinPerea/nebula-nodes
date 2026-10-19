@@ -520,11 +520,20 @@ def _refusal(exc: NebulaAPIError) -> MoodboardError:
     return MoodboardError(detail)
 
 
-def _send(api: NebulaAPI, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+def _send(api: NebulaAPI, method: str, path: str, *, person_brief: str | None = None,
+          **kwargs: Any) -> dict[str, Any]:
+    """`person_brief` is what to say when the backend refuses because the
+    person wrote the brief (they wrote it after this call read the board):
+    the backend's own words are for API callers ("Leave briefOverride out
+    of the request")."""
+    from services.moodboard_store import PERSON_BRIEF_REFUSED
+
     try:
         return api.request(method, path, **kwargs)
     except NebulaAPIError as exc:
         if exc.status == 403:
+            if person_brief and str(exc.detail).startswith(PERSON_BRIEF_REFUSED):
+                raise MoodboardError(person_brief) from exc
             raise _refusal(exc) from exc
         raise
 
@@ -611,15 +620,16 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
         body["pinnedColors"] = _new_pinned(board.get("pinnedColors") or {}, pinned_colors, pin_colors,
                                            keep_out_colors, unpin_colors)
     saved_override = _override(board)
+    refused_put: str | None = None
     if brief_override is not None:
         try:
             text = rules.normalize_override_text(brief_override)
         except ValueError as exc:
             raise MoodboardError(f"the hand-written brief: {exc}") from exc
         if text != str((saved_override or {}).get("text") or "").strip():
+            refused_put = _PERSON_BRIEF.format(action="replace" if text else "remove")
             if saved_override and saved_override["by"] == "person":
-                raise MoodboardError(_PERSON_BRIEF.format(action="replace" if text else "remove",
-                                                          option="brief_override (--brief, --clear-brief)"))
+                raise MoodboardError(refused_put)
             body["briefOverride"] = {"text": text} if text else None
     # Keep runs after the PUT (it keeps the brief for the board as it ends
     # up), so one the backend would refuse stops here, before anything is
@@ -633,22 +643,33 @@ def update_board(api: NebulaAPI, ref: str, *, name: str | None = None, notes: st
         elif saved_override is None:
             raise MoodboardError("This board has no hand-written brief to keep. Nothing was changed.")
         elif saved_override["by"] == "person":
-            raise MoodboardError(_PERSON_BRIEF.format(action="keep", option="keep_brief (--keep-brief)"))
+            raise MoodboardError(_PERSON_KEEP.format(outcome=_NOTHING_KEPT))
     if not body and not keep_brief:
         raise MoodboardError("nothing to change")
     if content_changed:
         body["analysis"] = None
     updated = board
     if body:
-        updated = _send(api, "PUT", f"/api/moodboards/{board['id']}", json=body, headers=headers)
+        updated = _send(api, "PUT", f"/api/moodboards/{board['id']}", json=body, headers=headers,
+                        person_brief=refused_put)
     if keep_brief:
-        updated = _send(api, "POST", f"/api/moodboards/{board['id']}/brief-override/keep", headers=headers)
+        updated = _send(api, "POST", f"/api/moodboards/{board['id']}/brief-override/keep", headers=headers,
+                        person_brief=_PERSON_KEEP.format(outcome=_OTHERS_SAVED if body else _NOTHING_KEPT))
     return updated, removed, previous_settings(board, brief="briefOverride" in body)
 
 
 _PERSON_BRIEF = ("The person wrote this board's brief by hand, so an agent can't {action} it: the board keeps no "
-                 "history, and their text would be lost. Nothing was changed: leave {option} out to make the "
-                 "other changes, or ask the person to change it in Moodboard Studio.")
+                 "history, and their text would be lost. Nothing was changed: leave brief_override (--brief, "
+                 "--clear-brief) out to make the other changes, or ask the person to change it in Moodboard "
+                 "Studio.")
+# Keeping loses nothing: it answers the person's "changed since you edited
+# this" notice, which is theirs to answer.
+_PERSON_KEEP = ("The person wrote this board's brief by hand, so only they can keep it: keeping it clears their "
+                "notice that the board changed since they wrote it. {outcome}")
+_NOTHING_KEPT = ("Nothing was changed: leave keep_brief (--keep-brief) out to make the other changes, or ask the "
+                 "person to keep or regenerate it in Moodboard Studio.")
+_OTHERS_SAVED = ("The other changes were saved; the brief wasn't kept. Ask the person to keep or regenerate it in "
+                 "Moodboard Studio.")
 
 
 def previous_settings(board: dict[str, Any], *, brief: bool = False) -> dict[str, Any]:

@@ -146,10 +146,21 @@ def person_wrote(override: Any) -> bool:
             and override.get("by") != "agent")
 
 
+# How every refusal of the person's brief starts, so the CLI and MCP client
+# (moodboard_client.py) can tell it from other 403s and say it in their words.
+PERSON_BRIEF_REFUSED = "The person wrote this board's brief by hand"
+
+
 def _guard_override(previous: Any, by: str, action: str) -> None:
     if by != "person" and person_wrote(previous):
+        if action == "keep":
+            # Keeping loses nothing; it answers the person's "changed since
+            # you edited this" notice, which is theirs to answer.
+            raise BriefOverrideProtected(
+                f"{PERSON_BRIEF_REFUSED}, so only they can keep it: keeping it clears their notice that the "
+                "board changed since they wrote it. Ask the person to keep or regenerate it in Moodboard Studio.")
         raise BriefOverrideProtected(
-            f"The person wrote this board's brief by hand, so an agent can't {action} it: the board keeps no "
+            f"{PERSON_BRIEF_REFUSED}, so an agent can't {action} it: the board keeps no "
             "history, and their text would be lost. Leave briefOverride out of the request, or ask the person "
             "to change it in Moodboard Studio.")
 
@@ -351,7 +362,7 @@ class MoodboardStore:
         if not isinstance(override, dict) or not str(override.get("text") or "").strip():
             raise ValueError("This board has no hand-written brief to keep. To write one, send "
                              "briefOverride: {\"text\": ...} with PUT /api/moodboards/{id}.")
-        _guard_override(override, by, "mark as kept")
+        _guard_override(override, by, "keep")
         moodboard["briefOverride"] = {**override, "basis": _brief().brief_basis(moodboard), "updatedAt": _now_iso()}
         moodboard["version"] = int(moodboard.get("version", 1)) + 1
         moodboard["updatedAt"] = _now_iso()
