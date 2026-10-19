@@ -55,6 +55,14 @@ The server exposes these tools for building and running (see
 - `view_output`: a node's output as an image (videos as three frames, image
   lists as tiles), or as text.
 - `get_spend_limits`: the limits and what this session has used.
+- `list_projects` / `open_project` / `new_project`: list the person's saved
+  projects, switch the canvas to one, or start a new, empty one. The project
+  that was open is saved as it is. The person's canvas follows, shows a note
+  naming the agent, and offers a button back to the project they had open.
+  Start new work in a new project rather than emptying the canvas: it keeps
+  the person's work. Clearing a project that has nodes needs an explicit
+  force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
+  on an open canvas the person can undo it.
 - `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
   `moodboard_update`, `moodboard_analyze`, `moodboard_delete`: the boards in
   Moodboard Studio. See
@@ -1026,9 +1034,27 @@ nebula rename n2 "Hero shot"        # an empty name restores the model's
 nebula move n2=400,120 n3=400,320   # canvas coordinates
 nebula projects                     # saved projects; * is open
 nebula project open <id>            # switch the canvas (not while a run is going)
+nebula project new "Logo ideas"     # start a new, empty project and open it
+nebula clear                        # refused when the canvas has nodes
+nebula clear --force                # clears it anyway; the person can undo it
 nebula trash list                   # Recently deleted boards, characters, projects
 nebula trash restore [kind] <id>    # bring one back with the same id
 ```
+
+Opening or starting a project keeps the one that was open as it is. When an
+agent (or any script that isn't the person's own canvas) does it, the
+person's canvas follows, says who switched it, and offers a button back.
+The project's history names the agent.
+
+`nebula clear` refuses when the open project has nodes and points to
+`nebula project new` instead, which keeps this project's work. `--force`
+clears anyway, for agents and the person alike. The backend enforces this
+for every caller: `DELETE /api/graph` on a project with nodes returns 409
+unless it has `?force=true` (the canvas's Clear button and chat `/clear`
+send it after the person confirms). It's a check of intent, not of who is
+asking. With the canvas open, a clear is one undo step: Undo (or Cmd-Z)
+brings back every node, wire, name and output. With no canvas open there is
+nothing to undo it from, so prefer `nebula project new`.
 
 ### Moodboards from the CLI and MCP
 

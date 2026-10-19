@@ -155,7 +155,9 @@ export function Toolbar() {
     // empty the canvas.
     const undoStep = useGraphStore.getState().beginUndoStep();
     try {
-      const response = await apiFetch('/api/graph', { method: 'DELETE' });
+      // force: the person just confirmed, and a project with nodes needs it
+      // (the backend refuses a clear without it, 409).
+      const response = await apiFetch('/api/graph?force=true', { method: 'DELETE' });
       if (!response.ok) {
         let detail = '';
         try { detail = (await response.json()).detail ?? ''; } catch {

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
+from services import project_cover
 from services.saved_graph_upgrades import PARAMS_VERSION, catalog_params_behind, upgrade_catalog
 
 MAX_PROJECT_BYTES = 16 * 1024 * 1024
@@ -57,9 +58,19 @@ def empty_snapshot() -> dict[str, Any]:
 
 
 def metadata(project: dict[str, Any]) -> dict[str, Any]:
-    return {key: copy.deepcopy(project[key]) for key in (
+    found = {key: copy.deepcopy(project[key]) for key in (
         "id", "name", "createdAt", "updatedAt", "lastOpenedAt", "nodeCount", "edgeCount", "thumbnail",
     )}
+    # Saved before covers existed: refresh_metadata fills it on the next write
+    # (the listing backfills it, see needs_cover).
+    found["cover"] = copy.deepcopy(project.get("cover"))
+    if project.get("createdBy"):
+        found["createdBy"] = copy.deepcopy(project["createdBy"])
+    return found
+
+
+def needs_cover(project: dict[str, Any]) -> bool:
+    return "cover" not in project
 
 
 def public_project(project: dict[str, Any]) -> dict[str, Any]:
@@ -70,16 +81,10 @@ def refresh_metadata(project: dict[str, Any], *, touch: bool = True) -> None:
     snapshot = project["snapshot"]
     project["nodeCount"] = len(snapshot["nodes"])
     project["edgeCount"] = len(snapshot["edges"])
-    project["thumbnail"] = None
-    for node in reversed(snapshot["nodes"]):
-        for port in (node.get("data", {}).get("outputs") or {}).values():
-            if isinstance(port, dict) and port.get("type") == "Image":
-                value = port.get("value")
-                if isinstance(value, str) and len(value) <= 8192 and value.startswith(("/api/outputs/", "http://", "https://")):
-                    project["thumbnail"] = value
-                    break
-        if project["thumbnail"]:
-            break
+    # The card's picture (services/project_cover.py). `thumbnail` stays its
+    # first image for clients from before covers.
+    project["cover"] = project_cover.cover(snapshot, project.get("coverPin"))
+    project["thumbnail"] = project_cover.first_image(project["cover"])
     if touch:
         project["updatedAt"] = now()
 

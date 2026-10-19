@@ -1419,7 +1419,9 @@ export function ChatPanel() {
       // frontend side — cli-origin nodes drop out, library-dragged work survives.
       // One undo step, so the person can bring the canvas back.
       const undoStep = useGraphStore.getState().beginUndoStep();
-      apiFetch('/api/graph', { method: 'DELETE' }).then((response) => {
+      // force: typing /clear is the person's confirmation (the backend
+      // refuses a clear of a project with nodes without it).
+      apiFetch('/api/graph?force=true', { method: 'DELETE' }).then((response) => {
         if (!response.ok) useGraphStore.getState().cancelUndoStep(undoStep);
       }).catch(() => useGraphStore.getState().cancelUndoStep(undoStep));
       setMessages([

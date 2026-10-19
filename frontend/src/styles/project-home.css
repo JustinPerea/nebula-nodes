@@ -63,6 +63,24 @@ body.app-slava-restraint .project-home__open { display: block; width: 100%; over
 body.app-slava-restraint .project-home__preview { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 10; margin: 8px; overflow: hidden; border-radius: calc(var(--sr-node-media-radius) - 5px); background-color: var(--sr-node-media-bg); background-image: radial-gradient(circle at 1px 1px, var(--sr-canvas-dot-color-soft) 1px, transparent 0); background-size: 16px 16px; }
 body.app-slava-restraint .project-home__preview--image { background-image: none; }
 body.app-slava-restraint .project-home__preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* Only input references: up to four of them, as a mosaic (backend services/project_cover.py). */
+body.app-slava-restraint .project-home__mosaic { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; width: 100%; height: 100%; }
+body.app-slava-restraint .project-home__mosaic--2 { grid-template-rows: 1fr; }
+body.app-slava-restraint .project-home__mosaic--3 img:first-child { grid-row: span 2; }
+body.app-slava-restraint .project-home__mosaic img { min-width: 0; min-height: 0; }
+body.app-slava-restraint .project-home__cover-picker { margin: 0 10px 12px; padding: 10px; border: 1px solid var(--sr-edge); border-radius: calc(var(--sr-node-media-radius) - 5px); background: var(--sr-surface-control); }
+body.app-slava-restraint .project-home__cover-picker-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; color: var(--sr-ink-light); font-size: 11px; }
+body.app-slava-restraint .project-home__cover-picker-head > span { margin-right: auto; }
+body.app-slava-restraint .project-home__cover-auto { min-height: 28px; padding: 0 10px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink-light); font-size: 11px; }
+body.app-slava-restraint .project-home__cover-auto[aria-pressed="true"] { border-color: var(--sr-ink); color: var(--sr-ink); }
+body.app-slava-restraint .project-home__cover-close { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--sr-radius-control); background: transparent; color: var(--sr-ink-meta); }
+body.app-slava-restraint .project-home__cover-close svg { width: 13px; height: 13px; }
+body.app-slava-restraint .project-home__cover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; max-height: 196px; overflow-y: auto; }
+body.app-slava-restraint .project-home__cover-choice { aspect-ratio: 1; padding: 0; overflow: hidden; border: 2px solid transparent; border-radius: 6px; background: var(--sr-node-media-bg); }
+body.app-slava-restraint .project-home__cover-choice:hover:not(:disabled) { border-color: var(--sr-edge-strong); }
+body.app-slava-restraint .project-home__cover-choice[aria-pressed="true"] { border-color: var(--sr-ink); }
+body.app-slava-restraint .project-home__cover-choice img { display: block; width: 100%; height: 100%; object-fit: cover; }
+body.app-slava-restraint .project-home__cover-note { margin: 4px 0; color: var(--sr-ink-light); font-size: 12px; }
 body.app-slava-restraint .project-home__preview-open { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--sr-edge-strong); border-radius: var(--sr-radius-control); background: var(--sr-node-pill-bg); color: var(--sr-ink); opacity: 0; transform: translateY(3px); transition: opacity var(--sr-motion-fast), transform var(--sr-motion-fast); }
 body.app-slava-restraint .project-home__preview-open svg { width: 14px; height: 14px; }
 body.app-slava-restraint .project-home__open:hover .project-home__preview-open,

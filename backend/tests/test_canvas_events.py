@@ -374,7 +374,7 @@ def test_import_tags_the_project_and_clear_is_journaled(api):
     imported = client.post("/api/graph/import", headers=PERSON_HEADERS, json={
         "nodes": [{"id": "x1", "definitionId": "text-input", "params": {"value": "hi"}}], "edges": []})
     assert imported.status_code == 200
-    assert client.delete("/api/graph", headers=PERSON_HEADERS).status_code == 200
+    assert client.delete("/api/graph?force=true", headers=PERSON_HEADERS).status_code == 200
     events = journal.read(after=0)["events"]
     assert [e["kind"] for e in events] == ["canvas.replaced", "canvas.cleared"]
     assert events[0]["data"] == {"reason": "import"} and events[0]["projectId"] == PROJECT

@@ -43,6 +43,7 @@ Workflow:
 
 Spending: the person sets limits (get_spend_limits). A run over a limit, or with a node that has no list price, is refused; send the same plan as propose_change. The person accepts or rejects it in Nebula; agents cannot accept, and get_proposal waits for the decision. Use propose_change too when the change is theirs to decide (reworking their graph, a costly run).
 
+Projects: list_projects, open_project, new_project. Start new work in a new project rather than emptying the person's canvas; they can switch back.
 Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights and notes, moodboard_analyze reads its palette and brief.
 Deleted moodboards, characters and projects go to Recently deleted: list_trash shows them and restore_from_trash brings one back with the same id. Deleting for good is the person's alone.
 
@@ -414,6 +415,64 @@ def edit_canvas(
         "note": note, "nodes": nodes, "edges": edges, "params": params, "rename": rename, "move": move,
     }.items() if value}
     return _canvas_call("POST", "/api/graph/apply", ctx, json=body)
+
+
+# -- projects ---------------------------------------------------------------------
+
+def _project_line(project: dict[str, Any], active: str | None) -> dict[str, Any]:
+    return {"id": project.get("id"), "name": project.get("name"), "open": project.get("id") == active,
+            "nodes": project.get("nodeCount", 0), "updatedAt": project.get("updatedAt")}
+
+
+@mcp.tool(annotations=_READ)
+def list_projects(ctx: Context | None = None) -> dict[str, Any]:
+    """The person's saved projects, most recently edited first. `open` marks
+    the one on the canvas now."""
+    listing = _canvas_call("GET", "/api/projects", ctx)
+    active = listing.get("activeProjectId")
+    return {"projects": [_project_line(project, active) for project in listing.get("projects") or []],
+            "openProjectId": active}
+
+
+def _switch(path: str, body: dict[str, Any], ctx: Context | None) -> dict[str, Any]:
+    listing = _canvas_call("GET", "/api/projects", ctx)
+    previous_id = listing.get("activeProjectId")
+    previous = next((p for p in listing.get("projects") or [] if p.get("id") == previous_id), None)
+    result = _canvas_call("POST", path, ctx, timeout=30.0,
+                          json={**body, "workspaceRevision": listing.get("workspaceRevision", "")})
+    project = result.get("project") or {}
+    reply: dict[str, Any] = {"project": {"id": project.get("id"), "name": project.get("name"),
+                                         "nodes": len((project.get("snapshot") or {}).get("nodes") or [])}}
+    if previous and previous_id != project.get("id"):
+        reply["previousProject"] = {"id": previous_id, "name": previous.get("name")}
+        reply["note"] = (f"The canvas now shows {project.get('name')}. {previous.get('name')} is saved as it was; "
+                         f"open_project('{previous_id}') goes back.")
+    if result.get("warnings"):
+        reply["warnings"] = result["warnings"]
+    return reply
+
+
+@mcp.tool(annotations=_EDIT)
+def new_project(name: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Start a new, empty project and open it on the canvas.
+
+    Use it to start fresh work instead of clearing the canvas: the project
+    that was open is saved as it is. The person's canvas follows, names you,
+    and offers them a way back. Refused while a run is going.
+    """
+    return _switch("/api/projects", {"name": name}, ctx)
+
+
+@mcp.tool(annotations=_EDIT)
+def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Switch the canvas to a saved project (ids from list_projects).
+
+    The project that was open is saved as it is. The person's canvas follows,
+    names you, and offers them a way back. Refused while a run is going.
+    """
+    from urllib.parse import quote
+
+    return _switch(f"/api/projects/{quote(project_id, safe='')}/open", {}, ctx)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False))

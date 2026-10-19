@@ -27,12 +27,12 @@ def cli(monkeypatch):
 
     monkeypatch.setattr(main, "execute_graph", slow_execute_graph)
     with TestClient(main.app) as http:
-        http.delete("/api/graph")
+        http.delete("/api/graph?force=true")
         client = NebulaClient()
         client._client = http
         yield client, release
         release.set()
-        http.delete("/api/graph")
+        http.delete("/api/graph?force=true")
 
 
 def _text_node(client: NebulaClient) -> str:
@@ -90,6 +90,57 @@ def test_projects_open_refuses_an_unknown_project(cli, capsys):
     projects.run_list(client)
     with pytest.raises(SystemExit):
         projects.run_open(client, "no-such-project")
+
+
+def test_project_new_opens_a_fresh_project_and_names_the_way_back(cli, capsys, monkeypatch):
+    client, _ = cli
+    projects.run_new(client, "First")
+    first_id = client.list_projects()["activeProjectId"]
+    _text_node(client)
+    capsys.readouterr()
+    monkeypatch.setenv("NEBULA_AGENT_NAME", "Claude Code")
+    projects.run_new(client, "  Agent sketches ")
+    printed = capsys.readouterr().out
+    listing = client.list_projects()
+    opened = next(p for p in listing["projects"] if p["id"] == listing["activeProjectId"])
+    assert opened["name"] == "Agent sketches" and opened["createdBy"]["name"] == "Claude Code"
+    assert client.get_graph()["nodes"] == []
+    assert "Made and opened Agent sketches" in printed
+    assert f"nebula project open {first_id}" in printed and "First is saved" in printed
+    with pytest.raises(SystemExit):
+        projects.run_new(client, "   ")
+
+
+def test_clear_refuses_a_canvas_with_nodes_unless_forced(cli, capsys, monkeypatch):
+    client, _ = cli
+    _text_node(client)
+    with pytest.raises(SystemExit) as refused:
+        graph.run_clear(client)
+    assert refused.value.code == 1
+    message = capsys.readouterr().err
+    assert "has 1 node" in message and 'nebula project new "<name>"' in message and "--force" in message
+    assert len(client.get_graph()["nodes"]) == 1
+    # Agents may clear with --force (D3, 2026-10-18): the canvas makes it one
+    # undo step, and the CLI says so.
+    monkeypatch.setenv("NEBULA_AGENT_NAME", "Claude Code")
+    graph.run_clear(client, force=True)
+    assert client.get_graph()["nodes"] == []
+    out = capsys.readouterr().out
+    assert "Canvas cleared (1 node removed)" in out and "undo" in out
+
+
+def test_the_backend_refuses_a_clear_without_force_even_when_the_cli_check_is_skipped(cli, capsys):
+    """The 409 is the backend's, not only the CLI's: a node added after the
+    CLI looked (or a client that never looks) still needs force."""
+    client, _ = cli
+    _text_node(client)
+    with pytest.raises(SystemExit):
+        client.clear_graph()
+    err = capsys.readouterr().err
+    assert "nebula project new" in err and "--force" in err
+    assert len(client.get_graph()["nodes"]) == 1
+    client.clear_graph(force=True)
+    assert client.get_graph()["nodes"] == []
 
 
 def test_spend_shows_the_limits_an_agent_works_under(cli, capsys):

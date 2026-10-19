@@ -268,7 +268,7 @@ describe('Canvas toolbar hierarchy', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Clear canvas…' }));
     expect(trigger).toHaveFocus();
     expect(window.confirm).toHaveBeenCalledWith('Clear the canvas? 1 node will be removed, and the stored canvas used by connected tools will be reset. Save your graph first to keep a copy.');
-    expect(mocks.fetch).toHaveBeenCalledWith('/api/graph', { method: 'DELETE' });
+    expect(mocks.fetch).toHaveBeenCalledWith('/api/graph?force=true', { method: 'DELETE' });
     expect(mocks.clear).not.toHaveBeenCalled();
     expect(mocks.graph!.getState().providerRecoveries).toHaveLength(1);
     await act(async () => finishClear!({ ok: true }));

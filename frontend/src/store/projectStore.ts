@@ -11,7 +11,22 @@ import { backendParamsVersion, onParamsOutdated, reloadPage } from '../lib/param
 import { clearPersistedRunHistory, loadRunHistory } from '../lib/runHistory';
 import * as api from '../lib/projects';
 import { wsClient } from '../lib/wsClient';
+import type { ProjectSwitch } from '../lib/wsClient';
 import type { ProjectSnapshot, ProjectSummary, SavedProject, TrashedProject } from '../lib/projects';
+
+/** An agent (or a script) opened or made a project and this tab followed it.
+ * Shown as a toast with the way back. */
+export interface ProjectSwitchNotice {
+  /** The agent's name; null for an unnamed script or CLI call. */
+  actorName: string | null;
+  created: boolean;
+  projectName: string;
+  previousProjectId: string | null;
+  previousProjectName: string | null;
+  /** This tab's last unsaved changes couldn't go into the previous project,
+   * so they were kept as a recovered copy instead. */
+  keptCopy: boolean;
+}
 
 interface ProjectState {
   screen: 'home' | 'workspace';
@@ -23,6 +38,13 @@ interface ProjectState {
   lastDeleted: { id: string; name: string } | null;
   workspaceRevision: string; error: string | null;
   saveStatus: 'saved' | 'saving' | 'unsaved' | 'error'; dirty: boolean;
+  /** The last switch this tab followed (an agent's), for the toast. */
+  switchNotice: ProjectSwitchNotice | null;
+  dismissSwitchNotice: () => void;
+  /** Back to the project that was open before the switch in switchNotice. */
+  switchBack: () => Promise<void>;
+  /** Pin one of a project's images as its card cover, or null for automatic. */
+  pinCover: (id: string, url: string | null) => Promise<void>;
   initialize: () => Promise<void>;
   open: (id: string) => Promise<void>;
   createProject: (name?: string) => Promise<void>;
@@ -154,11 +176,12 @@ function paramsStopWork(snapshot: ProjectSnapshot, neverRan: Set<string>): strin
   });
 }
 /** `neverRan` is given for a params-version stop (handleParamsVersionChange). */
-function preserveWorkspaceConflict(message: string, neverRan?: Set<string>): void {
+function preserveWorkspaceConflict(message: string, neverRan?: Set<string>, captured?: ProjectSnapshot): void {
   if (saveTimer !== null) clearTimeout(saveTimer);
   saveTimer = null;
   const context = getProjectContext();
   let snapshot = captureProjectSnapshot();
+  if (captured) snapshot = captured;
   let dirty: boolean;
   if (neverRan) {
     snapshot = { ...snapshot, runHistory: snapshot.runHistory.filter((record) => !neverRan.has(record.id)) };
@@ -311,10 +334,137 @@ async function activate(action: () => Promise<api.ProjectActivation>): Promise<v
   }
 }
 
+/** Load what the backend has open now (the listing and its active project).
+ * Startup, Retry, and following an agent's switch all come through here. */
+async function loadWorkspace(): Promise<void> {
+  const set = useProjectStore.setState;
+  const list = await api.listProjects();
+  // A listing without a version is from a backend older than the gate (0).
+  const backendVersion = backendParamsVersion(list.paramsVersion);
+  if (backendVersion !== GRAPH_PARAMS_VERSION) {
+    await handleParamsVersionChange(backendVersion);
+    return;
+  }
+  clearParamsReloadMark();
+  set({ projects: list.projects, trash: list.trash ?? [], workspaceRevision: list.workspaceRevision });
+  if (list.activeProjectId) {
+    let project = await api.getProject(list.activeProjectId);
+    // Adopt browser-only legacy run records exactly once during migration.
+    // The backend's recovered graph is the authority for canvas contents.
+    if (list.migratedProjectId === project.id) {
+      const legacyHistory = loadRunHistory(window.localStorage);
+      const sessionId = useUIStore.getState().createSessionId;
+      project = await api.saveProject(project.id, {
+        ...project.snapshot,
+        runHistory: project.snapshot.runHistory.length ? project.snapshot.runHistory : legacyHistory,
+        createSessionId: sessionId,
+        createDraft: sessionId ? useCreateDraftStore.getState().drafts[sessionId] ?? null : null,
+      }, list.workspaceRevision);
+      // The project document is now durable; retire the global key so
+      // reload cannot recreate an obsolete pre-project running owner.
+      clearPersistedRunHistory(window.localStorage);
+    }
+    const graph = await fetchCLIGraph();
+    if (graph.workspaceRevision && graph.workspaceRevision !== list.workspaceRevision) {
+      throw new Error('The active project changed while loading. Try again to reload projects.');
+    }
+    applyProject(project, list.workspaceRevision, true);
+    useGraphStore.getState().hydrateProviderRecoveries(graph.providerRecoveries ?? []);
+    useGraphStore.getState().hydrateProviderStartAmbiguities(graph.providerStartAmbiguities ?? []);
+    if (graph.executionStatuses) useGraphStore.getState().hydrateExecutionStatuses(graph.executionStatuses);
+    void useGraphStore.getState().reconcilePersistedWorldLabsRun();
+  } else {
+    setProjectContext(null);
+    // Forget the project a conflict left loaded, so Open of it goes
+    // through the backend and applyProject instead of open()'s shortcut
+    // to a canvas with no project context.
+    set({ initialized: true, activeProject: null });
+  }
+}
+
+/** What the toast says when an agent (or a script) switched the open project. */
+export function switchMessage(notice: ProjectSwitchNotice): string {
+  const who = notice.actorName ?? 'An outside app';
+  const what = notice.created ? `made a new project, “${notice.projectName}”, and opened it` : `opened “${notice.projectName}”`;
+  const kept = notice.keptCopy ? ' Your last unsaved changes were kept as a copy in Projects.' : '';
+  return `${who} ${what}.${kept}`;
+}
+
+/** True when a graphSync's projectSwitch is the switch away from the project
+ * this tab holds: an agent (or script) opened or made a project. */
+function switchedAwayFrom(notice: ProjectSwitch | undefined, context: { id: string; revision: string }): notice is ProjectSwitch {
+  return Boolean(notice && typeof notice.projectId === 'string' && typeof notice.projectName === 'string'
+    && notice.previousRevision === context.revision && notice.previousProjectId === context.id);
+}
+
+/** Follow an agent's project switch instead of stopping the tab as if
+ * another window took over (D4). `snapshot` was captured before the graph
+ * store replaced the canvas; if it has changes the backend never saw (a pan,
+ * a run record, a node only this tab has), they go into the project that was
+ * open (the backend's handoff, open until the next switch), or into a
+ * recovered copy if that fails.
+ * Then the tab loads what's open now and says who switched it. */
+async function followProjectSwitch(notice: ProjectSwitch, context: { id: string; revision: string },
+  snapshot: ProjectSnapshot, unsaved: boolean): Promise<void> {
+  if (saveTimer !== null) clearTimeout(saveTimer);
+  saveTimer = null;
+  // Nothing else may save under the old project from here on.
+  setProjectContext(null);
+  useProjectStore.setState({ busy: true, error: null });
+  let keptCopy = false;
+  try {
+    await saveQueue.catch(() => {});
+    if (unsaved) {
+      try {
+        await api.saveProject(context.id, snapshot, context.revision);
+      } catch {
+        pendingRecovery = { sourceProjectId: context.id, snapshot, recoveryId: crypto.randomUUID().replaceAll('-', ''),
+          paramsVersion: canvasParamsVersion };
+        await recoverPendingWork();
+        keptCopy = true;
+      }
+    }
+    lastSaved = '';
+    await loadWorkspace();
+    const actor = notice.actor?.kind === 'agent' && typeof notice.actor.name === 'string' ? notice.actor.name : null;
+    // An agent that reopened the project this tab was showing reloaded it
+    // from what was saved: there's no other project to go back to.
+    const reopened = notice.previousProjectId === notice.projectId;
+    useProjectStore.setState({ switchNotice: {
+      actorName: actor, created: notice.created === true, projectName: notice.projectName,
+      previousProjectId: reopened ? null : notice.previousProjectId,
+      previousProjectName: reopened ? null : notice.previousProjectName, keptCopy,
+    } });
+  } catch (error) {
+    const who = notice.actor?.name ?? 'Another app';
+    const reason = error instanceof Error ? ` (${error.message})` : '';
+    useProjectStore.setState({ screen: 'home', initialized: false, dirty: Boolean(pendingRecovery),
+      error: `${who} opened “${notice.projectName}”, but this window couldn't follow${reason}. Try again to load it.` });
+  } finally {
+    useProjectStore.setState({ busy: false });
+  }
+}
+
 export const useProjectStore = create<ProjectState>((set, get) => ({
   screen: 'home', initialized: false, loading: true, busy: false,
   projects: [], activeProject: null, trash: [], lastDeleted: null, workspaceRevision: '', error: null,
-  saveStatus: 'saved', dirty: false,
+  saveStatus: 'saved', dirty: false, switchNotice: null,
+  dismissSwitchNotice: () => set({ switchNotice: null }),
+  switchBack: async () => {
+    const back = get().switchNotice?.previousProjectId;
+    if (!back) return;
+    await get().open(back);
+    if (get().activeProject?.id === back) set({ switchNotice: null });
+  },
+  pinCover: async (id, url) => {
+    try {
+      const project = await api.pinProjectCover(id, url);
+      set((state) => ({
+        projects: state.projects.map((item) => (item.id === id ? project : item)),
+        ...(state.activeProject?.id === id ? { activeProject: project } : {}),
+      }));
+    } catch (error) { showError(error); }
+  },
 
   initialize: async () => {
     if (get().initialized) return;
@@ -325,48 +475,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         // A stale tab cannot write to its former active project. Persist its
         // unsaved authoring as an inactive recovered copy before replacement.
         await recoverPendingWork();
-        const list = await api.listProjects();
-        // A listing without a version is from a backend older than the gate (0).
-        const backendVersion = backendParamsVersion(list.paramsVersion);
-        if (backendVersion !== GRAPH_PARAMS_VERSION) {
-          await handleParamsVersionChange(backendVersion);
-          return;
-        }
-        clearParamsReloadMark();
-        set({ projects: list.projects, trash: list.trash ?? [], workspaceRevision: list.workspaceRevision });
-        if (list.activeProjectId) {
-          let project = await api.getProject(list.activeProjectId);
-          // Adopt browser-only legacy run records exactly once during migration.
-          // The backend's recovered graph is the authority for canvas contents.
-          if (list.migratedProjectId === project.id) {
-            const legacyHistory = loadRunHistory(window.localStorage);
-            const sessionId = useUIStore.getState().createSessionId;
-            project = await api.saveProject(project.id, {
-              ...project.snapshot,
-              runHistory: project.snapshot.runHistory.length ? project.snapshot.runHistory : legacyHistory,
-              createSessionId: sessionId,
-              createDraft: sessionId ? useCreateDraftStore.getState().drafts[sessionId] ?? null : null,
-            }, list.workspaceRevision);
-            // The project document is now durable; retire the global key so
-            // reload cannot recreate an obsolete pre-project running owner.
-            clearPersistedRunHistory(window.localStorage);
-          }
-          const graph = await fetchCLIGraph();
-          if (graph.workspaceRevision && graph.workspaceRevision !== list.workspaceRevision) {
-            throw new Error('The active project changed while loading. Try again to reload projects.');
-          }
-          applyProject(project, list.workspaceRevision, true);
-          useGraphStore.getState().hydrateProviderRecoveries(graph.providerRecoveries ?? []);
-          useGraphStore.getState().hydrateProviderStartAmbiguities(graph.providerStartAmbiguities ?? []);
-          if (graph.executionStatuses) useGraphStore.getState().hydrateExecutionStatuses(graph.executionStatuses);
-          void useGraphStore.getState().reconcilePersistedWorldLabsRun();
-        } else {
-          setProjectContext(null);
-          // Forget the project a conflict left loaded, so Open of it goes
-          // through the backend and applyProject instead of open()'s shortcut
-          // to a canvas with no project context.
-          set({ initialized: true, activeProject: null });
-        }
+        await loadWorkspace();
       } catch (error) { showError(error); }
       finally { set({ loading: false }); initializing = null; }
     })();
@@ -555,7 +664,8 @@ export function subscribeProjectAutosave(): () => void {
     if (state.canvasViewport !== previous.canvasViewport || state.createSessionId !== previous.createSessionId) markDirty();
   });
   const drafts = useCreateDraftStore.subscribe(() => markDirty());
-  const socket = wsClient.subscribe((event) => {
+  // First, so it sees the canvas before the graph store swaps in the new graph.
+  const socket = wsClient.subscribeFirst((event) => {
     if (event.type !== 'graphSync') return;
     // A sync without a version is from a backend older than the gate (0).
     const paramsVersion = backendParamsVersion((event as unknown as { paramsVersion?: unknown }).paramsVersion);
@@ -569,11 +679,18 @@ export function subscribeProjectAutosave(): () => void {
     const context = getProjectContext();
     const state = useProjectStore.getState();
     if (!revision || !context || state.busy || revision === context.revision) return;
-    // Another tab changed the backend's active project. Keep our local canvas
-    // available but stop saves and require a fresh, explicit choice from Home.
-    preserveWorkspaceConflict(JSON.stringify(captureProjectSnapshot()) !== lastSaved
+    const snapshot = captureProjectSnapshot();
+    const unsaved = JSON.stringify(snapshot) !== lastSaved;
+    // An agent or script opened or made a project: follow it, with a way back.
+    if (switchedAwayFrom(event.projectSwitch, context)) {
+      void followProjectSwitch(event.projectSwitch, context, snapshot, unsaved);
+      return;
+    }
+    // The person changed the active project in another tab. Keep our local
+    // canvas available but stop saves and require a fresh, explicit choice from Home.
+    preserveWorkspaceConflict(unsaved
       ? 'The active project changed in another window. Try again to save your unsaved edits as a recovered project.'
-      : 'The active project changed in another window. Reload projects to continue.');
+      : 'The active project changed in another window. Reload projects to continue.', undefined, snapshot);
   });
   const outdated = onParamsOutdated((backendVersion) => { void handleParamsVersionChange(backendVersion); });
   const beforeUnload = (event: BeforeUnloadEvent) => {

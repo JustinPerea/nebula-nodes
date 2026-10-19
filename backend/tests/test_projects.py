@@ -194,10 +194,12 @@ def test_invalid_snapshot_and_invalid_name_are_atomic(workspace):
     assert graph.get_state() == before
 
 
-def test_stale_project_tabs_cannot_save_switch_edit_or_execute(workspace):
+def test_stale_project_tabs_cannot_save_switch_edit_or_execute(workspace, person):
     client, graph, _, _ = workspace
     first = create(client, "First")
-    second = create(client, "Second", first["workspaceRevision"])
+    # The person switched in another tab: no handoff save for the stale one.
+    second = client.post("/api/projects", json={"name": "Second", "workspaceRevision": first["workspaceRevision"]},
+                         headers=person.headers).json()
     stale = first["workspaceRevision"]
     assert client.put(f"/api/projects/{first['project']['id']}", json={"workspaceRevision": stale, "snapshot": {"nodes": [], "edges": []}}).status_code == 409
     assert client.post(f"/api/projects/{first['project']['id']}/open", json={"workspaceRevision": stale}).status_code == 409
@@ -545,6 +547,11 @@ def test_trash_can_be_purged_one_at_a_time_or_emptied(workspace, person):
     c = create(client, "C", b["workspaceRevision"])
     _trash(client, a["project"]["id"], c["workspaceRevision"])
     _trash(client, b["project"]["id"], c["workspaceRevision"])
+    # Deleting for good can't be undone, so it's the person's alone.
+    for headers in ({"X-Nebula-Agent": "Claude Code"}, {}, {**person.headers, "X-Nebula-Agent": "Claude Code"}):
+        assert client.request("DELETE", f"/api/projects/trash/{a['project']['id']}", headers=headers).status_code == 403
+        assert client.post("/api/projects/trash/empty", headers=headers).status_code == 403
+    assert len(store.read()["trash"]) == 2
     me = person.headers
     purged = client.request("DELETE", f"/api/projects/trash/{a['project']['id']}", headers=me)
     assert purged.status_code == 200

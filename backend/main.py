@@ -85,12 +85,13 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
+from services import project_cover
 from services.cli_graph import SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
 from services.saved_graph_upgrades import PARAMS_VERSION, request_version, upgrade_flat_nodes, upgrade_project
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
-    make_project, metadata as project_metadata, now as project_now,
+    make_project, metadata as project_metadata, needs_cover, now as project_now,
     project_name, public_project, refresh_metadata, validate_project_id,
     move_to_trash, purge_expired_trash, restore_from_trash, trash_metadata,
 )
@@ -1439,6 +1440,18 @@ def _output_url_from_ref(value: str) -> str | None:
     if rel is None:
         return None
     return f"{_OUTPUTS_URL_PREFIX}{rel.as_posix()}"
+
+
+def _output_file_time(url: str) -> float | None:
+    path = _output_path_from_ref(url)
+    try:
+        return path.stat().st_mtime if path is not None and path.is_file() else None
+    except OSError:
+        return None
+
+
+# Project cards pick their newest image by file time (services/project_cover.py).
+project_cover.configure(url_for=_output_url_from_ref, time_for=_output_file_time)
 
 
 def _normalize_output_value_for_storage(port_val: Any) -> Any:
@@ -6258,6 +6271,7 @@ def _graph_edit_origin() -> dict[str, Any]:
 
 async def _broadcast_graph_sync(
     *, graph_replaced: bool = False, reason: str = "import", moved: Iterable[str] = (), edit: bool = False,
+    project_switch: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket.
 
@@ -6267,6 +6281,9 @@ async def _broadcast_graph_sync(
     its own position for nodes it already shows (the person may be mid-drag),
     so without the list an agent's move didn't show on an open canvas until
     it reloaded.
+    `project_switch` (an agent or script opened or made a project) rides on
+    the event so the person's canvas follows it and offers the way back
+    (frontend projectStore), and names the project in the journal.
     `edit` marks a sync caused by a graph edit request (not a run's outputs or
     status): the sync carries ``edit`` = {actor, tab?} (_graph_edit_origin),
     and an open canvas that didn't send it makes it one undo step. A
@@ -6281,6 +6298,7 @@ async def _broadcast_graph_sync(
     await manager.broadcast_raw({"type": "graphSync", **export,
                                  **({"graphReplaced": True} if graph_replaced else {}),
                                  **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
+                                 **({"projectSwitch": project_switch} if project_switch and graph_replaced else {}),
                                  **({"edit": _graph_edit_origin()}
                                     if edit and (not graph_replaced or reason == "import") else {})})
     if graph_replaced:
@@ -6291,11 +6309,16 @@ async def _broadcast_graph_sync(
         except Exception:  # noqa: BLE001 - the journal must not break a project switch
             pass
         safe_reason = reason if reason in _REPLACE_REASONS else "import"
-        _journal(
-            "canvas.replaced",
-            data={"reason": safe_reason},
-            summary=f"replaced the canvas ({safe_reason})",
-        )
+        data: dict[str, Any] = {"reason": safe_reason}
+        summary = f"replaced the canvas ({safe_reason})"
+        if project_switch:
+            data.update({key: project_switch[key] for key in ("projectId", "projectName", "previousProjectId",
+                                                               "previousProjectName") if key in project_switch})
+            verb = "made and opened" if safe_reason == "project-create" else "opened"
+            summary = f"{verb} project “{project_switch.get('projectName', '')}”"
+            if project_switch.get("previousProjectName"):
+                summary += f" (was “{project_switch['previousProjectName']}”)"
+        _journal("canvas.replaced", data=data, summary=summary)
         # Pins belong to the project record. A project open or create brings
         # that project's pins; an import into the same project detaches pins
         # whose nodes did not survive.
@@ -7470,12 +7493,32 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
     return {"status": "updated", "count": len(normalized)}
 
 
+def _require_clear_intent(force: bool) -> None:
+    """Clearing a project that has nodes needs an explicit ``force``, from
+    every caller (Justin's D3, 2026-10-18). This is a check of intent, not of
+    who is asking: agents may clear too, because an open canvas makes the
+    clear one undo step (the graphSync carries ``edit``; Undo sends the nodes,
+    wires, names and outputs back through POST /api/graph/restore). The
+    canvas's Clear button and chat /clear send force after the person
+    confirms; `nebula clear --force` and the MCP send it when asked to."""
+    if force or not cli_graph.nodes:
+        return
+    count = len(cli_graph.nodes)
+    raise HTTPException(status_code=409, detail=(
+        f"The open project has {count} node{'s' if count != 1 else ''}, and clearing removes all of them. "
+        "To start fresh and keep this work, make a new project: `nebula project new \"<name>\"` "
+        "(MCP: new_project). To clear it anyway, pass force: `nebula clear --force` "
+        "(DELETE /api/graph?force=true). The person can undo a clear on an open canvas."
+    ))
+
+
 @app.delete("/api/graph")
-async def clear_graph() -> dict:
+async def clear_graph(force: bool = False) -> dict:
     # Clear Canvas is not consent to forget paid-provider state. Resolve each
     # recovery/ambiguity through its exact endpoint first; otherwise recreating
     # a node with the same identity could silently duplicate provider spend.
     _check_workspace_revision()
+    _require_clear_intent(force)
     with _paid_graph_mutation("clear the canvas"):
         _reject_graph_replacement_during_paid_start("clear the canvas")
         cli_graph.clear()
@@ -9241,6 +9284,10 @@ async def list_projects() -> dict[str, Any]:
             changed = True
         elif active := catalog["activeProjectId"]:
             changed = _overlay_live_project(catalog["projects"][active], exported)
+        for project in catalog["projects"].values():
+            if needs_cover(project):  # saved before covers existed
+                refresh_metadata(project, touch=False)
+                changed = True
         changed = purge_expired_trash(catalog) or changed
         if changed:
             project_store.commit(catalog)
@@ -9326,10 +9373,54 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
 
 
+def _switch_actor() -> dict[str, Any] | None:
+    """Who opened or made a project, when it wasn't the person's own canvas:
+    an agent (named by its token or X-Nebula-Agent) or an unnamed script. The
+    person's canvas follows such a switch instead of calling it a conflict."""
+    headers = current_request_headers()
+    if is_person(headers):
+        return None
+    actor = actor_for_headers(headers)
+    if actor.get("kind") != "agent" and has_agent_marker(headers):
+        actor = {"kind": "agent", "name": "An agent"}
+    return {key: actor[key] for key in ("kind", "name", "color") if actor.get(key)}
+
+
+def _begin_switch(catalog: dict[str, Any], actor: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Note what was open before a switch. For a switch the person didn't
+    make, their open tab may still hold a few unsaved changes (a pan, a run
+    record) for the project it was showing: `handoff` lets that tab save them
+    into it (save_project), with the revision it had, until the next switch."""
+    previous_id = catalog.get("activeProjectId")
+    previous = catalog["projects"].get(previous_id) if previous_id else None
+    if actor is None:
+        catalog.pop("handoff", None)
+        return None
+    if previous is not None:
+        catalog["handoff"] = {"projectId": previous_id, "revision": catalog["workspaceRevision"]}
+    else:
+        catalog.pop("handoff", None)
+    return {
+        "actor": actor,
+        "previousProjectId": previous_id if previous is not None else None,
+        "previousProjectName": previous["name"] if previous is not None else None,
+        "previousRevision": catalog["workspaceRevision"],
+    }
+
+
+def _switch_notice(start: dict[str, Any] | None, project: dict[str, Any], *, created: bool) -> dict[str, Any] | None:
+    if start is None:
+        return None
+    verb = "Made and opened" if created else "Opened"
+    publish_action(f"{verb} project “{project['name']}”")
+    return {**start, "projectId": project["id"], "projectName": project["name"], "created": created}
+
+
 @app.post("/api/projects")
 async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, Any]:
     body = body or {}
     exported = await _projects_live_export()
+    actor = _switch_actor()
     with project_store.transaction() as catalog, _paid_graph_mutation("create a project"):
         _project_revision(body, catalog)
         _project_replacement_guard()
@@ -9347,12 +9438,16 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
             project = make_project(body.get("name", "Untitled project"))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if actor is not None and actor.get("kind") == "agent":
+            project["createdBy"] = {"kind": "agent", "name": actor.get("name") or "An agent"}
+        start = _begin_switch(catalog, actor)
         catalog["projects"][project["id"]] = project
         catalog["activeProjectId"] = project["id"]
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, CLIGraph())
         revision = catalog["workspaceRevision"]
-    await _broadcast_graph_sync(graph_replaced=True, reason="project-create")
+    await _broadcast_graph_sync(graph_replaced=True, reason="project-create",
+                                project_switch=_switch_notice(start, project, created=True))
     # A bundle built for another version doesn't load it (projectStore.ts activate).
     return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
@@ -9360,6 +9455,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
 @app.post("/api/projects/{project_id}/open")
 async def open_saved_project(project_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     exported = await _projects_live_export()
+    actor = _switch_actor()
     with project_store.transaction() as catalog, _paid_graph_mutation("open a project"):
         _project_revision(body or {}, catalog)
         _project_replacement_guard()
@@ -9371,11 +9467,13 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings)
         candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
         project["lastOpenedAt"] = project_now()
+        start = _begin_switch(catalog, actor)
         catalog["activeProjectId"] = project_id
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, candidate)
         revision = catalog["workspaceRevision"]
-    await _broadcast_graph_sync(graph_replaced=True, reason="project-open")
+    await _broadcast_graph_sync(graph_replaced=True, reason="project-open",
+                                project_switch=_switch_notice(start, project, created=False))
     # What opening changed that the person should know (a folded Krea node's
     # dropped job-output connections); the snapshot is saved migrated, so
     # this is said once.
@@ -9387,6 +9485,19 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
 async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
+        handoff = catalog.get("handoff") or {}
+        if ("snapshot" in body and handoff.get("projectId") == project_id
+                and body.get("workspaceRevision") == handoff.get("revision")):
+            # Not once: an autosave already in flight at the switch lands
+            # first, and the tab's own last save must still land after it.
+            # The next switch (anyone's) ends the handoff. The project may
+            # be the open one again: an agent reopened the project the tab
+            # was showing, which reloads it from what was saved.
+            _save_handoff(project, body["snapshot"])
+            refresh_metadata(project)
+            project_store.commit(catalog)
+            return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
+                    "handoff": True}
         _project_revision(body, catalog, required="snapshot" in body)
         if "snapshot" in body:
             if catalog["activeProjectId"] != project_id:
@@ -9409,6 +9520,64 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
         refresh_metadata(project)
         project_store.commit(catalog)
         return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
+
+
+def _save_handoff(project: dict[str, Any], raw: Any) -> None:
+    """The last save from a tab whose project an agent switched away from.
+
+    The switch already merged the live canvas into this project
+    (_overlay_live_project), so nodes and wires the backend had stay as
+    saved. The tab adds what only it holds: nodes and wires it never sent to
+    the backend, its viewport, run history and Create draft.
+    """
+    stored = project["snapshot"]
+    historical = {node["id"]: node.get("data", {}).get("definitionId") for node in stored["nodes"]}
+    staged, candidate = _stage_project_snapshot(raw, historical=historical)
+    _refuse_agent_billing_in_project(candidate, _snapshot_nodes(stored))
+    backend_nodes = set(project.get("_backendNodeIds") or [])
+    backend_edges = set(project.get("_backendEdgeIds") or [])
+    stored_nodes = {node["id"]: node for node in stored["nodes"]}
+    nodes = [stored_nodes.get(node["id"], node) if node["id"] in backend_nodes else node for node in staged["nodes"]]
+    listed = {node["id"] for node in nodes}
+    nodes += [node for node in stored["nodes"] if node["id"] in backend_nodes and node["id"] not in listed]
+    kept = {node["id"] for node in nodes}
+    stored_edges = {edge["id"]: edge for edge in stored["edges"]}
+    edges = [stored_edges.get(edge["id"], edge) if edge["id"] in backend_edges else edge for edge in staged["edges"]]
+    listed_edges = {edge["id"] for edge in edges}
+    edges += [edge for edge in stored["edges"] if edge["id"] in backend_edges and edge["id"] not in listed_edges]
+    edges = [edge for edge in edges if edge["source"] in kept and edge["target"] in kept]
+    project["snapshot"] = {**staged, "nodes": nodes, "edges": edges}
+
+
+@app.get("/api/projects/{project_id}/covers")
+async def list_project_covers(project_id: str) -> dict[str, Any]:
+    """The images the person can pin as this project's card picture."""
+    exported = await _projects_live_export()
+    with project_store.transaction() as catalog:
+        project = _project_id_or_404(project_id, catalog)
+        if catalog["activeProjectId"] == project_id and _overlay_live_project(project, exported):
+            project_store.commit(catalog)
+        return {"images": project_cover.choices(project["snapshot"]), "pinned": project.get("coverPin"),
+                "cover": project.get("cover")}
+
+
+@app.put("/api/projects/{project_id}/cover")
+async def pin_project_cover(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Pin one of the project's images as its card picture ({"url": ...}), or
+    go back to the automatic one ({"url": null}). The person's choice only."""
+    require_person(current_request_headers())
+    url = body.get("url")
+    with project_store.transaction() as catalog:
+        project = _project_id_or_404(project_id, catalog)
+        if url is None:
+            project.pop("coverPin", None)
+        else:
+            if not isinstance(url, str) or not project_cover.is_choice(project["snapshot"], url):
+                raise HTTPException(status_code=400, detail="Pick one of this project's own images for its cover.")
+            project["coverPin"] = url
+        refresh_metadata(project, touch=False)
+        project_store.commit(catalog)
+        return {"project": project_metadata(project)}
 
 
 @app.delete("/api/projects/{project_id}")

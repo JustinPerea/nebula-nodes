@@ -69,8 +69,13 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Where to put each node, in canvas coordinates (e.g. n2=400,120)")
 
     sub.add_parser("projects", help="List saved projects")
-    project_p = sub.add_parser("project", help="Open a saved project on the canvas")
+    project_p = sub.add_parser("project", help="Start a new project, or open a saved one, on the canvas")
     project_sub = project_p.add_subparsers(dest="project_command", required=True)
+    project_new_p = project_sub.add_parser(
+        "new", help="Start a new, empty project and open it on the canvas",
+        description="Start a new, empty project and open it on the canvas. The project that was open "
+                    "is saved as it is, and the person can switch back to it.")
+    project_new_p.add_argument("name", nargs="+", help="Project name")
     project_open_p = project_sub.add_parser("open", help="Switch the canvas to a saved project")
     project_open_p.add_argument("project_id", help="Project id (from `nebula projects`)")
 
@@ -212,7 +217,14 @@ def build_parser() -> argparse.ArgumentParser:
     load_p = sub.add_parser("load", help="Load graph from file")
     load_p.add_argument("file", help="Input file path (JSON)")
 
-    sub.add_parser("clear", help="Clear the current graph")
+    clear_p = sub.add_parser(
+        "clear", help="Remove every node from the open project (needs --force when it has nodes)",
+        description="Remove every node from the open project. It refuses when the project has nodes "
+                    "unless you pass --force. To start fresh, run `nebula project new \"<name>\"` "
+                    "instead: it keeps this project's work. With the canvas open, the person can undo "
+                    "a clear (Undo, or Cmd-Z), which brings back every node, wire, name and output.")
+    clear_p.add_argument("--force", action="store_true",
+                         help="Clear even when the project has nodes")
 
     path_p = sub.add_parser("path", help="Print local file path of a node's primary image")
     path_p.add_argument("node_ref", help="Node reference (e.g. n1)")
@@ -414,7 +426,8 @@ def main() -> None:
         "move": lambda: graph.run_move(client, args.moves),
         "projects": lambda: projects.run_list(client),
         "trash": lambda: trash.run(client, args),
-        "project": lambda: projects.run_open(client, args.project_id),
+        "project": lambda: (projects.run_new(client, " ".join(args.name)) if args.project_command == "new"
+                            else projects.run_open(client, args.project_id)),
         "graph": lambda: graph.run_show(client),
         "selection": lambda: selection.run(client),
         "look": lambda: canvas.run_look(client, as_json=args.json),
@@ -433,7 +446,7 @@ def main() -> None:
         "proposals": lambda: proposals.run_list(client),
         "save": lambda: graph.run_save(client, args.file),
         "load": lambda: graph.run_load(client, args.file),
-        "clear": lambda: graph.run_clear(client),
+        "clear": lambda: graph.run_clear(client, force=args.force),
         "path": lambda: path.run(client, args.node_ref),
         "run": lambda: execute.run_node(client, args.node_ref, wait=args.wait),
         "run-all": lambda: execute.run_all(client, wait=args.wait),
