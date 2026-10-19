@@ -17,9 +17,9 @@ def client():
 
 @pytest.fixture(autouse=True)
 def clear_graph(client):
-    client.delete("/api/graph")
+    client.delete("/api/graph?force=true")
     yield
-    client.delete("/api/graph")
+    client.delete("/api/graph?force=true")
 
 
 class TestNodeEndpoints:
@@ -450,7 +450,12 @@ class TestGraphEndpoints:
 
     def test_clear_graph(self, client):
         client.post("/api/graph/node", json={"definitionId": "node-a", "params": {}})
-        resp = client.delete("/api/graph")
+        # A project with nodes needs an explicit force, from any caller (D3).
+        refused = client.delete("/api/graph")
+        assert refused.status_code == 409
+        assert "nebula project new" in refused.json()["detail"] and "--force" in refused.json()["detail"]
+        assert len(client.get("/api/graph").json()["nodes"]) == 1
+        resp = client.delete("/api/graph?force=true")
         assert resp.status_code == 200
         graph = client.get("/api/graph").json()
         assert len(graph["nodes"]) == 0
@@ -466,7 +471,7 @@ class TestGraphEndpoints:
         )
         assert main_module.provider_recovery_store.list()
 
-        resp = client.delete("/api/graph")
+        resp = client.delete("/api/graph?force=true")
 
         assert resp.status_code == 409
         assert main_module.provider_recovery_store.list()
@@ -474,7 +479,7 @@ class TestGraphEndpoints:
             "/api/provider-recoveries/run-clear/node-clear"
             "?resume_operation_id=operation-clear"
         ).status_code == 200
-        assert client.delete("/api/graph").status_code == 200
+        assert client.delete("/api/graph?force=true").status_code == 200
         assert client.get("/api/graph/export").json()["providerRecoveries"] == []
 
     def test_delete_provider_recovery_removes_only_exact_record(self, client):

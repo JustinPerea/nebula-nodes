@@ -323,7 +323,7 @@ def test_import_and_clear_detach_pins_whose_nodes_are_gone(api):
             assert pin["anchor"]["nodeId"] in surviving
         else:
             assert pin["detached"] is True and pin["detachedFrom"] == node_id
-    assert client.delete("/api/graph", headers=PERSON).status_code == 200
+    assert client.delete("/api/graph?force=true", headers=PERSON).status_code == 200
     assert all(pin["detached"] for pin in client.get("/api/canvas/pins").json()["pins"])
     assert journal.read(after=0, kinds={"pin.detached"})["events"]
 

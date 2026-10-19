@@ -721,6 +721,26 @@ def format_applied(result: dict[str, Any]) -> str:
     for node in result.get("added") or []:
         node_id = str(node.get("id") or "")
         lines.append(f"  {refs.get(node_id, '?')} → {node_id}  {node.get('name') or node.get('definitionId') or ''}".rstrip())
+    arrange = result.get("arrange")
+    if isinstance(arrange, dict) and arrange.get("message"):
+        lines.append(f"  Arrange: {arrange['message']}")
+    return "\n".join(lines)
+
+
+def format_step_stop(number: int, total: int, reason: str, applied: list[dict[str, Any]]) -> str:
+    """Why a steps plan stopped, and what the steps before it left on the canvas."""
+    lines = [f"error: step {number} of {total} was refused, so it and the steps after it weren't applied: {reason}"]
+    if not applied:
+        lines.append("Nothing was applied.")
+        return "\n".join(lines)
+    done = "Step 1 was applied and stays" if len(applied) == 1 else f"Steps 1-{len(applied)} were applied and stay"
+    lines.append(f"{done} on the canvas:")
+    for index, result in enumerate(applied, start=1):
+        mapped = ", ".join(f"{ref} → {node_id}" for ref, node_id in (result.get("idMap") or {}).items())
+        lines.append(f"  step {index}: {result.get('summary') or 'no change'}" + (f" ({mapped})" if mapped else ""))
+    rest = f"step {number}" if number == total else f"steps {number}-{total}"
+    lines.append(f"To finish, fix step {number} and apply {rest} on their own, "
+                 "using the node ids above in place of those +refs.")
     return "\n".join(lines)
 
 

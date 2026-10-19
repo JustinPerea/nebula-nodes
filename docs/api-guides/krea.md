@@ -89,7 +89,7 @@ The six existing Krea nodes remain available:
 
 For per-image style strength, connect an image to **Krea Image Style Reference**, then its `image_style_reference` output to `krea-2-generate.image_style_references`. For a trained style, connect `krea-style-train.style` to `krea-2-generate.styles`. Style Train also emits `style_id` and `job`; Style Search is synchronous.
 
-A provider-neutral `nebula-moodboard` can also feed the legacy Krea 2 node: Nebula adapts its representative images and style brief. A Krea-owned moodboard requires an existing Krea ID; this integration does not create Krea moodboards. Styles created in the app and through the API have separate identities unless shared with the workspace.
+A provider-neutral `nebula-moodboard` can also feed the legacy Krea 2 node: its images become style references, and its brief and Avoid list are added to the prompt. A Krea-owned moodboard requires an existing Krea ID; this integration does not create Krea moodboards. Styles created in the app and through the API have separate identities unless shared with the workspace.
 
 Use these legacy wrapper nodes for their established graph wiring. The new Krea 2 model nodes expose the canonical API schema, including Turbo and image-to-image controls; do not assume legacy wrapper objects are interchangeable with raw API JSON.
 

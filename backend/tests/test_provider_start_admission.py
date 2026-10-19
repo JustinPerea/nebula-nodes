@@ -683,7 +683,7 @@ async def test_graph_clear_import_and_bundle_restore_reject_active_paid_start() 
     )
 
     with pytest.raises(HTTPException) as clear_error:
-        await main_module.clear_graph()
+        await main_module.clear_graph(force=True)
     assert clear_error.value.status_code == 409
     assert main_module.cli_graph.nodes
 
@@ -853,7 +853,7 @@ async def test_clear_refuses_unresolved_ambiguity_until_exact_ack() -> None:
     )
 
     with pytest.raises(HTTPException) as clear_error:
-        await main_module.clear_graph()
+        await main_module.clear_graph(force=True)
     assert clear_error.value.status_code == 409
     assert main_module.provider_start_guard.list()
     assert main_module.cli_graph.nodes
@@ -861,7 +861,7 @@ async def test_clear_refuses_unresolved_ambiguity_until_exact_ack() -> None:
     await main_module.acknowledge_provider_start_ambiguity(
         ENVIRONMENT, "world-node", "ambiguous"
     )
-    assert await main_module.clear_graph() == {"status": "cleared"}
+    assert await main_module.clear_graph(force=True) == {"status": "cleared"}
 
 
 def test_ambiguity_blocks_fresh_node_with_new_identity() -> None:
@@ -1106,7 +1106,7 @@ async def test_deferred_bootstrap_seeds_legacy_checkpoint_before_clear(
     )
 
     with pytest.raises(HTTPException) as clear_error:
-        await main_module.clear_graph()
+        await main_module.clear_graph(force=True)
 
     assert clear_error.value.status_code == 409
     assert node_id in main_module.cli_graph.nodes
@@ -1272,7 +1272,7 @@ async def test_graph_replacement_commit_holds_cross_backend_paid_fence(
             original()
 
         monkeypatch.setattr(main_module.cli_graph, "clear", commit)
-        await main_module.clear_graph()
+        await main_module.clear_graph(force=True)
     else:
         original = main_module.cli_graph.replace_with
 

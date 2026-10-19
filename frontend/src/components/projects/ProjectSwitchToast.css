@@ -1,0 +1,64 @@
+/* After an agent switches the open project (projectStore followProjectSwitch).
+   Same spring as the Projects screen's Undo toast. */
+.project-switch-toast {
+  --project-switch-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  /* Above the canvas toolbar, so Run stays reachable. */
+  bottom: 96px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(640px, calc(100vw - 32px));
+  padding: 6px 6px 6px 16px;
+  border: 1px solid var(--sr-edge-strong, rgb(255 255 255 / 0.16));
+  border-radius: var(--sr-node-media-radius, 14px);
+  background: var(--sr-canvas-elevated, #202020);
+  color: var(--sr-ink, #ecece9);
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+  transform: translateX(-50%);
+  animation: project-switch-toast-in 420ms var(--project-switch-spring) both;
+}
+.project-switch-toast__text { min-width: 0; margin-right: 8px; }
+.project-switch-toast__back {
+  flex-shrink: 0;
+  min-height: 32px;
+  max-width: 260px;
+  overflow: hidden;
+  padding: 0 12px;
+  border: 1px solid var(--sr-ink, #ecece9);
+  border-radius: var(--sr-radius-control, 8px);
+  background: var(--sr-ink, #ecece9);
+  color: var(--sr-canvas, #111);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.project-switch-toast__back:disabled { opacity: 0.6; cursor: default; }
+.project-switch-toast__close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--sr-radius-control, 8px);
+  background: transparent;
+  color: var(--sr-ink-meta, #9a9a96);
+  cursor: pointer;
+}
+.project-switch-toast__close:hover { background: var(--sr-surface-control-hover, rgb(255 255 255 / 0.08)); color: var(--sr-ink, #ecece9); }
+.project-switch-toast__close svg { width: 14px; height: 14px; }
+@keyframes project-switch-toast-in {
+  from { opacity: 0; transform: translate(-50%, 16px) scale(0.96); }
+  30% { opacity: 1; }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-switch-toast { animation: none; }
+}

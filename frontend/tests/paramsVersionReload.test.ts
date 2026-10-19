@@ -12,6 +12,10 @@ vi.mock('../src/lib/wsClient', () => ({ wsClient: {
   subscribe: vi.fn((handler) => { socket.handlers.push(handler); return () => {
     socket.handlers = socket.handlers.filter((item) => item !== handler);
   }; }),
+  // The project coordinator runs ahead of other handlers (wsClient.subscribeFirst).
+  subscribeFirst: vi.fn((handler) => { socket.handlers.unshift(handler); return () => {
+    socket.handlers = socket.handlers.filter((item) => item !== handler);
+  }; }),
 } }));
 vi.mock('../src/lib/paramsOutdated', async (original) => ({
   ...await original<typeof import('../src/lib/paramsOutdated')>(), reloadPage: vi.fn(),

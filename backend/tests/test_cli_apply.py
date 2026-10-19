@@ -45,7 +45,9 @@ PLAN = {
 @pytest.fixture
 def api(tmp_path, monkeypatch, person):
     import main as main_module
+    from services.canvas_arrange import ArrangeBook
 
+    monkeypatch.setattr(main_module, "canvas_arrange", ArrangeBook())
     monkeypatch.delenv("NEBULA_AGENT_NAME", raising=False)
     monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
     graph = CLIGraph(persist_path=tmp_path / "state.json")
@@ -88,7 +90,7 @@ def api(tmp_path, monkeypatch, person):
 
 def _args(**overrides) -> argparse.Namespace:
     values = dict(file=None, note=None, add=[], param=[], set_params=[], wire=[], at=[], rename=[], move=[],
-                  remove=[], unwire=[], json=False, agent_name="Codex")
+                  remove=[], unwire=[], arrange=None, json=False, agent_name="Codex")
     values.update(overrides)
     return argparse.Namespace(**values)
 
@@ -125,7 +127,7 @@ def test_a_refused_plan_changes_nothing_and_says_why(api, capsys):
     err = capsys.readouterr().err
     # The new node is named as the plan named it, not by a staged id it never saw.
     assert err == "error: Invalid target handle 'nope' on node '+wide' (definition 'nano-banana'). " \
-                  "Valid inputPorts: ['prompt', 'images']\n"
+                  "Valid inputPorts: ['prompt', 'images', 'moodboard']\n"
     assert api.graph.get_state() == before
 
 
@@ -204,3 +206,140 @@ def test_a_proposal_says_where_renames_and_removals_go(api, capsys):
                                       at=[], wait=False, timeout=60.0, json=False, agent_name="Codex")
     assert proposals_cmd.run_propose(api.client, propose_args, out=io.StringIO()) == 1
     assert "a proposal can't remove; `nebula apply` edits the canvas directly" in capsys.readouterr().err
+
+
+# -- plans of steps (decision C2) and arrange (C3) -------------------------------
+
+STEPS = {
+    "note": "Board, then takes",
+    "steps": [
+        {"nodes": [{"ref": "+p", "definitionId": "text-input", "params": {"value": "a lighthouse"}}]},
+        {"note": "Two takes",
+         "nodes": [{"ref": "+a", "definitionId": "combine-text"}, {"ref": "+b", "definitionId": "combine-text"}],
+         "edges": [{"source": "+p", "sourceHandle": "text", "target": "+a", "targetHandle": "text1"},
+                   {"source": "+p", "sourceHandle": "text", "target": "+b", "targetHandle": "text1"}],
+         "rename": {"+p": "Prompt"}},
+    ],
+}
+
+
+def test_a_later_step_wires_refs_an_earlier_step_created(api):
+    api.graph.add_node("text-input", {"value": "keep"})
+    out = io.StringIO()
+
+    assert apply_cmd.run_apply(api.client, _args(file=_plan_file(api, STEPS)), out=out) == 0
+
+    lines = out.getvalue().splitlines()
+    assert lines[0] == "Step 1 of 2. Applied: added 1."
+    assert lines[1] == "  +p → n2  Text Input"
+    assert lines[2] == "Step 2 of 2. Applied: added 2, wired 2, renamed 1."
+    assert {(e["source"], e["target"]) for e in api.graph.edges} == {("n2", "n3"), ("n2", "n4")}
+    assert api.graph.nodes["n2"]["label"] == "Prompt"
+
+
+def test_a_refused_step_says_which_and_what_earlier_steps_applied(api, capsys):
+    bad = {"steps": [STEPS["steps"][0], {**STEPS["steps"][1], "edges": [
+        {"source": "+p", "sourceHandle": "text", "target": "+a", "targetHandle": "nope"}]}]}
+    out = io.StringIO()
+
+    assert apply_cmd.run_apply(api.client, _args(file=_plan_file(api, bad)), out=out) == 1
+
+    err = capsys.readouterr().err.splitlines()
+    assert err[0].startswith("error: step 2 of 2 was refused, so it and the steps after it weren't applied: "
+                             "Invalid target handle 'nope' on node '+a'")
+    assert err[1] == "Step 1 was applied and stays on the canvas:"
+    assert err[2] == "  step 1: added 1 (+p → n1)"
+    assert err[3] == "To finish, fix step 2 and apply step 2 on their own, using the node ids above in place of those +refs."
+    # Step 1 stayed; nothing of step 2 landed.
+    assert list(api.graph.nodes) == ["n1"] and api.graph.edges == []
+
+
+def test_a_refused_step_in_json(api):
+    bad = {"steps": [{"remove": ["n9"]}, STEPS["steps"][0]]}
+    out = io.StringIO()
+    assert apply_cmd.run_apply(api.client, _args(file=_plan_file(api, bad), json=True), out=out) == 1
+    result = json.loads(out.getvalue())
+    assert (result["status"], result["failedStep"], result["steps"], result["applied"]) == ("stopped", 1, 2, [])
+    assert "n9 is not on the canvas" in result["error"]
+
+
+def test_steps_in_json(api):
+    out = io.StringIO()
+    assert apply_cmd.run_apply(api.client, _args(file=_plan_file(api, STEPS), json=True), out=out) == 0
+    result = json.loads(out.getvalue())
+    assert result["status"] == "applied" and len(result["steps"]) == 2
+    assert result["idMap"] == {"+p": "n1", "+a": "n2", "+b": "n3"}
+
+
+def test_a_steps_plan_is_checked_before_anything_is_sent(api, capsys, monkeypatch):
+    sent = []
+    monkeypatch.setattr(api.client, "apply_step", lambda body, agent_name=None: sent.append(body))
+    for plan, words in (
+        ({"steps": [{"edges": [{"source": "+ghost", "sourceHandle": "text", "target": "n1",
+                                "targetHandle": "prompt"}]}]}, "step 1 uses +ghost"),
+        ({"steps": [STEPS["steps"][0], STEPS["steps"][0]]}, "step 2 creates +p, which step 1 already created"),
+        ({"steps": [{**STEPS["steps"][0], "run": ["+p"]}]}, "step 1 has run"),
+        ({"steps": [{"steps": []}]}, "steps don't nest"),
+        ({"steps": []}, "non-empty list"),
+        ({"steps": [STEPS["steps"][0]], "nodes": []}, "holds only note and steps"),
+        # These would be refused by the server only after step 1 had landed.
+        ({"steps": [STEPS["steps"][0], {"note": "only a note"}]}, "step 2 changes nothing"),
+        ({"steps": [STEPS["steps"][0], {"rename": {"+p": "P"}, "arrange": True}]},
+         "step 2 has arrange but adds no nodes"),
+    ):
+        assert apply_cmd.run_apply(api.client, _args(file=_plan_file(api, plan))) == 1
+        assert words in capsys.readouterr().err, plan
+    assert sent == [] and api.graph.nodes == {}
+
+
+def test_notes_fill_in_steps_without_one():
+    path_note = {"note": "Board", "steps": [{"remove": ["n1"]}, {"note": "Mine", "remove": ["n2"]}]}
+    from cli.plan import check_steps, resolve_step
+    steps = check_steps(path_note)
+    assert [step.get("note") for step in steps] == ["Board", "Mine"]
+    assert [step.get("note") for step in check_steps(path_note, note="Flag")] == ["Flag", "Mine"]
+    resolved = resolve_step({"nodes": [{"ref": "+x", "definitionId": "text-input"}],
+                             "edges": [{"source": "+p", "sourceHandle": "text", "target": "+x", "targetHandle": "a"}],
+                             "params": [{"nodeId": "+p", "params": {"value": "v"}}],
+                             "rename": {"+p": "P", "+x": "X"}, "move": {"+p": {"x": 1, "y": 2}},
+                             "remove": ["+q"], "unwire": [{"source": "+q", "target": "+p"}]},
+                            {"+p": "n4", "+q": "n5", "+x": "n99"})
+    assert resolved["edges"][0]["source"] == "n4" and resolved["edges"][0]["target"] == "+x"
+    assert resolved["params"][0]["nodeId"] == "n4"
+    assert resolved["rename"] == {"n4": "P", "+x": "X"} and resolved["move"] == {"n4": {"x": 1, "y": 2}}
+    assert resolved["remove"] == ["n5"] and resolved["unwire"][0] == {"source": "n5", "target": "n4"}
+
+
+def test_a_proposal_takes_one_plan_not_steps(api, capsys):
+    path = _plan_file(api, STEPS)
+    propose_args = argparse.Namespace(file=path, note=None, add=[], param=[], set_params=[], wire=[], run=[],
+                                      at=[], wait=False, timeout=60.0, json=False, agent_name="Codex")
+    assert proposals_cmd.run_propose(api.client, propose_args, out=io.StringIO()) == 1
+    assert "send steps with `nebula apply`" in capsys.readouterr().err
+    arranged = _plan_file(api, {key: PLAN[key] for key in ("note", "nodes", "edges")} | {"arrange": True})
+    propose_args.file = arranged
+    assert proposals_cmd.run_propose(api.client, propose_args, out=io.StringIO()) == 1
+    assert "a proposal can't arrange" in capsys.readouterr().err
+
+
+def test_arrange_from_the_builder_and_in_the_reply(api):
+    assert build_body(add=["+a=text-input"], arrange="right")["arrange"] is True
+    assert build_body(add=["+a=text-input"], arrange="down")["arrange"] == {"direction": "down"}
+    with pytest.raises(BuildError, match="none"):
+        build_body(remove=["n1"], arrange="right")
+    out = io.StringIO()
+    assert apply_cmd.run_apply(api.client, _args(add=["+a=text-input", "+b=text-input"], arrange="right"),
+                               out=out) == 0
+    assert out.getvalue().splitlines()[-1] == (
+        "  Arrange: No canvas is open, so the 2 new nodes stay where they were placed. "
+        "The first canvas that opens lays them out.")
+
+
+def test_arrange_works_with_a_plan_file(api):
+    plain = {key: PLAN[key] for key in ("note", "nodes", "edges")}
+    assert body_from_args(_args(file=_plan_file(api, plain), arrange="down"), command="apply")["arrange"] == {
+        "direction": "down"}
+    assert "arrange" not in body_from_args(_args(file=_plan_file(api, plain)), command="apply")
+    # With steps, arrange belongs to the step whose nodes it lays out.
+    with pytest.raises(BuildError, match="in each step"):
+        body_from_args(_args(file=_plan_file(api, STEPS), arrange="right"), command="apply")

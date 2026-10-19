@@ -2,12 +2,21 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 from typing import Any, Awaitable, Callable
 
-from models.events import ExecutionEvent
+from models.events import ExecutionEvent, add_run_note
 from models.graph import GraphNode, PortValueDict
 from services.moodboard_analysis import analysis_is_current, analyze_moodboard, rank_representative_images
+from services.moodboard_brief import compose
 from services.moodboard_store import MoodboardStore
+
+
+def _in_trash(moodboard_id: str) -> bool:
+    try:
+        return MoodboardStore().trashed(moodboard_id) is not None
+    except ValueError:
+        return False
 
 
 async def handle_moodboard_node(
@@ -30,7 +39,10 @@ async def handle_moodboard_node(
     except ValueError:  # not an id the store can hold
         moodboard = None
     if moodboard is None:
-        raise ValueError(f"Moodboard {moodboard_id!r} not found; it may have been deleted. "
+        if _in_trash(moodboard_id):
+            raise ValueError(f"Moodboard {moodboard_id!r} is in Recently deleted. Restore it (Moodboard Studio, "
+                             f"or nebula trash restore moodboard {moodboard_id}) and run again.")
+        raise ValueError(f"Moodboard {moodboard_id!r} not found; it may have been deleted for good. "
                          "Pick another board for this node.")
 
     analysis = moodboard.get("analysis")
@@ -50,6 +62,19 @@ async def handle_moodboard_node(
         if isinstance(img, dict) and not bool(img.get("excluded"))
     ]
     representative = analysis.get("representativeImages") or rank_representative_images(images)
+    # The brief generators get: the analysis joined with the person's
+    # Direction, Avoid and pinned colours, or their hand-written override.
+    brief = compose(moodboard, analysis)
+    if brief["override"]["stale"]:
+        add_run_note(f"Moodboard '{moodboard.get('name')}' changed after its brief was edited by hand; "
+                     "this run used the edited brief. Keep or Regenerate it in Moodboard Studio.")
+    hints = copy.deepcopy(analysis.get("providerHints") or {})
+    if isinstance(hints.get("krea"), dict):
+        hints["krea"]["styleBrief"] = brief["styleBrief"]
+    if isinstance(hints.get("generic"), dict):
+        hints["generic"]["promptSuffix"] = brief["styleBrief"]
+        hints["generic"]["negativePrompt"] = brief["negativePrompt"]
+        hints["generic"]["avoidPrompt"] = brief["avoidPrompt"]
     bundle = {
         "kind": "nebula_moodboard",
         "moodboardId": moodboard.get("id"),
@@ -58,13 +83,18 @@ async def handle_moodboard_node(
         "strength": moodboard.get("strength", 0.7),
         "images": images,
         "notes": moodboard.get("notes", ""),
-        "analysis": analysis,
-        "styleBrief": analysis.get("styleBrief", ""),
-        "negativePrompt": analysis.get("negativePrompt", ""),
-        "palette": analysis.get("palette", []),
-        "accents": analysis.get("accents", []),
+        "analysis": {**analysis, "providerHints": hints},
+        "styleBrief": brief["styleBrief"],
+        "negativePrompt": brief["negativePrompt"],
+        "avoid": brief["avoid"],
+        "avoidPrompt": brief["avoidPrompt"],
+        "direction": brief["direction"],
+        "pinnedColors": brief["pinnedColors"],
+        "briefOverride": brief["override"],
+        "palette": brief["palette"],
+        "accents": brief["accents"],
         "representativeImages": representative,
-        "providerHints": analysis.get("providerHints", {}),
+        "providerHints": hints,
     }
 
     return {

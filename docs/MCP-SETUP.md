@@ -46,7 +46,9 @@ The server exposes these tools for building and running (see
   `propose_change`. See
   [Provider routes](PROVIDER-ROUTES.md#hidden-settings-paramvisiblewhen).
 - `edit_canvas`: adds nodes, wires, param changes, renames and moves in one
-  call, all or nothing. Same shape as `propose_change`.
+  call, all or nothing. Same shape as `propose_change`, with no limit on how
+  much one call adds. `arrange: true` has the canvas lay out the new nodes by
+  their real size.
 - `remove_from_canvas`: deletes nodes or single wires, all or nothing.
 - `run_nodes`: runs a node and what feeds it (or the whole canvas) under the
   person's spending limits. Returns outputs with small inline previews, or
@@ -55,6 +57,21 @@ The server exposes these tools for building and running (see
 - `view_output`: a node's output as an image (videos as three frames, image
   lists as tiles), or as text.
 - `get_spend_limits`: the limits and what this session has used.
+- `list_projects` / `open_project` / `new_project`: list the person's saved
+  projects, switch the canvas to one, or start a new, empty one. The project
+  that was open is saved as it is. The person's canvas follows, shows a note
+  naming the agent, and offers a button back to the project they had open.
+  Start new work in a new project rather than emptying the canvas: it keeps
+  the person's work. Clearing a project that has nodes needs an explicit
+  force from anyone (`nebula clear --force`, or `DELETE /api/graph?force=true`);
+  on an open canvas the person can undo it.
+- `moodboard_list`, `moodboard_get`, `moodboard_create`, `moodboard_add`,
+  `moodboard_update`, `moodboard_analyze`, `moodboard_delete`: the boards in
+  Moodboard Studio. See
+  [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
+- `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
+  characters, projects), and bring one back with the same id. See
+  [Recently deleted](#recently-deleted).
 
 And these canvas tools:
 
@@ -253,6 +270,10 @@ Person-only, refused with 403 `person_required` otherwise:
   (`/api/agent/spend/apps`; see Connect your agent below);
 - starting any `/ws/chat` turn (Claude, Codex), so no chat
   workspace or agent token is minted without the person;
+- deleting for good from Recently deleted (`DELETE /api/trash/{kind}/{id}`,
+  `POST /api/trash/empty`, `DELETE /api/projects/trash/{id}`,
+  `POST /api/projects/trash/empty`). It can't be undone. The refusal tells an
+  agent it can restore instead (see Recently deleted below);
 - `POST /api/enhance-prompt`, the Create button's rewrite. The gate comes
   first; then prompts over 4,000 characters get a 413 that says so, and more
   than 20 calls a minute get a 429. Each call logs provider, length and outcome
@@ -382,7 +403,8 @@ Rules:
   something that can't be added. Cinema scene params and World Labs
   durable-recovery nodes can't be proposed.
 - Limits: 12 new nodes, 24 wires, 12 param changes and 6 run targets per
-  proposal; 3 open per agent and 12 in total (429 beyond); a 160-character
+  proposal (the person reviews each item; direct edits have no such limit);
+  3 open per agent and 12 in total (429 beyond); a 160-character
   note. Proposals expire after 15 minutes.
 - Deleting a node a proposal refers to invalidates it; so do import, opening
   another project and Clear canvas. If the canvas changed so that a
@@ -815,6 +837,45 @@ the shared outside budget, until the person revokes it, which deletes the
 file. Apps connected before token files keep the token in their config until
 they are revoked and connected again.
 
+### Recently deleted
+
+Deleting a moodboard, a character or a project doesn't remove it. It moves to
+Recently deleted with who deleted it (you, an agent by name, or an unnamed
+client) and when. Agents may delete boards and characters
+(`DELETE /api/moodboards/{id}`, `DELETE /api/characters/{id}`), because anyone
+can undo it:
+
+- `GET /api/trash` lists it, newest first. `kind` (`moodboard`, `character`,
+  `project`) narrows it; `scope` (`global`, or `project` with `projectId`)
+  narrows boards and characters the way their lists do.
+- `POST /api/trash/{kind}/{id}/restore` brings one back with the same id and
+  contents, so a Moodboard or Character node that points at it runs again. A
+  project comes back closed. Agents may restore. Restoring one that is already
+  back is a no-op (200, `alreadyRestored: true`). MCP: `list_trash`,
+  `restore_from_trash`. CLI: `nebula trash list`, `nebula trash restore [kind] <id>`.
+- Deleting for good is person-only (see the list above). The person does it
+  from Moodboard Studio, Character Studio or Projects. Emptying sends what the
+  person's list showed (`{"items": [{kind, id}]}` to `/api/trash/empty`,
+  `{"ids": [...]}` to `/api/projects/trash/empty`) and only those go, so an
+  agent's delete that lands after the list loaded stays restorable.
+- "Deleted by" is attribution, never permission. `deletedBy.kind` says who:
+  `person`, `agent`, `system` or `anonymous`. An agent names itself, so its
+  `name` proves nothing; the canvas and CLI label every agent from `kind`
+  ("Claude (agent)") and only `kind: "person"` reads as "you". Names are
+  stored NFKC-normalized, without control, format (zero-width, bidi),
+  private-use or surrogate characters.
+
+A board or character in Recently deleted answers `GET` and `PUT` with 404 and
+`code: "in_trash"` plus its trash record. Its node card and the Inspector say
+it's in Recently deleted and offer Restore. Running the node fails with a
+message that says how to restore it, and `edit_canvas` refuses to point a node
+at it.
+
+Boards and characters stay until the person deletes them for good: there is
+no timer. Projects keep their 30-day expiry. Files live in
+`<store>/.trash/<id>.json` with a `<id>.trash.json` record beside them
+(`backend/services/asset_trash.py`).
+
 ### Building and running over MCP
 
 `edit_canvas` and `remove_from_canvas` send one body to `POST /api/graph/apply`
@@ -823,13 +884,80 @@ proposal shape (`nodes` with `+refs`, `edges`, `params`) plus `rename`,
 `move`, `remove` and `unwire`, stages all of it on a copy of the graph in that
 order (unwire, remove, add and change, rename, move) with the validators the
 single-edit routes use, and commits it at once. A bad wire or a missing node
-leaves the canvas exactly as it was. Limits match proposals (12 new nodes, 24
-wires, 12 param changes, 24 removals). Nodes with unresolved World Labs paid
+leaves the canvas exactly as it was. There is no limit on how much one edit
+does: the only bound is the most a project can save
+(10,000 nodes and 50,000 wires, the same limits as import). An edit that
+would pass them is refused with 413 and changes nothing. Proposals keep their
+limits because the person reviews them item by item. Nodes with unresolved World Labs paid
 state can't be removed. Krea nodes may name `_kreaAuth` only to keep the mode
 they have: a change is refused with 403 and must be proposed (see Spending
 limits). Other `_` params are refused. The route never runs anything and
 is for agents only (the canvas edits through its own routes). `nebula apply`
 is the CLI twin (see below).
+
+#### Arrange: let the canvas lay out new nodes
+
+An agent can't know how tall a node will be on screen (an image card sizes
+to its image), so an edit can leave the layout to the canvas. Add `arrange`
+to the edit:
+
+- `"arrange": true` lays the new nodes out left to right, following their
+  wires: each step of the wiring is a column, 120 px apart, and nodes in the
+  same column stack 40 px apart.
+- `"arrange": {"direction": "down", "gap": 80}` flows top to bottom instead:
+  each step is a row, and nodes in the same row sit side by side.
+  `direction` is `right` (default) or `down`; `gap` is 0 to 2000 px.
+
+Only that edit's new nodes move. The block starts at the top-left of where
+they were placed, and shifts right or down only if it would cover another
+node. The person's nodes never move. An edit with `arrange` must add nodes.
+
+How it works (`services/canvas_arrange.py`, `components/canvas/ArrangeController.tsx`):
+the backend keeps the request and sends open requests with every graphSync
+(`arrange: [{id, nodeIds, direction, gap}]`), and in `GET /api/graph/export`
+for a tab that loads a project. An open canvas waits until those nodes have
+their real size (it draws every node meanwhile, even off screen, and loads
+their images), lays them out with the
+same size-aware layout as Auto-layout, and saves the positions with
+`PUT /api/graph/layout` and `arrangeId`. The first write for an id wins; a
+second open tab gets `already-arranged` and changes nothing, and every tab
+takes the winning positions from the next graphSync. The write is a normal
+move, and the activity log credits the agent.
+
+The edit's reply has `arrange: {id, nodeIds, direction, gap, status,
+message}`. `status` is `waiting` when a canvas is open, or
+`waiting-for-canvas` when none is: the nodes stay where they were placed and
+the first canvas that opens lays them out. If someone moves one of the nodes
+first (a drag, or an agent's `move`), that position wins and the arrange
+leaves it alone. Opening another project, Clear canvas or a backend restart
+drops open requests; the nodes keep the positions they were placed at.
+#### The person can undo any agent edit
+
+Every graph edit an agent makes (`edit_canvas`, `remove_from_canvas`,
+`nebula apply`, `set`, `create`, `delete`, `wire`, `move`, `nebula graph
+load`, the layout route) is one undo step on each open canvas. The canvas shows "Claude changed the
+canvas" with an Undo button, and Cmd-Z works too. Undo puts back exactly
+what that edit changed: deleted nodes come back with their params, outputs,
+name and wires, and new nodes go away with their wires. Redo (Cmd-Shift-Z)
+applies the edit again. A run's results are never undo steps, so undoing a
+param change keeps the outputs a run made since.
+
+How it works: a graphSync caused by an edit request carries `edit` =
+`{actor, tab?}`. `actor` is the request's journal actor (a named agent, the
+person, or anonymous). `tab` is the canvas tab that sent it (`X-Nebula-Tab`,
+set by the canvas on every write), so that tab skips the echo of its own
+edit. Only the person's canvas (this launch's person token) gets a `tab`:
+an agent, or a script without the token, never does, even if it sends the
+header. Run
+results and status syncs carry no `edit`, and opening, creating or switching
+a project is never an undo step. Loading a graph into the open project
+(`nebula graph load`) is: undo puts the whole canvas back, and since a load
+hands out ids from n1 again, the restore swaps any id that now holds a
+different model. Undo and redo then send what
+changed to `POST /api/graph/restore`, so the backend graph, the saved
+project and every other canvas match. The restore is journaled as whoever
+the canvas is (`Person` when the tab is connected as you), with "(undo)" or
+"(redo)" on each line. Agents never need to call it.
 
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
 it gets the same spending check and the same long-run handling. It waits 45
@@ -929,6 +1057,7 @@ nebula apply --note "Two takes" \
 #   +wide → n9  Wide
 #   +tight → n10  Nano Banana
 nebula apply --file plan.json       # or --file - to read standard input
+nebula apply --file plan.json --arrange        # or --arrange down
 ```
 
 The plan is the one `nebula propose` takes (`nodes` with `+refs`, `edges`,
@@ -937,7 +1066,35 @@ edges and params can be proposed or applied as it is. `nebula apply` never
 runs anything: a plan with `run` is refused before it's sent (propose it, or
 apply it and then `nebula run`). Like proposals, it needs your agent name
 (`$NEBULA_AGENT_NAME` or `--as`). `--json` prints the backend's result,
-including `idMap`.
+including `idMap`. There's no limit on how much one plan adds. `--arrange`
+(or `"arrange"` in the file) has the canvas lay out the new nodes by their
+real size; see Arrange above.
+
+A plan file can also hold steps, for a build where later parts wire into
+nodes earlier parts made:
+
+```json
+{"note": "Moodboard, then takes",
+ "steps": [
+   {"nodes": [{"ref": "+mood", "definitionId": "image-input"}]},
+   {"nodes": [{"ref": "+p", "definitionId": "text-input"},
+              {"ref": "+img", "definitionId": "nano-banana"}],
+    "edges": [{"source": "+p", "sourceHandle": "text", "target": "+img", "targetHandle": "prompt"},
+              {"source": "+mood", "sourceHandle": "image", "target": "+img", "targetHandle": "images"}],
+    "arrange": true}
+ ]}
+```
+
+`nebula apply` sends the steps in order. Each is its own edit that lands
+whole or not at all. A step can use the `+refs` earlier steps made: the CLI
+swaps in the node ids each step's reply gave in `idMap`, so the backend
+keeps no plan state. A ref names one node across all steps, and the CLI
+checks every step's refs before it sends step 1. If a step is refused, the
+command stops there (exit 1), names the step and the reason, and lists what
+the earlier steps applied, with the ids their `+refs` became. Those steps
+stay on the canvas: fix the refused step and apply it and the rest on their
+own, using those ids in place of the refs. `--json` prints `{status, steps, idMap}`, or `{status: "stopped",
+failedStep, error, applied, idMap}`. `nebula propose` doesn't take steps.
 
 Other graph commands:
 
@@ -948,7 +1105,98 @@ nebula rename n2 "Hero shot"        # an empty name restores the model's
 nebula move n2=400,120 n3=400,320   # canvas coordinates
 nebula projects                     # saved projects; * is open
 nebula project open <id>            # switch the canvas (not while a run is going)
+nebula project new "Logo ideas"     # start a new, empty project and open it
+nebula clear                        # refused when the canvas has nodes
+nebula clear --force                # clears it anyway; the person can undo it
+nebula trash list                   # Recently deleted boards, characters, projects
+nebula trash restore [kind] <id>    # bring one back with the same id
 ```
+
+Opening or starting a project keeps the one that was open as it is. When an
+agent (or any script that isn't the person's own canvas) does it, the
+person's canvas follows, says who switched it, and offers a button back.
+The project's history names the agent.
+
+`nebula clear` refuses when the open project has nodes and points to
+`nebula project new` instead, which keeps this project's work. `--force`
+clears anyway, for agents and the person alike. The backend enforces this
+for every caller: `DELETE /api/graph` on a project with nodes returns 409
+unless it has `?force=true` (the canvas's Clear button and chat `/clear`
+send it after the person confirms). It's a check of intent, not of who is
+asking. With the canvas open, a clear is one undo step: Undo (or Cmd-Z)
+brings back every node, wire, name and output. With no canvas open there is
+nothing to undo it from, so prefer `nebula project new`.
+
+### Moodboards from the CLI and MCP
+
+`nebula moodboard` and the `moodboard_*` MCP tools edit the boards Moodboard
+Studio shows. Both use `backend/moodboard_client.py`.
+
+```bash
+nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
+nebula moodboard show "Nature + tech"      # numbered images, settings, analysis
+nebula moodboard add <board> more.png
+nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --exclude 5 --strength 0.6
+nebula moodboard analyze <board>
+nebula moodboard list                      # boards for every project, plus the open project's
+nebula moodboard delete <board>
+```
+
+- A board is named by its id or exact name; an image by its number or id
+  from `show`. `--json` prints the board as JSON (the MCP tools return the
+  same shape).
+- Images can be files, folders (the images directly inside, in name order,
+  so `2.png` comes before `10.png`), http(s) links or Nebula outputs
+  (`/api/outputs/...`, used as they are).
+- Links are downloaded by the CLI or the MCP server process, never by the
+  backend, with the guarded fetcher Commons uses for links
+  (`backend/commons/net.py`): public web addresses only, so never this
+  computer, its local network or a cloud metadata address (checked on every
+  redirect, 3 at most, and the connection goes to the address that was
+  checked); ports 80 and 443; no user name or password in the link. Then a
+  PNG, JPEG, GIF or WebP content type whose bytes match, 20 MB at most, 60
+  seconds in all. For an image anywhere else, save it and add the file. The
+  bytes go through `POST /api/uploads`, like Moodboard Studio's Add Images.
+  Everything is read and downloaded before the first upload, so one bad
+  source changes nothing.
+- An in-app chat's turn reads local files only from its own workspace (as
+  with Commons); a relative path means that workspace. Every image found in
+  a folder is checked the same way, and the check runs again when the file
+  is read (which follows no links), so a link can't lead outside it.
+- Like Moodboard Studio, any change but a rename clears the board's
+  analysis, so run `analyze` again. `--remove` takes an image off the board;
+  its file stays, and the command prints the URL to add it back.
+- `moodboard_update` (and `set --json`) returns `previous`: the settings
+  before the change. Passing them back undoes it.
+- Deleting: where Nebula keeps deleted boards in Recently deleted, anyone
+  may delete one, agents included, because it can be restored. Where a
+  delete is for good (a Nebula without Recently deleted), `nebula moodboard
+  delete` and `moodboard_delete` refuse for everyone; the person deletes the
+  board in Moodboard Studio. The client never decides who is the person:
+  that would be a check any client could skip.
+- `moodboard_create` and `moodboard_add` are marked open-world because they
+  fetch links; `moodboard_delete` is marked destructive.
+
+### The nebula skill
+
+`skills/nebula/SKILL.md` teaches Claude Code and Codex the `nebula` CLI. It
+is for agents outside Nebula, so it lives apart from `.agents/skills/`, the
+provider knowledge Nebula's own chats read (they get their own primers).
+Install it once per machine:
+
+```bash
+backend/.venv/bin/python -m nebula skill install          # link it (git pull keeps it current)
+backend/.venv/bin/python -m nebula skill install --copy   # or copy it
+backend/.venv/bin/python -m nebula skill install --for codex
+```
+
+It goes to `~/.claude/skills/nebula` (Claude Code) and
+`~/.agents/skills/nebula` (Codex's user skill folder), for each app set up on
+the machine. Anything already there is moved, not deleted, to
+`skill-backups/nebula.backup-YYYYMMDD-HHMMSS` next to the skills folder
+(`~/.claude/skill-backups/`, `~/.agents/skill-backups/`). The backups sit
+outside the skills folder so they don't load as a second `nebula` skill.
+A copy records its checkout in `.installed-from`.
 
 `nebula context` lists the definition ids that can run here: with your keys,
 free, on the signed-in Krea account (marked `*`), or with a Nous sign-in.

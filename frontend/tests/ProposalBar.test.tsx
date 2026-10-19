@@ -11,6 +11,8 @@ const graph = vi.hoisted(() => ({
     executeNode: vi.fn(),
     executeCluster: vi.fn(),
     adoptAcceptedProposal: vi.fn(),
+    beginUndoStep: vi.fn(() => ({})),
+    cancelUndoStep: vi.fn(),
   },
 }));
 const net = vi.hoisted(() => ({ apiFetch: vi.fn() }));
@@ -107,7 +109,8 @@ describe('ProposalBar', () => {
     expect(path).toBe('/api/canvas/proposals/p_a/accept');
     expect((init.headers as Record<string, string>)['X-Nebula-Proposal-Key']).toBe('key-a');
     expect(JSON.parse(init.body as string)).toEqual({ positions: { '+up': { x: 900, y: -40 } } });
-    expect(graph.state.adoptAcceptedProposal).toHaveBeenCalledWith(expect.objectContaining({ nodes: [{ id: 'n7' }] }));
+    expect(graph.state.adoptAcceptedProposal).toHaveBeenCalledWith(expect.objectContaining({ nodes: [{ id: 'n7' }] }),
+      { undoStep: expect.any(Object) });
     expect(graph.state.executeNode).toHaveBeenCalledWith('n7', { approvalId: 'ra_a' });
     // Released after the run call (a no-op once the run used it up).
     expect(net.apiFetch.mock.calls[1][0]).toBe('/api/canvas/approvals/ra_a');

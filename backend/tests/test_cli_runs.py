@@ -29,12 +29,12 @@ def harness(monkeypatch):
     monkeypatch.setattr(main, "execute_graph", slow_execute_graph)
     # Without `with`, TestClient ends its event loop after each request, and the run with it.
     with TestClient(main.app) as client:
-        client.delete("/api/graph")
+        client.delete("/api/graph?force=true")
         node = client.post("/api/graph/node", json={"definitionId": "text-input", "params": {"value": "hi"}})
         assert node.status_code == 200, node.text
         yield client, node.json()["id"], release, started
         release.set()
-        client.delete("/api/graph")
+        client.delete("/api/graph?force=true")
 
 
 def test_without_wait_the_request_waits_for_the_result(harness):
@@ -109,11 +109,11 @@ def test_a_run_reports_the_nodes_a_gate_skipped(monkeypatch):
 
     monkeypatch.setattr(main, "execute_graph", gated_execute_graph)
     with TestClient(main.app) as client:
-        client.delete("/api/graph")
+        client.delete("/api/graph?force=true")
         ids = [client.post("/api/graph/node", json={"definitionId": "text-input", "params": {"value": v}}).json()["id"]
                for v in ("a", "b")]
         body = client.post("/api/graph/run", json={}).json()
-        client.delete("/api/graph")
+        client.delete("/api/graph?force=true")
     assert body["status"] == "finished"
     assert body["skipped"] == {ids[1]: "Jev Decide failed (answered no, 0.12)"}
     assert body["nodesExecuted"] == 1  # a skipped node never ran

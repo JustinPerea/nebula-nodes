@@ -3,8 +3,11 @@ import { useUIStore } from '../../store/uiStore';
 import {
   createCharacter,
   fetchCharacter,
+  lookupStoredAsset,
   updateCharacter,
 } from '../../lib/api';
+import { UndoDeleteToast } from '../asset-trash/AssetTrash';
+import { useAssetDelete } from '../../hooks/useAssetDelete';
 import type { Character } from '../../types';
 import { NEW_CHARACTER_SENTINEL } from '../../lib/studioSentinels';
 import { getCurrentProject } from '../../lib/currentProject';
@@ -109,8 +112,14 @@ export function CharacterStudioView() {
       void fetchCharacter(characterEditorId).then((found) => {
         if (!current()) return;
         if (!found) {
-          initialize(characterEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft(),
-            null, '', 'Character not found — it may have been deleted. Add ≥3 reference views to save a new one.');
+          const fresh = characterEditorScope === 'project' ? { ...emptyDraft(), projectId: projectId! } : emptyDraft();
+          // In Recently deleted? Say so; the list in the rail restores it.
+          void lookupStoredAsset('character', characterEditorId!).catch(() => null).then((stored) => {
+            if (!current()) return;
+            initialize(fresh, null, '', stored?.status === 'trashed'
+              ? 'This Character is in Recently deleted. Restore it from the list on the left.'
+              : 'Character not found — it may have been deleted for good. Add ≥3 reference views to save a new one.');
+          });
           return;
         }
         const scope: AssetScope = found.projectId ? 'project' : 'global';
@@ -193,12 +202,43 @@ export function CharacterStudioView() {
 
   const belowMinViews = draft.referenceViews.length < MIN_REFERENCE_VIEWS;
 
+  const deleting = useAssetDelete('character');
+  const deleteCharacterNow = async () => {
+    if (!savedId || !isCurrent()) return;
+    const scope = characterEditorScope;
+    const deletedKey = key;
+    // Save edits made since the last autosave first, so Undo and Restore
+    // bring back what the person last saw. If that save fails, don't delete.
+    if (dirty && isValid) {
+      await persist();
+      if (!mounted.current || useAssetStudioDraftStore.getState().entries[deletedKey]?.dirty) return;
+    }
+    const removed = await deleting.remove({ id: savedId, name: draft.name.trim(), scope });
+    if (!removed || !mounted.current) return;
+    const store = useAssetStudioDraftStore.getState();
+    // Forget the session draft, so reopening it after a restore loads what was saved.
+    store.reset(deletedKey, emptyDraft());
+    if (useUIStore.getState().viewMode !== 'character-editor') return;
+    store.reset(assetStudioDraftKey('character', scope, NEW_CHARACTER_SENTINEL, store.projectId),
+      scope === 'project' && store.projectId ? { ...emptyDraft(), projectId: store.projectId } : emptyDraft());
+    setRailScope(scope);
+    enterCharacterEditor(NEW_CHARACTER_SENTINEL, scope);
+  };
+  const undoDelete = async () => {
+    const asset = await deleting.undo();
+    if (!asset || !mounted.current || useUIStore.getState().viewMode !== 'character-editor') return;
+    setRailScope(asset.scope);
+    enterCharacterEditor(asset.id, asset.scope);
+  };
+
   return (
     <div className="character-studio-view">
       <CharacterStudioToolbar
           saveState={saveState}
           saveError={saveError}
           onRetry={() => void persist()}
+          onDelete={savedId && !isDraftId ? () => { void deleteCharacterNow(); } : undefined}
+          deleteDisabled={deleting.busy || Boolean(pendingSaveId)}
       />
 
       <aside className="character-studio-view__rail">
@@ -206,6 +246,7 @@ export function CharacterStudioView() {
           key={railScope}
           activeId={savedId ?? (isDraftId ? NEW_CHARACTER_SENTINEL : characterEditorId)}
           initialScope={railScope}
+          refreshKey={deleting.refreshKey}
           onSelect={handleSelectCharacter}
           onNew={(scope) => { void handleNewCharacter(scope); }}
         />
@@ -223,6 +264,11 @@ export function CharacterStudioView() {
             {loadError && (
               <div className="character-studio-view__notice character-studio-view__notice--warn">
                 {loadError}
+              </div>
+            )}
+            {deleting.error && !deleting.lastDeleted && (
+              <div className="character-studio-view__notice character-studio-view__notice--error" role="alert">
+                {deleting.error}
               </div>
             )}
 
@@ -266,6 +312,10 @@ export function CharacterStudioView() {
           </>
         )}
       </main>
+      {deleting.lastDeleted && (
+        <UndoDeleteToast key={deleting.lastDeleted.id} name={deleting.lastDeleted.name} busy={deleting.busy}
+          error={deleting.error} onDismiss={deleting.dismiss} onUndo={() => { void undoDelete(); }} />
+      )}
     </div>
   );
 }

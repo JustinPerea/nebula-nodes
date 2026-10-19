@@ -83,7 +83,7 @@ def test_success_confirms_canonical_pair_retains_raw_node_and_preserves_history(
     reloaded = CLIGraph()
     reloaded.load(path)
     assert reloaded.get_state() == graph.get_state()
-    broadcast.assert_awaited_once_with()
+    broadcast.assert_awaited_once_with(edit=True)
     assert actions.call_count == 2
 
 
@@ -94,7 +94,7 @@ def test_legacy_standalone_creation_is_explicitly_unconnected(connected_graph, c
     assert response.status_code == 200, response.text
     assert response.json() == {**graph.nodes["n4"], "connected": False, "edge": None}
     assert graph.edges == []
-    broadcast.assert_awaited_once_with()
+    broadcast.assert_awaited_once_with(edit=True)
 
 
 @pytest.mark.parametrize("changes", [

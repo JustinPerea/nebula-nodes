@@ -69,10 +69,27 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Where to put each node, in canvas coordinates (e.g. n2=400,120)")
 
     sub.add_parser("projects", help="List saved projects")
-    project_p = sub.add_parser("project", help="Open a saved project on the canvas")
+    project_p = sub.add_parser("project", help="Start a new project, or open a saved one, on the canvas")
     project_sub = project_p.add_subparsers(dest="project_command", required=True)
+    project_new_p = project_sub.add_parser(
+        "new", help="Start a new, empty project and open it on the canvas",
+        description="Start a new, empty project and open it on the canvas. The project that was open "
+                    "is saved as it is, and the person can switch back to it.")
+    project_new_p.add_argument("name", nargs="+", help="Project name")
     project_open_p = project_sub.add_parser("open", help="Switch the canvas to a saved project")
     project_open_p.add_argument("project_id", help="Project id (from `nebula projects`)")
+
+    trash_p = sub.add_parser(
+        "trash", help="Recently deleted moodboards, characters and projects: list them or restore one")
+    trash_sub = trash_p.add_subparsers(dest="trash_cmd", required=True)
+    trash_list_p = trash_sub.add_parser("list", help="What's in Recently deleted, newest first")
+    trash_list_p.add_argument("--kind", choices=["moodboard", "character", "project"], help="Only this kind")
+    trash_list_p.add_argument("--json", action="store_true", help="Print the raw JSON")
+    trash_restore_p = trash_sub.add_parser(
+        "restore", help="Bring one back with the same id (nodes that point at it work again)")
+    trash_restore_p.add_argument("target", nargs="+", metavar="[kind] id",
+                                 help="The id from `nebula trash list`, optionally after its kind "
+                                      "(moodboard, character or project)")
 
     sub.add_parser("graph", help="Show current graph state")
     sub.add_parser("selection", help="Show nodes currently selected on the canvas")
@@ -155,9 +172,15 @@ def build_parser() -> argparse.ArgumentParser:
             "--add +img=nano-banana --wire +p:text +img:prompt --rename +img=\"Hero shot\" "
             "--move n3=400,120 --remove n7 --unwire n1:text n2:prompt. "
             "New nodes use refs like +img; existing nodes use their ids (n4). Or pass --file plan.json "
-            "(- reads standard input) with {note, nodes, edges, params, rename, move, remove, unwire}: "
-            "the plan `nebula propose` takes, without run. If any part is refused, nothing changes. "
-            "It prints each new node's id; run them with `nebula run` after."
+            "(- reads standard input) with {note, nodes, edges, params, rename, move, remove, unwire, "
+            "arrange}: the plan `nebula propose` takes, without run. If any part is refused, nothing "
+            "changes. There's no limit on how much one plan adds. "
+            "A file can also hold {\"steps\": [plan, plan, ...]}: each step is applied in order as its "
+            "own all-or-nothing edit, and a later step can use the +refs an earlier step created. If a "
+            "step is refused, it stops there and says which earlier steps were applied. "
+            "\"arrange\": true (or {\"direction\": \"down\", \"gap\": 120}) has the canvas lay out that "
+            "plan's new nodes by their real size once it draws them; with no canvas open, the first one "
+            "that opens does it. It prints each new node's id; run them with `nebula run` after."
         ),
     )
     apply_p.add_argument("--file", help="JSON plan file, or - for standard input")
@@ -180,6 +203,9 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Delete a node and its wires (repeatable)")
     apply_p.add_argument("--unwire", action="append", nargs=2, default=[], metavar=("SRC:port", "DST:port"),
                          help="Remove a wire, e.g. --unwire n1:text n2:prompt (repeatable)")
+    apply_p.add_argument("--arrange", nargs="?", const="right", default=None, choices=("right", "down"),
+                         help="Have the canvas lay out the new nodes by their real size once it draws them; works with --file too "
+                              "(flowing right, or down)")
     apply_p.add_argument("--json", action="store_true", help="Print the raw result JSON")
     apply_p.add_argument("--as", dest="agent_name",
                          help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")
@@ -200,7 +226,14 @@ def build_parser() -> argparse.ArgumentParser:
     load_p = sub.add_parser("load", help="Load graph from file")
     load_p.add_argument("file", help="Input file path (JSON)")
 
-    sub.add_parser("clear", help="Clear the current graph")
+    clear_p = sub.add_parser(
+        "clear", help="Remove every node from the open project (needs --force when it has nodes)",
+        description="Remove every node from the open project. It refuses when the project has nodes "
+                    "unless you pass --force. To start fresh, run `nebula project new \"<name>\"` "
+                    "instead: it keeps this project's work. With the canvas open, the person can undo "
+                    "a clear (Undo, or Cmd-Z), which brings back every node, wire, name and output.")
+    clear_p.add_argument("--force", action="store_true",
+                         help="Clear even when the project has nodes")
 
     path_p = sub.add_parser("path", help="Print local file path of a node's primary image")
     path_p.add_argument("node_ref", help="Node reference (e.g. n1)")
@@ -271,7 +304,14 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--brand")
     csub.add_parser("status", help="Worker, meter and queue status")
 
+    # -- Moodboards --
+    from .commands import moodboard as moodboard_cmd
+    moodboard_cmd.add_parser(sub)
+
     # -- Outside apps --
+    from .commands import skill as skill_cmd
+    skill_cmd.add_parser(sub)
+
     mcp_p = sub.add_parser("mcp", help="Connect an outside agent app (Hermes, Claude Code, Codex...) to Nebula's MCP server")
     mcp_sub = mcp_p.add_subparsers(dest="mcp_cmd", required=True)
     from services.agent_connect import CLIENTS
@@ -352,6 +392,11 @@ def default_url(environ: dict[str, str] | None = None, *, strict: bool = True) -
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    if args.command == "skill":
+        # Installs files on this machine; needs no backend.
+        from .commands import skill
+
+        sys.exit(skill.run_install(args))
     if args.url is None and args.command:
         # mcp connect sends the token only to an address that passed the check.
         args.url = default_url(strict=args.command != "mcp")
@@ -370,12 +415,13 @@ def main() -> None:
     client = NebulaClient(args.url)
 
     from .commands import (
-        apply, canvas, commons, context, nodes, keys, graph, execute, quick, path, pins, projects, proposals,
-        selection, spend,
+        apply, canvas, commons, context, nodes, keys, graph, execute, moodboard, quick, path, pins, projects,
+        proposals, selection, spend, trash,
     )
 
     dispatch = {
         "commons": lambda: commons.run(client, args),
+        "moodboard": lambda: moodboard.run(client, args),
         "context": lambda: context.run(client),
         "nodes": lambda: nodes.run_list(client, query=args.query, category=args.category),
         "info": lambda: nodes.run_info(client, args.node_id),
@@ -388,7 +434,9 @@ def main() -> None:
         "rename": lambda: graph.run_rename(client, args.node_ref, " ".join(args.label)),
         "move": lambda: graph.run_move(client, args.moves),
         "projects": lambda: projects.run_list(client),
-        "project": lambda: projects.run_open(client, args.project_id),
+        "trash": lambda: trash.run(client, args),
+        "project": lambda: (projects.run_new(client, " ".join(args.name)) if args.project_command == "new"
+                            else projects.run_open(client, args.project_id)),
         "graph": lambda: graph.run_show(client),
         "selection": lambda: selection.run(client),
         "look": lambda: canvas.run_look(client, as_json=args.json),
@@ -407,7 +455,7 @@ def main() -> None:
         "proposals": lambda: proposals.run_list(client),
         "save": lambda: graph.run_save(client, args.file),
         "load": lambda: graph.run_load(client, args.file),
-        "clear": lambda: graph.run_clear(client),
+        "clear": lambda: graph.run_clear(client, force=args.force),
         "path": lambda: path.run(client, args.node_ref),
         "run": lambda: execute.run_node(client, args.node_ref, wait=args.wait),
         "run-all": lambda: execute.run_all(client, wait=args.wait),

@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, BinaryIO, Callable, Iterable, Mapping
+from typing import Any, BinaryIO, Callable, Iterable, Mapping, NoReturn
 from urllib.parse import quote, unquote_to_bytes, urlsplit
 
 from uuid import uuid4
@@ -85,12 +85,13 @@ from services.settings import (
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 from services.node_registry import NodeRegistry
 from services import agent_connect, agent_spend, backend_address, app_tokens, maker_sizes, model_pricing, node_readiness, node_route, output_preview
-from services.cli_graph import CLIGraph
+from services import project_cover
+from services.cli_graph import SHORT_ID_RE, CLIGraph
 from services.retired_nodes import folded_entry, migrate_graph, migrate_node, migrate_param_update, migrate_params, retired_message
 from services.saved_graph_upgrades import PARAMS_VERSION, request_version, upgrade_flat_nodes, upgrade_project
 from services.project_store import (
     MAX_PROJECT_BYTES, ProjectLimitError, ProjectStore, ProjectStoreError, empty_snapshot,
-    make_project, metadata as project_metadata, now as project_now,
+    make_project, metadata as project_metadata, needs_cover, now as project_now,
     project_name, public_project, refresh_metadata, validate_project_id,
     move_to_trash, purge_expired_trash, restore_from_trash, trash_metadata,
 )
@@ -133,6 +134,7 @@ from services.canvas_events import (
     MOVE_THRESHOLD_PX,
     TooManyWaiters,
     actor_for_headers,
+    actor_record,
     actor_label,
     canvas_events,
     param_changes,
@@ -140,6 +142,7 @@ from services.canvas_events import (
 )
 from services.canvas_pins import CanvasPins, PinError, pin_summary
 from services import person_session
+from services import asset_trash
 from services.child_env import scrubbed_env
 from services.person_gate import (
     PERSON_HEADER,
@@ -150,6 +153,7 @@ from services.person_gate import (
     require_person,
 )
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
+from services.canvas_arrange import canvas_arrange
 from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
 from services.canvas_proposals import (
     MAX_REASON,
@@ -632,7 +636,7 @@ app.add_middleware(LocalRequestGuard)
 _DESKTOP_RENDERER_ORIGINS = frozenset({"null", "file://"})
 _DESKTOP_CORS_HEADERS = ", ".join((
     "Content-Type", "Authorization", "X-Nebula-Person", "X-Nebula-Workspace-Revision", "X-Nebula-Proposal-Key",
-    "X-Nebula-Params-Version",
+    "X-Nebula-Params-Version", "X-Nebula-Tab",
 ))
 
 
@@ -1437,6 +1441,18 @@ def _output_url_from_ref(value: str) -> str | None:
     if rel is None:
         return None
     return f"{_OUTPUTS_URL_PREFIX}{rel.as_posix()}"
+
+
+def _output_file_time(url: str) -> float | None:
+    path = _output_path_from_ref(url)
+    try:
+        return path.stat().st_mtime if path is not None and path.is_file() else None
+    except OSError:
+        return None
+
+
+# Project cards pick their newest image by file time (services/project_cover.py).
+project_cover.configure(url_for=_output_url_from_ref, time_for=_output_file_time)
 
 
 def _normalize_output_value_for_storage(port_val: Any) -> Any:
@@ -2283,6 +2299,17 @@ async def _personal_agents_shutdown() -> None:
 
 
 @app.on_event("startup")
+async def _moodboard_brief_fields_startup() -> None:
+    """Give boards saved before Direction / Avoid / pinned colours existed those
+    fields, once, backing each file up first (services/moodboard_brief.py)."""
+    from services.moodboard_store import migrate_brief_fields
+    try:
+        await asyncio.to_thread(migrate_brief_fields)
+    except Exception as exc:  # never block startup; boards still migrate in memory on read
+        print(f"[main] moodboard brief migration skipped: {type(exc).__name__}: {exc}", flush=True)
+
+
+@app.on_event("startup")
 async def _commons_startup() -> None:
     """Scan linked folders. Human authority is the person session, set above."""
     from commons.activation import is_enabled
@@ -2430,7 +2457,7 @@ async def upload_file_consolidated(
 
         node_id = cli_graph.add_node(node_type, node_params, position=new_position)
         try:
-            await _broadcast_graph_sync()
+            await _broadcast_graph_sync(edit=True)
         except Exception as exc:
             # Roll back the graph mutation so a failed broadcast doesn't leave
             # a node the frontend never heard about. Removal is best-effort —
@@ -2525,6 +2552,14 @@ class ConnectionManager:
 
     def is_browser(self, websocket: WebSocket) -> bool:
         return websocket in self.browser_connections
+
+    def canvas_open(self) -> bool:
+        """Whether a canvas is connected: any socket without an agent marker.
+
+        Not only the person's verified canvas: a tab opened without the person
+        link still draws the graph and lays out an arrange (services/canvas_arrange.py)."""
+        return bool(self.browser_connections) or any(
+            not _websocket_has_agent_marker(connection) for connection in self.active_connections)
 
     def disconnect(self, websocket: WebSocket) -> None:
         if websocket in self.active_connections:
@@ -4695,7 +4730,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         fingerprint=approvals.fingerprint(cli_graph.nodes, cli_graph.edges, run_ids),
         shape=_approval_shape(cli_graph, run_ids),
     ) if run_ids else None
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(edit=True)
     publish_action(f"Accepted {proposal.agent.name}'s proposal ({len(id_map)} nodes)")
     person = dict(_PERSON_ACTOR)
     _journal(
@@ -6227,8 +6262,36 @@ async def get_node(node_id: str) -> dict:
 _REPLACE_REASONS = ("import", "project-open", "project-create", "project-delete")
 
 
+_TAB_ID_RE = re.compile(r"[A-Za-z0-9_-]{8,64}")
+
+
+def _graph_edit_origin() -> dict[str, Any]:
+    """Who made the graph edit this request is broadcasting, for open canvases.
+
+    ``actor`` is the journal's actor (services/canvas_events.py): a named
+    agent, the person, or anonymous. ``tab`` is the canvas tab that sent the
+    request (``X-Nebula-Tab``, set by the canvas's apiFetch), so that tab
+    knows the sync is the echo of its own write. A canvas makes every edit it
+    didn't send one undo step, named after the actor.
+    """
+    headers = current_request_headers() or {}
+    actor = actor_for_headers(headers)
+    origin: dict[str, Any] = {"actor": {key: actor[key] for key in ("kind", "id", "name", "color") if key in actor}}
+    tab = next((value for key, value in headers.items() if key.lower() == "x-nebula-tab"), None)
+    # Only the person's canvas is a tab (services/person_gate.py: no agent
+    # marker AND this launch's person token). A tab id is broadcast on every
+    # graphSync, so an agent, or a script that leaves out X-Nebula-Agent,
+    # could send one back to pass its edit off as that tab's own echo and
+    # keep it off the person's undo stack. A tab without the person token
+    # gets no echo match either; it can't be told apart from a script.
+    if is_person(headers) and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab):
+        origin["tab"] = tab
+    return origin
+
+
 async def _broadcast_graph_sync(
-    *, graph_replaced: bool = False, reason: str = "import", moved: Iterable[str] = (),
+    *, graph_replaced: bool = False, reason: str = "import", moved: Iterable[str] = (), edit: bool = False,
+    project_switch: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Push the current CLI graph to all connected frontends via WebSocket.
 
@@ -6238,14 +6301,29 @@ async def _broadcast_graph_sync(
     its own position for nodes it already shows (the person may be mid-drag),
     so without the list an agent's move didn't show on an open canvas until
     it reloaded.
+    `project_switch` (an agent or script opened or made a project) rides on
+    the event so the person's canvas follows it and offers the way back
+    (frontend projectStore), and names the project in the journal.
+    `edit` marks a sync caused by a graph edit request (not a run's outputs or
+    status): the sync carries ``edit`` = {actor, tab?} (_graph_edit_origin),
+    and an open canvas that didn't send it makes it one undo step. A
+    replacement carries it only for an import into the open project (``nebula
+    graph load``, a file loaded in another window), which is an edit like any
+    other; opening, creating or deleting a project is not.
     """
+    if graph_replaced:
+        # Node ids restart with another project; no open arrange can apply to it.
+        canvas_arrange.clear()
     export = await export_graph_for_frontend()
     if graph_replaced:
         agent_presence.forget_graph()
     moved_ids = sorted({str(node_id) for node_id in moved if node_id in cli_graph.nodes})
     await manager.broadcast_raw({"type": "graphSync", **export,
                                  **({"graphReplaced": True} if graph_replaced else {}),
-                                 **({"moved": moved_ids} if moved_ids and not graph_replaced else {})})
+                                 **({"moved": moved_ids} if moved_ids and not graph_replaced else {}),
+                                 **({"projectSwitch": project_switch} if project_switch and graph_replaced else {}),
+                                 **({"edit": _graph_edit_origin()}
+                                    if edit and (not graph_replaced or reason == "import") else {})})
     if graph_replaced:
         # Tag, don't reset: seq stays monotonic, and the new project id rides
         # on this event and every one after it.
@@ -6254,11 +6332,16 @@ async def _broadcast_graph_sync(
         except Exception:  # noqa: BLE001 - the journal must not break a project switch
             pass
         safe_reason = reason if reason in _REPLACE_REASONS else "import"
-        _journal(
-            "canvas.replaced",
-            data={"reason": safe_reason},
-            summary=f"replaced the canvas ({safe_reason})",
-        )
+        data: dict[str, Any] = {"reason": safe_reason}
+        summary = f"replaced the canvas ({safe_reason})"
+        if project_switch:
+            data.update({key: project_switch[key] for key in ("projectId", "projectName", "previousProjectId",
+                                                               "previousProjectName") if key in project_switch})
+            verb = "made and opened" if safe_reason == "project-create" else "opened"
+            summary = f"{verb} project “{project_switch.get('projectName', '')}”"
+            if project_switch.get("previousProjectName"):
+                summary += f" (was “{project_switch['previousProjectName']}”)"
+        _journal("canvas.replaced", data=data, summary=summary)
         # Pins belong to the project record. A project open or create brings
         # that project's pins; an import into the same project detaches pins
         # whose nodes did not survive.
@@ -6899,7 +6982,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
             [candidate.nodes[short_id]],
             source="create",
         )
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(edit=True)
     publish_action(f"Added {definition_id} ({short_id})")
     _journal_node_added(short_id)
     await _show_agent({"nodeId": short_id}, say=f"Added {_node_label(short_id)}")
@@ -6925,7 +7008,7 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(edit=True)
     publish_action(
         f"Wired {edge['source']}:{edge['sourceHandle']} → "
         f"{edge['target']}:{edge['targetHandle']}"
@@ -7051,7 +7134,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     # Preserve the raw top-level node contract for existing CLI callers while
     # letting the canvas adopt only a connection explicitly confirmed by us.
     response = {**copy.deepcopy(candidate.nodes[short_id]), "connected": edge is not None, "edge": rf_edge}
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(edit=True)
     publish_action(f"Added {definition_id} ({short_id})")
     _journal_node_added(short_id)
     if edge is not None:
@@ -7204,7 +7287,7 @@ async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
         "edge": {**copy.deepcopy(edge), "type": "typed-edge", "data": {"dataType": "Image"}},
     }
     if created:
-        await _broadcast_graph_sync()
+        await _broadcast_graph_sync(edit=True)
         publish_action(f"Connected Cinema {node_id}:{port_id} to Veo ({target['id']})")
     return response
 
@@ -7212,6 +7295,86 @@ async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
 @app.get("/api/graph")
 async def get_graph() -> dict:
     return cli_graph.get_state()
+
+
+def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], params: dict[str, Any]) -> None:
+    """Keep a Cinema scene's runtime media when a write sets its authoring.
+
+    Shared by PUT /api/graph/node/{id} and POST /api/graph/restore. Changes
+    ``params["scene"]`` in place, and drops the node's outputs and the wires
+    of shots the new scene no longer has (on ``graph``)."""
+    if node.get("definitionId") != "cinema-scene" or "scene" not in params:
+        return
+    # Studio/Inspector PUTs carry authoring snapshots captured before
+    # a generation or promotion may have installed fresher media.
+    # Runtime media belongs to the canonical shot, not that snapshot.
+    incoming_scene = params["scene"]
+    if not isinstance(incoming_scene, dict) or not isinstance(incoming_scene.get("shots"), list):
+        raise HTTPException(400, "Cinema scene must be an object with a shots array")
+    shots = incoming_scene["shots"]
+    if any(not isinstance(shot, dict) or not isinstance(shot.get("id"), str)
+           or not shot["id"] for shot in shots):
+        raise HTTPException(400, "Cinema shots require non-empty string IDs")
+    if len({shot["id"] for shot in shots}) != len(shots):
+        raise HTTPException(400, "Cinema shot IDs must be unique")
+    current_scene = (node.get("params") or {}).get("scene")
+    stored_shots = current_scene.get("shots") if isinstance(current_scene, dict) else None
+    current_shots = {
+        shot["id"]: shot for shot in (stored_shots if isinstance(stored_shots, list) else [])
+        if isinstance(shot, dict) and isinstance(shot.get("id"), str)
+    }
+    authored_scene = copy.deepcopy(incoming_scene)
+    for shot in authored_scene["shots"]:
+        canonical = current_shots.get(shot["id"])
+        for field in ("output", "variations", "selectedVariation"):
+            shot.pop(field, None)
+            if canonical is not None and field in canonical:
+                shot[field] = copy.deepcopy(canonical[field])
+        if canonical is None:
+            shot["output"] = {"status": "idle"}
+    params["scene"] = authored_scene
+    # Deleted shots no longer own live ports/connections. Import and
+    # generation/promotion routes retain their separate media contract.
+    valid_ports = {f"shot_{shot['id']}" for shot in authored_scene["shots"]}
+    node["outputs"] = {
+        port: output for port, output in (node.get("outputs") or {}).items()
+        if not port.startswith("shot_") or port in valid_ports
+    }
+    graph.edges = [edge for edge in graph.edges
+                   if edge.get("source") != node_id
+                   or not str(edge.get("sourceHandle", "")).startswith("shot_")
+                   or edge["sourceHandle"] in valid_ports]
+
+
+def _keep_recovery_checkpoint(node: dict[str, Any], params: dict[str, Any]) -> bool:
+    """For a World Labs recovery node, keep its live checkpoint in ``params``
+    (in place) and return True; False for every other node.
+
+    Shared by PUT /api/graph/node/{id} and POST /api/graph/restore."""
+    recovery_update = isinstance(node.get("definitionId"), str) and uses_durable_recovery(
+        str(node.get("definitionId")),
+        provider="worldlabs",
+    )
+    if not recovery_update:
+        return False
+    # Inspector writes are debounced whole-param snapshots. A response
+    # captured after that snapshot may already have installed a provider
+    # recovery ID, so a late PUT must not erase or rewind server-owned
+    # safety state. The exact provider-recovery DELETE route is the only
+    # way to clear a live checkpoint deliberately.
+    current_params = node.get("params") or {}
+    policy_fields = recovery_param_names(str(node.get("definitionId") or ""))
+    checkpoint = {
+        key: value
+        for key in policy_fields
+        if isinstance((value := current_params.get(key)), str)
+        and bool(value.strip())
+    }
+    if checkpoint:
+        for key in policy_fields:
+            params.pop(key, None)
+        params.update(checkpoint)
+    return True
 
 
 @app.put("/api/graph/node/{node_id}")
@@ -7237,68 +7400,9 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
         _guard_approved_runs(lambda probe: probe.update_params(node_id, copy.deepcopy(params)))
-        if node.get("definitionId") == "cinema-scene" and "scene" in params:
-            # Studio/Inspector PUTs carry authoring snapshots captured before
-            # a generation or promotion may have installed fresher media.
-            # Runtime media belongs to the canonical shot, not that snapshot.
-            incoming_scene = params["scene"]
-            if not isinstance(incoming_scene, dict) or not isinstance(incoming_scene.get("shots"), list):
-                raise HTTPException(400, "Cinema scene must be an object with a shots array")
-            shots = incoming_scene["shots"]
-            if any(not isinstance(shot, dict) or not isinstance(shot.get("id"), str)
-                   or not shot["id"] for shot in shots):
-                raise HTTPException(400, "Cinema shots require non-empty string IDs")
-            if len({shot["id"] for shot in shots}) != len(shots):
-                raise HTTPException(400, "Cinema shot IDs must be unique")
-            current_scene = (node.get("params") or {}).get("scene")
-            stored_shots = current_scene.get("shots") if isinstance(current_scene, dict) else None
-            current_shots = {
-                shot["id"]: shot for shot in (stored_shots if isinstance(stored_shots, list) else [])
-                if isinstance(shot, dict) and isinstance(shot.get("id"), str)
-            }
-            authored_scene = copy.deepcopy(incoming_scene)
-            for shot in authored_scene["shots"]:
-                canonical = current_shots.get(shot["id"])
-                for field in ("output", "variations", "selectedVariation"):
-                    shot.pop(field, None)
-                    if canonical is not None and field in canonical:
-                        shot[field] = copy.deepcopy(canonical[field])
-                if canonical is None:
-                    shot["output"] = {"status": "idle"}
-            params["scene"] = authored_scene
-            # Deleted shots no longer own live ports/connections. Import and
-            # generation/promotion routes retain their separate media contract.
-            valid_ports = {f"shot_{shot['id']}" for shot in authored_scene["shots"]}
-            node["outputs"] = {
-                port: output for port, output in (node.get("outputs") or {}).items()
-                if not port.startswith("shot_") or port in valid_ports
-            }
-            cli_graph.edges = [edge for edge in cli_graph.edges
-                               if edge.get("source") != node_id
-                               or not str(edge.get("sourceHandle", "")).startswith("shot_")
-                               or edge["sourceHandle"] in valid_ports]
-        recovery_update = isinstance(node.get("definitionId"), str) and uses_durable_recovery(
-            str(node.get("definitionId")),
-            provider="worldlabs",
-        )
+        _author_cinema_scene(cli_graph, node_id, node, params)
+        recovery_update = _keep_recovery_checkpoint(node, params)
         if recovery_update:
-            # Inspector writes are debounced whole-param snapshots. A response
-            # captured after that snapshot may already have installed a provider
-            # recovery ID, so a late PUT must not erase or rewind server-owned
-            # safety state. The exact provider-recovery DELETE route is the only
-            # way to clear a live checkpoint deliberately.
-            current_params = node.get("params") or {}
-            policy_fields = recovery_param_names(str(node.get("definitionId") or ""))
-            checkpoint = {
-                key: value
-                for key in policy_fields
-                if isinstance((value := current_params.get(key)), str)
-                and bool(value.strip())
-            }
-            if checkpoint:
-                for key in policy_fields:
-                    params.pop(key, None)
-                params.update(checkpoint)
             candidate = cli_graph.clone()
             try:
                 candidate.update_params(node_id, params)
@@ -7314,7 +7418,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                 cli_graph.update_params(node_id, params)
             except ValueError:
                 raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(edit=True)
     publish_action(f"Updated {node_id} params")
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
     if changes:
@@ -7344,7 +7448,7 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     previous = _node_label(node_id)
     cli_graph.set_label(node_id, _custom_node_label(raw, str(node.get("definitionId", ""))))
     current = _node_label(node_id)
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(edit=True)
     if current != previous:
         publish_action(f"Renamed {node_id}")
         _journal(
@@ -7358,11 +7462,33 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
 
 @app.put("/api/graph/layout")
 async def update_graph_layout(body: dict[str, Any]) -> dict:
-    """Persist a complete or partial Canvas layout in one atomic mutation."""
+    """Persist a complete or partial Canvas layout in one atomic mutation.
+
+    With ``arrangeId`` this is a canvas finishing an agent's arrange request
+    (services/canvas_arrange.py): only that request's nodes may be in
+    ``positions``, and only the first write for the id applies. A later one
+    (another open tab) returns ``already-arranged`` and changes nothing.
+    Without it, the nodes it positions drop out of any open arrange.
+    """
     _check_workspace_revision()
     raw_positions = body.get("positions")
     if not isinstance(raw_positions, dict) or not raw_positions:
         raise HTTPException(status_code=400, detail="positions must be a non-empty object")
+    arrange_id = body.get("arrangeId")
+    arrange = None
+    if arrange_id is not None:
+        if not isinstance(arrange_id, str):
+            raise HTTPException(status_code=400, detail="arrangeId must be a string")
+        arrange = canvas_arrange.get(arrange_id)
+        if arrange is None:
+            return {"status": "already-arranged", "count": 0}
+        outside = sorted(set(raw_positions) - set(arrange.node_ids))
+        if outside:
+            raise HTTPException(status_code=400, detail=(
+                f"{outside[0]} isn't one of the new nodes this arrange lays out; "
+                "an arrange never moves other nodes"))
+        # Nodes deleted since the request are simply skipped.
+        raw_positions = {node_id: point for node_id, point in raw_positions.items() if node_id in cli_graph.nodes}
 
     normalized: dict[str, dict[str, float]] = {}
     for node_id, raw_position in raw_positions.items():
@@ -7389,11 +7515,19 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
     # against where the canvas drew them, or the first drag would go unseen.
     shown = _display_positions(list(cli_graph.nodes.values()))
     previous = {node_id: shown.get(node_id) for node_id in normalized}
+    if arrange is not None:
+        # Close it before anything awaits, so a second tab's write can't also apply.
+        canvas_arrange.complete(arrange.id)
+        if not normalized:
+            await _broadcast_graph_sync()
+            return {"status": "arranged", "count": 0}
     try:
         cli_graph.update_positions(normalized)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    await _broadcast_graph_sync(moved=normalized)
+    if arrange is None:
+        canvas_arrange.forget_nodes(normalized)
+    await _broadcast_graph_sync(edit=True, moved=normalized)
     publish_action(f"Updated layout for {len(normalized)} node(s)")
     # This route is the authoritative move signal (drag end, auto-layout,
     # paste).
@@ -7407,23 +7541,49 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
             "node.moved",
             node_id=moved[0] if len(moved) == 1 else None,
             data={"nodeIds": moved[:50], "count": len(moved)},
-            summary=f"moved {_listed(moved)}",
+            summary=f"{'arranged' if arrange is not None else 'moved'} {_listed(moved)}",
+            # The agent asked for the arrange; a canvas only measured. An agent
+            # that writes it (the arrangeId is on every graphSync) is credited
+            # itself, so it can't put its positions under another agent's name.
+            actor=arrange.actor if arrange is not None and not has_agent_marker(current_request_headers()) else None,
         )
+    if arrange is not None:
+        return {"status": "arranged", "count": len(normalized), "positions": normalized}
     return {"status": "updated", "count": len(normalized)}
 
 
+def _require_clear_intent(force: bool) -> None:
+    """Clearing a project that has nodes needs an explicit ``force``, from
+    every caller (Justin's D3, 2026-10-18). This is a check of intent, not of
+    who is asking: agents may clear too, because an open canvas makes the
+    clear one undo step (the graphSync carries ``edit``; Undo sends the nodes,
+    wires, names and outputs back through POST /api/graph/restore). The
+    canvas's Clear button and chat /clear send force after the person
+    confirms; `nebula clear --force` and the MCP send it when asked to."""
+    if force or not cli_graph.nodes:
+        return
+    count = len(cli_graph.nodes)
+    raise HTTPException(status_code=409, detail=(
+        f"The open project has {count} node{'s' if count != 1 else ''}, and clearing removes all of them. "
+        "To start fresh and keep this work, make a new project: `nebula project new \"<name>\"` "
+        "(MCP: new_project). To clear it anyway, pass force: `nebula clear --force` "
+        "(DELETE /api/graph?force=true). The person can undo a clear on an open canvas."
+    ))
+
+
 @app.delete("/api/graph")
-async def clear_graph() -> dict:
+async def clear_graph(force: bool = False) -> dict:
     # Clear Canvas is not consent to forget paid-provider state. Resolve each
     # recovery/ambiguity through its exact endpoint first; otherwise recreating
     # a node with the same identity could silently duplicate provider spend.
     _check_workspace_revision()
+    _require_clear_intent(force)
     with _paid_graph_mutation("clear the canvas"):
         _reject_graph_replacement_during_paid_start("clear the canvas")
         cli_graph.clear()
         run_approvals.clear()
     agent_presence.forget_graph()
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(edit=True)
     publish_action("Cleared the canvas")
     _journal("canvas.cleared", summary="cleared the canvas")
     try:
@@ -7593,7 +7753,7 @@ async def delete_graph_node(node_id: str) -> dict:
             cli_graph.remove_node(node_id)
         except ValueError:
             raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(edit=True)
     publish_action(f"Removed {node_id}")
     _journal(
         "node.removed",
@@ -7702,6 +7862,19 @@ def _stored_asset(kind: str, asset_id: str) -> dict[str, Any] | None:
         return None
 
 
+def _asset_out(kind: str, asset: dict[str, Any]) -> dict[str, Any]:
+    """A saved board or character as the API returns it (a board with its brief)."""
+    return _moodboard_out(asset) if kind == "moodboard" else asset
+
+
+def _trashed_asset(kind: str, asset_id: str) -> dict[str, Any] | None:
+    store = _moodboard_store() if kind == "moodboard" else _char_store()
+    try:
+        return store.trashed(asset_id)
+    except ValueError:
+        return None
+
+
 def _check_asset_refs(definition_id: str, params: Mapping[str, Any], label: str, *,
                       before: Mapping[str, Any] | None = None, must_exist: bool | None = None) -> None:
     """400 unless each asset-reference param (a Moodboard's ``moodboard``, a
@@ -7724,6 +7897,11 @@ def _check_asset_refs(definition_id: str, params: Mapping[str, Any], label: str,
             raise HTTPException(status_code=400, detail=(
                 f"{label}.{key} must be a {source['noun']} id; {source['list']} lists them"))
         if must_exist and _stored_asset(kind, value.strip()) is None:
+            if _trashed_asset(kind, value.strip()) is not None:
+                raise HTTPException(status_code=400, detail=(
+                    f"{label}.{key}: {source['noun']} {value.strip()[:64]!r} is in Recently deleted; "
+                    f"restore it first (POST /api/trash/{kind}/{value.strip()[:64]}/restore, "
+                    f"or nebula trash restore {kind} {value.strip()[:64]})"))
             raise HTTPException(status_code=400, detail=(
                 f"{label}.{key}: there's no {source['noun']} {value.strip()[:64]!r}; {source['list']} lists them"))
 
@@ -7752,6 +7930,13 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     graph in that order (unwire, remove, add and change, rename, move) with
     the validators single edits use, then committed at once. Never runs
     anything; runs go through /api/graph/run and its spending limits.
+
+    No per-edit caps (decision C1): the staged graph must stay within what a
+    project can save (RESTORE_MAX_GRAPH_NODES / _EDGES), as on restore.
+
+    `arrange` (true, or {direction: right|down, gap}) asks the canvas to lay
+    out this edit's new nodes once it has drawn them; see
+    services/canvas_arrange.py. The response's `arrange` says so.
     """
     headers = current_request_headers()
     identity = identify_agent(headers)
@@ -7837,6 +8022,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail=f"{missing[0]} is not on the canvas")
         if moves:
             candidate.update_positions(moves)
+        _refuse_oversized_graph(candidate)
         touched = sorted(set(id_map.values()) | set(params_before))
         _refuse_agent_change_to_approved_runs(candidate)
         _commit_graph_candidate_with_recoveries(
@@ -7845,7 +8031,13 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             source="agent-edit",
         )
 
-    await _broadcast_graph_sync(moved=moves)
+    # An explicit move wins over any arrange still waiting for these nodes.
+    canvas_arrange.forget_nodes(moves)
+    arrange = None
+    if spec.arrange is not None and id_map:
+        arrange = canvas_arrange.add(id_map.values(), direction=spec.arrange.direction, gap=spec.arrange.gap,
+                                     actor=actor_for_headers(headers))
+    await _broadcast_graph_sync(edit=True, moved=moves)
     note = f" ({additions.note})" if additions.note != "edit" else ""
     for edge in spec.unwire:
         _journal_edge("edge.removed", edge.as_dict())
@@ -7925,6 +8117,269 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         "moved": list(moves),
         "removed": [gone["id"] for gone in removed],
         "unwired": [edge.as_dict() for edge in spec.unwire],
+        **({"arrange": _arrange_reply(arrange)} if arrange is not None else {}),
+    }
+
+
+def _refuse_oversized_graph(candidate: CLIGraph) -> None:
+    """413 when a staged edit would make a canvas bigger than a project can save."""
+    nodes, edges = len(candidate.nodes), len(candidate.edges)
+    if nodes > RESTORE_MAX_GRAPH_NODES or edges > RESTORE_MAX_GRAPH_EDGES:
+        raise HTTPException(status_code=413, detail=(
+            f"A canvas holds at most {RESTORE_MAX_GRAPH_NODES:,} nodes and {RESTORE_MAX_GRAPH_EDGES:,} wires "
+            f"(the most a project can save). This edit would leave {nodes:,} nodes and {edges:,} wires, "
+            "so nothing changed."))
+
+
+def _arrange_reply(arrange: Any) -> dict[str, Any]:
+    """What `arrange` on an edit did: the canvas lays the new nodes out, now or when one opens."""
+    count = len(arrange.node_ids)
+    nodes = f"{count} new node{'' if count == 1 else 's'}"
+    if manager.canvas_open():
+        status, message = "waiting", (
+            f"The open canvas lays out the {nodes} once it has drawn them, and saves the positions.")
+    else:
+        status, message = "waiting-for-canvas", (
+            f"No canvas is open, so the {nodes} stay where they were placed. "
+            "The first canvas that opens lays them out.")
+    return {**arrange.view(), "status": status, "message": message}
+RESTORE_ACTIONS = ("undo", "redo")
+
+
+def _restore_wire(raw: Any, where: str) -> tuple[str, str, str, str]:
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=400, detail=f"{where} must be an object")
+    parts = tuple(raw.get(key) for key in ("source", "sourceHandle", "target", "targetHandle"))
+    if not all(isinstance(part, str) and part for part in parts):
+        raise HTTPException(status_code=400, detail=f"{where} needs source, sourceHandle, target and targetHandle")
+    return parts  # type: ignore[return-value]
+
+
+def _kept_paper_source(current: Mapping[str, Any], incoming: Mapping[str, Any]) -> Any:
+    """The newer of two ``_paperSource`` records: undo restores a recipe, not an
+    older capture of the same Paper source (the canvas merges them the same way)."""
+    now, then = current.get("_paperSource"), incoming.get("_paperSource")
+    if (isinstance(now, dict) and isinstance(then, dict) and now.get("id") == then.get("id")
+            and isinstance(now.get("sequence"), int) and isinstance(then.get("sequence"), int)
+            and now["sequence"] >= then["sequence"]):
+        return now
+    return then
+
+
+@app.post("/api/graph/restore")
+async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
+    """Put nodes and wires back the way they were: the canvas's undo and redo.
+
+    The canvas keeps its own undo history. When the person undoes or redoes a
+    step (theirs or an agent's), it sends what changed so the backend graph,
+    and through it agents and other open canvases, match the canvas again.
+    Body: {action: "undo"|"redo", nodes: [{id, definitionId, params, label?,
+    position?, outputs?}], remove: [id], wire: [edge], unwire: [edge]}, where
+    an edge is {source, sourceHandle, target, targetHandle}.
+
+    A node in ``nodes`` that exists gets the params (replaced, not merged),
+    name and position the item carries; a key the item leaves out is left as
+    it is, and the node keeps its current outputs. One that doesn't exist
+    comes back under the same id, with the outputs sent. An id listed in both
+    ``remove`` and ``nodes`` is swapped: whatever holds it now goes, and the
+    node sent comes back there (undoing an import, which gives ids out
+    again). Without that, an id that now holds a different model is refused
+    (409). Removing a node that is already gone, or a wire that isn't there, is not an error, so two tabs
+    undoing the same step agree. Staged on a copy (unwire, remove, nodes,
+    wire) with the checks single edits use, then committed at once. Never
+    runs anything. Anyone can call it, agents too: it is itself undoable.
+    """
+    _check_workspace_revision()
+    _validate_graph_ingress_complexity(body)
+    action = body.get("action", "undo")
+    if action not in RESTORE_ACTIONS:
+        raise HTTPException(status_code=400, detail="action must be undo or redo")
+    raw_nodes = _graph_ingress_items(body, "nodes")
+    raw_remove = body.get("remove", [])
+    if not isinstance(raw_remove, list) or not all(isinstance(node_id, str) and node_id for node_id in raw_remove):
+        raise HTTPException(status_code=400, detail="remove must be a list of node ids")
+    wires = [_restore_wire(raw, f"wire[{index}]") for index, raw in enumerate(_graph_ingress_items(body, "wire"))]
+    unwires = [_restore_wire(raw, f"unwire[{index}]") for index, raw in enumerate(_graph_ingress_items(body, "unwire"))]
+    seen_ids: set[str] = set()
+    for index, raw in enumerate(raw_nodes):
+        node_id = raw.get("id")
+        if not isinstance(node_id, str) or SHORT_ID_RE.fullmatch(node_id) is None:
+            raise HTTPException(status_code=400, detail=f"nodes[{index}].id must be a node id like n3")
+        # An id in both ``remove`` and ``nodes`` is a swap: the id holds a
+        # different model now (an import gave it out again), so the node
+        # there goes and the one sent comes back in its place.
+        if node_id in seen_ids:
+            raise HTTPException(status_code=400, detail=f"{node_id} is listed twice")
+        seen_ids.add(node_id)
+    note = f" ({action})"
+
+    shown = _display_positions(list(cli_graph.nodes.values()))
+    added: list[str] = []
+    changed: dict[str, dict[str, Any]] = {}
+    renamed: dict[str, tuple[str, str]] = {}
+    moved: list[str] = []
+    removed: list[dict[str, Any]] = []
+    with _paid_graph_mutation(f"{action} an edit"):
+        candidate = cli_graph.clone()
+        unwired: list[dict[str, Any]] = []
+        for source, source_handle, target, target_handle in unwires:
+            if candidate.remove_edge(source, source_handle, target, target_handle):
+                unwired.append({"source": source, "sourceHandle": source_handle,
+                                "target": target, "targetHandle": target_handle})
+        for node_id in raw_remove:
+            node = candidate.nodes.get(node_id)
+            if node is None:
+                continue
+            _ensure_node_deletable(node_id, node)
+            removed.append({
+                "id": node_id,
+                "name": _node_label(node_id),
+                "definitionId": str(node.get("definitionId") or ""),
+                "position": copy.deepcopy(node.get("position")),
+            })
+            candidate.remove_node(node_id)
+        billing: list[tuple[str, str, Mapping[str, Any] | None, Mapping[str, Any]]] = []
+        for index, raw in enumerate(raw_nodes):
+            node_id = raw["id"]
+            current = candidate.nodes.get(node_id)
+            definition_id, params, position, outputs, label = _validated_ingress_node(
+                raw, index, include_outputs=current is None,
+            )
+            _refuse_agent_internal_params(params, node_id)
+            _check_provider(definition_id, params, node_id)
+            _check_krea_auth(definition_id, params, node_id)
+            params = migrate_params(definition_id, params)
+            if current is None:
+                _check_asset_refs(definition_id, params, node_id)
+                billing.append((node_id, definition_id, None, params))
+                try:
+                    candidate.add_node(definition_id, params, position=position, outputs=outputs, node_id=node_id)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                if label:
+                    candidate.set_label(node_id, label)
+                added.append(node_id)
+                continue
+            if str(current.get("definitionId") or "") != definition_id:
+                raise HTTPException(status_code=409, detail=(
+                    f"{node_id} is a different node now, so this step can't be put back. "
+                    "Reload the canvas to see the current graph."))
+            # A node that is still there changes only what the item sends: the
+            # canvas leaves out params and name when the step didn't touch them.
+            if "params" in raw:
+                params_before = copy.deepcopy(current.get("params") or {})
+                _check_asset_refs(definition_id, params, node_id, before=params_before)
+                if definition_id == "paper-source":
+                    kept = _kept_paper_source(params_before, params)
+                    if kept is not None:
+                        params["_paperSource"] = kept
+                _author_cinema_scene(candidate, node_id, current, params)
+                _keep_recovery_checkpoint(current, params)
+                billing.append((node_id, definition_id, params_before, params))
+                if params != params_before:
+                    candidate.set_params(node_id, params)
+                    changed[node_id] = params_before
+            previous_label = str(current.get("label") or "")
+            if "label" in raw and (label or "") != previous_label:
+                candidate.set_label(node_id, label)
+                renamed[node_id] = (previous_label, label or "")
+            if position is not None:
+                point = {"x": float(position["x"]), "y": float(position["y"])}
+                if current.get("position") != point:
+                    candidate.update_positions({node_id: point})
+                    moved.append(node_id)
+        _refuse_agent_billing_change(billing)
+        wired: list[dict[str, Any]] = []
+        for source, source_handle, target, target_handle in wires:
+            if any(edge["source"] == source and edge["sourceHandle"] == source_handle
+                   and edge["target"] == target and edge["targetHandle"] == target_handle
+                   for edge in candidate.edges):
+                continue
+            missing = next((node_id for node_id in (source, target) if node_id not in candidate.nodes), None)
+            if missing is not None:
+                raise HTTPException(status_code=409, detail=(
+                    f"{missing} is no longer on the canvas, so its wire can't be put back. "
+                    "Reload the canvas to see the current graph."))
+            _validate_connect_handles(source, source_handle, target, target_handle, graph=candidate)
+            wired.append(candidate.connect(source, source_handle, target, target_handle))
+        try:
+            graph_nodes, graph_edges = candidate.to_execute_format()
+            topological_sort(
+                [GraphNode.model_validate(node) for node in graph_nodes],
+                [GraphEdge.model_validate(edge) for edge in graph_edges],
+            )
+        except CycleError as exc:
+            raise HTTPException(status_code=400, detail=f"graph contains a cycle: {exc}") from exc
+        _refuse_agent_change_to_approved_runs(candidate)
+        touched = sorted(set(added) | set(changed))
+        _commit_graph_candidate_with_recoveries(
+            candidate,
+            [candidate.nodes[node_id] for node_id in touched],
+            source="restore",
+        )
+
+    await _broadcast_graph_sync(edit=True, moved=moved)
+    for edge in unwired:
+        _journal_edge("edge.removed", edge, note=note)
+    for gone in removed:
+        _journal(
+            "node.removed",
+            node_id=gone["id"],
+            data={"name": gone["name"], "definitionId": gone["definitionId"]},
+            summary=f"removed {gone['name']} ({gone['id']}){note}",
+        )
+        try:
+            detached = canvas_pins.detach_node(gone["id"], gone["position"])
+        except (PinError, ProjectStoreError):
+            detached = []
+        await _journal_detached_pins(detached, f"{gone['name']} was removed{note}")
+        await _announce_closed_proposals(
+            canvas_proposals.invalidate_referencing(gone["id"], f"{gone['name']} ({gone['id']}) was removed{note}")
+        )
+        agent_presence.forget_node(gone["id"])
+    for node_id in added:
+        _journal_node_added(node_id, note=note)
+    for node_id, before in changed.items():
+        changes = param_changes(before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
+        if changes:
+            _journal(
+                "node.params",
+                node_id=node_id,
+                data=changes,
+                summary=f"set {_listed(changes['keys'], 4)} on {_node_label(node_id)} ({node_id}){note}",
+            )
+    for node_id, (was, now) in renamed.items():
+        definition_id = str((cli_graph.nodes.get(node_id) or {}).get("definitionId") or "")
+        display = (node_registry.get(definition_id) or {}).get("displayName", definition_id)
+        _journal(
+            "node.renamed",
+            node_id=node_id,
+            data={"from": was or display, "to": now or display},
+            summary=f"renamed {was or display} ({node_id}) to {now or display}{note}",
+        )
+    far = [node_id for node_id in moved
+           if _moved_far_enough(shown.get(node_id), cli_graph.nodes[node_id].get("position") or {})]
+    if far:
+        _journal(
+            "node.moved",
+            node_id=far[0] if len(far) == 1 else None,
+            data={"nodeIds": far[:50], "count": len(far)},
+            summary=f"moved {_listed(far)}{note}",
+        )
+    for edge in wired:
+        _journal_edge("edge.added", edge, note=note)
+    publish_action(f"{action.capitalize()} on the canvas: {len(added)} back, {len(removed)} removed, "
+                   f"{len(changed)} changed, {len(wired)} wired, {len(unwired)} unwired")
+    return {
+        "status": "restored",
+        "action": action,
+        "added": added,
+        "removed": [gone["id"] for gone in removed],
+        "changed": sorted(changed),
+        "renamed": sorted(renamed),
+        "moved": moved,
+        "wired": [_edge_data(edge) for edge in wired],
+        "unwired": unwired,
     }
 
 
@@ -8078,7 +8533,7 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
         body.get("targetHandle", ""),
     )
     if removed:
-        await _broadcast_graph_sync()
+        await _broadcast_graph_sync(edit=True)
         _journal_edge("edge.removed", body)
         publish_action(
             f"Unwired {body.get('source', '')}:{body.get('sourceHandle', '')} → "
@@ -8153,6 +8608,88 @@ def _folded_billing_baseline(reference: str, folded: set[str]) -> dict[str, Any]
     return {node_route.PROVIDER_PARAM: "krea"} if reference in folded else None
 
 
+def _validated_ingress_node(
+    raw: dict[str, Any],
+    index: int,
+    *,
+    include_outputs: bool,
+    normalize_image_inputs: bool = True,
+) -> tuple[str, dict[str, Any], dict[str, Any] | None, dict[str, Any] | None, str | None]:
+    """Validate one ingress node: (definitionId, params, position, outputs, custom label).
+
+    Shared by imports, clusters (_stage_graph_nodes) and POST /api/graph/restore."""
+    definition_id = raw.get("definitionId")
+    if not isinstance(definition_id, str) or not definition_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"nodes[{index}].definitionId must be a non-empty string",
+        )
+    raw_params = raw.get("params", {})
+    params = {} if raw_params is None else raw_params
+    if not isinstance(params, dict):
+        raise HTTPException(
+            status_code=400,
+            detail=f"nodes[{index}].params must be an object",
+        )
+    # A retired definition (its provider shut the model down) becomes its
+    # replacement, so saved graphs and exports still load.
+    definition_id, params, retired_label = migrate_node(definition_id, params)
+    if node_registry.get(definition_id) is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unknown node definition '{definition_id}'",
+        )
+    _validate_params(definition_id, params)
+    params = _coerce_params(definition_id, params)
+    if definition_id == "image-input" and normalize_image_inputs:
+        params = _normalize_image_input_params(params)
+
+    position = raw.get("position")
+    if position is not None and not isinstance(position, dict):
+        raise HTTPException(
+            status_code=400,
+            detail=f"nodes[{index}].position must be an object",
+        )
+    if position is not None:
+        coordinates = [position.get("x"), position.get("y")]
+        if any(
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(float(value))
+            for value in coordinates
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"nodes[{index}].position requires finite numeric x and y"
+                ),
+            )
+    outputs: dict[str, Any] | None = None
+    if include_outputs:
+        supplied_outputs = raw.get("outputs", {})
+        raw_outputs = {} if supplied_outputs is None else supplied_outputs
+        if not isinstance(raw_outputs, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"nodes[{index}].outputs must be an object",
+            )
+        try:
+            _validate_imported_outputs(
+                definition_id,
+                raw_outputs,
+                node_index=index,
+                params=params,
+            )
+            outputs = _normalize_outputs_for_storage(raw_outputs)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"nodes[{index}].outputs is invalid: {exc}",
+            ) from exc
+    label = _custom_node_label(raw.get("label"), definition_id) or retired_label
+    return definition_id, params, position, outputs, label
+
+
 def _stage_graph_nodes(
     candidate: CLIGraph,
     raw_nodes: list[dict[str, Any]],
@@ -8175,74 +8712,9 @@ def _stage_graph_nodes(
                 status_code=400,
                 detail=f"duplicate node reference '{reference}'",
             )
-        definition_id = raw.get("definitionId")
-        if not isinstance(definition_id, str) or not definition_id:
-            raise HTTPException(
-                status_code=400,
-                detail=f"nodes[{index}].definitionId must be a non-empty string",
-            )
-        raw_params = raw.get("params", {})
-        params = {} if raw_params is None else raw_params
-        if not isinstance(params, dict):
-            raise HTTPException(
-                status_code=400,
-                detail=f"nodes[{index}].params must be an object",
-            )
-        # A retired definition (its provider shut the model down) becomes its
-        # replacement, so saved graphs and exports still load.
-        definition_id, params, retired_label = migrate_node(definition_id, params)
-        if node_registry.get(definition_id) is None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"unknown node definition '{definition_id}'",
-            )
-        _validate_params(definition_id, params)
-        params = _coerce_params(definition_id, params)
-        if definition_id == "image-input" and normalize_image_inputs:
-            params = _normalize_image_input_params(params)
-
-        position = raw.get("position")
-        if position is not None and not isinstance(position, dict):
-            raise HTTPException(
-                status_code=400,
-                detail=f"nodes[{index}].position must be an object",
-            )
-        if position is not None:
-            coordinates = [position.get("x"), position.get("y")]
-            if any(
-                not isinstance(value, (int, float))
-                or isinstance(value, bool)
-                or not math.isfinite(float(value))
-                for value in coordinates
-            ):
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"nodes[{index}].position requires finite numeric x and y"
-                    ),
-                )
-        outputs: dict[str, Any] | None = None
-        if include_outputs:
-            supplied_outputs = raw.get("outputs", {})
-            raw_outputs = {} if supplied_outputs is None else supplied_outputs
-            if not isinstance(raw_outputs, dict):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"nodes[{index}].outputs must be an object",
-                )
-            try:
-                _validate_imported_outputs(
-                    definition_id,
-                    raw_outputs,
-                    node_index=index,
-                    params=params,
-                )
-                outputs = _normalize_outputs_for_storage(raw_outputs)
-            except ValueError as exc:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"nodes[{index}].outputs is invalid: {exc}",
-                ) from exc
+        definition_id, params, position, outputs, label = _validated_ingress_node(
+            raw, index, include_outputs=include_outputs, normalize_image_inputs=normalize_image_inputs,
+        )
         try:
             new_id = candidate.add_node(
                 definition_id,
@@ -8255,7 +8727,7 @@ def _stage_graph_nodes(
                 status_code=400,
                 detail=f"invalid node '{reference}': {exc}",
             ) from exc
-        if label := _custom_node_label(raw.get("label"), definition_id) or retired_label:
+        if label:
             candidate.nodes[new_id]["label"] = label
         id_map[reference] = new_id
     return id_map
@@ -8373,7 +8845,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
             list(candidate.nodes.values()),
             source="import",
         )
-    exported = await _broadcast_graph_sync(graph_replaced=True)
+    exported = await _broadcast_graph_sync(graph_replaced=True, edit=True)
     publish_action(
         f"Loaded graph ({len(cli_graph.nodes)} nodes, {len(cli_graph.edges)} edges)"
     )
@@ -8469,7 +8941,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
             [candidate.nodes[node_id] for node_id in id_map.values()],
             source="cluster",
         )
-    await _broadcast_graph_sync()
+    await _broadcast_graph_sync(edit=True)
     publish_action(f"Created cluster ({len(id_map)} nodes)")
     _journal_cluster(list(id_map.values()), created_edge_ids)
 
@@ -8913,6 +9385,10 @@ async def list_projects() -> dict[str, Any]:
             changed = True
         elif active := catalog["activeProjectId"]:
             changed = _overlay_live_project(catalog["projects"][active], exported)
+        for project in catalog["projects"].values():
+            if needs_cover(project):  # saved before covers existed
+                refresh_metadata(project, touch=False)
+                changed = True
         changed = purge_expired_trash(catalog) or changed
         if changed:
             project_store.commit(catalog)
@@ -8998,10 +9474,54 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
 
 
+def _switch_actor() -> dict[str, Any] | None:
+    """Who opened or made a project, when it wasn't the person's own canvas:
+    an agent (named by its token or X-Nebula-Agent) or an unnamed script. The
+    person's canvas follows such a switch instead of calling it a conflict."""
+    headers = current_request_headers()
+    if is_person(headers):
+        return None
+    actor = actor_for_headers(headers)
+    if actor.get("kind") != "agent" and has_agent_marker(headers):
+        actor = {"kind": "agent", "name": "An agent"}
+    return {key: actor[key] for key in ("kind", "name", "color") if actor.get(key)}
+
+
+def _begin_switch(catalog: dict[str, Any], actor: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Note what was open before a switch. For a switch the person didn't
+    make, their open tab may still hold a few unsaved changes (a pan, a run
+    record) for the project it was showing: `handoff` lets that tab save them
+    into it (save_project), with the revision it had, until the next switch."""
+    previous_id = catalog.get("activeProjectId")
+    previous = catalog["projects"].get(previous_id) if previous_id else None
+    if actor is None:
+        catalog.pop("handoff", None)
+        return None
+    if previous is not None:
+        catalog["handoff"] = {"projectId": previous_id, "revision": catalog["workspaceRevision"]}
+    else:
+        catalog.pop("handoff", None)
+    return {
+        "actor": actor,
+        "previousProjectId": previous_id if previous is not None else None,
+        "previousProjectName": previous["name"] if previous is not None else None,
+        "previousRevision": catalog["workspaceRevision"],
+    }
+
+
+def _switch_notice(start: dict[str, Any] | None, project: dict[str, Any], *, created: bool) -> dict[str, Any] | None:
+    if start is None:
+        return None
+    verb = "Made and opened" if created else "Opened"
+    publish_action(f"{verb} project “{project['name']}”")
+    return {**start, "projectId": project["id"], "projectName": project["name"], "created": created}
+
+
 @app.post("/api/projects")
 async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, Any]:
     body = body or {}
     exported = await _projects_live_export()
+    actor = _switch_actor()
     with project_store.transaction() as catalog, _paid_graph_mutation("create a project"):
         _project_revision(body, catalog)
         _project_replacement_guard()
@@ -9019,12 +9539,16 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
             project = make_project(body.get("name", "Untitled project"))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if actor is not None and actor.get("kind") == "agent":
+            project["createdBy"] = {"kind": "agent", "name": actor.get("name") or "An agent"}
+        start = _begin_switch(catalog, actor)
         catalog["projects"][project["id"]] = project
         catalog["activeProjectId"] = project["id"]
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, CLIGraph())
         revision = catalog["workspaceRevision"]
-    await _broadcast_graph_sync(graph_replaced=True, reason="project-create")
+    await _broadcast_graph_sync(graph_replaced=True, reason="project-create",
+                                project_switch=_switch_notice(start, project, created=True))
     # A bundle built for another version doesn't load it (projectStore.ts activate).
     return {"project": public_project(project), "workspaceRevision": revision, "paramsVersion": PARAMS_VERSION}
 
@@ -9032,6 +9556,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
 @app.post("/api/projects/{project_id}/open")
 async def open_saved_project(project_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     exported = await _projects_live_export()
+    actor = _switch_actor()
     with project_store.transaction() as catalog, _paid_graph_mutation("open a project"):
         _project_revision(body or {}, catalog)
         _project_replacement_guard()
@@ -9043,11 +9568,13 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         project["snapshot"], candidate = _stage_project_snapshot(project["snapshot"], historical=historical, warnings=warnings)
         candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
         project["lastOpenedAt"] = project_now()
+        start = _begin_switch(catalog, actor)
         catalog["activeProjectId"] = project_id
         catalog["workspaceRevision"] = uuid4().hex
         _commit_project_workspace(catalog, candidate)
         revision = catalog["workspaceRevision"]
-    await _broadcast_graph_sync(graph_replaced=True, reason="project-open")
+    await _broadcast_graph_sync(graph_replaced=True, reason="project-open",
+                                project_switch=_switch_notice(start, project, created=False))
     # What opening changed that the person should know (a folded Krea node's
     # dropped job-output connections); the snapshot is saved migrated, so
     # this is said once.
@@ -9059,6 +9586,19 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
 async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
     with project_store.transaction() as catalog:
         project = _project_id_or_404(project_id, catalog)
+        handoff = catalog.get("handoff") or {}
+        if ("snapshot" in body and handoff.get("projectId") == project_id
+                and body.get("workspaceRevision") == handoff.get("revision")):
+            # Not once: an autosave already in flight at the switch lands
+            # first, and the tab's own last save must still land after it.
+            # The next switch (anyone's) ends the handoff. The project may
+            # be the open one again: an agent reopened the project the tab
+            # was showing, which reloads it from what was saved.
+            _save_handoff(project, body["snapshot"])
+            refresh_metadata(project)
+            project_store.commit(catalog)
+            return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
+                    "handoff": True}
         _project_revision(body, catalog, required="snapshot" in body)
         if "snapshot" in body:
             if catalog["activeProjectId"] != project_id:
@@ -9083,6 +9623,64 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
         return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"]}
 
 
+def _save_handoff(project: dict[str, Any], raw: Any) -> None:
+    """The last save from a tab whose project an agent switched away from.
+
+    The switch already merged the live canvas into this project
+    (_overlay_live_project), so nodes and wires the backend had stay as
+    saved. The tab adds what only it holds: nodes and wires it never sent to
+    the backend, its viewport, run history and Create draft.
+    """
+    stored = project["snapshot"]
+    historical = {node["id"]: node.get("data", {}).get("definitionId") for node in stored["nodes"]}
+    staged, candidate = _stage_project_snapshot(raw, historical=historical)
+    _refuse_agent_billing_in_project(candidate, _snapshot_nodes(stored))
+    backend_nodes = set(project.get("_backendNodeIds") or [])
+    backend_edges = set(project.get("_backendEdgeIds") or [])
+    stored_nodes = {node["id"]: node for node in stored["nodes"]}
+    nodes = [stored_nodes.get(node["id"], node) if node["id"] in backend_nodes else node for node in staged["nodes"]]
+    listed = {node["id"] for node in nodes}
+    nodes += [node for node in stored["nodes"] if node["id"] in backend_nodes and node["id"] not in listed]
+    kept = {node["id"] for node in nodes}
+    stored_edges = {edge["id"]: edge for edge in stored["edges"]}
+    edges = [stored_edges.get(edge["id"], edge) if edge["id"] in backend_edges else edge for edge in staged["edges"]]
+    listed_edges = {edge["id"] for edge in edges}
+    edges += [edge for edge in stored["edges"] if edge["id"] in backend_edges and edge["id"] not in listed_edges]
+    edges = [edge for edge in edges if edge["source"] in kept and edge["target"] in kept]
+    project["snapshot"] = {**staged, "nodes": nodes, "edges": edges}
+
+
+@app.get("/api/projects/{project_id}/covers")
+async def list_project_covers(project_id: str) -> dict[str, Any]:
+    """The images the person can pin as this project's card picture."""
+    exported = await _projects_live_export()
+    with project_store.transaction() as catalog:
+        project = _project_id_or_404(project_id, catalog)
+        if catalog["activeProjectId"] == project_id and _overlay_live_project(project, exported):
+            project_store.commit(catalog)
+        return {"images": project_cover.choices(project["snapshot"]), "pinned": project.get("coverPin"),
+                "cover": project.get("cover")}
+
+
+@app.put("/api/projects/{project_id}/cover")
+async def pin_project_cover(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Pin one of the project's images as its card picture ({"url": ...}), or
+    go back to the automatic one ({"url": null}). The person's choice only."""
+    require_person(current_request_headers())
+    url = body.get("url")
+    with project_store.transaction() as catalog:
+        project = _project_id_or_404(project_id, catalog)
+        if url is None:
+            project.pop("coverPin", None)
+        else:
+            if not isinstance(url, str) or not project_cover.is_choice(project["snapshot"], url):
+                raise HTTPException(status_code=400, detail="Pick one of this project's own images for its cover.")
+            project["coverPin"] = url
+        refresh_metadata(project, touch=False)
+        project_store.commit(catalog)
+        return {"project": project_metadata(project)}
+
+
 @app.delete("/api/projects/{project_id}")
 async def delete_saved_project(project_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     """Move a project to Recently deleted. Generated media stays on disk.
@@ -9099,7 +9697,8 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
         if deleting_active:
             fences.enter_context(_paid_graph_mutation("delete the open project"))
             _project_replacement_guard("delete the open project")
-        trashed = move_to_trash(catalog, project_id)
+        trashed = move_to_trash(catalog, project_id,
+                                actor_record(actor_for_headers(current_request_headers())))
         if deleting_active:
             catalog["activeProjectId"] = None
             catalog["workspaceRevision"] = uuid4().hex
@@ -9147,6 +9746,8 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
 
 @app.delete("/api/projects/trash/{project_id}")
 async def purge_trashed_project(project_id: str) -> dict[str, Any]:
+    # Deleting for good can't be undone, so only the person may (agents restore).
+    require_person(current_request_headers(), hint=_RESTORE_HINT)
     with project_store.transaction() as catalog:
         _trashed_or_404(project_id, catalog)
         del catalog["trash"][project_id]
@@ -9155,12 +9756,36 @@ async def purge_trashed_project(project_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/projects/trash/empty")
-async def empty_project_trash() -> dict[str, Any]:
+async def empty_project_trash(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Delete the trashed projects for good. Person only. With ``{"ids": [...]}``
+    (what the person's list showed) only those go, so a project an agent
+    deleted after the list loaded stays restorable."""
+    require_person(current_request_headers(), hint=_RESTORE_HINT)
+    shown = _shown_trash_ids(body, "ids")
     with project_store.transaction() as catalog:
-        if catalog.get("trash"):
-            catalog["trash"] = {}
+        trash = catalog.get("trash") or {}
+        doomed = [project_id for project_id in trash if shown is None or project_id in shown]
+        for project_id in doomed:
+            del trash[project_id]
+        if doomed:
             project_store.commit(catalog)
-        return {"trash": []}
+        return {"trash": _trash_listing(catalog)}
+
+
+def _shown_trash_ids(body: dict[str, Any] | None, key: str) -> set[str] | None:
+    """The ids an empty request says the person was shown, or None when it
+    doesn't say (then everything that matches goes, as before)."""
+    if not body or key not in body:
+        return None
+    raw = body.get(key)
+    if not isinstance(raw, list) or len(raw) > 10_000 or not all(isinstance(value, str) for value in raw):
+        raise HTTPException(status_code=400, detail=f"{key} must be a list of ids")
+    for value in raw:
+        try:
+            validate_project_id(value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return set(raw)
 
 
 def _display_positions(
@@ -9202,6 +9827,8 @@ async def export_graph_for_frontend() -> dict:
     _normalize_cli_graph_output_refs()
     state = cli_graph.get_state()
     if not state["nodes"]:
+        # A cleared canvas restarts node ids, so an open arrange can't apply.
+        canvas_arrange.clear()
         return {
             **_workspace_context(),
             "nodes": [],
@@ -9254,6 +9881,10 @@ async def export_graph_for_frontend() -> dict:
         "nodes": rf_nodes,
         "edges": rf_edges,
         "empty": False,
+        # Agent edits that asked the canvas to lay out their new nodes once
+        # drawn (services/canvas_arrange.py). A canvas that connects later
+        # gets them too.
+        "arrange": canvas_arrange.pending(cli_graph.nodes),
         "providerRecoveries": provider_recovery_store.list(),
         "providerStartAmbiguities": provider_start_guard.list(),
         "executionStatuses": execution_runs.list_statuses(),
@@ -9860,6 +10491,19 @@ class MoodboardImageModel(BaseModel):
     excluded: bool = False
 
 
+class MoodboardPinnedColorsModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    include: list[str] = Field(default_factory=list)
+    exclude: list[str] = Field(default_factory=list)
+
+
+class MoodboardBriefOverrideModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+
+
 class MoodboardCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -9870,6 +10514,12 @@ class MoodboardCreate(BaseModel):
     strength: float = 0.7
     analysis: dict[str, Any] | None = None
     projectId: str | None = None
+    # The person's brief fields (services/moodboard_brief.py). They live on
+    # the board, so analyzing again keeps them.
+    direction: str = ""
+    avoid: list[str] = Field(default_factory=list)
+    pinnedColors: MoodboardPinnedColorsModel | None = None
+    briefOverride: MoodboardBriefOverrideModel | None = None
 
 
 class MoodboardUpdate(BaseModel):
@@ -9886,6 +10536,12 @@ class MoodboardUpdate(BaseModel):
     # Moodboard Studio sends the board's own project back; a different one is
     # refused, since a board can't move between projects.
     projectId: str | None = None
+    direction: str | None = None
+    avoid: list[str] | None = None
+    pinnedColors: MoodboardPinnedColorsModel | None = None
+    # {"text": ...} sets a hand-written brief; an explicit null removes it
+    # (the board goes back to the generated brief).
+    briefOverride: MoodboardBriefOverrideModel | None = None
 
 
 class PresetCreate(BaseModel):
@@ -9932,6 +10588,31 @@ def _char_store():
 def _moodboard_store():
     from services.moodboard_store import MoodboardStore
     return MoodboardStore()
+
+
+def _moodboard_author() -> str:
+    """Who is changing a board's hand-written brief: "person" only when the
+    person gate says so (services/person_gate.py), else "agent"."""
+    return "person" if _is_person_request() else "agent"
+
+
+def _refuse_override_change(exc: Exception) -> NoReturn:
+    """Turn the store's BriefOverrideProtected into the person gate's refusal
+    (403, ``agent_refused`` or ``person_required``) with the store's reason."""
+    try:
+        require_person(current_request_headers())
+    except PersonGateError as gate:
+        gate.detail = f"{exc} {gate.detail}"
+        raise
+    raise HTTPException(status_code=403, detail=str(exc))  # unreachable: only non-persons are refused
+
+
+def _moodboard_out(board: dict) -> dict:
+    """A board as the API returns it: the saved board plus ``brief``, what
+    generators get from it (services/moodboard_brief.compose). ``brief`` is
+    computed on every read and never saved."""
+    from services.moodboard_brief import with_brief
+    return with_brief(board)
 
 
 def _validate_project_id_param(project_id: str | None) -> None:
@@ -10005,7 +10686,7 @@ async def get_character(char_id: str) -> dict:
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
     if char is None:
-        raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
+        return _asset_not_found("character", char_id)
     return char
 
 
@@ -10016,7 +10697,11 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     try:
         character = store.update(char_id, **updates)
-    except (KeyError, ValueError):
+    except KeyError:
+        # In Recently deleted (an agent may have deleted it): say so, so the
+        # Studio can tell the person to restore it and keep their edits.
+        return _asset_not_found("character", char_id)
+    except ValueError:
         raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
     await _broadcast_stored_asset("character", character)
     return character
@@ -10024,14 +10709,15 @@ async def update_character(char_id: str, body: CharacterUpdate) -> dict:
 
 @app.delete("/api/characters/{char_id}")
 async def delete_character(char_id: str) -> dict:
-    """Delete a Character by id."""
+    """Move a Character to Recently deleted. Anyone, agents included, may:
+    it can be restored (POST /api/trash/character/{id}/restore)."""
     store = _char_store()
     try:
-        store.delete(char_id)
+        record = store.delete(char_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
     await _broadcast_stored_asset("character", None, char_id, deleted=True)
-    return {"status": "deleted", "id": char_id}
+    return {"status": "trashed", "id": char_id, "trashed": record}
 
 
 # ---------- Moodboards: provider-neutral creative-direction store ----------
@@ -10041,7 +10727,7 @@ async def list_moodboards(scope: str = "global", projectId: str | None = None) -
     _validate_project_id_param(projectId)
     store = _moodboard_store()
     try:
-        return store.list(scope=scope, projectId=projectId)
+        return [_moodboard_out(board) for board in store.list(scope=scope, projectId=projectId)]
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -10059,11 +10745,16 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
             strength=body.strength,
             analysis=body.analysis,
             projectId=body.projectId,
+            direction=body.direction,
+            avoid=body.avoid,
+            pinnedColors=body.pinnedColors.model_dump() if body.pinnedColors else None,
+            briefOverride=body.briefOverride.model_dump() if body.briefOverride else None,
+            by=_moodboard_author(),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
-    return moodboard
+    return _moodboard_out(moodboard)
 
 
 @app.get("/api/moodboards/{moodboard_id}")
@@ -10074,8 +10765,8 @@ async def get_moodboard(moodboard_id: str) -> dict:
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     if moodboard is None:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
-    return moodboard
+        return _asset_not_found("moodboard", moodboard_id)
+    return _moodboard_out(moodboard)
 
 
 @app.put("/api/moodboards/{moodboard_id}")
@@ -10088,16 +10779,42 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     }
     if "analysis" in body.model_fields_set and body.analysis is None:
         updates["analysis"] = None
+    if "briefOverride" in body.model_fields_set and body.briefOverride is None:
+        updates["briefOverride"] = None
     if "images" in updates:
         updates["images"] = [img.model_dump() if hasattr(img, "model_dump") else img for img in body.images or []]
+    from services.moodboard_store import BriefOverrideProtected
     try:
-        moodboard = store.update(moodboard_id, **updates)
+        moodboard = store.update(moodboard_id, by=_moodboard_author(), **updates)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+        # In Recently deleted (an agent may have deleted it): say so, so the
+        # Studio can tell the person to restore it and keep their edits.
+        return _asset_not_found("moodboard", moodboard_id)
+    except BriefOverrideProtected as exc:
+        _refuse_override_change(exc)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
-    return moodboard
+    return _moodboard_out(moodboard)
+
+
+@app.post("/api/moodboards/{moodboard_id}/brief-override/keep")
+async def keep_moodboard_brief_override(moodboard_id: str) -> dict:
+    """Keep the board's hand-written brief after the board changed: clears
+    "changed since you edited this" until the next change. Only the person
+    may keep text the person wrote; an agent may keep its own."""
+    from services.moodboard_store import BriefOverrideProtected
+    store = _moodboard_store()
+    try:
+        moodboard = store.keep_brief_override(moodboard_id, by=_moodboard_author())
+    except KeyError:
+        return _asset_not_found("moodboard", moodboard_id)
+    except BriefOverrideProtected as exc:
+        _refuse_override_change(exc)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    await _broadcast_stored_asset("moodboard", moodboard)
+    return _moodboard_out(moodboard)
 
 
 @app.post("/api/moodboards/{moodboard_id}/analyze")
@@ -10119,18 +10836,208 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     await _broadcast_stored_asset("moodboard", moodboard)
-    return moodboard
+    return _moodboard_out(moodboard)
 
 
 @app.delete("/api/moodboards/{moodboard_id}")
 async def delete_moodboard(moodboard_id: str) -> dict:
+    """Move a board to Recently deleted. Anyone, agents included, may: it
+    can be restored (POST /api/trash/moodboard/{id}/restore)."""
     store = _moodboard_store()
     try:
-        store.delete(moodboard_id)
+        record = store.delete(moodboard_id, deleted_by=actor_record(actor_for_headers(current_request_headers())))
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
-    return {"status": "deleted", "id": moodboard_id}
+    return {"status": "trashed", "id": moodboard_id, "trashed": record}
+
+
+# ---------- Recently deleted: moodboards, characters and projects ----------
+#
+# Deleting a board, a character or a project moves it here, and anyone,
+# agents included, may restore it. Deleting for good can't be undone, so it is
+# the person's alone (services/person_gate.py). Boards and characters stay
+# until the person deletes them for good; projects keep their 30-day expiry
+# (services/project_store.py TRASH_RETENTION).
+
+TRASH_KINDS = ("moodboard", "character", "project")
+_RESTORE_HINT = ("Deleting for good can't be undone, so only the person can. You can restore it instead: "
+                 "nebula trash restore <kind> <id>, the restore_from_trash tool, or "
+                 "POST /api/trash/<kind>/<id>/restore.")
+
+
+def _trash_kind(kind: str) -> str:
+    if kind not in TRASH_KINDS:
+        raise HTTPException(status_code=400, detail=f"kind must be one of {', '.join(TRASH_KINDS)}")
+    return kind
+
+
+def _asset_store(kind: str):
+    return _moodboard_store() if kind == "moodboard" else _char_store()
+
+
+def _asset_noun(kind: str) -> str:
+    return "Moodboard" if kind == "moodboard" else "Character"
+
+
+def _asset_not_found(kind: str, asset_id: str) -> JSONResponse:
+    """404 for a board or character that isn't live. When it is in Recently
+    deleted the body says so (code "in_trash", with the trash record), so a
+    card can offer Restore instead of "not found"."""
+    record = _trashed_asset(kind, asset_id)
+    if record is None:
+        return JSONResponse(status_code=404, content={"detail": f"{_asset_noun(kind)} '{asset_id}' not found"})
+    return JSONResponse(status_code=404, content={
+        "detail": (f"{_asset_noun(kind)} '{asset_id}' is in Recently deleted. Restore it with "
+                   f"nebula trash restore {kind} {asset_id} (POST /api/trash/{kind}/{asset_id}/restore)."),
+        "code": "in_trash",
+        "trashed": record,
+    })
+
+
+def _trash_scope(scope: str | None, project_id: str | None) -> None:
+    _validate_project_id_param(project_id)
+    if scope not in (None, "global", "project"):
+        raise HTTPException(status_code=400, detail="scope must be global or project")
+    if scope == "project" and not project_id:
+        raise HTTPException(status_code=400, detail="projectId is required for scope=project")
+
+
+def _project_trash_items() -> list[dict[str, Any]]:
+    with project_store.transaction() as catalog:
+        if purge_expired_trash(catalog):
+            project_store.commit(catalog)
+        return [{"kind": "project", **entry} for entry in _trash_listing(catalog)]
+
+
+@app.get("/api/trash")
+async def list_trash(kind: str | None = None, scope: str | None = None,
+                     projectId: str | None = None) -> dict[str, Any]:
+    """What's in Recently deleted, newest first. ``kind`` narrows it to
+    moodboards, characters or projects; ``scope`` (global, or project with
+    ``projectId``) narrows boards and characters the way their lists do."""
+    if kind is not None:
+        _trash_kind(kind)
+    _trash_scope(scope, projectId)
+    items: list[dict[str, Any]] = []
+    for asset_kind in ("moodboard", "character"):
+        if kind in (None, asset_kind):
+            try:
+                items.extend(_asset_store(asset_kind).list_trash(scope=scope, projectId=projectId))
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if kind in (None, "project") and scope is None:
+        items.extend(_project_trash_items())
+    items.sort(key=lambda item: str(item.get("deletedAt") or ""), reverse=True)
+    return {"items": items}
+
+
+@app.post("/api/trash/{kind}/{item_id}/restore")
+async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
+    """Bring something back from Recently deleted with the same id and
+    contents. Agents may: a restore undoes a delete."""
+    _trash_kind(kind)
+    if kind == "project":
+        result = await restore_saved_project(item_id)
+        return {"restored": "project", "id": item_id, **result}
+    try:
+        asset = _asset_store(kind).restore(item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except asset_trash.AlreadyLive:
+        raise HTTPException(status_code=409, detail=(
+            f"{_asset_noun(kind)} '{item_id}' is already back; nothing to restore"))
+    except KeyError:
+        # Already restored (another tab, an agent, or a retry): nothing to do,
+        # and the caller gets what it asked for.
+        live = _stored_asset(kind, item_id)
+        if live is not None:
+            return {"restored": kind, "id": item_id, "asset": _asset_out(kind, live), "alreadyRestored": True}
+        raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
+    await _broadcast_stored_asset(kind, asset)
+    # Read back through the store, as GET does (a board gets its brief).
+    return {"restored": kind, "id": item_id, "asset": _asset_out(kind, _stored_asset(kind, item_id) or asset)}
+
+
+@app.delete("/api/trash/{kind}/{item_id}")
+async def purge_trashed(kind: str, item_id: str) -> dict[str, Any]:
+    """Delete one item for good. Only the person may."""
+    _trash_kind(kind)
+    require_person(current_request_headers(), hint=_RESTORE_HINT)
+    if kind == "project":
+        await purge_trashed_project(item_id)
+        return {"purged": "project", "id": item_id}
+    try:
+        _asset_store(kind).purge(item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
+    # A card that showed it "in Recently deleted" now says it's gone.
+    await _broadcast_stored_asset(kind, None, item_id, deleted=True)
+    return {"purged": kind, "id": item_id}
+
+
+@app.post("/api/trash/empty")
+async def empty_trash(kind: str | None = None, scope: str | None = None,
+                      projectId: str | None = None, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Delete for good everything ``GET /api/trash`` lists with the same
+    filters. Only the person may.
+
+    The canvas sends ``{"items": [{"kind", "id"}, ...]}``, what its list
+    showed, and then only those go: an agent's delete that landed after the
+    list loaded stays restorable. Without ``items`` everything listed goes."""
+    if kind is not None:
+        _trash_kind(kind)
+    _trash_scope(scope, projectId)
+    require_person(current_request_headers(), hint=_RESTORE_HINT)
+    shown = _shown_trash_items(body)
+    purged = 0
+    for asset_kind in ("moodboard", "character"):
+        if kind in (None, asset_kind):
+            store = _asset_store(asset_kind)
+            for record in store.list_trash(scope=scope, projectId=projectId):
+                if shown is not None and (asset_kind, record["id"]) not in shown:
+                    continue
+                try:
+                    store.purge(record["id"])
+                except KeyError:
+                    continue
+                purged += 1
+                await _broadcast_stored_asset(asset_kind, None, record["id"], deleted=True)
+    if kind in (None, "project") and scope is None:
+        with project_store.transaction() as catalog:
+            trash = catalog.get("trash") or {}
+            doomed = [project_id for project_id in trash if shown is None or ("project", project_id) in shown]
+            for project_id in doomed:
+                del trash[project_id]
+            if doomed:
+                purged += len(doomed)
+                project_store.commit(catalog)
+    return {"purged": purged}
+
+
+def _shown_trash_items(body: dict[str, Any] | None) -> set[tuple[str, str]] | None:
+    """``items`` from an empty request as {(kind, id)}, or None when absent."""
+    if not body or "items" not in body:
+        return None
+    raw = body.get("items")
+    if not isinstance(raw, list) or len(raw) > 10_000:
+        raise HTTPException(status_code=400, detail="items must be a list of {kind, id}")
+    shown: set[tuple[str, str]] = set()
+    for item in raw:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+            raise HTTPException(status_code=400, detail="items must be a list of {kind, id}")
+        item_kind = _trash_kind(str(item.get("kind")))
+        try:
+            if item_kind == "project":
+                validate_project_id(item["id"])
+            else:
+                asset_trash.validate_id(item["id"])
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        shown.add((item_kind, item["id"]))
+    return shown
 
 
 # ---------- Presets: named styles / prompt fragments + params ----------

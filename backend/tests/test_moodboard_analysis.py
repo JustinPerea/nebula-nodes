@@ -63,7 +63,7 @@ def test_weights_decide_the_palette_order() -> None:
     assert _close(cream_first["palette"][0], CREAM) and _close(cream_first["palette"][1], NAVY)
     shares = [c["share"] for c in cream_first["colors"] if c["role"] == "dominant"]
     assert shares == sorted(shares, reverse=True) and abs(sum(shares) - 1.0) < 0.01
-    assert cream_first["version"] == ANALYSIS_VERSION == 2
+    assert cream_first["version"] == ANALYSIS_VERSION == 3
 
 
 def test_the_largest_colour_leads_not_the_darkest() -> None:
@@ -83,7 +83,7 @@ def test_a_small_accent_is_kept_in_its_own_list() -> None:
     (accent,) = [c for c in analysis["colors"] if c["role"] == "accent"]
     assert accent["images"] == 2
     assert "Accent colors, used sparingly: " + analysis["accents"][0] in analysis["styleBrief"]
-    assert "Visual style only; avoid copying specific subjects or identities. Color palette: " in analysis["styleBrief"]
+    assert "The subject comes from the prompt. Color palette: " in analysis["styleBrief"]
     assert analysis["providerHints"]["generic"]["accents"] == analysis["accents"]
     cream_item = analysis["images"][1]
     assert _close(cream_item["palette"][0], CREAM) and _close(cream_item["accents"][0], ORANGE)

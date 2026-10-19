@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/wsClient', () => ({
-  wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), disconnect: vi.fn() },
+  wsClient: { connect: vi.fn(), subscribe: vi.fn(() => () => {}), subscribeFirst: vi.fn(() => () => {}), disconnect: vi.fn() },
 }));
 vi.mock('../lib/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/projects')>()),
@@ -123,7 +123,7 @@ describe('project autosave', () => {
     await vi.advanceTimersByTimeAsync(600);
     setPrompt('c');
     // Another tab switched the backend's active project while 'b' was saving.
-    const onSocket = vi.mocked(wsClient.subscribe).mock.calls.at(-1)?.[0];
+    const onSocket = vi.mocked(wsClient.subscribeFirst).mock.calls.at(-1)?.[0];
     onSocket?.({ type: 'graphSync', workspaceRevision: 'r2' } as never);
     expect(useProjectStore.getState()).toMatchObject({ initialized: false, dirty: true });
     finish();
