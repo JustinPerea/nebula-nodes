@@ -45,6 +45,7 @@ Spending: the person sets limits (get_spend_limits). A run over a limit, or with
 
 Projects: list_projects, open_project, new_project. Start new work in a new project rather than emptying the person's canvas; they can switch back.
 Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing). A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt); analysis.styleBrief is not. Only the person may change their own hand-written brief.
+A moodboard or Character is Global (every project lists it) or in one canvas project. moodboard_move and character_move move one between them ("global", "current" or a project); nodes that use it keep working everywhere, and moving it back undoes it.
 Deleted moodboards, characters and projects go to Recently deleted: list_trash shows them and restore_from_trash brings one back with the same id. Deleting for good is the person's alone.
 
 Answer the person's pins with resolve_pin. Use wait_for_canvas_change to wait for them instead of polling. If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
@@ -983,6 +984,44 @@ def moodboard_delete(board: str, ctx: Context | None = None) -> dict[str, Any]:
     import moodboard_client as boards
 
     return _board_call(boards.delete_board, _api(), board, _board_headers(ctx))
+
+
+_MOVE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
+
+
+@mcp.tool(annotations=_MOVE)
+def moodboard_move(board: str, to: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Move a moodboard (id or exact name) to Global or to a canvas project.
+
+    `to`: "global" (every project's Global tab lists it), "current" (the
+    project open on the canvas), or a project's id or exact name from
+    list_projects. Only where it's listed changes: its settings, brief and
+    analysis stay, and nodes that use it keep working in every project.
+    Anyone may move a board; moving it back (`to` = the result's `from`, or
+    "global" when that is null) undoes it.
+
+    Returns `status` ("moved", or "unchanged" when it was already there),
+    `from` and `to` (project ids, null for Global) with `fromName` and
+    `toName`, `movedBy`, and the board as moodboard_get gives it. Refused,
+    with what to do: no project open for "current", an unknown project, a
+    name two projects share, a project or board in Recently deleted."""
+    import moodboard_client as boards
+
+    result = _board_call(boards.move_board, _api(), board, to, _board_headers(ctx))
+    asset = result.get("asset")
+    return {**result, "asset": boards.brief(asset) if isinstance(asset, dict) else asset}
+
+
+@mcp.tool(annotations=_MOVE)
+def character_move(character: str, to: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Move a Character (id or exact name) to Global or to a canvas project,
+    as moodboard_move does for a board: `to` is "global", "current" or a
+    project's id or exact name. Nodes that use it keep working in every
+    project; moving it back undoes it. Returns `status`, `from`, `to`,
+    `fromName`, `toName`, `movedBy` and the Character as `asset`."""
+    import character_client as characters
+
+    return _board_call(characters.move_character, _api(), character, to, _board_headers(ctx))
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

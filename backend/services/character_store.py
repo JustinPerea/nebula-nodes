@@ -280,6 +280,39 @@ class CharacterStore:
         return char
 
     # ------------------------------------------------------------------
+    # move (Global <-> a canvas project)
+    # ------------------------------------------------------------------
+
+    def move(self, char_id: str, projectId: str | None) -> tuple[dict, dict, bool]:
+        """File a Character under canvas project ``projectId`` (None: Global)
+        and return ``(before, after, moved)``. Only ``projectId`` changes:
+        ``id``, ``version`` and ``updatedAt`` stay, since a move isn't an edit
+        (services/asset_project_rehome.move_asset). ``moved`` is False when it
+        was already there. The caller checks ``projectId`` is a live canvas
+        project (main.py). KeyError: no live Character with that id (one in
+        Recently deleted isn't live); FileExistsError: a different file with
+        this id is already in the target folder."""
+        from services.asset_project_rehome import GLOBAL_DIR, move_asset
+
+        root = _char_root()
+        path = _find_char_file(root, char_id)
+        if path is None:
+            raise KeyError(f"Character '{char_id}' not found")
+        target = projectId or None
+        _scope_dir(root, target)  # refuses an unsafe id before any path is built from it
+        # Two live copies (a re-home that skipped a collision leaves one in an
+        # old folder): which one is "the" asset isn't ours to guess.
+        copies = sorted(sub.name for sub in root.iterdir()
+                        if sub.is_dir() and not is_trash_folder(sub) and (sub / f"{char_id}.json").is_file())
+        if len(copies) > 1:
+            raise FileExistsError(f"there is a copy with this id in each of {', '.join(copies)}")
+        before = json.loads(path.read_text(encoding="utf-8"))
+        if (before.get("projectId") or None) == target and path.parent.name == (target or GLOBAL_DIR):
+            return before, before, False
+        moved_to = move_asset("character", root, path, target)
+        return before, json.loads(moved_to.read_text(encoding="utf-8")), True
+
+    # ------------------------------------------------------------------
     # delete
     # ------------------------------------------------------------------
 

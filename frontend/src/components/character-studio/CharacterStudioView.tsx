@@ -10,7 +10,10 @@ import { UndoDeleteToast } from '../asset-trash/AssetTrash';
 import { useAssetDelete } from '../../hooks/useAssetDelete';
 import type { Character } from '../../types';
 import { NEW_CHARACTER_SENTINEL } from '../../lib/studioSentinels';
-import { NO_PROJECT_OPEN, currentProject } from '../../lib/currentProject';
+import { NO_PROJECT_OPEN, currentProject, useCurrentProject } from '../../lib/currentProject';
+import { moveChoices, type MoveChoice } from '../../lib/assetMove';
+import { useStudioAssetMove } from '../../hooks/useStudioAssetMove';
+import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
 import { useProjectName } from '../../hooks/useProjectName';
 import { assetHome, type AssetHome } from '../../lib/assetHome';
 import type { AssetScope } from '../../store/uiStore';
@@ -225,6 +228,17 @@ export function CharacterStudioView() {
     setRailScope(scope);
     enterCharacterEditor(NEW_CHARACTER_SENTINEL, scope);
   };
+  // Move to Global / Move to <open project> (contract 07, 1.10).
+  const openProject = useCurrentProject();
+  const moving = useStudioAssetMove('character');
+  const moveCharacter = (choice: MoveChoice) => {
+    if (!savedId) return;
+    const id = savedId;
+    void moving.move({ id, key, target: choice.target, persist, canSave: isValid, isCurrent,
+      isOpen: () => mounted.current && useUIStore.getState().viewMode === 'character-editor'
+        && useUIStore.getState().characterEditorId === id,
+      open: (movedId, scope) => { setRailScope(scope); enterCharacterEditor(movedId, scope); } });
+  };
   const undoDelete = async () => {
     const asset = await deleting.undo();
     if (!asset || !mounted.current || useUIStore.getState().viewMode !== 'character-editor') return;
@@ -249,6 +263,11 @@ export function CharacterStudioView() {
           onRetry={() => void persist()}
           onDelete={savedId && !isDraftId ? () => { void deleteCharacterNow(); } : undefined}
           deleteDisabled={deleting.busy || Boolean(pendingSaveId)}
+          move={savedId && !isDraftId && loaded ? (
+            <AssetMoveMenu noun="Character" buttonClassName="character-studio-toolbar__retry"
+              choices={moveChoices(draft.projectId, openProject)} onChoose={moveCharacter} busy={moving.busy}
+              disabled={deleting.busy || Boolean(pendingSaveId)} />
+          ) : undefined}
       />
 
       <aside className="character-studio-view__rail">
@@ -258,7 +277,7 @@ export function CharacterStudioView() {
           initialScope={shownRailScope}
           characterHome={characterHome}
           projectId={projectId}
-          refreshKey={deleting.refreshKey}
+          refreshKey={`${deleting.refreshKey}:${moving.moves}`}
           onSelect={handleSelectCharacter}
           onNew={handleNewCharacter}
         />
@@ -281,6 +300,11 @@ export function CharacterStudioView() {
             {deleting.error && !deleting.lastDeleted && (
               <div className="character-studio-view__notice character-studio-view__notice--error" role="alert">
                 {deleting.error}
+              </div>
+            )}
+            {moving.error && (
+              <div className="character-studio-view__notice character-studio-view__notice--error" role="alert">
+                {moving.error}
               </div>
             )}
 

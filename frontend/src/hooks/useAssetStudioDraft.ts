@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { assetStudioDraftKey, emptyAssetStudioEntry, useAssetStudioDraftStore,
   resolveAssetStudioDraftKey, type AssetStudioDraftEntry, type AssetStudioKind } from '../store/assetStudioDraftStore';
 import { NO_PROJECT_OPEN, currentProject, useCurrentProjectId } from '../lib/currentProject';
+import { followAssetMoves } from '../lib/keptDraftMoves';
 
 /**
  * One Studio's session draft. A project draft is keyed under the canvas
@@ -20,6 +21,7 @@ export function useAssetStudioDraft<D>(kind: AssetStudioKind, scope: string, id:
   const fallback = useMemo(() => emptyAssetStudioEntry(createEmpty()), [createEmpty]);
   const stored = useAssetStudioDraftStore((state) => state.entries[key]) as AssetStudioDraftEntry<D> | undefined;
   const entry = stored ?? fallback;
+  useEffect(() => { followAssetMoves(); }, []);
   useEffect(() => { if (projectReady) useAssetStudioDraftStore.getState().ensure(key, fallback); }, [key, fallback, projectReady]);
   const patch = useCallback((next: Partial<AssetStudioDraftEntry<D>>) => {
     const store = useAssetStudioDraftStore.getState();

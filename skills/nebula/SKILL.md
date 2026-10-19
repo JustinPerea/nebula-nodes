@@ -143,6 +143,8 @@ nebula moodboard set <board> --restore set-output.json  # undo: the `set --json`
 nebula moodboard analyze <board>
 nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
 nebula moodboard list
+nebula moodboard move <board> --to global      # or --to current, or a project's id or exact name
+nebula character move <character> --to current
 nebula moodboard delete <board>
 ```
 
@@ -196,6 +198,14 @@ nebula moodboard delete <board>
 - A Moodboard (or Character) node names its board by id, so it works in any
   project: copied into another project it still shows the board, runs, and
   opens it, and the board stays in the project it lives in.
+- `nebula moodboard move <board> --to global|current|<project id or exact
+  name>` changes which project a board is listed in (Global: every
+  project's Global tab). `nebula character move` does the same for a
+  Character, by id or exact name. Only where it's listed changes; nodes that
+  use it keep working everywhere, so anyone may move one, and the output
+  prints the command that moves it back. A board or Character in Recently
+  deleted is refused: restore it first. MCP: `moodboard_move`,
+  `character_move`.
 - `set --json` returns `previous`, the settings before your change
   (including Direction, Avoid, pinned colours and your own hand-written
   brief). To undo it, save that output and run

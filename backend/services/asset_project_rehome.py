@@ -197,9 +197,10 @@ def move_asset(kind: str, root: Path, source: Path, target: str | None, *,
     that id is already there; one this move wrote before it was stopped is
     finished instead. ``before_change(source)`` runs first (a backup).
 
-    The migration below uses it; a person's "Move to Global / Move to
-    <project>" in the Studio or CLI can too (validate ``target`` against the
-    catalog, then broadcast storedAssetChanged)."""
+    The migration below uses it, and so does a person's or agent's "Move to
+    Global / Move to <project>" (the stores' ``move``, called by main.py
+    ``_move_stored_asset``, which checks ``target`` against the catalog and
+    broadcasts storedAssetChanged; contract 07, 1.10)."""
     asset = _read_json(source)
     new = _rehomed(kind, asset, target)
     destination = root / (target or GLOBAL_DIR) / source.name

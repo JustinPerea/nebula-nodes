@@ -354,7 +354,10 @@ class MoodboardStore:
         for key, value in fields.items():
             if key in immutable:
                 if value is not None and value != moodboard.get(key):
-                    raise ValueError(f"{key} can't change: a board stays where it was created")
+                    if key == "projectId":
+                        raise ValueError("projectId can't change in an edit: move the board with "
+                                         f"POST /api/moodboards/{moodboard_id}/move")
+                    raise ValueError(f"{key} can't change")
                 continue
             if key == "images":
                 moodboard[key] = _normalize_images(value)
@@ -411,6 +414,35 @@ class MoodboardStore:
         moodboard["updatedAt"] = _now_iso()
         _write_json(path, moodboard)
         return moodboard
+
+    def move(self, moodboard_id: str, projectId: str | None) -> tuple[dict[str, Any], dict[str, Any], bool]:
+        """File a board under canvas project ``projectId`` (None: Global) and
+        return ``(before, after, moved)``. Only ``projectId`` changes: ``id``,
+        ``version`` and ``updatedAt`` stay, since a move isn't an edit
+        (services/asset_project_rehome.move_asset). ``moved`` is False when it
+        was already there. The caller checks ``projectId`` is a live canvas
+        project (main.py). KeyError: no live board with that id (one in
+        Recently deleted isn't live); FileExistsError: a different file with
+        this id is already in the target folder."""
+        from services.asset_project_rehome import GLOBAL_DIR, move_asset
+
+        root = _moodboard_root()
+        path = _find_moodboard_file(root, moodboard_id)
+        if path is None:
+            raise KeyError(f"Moodboard '{moodboard_id}' not found")
+        target = projectId or None
+        _scope_dir(root, target)  # refuses an unsafe id before any path is built from it
+        # Two live copies (a re-home that skipped a collision leaves one in an
+        # old folder): which one is "the" asset isn't ours to guess.
+        copies = sorted(sub.name for sub in root.iterdir()
+                        if sub.is_dir() and not is_trash_folder(sub) and (sub / f"{moodboard_id}.json").is_file())
+        if len(copies) > 1:
+            raise FileExistsError(f"there is a copy with this id in each of {', '.join(copies)}")
+        before = _migrated(json.loads(path.read_text(encoding="utf-8")))
+        if (before.get("projectId") or None) == target and path.parent.name == (target or GLOBAL_DIR):
+            return before, before, False
+        moved_to = move_asset("moodboard", root, path, target)
+        return before, _migrated(json.loads(moved_to.read_text(encoding="utf-8"))), True
 
     def delete(self, moodboard_id: str, deleted_by: dict[str, Any] | None = None) -> dict[str, Any]:
         """Move the board to Recently deleted (services/asset_trash.py) and

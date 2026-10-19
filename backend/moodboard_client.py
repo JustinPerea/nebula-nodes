@@ -380,6 +380,99 @@ def resolve_project(api: NebulaAPI, project: str | None, headers: dict[str, str]
     return project
 
 
+MOVE_UNSUPPORTED = ("this version of Nebula can't move {noun}s between projects, so nothing was moved. "
+                    "Update Nebula to use it.")
+
+
+def resolve_move_target(api: NebulaAPI, to: str | None,
+                        headers: dict[str, str] | None = None) -> tuple[str | None, str]:
+    """Where `--to` / `to` points: ``(project id, its name)``, or ``(None,
+    "Global")``. "global" is Global and "current" the project open on the
+    canvas; anything else is a canvas project's id, else its exact name
+    (case-insensitive). Refuses, saying what to do: no project open, a project
+    in Recently deleted, an unknown one, or a name two projects share."""
+    ref = str(to or "").strip()
+    if not ref:
+        raise MoodboardError("say where to move it: global, current, or a project's id or exact name "
+                             "(`nebula projects`)")
+    if ref.casefold() == "global":
+        return None, "Global"
+    listing = api.request("GET", "/api/projects", headers=headers)
+    listing = listing if isinstance(listing, dict) else {}
+    live = [p for p in listing.get("projects") or [] if isinstance(p, dict) and isinstance(p.get("id"), str)]
+    trashed = [p for p in listing.get("trash") or [] if isinstance(p, dict) and isinstance(p.get("id"), str)]
+
+    def named(project: dict[str, Any]) -> str:
+        return str(project.get("name") or "Untitled project")
+
+    if ref.casefold() == "current":
+        active = listing.get("activeProjectId")
+        for project in live:
+            if project["id"] == active:
+                return project["id"], named(project)
+        raise MoodboardError("no project is open on the canvas, so there is no current project. Open one "
+                             "(`nebula project open <id>`), or name one with --to <id or name>")
+    for project in live:
+        if project["id"] == ref:
+            return project["id"], named(project)
+    gone = [p for p in trashed if p["id"] == ref or named(p).casefold() == ref.casefold()]
+    matches = [p for p in live if named(p).casefold() == ref.casefold()]
+    if len(matches) == 1:
+        return matches[0]["id"], named(matches[0])
+    if len(matches) > 1:
+        ids = ", ".join(p["id"] for p in matches)
+        raise MoodboardError(f"{len(matches)} projects are named '{named(matches[0])}' ({ids}); use the id")
+    if gone:
+        raise MoodboardError(f"the project '{named(gone[0])}' is in Recently deleted. Restore it first "
+                             f"(`nebula trash restore project {gone[0]['id']}`), or move it to global")
+    raise MoodboardError(f"no project '{ref}' (`nebula projects` lists them; or use global or current)")
+
+
+def move_asset(api: NebulaAPI, kind: str, asset: dict[str, Any], to: str | None,
+               headers: dict[str, str] | None = None) -> dict[str, Any]:
+    """POST /api/{kind}s/{id}/move for an asset already looked up. Returns
+    the backend's answer: ``status`` ("moved" or "unchanged"), ``from`` /
+    ``to`` (project ids, None for Global) with ``fromName`` / ``toName``,
+    ``movedBy`` and ``asset``."""
+    target, _name = resolve_move_target(api, to, headers)
+    noun = "board" if kind == "moodboard" else "Character"
+    try:
+        result = api.request("POST", f"/api/{kind}s/{asset['id']}/move", json={"projectId": target},
+                             headers=headers)
+    except NebulaAPIError as exc:
+        if exc.status == 405 or (exc.status == 404 and str(exc.detail).strip() == "Not Found"):
+            raise MoodboardError(MOVE_UNSUPPORTED.format(noun=noun)) from exc
+        if exc.status in (400, 404, 409, 422):
+            raise MoodboardError(str(exc.detail)) from exc
+        raise
+    return result if isinstance(result, dict) else {}
+
+
+def asset_for_move(api: NebulaAPI, kind: str, ref: str, find_by_name: Any,
+                   headers: dict[str, str] | None = None) -> dict[str, Any]:
+    """The live asset `ref` names (id, else exact name via `find_by_name`).
+    An id in Recently deleted is refused with the backend's own restore
+    advice, rather than "no such board"."""
+    ref = str(ref or "").strip()
+    if _BOARD_ID.fullmatch(ref):
+        try:
+            return api.request("GET", f"/api/{kind}s/{ref}", headers=headers)
+        except NebulaAPIError as exc:
+            if exc.status != 404:
+                raise
+            if "Recently deleted" in str(exc.detail):
+                raise MoodboardError(f"{exc.detail} Then move it.") from exc
+    return find_by_name(api, ref, headers)
+
+
+def move_board(api: NebulaAPI, ref: str, to: str | None,
+               headers: dict[str, str] | None = None) -> dict[str, Any]:
+    """Move a board (id or exact name) to Global or a canvas project (see
+    resolve_move_target). Anyone may, agents included: moving it back undoes
+    it. Nodes that use the board keep working in every project."""
+    return move_asset(api, "moodboard", asset_for_move(api, "moodboard", ref, get_board, headers), to, headers)
+
+
 def get_board(api: NebulaAPI, ref: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
     """A board by id, else by exact name (case-insensitive) across all boards."""
     ref = str(ref or "").strip()

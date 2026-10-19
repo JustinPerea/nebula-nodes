@@ -307,6 +307,8 @@ def build_parser() -> argparse.ArgumentParser:
     # -- Moodboards --
     from .commands import moodboard as moodboard_cmd
     moodboard_cmd.add_parser(sub)
+    from .commands import character as character_cmd
+    character_cmd.add_parser(sub)
 
     # -- Outside apps --
     from .commands import skill as skill_cmd
@@ -415,13 +417,14 @@ def main() -> None:
     client = NebulaClient(args.url)
 
     from .commands import (
-        apply, canvas, commons, context, nodes, keys, graph, execute, moodboard, quick, path, pins, projects,
-        proposals, selection, spend, trash,
+        apply, canvas, character, commons, context, nodes, keys, graph, execute, moodboard, quick, path, pins,
+        projects, proposals, selection, spend, trash,
     )
 
     dispatch = {
         "commons": lambda: commons.run(client, args),
         "moodboard": lambda: moodboard.run(client, args),
+        "character": lambda: character.run(client, args),
         "context": lambda: context.run(client),
         "nodes": lambda: nodes.run_list(client, query=args.query, category=args.category),
         "info": lambda: nodes.run_info(client, args.node_id),
