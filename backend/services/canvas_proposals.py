@@ -153,13 +153,13 @@ def _point(raw: Any, label: str) -> dict[str, float]:
     return result
 
 
-def _list(body: Mapping[str, Any], key: str, cap: int) -> list[Any]:
+def _list(body: Mapping[str, Any], key: str, cap: int | None) -> list[Any]:
     value = body.get(key)
     if value is None:
         return []
     if not isinstance(value, list):
         raise ProposalError(422, f"{key} must be a list")
-    if len(value) > cap:
+    if cap is not None and len(value) > cap:
         raise ProposalError(422, f"a proposal can have at most {cap} {key}")
     return value
 
@@ -197,13 +197,19 @@ def _params(raw: Any, label: str, internal_ok: frozenset[str] = frozenset()) -> 
     return dict(raw)
 
 
-def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset()) -> ProposalSpec:
+def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset(), capped: bool = True) -> ProposalSpec:
     """Shape-check and sanitise a proposal body. Graph validation happens in main.
 
     `internal_ok` names underscore params a caller may set anyway: proposals
     and direct edits name `_provider` and `_kreaAuth`, who bills a run
     (node_route.BILLING_PARAMS). Only a proposal may change them; direct
-    edits from agents that would are refused."""
+    edits from agents that would are refused.
+
+    `capped` applies the per-proposal caps (MAX_NODES, MAX_EDGES,
+    MAX_PARAM_NODES, MAX_RUN). The person reviews a proposal item by item, so
+    it stays small. A direct edit (services/canvas_edits.py) passes False: it
+    is bounded only by the canvas's own size limits, which main checks on the
+    staged graph."""
     if not isinstance(body, dict):
         raise ProposalError(422, "the proposal must be a JSON object")
     unknown = sorted(set(body) - _ALLOWED_KEYS)
@@ -213,7 +219,7 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset()) -> Propo
 
     nodes: list[ProposedNode] = []
     refs: set[str] = set()
-    for index, raw in enumerate(_list(body, "nodes", MAX_NODES)):
+    for index, raw in enumerate(_list(body, "nodes", MAX_NODES if capped else None)):
         if not isinstance(raw, dict):
             raise ProposalError(422, f"nodes[{index}] must be an object")
         ref = raw.get("ref")
@@ -234,7 +240,7 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset()) -> Propo
         ))
 
     edges: list[ProposedEdge] = []
-    for index, raw in enumerate(_list(body, "edges", MAX_EDGES)):
+    for index, raw in enumerate(_list(body, "edges", MAX_EDGES if capped else None)):
         if not isinstance(raw, dict):
             raise ProposalError(422, f"edges[{index}] must be an object")
         edges.append(ProposedEdge(
@@ -246,7 +252,7 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset()) -> Propo
 
     changes: list[ParamChange] = []
     seen_nodes: set[str] = set()
-    for index, raw in enumerate(_list(body, "params", MAX_PARAM_NODES)):
+    for index, raw in enumerate(_list(body, "params", MAX_PARAM_NODES if capped else None)):
         if not isinstance(raw, dict):
             raise ProposalError(422, f"params[{index}] must be an object")
         node_id = raw.get("nodeId")
@@ -261,7 +267,7 @@ def parse_spec(body: Any, *, internal_ok: frozenset[str] = frozenset()) -> Propo
         changes.append(ParamChange(node_id=node_id, params=params))
 
     run: list[str] = []
-    for index, raw in enumerate(_list(body, "run", MAX_RUN)):
+    for index, raw in enumerate(_list(body, "run", MAX_RUN if capped else None)):
         item = _end(raw, refs, f"run[{index}]")
         if item in run:
             raise ProposalError(400, f"run lists '{item}' twice")

@@ -172,9 +172,15 @@ def build_parser() -> argparse.ArgumentParser:
             "--add +img=nano-banana --wire +p:text +img:prompt --rename +img=\"Hero shot\" "
             "--move n3=400,120 --remove n7 --unwire n1:text n2:prompt. "
             "New nodes use refs like +img; existing nodes use their ids (n4). Or pass --file plan.json "
-            "(- reads standard input) with {note, nodes, edges, params, rename, move, remove, unwire}: "
-            "the plan `nebula propose` takes, without run. If any part is refused, nothing changes. "
-            "It prints each new node's id; run them with `nebula run` after."
+            "(- reads standard input) with {note, nodes, edges, params, rename, move, remove, unwire, "
+            "arrange}: the plan `nebula propose` takes, without run. If any part is refused, nothing "
+            "changes. There's no limit on how much one plan adds. "
+            "A file can also hold {\"steps\": [plan, plan, ...]}: each step is applied in order as its "
+            "own all-or-nothing edit, and a later step can use the +refs an earlier step created. If a "
+            "step is refused, it stops there and says which earlier steps were applied. "
+            "\"arrange\": true (or {\"direction\": \"down\", \"gap\": 120}) has the canvas lay out that "
+            "plan's new nodes by their real size once it draws them; with no canvas open, the first one "
+            "that opens does it. It prints each new node's id; run them with `nebula run` after."
         ),
     )
     apply_p.add_argument("--file", help="JSON plan file, or - for standard input")
@@ -197,6 +203,9 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Delete a node and its wires (repeatable)")
     apply_p.add_argument("--unwire", action="append", nargs=2, default=[], metavar=("SRC:port", "DST:port"),
                          help="Remove a wire, e.g. --unwire n1:text n2:prompt (repeatable)")
+    apply_p.add_argument("--arrange", nargs="?", const="right", default=None, choices=("right", "down"),
+                         help="Have the canvas lay out the new nodes by their real size once it draws them; works with --file too "
+                              "(flowing right, or down)")
     apply_p.add_argument("--json", action="store_true", help="Print the raw result JSON")
     apply_p.add_argument("--as", dest="agent_name",
                          help="Your agent name (default: $NEBULA_AGENT_NAME; in-app agents are named automatically)")

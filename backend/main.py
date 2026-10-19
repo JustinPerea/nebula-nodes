@@ -153,6 +153,7 @@ from services.person_gate import (
     require_person,
 )
 from services.canvas_edits import INTERNAL_OK as BILLING_PARAMS, EditSpec, parse_edit
+from services.canvas_arrange import canvas_arrange
 from services.agent_params import ASSET_PARAM_TYPES, asset_params, internal_keys, internal_refusal
 from services.canvas_proposals import (
     MAX_REASON,
@@ -2540,6 +2541,14 @@ class ConnectionManager:
 
     def is_browser(self, websocket: WebSocket) -> bool:
         return websocket in self.browser_connections
+
+    def canvas_open(self) -> bool:
+        """Whether a canvas is connected: any socket without an agent marker.
+
+        Not only the person's verified canvas: a tab opened without the person
+        link still draws the graph and lays out an arrange (services/canvas_arrange.py)."""
+        return bool(self.browser_connections) or any(
+            not _websocket_has_agent_marker(connection) for connection in self.active_connections)
 
     def disconnect(self, websocket: WebSocket) -> None:
         if websocket in self.active_connections:
@@ -6291,6 +6300,9 @@ async def _broadcast_graph_sync(
     graph load``, a file loaded in another window), which is an edit like any
     other; opening, creating or deleting a project is not.
     """
+    if graph_replaced:
+        # Node ids restart with another project; no open arrange can apply to it.
+        canvas_arrange.clear()
     export = await export_graph_for_frontend()
     if graph_replaced:
         agent_presence.forget_graph()
@@ -7439,11 +7451,33 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
 
 @app.put("/api/graph/layout")
 async def update_graph_layout(body: dict[str, Any]) -> dict:
-    """Persist a complete or partial Canvas layout in one atomic mutation."""
+    """Persist a complete or partial Canvas layout in one atomic mutation.
+
+    With ``arrangeId`` this is a canvas finishing an agent's arrange request
+    (services/canvas_arrange.py): only that request's nodes may be in
+    ``positions``, and only the first write for the id applies. A later one
+    (another open tab) returns ``already-arranged`` and changes nothing.
+    Without it, the nodes it positions drop out of any open arrange.
+    """
     _check_workspace_revision()
     raw_positions = body.get("positions")
     if not isinstance(raw_positions, dict) or not raw_positions:
         raise HTTPException(status_code=400, detail="positions must be a non-empty object")
+    arrange_id = body.get("arrangeId")
+    arrange = None
+    if arrange_id is not None:
+        if not isinstance(arrange_id, str):
+            raise HTTPException(status_code=400, detail="arrangeId must be a string")
+        arrange = canvas_arrange.get(arrange_id)
+        if arrange is None:
+            return {"status": "already-arranged", "count": 0}
+        outside = sorted(set(raw_positions) - set(arrange.node_ids))
+        if outside:
+            raise HTTPException(status_code=400, detail=(
+                f"{outside[0]} isn't one of the new nodes this arrange lays out; "
+                "an arrange never moves other nodes"))
+        # Nodes deleted since the request are simply skipped.
+        raw_positions = {node_id: point for node_id, point in raw_positions.items() if node_id in cli_graph.nodes}
 
     normalized: dict[str, dict[str, float]] = {}
     for node_id, raw_position in raw_positions.items():
@@ -7470,10 +7504,18 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
     # against where the canvas drew them, or the first drag would go unseen.
     shown = _display_positions(list(cli_graph.nodes.values()))
     previous = {node_id: shown.get(node_id) for node_id in normalized}
+    if arrange is not None:
+        # Close it before anything awaits, so a second tab's write can't also apply.
+        canvas_arrange.complete(arrange.id)
+        if not normalized:
+            await _broadcast_graph_sync()
+            return {"status": "arranged", "count": 0}
     try:
         cli_graph.update_positions(normalized)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    if arrange is None:
+        canvas_arrange.forget_nodes(normalized)
     await _broadcast_graph_sync(edit=True, moved=normalized)
     publish_action(f"Updated layout for {len(normalized)} node(s)")
     # This route is the authoritative move signal (drag end, auto-layout,
@@ -7488,8 +7530,14 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
             "node.moved",
             node_id=moved[0] if len(moved) == 1 else None,
             data={"nodeIds": moved[:50], "count": len(moved)},
-            summary=f"moved {_listed(moved)}",
+            summary=f"{'arranged' if arrange is not None else 'moved'} {_listed(moved)}",
+            # The agent asked for the arrange; a canvas only measured. An agent
+            # that writes it (the arrangeId is on every graphSync) is credited
+            # itself, so it can't put its positions under another agent's name.
+            actor=arrange.actor if arrange is not None and not has_agent_marker(current_request_headers()) else None,
         )
+    if arrange is not None:
+        return {"status": "arranged", "count": len(normalized), "positions": normalized}
     return {"status": "updated", "count": len(normalized)}
 
 
@@ -7866,6 +7914,13 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     graph in that order (unwire, remove, add and change, rename, move) with
     the validators single edits use, then committed at once. Never runs
     anything; runs go through /api/graph/run and its spending limits.
+
+    No per-edit caps (decision C1): the staged graph must stay within what a
+    project can save (RESTORE_MAX_GRAPH_NODES / _EDGES), as on restore.
+
+    `arrange` (true, or {direction: right|down, gap}) asks the canvas to lay
+    out this edit's new nodes once it has drawn them; see
+    services/canvas_arrange.py. The response's `arrange` says so.
     """
     headers = current_request_headers()
     identity = identify_agent(headers)
@@ -7951,6 +8006,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail=f"{missing[0]} is not on the canvas")
         if moves:
             candidate.update_positions(moves)
+        _refuse_oversized_graph(candidate)
         touched = sorted(set(id_map.values()) | set(params_before))
         _refuse_agent_change_to_approved_runs(candidate)
         _commit_graph_candidate_with_recoveries(
@@ -7959,6 +8015,12 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             source="agent-edit",
         )
 
+    # An explicit move wins over any arrange still waiting for these nodes.
+    canvas_arrange.forget_nodes(moves)
+    arrange = None
+    if spec.arrange is not None and id_map:
+        arrange = canvas_arrange.add(id_map.values(), direction=spec.arrange.direction, gap=spec.arrange.gap,
+                                     actor=actor_for_headers(headers))
     await _broadcast_graph_sync(edit=True, moved=moves)
     note = f" ({additions.note})" if additions.note != "edit" else ""
     for edge in spec.unwire:
@@ -8039,9 +8101,32 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         "moved": list(moves),
         "removed": [gone["id"] for gone in removed],
         "unwired": [edge.as_dict() for edge in spec.unwire],
+        **({"arrange": _arrange_reply(arrange)} if arrange is not None else {}),
     }
 
 
+def _refuse_oversized_graph(candidate: CLIGraph) -> None:
+    """413 when a staged edit would make a canvas bigger than a project can save."""
+    nodes, edges = len(candidate.nodes), len(candidate.edges)
+    if nodes > RESTORE_MAX_GRAPH_NODES or edges > RESTORE_MAX_GRAPH_EDGES:
+        raise HTTPException(status_code=413, detail=(
+            f"A canvas holds at most {RESTORE_MAX_GRAPH_NODES:,} nodes and {RESTORE_MAX_GRAPH_EDGES:,} wires "
+            f"(the most a project can save). This edit would leave {nodes:,} nodes and {edges:,} wires, "
+            "so nothing changed."))
+
+
+def _arrange_reply(arrange: Any) -> dict[str, Any]:
+    """What `arrange` on an edit did: the canvas lays the new nodes out, now or when one opens."""
+    count = len(arrange.node_ids)
+    nodes = f"{count} new node{'' if count == 1 else 's'}"
+    if manager.canvas_open():
+        status, message = "waiting", (
+            f"The open canvas lays out the {nodes} once it has drawn them, and saves the positions.")
+    else:
+        status, message = "waiting-for-canvas", (
+            f"No canvas is open, so the {nodes} stay where they were placed. "
+            "The first canvas that opens lays them out.")
+    return {**arrange.view(), "status": status, "message": message}
 RESTORE_ACTIONS = ("undo", "redo")
 
 
@@ -9726,6 +9811,8 @@ async def export_graph_for_frontend() -> dict:
     _normalize_cli_graph_output_refs()
     state = cli_graph.get_state()
     if not state["nodes"]:
+        # A cleared canvas restarts node ids, so an open arrange can't apply.
+        canvas_arrange.clear()
         return {
             **_workspace_context(),
             "nodes": [],
@@ -9778,6 +9865,10 @@ async def export_graph_for_frontend() -> dict:
         "nodes": rf_nodes,
         "edges": rf_edges,
         "empty": False,
+        # Agent edits that asked the canvas to lay out their new nodes once
+        # drawn (services/canvas_arrange.py). A canvas that connects later
+        # gets them too.
+        "arrange": canvas_arrange.pending(cli_graph.nodes),
         "providerRecoveries": provider_recovery_store.list(),
         "providerStartAmbiguities": provider_start_guard.list(),
         "executionStatuses": execution_runs.list_statuses(),

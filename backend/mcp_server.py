@@ -37,7 +37,7 @@ Nebula Nodes is a node-graph studio for AI images, video and audio. You work on 
 Workflow:
 1. look_at_canvas: nodes, wires, outputs, the person's selection and pins. Read get_selected_nodes before acting on "these" or "the selected".
 2. find_nodes / describe_node: pick a node type that can run here (runsWith) and learn its ports, params and price. A node with `routes` runs on one provider each: each route's `params` are what that provider offers (a setting it lacks is absent or has `onlyWhen`); `_provider` changes go through propose_change.
-3. edit_canvas: add nodes (refs like "+img"), wires, param changes, renames and moves in one call; all of it lands or none of it. remove_from_canvas deletes nodes or wires.
+3. edit_canvas: add nodes (refs like "+img"), wires, param changes, renames and moves in one call; all of it lands or none of it. Set arrange=true to have the canvas lay out the new nodes by their real size. remove_from_canvas deletes nodes or wires.
 4. run_nodes: runs a node and what feeds it. It returns outputs with small previews, or status "running" with a runId: then get_run(runId) or cancel_run(runId).
 5. view_output: look at any node's output again.
 
@@ -390,6 +390,7 @@ def edit_canvas(
     params: list[dict] | None = None,
     rename: dict[str, str] | None = None,
     move: dict[str, dict] | None = None,
+    arrange: bool | dict | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Change the canvas directly, all at once: every part applies, or none does.
@@ -403,8 +404,12 @@ def edit_canvas(
     - `params`: changes to existing nodes [{"nodeId": "n4", "params": {...}}].
     - `rename`: {"n4" or "+img": "Hero shot"} ("" restores the model's name).
     - `move`: {"n4" or "+img": {"x": 0, "y": 0}}. New nodes are placed for you.
+    - `arrange`: true (or {"direction": "right" or "down", "gap": 120}) to have
+      the canvas lay out this call's new nodes by their real size once it has
+      drawn them, starting where they were placed. Other nodes never move. With
+      no canvas open, the first one to open does it; the result's `arrange` says which.
     - `note`: one line on what this is for; shown beside your cursor.
-    Limits per call: 12 new nodes, 24 wires, 12 param changes.
+    No limit on how much one call adds; it all lands or none of it does.
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
@@ -413,6 +418,7 @@ def edit_canvas(
     """
     body: dict[str, Any] = {key: value for key, value in {
         "note": note, "nodes": nodes, "edges": edges, "params": params, "rename": rename, "move": move,
+        "arrange": arrange,
     }.items() if value}
     return _canvas_call("POST", "/api/graph/apply", ctx, json=body)
 

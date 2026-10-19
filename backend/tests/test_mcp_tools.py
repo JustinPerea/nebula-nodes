@@ -14,6 +14,7 @@ from mcp.server.fastmcp import Image
 from PIL import Image as PILImage
 
 import mcp_server
+from services.canvas_proposals import MAX_NODES
 from models.events import ExecutedEvent, SkippedEvent
 from nebula_api import NebulaAPI, NebulaAPIError
 from services import agent_spend, node_readiness, output_preview
@@ -143,6 +144,16 @@ def test_edit_canvas_applies_everything_or_nothing(nebula):
 
     removed = mcp_server.remove_from_canvas(node_ids=[built["idMap"]["+img"]])
     assert removed["removed"] == [built["idMap"]["+img"]]
+
+
+def test_edit_canvas_can_ask_the_canvas_to_arrange(nebula):
+    built = mcp_server.edit_canvas(
+        nodes=[{"ref": f"+t{i}", "definitionId": "text-input"} for i in range(MAX_NODES + 2)],
+        arrange={"direction": "down", "gap": 60},
+    )
+    assert built["summary"] == f"added {MAX_NODES + 2}"
+    assert built["arrange"]["nodeIds"] == [built["idMap"][f"+t{i}"] for i in range(MAX_NODES + 2)]
+    assert (built["arrange"]["direction"], built["arrange"]["gap"]) == ("down", 60.0)
 
 
 def test_run_previews_images_and_reports_text(nebula):

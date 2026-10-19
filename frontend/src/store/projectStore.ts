@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { runsThatNeverStarted, useGraphStore } from './graphStore';
 import { useUIStore } from './uiStore';
 import { readDraft, useCreateDraftStore } from './createDraftStore';
+import { useArrangeStore } from './arrangeStore';
 import { fetchCLIGraph } from '../lib/api';
 import { rewriteBackendAssetUrls } from '../lib/backend';
 import { normalizeRuntimeMediaParams } from '../lib/graphFile';
@@ -372,6 +373,10 @@ async function loadWorkspace(): Promise<void> {
     useGraphStore.getState().hydrateProviderRecoveries(graph.providerRecoveries ?? []);
     useGraphStore.getState().hydrateProviderStartAmbiguities(graph.providerStartAmbiguities ?? []);
     if (graph.executionStatuses) useGraphStore.getState().hydrateExecutionStatuses(graph.executionStatuses);
+    // The graphSync a socket gets on connect arrives before this tab has a
+    // project, so it's dropped; without this an agent's arrange made while
+    // no canvas was open would wait for the next unrelated sync.
+    useArrangeStore.getState().setPending(graph.arrange);
     void useGraphStore.getState().reconcilePersistedWorldLabsRun();
   } else {
     setProjectContext(null);

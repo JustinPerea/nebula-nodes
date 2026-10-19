@@ -573,6 +573,8 @@ export async function fetchCLIGraph(): Promise<{
   providerRecoveries?: ProviderRecoveryCheckpoint[];
   providerStartAmbiguities?: ProviderStartAmbiguity[];
   executionStatuses?: ExecutionStatusResult[];
+  /** Agent edits waiting for a canvas to lay out their new nodes (services/canvas_arrange.py). */
+  arrange?: unknown;
 }> {
   const response = await apiFetch('/api/graph/export');
   if (!response.ok) throw new Error(`Fetch CLI graph failed: ${response.status}`);
