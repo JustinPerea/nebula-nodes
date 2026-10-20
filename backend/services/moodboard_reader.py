@@ -28,6 +28,22 @@ Every step writes a trace line (``Trace``), the ``moodboardReadTrace`` shape
 of section 5.6.1, numbered from 1 with no gaps. In PR4 a read is always a dry
 run: nothing is saved and nothing moves.
 
+**One swappable reading source (section 5.6.2).** The provider call sits
+behind ``ReadingSource`` (``identity``, ``priced``, ``streams``,
+``thoughts``, ``read(task, sink)``, ``sort(task, sink)``). The shared code
+builds every task (labels, image parts, instructions and schema, notes per
+the opt-in), so a source can't add or drop an instruction, and everything
+after "the model said this" is shared too: the item check (``sink.item``),
+the reason trim and strip, the new-look-name check, the retry for missing
+refs (split only when the source reports ``truncated``), Python's sort rules,
+the trace and its templates. ``GeminiSource`` is Argon's: it wraps
+``GeminiTransport``, ``gemini_body`` and the stream parser, reports
+``truncated`` for ``MAX_TOKENS``, and gives a lone cut-off image (or the
+sort) more room through ``can_widen``. PR10c adds an agent's source and
+changes nothing here. The estimate and the spend gate run only when
+``source.priced`` ("Nebula pays"), which an Argon entry with no list price
+still is.
+
 Notes follow #18's opt-in in both phases and the retry: board and image notes
 go only when the board's ``sendNotes`` is on; private notes never go.
 
@@ -36,11 +52,13 @@ music direction.
 """
 from __future__ import annotations
 
+import abc
 import asyncio
 import base64
 import io
 import json
 import math
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -62,6 +80,7 @@ from services.moodboard_reader_stream import (
     GeminiStreamParser,
     StreamOutcome,
     clean_model_text,
+    names_a_label,
     split_text,
     trim_reason,
 )
@@ -243,9 +262,22 @@ def reader_entry(model_id: str, models: Mapping[str, Any] | None = None) -> dict
 
 
 def reader_identity(entry: Mapping[str, Any]) -> dict[str, str]:
-    """The overseer's fixed identity (section 5.6.1): never a header identity."""
+    """The overseer's fixed identity (section 5.6.1): never a header identity.
+    The estimate shows it as it is."""
     return {"kind": "reader", "id": f"reader:{entry['id']}", "name": str(entry["name"]),
             "model": str(entry["model"]), "provider": str(entry["provider"]), "color": str(entry["color"])}
+
+
+def model_identity(entry: Mapping[str, Any]) -> dict[str, str]:
+    """A model reader's identity as a source (section 5.6.2): the overseer's,
+    with ``source: "model"``. An agent's reader (PR10c) has ``"agent"``."""
+    return {**reader_identity(entry), "source": "model"}
+
+
+def reader_key(identity: Mapping[str, Any]) -> str:
+    """What a reading's ``reader`` holds (section 4.1): the identity's id
+    without ``reader:``, so ``"gemini-4-argon"`` or ``"agent:<identity id>"``."""
+    return str(identity["id"]).removeprefix("reader:")
 
 
 def asks_for_thoughts(entry: Mapping[str, Any]) -> bool:
@@ -382,15 +414,13 @@ def phase1_schema(labels: Sequence[str]) -> dict[str, Any]:
     }
 
 
-def phase1_parts(board: Mapping[str, Any], targets: Sequence[Target],
-                 images: Sequence[tuple[str, str]] | None) -> list[dict[str, Any]]:
-    """The user turn for one batch: the instructions, then each image as a
-    text part ``Image A`` followed by the image. ``images`` None leaves the
-    image parts out (the estimate counts their tokens separately)."""
-    labels = LABELS[:len(targets)]
+def phase1_instructions(board: Mapping[str, Any], count: int) -> str:
+    """What a reader is told for one batch of ``count`` images, the board's
+    notes only when ``sendNotes`` is on."""
+    labels = LABELS[:count]
     names = look_names(board)
     lines = [
-        f"Read each of these {len(targets)} images. For each, give its medium, style and light in a few words, "
+        f"Read each of these {count} images. For each, give its medium, style and light in a few words, "
         f"up to {MAX_MOTIFS} motifs, and up to {MAX_LOOKS} looks it could belong to, best first, each with a fit "
         "from 0 to 1 (1: clearly belongs).",
     ]
@@ -404,16 +434,44 @@ def phase1_parts(board: Mapping[str, Any], targets: Sequence[Target],
     lines.append(f"Answer once for every image, with its label ({', '.join(labels)}) as `ref`.")
     if _notes_sent(board) and str(board.get("notes") or "").strip():
         lines.append("The person's notes on the board: " + str(board["notes"]).strip())
-    parts: list[dict[str, Any]] = [{"text": "\n".join(lines)}]
-    for i, (label, target) in enumerate(zip(labels, targets)):
+    return "\n".join(lines)
+
+
+def phase1_image_parts(board: Mapping[str, Any], targets: Sequence[Target],
+                       images: Sequence[tuple[str, str]] | None) -> list[dict[str, Any]]:
+    """Each image as a text part ``Image A`` followed by the image
+    (``{"image": {mimeType, data}}``), and its note when notes are sent;
+    private notes never. ``images`` None leaves the images out (the estimate
+    counts their tokens separately)."""
+    parts: list[dict[str, Any]] = []
+    for i, (label, target) in enumerate(zip(LABELS[:len(targets)], targets)):
         parts.append({"text": f"Image {label}"})
         if images is not None:
             mime, data = images[i]
-            parts.append({"inline_data": {"mime_type": mime, "data": data}})
+            parts.append({"image": {"mimeType": mime, "data": data}})
         note = str(target.image.get("notes") or "").strip()
         if _notes_sent(board) and note:
             parts.append({"text": f"The person's note on Image {label}: {note}"})
     return parts
+
+
+def gemini_parts(instructions: str, parts: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """A task's text and images as Gemini parts: the instructions first,
+    then each part, an image as ``inline_data``."""
+    out: list[dict[str, Any]] = [{"text": instructions}]
+    for part in parts:
+        if "image" in part:
+            out.append({"inline_data": {"mime_type": part["image"]["mimeType"], "data": part["image"]["data"]}})
+        else:
+            out.append({"text": part["text"]})
+    return out
+
+
+def phase1_parts(board: Mapping[str, Any], targets: Sequence[Target],
+                 images: Sequence[tuple[str, str]] | None) -> list[dict[str, Any]]:
+    """The user turn Argon gets for one batch: the instructions, then each
+    image as a text part ``Image A`` followed by the image."""
+    return gemini_parts(phase1_instructions(board, len(targets)), phase1_image_parts(board, targets, images))
 
 
 def sort_labels(count: int) -> list[str]:
@@ -820,6 +878,310 @@ async def call_text(transport: GeminiTransport, body: Mapping[str, Any], bounds:
     return TextResult(parser.close(), error)
 
 
+# -- reading sources (section 5.6.2) -----------------------------------------------------------
+
+@dataclass(frozen=True)
+class ReadTask:
+    """One read request, built by the shared code (``build_read_task``) and
+    never by a source, so every source gets the same instructions. ``parts``
+    are, in label order, ``{"text": "Image A"}``, ``{"image": {mimeType,
+    data}}`` and the image's note when notes are sent. ``wider`` asks for
+    more room: the retry of a lone image whose answer was cut off."""
+    kind: str                            # "read" or "retry"
+    batch: int
+    attempt: int
+    labels: tuple[str, ...]
+    system: str
+    instructions: str
+    schema: Mapping[str, Any]
+    parts: tuple[Mapping[str, Any], ...]
+    wider: bool = False
+
+
+@dataclass(frozen=True)
+class SortTask:
+    """Phase 2's text-only task: each reading under a sort label in
+    ``instructions``, no images."""
+    attempt: int
+    labels: tuple[str, ...]
+    system: str
+    instructions: str
+    schema: Mapping[str, Any]
+    wider: bool = False
+    kind: str = "sort"
+    parts: tuple[Mapping[str, Any], ...] = ()
+
+
+@dataclass(frozen=True)
+class Cause:
+    """Why a request left something out, in words a line can show."""
+    kind: str
+    text: str
+    retryable: bool = True
+
+
+MISSING = Cause("missing", "no answer came back for it")
+
+
+@dataclass
+class ReadOutcome:
+    """What a source says about one task: the labels it saw close (the shared
+    core counts only what its own check accepted), whether the answer was cut
+    off, and why something is missing (None: nothing went wrong)."""
+    closed: list[str]
+    truncated: bool = False
+    cause: Cause | None = None
+
+
+@dataclass
+class SortOutcome:
+    """The sort's answer (``{"sort": [...]}``, checked by the shared core), or
+    None with why."""
+    value: Any = None
+    truncated: bool = False
+    cause: Cause | None = None
+
+
+class ReadSink:
+    """Where a source hands what it reads. ``focus(label)`` when an item's
+    ref is known, ``item(raw)`` when it closes (the shared item check: it
+    returns the label it accepted, or None), ``thought(text)`` for thought
+    summaries, shown only when the source's ``thoughts`` is true."""
+
+    def focus(self, label: Any) -> None:
+        return None
+
+    def item(self, raw: Any) -> str | None:
+        return None
+
+    def thought(self, text: str) -> None:
+        return None
+
+
+class ReadingSource(abc.ABC):
+    """Who reads the references (section 5.6.2): Argon (``GeminiSource``), or
+    in PR10c the person's agent. A source makes the provider call and nothing
+    else: it gets tasks the shared code built and hands every item to the
+    sink, and it never writes a trace line.
+
+    - ``identity``: ``{kind: "reader", id, name, color, model?, provider,
+      source: "model" | "agent"}``.
+    - ``priced``: "Nebula pays". True for Argon even with no list price, so
+      the unpriced-read refusal still applies (Q16); false only for an agent,
+      which reads on its own plan. The estimate and the spend gate run only
+      when it is true (``read_estimate``, ``gate_items``).
+    - ``streams``: whether items arrive one by one; ``thoughts``: whether it
+      gives thought summaries (an agent never does).
+    - ``can_widen(task)``: whether a ``wider`` attempt would be a different
+      request from ``task`` (Argon: a raised output cap). The shared retry
+      sends a lone cut-off image again only when it would be."""
+
+    identity: dict[str, Any]
+    priced: bool
+    streams: bool
+    thoughts: bool
+    level: str | None = None  # the thinking level, for a model that has them
+
+    @property
+    def thought_summaries(self) -> bool | str:
+        """The result's ``thoughtSummaries``."""
+        return self.thoughts
+
+    @abc.abstractmethod
+    async def read(self, task: ReadTask, sink: ReadSink) -> ReadOutcome:
+        """Read one task; never raises for the provider."""
+
+    @abc.abstractmethod
+    async def sort(self, task: SortTask, sink: ReadSink) -> SortOutcome:
+        """Sort the readings; never raises for the provider."""
+
+    def can_widen(self, task: ReadTask | SortTask) -> bool:
+        return False
+
+    def spent(self) -> dict[str, Any] | None:
+        """What the reads cost Nebula so far; None when Nebula doesn't pay."""
+        return None
+
+    def estimate(self, board: Mapping[str, Any], targets: Sequence[Target], *,
+                 today: date | None = None) -> dict[str, Any]:
+        """A priced source's price for a read (``read_estimate``)."""
+        raise NotImplementedError
+
+    def spend_items(self, est: Mapping[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """What ``agent_spend.decide`` takes for a priced source's read."""
+        raise NotImplementedError
+
+
+def build_read_task(board: Mapping[str, Any], targets: Sequence[Target], images: Sequence[tuple[str, str]], *,
+                    batch: int, attempt: int, wider: bool = False) -> ReadTask:
+    """The task for ``targets`` (labelled A, B, ... in order), with notes per
+    the board's opt-in, never private notes."""
+    labels = tuple(LABELS[:len(targets)])
+    return ReadTask(kind="read" if attempt == 1 else "retry", batch=batch, attempt=attempt, labels=labels,
+                    system=SYSTEM_PROMPT, instructions=phase1_instructions(board, len(targets)),
+                    schema=phase1_schema(labels), parts=tuple(phase1_image_parts(board, targets, images)),
+                    wider=wider)
+
+
+def build_sort_task(board: Mapping[str, Any], labelled: Sequence[tuple[str, Target, Mapping[str, Any]]], *,
+                    attempt: int, wider: bool = False) -> SortTask:
+    labels = tuple(label for label, _, _ in labelled)
+    return SortTask(attempt=attempt, labels=labels, system=SYSTEM_PROMPT,
+                    instructions=phase2_prompt(board, labelled), schema=phase2_schema(labels), wider=wider)
+
+
+@dataclass
+class _Usage:
+    requests: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    thoughts_tokens: int = 0
+    unknown: int = 0  # requests that ended without usageMetadata
+
+    def add(self, usage: Mapping[str, Any]) -> None:
+        self.requests += 1
+        if not usage:
+            self.unknown += 1
+            return
+        self.input_tokens += int(usage.get("promptTokenCount") or 0)
+        self.output_tokens += int(usage.get("candidatesTokenCount") or 0)
+        self.thoughts_tokens += int(usage.get("thoughtsTokenCount") or 0)
+
+
+class GeminiSource(ReadingSource):
+    """Argon's source: today's Gemini request (``gemini_body`` through
+    ``GeminiTransport``, read by ``GeminiStreamParser``) under the model's
+    time bounds. It reports ``truncated`` for ``finishReason: MAX_TOKENS``,
+    asks for thought summaries only when the model file says ``true``, and
+    counts the usage Google reports. A ``wider`` task goes out at twice its
+    cap, bounded by the model's output limit (``raised_cap``).
+
+    ``api_key`` may be left out for an estimate; reading then raises
+    ``NoReaderKeyError``. ``today`` picks the price row the spend is counted at."""
+
+    priced = True  # Nebula pays, with a list price or not (Q16)
+
+    def __init__(self, entry: Mapping[str, Any], api_key: str | None = None, *, level: str | None = None,
+                 client: httpx.AsyncClient | None = None, clock: Callable[[], float] = time.monotonic,
+                 today: date | None = None) -> None:
+        self.entry = entry
+        self.level = thinking_level(entry, level)
+        self.identity = model_identity(entry)
+        self.streams = bool(entry.get("streams"))
+        self.thoughts = asks_for_thoughts(entry)
+        self.bounds = TimeBounds.of(entry, self.level)
+        self.today = today or date.today()
+        self._transport = GeminiTransport(entry, api_key, client=client, clock=clock) if api_key else None
+        self._usage = _Usage()
+
+    @property
+    def thought_summaries(self) -> bool | str:
+        return self.entry.get("thoughtSummaries")
+
+    def transport(self) -> GeminiTransport:
+        if self._transport is None:
+            check_key(self.entry, {})  # raises NoReaderKeyError
+        return self._transport  # type: ignore[return-value]
+
+    def _cap(self, task: ReadTask | SortTask, *, wider: bool | None = None) -> int:
+        count = len(task.labels)
+        cap = sort_cap(self.entry, self.level, count) if isinstance(task, SortTask) \
+            else batch_cap(self.entry, self.level, count)
+        return raised_cap(self.entry, cap) if (task.wider if wider is None else wider) else cap
+
+    def can_widen(self, task: ReadTask | SortTask) -> bool:
+        return self._cap(task, wider=True) > self._cap(task, wider=False)
+
+    def request_body(self, task: ReadTask | SortTask) -> dict[str, Any]:
+        """The ``generateContent`` body for ``task``: its text and images as
+        they are, at the task's output cap."""
+        return gemini_body(self.entry, parts=gemini_parts(task.instructions, task.parts), schema=task.schema,
+                           level=self.level, max_output_tokens=self._cap(task), system=task.system)
+
+    async def read(self, task: ReadTask, sink: ReadSink) -> ReadOutcome:
+        if sum(len(part["image"]["data"]) for part in task.parts if "image" in part) > MAX_BASE64_CHARS:
+            return ReadOutcome([], cause=Cause("too_big", "the batch's images are too large to send", retryable=False))
+        transport = self.transport()
+        closed: list[str] = []
+
+        def on_item(raw: Any) -> None:
+            label = sink.item(raw)
+            if label is not None:
+                closed.append(label)
+
+        parser = GeminiStreamParser(items_key="readings", on_focus=sink.focus, on_item=on_item,
+                                    on_thought=sink.thought if self.thoughts else None)
+        error: ReaderRequestError | None = None
+        try:
+            await transport.send(self.request_body(task), parser, self.bounds)
+        except ReaderRequestError as exc:
+            error = exc
+        outcome = parser.close()
+        self._usage.add(outcome.usage)
+        cause = _cause(error, outcome)
+        return ReadOutcome(closed, truncated=cause is not None and cause.kind == "max_tokens", cause=cause)
+
+    async def sort(self, task: SortTask, sink: ReadSink) -> SortOutcome:
+        result = await call_text(self.transport(), self.request_body(task), self.bounds,
+                                 on_thought=sink.thought if self.thoughts else None)
+        self._usage.add(result.outcome.usage)
+        if result.error is None and result.outcome.complete and isinstance(result.value, dict):
+            return SortOutcome(result.value)
+        cause = _cause(result.error, result.outcome) or MISSING
+        return SortOutcome(None, truncated=cause.kind == "max_tokens", cause=cause)
+
+    def spent(self) -> dict[str, Any]:
+        """The usage Google reported, priced at today's row. A minimum: a
+        request that ended without ``usageMetadata`` adds nothing to ``usd``."""
+        row = price_row(self.entry, self.today)
+        usage = self._usage
+        return {"inputTokens": usage.input_tokens, "outputTokens": usage.output_tokens,
+                "thoughtsTokens": usage.thoughts_tokens, "requests": usage.requests,
+                "requestsWithoutUsage": usage.unknown,
+                "usd": round(_usd(usage.input_tokens, usage.output_tokens + usage.thoughts_tokens, row), 6)
+                if row else None}
+
+    def estimate(self, board: Mapping[str, Any], targets: Sequence[Target], *,
+                 today: date | None = None) -> dict[str, Any]:
+        return estimate(board, self.entry, level=self.level, targets=targets, today=today)
+
+    def spend_items(self, est: Mapping[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        return spend_check(self.entry, est)
+
+
+def model_source(entry: Mapping[str, Any], api_key: str | None = None, **options: Any) -> ReadingSource:
+    """The source for a reader in the model file. Every reader there is
+    Google's today; another maker's model gets its own source."""
+    if str(entry.get("provider")) != "google":
+        raise ReaderError(f"{entry.get('name')} is from {entry.get('provider')}, and Nebula reads only with "
+                          "Google's models so far.")
+    return GeminiSource(entry, api_key, **options)
+
+
+def read_estimate(source: ReadingSource, board: Mapping[str, Any], targets: Sequence[Target], *,
+                  today: date | None = None) -> dict[str, Any]:
+    """The estimate route's answer. A priced source prices the read
+    (``estimate``); a source Nebula doesn't pay for gets no estimate maths,
+    only its counts and ``billedTo: "agent"`` (section 5.6.2)."""
+    if source.priced:
+        return source.estimate(board, targets, today=today)
+    readable = [t for t in targets if t.path is not None]
+    return {"model": reader_key(source.identity), "reader": dict(source.identity), "count": len(readable),
+            "targets": len(targets), "unreadable": [t.number for t in targets if t.path is None],
+            "batches": len(batches_of(readable)), "billedTo": "agent", "usd": None}
+
+
+def gate_items(source: ReadingSource,
+               est: Mapping[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]] | None:
+    """What ``agent_spend.decide`` takes for this read, or None when Nebula
+    doesn't pay for it, so there is nothing to gate or hold. A priced read
+    with no list price still comes back, with no pricing entry, so any USD
+    limit refuses it."""
+    if not source.priced:
+        return None
+    return source.spend_items(est)
+
+
 # -- the trace --------------------------------------------------------------------------------
 
 def _now() -> str:
@@ -894,7 +1256,10 @@ def _short(value: Any, limit: int) -> str:
     return trim_reason(clean_model_text(value), limit)
 
 
-def _looks(value: Any, limit: int) -> list[dict[str, Any]]:
+def _looks(value: Any, limit: int, *, cut: bool = True) -> list[dict[str, Any]]:
+    """Checked looks, names with their spaces collapsed. A reading's look
+    names are cut to 60 characters; the sort's are kept whole (``cut``
+    False), so the look-name check can refuse a longer one."""
     if not isinstance(value, list):
         raise ItemProblem("schema", "looks isn't a list")
     looks = []
@@ -904,7 +1269,8 @@ def _looks(value: Any, limit: int) -> list[dict[str, Any]]:
         fit = look.get("fit")
         if isinstance(fit, bool) or not isinstance(fit, (int, float)) or not math.isfinite(fit) or not 0 <= fit <= 1:
             raise ItemProblem("schema", "a look's fit isn't from 0 to 1")
-        looks.append({"name": " ".join(look["name"].split())[:FRAME_NAME_LIMIT], "fit": round(float(fit), 3)})
+        name = " ".join(look["name"].split())
+        looks.append({"name": name[:FRAME_NAME_LIMIT] if cut else name, "fit": round(float(fit), 3)})
     return looks
 
 
@@ -937,70 +1303,116 @@ def check_reading(item: Any, labels: Sequence[str]) -> tuple[str, dict[str, Any]
 # -- the run ------------------------------------------------------------------------------------
 
 @dataclass
-class _Cause:
-    kind: str
-    text: str
-    retryable: bool = True
-
-
-@dataclass
-class _Usage:
-    requests: int = 0
-    input_tokens: int = 0
-    output_tokens: int = 0
-    thoughts_tokens: int = 0
-    unknown: int = 0  # requests that ended without usageMetadata
-
-    def add(self, usage: Mapping[str, Any]) -> None:
-        self.requests += 1
-        if not usage:
-            self.unknown += 1
-            return
-        self.input_tokens += int(usage.get("promptTokenCount") or 0)
-        self.output_tokens += int(usage.get("candidatesTokenCount") or 0)
-        self.thoughts_tokens += int(usage.get("thoughtsTokenCount") or 0)
-
-
-@dataclass
 class _Sorted:
     placements: dict[str, dict[str, Any]] = field(default_factory=dict)  # imageId -> result
     new_looks: list[str] = field(default_factory=list)
     suggestions: list[dict[str, Any]] = field(default_factory=list)
 
 
+class _TaskSink(ReadSink):
+    """The shared item check for one task: each item a source hands over is
+    checked here and only then becomes a reading and its lines."""
+
+    def __init__(self, run: "MoodboardRead", task: ReadTask, targets: Sequence[Target]) -> None:
+        self.run = run
+        self.task = task
+        self.by_label = dict(zip(task.labels, targets))  # frozen when the task is made
+        self.key = (task.batch, task.attempt, task.labels)
+        self.done: dict[str, Target] = {}
+        self.focused: set[str] = set()
+        self.last_done: Target | None = None
+
+    def focus(self, label: Any) -> None:
+        if isinstance(label, str) and label in self.by_label and label not in self.focused and label not in self.done:
+            self.run.trace.flush_thoughts(self.key)
+            self.focused.add(label)
+            self.run.trace.add("focus", refs=[self.by_label[label]], batch=self.task.batch, attempt=self.task.attempt)
+
+    def item(self, raw: Any) -> str | None:
+        run, task = self.run, self.task
+        run.trace.flush_thoughts(self.key)
+        try:
+            ref, fields = check_reading(raw, task.labels)
+        except ItemProblem as problem:
+            run.log.append(f"batch {task.batch} attempt {task.attempt}: {problem}")
+            if problem.kind == "bad_ref":
+                run.trace.add("skipped", "Ignored an answer for an image not in this batch", batch=task.batch,
+                              attempt=task.attempt)
+            return None
+        if ref in self.done:
+            run.log.append(f"batch {task.batch} attempt {task.attempt}: a second answer for {ref}, kept the first")
+            return None
+        target = self.by_label[ref]
+        if ref not in self.focused:
+            self.focused.add(ref)
+            run.trace.add("focus", refs=[target], batch=task.batch, attempt=task.attempt)
+        self.done[ref] = target
+        self.last_done = target
+        reading = run.reading(target, fields)
+        best = reading["looks"][0] if reading["looks"] else None
+        text = reading["reason"] + (f" → {best['name']}" if best else "")
+        run.trace.add("reading", text.strip(), source="reader", refs=[target], batch=task.batch, attempt=task.attempt,
+                      look=run._look_ref(best["name"]) if best else None, fit=best["fit"] if best else None)
+        return ref
+
+    def thought(self, text: str) -> None:
+        if self.run.source.thoughts:
+            self.run.trace.thought(self.key, text, phase="reading", batch=self.task.batch, attempt=self.task.attempt)
+
+
+class _SortSink(ReadSink):
+    """The sort hands over its answer whole; only thoughts stream."""
+
+    def __init__(self, run: "MoodboardRead", attempt: int) -> None:
+        self.run = run
+        self.attempt = attempt
+        self.key = ("sort", attempt)
+
+    def thought(self, text: str) -> None:
+        if self.run.source.thoughts:
+            self.run.trace.thought(self.key, text, phase="sorting", batch=None, attempt=self.attempt)
+
+
 class MoodboardRead:
     """One read of a board, as a dry run (PR4): both phases, the trace, and
     what Analyze would do. Nothing is saved and nothing moves.
 
-    ``sink`` gets each trace line as it is written. ``client`` is the httpx
-    client requests go through (tests pass a mock transport); ``today`` picks
-    the price row the spend is counted at."""
+    This is the shared core of section 5.6.2: the tasks, the item check, the
+    retry, the sort rules and every line are here, and ``source`` makes the
+    provider calls. Without ``source``, ``entry`` and ``api_keys`` make
+    Argon's (``GeminiSource``), with ``level``, ``client`` (the httpx client
+    requests go through; tests pass a mock transport) and ``today`` (the
+    price row the spend is counted at).
 
-    def __init__(self, board: Mapping[str, Any], entry: Mapping[str, Any], *, api_keys: Mapping[str, Any],
-                 image_ids: Sequence[str] | None = None, level: str | None = None,
-                 sink: Callable[[dict[str, Any]], None] | None = None, client: httpx.AsyncClient | None = None,
-                 clock: Callable[[], float] = time.monotonic, now: Callable[[], str] = _now,
-                 today: date | None = None, run_id: str | None = None,
-                 requested_by: Mapping[str, Any] | None = None,
-                 targets: Sequence[Target] | None = None,
-                 encode: Callable[[Path], tuple[str, str]] = encode_image) -> None:
+    ``sink`` gets each trace line as it is written."""
+
+    def __init__(self, board: Mapping[str, Any], entry: Mapping[str, Any] | None = None, *,
+                 api_keys: Mapping[str, Any] | None = None, image_ids: Sequence[str] | None = None,
+                 level: str | None = None, sink: Callable[[dict[str, Any]], None] | None = None,
+                 client: httpx.AsyncClient | None = None, clock: Callable[[], float] = time.monotonic,
+                 now: Callable[[], str] = _now, today: date | None = None, run_id: str | None = None,
+                 requested_by: Mapping[str, Any] | None = None, targets: Sequence[Target] | None = None,
+                 encode: Callable[[Path], tuple[str, str]] = encode_image,
+                 source: ReadingSource | None = None) -> None:
+        if source is None:
+            if entry is None:
+                raise TypeError("MoodboardRead needs a source, or a reader entry and api_keys")
+            level = thinking_level(entry, level)
         self.board = board
-        self.entry = entry
-        self.level = thinking_level(entry, level)
         self.targets = list(targets) if targets is not None else select_targets(board, image_ids)
+        if source is None:
+            assert entry is not None
+            source = model_source(entry, check_key(entry, api_keys or {}), level=level, client=client, clock=clock,
+                                  today=today)
+        self.source = source
         self.run_id = run_id or uuid.uuid4().hex[:12]
         self.requested_by = dict(requested_by) if requested_by else None
         self.trace = Trace(board_id=str(board.get("id") or ""), run_id=self.run_id, sink=sink, clock=clock, now=now)
-        self.transport = GeminiTransport(entry, check_key(entry, api_keys), client=client, clock=clock)
-        self.bounds = TimeBounds.of(entry, self.level)
-        self.thoughts = asks_for_thoughts(entry)
-        self.today = today or date.today()
         self._now = now
         self._encode = encode
         self._encoded: dict[str, tuple[str, str]] = {}
         self._readings: dict[str, dict[str, Any]] = {}
         self._failed: dict[str, str] = {}  # imageId -> why it couldn't be read
-        self._usage = _Usage()
         self._sent: list[str] = []
         self._sort_error: str | None = None
         self._semaphore = asyncio.Semaphore(MAX_PARALLEL)
@@ -1010,6 +1422,17 @@ class MoodboardRead:
         """The requests started so far (``batch:N``, ``retry:N``, ``sort``,
         ``sort-retry``): what a hold keeps when a read stops part way."""
         return list(self._sent)
+
+    def reading(self, target: Target, fields: Mapping[str, Any]) -> dict[str, Any]:
+        """A checked item as the reading section 4.1 describes, kept for the
+        sort: who read it (``reader``, ``readerName``) and its model where
+        known."""
+        identity = self.source.identity
+        reading = {"model": identity.get("model"), "reader": reader_key(identity), "readerName": str(identity["name"]),
+                   "at": self._now(), "url": str(target.image.get("url") or ""), "readerVersion": READER_VERSION,
+                   **fields}
+        self._readings[target.id] = reading
+        return reading
 
     # -- phase 1 --------------------------------------------------------------------------
 
@@ -1028,6 +1451,10 @@ class MoodboardRead:
         self.trace.add("error", f"Couldn't read #{target.number}: {why}", refs=[target], batch=batch,
                        attempt=attempt)
 
+    def _task(self, number: int, attempt: int, targets: Sequence[Target], *, wider: bool = False) -> ReadTask:
+        return build_read_task(self.board, targets, [self._encoded[t.id] for t in targets], batch=number,
+                               attempt=attempt, wider=wider)
+
     async def _batch(self, number: int, batch: list[Target]) -> None:
         async with self._semaphore:
             ready = await asyncio.to_thread(self._encode_batch, batch)
@@ -1039,117 +1466,61 @@ class MoodboardRead:
             self.trace.add("batch", f"Reading {numbers_text(t.number for t in ready)}", refs=ready, batch=number,
                            attempt=1)
             self._sent.append(f"batch:{number}")
-            missing, cause, last_done = await self._attempt(number, 1, ready)
+            first = self._task(number, 1, ready)
+            missing, outcome, last_done = await self._attempt(first, ready)
         if not missing:
             return
+        cause = outcome.cause or MISSING
         if not cause.retryable:
             for target in missing:
                 self._fail(target, cause.text, batch=number, attempt=1)
             return
-        split = cause.kind == "max_tokens" and len(missing) > 1
+        # The retry asks only for what's missing. It goes out in two halves
+        # only when the source said its answer was cut off.
+        split = outcome.truncated and len(missing) > 1
         groups = [missing[: (len(missing) + 1) // 2], missing[(len(missing) + 1) // 2:]] if split else [missing]
-        retry_cap: int | None = None
-        if cause.kind == "max_tokens" and not split:
-            # One image left can't be split, so its retry gets a raised cap.
-            # If the cap can't grow and it was the whole batch, the retry
-            # would be the first request again: don't send it.
-            first_cap = batch_cap(self.entry, self.level, len(ready))
-            retry_cap = raised_cap(self.entry, batch_cap(self.entry, self.level, 1))
-            if len(ready) == 1 and retry_cap <= first_cap:
+        wider = False
+        if outcome.truncated and not split:
+            # One image left can't be split, so its retry asks for more room.
+            # If the source can't give it and the image was the whole batch,
+            # the retry would be the first request again: don't send it.
+            if len(ready) == 1 and not self.source.can_widen(first):
                 for target in missing:
                     self._fail(target, cause.text, batch=number, attempt=1)
                 return
-        self.trace.add("retry", _retry_text(cause, missing, last_done, split), refs=missing, batch=number,
-                       attempt=2)
+            wider = True
+        self.trace.add("retry", _retry_text(cause, outcome.truncated, missing, last_done, split), refs=missing,
+                       batch=number, attempt=2)
         self._sent.append(f"retry:{number}")
-        still: list[tuple[Target, _Cause]] = []
+        still: list[tuple[Target, Cause]] = []
         async with self._semaphore:
             for group in groups:
-                left, again, _ = await self._attempt(number, 2, group, max_output_tokens=retry_cap)
-                still.extend((target, again) for target in left)
-        for target, again in still:
-            self._fail(target, again.text, batch=number, attempt=2)
+                left, again, _ = await self._attempt(self._task(number, 2, group, wider=wider), group)
+                still.extend((target, again.cause or MISSING) for target in left)
+        for target, why in still:
+            self._fail(target, why.text, batch=number, attempt=2)
 
     def _encode_batch(self, batch: list[Target]) -> list[Target]:
         ready = []
-        total = sum(len(data) for _, data in self._encoded.values())
         for target in batch:
             if target.id not in self._encoded:
                 try:
                     self._encoded[target.id] = self._encode(target.path)  # type: ignore[arg-type]
                 except (OSError, ValueError, Image.DecompressionBombError):
                     continue
-                total += len(self._encoded[target.id][1])
             ready.append(target)
         return ready
 
-    async def _attempt(self, number: int, attempt: int, batch: list[Target], *,
-                       max_output_tokens: int | None = None) -> tuple[list[Target], _Cause, Target | None]:
-        """One request for ``batch``: the items that closed are kept (and
-        already shown); the rest come back as missing, with why.
-        ``max_output_tokens`` overrides the batch's cap (a raised retry)."""
-        labels = LABELS[:len(batch)]
-        by_label = dict(zip(labels, batch))  # frozen when the request is sent
-        images = [self._encoded[t.id] for t in batch]
-        if sum(len(data) for _, data in images) > MAX_BASE64_CHARS:
-            return batch, _Cause("too_big", "the batch's images are too large to send", retryable=False), None
-        body = gemini_body(self.entry, parts=phase1_parts(self.board, batch, images), schema=phase1_schema(labels),
-                           level=self.level,
-                           max_output_tokens=max_output_tokens or batch_cap(self.entry, self.level, len(batch)))
-        done: dict[str, Target] = {}
-        focused: set[str] = set()
-        key = (number, attempt, labels)
-        last_done: list[Target] = []
-
-        def on_focus(ref: Any) -> None:
-            if isinstance(ref, str) and ref in by_label and ref not in focused and ref not in done:
-                self.trace.flush_thoughts(key)
-                focused.add(ref)
-                self.trace.add("focus", refs=[by_label[ref]], batch=number, attempt=attempt)
-
-        def on_item(item: Any) -> None:
-            self.trace.flush_thoughts(key)
-            try:
-                ref, fields = check_reading(item, labels)
-            except ItemProblem as problem:
-                self.log.append(f"batch {number} attempt {attempt}: {problem}")
-                if problem.kind == "bad_ref":
-                    self.trace.add("skipped", "Ignored an answer for an image not in this batch", batch=number,
-                                   attempt=attempt)
-                return
-            if ref in done:
-                self.log.append(f"batch {number} attempt {attempt}: a second answer for {ref}, kept the first")
-                return
-            target = by_label[ref]
-            if ref not in focused:
-                focused.add(ref)
-                self.trace.add("focus", refs=[target], batch=number, attempt=attempt)
-            done[ref] = target
-            last_done.append(target)
-            reading = {"model": self.entry["id"], "at": self._now(), "url": str(target.image.get("url") or ""),
-                       "readerVersion": READER_VERSION, **fields}
-            self._readings[target.id] = reading
-            best = reading["looks"][0] if reading["looks"] else None
-            text = reading["reason"] + (f" → {best['name']}" if best else "")
-            self.trace.add("reading", text.strip(), source="reader", refs=[target], batch=number, attempt=attempt,
-                           look=self._look_ref(best["name"]) if best else None,
-                           fit=best["fit"] if best else None)
-
-        def on_thought(text: str) -> None:
-            if self.thoughts:
-                self.trace.thought(key, text, phase="reading", batch=number, attempt=attempt)
-
-        parser = GeminiStreamParser(items_key="readings", on_focus=on_focus, on_item=on_item, on_thought=on_thought)
-        error: ReaderRequestError | None = None
-        try:
-            await self.transport.send(body, parser, self.bounds)
-        except ReaderRequestError as exc:
-            error = exc
-        outcome = parser.close()
-        self.trace.flush_thoughts(key)
-        self._usage.add(outcome.usage)
-        missing = [by_label[label] for label in labels if label not in done]
-        return missing, _cause(error, outcome), (last_done[-1] if last_done else None)
+    async def _attempt(self, task: ReadTask,
+                       targets: Sequence[Target]) -> tuple[list[Target], ReadOutcome, Target | None]:
+        """One task for ``targets``: the items that closed are kept (and
+        already shown); the rest come back as missing, with the source's
+        outcome saying why."""
+        sink = _TaskSink(self, task, targets)
+        outcome = await self.source.read(task, sink)
+        self.trace.flush_thoughts(sink.key)
+        missing = [sink.by_label[label] for label in task.labels if label not in sink.done]
+        return missing, outcome, sink.last_done
 
     # -- phase 2 --------------------------------------------------------------------------
 
@@ -1158,33 +1529,29 @@ class MoodboardRead:
         labels = sort_labels(len(read))
         labelled = [(label, t, self._readings[t.id]) for label, t in zip(labels, read)]
         by_label = {label: t for label, t, _ in labelled}
-        cap = sort_cap(self.entry, self.level, len(read))
         self.trace.add("batch", f"Sorting {len(read)} into looks", phase="sorting")
         proposal: dict[str, list[dict[str, Any]]] | None = None
+        wider = False
         for attempt in (1, 2):
-            body = gemini_body(self.entry, parts=[{"text": phase2_prompt(self.board, labelled)}],
-                               schema=phase2_schema(labels), level=self.level, max_output_tokens=cap)
+            task = build_sort_task(self.board, labelled, attempt=attempt, wider=wider)
             self._sent.append("sort" if attempt == 1 else "sort-retry")
-            key = ("sort", attempt)
-            result = await call_text(self.transport, body, self.bounds, on_thought=(
-                (lambda text, k=key, a=attempt: self.trace.thought(k, text, phase="sorting", batch=None, attempt=a))
-                if self.thoughts else None))
-            self.trace.flush_thoughts(key)
-            self._usage.add(result.outcome.usage)
-            cause = _cause(result.error, result.outcome)
-            if result.error is None and result.outcome.complete and isinstance(result.value, dict):
-                proposal = _sort_items(result.value, by_label, self.log)
+            sink = _SortSink(self, attempt)
+            outcome = await self.source.sort(task, sink)
+            self.trace.flush_thoughts(sink.key)
+            if isinstance(outcome.value, dict):
+                proposal = _sort_items(outcome.value, by_label, self.log)
                 break
+            cause = outcome.cause or MISSING
             if attempt == 2 or not cause.retryable:
                 self._sort_error = cause.text
                 break
-            if cause.kind == "max_tokens":
-                raised = raised_cap(self.entry, cap)
-                if raised <= cap:  # the same request again: don't send it
+            if outcome.truncated:
+                if not self.source.can_widen(task):  # the same request again: don't send it
                     self._sort_error = cause.text
                     break
-                cap = raised
-            self.trace.add("retry", f"Sort answer {_cause_phrase(cause)}; asking again", phase="sorting", attempt=2)
+                wider = True
+            self.trace.add("retry", f"Sort answer {_cause_phrase(cause, outcome.truncated)}; asking again",
+                           phase="sorting", attempt=2)
         if proposal is None:
             # Each reading's own looks still give a draft.
             self.trace.add("error", f"Couldn't sort: {self._sort_error or 'no answer'}; using each reading's own looks",
@@ -1237,48 +1604,45 @@ class MoodboardRead:
         if unsorted:
             text += f" · {unsorted} Unsorted"
         self.trace.add("done", text + " · nothing moved", phase="done")
-        row = price_row(self.entry, self.today)
-        usage = self._usage
-        spent = {"inputTokens": usage.input_tokens, "outputTokens": usage.output_tokens,
-                 "thoughtsTokens": usage.thoughts_tokens, "requests": usage.requests,
-                 "requestsWithoutUsage": usage.unknown,
-                 "usd": round(_usd(usage.input_tokens, usage.output_tokens + usage.thoughts_tokens, row), 6)
-                 if row else None}
+        source = self.source
         return {
             "dryRun": True, "applied": False, "runId": self.run_id, "boardId": self.board.get("id"),
-            "reader": reader_identity(self.entry), "requestedBy": self.requested_by, "model": self.entry["id"],
-            "thinkingLevel": self.level, "thoughtSummaries": self.entry.get("thoughtSummaries"),
+            "reader": dict(source.identity), "requestedBy": self.requested_by, "model": reader_key(source.identity),
+            "thinkingLevel": source.level, "thoughtSummaries": source.thought_summaries,
             "results": results, "suggestions": result.suggestions, "newLooks": result.new_looks,
-            "readings": dict(self._readings), "summary": summary, "spent": spent, "sent": list(self._sent),
+            "readings": dict(self._readings), "summary": summary, "spent": source.spent(), "sent": list(self._sent),
             "sortError": self._sort_error, "ignored": list(self.log), "trace": list(self.trace.lines),
         }
 
 
-def _cause(error: ReaderRequestError | None, outcome: StreamOutcome) -> _Cause:
+def _cause(error: ReaderRequestError | None, outcome: StreamOutcome) -> Cause | None:
+    """Why a Gemini request left something out; None when the answer ended
+    cleanly (whatever is still missing was simply not answered)."""
     if error is not None:
-        return _Cause(error.kind, error.text, error.retryable)
+        return Cause(error.kind, error.text, error.retryable)
     if outcome.block_reason:
-        return _Cause("blocked", f"Google blocked the request ({outcome.block_reason})", retryable=False)
+        return Cause("blocked", f"Google blocked the request ({outcome.block_reason})", retryable=False)
     if outcome.error:
-        return _Cause("stream_error", f"Google stopped with an error: {outcome.error}"[:150])
+        return Cause("stream_error", f"Google stopped with an error: {outcome.error}"[:150])
     if outcome.finish_reason == "MAX_TOKENS":
-        return _Cause("max_tokens", "the answer hit its token cap")
+        return Cause("max_tokens", "the answer hit its token cap")
     if not outcome.complete or outcome.value is None:
-        return _Cause("invalid_json", "the answer wasn't valid JSON")
+        return Cause("invalid_json", "the answer wasn't valid JSON")
     if outcome.finish_reason not in (None, "STOP"):
-        return _Cause("stopped", f"Google stopped the answer ({outcome.finish_reason})")
-    return _Cause("missing", "no answer came back for it")
+        return Cause("stopped", f"Google stopped the answer ({outcome.finish_reason})")
+    return None
 
 
-def _cause_phrase(cause: _Cause) -> str:
-    return {"max_tokens": "was cut off", "invalid_json": "wasn't valid JSON",
-            "missing": "left some out"}.get(cause.kind, f"failed ({cause.text})")
+def _cause_phrase(cause: Cause, truncated: bool) -> str:
+    if truncated:
+        return "was cut off"
+    return {"invalid_json": "wasn't valid JSON", "missing": "left some out"}.get(cause.kind, f"failed ({cause.text})")
 
 
-def _retry_text(cause: _Cause, missing: list[Target], last_done: Target | None, split: bool) -> str:
+def _retry_text(cause: Cause, truncated: bool, missing: list[Target], last_done: Target | None, split: bool) -> str:
     numbers = numbers_text(t.number for t in missing)
     tail = f"; asking again for {numbers}" + (" in two halves" if split else "")
-    if cause.kind == "max_tokens":
+    if truncated:
         return ("Answer cut off" + (f" after #{last_done.number}" if last_done else "")) + tail
     if cause.kind == "invalid_json":
         return "Answer wasn't valid JSON" + tail
@@ -1302,7 +1666,7 @@ def _sort_items(value: Mapping[str, Any], by_label: Mapping[str, Target], log: l
             log.append(f"sort: a second answer for {ref}, kept the first")
             continue
         try:
-            out[target.id] = _looks(item.get("looks"), 2)
+            out[target.id] = _looks(item.get("looks"), 2, cut=False)
         except ItemProblem as problem:
             log.append(f"sort: {ref}: {problem}")
     return out
@@ -1311,6 +1675,37 @@ def _sort_items(value: Mapping[str, Any], by_label: Mapping[str, Target], log: l
 def _frames_by_name(board: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     return {str(frame.get("name")).casefold(): frame for frame in board.get("frames") or []
             if isinstance(frame, dict) and frame.get("kind") == "look" and frame.get("name")}
+
+
+_LOOK_NAME_PUNCTUATION = set(" &-'")
+_LOOK_NAME_WORDS = 4
+# A sort label ("R3") or a link ("https", "www") in a name, or a name that
+# is only a batch label ("B"; "Plan B" is a name).
+_SORT_LABEL_OR_LINK = re.compile(r"\bR\d+\b|(?i:\bhttps?\b|\bwww\b)|^[A-F]$")
+
+
+def _look_char(ch: str) -> bool:
+    return ch.isalpha() or ch.isdigit()
+
+
+def check_look_name(name: Any) -> str | None:
+    """A new look's name from the sort, its spaces collapsed, or None when
+    it fails section 5.6.2's check: 1 to 60 characters, at most 4 words,
+    only letters, digits, spaces and ``&-'``, at least one letter or digit,
+    and no ``#n``, batch or sort label, link or ``@``. A frame name is the
+    one piece of model text that becomes board data and then shows in
+    update templates, so it is checked for every source, Argon's too."""
+    if not isinstance(name, str):
+        return None
+    name = " ".join(name.split())
+    if not 1 <= len(name) <= FRAME_NAME_LIMIT or len(name.split()) > _LOOK_NAME_WORDS:
+        return None
+    # isalnum would let "½" and "Ⅻ" in: digits are isdigit's.
+    if not all(_look_char(ch) or ch in _LOOK_NAME_PUNCTUATION for ch in name) or not any(map(_look_char, name)):
+        return None
+    if names_a_label(name) or _SORT_LABEL_OR_LINK.search(name):
+        return None
+    return name
 
 
 def enforce_sort(board: Mapping[str, Any], targets: Sequence[Target], proposal: Mapping[str, list[dict[str, Any]]],
@@ -1323,20 +1718,25 @@ def enforce_sort(board: Mapping[str, Any], targets: Sequence[Target], proposal: 
     first (then the first named); an image whose best look didn't make it
     tries its second. Each image goes to its best look only; a second look
     with a fit of 0.5 or more becomes an ``alsoIn`` suggestion, and 3 or more
-    images sharing the same pair become one ``hybrid`` suggestion instead."""
+    images sharing the same pair become one ``hybrid`` suggestion instead.
+    A new look whose name fails ``check_look_name`` is dropped: an image
+    whose best look it was goes to Unsorted (not to its second look), and it
+    is never a second look or a suggestion. Existing looks aren't checked:
+    their names are the person's."""
     frames = _frames_by_name(board)
     out = _Sorted()
 
     def usable(looks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen, kept = set(), []
         for look in looks:
-            name = " ".join(str(look.get("name") or "").split())[:FRAME_NAME_LIMIT]
+            name = " ".join(str(look.get("name") or "").split())
             if not name or name.casefold() == "unsorted" or name.casefold() in seen:
                 continue
             seen.add(name.casefold())
             frame = frames.get(name.casefold())
             kept.append({"name": frame["name"] if frame else name, "fit": float(look.get("fit") or 0),
-                         "frameId": frame.get("id") if frame else None})
+                         "frameId": frame.get("id") if frame else None,
+                         "refused": frame is None and check_look_name(name) is None})
         # Best means the highest fit, whatever order the model gave.
         return sorted(kept, key=lambda look: -look["fit"])
 
@@ -1344,7 +1744,7 @@ def enforce_sort(board: Mapping[str, Any], targets: Sequence[Target], proposal: 
     counts: dict[str, int] = {}
     order: list[str] = []
     for looks in candidates.values():
-        if looks and looks[0]["fit"] >= MIN_FIT and looks[0]["frameId"] is None:
+        if looks and looks[0]["fit"] >= MIN_FIT and looks[0]["frameId"] is None and not looks[0]["refused"]:
             key = looks[0]["name"].casefold()
             if key not in counts:
                 order.append(key)
@@ -1362,7 +1762,11 @@ def enforce_sort(board: Mapping[str, Any], targets: Sequence[Target], proposal: 
                                          "why": failed[target.id]}
             continue
         proposed = candidates.get(target.id, [])
-        looks = [look for look in proposed if allowed(look)]
+        if proposed and proposed[0]["refused"] and proposed[0]["fit"] >= MIN_FIT:
+            out.placements[target.id] = {"status": "unsorted", "look": None, "frameId": None,
+                                         "fit": proposed[0]["fit"], "why": "its look's name was refused"}
+            continue
+        looks = [look for look in proposed if not look["refused"] and allowed(look)]
         best = looks[0] if looks else None
         if best is None or best["fit"] < MIN_FIT:
             fit = best["fit"] if best else None

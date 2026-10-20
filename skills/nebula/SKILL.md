@@ -177,7 +177,9 @@ nebula moodboard delete <board>
   `--quiet` prints only the done and spent lines, `--json` one JSON line
   per trace line. The spent line is a minimum: a request that stopped
   without a token count isn't in it, and the CLI says so. The reader never
-  sees board numbers, and its reasons never name another image;
+  sees board numbers, and its reasons never name another image; a look
+  name it makes up that isn't plain words (at most 4, letters, digits and
+  `&-'`) is refused and those images show as Unsorted;
   board and image notes go to Google only when the board's `sendNotes` is on,
   private notes never. A reference that isn't a file on this computer isn't
   read.

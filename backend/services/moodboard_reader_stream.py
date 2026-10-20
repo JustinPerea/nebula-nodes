@@ -76,6 +76,12 @@ def clean_model_text(text: Any) -> str:
     return cleaned.strip(" ,;:-–—").strip()
 
 
+def names_a_label(text: str) -> bool:
+    """Whether ``text`` names a batch label or a ``#n`` ("Image B", "ref C",
+    "#18", "(B)"), as ``clean_model_text`` would strip."""
+    return bool(_LABEL_TOKEN.search(text) or _BRACKET_LABELS.search(text))
+
+
 def trim_reason(text: str, limit: int = REASON_LIMIT) -> str:
     """At most ``limit`` characters, cut at a word boundary with an ellipsis.
     Google's schema can't cap a string's length (``maxLength`` is ignored),

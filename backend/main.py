@@ -11272,34 +11272,44 @@ def _reader_board(moodboard_id: str) -> dict:
     return board
 
 
-def _reader_plan(moodboard_id: str, body: MoodboardReadRequest) -> tuple[dict, dict, list, dict]:
-    """The board, the reader's entry, the targets and the estimate, or 404/422."""
+def _reader_plan(moodboard_id: str, body: MoodboardReadRequest) -> tuple[dict, dict, Any, list, dict]:
+    """The board, the reader's entry, its reading source (no key yet), the
+    targets and the estimate, or 404/422. A source Nebula doesn't pay for gets
+    no estimate maths (moodboard_reader.read_estimate)."""
     from services import moodboard_reader as reader
 
     board = _reader_board(moodboard_id)
     try:
         entry = reader.reader_entry(body.model)
         targets = reader.select_targets(board, body.imageIds)
-        estimate = reader.estimate(board, entry, level=body.thinkingLevel, targets=targets)
+        source = reader.model_source(entry, level=body.thinkingLevel)
+        estimate = reader.read_estimate(source, board, targets)
     except reader.ReaderError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return board, entry, targets, estimate
+    return board, entry, source, targets, estimate
 
 
-def _reader_spend_hold(entry: dict, estimate: dict, settings: Mapping[str, Any], board_ref: str) -> _SpendHold | None:
+def _reader_spend_hold(source: Any, estimate: dict, settings: Mapping[str, Any], board_ref: str) -> _SpendHold | None:
     """Refuse a read that isn't the person's when it breaks a spending limit,
     and count it at its high estimate when it doesn't (Q11: as one Gemini
     chat run, so the chat model's own limits in Settings apply). The hold is
     split per request, so requests that never start are given back.
-    The person's reads pass: the Studio asks them itself (PR10)."""
+    The person's reads pass: the Studio asks them itself (PR10). A source
+    Nebula doesn't pay for (``source.priced`` false) has nothing to gate or
+    hold; an Argon entry with no list price is still priced, and refused
+    under any USD limit."""
     from services import moodboard_reader as reader
 
     if _is_person_request():
         return None
-    items, pricing = reader.spend_check(entry, estimate)
-    ask = (f"To let agents read it, the person can raise the per-run limit for {entry['name']} "
+    gate = reader.gate_items(source, estimate)
+    if gate is None:
+        return None
+    items, pricing = gate
+    name, key_id = source.identity["name"], reader.reader_key(source.identity)
+    ask = (f"To let agents read it, the person can raise the per-run limit for {name} "
            f"(the Gemini chat node) in Settings > Agent spending. Price it first: "
-           f"`nebula moodboard analyze {board_ref} --read-with {entry['id']} --estimate` "
+           f"`nebula moodboard analyze {board_ref} --read-with {key_id} --estimate` "
            "(MCP: moodboard_analyze with estimate_only).")
     key, label = _spend_session(current_request_headers())
     decision = agent_spend.decide(items, [], settings=settings, pricing=pricing, definitions=node_registry.get_all(),
@@ -11307,7 +11317,8 @@ def _reader_spend_hold(entry: dict, estimate: dict, settings: Mapping[str, Any],
     if decision.refusal:
         raise HTTPException(status_code=403, detail=decision.refusal)
     at = agent_spend_ledger.record(key, label, decision.charge, decision.plan_charge)
-    shares = {part: (str(entry["definitionId"]), amount) for part, amount in (estimate.get("shares") or {}).items()}
+    node = str(items[0]["definitionId"])
+    shares = {part: (node, amount) for part, amount in (estimate.get("shares") or {}).items()}
     if not decision.charge or not shares:
         return None
     # The shares add up to the charge; any rounding left over rides on the first request.
@@ -11335,7 +11346,7 @@ async def estimate_moodboard_read(moodboard_id: str, body: MoodboardReadRequest)
     """What reading these references would cost (C10, Q16), sending nothing:
     ``{count, batches, low, high, unconfirmed, sources}`` and the parts behind
     them. ``available`` says whether the reader's key is set."""
-    _, entry, _, estimate = _reader_plan(moodboard_id, body)
+    _, entry, _, _, estimate = _reader_plan(moodboard_id, body)
     keys = node_readiness.configured_keys(load_settings())
     return {**estimate, "available": str(entry["keyName"]) in keys}
 
@@ -11359,21 +11370,22 @@ async def read_moodboard(moodboard_id: str, body: MoodboardReadRequest, dryRun: 
         raise HTTPException(status_code=422, detail=(
             "Reading references can only be a dry run in this version of Nebula: send dryRun=1. "
             "It reads and prices them and says how Analyze would sort them, and moves nothing."))
-    board, entry, targets, estimate = _reader_plan(moodboard_id, body)
+    board, entry, source, targets, estimate = _reader_plan(moodboard_id, body)
     if not estimate["count"]:
         raise HTTPException(status_code=422, detail=(
             "Nothing to read: none of these references is a file on this computer."
             if targets else "Nothing to read: the board has no references."))
     settings = load_settings()
-    hold = _reader_spend_hold(entry, estimate, settings, str(board.get("id")))
+    hold = _reader_spend_hold(source, estimate, settings, str(board.get("id")))
     requested_by = actor_record(actor_for_headers(current_request_headers()))
     lines: asyncio.Queue | None = asyncio.Queue() if stream else None
     client = httpx.AsyncClient(transport=_moodboard_reader_transport, timeout=httpx.Timeout(30.0, read=None)) \
         if _moodboard_reader_transport is not None else None
     try:
-        run = reader.MoodboardRead(
-            board, entry, api_keys=settings.get("apiKeys") or {}, level=estimate["thinkingLevel"], targets=targets,
-            client=client, requested_by=requested_by, sink=lines.put_nowait if lines is not None else None)
+        run_source = reader.model_source(entry, reader.check_key(entry, settings.get("apiKeys") or {}),
+                                         level=source.level, client=client)
+        run = reader.MoodboardRead(board, source=run_source, targets=targets, requested_by=requested_by,
+                                   sink=lines.put_nowait if lines is not None else None)
     except reader.NoReaderKeyError as exc:
         _settle_reader_hold(hold, [])
         if client is not None:

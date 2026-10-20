@@ -1343,7 +1343,13 @@ nebula moodboard delete <board>
     that never started is given back. A read with no list price is refused
     under any dollar limit.
   - The reader sees the images as A to F, never board numbers; reasons that
-    name another image are cleaned before they are shown. Board and image
+    name another image are cleaned before they are shown. A new look's name
+    must be 1 to 60 characters and at most 4 words, of letters, digits,
+    spaces and `&-'`, with no `#n`, image label, link or `@`; when the
+    reader names a look any other way, its images show as Unsorted ("its
+    look's name was refused") instead. Each reading in `--json` carries
+    `reader` and `readerName` ("Gemini 4 Argon"), and the answer's `reader`
+    says who read (`source: "model"`). Board and image
     notes go only when the board's `sendNotes` is on; private notes never.
     A reference that isn't a file on this computer is skipped and listed.
   - It needs `GOOGLE_API_KEY` (400 without it, and nothing is charged).
