@@ -29,7 +29,7 @@ sequenceDiagram
 
 | Agent | What it brings | How Nebula starts it | Needs |
 |---|---|---|---|
-| Claude (your setup) | Your Claude Code login and plan, `~/.claude` settings, **hooks**, **MCP servers**, memory and skills | `npx -y @agentclientprotocol/claude-agent-acp@0.84.0` | Node.js 22+ next to `npx`; signed in to Claude Code in a terminal |
+| Claude (your setup) | Your Claude Code login and plan, `~/.claude` settings, **hooks**, **MCP servers**, memory and skills | `npx -y @agentclientprotocol/claude-agent-acp@0.84.0`, which runs the Agent SDK's bundled Claude Code (2.1.284), not your `claude` (see below) | Node.js 22+ next to `npx`; signed in to Claude Code in a terminal |
 | Codex (your setup) | Your Codex login and `~/.codex` config, its own sandbox settings | `npx -y @agentclientprotocol/codex-acp@2.0.0` (with `CODEX_PATH` set to your `codex` when found) | Node.js; signed in to Codex in a terminal |
 | Gemini (your setup) | Your Gemini CLI login and settings | your installed `gemini --acp` (Nebula doesn't install it) | the `gemini` CLI |
 | Hermes | Your Hermes agent | `hermes acp` | **Not startable yet**: it needs a Nebula profile first |
@@ -38,6 +38,17 @@ sequenceDiagram
 The adapter versions are pinned exactly and were at least 14 days old when pinned (checked on registry.npmjs.org on
 2026-10-13). npx runs with `npm_config_before` set to 14 days ago, so what the adapter pulls in (for example
 `@openai/codex`) is held to the same age. Bumping a pin is a code change in `backend/services/personal_agents.py`.
+
+**Which Claude Code runs.** The Claude adapter doesn't start the `claude` on your `PATH`. It runs the native CLI
+bundled with its `@anthropic-ai/claude-agent-sdk` dependency (adapter 0.84.0 uses SDK 0.3.284, which is Claude Code
+2.1.284), resolved in `claudeCliPath()` (`src/acp-agent.ts:1719-1757` in adapter 0.84.0). Only if
+`CLAUDE_CODE_EXECUTABLE` is set does it use that path instead. Nebula doesn't set it; the agent inherits it only if
+it was set in the environment Nebula was started from. So the Claude Code version in a personal-agent chat follows the adapter
+pin, not your install: updating your own `claude` doesn't change it, and a feature or fix newer than 2.1.284 isn't there
+until the pin moves. Your login and `~/.claude` settings are still the ones used.
+
+The newer adapter, 0.94.0, was published on 2026-10-19, so under the 14-day rule it can't be pinned before
+2026-11-02. The weekly check below reports it once it clears.
 
 Agents are **off** until you switch them on in **Settings > Preferences > Personal agents**. Only agents whose status
 is *Ready* show in the chat picker. Statuses: Ready, Off, Not installed, Needs a newer Node.js, Not set up yet.
@@ -84,7 +95,7 @@ Nebula won't start a personal agent until you accept this:
   `<state dir>/agent-tokens/<backend pid>/<session id>.token`, mode 0600 in 0700 folders, outside the agent's
   workspace. `session/new` carries only that file's path (`NEBULA_AGENT_TOKEN_FILE` in the `nebula` MCP server's
   environment), never the token. That matters because adapters may put the MCP server's environment on a command
-  line: the pinned Claude adapter starts `claude` with `--mcp-config <json>`, which any local account can read with
+  line: the pinned Claude adapter starts its bundled Claude Code with `--mcp-config <json>`, which any local account can read with
   `ps`. The `nebula` MCP server reads the file when it starts and keeps the token in its own environment; if the file
   is missing, unreadable, open to other users or malformed, it exits instead of running without a token. The agent's
   own environment doesn't get the token. The file is deleted when the session ends, and a backend start deletes any
