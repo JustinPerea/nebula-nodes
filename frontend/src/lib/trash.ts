@@ -4,12 +4,12 @@ import { resolveProjectId } from './currentProject';
 /**
  * Recently deleted (backend main.py `/api/trash`, services/asset_trash.py).
  *
- * Deleting a moodboard, a character or a project moves it here. Anyone,
+ * Deleting a moodboard, a character, a Style or a project moves it here. Anyone,
  * agents included, may restore it with the same id. Deleting for good can't
  * be undone, so the backend lets only the person do it.
  */
 
-export type TrashKind = 'moodboard' | 'character' | 'project';
+export type TrashKind = 'moodboard' | 'character' | 'style' | 'project';
 
 export interface DeletedBy {
   kind: 'person' | 'agent' | 'anonymous' | 'system';
@@ -25,7 +25,7 @@ export interface TrashedItem {
   deletedAt: string;
   /** Missing on projects deleted before who-deleted-it was recorded. */
   deletedBy?: DeletedBy;
-  /** Projects only: when they're removed for good. Boards and characters stay until you delete them. */
+  /** Projects only: when they're removed for good. Boards, characters and Styles stay until you delete them. */
   purgeAt?: string;
 }
 

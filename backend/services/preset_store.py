@@ -17,6 +17,12 @@ version is separate from ``version``, which counts edits. Reads upgrade a copy
 of an older preset's params (services/saved_graph_upgrades.py) without writing,
 and every write stores the upgraded params with the current version, so a
 value saved after an upgrade is never upgraded again.
+
+Deleting a Style moves it to Recently deleted (``<root>/.trash``,
+services/asset_trash.py), the way boards and characters go: the file moves
+untouched and a restore brings it back with the same id. Reads skip the trash
+folder, so a trashed Style isn't found, listed or edited until it is restored.
+Deleting for good is the person's alone (main.py checks the person gate).
 """
 from __future__ import annotations
 
@@ -28,6 +34,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from services import asset_trash
+from services.asset_trash import is_trash_folder
 from services.retired_nodes import migrate_node
 from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrade_params
 
@@ -106,7 +114,8 @@ def _find_file(preset_id: str) -> Path | None:
     if not root.exists():
         return None
     for sub in root.iterdir():
-        if sub.is_dir():
+        # Skip the trash (``.trash``): a deleted Style isn't found until restored.
+        if sub.is_dir() and not is_trash_folder(sub):
             candidate = sub / f"{preset_id}.json"
             if candidate.exists():
                 return candidate
@@ -124,6 +133,15 @@ def _as_current(preset: dict[str, Any]) -> dict[str, Any]:
     if new_id == model_id and new_params == params:
         return preset
     return {**preset, "modelId": new_id, "params": new_params}
+
+
+class VersionConflict(Exception):
+    """An update sent ``base_version`` and the Style has moved on since:
+    someone else saved it. ``preset`` is the Style as it is now."""
+
+    def __init__(self, preset: dict[str, Any]) -> None:
+        super().__init__(f"the Style changed since you read it (it is at version {preset.get('version')})")
+        self.preset = preset
 
 
 class PresetStore:
@@ -182,22 +200,30 @@ class PresetStore:
         return items
 
     def update(self, preset_id: str, *, params_version: int = PARAMS_VERSION,
-               **fields: Any) -> dict[str, Any]:
+               base_version: int | None = None, **fields: Any) -> dict[str, Any]:
         """``params_version`` is the version of ``params`` in ``fields`` (current
         unless the caller says otherwise). Without new params, the stored params
         keep the version they were saved at. Either way the merged params are
         upgraded once against the merged ``modelId`` and the file is stamped,
-        so a thumbnail-only update also stores an older preset upgraded."""
+        so a thumbnail-only update also stores an older preset upgraded.
+
+        ``base_version`` (the ``version`` the caller read) makes it a checked
+        write: VersionConflict when the Style is at another version. A
+        ``modelId`` of "" clears the model (a style-only Style)."""
         path = _find_file(preset_id)
         if not path:
             raise KeyError(preset_id)
         preset = json.loads(path.read_text(encoding="utf-8"))
+        if base_version is not None and int(preset.get("version", 1)) != base_version:
+            raise VersionConflict(_upgraded(_as_current(preset)))
         stored = stored_version(preset.get("paramsVersion"))
         new_params = fields.get("params") is not None
         for key, value in fields.items():
             if key in self._IMMUTABLE or key == "paramsVersion" or value is None:
                 continue
             preset[key] = value
+        if preset.get("modelId") == "":
+            preset["modelId"] = None
         version = params_version if new_params else stored
         upgraded = upgrade_params(preset.get("modelId"), preset.get("params"), version)
         if upgraded is not None:
@@ -208,11 +234,38 @@ class PresetStore:
         _write_json(path, preset)
         return _as_current(preset)
 
-    def delete(self, preset_id: str) -> None:
+    def delete(self, preset_id: str, deleted_by: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Move a Style to Recently deleted and return the trash record.
+        ``deleted_by`` is who asked (services/canvas_events.actor_record).
+        KeyError when there is no live Style with that id."""
         path = _find_file(preset_id)
         if not path:
             raise KeyError(preset_id)
-        path.unlink()
+        return asset_trash.move_to_trash(_root(), path, kind="style", deleted_by=deleted_by)
+
+    # -- Recently deleted (services/asset_trash.py) --
+
+    def trashed(self, preset_id: str) -> dict[str, Any] | None:
+        """The trash record when this Style is in Recently deleted, else None."""
+        return asset_trash.trashed(_root(), asset_trash.validate_id(preset_id))
+
+    def list_trash(self, scope: str | None = None, projectId: str | None = None) -> list[dict[str, Any]]:
+        if projectId is not None and not _ID_RE.fullmatch(projectId):
+            raise ValueError("invalid projectId")
+        return asset_trash.list_trashed(_root(), scope=scope, project_id=projectId)
+
+    def restore(self, preset_id: str) -> dict[str, Any]:
+        """Bring a trashed Style back with the same id and contents, and return
+        it as reads give it."""
+        asset_trash.restore(_root(), asset_trash.validate_id(preset_id))
+        restored = self.get(preset_id)
+        if restored is None:  # moved back, then gone again before the read
+            raise KeyError(preset_id)
+        return restored
+
+    def purge(self, preset_id: str) -> None:
+        """Delete a trashed Style for good. Only the person may (main.py)."""
+        asset_trash.purge(_root(), asset_trash.validate_id(preset_id))
 
 
 preset_store = PresetStore()

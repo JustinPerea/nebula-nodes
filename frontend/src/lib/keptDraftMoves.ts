@@ -49,7 +49,7 @@ export function followAssetMoves(): void {
       void rehomeKeptDrafts();
       return;
     }
-    if (event.type !== 'storedAssetChanged' || event.deleted || !('projectId' in event)) return;
+    if (event.type !== 'storedAssetChanged' || event.deleted || !('projectId' in event) || event.kind === 'style') return;
     useAssetStudioDraftStore.getState().rehome(event.kind, event.id, event.projectId ?? null);
   });
 }
