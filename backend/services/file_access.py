@@ -123,34 +123,50 @@ def validate_file_references(value: Any) -> None:
     Graph ports permit Any and dynamic parameter names, so do not trust declared
     media types or a fixed filePath-key list. Strings remain unchanged: prose,
     provider handles and remote/data references are not converted into paths.
+
+    Each distinct reference is checked once per call. A project snapshot
+    repeats the same labels, ids and output paths in every run record (2,505
+    strings, 125 distinct, in a 40-node project), and each check stats the
+    protected roots, so checking repeats made one autosave take 10-35 s.
     """
-    if isinstance(value, dict):
-        for item in value.values():
-            validate_file_references(item)
-    elif isinstance(value, (list, tuple)):
-        for item in value:
-            validate_file_references(item)
-    elif isinstance(value, str) and value:
-        if value.startswith("data:"):
-            return
-        if value.startswith(("http://", "https://")):
-            # Some provider adapters map served output URLs directly to disk.
-            # Apply the same checks regardless of their hostname spelling.
+    seen: set[str] = set()
+    stack: list[Any] = [value]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, dict):
+            stack.extend(current.values())
+        elif isinstance(current, (list, tuple)):
+            stack.extend(current)
+        elif isinstance(current, str) and current:
+            reference = _path_reference(current)
+            if reference is None or reference in seen:
+                continue
+            seen.add(reference)
             try:
-                remote_path = urlsplit(value).path
-            except ValueError:
-                return  # Plain text can contain an illustrative, invalid URL.
-            if not remote_path.startswith("/api/outputs/"):
-                return
-            value = remote_path
-        if value.startswith("/api/outputs/"):
-            from services.output import OUTPUT_ROOT
-            value = str(OUTPUT_ROOT / unquote(value[len("/api/outputs/"):]))
+                require_allowed_path(reference)
+            except ProtectedPathError:
+                raise
+            except (OSError, RuntimeError, ValueError):
+                # Prose may contain ~, NUL or exceed pathname limits. Final file
+                # consumers still use the strict guard after their own conversion.
+                continue
+
+
+def _path_reference(value: str) -> str | None:
+    """The local path a graph string may stand for, or None for one that can't be a file."""
+    if value.startswith("data:"):
+        return None
+    if value.startswith(("http://", "https://")):
+        # Some provider adapters map served output URLs directly to disk.
+        # Apply the same checks regardless of their hostname spelling.
         try:
-            require_allowed_path(value)
-        except ProtectedPathError:
-            raise
-        except (OSError, RuntimeError, ValueError):
-            # Prose may contain ~, NUL or exceed pathname limits. Final file
-            # consumers still use the strict guard after their own conversion.
-            return
+            remote_path = urlsplit(value).path
+        except ValueError:
+            return None  # Plain text can contain an illustrative, invalid URL.
+        if not remote_path.startswith("/api/outputs/"):
+            return None
+        value = remote_path
+    if value.startswith("/api/outputs/"):
+        from services.output import OUTPUT_ROOT
+        value = str(OUTPUT_ROOT / unquote(value[len("/api/outputs/"):]))
+    return value

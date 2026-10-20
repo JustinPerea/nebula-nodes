@@ -19,6 +19,7 @@ import httpx  # noqa: F401 - tests patch httpx.request through this module
 from commons.client_paths import asset_path
 from nebula_api import NebulaAPI, NebulaAPIError
 from services.file_access import require_allowed_path
+from services.canvas_proposals import READY_NODES_MCP, readiness_warning
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
 
@@ -374,7 +375,17 @@ def propose_change(
         body["params"] = params
     if run:
         body["run"] = run
-    return _canvas_call("POST", "/api/canvas/proposals", ctx, json=body)
+    response = _canvas_call("POST", "/api/canvas/proposals", ctx, json=body)
+    return _worded_for_mcp(response)
+
+
+def _worded_for_mcp(response: Any) -> Any:
+    """The readiness warning in this surface's words (find_nodes, not the HTTP route)."""
+    if isinstance(response, dict) and response.get("warning"):
+        warning = readiness_warning(((response.get("proposal") or {}).get("cost")) or {}, lister=READY_NODES_MCP)
+        if warning:
+            response = {**response, "warning": warning}
+    return response
 
 
 @_tool(annotations=_READ, waits=True)

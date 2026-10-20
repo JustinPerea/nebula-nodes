@@ -109,8 +109,9 @@ with a node that has no list price, is refused: send it as a proposal.
 A run where any node failed exits 1 and prints each node's error (a missing
 key refuses the whole run before anything is called or spent). The card on
 the canvas shows the same error. `nebula look` prints a failed node's error
-under it, and `nebula path` says why there is no file. Tell the person what
-to set up, or pick a node `nebula context` lists.
+under it, and `nebula path` says why there is no file. The error stays on the
+node, through reloads, project switches and restarts, until it runs again.
+Tell the person what to set up, or pick a node `nebula context` lists.
 
 ## Propose instead of doing
 
@@ -124,8 +125,10 @@ nebula propose --note "Upscale the wide take" \
 ```
 
 If a node the run needs can't run here, `nebula propose` prints a
-`warning:` line naming it and why; Accept would fail at that node. Say so to
-the person, or propose a node that runs here instead.
+`warning:` line naming it and why (`--json` gives it as `warning`, with
+`--wait` too); Accept would fail at that node. Say so to
+the person, or propose a node that runs here instead (`nebula context` lists
+them).
 
 `nebula proposals` lists open ones; `nebula proposal withdraw <id>` takes one
 back.
