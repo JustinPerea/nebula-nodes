@@ -210,6 +210,30 @@ body.app-slava-restraint .model-node__ports--input + .model-node__preview--struc
   white-space: nowrap;
 }
 
+/* The Inspector's Left out, May clash and Pinned rows (MoodboardBundlePreview
+ * BundleClashes). */
+.structured-preview__clashes {
+  display: grid;
+  gap: 8px;
+}
+
+.structured-preview__clash-group {
+  display: grid;
+  gap: 4px;
+}
+
+/* Under the chips, past the 54px label column (and after
+ * .structured-preview__list, whose padding: 0 it overrides). Reasons wrap:
+ * the Inspector is where they're read. */
+.structured-preview__list.structured-preview__reasons {
+  padding-left: 62px;
+}
+
+.structured-preview__item.structured-preview__reason {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .structured-preview__fields {
   display: grid;
   margin: 0;
@@ -371,6 +395,7 @@ body.app-slava-restraint .structured-preview--full .structured-preview__swatch {
 
 body.app-slava-restraint .structured-preview__swatch-more,
 body.app-slava-restraint .structured-preview__note,
+body.app-slava-restraint .structured-preview .structured-preview__reason,
 body.app-slava-restraint .structured-preview__item--more {
   color: var(--sr-ink-meta);
   font-size: 11px;

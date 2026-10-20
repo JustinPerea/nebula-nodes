@@ -1,6 +1,13 @@
 import { useMemo } from 'react';
 import { backendAssetUrlSync } from '../../lib/backend';
-import { moodboardMeta, moodboardStatus, parseMoodboardBundle } from '../../lib/moodboardBundle';
+import {
+  moodboardLeftOut,
+  moodboardMeta,
+  moodboardStatus,
+  parseMoodboardBundle,
+  type MoodboardBundleClash,
+  type MoodboardBundleView,
+} from '../../lib/moodboardBundle';
 import { thumbnailLoading } from '../../lib/structuredValue';
 import { CopyValueButton, ExpandableBlock } from './ExpandableBlock';
 import { OverviewImage } from './OverviewImage';
@@ -18,7 +25,8 @@ const LIMITS = {
  * A Moodboard bundle as a generator gets it (handlers/moodboard.py): the
  * board's name and settings, a few of its images, the brief's palette and
  * accents (kept-out colours already gone), the style brief and what else the
- * run sent. `full` (the Inspector) shows more images and the whole brief.
+ * run sent. `full` (the Inspector) shows more images, the whole brief and
+ * which colours were left out or may clash, with why; a card only counts them.
  */
 export function MoodboardBundlePreview({ value, variant = 'card' }: { value: unknown; variant?: StructuredVariant }) {
   const bundle = useMemo(() => parseMoodboardBundle(value), [value]);
@@ -57,6 +65,8 @@ export function MoodboardBundlePreview({ value, variant = 'card' }: { value: unk
         </div>
       )}
 
+      {variant === 'full' && bundle.clashChecked && <BundleClashes bundle={bundle} limit={limits.swatches} />}
+
       {bundle.styleBrief ? (
         <ExpandableBlock lines={4} contentKey={bundle.styleBrief} longHint={bundle.styleBrief.length > 220}
           collapsible={variant === 'card'} className="structured-preview__brief-block"
@@ -80,8 +90,60 @@ export function MoodboardBundlePreview({ value, variant = 'card' }: { value: unk
   );
 }
 
-/** One row of colour chips, the Studio's swatch look at card size. */
-export function SwatchRow({ label, colors, limit }: { label: string; colors: string[]; limit: number }) {
+/** The colours the brief left out or flagged, as rows of chips with the
+ *  reasons listed under each (the Studio's "Left out of the brief", "May
+ *  clash" and "Pinned, so it still goes" lists, read-only). */
+function BundleClashes({ bundle, limit }: { bundle: MoodboardBundleView; limit: number }) {
+  const flagged = bundle.clashMode === 'flag';
+  const groups = [
+    { label: 'Left out', reasonsLabel: 'Why these are left out', items: moodboardLeftOut(bundle) },
+    { label: flagged ? 'Flagged' : 'May clash', reasonsLabel: flagged ? 'Why these are flagged' : 'Why these may clash',
+      items: bundle.mayClash },
+    { label: 'Pinned', reasonsLabel: 'Why these pinned colors clash', items: bundle.pinnedClashes },
+  ].filter((group) => group.items.length > 0);
+  if (groups.length === 0 && bundle.paletteClashes.length === 0) return null;
+  return (
+    <div className="structured-preview__clashes">
+      {groups.map((group) => {
+        const lines = group.items.map(clashLine);
+        // As many reasons as chips, so no chip's reason is hover-only.
+        const shown = lines.slice(0, limit);
+        return (
+          <div key={group.label} className="structured-preview__clash-group">
+            <SwatchRow label={group.label} colors={group.items.map((item) => item.hex ?? '')} titles={lines} limit={limit} />
+            <ul className="structured-preview__list structured-preview__reasons" aria-label={group.reasonsLabel}>
+              {shown.map((line, index) => (
+                <li key={`${line}-${index}`} className="structured-preview__item structured-preview__reason">{line}</li>
+              ))}
+              {lines.length > shown.length && (
+                <li className="structured-preview__item structured-preview__item--more">+{lines.length - shown.length} more</li>
+              )}
+            </ul>
+          </div>
+        );
+      })}
+      {bundle.paletteClashes.map((item, index) => (
+        <p key={index} className="structured-preview__note">Whole palette: {item.reasons.join(' · ')}</p>
+      ))}
+    </div>
+  );
+}
+
+/** "#a6392d accent: Avoid: red flowers · Direction: silver", as the Studio
+ *  reads a clash (hex, palette/accent, every reason). */
+function clashLine(item: MoodboardBundleClash): string {
+  const head = item.role ? `${item.hex} ${item.role}` : `${item.hex}`;
+  return item.reasons.length ? `${head}: ${item.reasons.join(' · ')}` : head;
+}
+
+/** One row of colour chips, the Studio's swatch look at card size. `titles`
+ *  (one per colour) replace the hex as each chip's tooltip. */
+export function SwatchRow({ label, colors, titles, limit }: {
+  label: string;
+  colors: string[];
+  titles?: string[];
+  limit: number;
+}) {
   if (colors.length === 0) return null;
   const shown = colors.slice(0, limit);
   return (
@@ -89,7 +151,7 @@ export function SwatchRow({ label, colors, limit }: { label: string; colors: str
       <span className="moodboard-swatches__label structured-preview__swatch-label">{label}</span>
       <div className="moodboard-palette structured-preview__swatches" role="list" aria-label={label}>
         {shown.map((hex, index) => (
-          <span key={`${hex}-${index}`} role="listitem" title={hex}
+          <span key={`${hex}-${index}`} role="listitem" title={titles?.[index] ?? hex}
             className="moodboard-palette__swatch structured-preview__swatch" style={{ backgroundColor: hex }} />
         ))}
         {colors.length > shown.length && (
