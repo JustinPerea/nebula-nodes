@@ -1,5 +1,12 @@
 # Implementation Notes
 
+## 2026-10-20 — A new edge never takes a live edge's id
+
+Found by the ModelNode render-scope review: `CLIGraph.connect` named a new edge `e{len(edges)+1}`, so after a removal it could give a second live edge the same id (edges e1-e3, remove e1, connect: a second `e3`). The canvas then held two wires with one id: duplicate React keys, and selecting or removing by id could hit the other wire. Two routes (`create_node_and_connect`, `send_cinema_shot_to_motion`) had each patched the id after the fact; the allocator now skips ids in use, and both patches are gone.
+
+- Ids of removed edges can still come back; nothing keys on an old edge id (canvas undo matches wires by their four endpoints, `canvas_undo.wire_key`).
+- Test: `test_a_new_edge_never_takes_the_id_of_one_still_on_the_canvas` (failed first). The existing `test_deleted_edge_does_not_reuse_an_existing_confirmed_edge_id` still passes, now through the allocator.
+
 ## 2026-10-20 — Review: an agent's edit saves at once
 
 Adversarial review of the entry below (same branch, uncommitted). The 11 tests that failed before still fail with the fix reverted (`git apply -R`, tree restored and checked by hash). Three holes were found and fixed, each with a test that failed first:
