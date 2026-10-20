@@ -14,7 +14,7 @@ vi.mock('../../src/components/nodes/MeshPreview', () => ({
 import { OutputRenderer } from '../../src/components/create-studio/OutputRenderer';
 
 describe('OutputRenderer World output', () => {
-  it('prioritizes the structured World over derivative thumbnail, panorama, and collider outputs', () => {
+  it('prioritizes the structured World over derivative thumbnail, panorama, and collider outputs', async () => {
     render(
       <OutputRenderer
         state="complete"
@@ -35,12 +35,13 @@ describe('OutputRenderer World output', () => {
       />,
     );
 
-    expect(screen.getByTestId('world-preview')).toHaveTextContent('world-123');
+    // The viewers load as deferred chunks (lib/deferredChunks.ts).
+    expect(await screen.findByTestId('world-preview')).toHaveTextContent('world-123');
     expect(screen.queryByRole('img')).toBeNull();
     expect(document.querySelector('model-viewer')).toBeNull();
   });
 
-  it('routes PLY exports through the format-aware MeshPreview', () => {
+  it('routes PLY exports through the format-aware MeshPreview', async () => {
     render(
       <OutputRenderer
         state="complete"
@@ -51,7 +52,7 @@ describe('OutputRenderer World output', () => {
       />,
     );
 
-    expect(screen.getByTestId('mesh-preview')).toHaveTextContent('/api/outputs/world-full.ply');
+    expect(await screen.findByTestId('mesh-preview')).toHaveTextContent('/api/outputs/world-full.ply');
     expect(document.querySelector('model-viewer')).toBeNull();
   });
 });

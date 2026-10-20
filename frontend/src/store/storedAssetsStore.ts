@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import { lookupStoredAsset } from '../lib/api';
+import { setAsideCount } from '../lib/moodboardCount';
 import type { TrashedItem } from '../lib/trash';
 import { wsClient, type StoredAssetChangedEvent } from '../lib/wsClient';
 import type { Character, Moodboard } from '../types';
@@ -26,6 +27,8 @@ export interface StoredAssetSummary {
   thumbnail: string;
   /** Moodboards only: images on the board, as the Assets panel counts them. */
   imageCount?: number;
+  /** Moodboards only: how many of them are set aside (lib/moodboardCount). */
+  setAsideCount?: number;
   mode?: Moodboard['mode'];
 }
 
@@ -43,6 +46,7 @@ export function moodboardSummary(moodboard: Moodboard): StoredAssetSummary {
     name: moodboard.name,
     thumbnail: moodboard.thumbnail,
     imageCount: moodboard.images.length,
+    setAsideCount: setAsideCount(moodboard.images),
     mode: moodboard.mode,
   };
 }

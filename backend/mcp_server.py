@@ -888,7 +888,10 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     `brief` is what generators get, as Nebula composed it: `styleBrief` (the
     hand-written brief when there is one, else the generated one),
     `negativePrompt`, `avoidPrompt`, `palette`/`accents` and `override`
-    {active, stale}. It is null on a Nebula too old to send it. Don't use
+    {active, stale}. It is null on a Nebula too old to send it. At
+    `strength` 0 the board is off and no node it's wired into gets any of
+    it, images included (the run note "Board strength is 0: board not
+    sent"). Don't use
     analysis.styleBrief as the brief: it leaves out Direction, pinned colours
     and a hand-written brief, and keeps colours the brief left out.
 

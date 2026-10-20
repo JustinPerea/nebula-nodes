@@ -42,6 +42,12 @@ Research/topics/colour-text-contradiction-detection-2026-10.md):
 Results have two levels: ``conflict`` (the words rule the colour out) and
 ``warning`` (it may clash; the Direction allows that hue, or it's muted).
 
+Each reason starts "Avoid: <item>" or "Direction: <words>" and quotes only
+whole words as the person wrote them (any letters, not only A-Z; a hyphenated
+word is one word). When a Direction allowance makes it a warning, it adds
+'the Direction also asks for "<the allowance's words through its noun
+phrase>"', and "in the <noun>" for a list item that takes its head's noun.
+
 Every number below is our own first value: no published OKLCH colour-name
 boundaries exist, and the naming datasets (Lindner's Colour Thesaurus is
 CC BY-NC-SA; XKCD, StanfordHCI c3 and LUX have no confirmed licence) are not
@@ -57,7 +63,7 @@ from typing import Any, Iterable
 
 # Bumped whenever the table or the rules change: it is part of each saved
 # check's basis, so every board's check runs again.
-LEXICON_VERSION = 2
+LEXICON_VERSION = 3
 FOUND_BY = "words"
 
 # -- the one table ------------------------------------------------------------
@@ -201,7 +207,7 @@ def oklch(hex_value: str) -> tuple[float, float, float]:
 
 _TOKEN = re.compile(
     r"(?P<hex>#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?![0-9A-Za-z]))"
-    r"|(?P<word>[A-Za-z]+(?:['’][A-Za-z]+)*(?:-[A-Za-z]+(?:['’][A-Za-z]+)*)*)"
+    r"|(?P<word>[^\W_]+(?:['’][^\W_]+)*(?:-[^\W_]+(?:['’][^\W_]+)*)*)"
     r"|(?P<join>[,&/])|(?P<colon>:)|(?P<brk>[.;!?\n]+)")
 
 
@@ -228,6 +234,8 @@ class Term:
     noun: str | None
     phrase: str                   # the words naming it, as written
     clause: str                   # what a reason quotes
+    quote: str = ""               # an allowance's words a reason quotes, as written (``_allows``)
+    place: str | None = None      # the head's noun phrase a list item takes ("flowers")
     hex: str | None = None
     reference: str | None = None  # a reference colour's hex
     chroma_gated: bool = False    # the words name a soft colour (an upper chroma bound)
@@ -356,24 +364,80 @@ def _run(items: list[_Item], index: int) -> tuple[str | None, int, bool, bool]:
         elif item.kind == "palette":
             return item.word, k, cast, True
         elif item.kind == "noun":
-            return item.word, k, cast, False
+            return item.word, _noun_end(items, k), cast, False
         else:
             break
     return None, last, cast, False
 
 
-def _head_context(items: list[_Item]) -> tuple[str, str | None]:
+def _noun_end(items: list[_Item], index: int) -> int:
+    """The last item of the noun phrase the noun at ``index`` starts: the
+    nouns right after it ("late-summer light", "blue-tinted glass"), and
+    "light" or another modifier that leads to no colour. A quote that ended
+    at the first noun cut "late-summer light" to "late"."""
+    k = index
+    while k + 1 < len(items):
+        after = items[k + 1]
+        if after.start == items[k].start or after.kind == "noun" \
+                or (after.kind == "modifier" and _next_colour(items, k + 1) is None):
+            k += 1
+        else:
+            break
+    return k
+
+
+def _head_context(text: str, items: list[_Item]) -> tuple[str, str | None]:
     """What a list after a colon inherits from its head: ("global", None)
-    when the head is a palette rule, else ("object", its first noun), or
-    ("none", None)."""
+    when the head is a palette rule, else ("object", its first noun phrase
+    as written), or ("none", None)."""
     if any(item.kind == "style" for item in items) or any(item.kind == "palette" for item in items[:1]):
         return "global", None
-    for item in items:
+    for index, item in enumerate(items):
         if item.kind == "palette":
             return "global", None
         if item.kind == "noun":
-            return "object", item.word
+            return "object", _as_place(text, item.start, _quote(text, items, index, index, _noun_end(items, index)))
     return "none", None
+
+
+# Longest words a reason quotes; past it, only the colour's own words.
+QUOTE_LIMIT = 80
+_PAIRS = (("“", "”"), ("(", ")"), ("[", "]"))  # not ‘’: ’ is an apostrophe too
+
+
+def _quote(text: str, items: list[_Item], first: int, anchor: int, last: int) -> str:
+    """The words from ``items[first]`` to ``items[last]`` as written, one
+    space apart: the longest run around ``items[anchor]`` with nothing but
+    spaces between its words (a list's commas and "and" are words here), so
+    a quote never holds a bracket or quotation mark from the text."""
+    start, end = anchor, anchor
+    while start > first and not text[items[start - 1].end:items[start].start].strip():
+        start -= 1
+    while end < last and not text[items[end].end:items[end + 1].start].strip():
+        end += 1
+    return " ".join(text[items[start].start:items[end].end].split())
+
+
+def _as_place(text: str, start: int, phrase: str) -> str:
+    """A noun phrase read after "in the" (it starts at ``start`` in the
+    text): its first word in lower case when only the start of a sentence
+    capitalised it ("Flowers in cool jewel tones" gives "flowers"). Read at
+    its own place: the same words earlier in the text ("Garden Flowers.
+    Flowers: ...") say nothing about this one's capital."""
+    first = phrase.split(" ", 1)[0]
+    before = text[:start].rstrip(" \t")
+    if first[:1].isupper() and first[1:] == first[1:].lower() and (not before or before[-1] in ".!?;:\n"):
+        return phrase[:1].lower() + phrase[1:]
+    return phrase
+
+
+def _tidy(phrase: str) -> str:
+    """A clause without a bracket or quotation mark its span cut in half."""
+    for opening, closing in (*_PAIRS, ('"', '"')):
+        if (phrase.count(opening) != phrase.count(closing) if opening != closing
+                else phrase.count(opening) % 2):
+            phrase = phrase.replace(opening, "").replace(closing, "")
+    return " ".join(phrase.split()).strip(" ,&/")
 
 
 def _first_content(items: list[_Item]) -> _Item | None:
@@ -414,7 +478,7 @@ def _parse_text(text: str, source: str, rules: Rules, *, quote: str | None) -> N
         head_items: list[_Item] = []
         for seg_start, seg_end, role in segments:
             items = _items(text, seg_start, seg_end, matches)
-            inherited = _head_context(head_items) if role == "list" else ("none", None)
+            inherited = _head_context(text, head_items) if role == "list" else ("none", None)
             negated = _segment(text, items, source, rules, quote=quote, negated=negated, inherited=inherited)
             if role is None:
                 head_items = items
@@ -425,6 +489,10 @@ def _segment(text: str, items: list[_Item], source: str, rules: Rules, *, quote:
     """Read one head or list. Returns whether a negation is still open at its end."""
     negation_start: int | None = None if not negated else (items[0].start if items else None)
     negated_at: list[bool] = []
+    # Where each item's negation starts: a second "no" later in the clause
+    # used to move the first one's, so "no blue glass, no red flowers"
+    # quoted nothing for the blue.
+    negation_starts: list[int | None] = []
     # A negation governs one noun phrase: "no red or orange flowers" negates
     # both colours, "No people, red flowers" only the people. Once a noun has
     # followed the negator, the next comma, "and" or "&" closes it; "or" and
@@ -440,6 +508,7 @@ def _segment(text: str, items: list[_Item], source: str, rules: Rules, *, quote:
         elif negated and item.kind in ("noun", "palette"):
             noun_seen = True
         negated_at.append(negated)
+        negation_starts.append(negation_start if negated else None)
 
     terms_here: list[tuple[int, Term]] = []
     for index, item in enumerate(items):
@@ -448,7 +517,7 @@ def _segment(text: str, items: list[_Item], source: str, rules: Rules, *, quote:
         if item.kind in ("temperature", "reference") and _next_colour(items, index + 1) is not None:
             continue  # it modifies the colour after it
         term = _term(text, items, index, source=source, exclusion=source == "avoid" or negated_at[index],
-                     quote=quote, inherited=inherited, negation_start=negation_start if negated_at[index] else None)
+                     quote=quote, inherited=inherited, negation_start=negation_starts[index])
         if term is not None:
             terms_here.append((index, term))
             (rules.exclusions if term.exclusion else rules.allowances).append(term)
@@ -502,6 +571,7 @@ def _term(text: str, items: list[_Item], index: int, *, source: str, exclusion: 
         k -= 1
 
     noun, last, cast, palette = _run(items, index)
+    own = bool(noun or cast or palette) and last > index  # the run ends at its own noun
     if cast:
         scope = "cast"
     elif palette:
@@ -515,11 +585,19 @@ def _term(text: str, items: list[_Item], index: int, *, source: str, exclusion: 
     else:
         scope = "global"
     phrase_start = items[first].start if negation_start is None or source == "avoid" else negation_start
-    phrase_end = items[last].end if (noun or cast or palette) and last > index else item.end
-    phrase = " ".join(text[phrase_start:phrase_end].split()).strip(" ,&/")
+    end = last if (noun or cast or palette) and last > index else index
+    phrase = _tidy(text[phrase_start:items[end].end])
     words = " ".join(text[items[first].start:item.end].split())
+    # What a reason quotes of an allowance: its words through its noun
+    # phrase, or only the colour's words when that runs long. A list item
+    # that takes the head's noun names it after the quote ("in the flowers").
+    said = _quote(text, items, first, index, last if own else index)
+    if len(said) > QUOTE_LIMIT:
+        said = _quote(text, items, first, index, index)
+    place = inherited[1] if scope == "object" and not own else None
     return Term(kind=kind, name=name, gate=gate, exclusion=exclusion, source=source, scope=scope, noun=noun,
-                phrase=words, clause=quote if quote is not None else phrase,
+                phrase=words, clause=quote if quote is not None else phrase, quote=said,
+                place=place if place and len(place) <= QUOTE_LIMIT else None,
                 hex=item.word if kind == "hex" else None, reference=reference, chroma_gated=chroma_gated)
 
 
@@ -549,7 +627,7 @@ def _ceiling(text: str, items: list[_Item], terms: list[tuple[int, Term]], negat
         k += 1
     if k < len(items) and items[k].kind == "palette":
         last = k
-    phrase = " ".join(text[items[first].start:items[last].end].split()).strip(" ,&/")
+    phrase = _tidy(text[items[first].start:items[last].end])
     rules.ceilings.append(Ceiling(value=max(value for _, value in contributing), phrase=phrase))
 
 
@@ -633,8 +711,17 @@ def _allowance_hit(term: Term, colour: _Colour) -> str | None:
 
 
 def _allows(term: Term) -> str:
-    noun = f" for the {term.noun}" if term.scope == "object" and term.noun else ""
-    return f"The Direction allows {term.phrase}{noun}"
+    """The allowance a reason names: the Direction's own words in quotes,
+    whole words only, then the noun a list item takes from its head. It
+    used to build "allows <colour> for the <first noun>", which read
+    "allows Warm for the late" for "Warm late-summer light" (demo dry run,
+    2026-10-20)."""
+    place = f" in the {term.place}" if term.place else ""
+    return f"the Direction also asks for “{term.quote}”{place}"
+
+
+def _capital(sentence: str) -> str:
+    return sentence[:1].upper() + sentence[1:]
 
 
 def _best_allowance(hits: list[tuple[Term, str]]) -> Term:
@@ -693,7 +780,7 @@ def check(direction: str, avoid: Iterable[str], colours: Iterable[dict[str, Any]
             protectors = covering(colour)
             if protectors:
                 level = "warning"
-                reason = f"{reason}. {_allows(_best_allowance(protectors))}, so it may clash."
+                reason = f"{reason}. {_capital(_allows(_best_allowance(protectors)))}, so it may clash."
             add(colour, level, term.source, term.clause, rule, reason)
 
     for ceiling in rules.ceilings:
@@ -710,7 +797,7 @@ def check(direction: str, avoid: Iterable[str], colours: Iterable[dict[str, Any]
             if hits:
                 best = _best_allowance(hits)
                 add(colour, "warning", "direction", ceiling.phrase, "allowance-chroma",
-                    f"{reason}. {_allows(best)}, but this one is more saturated.")
+                    f"{reason}. This color is more saturated than that, though {_allows(best)}.")
             else:
                 add(colour, "conflict", "direction", ceiling.phrase, "global", reason)
     return _deduped(findings)

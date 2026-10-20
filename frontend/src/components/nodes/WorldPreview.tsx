@@ -12,7 +12,6 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Box,
   Download,
   ExternalLink,
   Footprints,
@@ -22,7 +21,6 @@ import {
   X,
 } from 'lucide-react';
 import type { PortValue } from '../../types';
-import { backendAssetUrlSync } from '../../lib/backend';
 import {
   initialWorldResolution,
   isSafeMarbleUrl,
@@ -37,6 +35,8 @@ import {
   worldImageExtensionFromUrl,
 } from '../../lib/worldDownload';
 import type { WorldNavigationMode, WorldViewerStatus } from './WorldEnvironmentViewer';
+import { InvalidWorldFace, WorldPreviewFace } from './WorldPreviewFace';
+import { safeWorldAsset as safeAsset, worldCaption, worldThumbnail } from '../../lib/worldCard';
 import '../../styles/world-preview.css';
 
 const LazyWorldEnvironmentViewer = lazy(() =>
@@ -60,10 +60,6 @@ function prefersLowBandwidth(): boolean {
     || window.matchMedia?.('(pointer: coarse)').matches
     || window.innerWidth < 768,
   );
-}
-
-function safeAsset(value: string | undefined): string | undefined {
-  return isSafeWorldUrl(value) ? backendAssetUrlSync(value) : undefined;
 }
 
 const MODAL_FOCUSABLE_SELECTOR = [
@@ -114,7 +110,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
     ? selected.resolution
     : initialResolution;
   const activeOption = options.find((option) => option.id === resolution) ?? null;
-  const thumbnail = world ? safeAsset(world.assets.thumbnail ?? world.assets.panorama) : undefined;
+  const thumbnail = world ? worldThumbnail(world) : undefined;
 
   const close = useCallback(() => {
     downloadControllerRef.current?.abort();
@@ -172,8 +168,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
   if (!world) {
     return (
       <div className="world-preview world-preview--invalid" role="status">
-        <Box aria-hidden="true" size={22} strokeWidth={1.5} />
-        <span>World data unavailable</span>
+        <InvalidWorldFace />
       </div>
     );
   }
@@ -181,7 +176,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
   const marbleUrl = isSafeMarbleUrl(world.marbleUrl) ? world.marbleUrl : undefined;
   const panorama = safeAsset(world.assets.panorama);
   const collider = safeAsset(world.assets.colliderMesh);
-  const caption = world.caption || `${world.displayName}, generated with ${world.model}`;
+  const caption = worldCaption(world);
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -229,20 +224,7 @@ function WorldPreviewComponent({ value, compact = false }: WorldPreviewProps) {
         title="Explore 3D world"
         data-world-id={world.worldId}
       >
-        {thumbnail ? (
-          <img className="world-preview__thumbnail" src={thumbnail} alt="" loading="lazy" />
-        ) : (
-          <span className="world-preview__placeholder" aria-hidden="true">
-            <Globe2 size={34} strokeWidth={1.25} />
-          </span>
-        )}
-        <span className="world-preview__shade" aria-hidden="true" />
-        <span className="world-preview__badge"><Globe2 size={12} strokeWidth={1.7} /> World</span>
-        <span className="world-preview__copy">
-          <strong>{world.displayName}</strong>
-          <span>{caption}</span>
-        </span>
-        <span className="world-preview__cta">Explore</span>
+        <WorldPreviewFace world={world} />
       </button>
 
       {showModal && createPortal(
