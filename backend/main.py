@@ -123,6 +123,7 @@ from services.agent_profiles import (
 from services.local_guard import LocalRequestGuard
 from services.agent_workspaces import AgentWorkspaceContext, WorkspaceSessions, WorkspaceSessionError, workspace_scope
 from services.chat_actions import publish_action
+from services import moodboard_actions
 from services.agent_presence import (
     PresenceError,
     RequestHeadersContext,
@@ -3894,6 +3895,23 @@ async def _show_agent(
         event = agent_presence.point(identity, target=target, origin=origin, action=action, say=say)
         await manager.broadcast_raw(event)
     except Exception:  # noqa: BLE001 - decoration must not break graph edits
+        pass
+
+
+async def _say_agent_action(say: str) -> None:
+    """Tell open canvases what the calling agent did where no cursor can go
+    (a moodboard write, a run of the whole canvas). It is the cursor's own
+    event without a target, so the Agent log lists it under the agent's name
+    and colour and no cursor moves (frontend store/agentLogStore.ts). A no-op
+    for the browser's own requests; like _show_agent, it never fails the
+    route that called it.
+    """
+    identity = identify_agent(current_request_headers())
+    if identity is None:
+        return
+    try:
+        await manager.broadcast_raw(agent_presence.point(identity, target=None, action="click", say=say))
+    except Exception:  # noqa: BLE001 - decoration must not break a saved write
         pass
 
 
@@ -10052,6 +10070,9 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     )
     if target:
         await _show_agent({"nodeId": target}, say=f"Running {_node_label(target)}")
+    else:
+        # The whole canvas has no one node to point at: the Agent log only.
+        await _say_agent_action(f"Running {len(sub_nodes)} node{'' if len(sub_nodes) == 1 else 's'}")
 
     outcome: dict[str, Any] = {"results": {}, "errors": {}, "skipped": {}}
     task = asyncio.create_task(_execute_cli_run(run_id, sub_nodes, sub_edges, api_keys, outcome))
@@ -10975,6 +10996,7 @@ async def create_moodboard(body: MoodboardCreate) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
+    await _say_agent_action(moodboard_actions.describe_create(moodboard))
     return _moodboard_out(moodboard)
 
 
@@ -11012,6 +11034,14 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
         updates["images"] = [img.model_dump(exclude_unset=True) for img in body.images or []]
     updates.pop("colorCheck", None)
     from services.moodboard_store import BriefOverrideProtected, NotesOptInProtected
+    # The board before an agent's change, for the Agent log's line. The
+    # person's own saves (the Studio's autosave) skip the extra read.
+    agent_before = None
+    if identify_agent(current_request_headers()) is not None:
+        try:
+            agent_before = store.get(moodboard_id, laid_out=False)
+        except ValueError:
+            agent_before = None
     try:
         moodboard = store.update(moodboard_id, by=_moodboard_author(), **updates)
     except KeyError:
@@ -11023,6 +11053,8 @@ async def update_moodboard(moodboard_id: str, body: MoodboardUpdate) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
+    if agent_before is not None:
+        await _say_agent_action(moodboard_actions.describe_update(agent_before, moodboard))
     return _moodboard_out(moodboard)
 
 
@@ -11042,6 +11074,7 @@ async def keep_moodboard_brief_override(moodboard_id: str) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     await _broadcast_stored_asset("moodboard", moodboard)
+    await _say_agent_action(f"Kept the brief in {moodboard_actions.board_name(moodboard)}")
     return _moodboard_out(moodboard)
 
 
@@ -11066,6 +11099,7 @@ async def analyze_moodboard_route(moodboard_id: str) -> dict:
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     await _broadcast_stored_asset("moodboard", moodboard)
+    await _say_agent_action(f"Analyzed {moodboard_actions.board_name(moodboard)}")
     return _moodboard_out(moodboard)
 
 
@@ -11108,6 +11142,7 @@ async def delete_moodboard(moodboard_id: str) -> dict:
     except (KeyError, ValueError):
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     await _broadcast_stored_asset("moodboard", None, moodboard_id, deleted=True)
+    await _say_agent_action(f"Deleted moodboard {moodboard_actions.board_name(record)}")
     return {"status": "trashed", "id": moodboard_id, "trashed": record}
 
 
@@ -11187,6 +11222,8 @@ async def _move_stored_asset(kind: str, asset_id: str, body: AssetMoveBody) -> d
     result["movedBy"] = actor_record(actor_for_headers(current_request_headers()))
     result["detail"] = f"Moved “{name}” from {names['from']} to {names['to']}."
     await _broadcast_stored_asset(kind, after, moved=True)
+    if kind == "moodboard":
+        await _say_agent_action(f"Moved {moodboard_actions.board_name(after)} to {names['to']}")
     return result
 
 
@@ -11305,6 +11342,8 @@ async def restore_trashed(kind: str, item_id: str) -> dict[str, Any]:
             return {"restored": kind, "id": item_id, "asset": _asset_out(kind, live), "alreadyRestored": True}
         raise HTTPException(status_code=404, detail=f"{_asset_noun(kind)} '{item_id}' isn't in Recently deleted")
     await _broadcast_stored_asset(kind, asset)
+    if kind == "moodboard":
+        await _say_agent_action(f"Restored moodboard {moodboard_actions.board_name(asset)}")
     # Read back through the store, as GET does (a board gets its brief).
     return {"restored": kind, "id": item_id, "asset": _asset_out(kind, _stored_asset(kind, item_id) or asset)}
 

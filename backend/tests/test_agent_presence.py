@@ -97,6 +97,17 @@ def test_point_builds_a_broadcast_event_and_trims_narration():
         presence.point(identity, target={"nodeId": "n1"}, action="teleport")
 
 
+def test_an_action_with_no_place_on_the_canvas_is_said_but_draws_no_cursor():
+    # A moodboard write: the Agent log lists it (frontend agentLogStore), the cursor stays put.
+    presence = AgentPresence(clock=Clock())
+    identity = identify({"X-Nebula-Agent": "Claude Code"})
+    presence.point(identity, target={"nodeId": "n1"}, say="Added Moodboard")
+    event = presence.point(identity, target=None, say="Analyzed “Dusk”")
+    assert event["say"] == "Analyzed “Dusk”" and "target" not in event
+    (cursor,) = presence.active()
+    assert cursor["target"] == {"nodeId": "n1"} and cursor["say"] == "Added Moodboard"
+
+
 def test_cursors_expire_and_deleted_nodes_re_anchor_to_where_they_were():
     clock = Clock()
     presence = AgentPresence(clock=clock)
@@ -346,3 +357,21 @@ def test_a_personal_agent_token_carries_its_own_name_and_color():
     bad = {"runner": "personal:x", "display_name": "<<>>", "color": "red"}
     fallback = identify({"Authorization": "Agent b"}, token_lookup=lambda token: bad)
     assert fallback.color == "#E8825A" and fallback.name
+
+
+def test_an_agents_whole_canvas_run_is_said_with_no_cursor_and_a_node_run_points_at_it(api):
+    # `nebula run` / run_nodes without a node has no node to point at: the
+    # Agent log still lists it (target-less, like a moodboard write).
+    client, graph, sent = api
+    agent = {"X-Nebula-Agent": "Claude Code"}
+    node_id = graph.add_node("text-input", {"value": "hi"})
+    graph.add_node("text-input", {"value": "there"})
+
+    assert client.post("/api/graph/run", json={"wait": 5}).status_code == 200
+    assert _presence_events(sent) == []
+    assert client.post("/api/graph/run", json={"wait": 5}, headers=agent).status_code == 200
+    assert client.post("/api/graph/run", json={"wait": 5, "targetNodeId": node_id}, headers=agent).status_code == 200
+
+    whole, one = _presence_events(sent)
+    assert whole["say"] == "Running 2 nodes" and "target" not in whole
+    assert one["say"] == "Running Text Input" and one["target"] == {"nodeId": node_id}

@@ -375,6 +375,16 @@ body:not(.app-slava-restraint) .agent-log__source {
   letter-spacing: 0.4px;
 }
 
+/* An agent's action names the agent in its cursor colour (agentLogStore). */
+body:not(.app-slava-restraint) .agent-log__entry--agent .agent-log__source {
+  color: var(--agent-log-source-color);
+}
+
+/* Spelled as the agent's cursor spells it, in every skin. */
+body .agent-log .agent-log__entry--agent .agent-log__source {
+  text-transform: none;
+}
+
 body:not(.app-slava-restraint) .agent-log__msg {
   color: #ddd;
 }

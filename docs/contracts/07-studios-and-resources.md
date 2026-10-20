@@ -2,7 +2,7 @@
 title: Nebula Contracts — Studios and Resources (Volume 7)
 status: draft
 contract_version: 1
-updated: 2026-10-19
+updated: 2026-10-20
 ---
 
 # Studios and resources (Volume 7)
@@ -225,6 +225,10 @@ Design-canvas gap 18 (Justin's calls P1-P4, 2026-10-19). Where two parts of a bo
 
 ---
 
+### 1.12 An agent's board writes in the Agent log
+
+When an identified agent (an agent token or `X-Nebula-Agent`, the same identity that names its cursor) makes, changes, analyzes, keeps the brief of, moves, deletes or restores (from Recently deleted) a board, the route broadcasts an `agentPresence` event with no `target` after the write is saved (`main._say_agent_action`). Its `say` names the agent's own action (`services/moodboard_actions.py`): "Made moodboard “Dusk” with 4 images", "Set aside 1 image in “Dusk”", "Analyzed “Dusk”", "Kept the brief in “Dusk”", "Moved “Dusk” to Global", "Deleted moodboard “Dusk”", "Restored moodboard “Dusk”". A `PUT` names each kind of change (set aside, used again, added, removed, weight, notes, private notes, the brief fields, the name) by count, never by the text written: a private note is "Edited private notes on 1 image". A default the store fills in on that write (the weight of an image saved before weights were) is not named. The browser lists the event in the Agent log under the agent's name and colour; with no target no cursor moves, and `nebula look` lists no cursor for it. The person's own writes, a refused write and the dry run (1.8) send nothing.
+
 ## Changelog
 
 | Date | Change |
@@ -238,3 +242,4 @@ Design-canvas gap 18 (Justin's calls P1-P4, 2026-10-19). Where two parts of a bo
 | 2026-10-19 | Moodboard canvas, board model v2: `images[].placements`, `layoutVersion`, `frames`, `suggestions`, `readings` (1.1); `PUT` merges images by id, so a left-out key keeps its value (it used to reset to its default) and saved cards stay; layout fields refused on create and `PUT`; new images placed by the server; old boards read with a grid and save it on their first edit, and so does a board an older Nebula edited (1.5); odd layout files still list, open and save (1.1); node bundle images carry only output keys (1.4); `show --json` and `moodboard_get` list the layout (1.6) |
 | 2026-10-19 | Moodboard: the colour-word check, `clashMode`, `colorChoices`, `sendNotes`, `colorCheck`, the brief's left-out lists, notes only on opt-in, the node's `send_notes` (1.11) |
 | 2026-10-20 | Moodboard canvas, one "Set aside" switch: `excluded` now means read, never steers (1.1); analysis version 5 measures set-aside images (`images[].setAside`), with every steering output and the source hash unchanged, and the all-set-aside warning (1.3a); the bundle leaves set-aside images out of `analysis.images` too (1.4); `setAside` in the CLI and MCP view, `--set-aside`/`--use` (old `--exclude`/`--include`), `setAside` in `moodboard_update` edits (1.6) |
+| 2026-10-20 | Moodboard: an agent's board writes reach the Agent log as target-less `agentPresence` events (1.12) |

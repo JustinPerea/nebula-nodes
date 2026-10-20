@@ -1,4 +1,6 @@
 export type AgentEventSource =
+  /** An agent's action on the canvas or a board (agentLogStore), named by the entry's agent. */
+  | 'agent'
   | 'graph'
   | 'claude'
   | 'codex'
@@ -6,6 +8,7 @@ export type AgentEventSource =
   | 'system';
 
 const AGENT_EVENT_SOURCES = new Set<AgentEventSource>([
+  'agent',
   'graph',
   'claude',
   'codex',

@@ -33,7 +33,8 @@ can't connect, ask the person to start Nebula; don't start a second backend
 yourself.
 
 Set `NEBULA_AGENT_NAME` (for example `export NEBULA_AGENT_NAME="Claude Code"`)
-so your cursor and edits show under your name. `nebula apply` and
+so your cursor and edits show under your name (the person's Agent log lists
+each of your edits, runs and moodboard changes under it too). `nebula apply` and
 `nebula propose` need it (or `--as NAME`).
 
 ## Start here

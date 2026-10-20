@@ -39,7 +39,9 @@ export interface ProjectSwitch {
 export interface AgentPresenceEvent {
   type: 'agentPresence';
   agent: { id: string; name: string; color: string; verified: boolean };
-  target: AgentCursorAnchor;
+  /** Absent for an action with no place on the canvas (a moodboard write):
+   * the Agent log lists it (agentLogStore) and no cursor moves. */
+  target?: AgentCursorAnchor;
   from?: AgentCursorAnchor;
   action: 'move' | 'click' | 'drag' | 'look';
   say: string;

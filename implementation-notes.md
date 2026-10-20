@@ -1,5 +1,26 @@
 # Implementation Notes
 
+## 2026-10-20 — AgentLog shows every agent's actions (MCP included)
+
+Branch `fix/agentlog-mcp-actions` (from origin/main 26572670). AgentLog showed only the in-app chat's thinking lines and a "Running graph (N nodes)…" placeholder; Claude Code, Claude Desktop, Codex or Cursor working over MCP put nothing in it.
+
+- **What.**
+  - *One source.* The log is fed by the `agentPresence` events that already move each agent's cursor (`_show_agent`, `/api/canvas/cursor`, a proposal's note, "Accepted"): the cursor's name, colour and words, and the backend's `at` as the time. No second log on the backend. `frontend/src/store/agentLogStore.ts` subscribes to `wsClient` at load (as `agentPresenceStore` does) and keeps the last 50 entries; the chat's thinking lines (`nebula:agent-log-entry`) are collected there too, so both survive the panel unmounting (a Studio visit).
+  - *Moodboard writes.* A board has no place on the canvas, so an identified agent's create, `PUT`, Analyze, Keep brief, move and delete send the same event with no `target` (`main._say_agent_action`, words from `services/moodboard_actions.py`): "Set aside 1 image in “Dusk”", "Analyzed “Dusk”". `AgentPresence.point(target=None)` returns the event without storing a cursor, and `agentPresenceStore.apply` ignores it, so no cursor moves and `nebula look` lists none. The person's writes, refusals and the dry run send nothing. Contract 07 §1.12.
+  - *Panel.* `AgentLog.tsx` reads the store; an agent's row shows its name (in its own case) in its cursor colour (`--agent-log-source-color`), the status shows the latest agent's name. The "Running graph" placeholder is gone.
+- **Decisions not in the brief.**
+  - *The visibility gate is kept (Settings switch AND chat open).* It came in `fb56e017` ("Refine Slava panel launchers", 2026-05-09), which made the bottom-right a chat launcher and the log part of the chat dock ("reserves space while the chat dock is actually open"); the Settings label still reads "Execution telemetry under the chat". That is a layout choice, not only "the log held chat lines", so it stays. **Question for Justin:** the chat starts closed (`DEFAULT_PANELS.chat.visible: false`), so an MCP-only person with the log switched on sees nothing until they open the chat. Show it with the switch alone?
+  - *The "Running graph" placeholder is removed*: it was labelled a placeholder, counted every node on the canvas, and doubled an agent's "Running X" line.
+  - *A board write moves no cursor.* Pointing at a Moodboard node showing that board was possible but would pre-empt the Studio cursor work in the moodboard plan (PR for `moodboard_edit`).
+  - *Words never quote the person's text*: counts per kind of change ("Edited private notes on 1 image").
+  - *Not done:* Character writes (same pattern, not asked); PR9a's `agentLogOpen` move to `uiStore` is left to PR9a.
+- **Surprises.** The open log overlaps the bottom of the docked chat (no `agent-log-open` reservation in `layouts.css` today); unchanged here.
+- **Review fixes (same day).**
+  - An agent's restore from Recently deleted (MCP `restore_from_trash`, `nebula trash restore`) is a board write too and was missing: "Restored moodboard “Dusk”".
+  - An agent's run of the whole canvas (`run_nodes` or `nebula run` with no node) sent nothing, so with the "Running graph" placeholder gone it left no line at all. It now sends the target-less event too: "Running 4 nodes".
+  - An old board whose images were saved without a weight read as "set the weight of N images" on the agent's first `PUT`, because the store writes the default then. `moodboard_actions` compares weights with the store's default (1.0).
+  - **Not done, needs a rebase:** this branch is on 26572670; origin/main has since taken #94 (checked board edits: `store.update_with_before`, the `/edits` route with the agent's own `say`, `board.*` journal summaries) and #95. A merge conflicts in `main.py` (update, keep, analyze), contract 07 and these notes, and an agent's `/edits` batch (on main, the path for `moodboard_add`, `nebula moodboard add` and an update's undo) sends no log line. On rebase: take `before` from `update_with_before` instead of the extra read, and send one line per `/edits` batch (its `say`, else the board journal's summary), so the log has one source of words per change.
+
 ## 2026-10-20 — Moodboard canvas PR2: one "Set aside" switch (C3, analysis version 5)
 
 Branch `feat/moodboard-set-aside` (from origin/main 173d9289: #87 board model v2, #89, #90 brief precedence). Spec: `docs/moodboard-canvas-plan.md` section 4.4, C3, Q7 (yes), Q8, and the PR2 section.

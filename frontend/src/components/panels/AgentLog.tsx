@@ -2,18 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Activity, ChevronUp } from 'lucide-react';
 import { useGraphStore } from '../../store/graphStore';
 import { useUIStore } from '../../store/uiStore';
+import { useAgentLogStore } from '../../store/agentLogStore';
 import { ScrollFade } from '../ScrollFade';
-import {
-  normalizeAgentEventSource,
-  type AgentEventSource,
-} from '../../lib/agentEvents';
-
-interface LogEntry {
-  id: string;
-  ts: number;
-  source: AgentEventSource;
-  message: string;
-}
 
 interface Position {
   left: number;
@@ -122,13 +112,16 @@ function clearPersistedPosition() {
 
 export function AgentLog() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
-  const nodeCount = useGraphStore((s) => s.nodes.length);
   const enabled = useUIStore((s) => s.agentLogEnabled);
   const chatVisible = useUIStore((s) => s.panels.chat.visible);
+  // Docked under the chat since the Slava launchers (fb56e017), so it shows
+  // only with the chat open, even though MCP agents' actions are listed too.
   const visible = enabled && chatVisible;
 
   const [open, setOpen] = useState(false);
-  const [entries, setEntries] = useState<LogEntry[]>([]);
+  // Every agent's actions and the chat's thinking lines, collected while
+  // this panel is unmounted too (store/agentLogStore.ts).
+  const entries = useAgentLogStore((s) => s.entries);
   const [position, setPosition] = useState<Position | null>(readInitialPosition);
   const logRef = useRef<HTMLDivElement | null>(null);
 
@@ -204,48 +197,6 @@ export function AgentLog() {
     };
   }, [visible, open, entries.length]);
 
-  // Sample graph executions as a placeholder feed.
-  useEffect(() => {
-    if (!isExecuting) return;
-    const timeoutId = window.setTimeout(() => {
-      setEntries((prev) => [
-        ...prev.slice(-49),
-        {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          ts: Date.now(),
-          source: 'graph',
-          message: `Running graph (${nodeCount} node${nodeCount === 1 ? '' : 's'})…`,
-        },
-      ]);
-    }, 0);
-    return () => window.clearTimeout(timeoutId);
-  }, [isExecuting, nodeCount]);
-
-  // Subscribe to nebula:agent-log-entry events so any component can stream
-  // entries into this log without coupling. ChatPanel dispatches these
-  // for agent thinking lines so they live here instead of in chat.
-  useEffect(() => {
-    function handleEntry(e: Event) {
-      const detail = (e as CustomEvent).detail as
-        | { source?: unknown; message?: string }
-        | undefined;
-      if (!detail) return;
-      const msg = String(detail.message ?? '').trim();
-      if (!msg) return;
-      setEntries((prev) => [
-        ...prev.slice(-49),
-        {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          ts: Date.now(),
-          source: normalizeAgentEventSource(detail.source),
-          message: msg,
-        },
-      ]);
-    }
-    window.addEventListener('nebula:agent-log-entry', handleEntry);
-    return () => window.removeEventListener('nebula:agent-log-entry', handleEntry);
-  }, []);
-
   function handleHeaderMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     // Ignore right-click. Allow drag to start anywhere on the row — the
     // click handler later checks justDraggedRef to decide whether to fire.
@@ -310,7 +261,7 @@ export function AgentLog() {
     ? { left: position.left, top: position.top, bottom: 'auto' }
     : {};
   const latestEntry = entries.length > 0 ? entries[entries.length - 1] : null;
-  const statusLabel = isExecuting ? 'streaming' : latestEntry ? latestEntry.source : 'standby';
+  const statusLabel = isExecuting ? 'streaming' : latestEntry ? latestEntry.agent?.name ?? latestEntry.source : 'standby';
   const countLabel = `${entries.length} event${entries.length === 1 ? '' : 's'}`;
 
   if (!visible) return null;
@@ -379,7 +330,13 @@ export function AgentLog() {
           ) : (
             <ul className="agent-log__list" aria-live="polite">
               {entries.slice().reverse().map((e) => (
-                <li key={e.id} className={`agent-log__entry agent-log__entry--${e.source}`} data-source={e.source}>
+                <li
+                  key={e.id}
+                  className={`agent-log__entry agent-log__entry--${e.source}`}
+                  data-source={e.source}
+                  data-agent={e.agent?.id}
+                  style={e.agent ? { ['--agent-log-source-color' as string]: e.agent.color } : undefined}
+                >
                   <span className="agent-log__entry-marker" aria-hidden="true" />
                   <span className="agent-log__time">
                     {new Date(e.ts).toLocaleTimeString([], {
@@ -388,7 +345,7 @@ export function AgentLog() {
                       second: '2-digit',
                     })}
                   </span>
-                  <span className="agent-log__source">{e.source}</span>
+                  <span className="agent-log__source" title={e.agent?.name}>{e.agent?.name ?? e.source}</span>
                   <span className="agent-log__msg">{e.message}</span>
                 </li>
               ))}

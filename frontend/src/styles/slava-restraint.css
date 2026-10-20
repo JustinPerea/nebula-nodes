@@ -2612,8 +2612,11 @@ body.app-slava-restraint .agent-log__time {
 }
 
 body.app-slava-restraint .agent-log__source {
+  overflow: hidden;
   color: var(--agent-log-source-color);
+  text-overflow: ellipsis;
   text-transform: lowercase;
+  white-space: nowrap;
   letter-spacing: 0;
   font-size: var(--sr-type-meta);
 }
