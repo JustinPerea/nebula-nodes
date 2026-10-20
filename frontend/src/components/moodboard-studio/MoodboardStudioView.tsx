@@ -30,7 +30,7 @@ import { wsClient } from '../../lib/wsClient';
 import { moveChoices, type MoveChoice } from '../../lib/assetMove';
 import { useStudioAssetMove } from '../../hooks/useStudioAssetMove';
 import { AssetMoveMenu } from '../asset-move/AssetMoveMenu';
-import { patchSteers } from './steering';
+import { isSetAside, patchSteers, setAsidePatch } from './steering';
 import '../../styles/moodboard-studio.css';
 
 interface MoodboardDraft {
@@ -604,7 +604,7 @@ export function MoodboardStudioView() {
               </div>
               <div className="moodboard-grid">
                 {draft.images.map((img, index) => (
-                  <div key={img.id} className={`moodboard-tile ${img.excluded ? 'moodboard-tile--excluded' : ''}`}>
+                  <div key={img.id} className={`moodboard-tile ${isSetAside(img) ? 'moodboard-tile--set-aside' : ''}`}>
                     <div className="moodboard-tile__image">
                       <img src={backendAssetUrlSync(img.url)} alt="" draggable={false} />
                       <span className="moodboard-tile__number" aria-label={`Image ${index + 1}`}>#{index + 1}</span>
@@ -625,13 +625,13 @@ export function MoodboardStudioView() {
                           onChange={(event) => updateImage(img.id, { weight: Number(event.target.value) })}
                         />
                       </label>
-                      <label className="moodboard-tile__toggle">
+                      <label className="moodboard-tile__toggle" title="Still read for its colors; never steers">
                         <input
                           type="checkbox"
-                          checked={img.excluded}
-                          onChange={(event) => updateImage(img.id, { excluded: event.target.checked })}
+                          checked={isSetAside(img)}
+                          onChange={(event) => updateImage(img.id, setAsidePatch(img, event.target.checked))}
                         />
-                        <span>Exclude</span>
+                        <span>Set aside</span>
                       </label>
                       <label className="moodboard-tile__note">
                         <span>Image note</span>

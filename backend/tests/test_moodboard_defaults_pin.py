@@ -9,6 +9,12 @@ added (bf488a80); this test compares against it.
 
 To re-pin after a deliberate change (gap #20 itself), run this file with
 NEBULA_REPIN_MOODBOARD=1 and review the fixture diff.
+
+Analysis version 5 (moodboard canvas PR2, Q7) measures set-aside images: the
+"brand" board's excluded image gains an ``images`` entry with
+``setAside: true`` and its colours. The steering view below leaves those
+entries out, so its fixture is unchanged; ``fixtures/moodboard_set_aside_pin.json``
+pins the set-aside images' colours on their own.
 """
 from __future__ import annotations
 
@@ -26,6 +32,7 @@ from services.moodboard_brief import compose
 from services.output import OUTPUT_ROOT
 
 FIXTURE = Path(__file__).parent / "fixtures" / "moodboard_defaults_pin.json"
+SET_ASIDE_FIXTURE = Path(__file__).parent / "fixtures" / "moodboard_set_aside_pin.json"
 
 CREAM = (235, 225, 205)
 NAVY = (30, 40, 90)
@@ -102,7 +109,9 @@ def pinned_boards() -> dict[str, dict[str, Any]]:
 
 
 def pinned_view(board: dict[str, Any], analysis: dict[str, Any]) -> dict[str, Any]:
-    """What must not change: the colours, their order and shares, the brief and the negatives."""
+    """What must not change: the colours, their order and shares, the brief
+    and the negatives. Per-image colours are those of the images that aren't
+    set aside (``set_aside_view`` has the others)."""
     composed = compose(board, analysis)
     return {
         "palette": analysis["palette"],
@@ -113,10 +122,16 @@ def pinned_view(board: dict[str, Any], analysis: dict[str, Any]) -> dict[str, An
         "avoids": analysis["avoids"],
         "keywords": analysis["keywords"],
         "summary": analysis["summary"],
-        "imageColors": [item.get("colors") for item in analysis["images"]],
+        "imageColors": [item.get("colors") for item in analysis["images"] if not item.get("setAside")],
         "composed": {key: composed[key] for key in ("styleBrief", "negativePrompt", "avoidPrompt", "palette",
                                                     "accents")},
     }
+
+
+def set_aside_view(analysis: dict[str, Any]) -> list[dict[str, Any]]:
+    """The set-aside images as the analysis lists them: number, id, status and colours."""
+    return [{key: item.get(key) for key in ("number", "id", "status", "colors")}
+            for item in analysis["images"] if item.get("setAside")]
 
 
 def _current() -> dict[str, Any]:
@@ -132,3 +147,19 @@ def test_default_analysis_matches_the_pin() -> None:
     pinned = json.loads(FIXTURE.read_text(encoding="utf-8"))
     for name in pinned:
         assert current[name] == pinned[name], name
+
+
+def test_set_aside_colours_match_the_pin() -> None:
+    boards = pinned_boards()
+    current = {name: set_aside_view(analyze_moodboard(board)) for name, board in boards.items()}
+    if os.environ.get("NEBULA_REPIN_MOODBOARD") == "1":
+        SET_ASIDE_FIXTURE.write_text(json.dumps(current, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        pytest.skip("re-pinned; review the fixture diff")
+    assert current == json.loads(SET_ASIDE_FIXTURE.read_text(encoding="utf-8"))
+    # Only the brand board sets one aside: image 4, measured as if it steered.
+    assert [len(entries) for entries in current.values()] == [0, 1, 0, 0]
+    (entry,) = current["brand"]
+    assert (entry["number"], entry["id"], entry["status"]) == (4, "brand-4", "analyzed")
+    alone = boards["brand"]["images"][3]
+    assert entry["colors"] == analyze_moodboard({**boards["brand"], "images": [{**alone, "excluded": False}]}
+                                                )["images"][0]["colors"]

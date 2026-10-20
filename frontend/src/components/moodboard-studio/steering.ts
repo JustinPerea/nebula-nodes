@@ -9,3 +9,25 @@ export const STEERING_KEYS = ['url', 'weight', 'notes', 'excluded'] as const;
 export function patchSteers(patch: Partial<MoodboardImage>): boolean {
   return STEERING_KEYS.some((key) => key in patch);
 }
+
+/** Set aside: the person's switch (stored as `excluded`), or weight 0,
+ *  which steers nothing either. A set-aside image is still read for its
+ *  colours; it never steers. */
+export function isSetAside(image: Pick<MoodboardImage, 'excluded' | 'weight'>): boolean {
+  return image.excluded || !(image.weight > 0);
+}
+
+/** The weight an image's card shows: its largest card's (the board weight
+ *  is the largest copy's), else full weight, as a weight-0 card is laid out
+ *  at full size. */
+export function cardWeight(image: Pick<MoodboardImage, 'placements'>): number {
+  const weights = (image.placements ?? []).map((card) => card.weight).filter((weight) => weight > 0);
+  return weights.length ? Math.min(1, Math.max(...weights)) : 1;
+}
+
+/** What the Set aside switch changes. On keeps the weight and the card;
+ *  off uses the image again, and one at weight 0 takes its card's weight. */
+export function setAsidePatch(image: MoodboardImage, on: boolean): Partial<MoodboardImage> {
+  if (on) return { excluded: true };
+  return image.weight > 0 ? { excluded: false } : { excluded: false, weight: cardWeight(image) };
+}

@@ -9,9 +9,14 @@ Notes, mode and brightness fill in the rest. A vision reader can fill the
 empty fields later without changing the saved Moodboard resource.
 
 Each board colour lists its sources: the images it comes from, by their
-number on the board (1-based, every image in board order, excluded ones
+number on the board (1-based, every image in board order, set-aside ones
 included, as `nebula moodboard show` numbers them), with the colour's share of
 that image and its contribution to the board share.
+
+Set aside (the stored ``excluded`` switch) means read, never steers: a
+set-aside image is measured and listed in ``images`` with ``setAside: true``
+and its colours, and adds nothing else. An image steers when it isn't set
+aside and its weight is above 0 (``steers``).
 
 The brief and negatives are written by services/moodboard_brief.py, which
 also joins in the person's Direction, Avoid and pinned colours (kept on the
@@ -50,7 +55,11 @@ from services.output import OUTPUT_ROOT, DEFAULT_OUTPUT_ROOT
 # 4: each board colour lists its source images (``sources``) and each image
 # its number on the board. The colours themselves are as in 3, so a version 3
 # analysis stays current; it just has no sources until analyzed again.
-ANALYSIS_VERSION = 4
+# 5: set-aside (excluded) images are measured: each gets an ``images`` entry
+# with ``setAside: true`` and its colours, and never steers. Everything that
+# steers is as in 4, and the source hash is unchanged, so a version 4 (or 3)
+# analysis stays current; it just doesn't list set-aside images.
+ANALYSIS_VERSION = 5
 PALETTE_SIZE = 8
 ACCENT_LIMIT = 4
 REPRESENTATIVE_LIMIT = 10
@@ -132,14 +141,24 @@ def parse_thresholds(raw: dict[str, Any] | None) -> Thresholds:
     return Thresholds(**values)
 
 
-def steers(weight: float) -> bool:
-    """Whether an image with this weight shapes the board.
+# Said when no image steers: every one is set aside or has weight 0.
+ALL_SET_ASIDE_WARNING = "Every reference is set aside, so none of them shapes the board."
 
-    Weight 0 keeps an image on the board without using it: it adds nothing to
-    the palette and isn't a representative image. Excluding is the separate
-    switch that leaves an image out of the analysis altogether.
+
+def set_aside(image: dict[str, Any]) -> bool:
+    """Whether the person set an image aside: the stored ``excluded`` switch."""
+    return bool(image.get("excluded"))
+
+
+def steers(image: dict[str, Any]) -> bool:
+    """Whether a board image shapes the board: it isn't set aside and its
+    weight is above 0.
+
+    A set-aside image is still read (its colours are measured) but adds
+    nothing to the palette, the cues or the representative images. Weight 0
+    does the same, and shows as set aside wherever a board is shown.
     """
-    return weight > 0
+    return not set_aside(image) and _clamp_float(image.get("weight"), 1.0, 0.0, 1.0) > 0
 
 
 def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | None = None) -> dict[str, Any]:
@@ -149,29 +168,35 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
     ``thresholds`` is for dry runs only; left out, Commons' constants apply.
     """
     thresholds = thresholds or Thresholds()
-    # An image's number is its place among all the board's images, excluded
+    # An image's number is its place among all the board's images, set-aside
     # ones included: what Moodboard Studio's grid and the CLI count.
     numbered = [
         (number, img) for number, img in enumerate(moodboard.get("images", []), start=1)
         if isinstance(img, dict)
     ]
-    images = [img for _, img in numbered if not bool(img.get("excluded"))]
+    # The images not set aside: what the summary counts and what may be
+    # representative. Weight 0 still counts here, as it always has.
+    images = [img for _, img in numbered if not set_aside(img)]
     notes = str(moodboard.get("notes") or "").strip()
     mode = str(moodboard.get("mode") or "look")
     strength = _clamp_float(moodboard.get("strength"), 0.7, 0.0, 1.0)
 
     per_image: list[dict[str, Any]] = []
     weighted_colours: list[_Steering] = []
+    # The analyzed entries of the images that steer: the cues read them.
+    steering: list[dict[str, Any]] = []
     analyzed_urls: set[str] = set()
     warnings: list[str] = []
+    any_steers = False
 
     for number, img in numbered:
-        if bool(img.get("excluded")):
-            continue
         url = str(img.get("url") or "").strip()
         if not url:
             continue
         weight = _clamp_float(img.get("weight"), 1.0, 0.0, 1.0)
+        aside = set_aside(img)
+        shapes = steers(img)
+        any_steers |= shapes
         local_path = resolve_moodboard_image_path(url)
         item: dict[str, Any] = {
             "number": number,
@@ -180,10 +205,15 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
             "weight": weight,
             "notes": str(img.get("notes") or ""),
         }
+        if aside:
+            item["setAside"] = True
+        # A set-aside image that can't be read says so on its own entry; the
+        # board's warnings stay those of the images that count.
         if local_path is None:
             item["status"] = "unresolved"
             item["palette"] = []
-            warnings.append(f"Could not resolve image: {url}")
+            if not aside:
+                warnings.append(f"Could not resolve image: {url}")
             per_image.append(item)
             continue
         try:
@@ -192,7 +222,8 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
             item["status"] = "error"
             item["error"] = str(exc)
             item["palette"] = []
-            warnings.append(f"Could not analyze image: {url}")
+            if not aside:
+                warnings.append(f"Could not analyze image: {url}")
             per_image.append(item)
             continue
         colours = measured["colors"]
@@ -207,18 +238,18 @@ def analyze_moodboard(moodboard: dict[str, Any], *, thresholds: Thresholds | Non
             "saturation": measured["saturation"],
         })
         analyzed_urls.add(url)
-        if steers(weight):
+        if shapes:
             weighted_colours.append(_Steering(weight, colours, number, item["id"]))
+            steering.append(item)
         per_image.append(item)
 
-    if per_image and not any(steers(item["weight"]) for item in per_image):
-        warnings.append("Every image has weight 0, so none of them shapes the board.")
+    if per_image and not any_steers:
+        warnings.append(ALL_SET_ASIDE_WARNING)
 
     dominant, accent = _roll_up(weighted_colours, thresholds.merge_delta_e)
     palette = [colour["hex"] for colour in dominant]
     accents = [colour["hex"] for colour in accent]
     representative = rank_representative_images(images, only=analyzed_urls)
-    steering = [item for item in per_image if item.get("status") == "analyzed" and steers(item["weight"])]
     keywords = _keywords_from_analysis(mode, notes, steering, palette)
     avoids = list(DEFECT_NEGATIVES)
     style_brief = generated_brief(
@@ -377,19 +408,18 @@ def rank_representative_images(
 ) -> list[str]:
     """The URLs that best stand for the board: heaviest first, board order on ties.
 
-    Leaves out excluded images, weight 0 (see ``steers``) and, given ``only``,
-    any URL outside it (the analysis passes the images it could read).
+    Leaves out images that don't steer (set aside or weight 0, see
+    ``steers``) and, given ``only``, any URL outside it (the analysis passes
+    the images it could read).
     """
     ranked: list[tuple[float, int, str]] = []
     for index, img in enumerate(images or []):
-        if not isinstance(img, dict) or bool(img.get("excluded")):
+        if not isinstance(img, dict) or not steers(img):
             continue
         url = str(img.get("url") or "").strip()
         if not url or (only is not None and url not in only):
             continue
-        weight = _clamp_float(img.get("weight"), 1.0, 0.0, 1.0)
-        if steers(weight):
-            ranked.append((-weight, index, url))
+        ranked.append((-_clamp_float(img.get("weight"), 1.0, 0.0, 1.0), index, url))
     ranked.sort()
     urls: list[str] = []
     for _, _, url in ranked:

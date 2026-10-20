@@ -1200,3 +1200,82 @@ def test_a_keep_nebula_never_answered_doesnt_say_the_brief_wasnt_kept(app, tmp_p
     assert "may or may not have been kept" in message and "wasn't kept" not in message
     assert "The other changes were saved" in message
     assert caught.value.previous["direction"] == "" and caught.value.board_id == board["id"]
+
+
+# -- Set aside (moodboard canvas C3) -------------------------------------------
+
+def _three_image_board(app, tmp_path) -> dict:
+    sources = [str(_png(tmp_path / f"set-aside-{n}.png", (40 * n, 90, 160))) for n in (1, 2, 3)]
+    return boards.create_board(app.api, "Set aside", sources)[0]
+
+
+def test_cli_set_aside_and_use_keep_the_weight(app, tmp_path, capsys):
+    board = _three_image_board(app, tmp_path)
+    _cli(app, ["moodboard", "set", board["id"], "--weight", "2=0.4", "--set-aside", "2", "--exclude", "3"], capsys)
+    changed = boards.get_board(app.api, board["id"])
+    assert [(image["excluded"], image["weight"]) for image in changed["images"]] == [
+        (False, 1.0), (True, 0.4), (True, 1.0)]
+    shown = _cli(app, ["moodboard", "show", board["id"]], capsys)
+    assert shown.count("  set aside") == 2 and "excluded" not in shown
+
+    # --use (and --include, its old name) turns it off; the weight stays.
+    _cli(app, ["moodboard", "set", board["id"], "--use", "2", "--include", "3"], capsys)
+    used = boards.get_board(app.api, board["id"])
+    assert [(image["excluded"], image["weight"]) for image in used["images"]] == [
+        (False, 1.0), (False, 0.4), (False, 1.0)]
+
+
+def test_cli_use_on_a_weight_zero_image_takes_its_card_weight(app, tmp_path, capsys):
+    board = _three_image_board(app, tmp_path)
+    _cli(app, ["moodboard", "set", board["id"], "--weight", "2=0.5"], capsys)
+    # Weight 0 keeps the card where it was (and as big): it shows as set aside.
+    _cli(app, ["moodboard", "set", board["id"], "--weight", "2=0"], capsys)
+    zero = boards.get_board(app.api, board["id"])["images"][1]
+    assert zero["weight"] == 0 and zero["placements"][0]["weight"] == 0.5
+    assert "set aside (weight 0)" in _cli(app, ["moodboard", "show", board["id"]], capsys)
+    data = boards.brief(boards.get_board(app.api, board["id"]))
+    assert [image["setAside"] for image in data["images"]] == [False, True, False]
+
+    _cli(app, ["moodboard", "set", board["id"], "--use", "2"], capsys)
+    used = boards.get_board(app.api, board["id"])["images"][1]
+    assert used["weight"] == 0.5 and used["excluded"] is False
+    # A weight given with it wins.
+    _cli(app, ["moodboard", "set", board["id"], "--weight", "3=0", "--use", "3", "--weight", "3=0.3"], capsys)
+    assert boards.get_board(app.api, board["id"])["images"][2]["weight"] == 0.3
+
+
+def test_cli_set_aside_and_use_on_one_image_fail(app, tmp_path, capsys):
+    board = _three_image_board(app, tmp_path)
+    with pytest.raises(SystemExit):
+        _cli(app, ["moodboard", "set", board["id"], "--set-aside", "1", "--use", "1"], capsys)
+    assert "pick one" in capsys.readouterr().err
+    assert not any(image["excluded"] for image in boards.get_board(app.api, board["id"])["images"])
+
+
+
+def test_cli_set_aside_and_use_on_one_image_by_number_and_id_fail(app, tmp_path, capsys):
+    # The flags name one image two ways, so the raw refs differ but the image doesn't.
+    board = _three_image_board(app, tmp_path)
+    first = board["images"][0]["id"]
+    for flags in (["--use", "1", "--set-aside", first], ["--set-aside", first, "--use", "1"]):
+        with pytest.raises(SystemExit):
+            _cli(app, ["moodboard", "set", board["id"], *flags], capsys)
+        assert "pick one" in capsys.readouterr().err
+    assert not any(image["excluded"] for image in boards.get_board(app.api, board["id"])["images"])
+
+def test_mcp_set_aside_is_the_excluded_switch(app, tmp_path):
+    board = _three_image_board(app, tmp_path)
+
+    updated = mcp_server.moodboard_update(board["id"], images=[{"image": 1, "setAside": True},
+                                                               {"image": 2, "excluded": True}])
+    assert [(image["excluded"], image["setAside"]) for image in updated["images"]] == [
+        (True, True), (True, True), (False, False)]
+    # The undo puts it back as it was.
+    assert [image["excluded"] for image in updated["previous"]["images"]] == [False, False, False]
+    with pytest.raises(RuntimeError, match="same switch"):
+        mcp_server.moodboard_update(board["id"], images=[{"image": 3, "setAside": True, "excluded": False}])
+
+    zero = mcp_server.moodboard_update(board["id"], images=[{"image": 1, "setAside": False, "weight": 0}])
+    assert zero["images"][0]["setAside"] is True and zero["images"][0]["excluded"] is False
+    back = mcp_server.moodboard_update(board["id"], images=[{"image": 1, "excluded": False}])
+    assert back["images"][0]["weight"] == 1.0 and back["images"][0]["setAside"] is False

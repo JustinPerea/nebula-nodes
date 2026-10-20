@@ -174,7 +174,8 @@ def _print_board(board: dict[str, Any], names: dict[str, tuple[str, bool]] | Non
             print(f"  {label}: {' '.join(pinned[key])}")
     print(f"  Images ({len(images)}):")
     for index, image in enumerate(images, start=1):
-        flags = "  excluded" if image.get("excluded") else ""
+        flags = ("  set aside" if image.get("excluded")
+                 else "  set aside (weight 0)" if boards.is_set_aside(image) else "")
         note = f'  "{image["notes"]}"' if image.get("notes") else ""
         print(f"    {index:>2}  {image.get('id')}  weight {float(image.get('weight', 1)):.2f}{flags}  "
               f"{image.get('url')}{note}")
@@ -371,9 +372,12 @@ def run(client: NebulaClient, args) -> None:
                 edits.setdefault(image, {"image": image})["notes"] = value
             for image, value in _pairs(args.private_note, "--private-note"):
                 edits.setdefault(image, {"image": image})["privateNote"] = value
-            for image in args.exclude:
+            both = sorted(set(args.set_aside) & set(args.use))
+            if both:
+                _fail(f"--set-aside and --use both name image {', '.join(both)}: pick one")
+            for image in args.set_aside:
                 edits.setdefault(image, {"image": image})["excluded"] = True
-            for image in args.include:
+            for image in args.use:
                 edits.setdefault(image, {"image": image})["excluded"] = False
             if args.brief is not None and args.clear_brief:
                 _fail("--brief and --clear-brief can't go together")
@@ -500,10 +504,12 @@ def add_parser(sub) -> None:
                        help="The person's own label for one image, e.g. --private-note 2=\"PAINTERLY (liked)\". "
                             "Not sent anywhere: no analysis, brief or generator gets it, so it keeps the "
                             "analysis (repeatable)")
-    set_p.add_argument("--exclude", action="append", default=[], metavar="IMAGE",
-                       help="Keep an image on the board but stop it steering (repeatable)")
-    set_p.add_argument("--include", action="append", default=[], metavar="IMAGE",
-                       help="Let an excluded image steer again (repeatable)")
+    set_p.add_argument("--set-aside", "--exclude", dest="set_aside", action="append", default=[], metavar="IMAGE",
+                       help="Set an image aside: it stays on the board, keeps its weight and is still read "
+                            "for its colours, but never steers (repeatable; --exclude is the old name)")
+    set_p.add_argument("--use", "--include", dest="use", action="append", default=[], metavar="IMAGE",
+                       help="Use a set-aside image again; one at weight 0 takes the weight its card shows "
+                            "unless --weight sets one (repeatable; --include is the old name)")
     set_p.add_argument("--remove", action="append", default=[], metavar="IMAGE",
                        help="Take an image off the board (its file stays; repeatable)")
     set_p.add_argument("--name", help="Rename the board")

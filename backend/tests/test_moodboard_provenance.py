@@ -54,7 +54,7 @@ def _accent_board() -> dict:
 def test_each_board_colour_lists_its_source_images_by_board_number() -> None:
     analysis = analyze_moodboard(_accent_board())
 
-    assert analysis["version"] == ANALYSIS_VERSION == 4
+    assert analysis["version"] == ANALYSIS_VERSION == 5
     by_hex = {colour["hex"]: colour for colour in analysis["colors"]}
     navy, cream, sage = (c for c in analysis["colors"] if c["role"] == "dominant")
     assert [s["number"] for s in navy["sources"]] == [2] and navy["sources"][0]["id"] == "navy"
@@ -79,10 +79,11 @@ def test_each_board_colour_lists_its_source_images_by_board_number() -> None:
 def test_each_image_says_its_number_and_keeps_its_colours() -> None:
     analysis = analyze_moodboard(_accent_board())
 
-    # Excluded image 1 isn't analyzed; weight-0 image 3 is, but sources never name it.
-    assert [(item["number"], item["id"]) for item in analysis["images"]] == [
-        (2, "navy"), (3, "zero"), (4, "cream"), (5, "sage")]
-    cream = analysis["images"][2]
+    # Set-aside image 1 and weight-0 image 3 are measured, but sources never name them.
+    assert [(item["number"], item["id"], item.get("setAside")) for item in analysis["images"]] == [
+        (1, "ex", True), (2, "navy", None), (3, "zero", None), (4, "cream", None), (5, "sage", None)]
+    assert analysis["images"][0]["colors"] and analysis["images"][0]["status"] == "analyzed"
+    cream = analysis["images"][3]
     assert [(c["share"] > 0.9, c["accent"]) for c in cream["colors"]] == [(True, False), (False, True)]
     named = {s["number"] for colour in analysis["colors"] for s in colour["sources"]}
     assert named == {2, 4, 5}

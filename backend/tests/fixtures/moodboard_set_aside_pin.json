@@ -1,0 +1,19 @@
+{
+  "accent": [],
+  "brand": [
+    {
+      "number": 4,
+      "id": "brand-4",
+      "status": "analyzed",
+      "colors": [
+        {
+          "hex": "#155ae6",
+          "share": 1.0,
+          "accent": false
+        }
+      ]
+    }
+  ],
+  "shades": [],
+  "busy": []
+}

@@ -1148,7 +1148,7 @@ Studio shows. Both use `backend/moodboard_client.py`.
 nebula moodboard new "Nature + tech" ./refs https://example.com/ref.jpg --project current
 nebula moodboard show "Nature + tech"      # settings, the brief generators get, images, analysis
 nebula moodboard add <board> more.png
-nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --exclude 5 --strength 0.6
+nebula moodboard set <board> --weight 2=0.5 --image-note 3="the orange accent" --set-aside 5 --strength 0.6
 nebula moodboard set <board> --private-note 2="PAINTERLY (liked)"   # a label, never sent anywhere
 nebula moodboard set <board> --direction "quiet coastal mornings" --avoid "neon signage" --pin-color "#E8593C"
 nebula moodboard set <board> --unavoid "neon signage" --keep-out-color "#0000FF" --unpin-color "#E8593C"
@@ -1197,6 +1197,20 @@ nebula moodboard delete <board>
   image's cards. The CLI and MCP can't move cards yet. Through the API, a
   `PUT` keeps what it leaves out (images merge by id) and keeps the saved
   cards of images already on the board.
+- Set aside (contract 07, sections 1.1 and 1.3a): `--set-aside N` /
+  `--use N` (old names `--exclude` / `--include`), or `{"image": 5,
+  "excluded": true}` in `moodboard_update` (`setAside` is the same key). A
+  set-aside image stays on the board with its weight and cards and is still
+  read for its colours: the analysis lists it with `setAside: true`. It never
+  steers: it isn't in the palette, accents, colour sources, cues, summary,
+  brief or representative images, and the Moodboard node's outputs (and so
+  Krea 2's style references) leave it out. Weight 0 shows as set aside too;
+  each image in `show --json` and `moodboard_get` has `setAside` (`excluded`
+  or weight 0), while the analysis marks only switched images with
+  `setAside` (a weight-0 image keeps its ordinary entry, measured and in no
+  colour's sources). Using a weight-0 image again sets the weight its card shows,
+  unless the same change gives a weight. When nothing steers, the analysis
+  warns "Every reference is set aside, so none of them shapes the board."
 - Each image has `notes`, which steer (the analysis reads them), and
   `privateNote`, the person's own label (`--private-note`, or
   `{"image": 2, "privateNote": "..."}` in `moodboard_update`). The private

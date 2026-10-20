@@ -536,6 +536,8 @@ export interface MoodboardImage {
   /** The person's own label ("PAINTERLY (liked)"). Never sent anywhere: not
    * the analysis, the brief, a generator or the node's outputs. */
   privateNote?: string;
+  /** The Set aside switch: still read for its colours, never steers. The
+   *  Studio also shows weight 0 as set aside (`isSetAside`). */
   excluded: boolean;
   /** Where its cards sit. Every board read by id has them (an old board is
    *  laid out on read); lists may not. A PUT keeps the saved ones for images
@@ -582,8 +584,10 @@ export interface MoodboardAnalysis {
   subjectBias: string[];
   representativeImages: string[];
   providerHints: Record<string, unknown>;
-  /** Each analyzed image (excluded ones are left out). `number` (version 4 on)
-   *  is its place among all the board's images, excluded ones included. */
+  /** Each analyzed image. `number` (version 4 on) is its place among all
+   *  the board's images, set-aside ones included. From version 5 set-aside
+   *  (excluded) images are listed too, with `setAside` and their colours;
+   *  they never steer. */
   images: Array<MoodboardAnalysisImage & Record<string, unknown>>;
   warnings: string[];
 }
@@ -616,6 +620,8 @@ export interface MoodboardAnalysisImage {
   url: string;
   weight: number;
   status: 'analyzed' | 'unresolved' | 'error';
+  /** Set aside (version 5 on): measured, never steers. Absent otherwise. */
+  setAside?: boolean;
   colors?: Array<{ hex: string; share: number; accent: boolean }>;
 }
 
