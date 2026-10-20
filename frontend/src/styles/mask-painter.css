@@ -160,7 +160,8 @@
   cursor: pointer;
 }
 
-.mask-painter__save:disabled {
+.mask-painter__save:disabled,
+.mask-painter__save[aria-disabled='true'] {
   opacity: 0.45;
   cursor: default;
 }
