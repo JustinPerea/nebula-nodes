@@ -93,6 +93,20 @@ before it was replaced (the review lists every path that moved):
   for the late" reasons. On the CLI's board only ``colorCheck.basis`` (it
   hashes the version) and ``colorCheck.checks.words.version`` moved, on all
   7 boards. No old board clashes, so every finding list is still empty.
+- 2026-10-20, weight 0 is set aside in the bundle and the summary (plan
+  section 4.4; Justin's go on #100's review, recommendation a). The 4 boards
+  with a weight-0 image (``prebrief_unanalyzed``, ``prebrief_v2_edited``,
+  ``v3_current``, ``v4_current_private``) moved on 15 paths: the node
+  bundle's ``images`` and ``analysis.images`` each lose that one image, and
+  ``analysis.summary``'s count drops by one, on all 4 (12 paths); the CLI's
+  ``analysis.summary`` (the saved analysis as read, counted again in memory
+  by ``with_steering_count``) drops by one on the 3 analyzed ones (3 paths).
+  Nothing else moved: no generator prompt, Krea style reference, brief,
+  ``compose`` output, run note, hash or saved analysis key besides that
+  summary. ``test_q21b_changed_only_the_krea_style_references`` pins the
+  file before the change with those paths normalized
+  (``_without_weight_zero``), and ``tests/test_moodboard_weight_zero.py``
+  pins that no generator request changes.
 
 The board images are copied into the test OUTPUT_ROOT at
 ``moodboard-golden/``, so the boards' ``/api/outputs/moodboard-golden/...``
@@ -104,6 +118,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -319,7 +334,30 @@ def test_reading_an_old_board_leaves_its_file_unchanged(seeded) -> None:
 # clash-wording change (``LEXICON_VERSION`` 3, same day) moves only the
 # lexicon's own stamps, ``cli.colorCheck.basis`` (it hashes the version) and
 # ``cli.colorCheck.checks.words.version``, so those are left out of both sides.
-BEFORE_Q21B_WITHOUT_KREA_REFS = "c97b6c2d4b073e70115d52cd93ac09324090af592d33aea2fe9821aa966e0a80"
+# The weight-0 change (2026-10-20) moves only the paths ``_without_weight_zero``
+# normalizes, so the hash is of the file at 26572670 with those normalized too
+# (it was c97b6c2d4b07... before them); the file just before that change gives
+# the same hash.
+BEFORE_Q21B_WITHOUT_KREA_REFS = "ef8f5d4016bb300f95111b0a288b782adcfd4b461503189bc8dae277cc333fbc"
+
+
+_COUNT = re.compile(r"^\d+ reference image\(s\) analyzed as ")
+
+
+def _without_weight_zero(outputs: dict[str, Any]) -> None:
+    """The paths the weight-0 change moved, normalized in place: weight-0
+    images out of the bundle's ``images`` and ``analysis.images`` (where
+    the file before it still had them), and the count in the bundle's and
+    the CLI's ``analysis.summary``."""
+    bundle = ((outputs.get("node") or {}).get("moodboard") or {}).get("value") or {}
+    analysis = bundle.get("analysis") or {}
+    for holder in (bundle, analysis):
+        if isinstance(holder.get("images"), list):
+            holder["images"] = [img for img in holder["images"]
+                                if not (isinstance(img, dict) and img.get("weight") in (0, 0.0))]
+    for view in (analysis, (outputs.get("cli") or {}).get("analysis") or {}):
+        if isinstance(view.get("summary"), str):
+            view["summary"] = _COUNT.sub("N reference image(s) analyzed as ", view["summary"])
 
 
 def _without_krea_refs(expected: dict[str, Any]) -> str:
@@ -331,6 +369,7 @@ def _without_krea_refs(expected: dict[str, Any]) -> str:
         if isinstance(check, dict):
             check.pop("basis", None)
             ((check.get("checks") or {}).get("words") or {}).pop("version", None)
+        _without_weight_zero(outputs)
     canonical = json.dumps(rest, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 

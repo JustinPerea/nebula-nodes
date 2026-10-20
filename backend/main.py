@@ -11304,6 +11304,9 @@ class CharacterUpdate(BaseModel):
     frozenTraitString: str | None = None
     seed: int | None = None
     consistencyStrength: float | None = None
+    # The version the caller read: any other is a 409 with the Character as
+    # it is (contract 07, 2.1). Left out, the write isn't checked.
+    baseVersion: Any = None
 
 
 # Moodboard bodies refuse unknown fields: an image list sent under any other
@@ -11675,18 +11678,34 @@ async def get_character(char_id: str) -> dict:
 
 @app.put("/api/characters/{char_id}")
 async def update_character(char_id: str, body: CharacterUpdate) -> dict:
-    """Update mutable fields on a Character; bumps version."""
+    """Update mutable fields on a Character; bumps version. With
+    ``baseVersion``, a Character saved elsewhere since is a 409 carrying it as
+    it is now, and nothing is written. The broadcast carries the new
+    ``version`` and who wrote it (``edit``), so an open Character Studio
+    follows an outside edit and skips its own echo."""
+    from services.character_store import CharacterVersionConflict
+
+    if body.baseVersion is not None and (isinstance(body.baseVersion, bool) or not isinstance(body.baseVersion, int)):
+        raise HTTPException(status_code=422, detail="baseVersion must be a whole number: the Character's version you read")
     store = _char_store()
-    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updates = {k: v for k, v in body.model_dump().items() if v is not None and k != "baseVersion"}
     try:
-        character = store.update(char_id, **updates)
+        character = store.update(char_id, base_version=body.baseVersion, **updates)
     except KeyError:
         # In Recently deleted (an agent may have deleted it): say so, so the
         # Studio can tell the person to restore it and keep their edits.
         return _asset_not_found("character", char_id)
+    except CharacterVersionConflict as exc:
+        return JSONResponse(status_code=409, content={
+            "detail": (f"The Character changed since you read it: it is at version {exc.character.get('version')}. "
+                       "Read it again (it is in this answer), redo your change on it and send it with that baseVersion."),
+            "code": "version_conflict",
+            "version": exc.character.get("version"),
+            "character": exc.character,
+        })
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Character '{char_id}' not found")
-    await _broadcast_stored_asset("character", character)
+    await _broadcast_stored_asset("character", character, edit={})
     return character
 
 
