@@ -190,8 +190,12 @@ nebula moodboard delete <board>
   share out its strength: each goes at strength x its weight / the weights
   of the images sent, so they add up to the board's strength (one image
   goes at the full strength), and your own wired references keep theirs on
-  top. Strength 0 sends no board images to Krea 2. The run note lists what
-  went. `--set-aside N` keeps an image on
+  top. The run note lists what went. Strength 0 turns the board off for
+  every node it's wired into, text included: no brief, Avoid, negatives or
+  images, and the run note "Board strength is 0: board not sent". For
+  text without images, use the node's "Send board images" switch instead
+  (not in this version yet; until then GPT Image, Nano Banana, FLUX and
+  the other content-slot nodes get only the text anyway). `--set-aside N` keeps an image on
   the board with its weight, still read for its colours, but it never steers
   (no palette, brief, cues or representative image, and no generator gets
   it); `--use N` uses it again (`--exclude`/`--include` are the old names).
