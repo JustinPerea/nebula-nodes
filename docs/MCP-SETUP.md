@@ -1249,7 +1249,14 @@ nebula moodboard delete <board>
   Anyone may move, agents included; the result's `from` says where to move
   it back, and `movedBy` who moved it. Already there is a no-op
   (`status: "unchanged"`); one in Recently deleted is refused until it's
-  restored.
+  restored. A Studio draft kept for it follows the move, also one made while
+  the tab's socket was closed (contract 07, section 1.12).
+- Editing a Character: `PUT /api/characters/{id}` with only the fields you
+  change and `baseVersion` (the `version` you read); a 409
+  `version_conflict` carries the Character as it is now. An open Character
+  Studio shows the change live, keeps the person's unsaved edits, and names
+  you when you both changed one field (contract 07, section 2.1). No MCP
+  tool edits a Character's fields.
 - A board is named by its id or exact name; an image by its number or id
   from `show`. `--json` prints the board as JSON (the MCP tools return the
   same shape).
@@ -1298,8 +1305,12 @@ nebula moodboard delete <board>
   lists also catch up on a change made while their tab's socket was closed
   (a backend restart), once it opens again. A Preview of the run
   counts only the images that steer ("4 images"), weight 0 left out like
-  the switch. When nothing steers, the analysis
-  warns "Every reference is set aside, so none of them shapes the board."
+  the switch, and so does the analysis's summary ("4 reference image(s)
+  analyzed"). The Moodboard node's bundle leaves weight-0 images out of
+  `images`, `analysis.images` and `representativeImages` as it does switched ones. When nothing
+  steers, the analysis warns "Every reference is set aside, so none of them
+  shapes the board." and its summary says "No reference image steers this
+  board: every one is set aside."
 - Each image has `notes`, which steer (the analysis reads them), and
   `privateNote`, the person's own label (`--private-note`, or
   `{"image": 2, "privateNote": "..."}` in `moodboard_update`). The private
