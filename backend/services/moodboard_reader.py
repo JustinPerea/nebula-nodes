@@ -60,6 +60,7 @@ import json
 import math
 import re
 import time
+import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -101,6 +102,9 @@ HYBRID_MIN = 3         # Q10
 LINE_LIMIT = 200
 THOUGHT_MERGE_SECONDS = 0.25
 FRAME_NAME_LIMIT = 60
+# A reading's look names are cut here, past a frame name's limit, so a cut
+# name always fails the look-name check.
+READING_LOOK_LIMIT = 2 * FRAME_NAME_LIMIT
 FIELD_LIMIT = 80
 MOTIF_LIMIT = 40
 MAX_MOTIFS = 6
@@ -1258,8 +1262,10 @@ def _short(value: Any, limit: int) -> str:
 
 def _looks(value: Any, limit: int, *, cut: bool = True) -> list[dict[str, Any]]:
     """Checked looks, names with their spaces collapsed. A reading's look
-    names are cut to 60 characters; the sort's are kept whole (``cut``
-    False), so the look-name check can refuse a longer one."""
+    names are cut at ``READING_LOOK_LIMIT`` (120), twice a frame name's
+    limit, so a cut name is always too long and the look-name check refuses
+    it wherever it is used (the reading line, the fallback draft); the
+    sort's are kept whole (``cut`` False)."""
     if not isinstance(value, list):
         raise ItemProblem("schema", "looks isn't a list")
     looks = []
@@ -1269,8 +1275,10 @@ def _looks(value: Any, limit: int, *, cut: bool = True) -> list[dict[str, Any]]:
         fit = look.get("fit")
         if isinstance(fit, bool) or not isinstance(fit, (int, float)) or not math.isfinite(fit) or not 0 <= fit <= 1:
             raise ItemProblem("schema", "a look's fit isn't from 0 to 1")
-        name = " ".join(look["name"].split())
-        looks.append({"name": name[:FRAME_NAME_LIMIT] if cut else name, "fit": round(float(fit), 3)})
+        # Composed before the cut, so composing it later (the look-name
+        # check does) can't bring a cut name back under the limit.
+        name = " ".join(unicodedata.normalize("NFC", look["name"]).split())
+        looks.append({"name": name[:READING_LOOK_LIMIT] if cut else name, "fit": round(float(fit), 3)})
     return looks
 
 
@@ -1350,9 +1358,12 @@ class _TaskSink(ReadSink):
         self.last_done = target
         reading = run.reading(target, fields)
         best = reading["looks"][0] if reading["looks"] else None
-        text = reading["reason"] + (f" → {best['name']}" if best else "")
+        # The reading's own look is model text: the line names it only as
+        # the board's frame or after the look-name check, else not at all.
+        look = run._checked_look_ref(best["name"]) if best else None
+        text = reading["reason"] + (f" → {look['name']}" if look else "")
         run.trace.add("reading", text.strip(), source="reader", refs=[target], batch=task.batch, attempt=task.attempt,
-                      look=run._look_ref(best["name"]) if best else None, fit=best["fit"] if best else None)
+                      look=look, fit=best["fit"] if look else None)
         return ref
 
     def thought(self, text: str) -> None:
@@ -1561,9 +1572,15 @@ class MoodboardRead:
 
     # -- the end ------------------------------------------------------------------------------
 
-    def _look_ref(self, name: str) -> dict[str, Any]:
-        frame = _frames_by_name(self.board).get(name.casefold())
-        return {"frameId": frame.get("id") if frame else None, "name": frame.get("name") if frame else name}
+    def _checked_look_ref(self, name: str) -> dict[str, Any] | None:
+        """``name`` as the board's frame (the person's name, not checked),
+        or as a new look's name after ``check_look_name``; None when that
+        check refuses it."""
+        frame = _frames_by_name(self.board).get(_look_key(name))
+        if frame is not None:
+            return {"frameId": frame.get("id"), "name": frame.get("name")}
+        checked = check_look_name(name)
+        return {"frameId": None, "name": checked} if checked is not None else None
 
     def _finish(self, result: _Sorted) -> dict[str, Any]:
         by_id = {t.id: t for t in self.targets}
@@ -1673,37 +1690,81 @@ def _sort_items(value: Mapping[str, Any], by_label: Mapping[str, Target], log: l
 
 
 def _frames_by_name(board: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    return {str(frame.get("name")).casefold(): frame for frame in board.get("frames") or []
+    return {_look_key(str(frame.get("name"))): frame for frame in board.get("frames") or []
             if isinstance(frame, dict) and frame.get("kind") == "look" and frame.get("name")}
 
 
+# Typographic apostrophes and dashes that keyboards, autocorrect and models
+# write for ' and -: right and left single quotation marks, the modifier
+# letter apostrophe, the en and em dashes, the hyphen and the non-breaking
+# hyphen. Nothing else is mapped (not primes, minus, bars or double quotes):
+# a look-alike outside this set is refused, not guessed at.
+_LOOK_NAME_TYPOGRAPHY = str.maketrans({"\u2019": "'", "\u2018": "'", "\u02bc": "'",
+                                       "\u2013": "-", "\u2014": "-", "\u2010": "-", "\u2011": "-"})
 _LOOK_NAME_PUNCTUATION = set(" &-'")
 _LOOK_NAME_WORDS = 4
-# A sort label ("R3") or a link ("https", "www") in a name, or a name that
-# is only a batch label ("B"; "Plan B" is a name).
-_SORT_LABEL_OR_LINK = re.compile(r"\bR\d+\b|(?i:\bhttps?\b|\bwww\b)|^[A-F]$")
+# A sort label ("R3", "r12") or a link ("https", "www") in a name, as whole
+# words in any case.
+_SORT_LABEL_OR_LINK = re.compile(r"(?i:\bR\d+\b|\bhttps?\b|\bwww\b)")
+# The words of a name, to tell a name that is only batch labels ("B", "'b'",
+# "A & C"; "Plan B" and "B&W film" are names).
+_LOOK_NAME_WORD = re.compile(r"[^\W_]+")
+_BATCH_LABEL = re.compile(r"[A-Fa-f]")
+# A lone a to f, raised to a capital so ``names_a_label`` (which takes only
+# capitals, for reasons like "image a bit") sees "image b" as "Image B".
+_LONE_SMALL_LABEL = re.compile(r"\b[a-f]\b")
+
+
+def normalize_look_name(name: str) -> str:
+    """``name`` composed (NFC, so "Café" has one spelling), with
+    ``_LOOK_NAME_TYPOGRAPHY``'s apostrophes and dashes made plain and its
+    spaces collapsed: the form a new look is stored and shown in."""
+    return " ".join(unicodedata.normalize("NFC", name).translate(_LOOK_NAME_TYPOGRAPHY).split())
+
+
+def _names_a_label_any_case(name: str) -> bool:
+    """A batch label or ``#n`` (``names_a_label``) in any case, or a name
+    whose every word is a batch label."""
+    words = _LOOK_NAME_WORD.findall(name)
+    if words and all(_BATCH_LABEL.fullmatch(word) for word in words):
+        return True
+    return names_a_label(_LONE_SMALL_LABEL.sub(lambda m: m.group().upper(), name))
+
+
+def _look_key(name: str) -> str:
+    """How look names are matched: normalised, ignoring case, so the
+    person's "Mid–century" frame is the sort's "mid-century"."""
+    return normalize_look_name(name).casefold()
 
 
 def _look_char(ch: str) -> bool:
-    return ch.isalpha() or ch.isdigit()
+    # isdecimal, not isdigit: "³", "①" and "⓵" aren't digits in a name.
+    return ch.isalpha() or ch.isdecimal()
 
 
 def check_look_name(name: Any) -> str | None:
-    """A new look's name from the sort, its spaces collapsed, or None when
-    it fails section 5.6.2's check: 1 to 60 characters, at most 4 words,
-    only letters, digits, spaces and ``&-'``, at least one letter or digit,
-    and no ``#n``, batch or sort label, link or ``@``. A frame name is the
+    """A new look's name from the sort, normalised (``normalize_look_name``:
+    composed, typographic apostrophes and dashes made plain, spaces
+    collapsed), or None when it fails section 5.6.2's check: no
+    compatibility characters, 1 to 60 characters, at most 4 words, only
+    letters, decimal digits, spaces and ``&-'``, at least one letter or
+    digit, and no ``#n``, batch or sort label (in any case), link or ``@``.
+    A frame name is the
     one piece of model text that becomes board data and then shows in
     update templates, so it is checked for every source, Argon's too."""
     if not isinstance(name, str):
         return None
-    name = " ".join(name.split())
+    name = normalize_look_name(name)
+    # A compatibility character (fullwidth "Ｒ３", "𝐑", "ﬁ", "③") would
+    # spell a label or link the checks below can't see: refused, not folded.
+    if unicodedata.normalize("NFKC", name) != name:
+        return None
     if not 1 <= len(name) <= FRAME_NAME_LIMIT or len(name.split()) > _LOOK_NAME_WORDS:
         return None
-    # isalnum would let "½" and "Ⅻ" in: digits are isdigit's.
+    # isalnum would let "½" and "Ⅻ" in.
     if not all(_look_char(ch) or ch in _LOOK_NAME_PUNCTUATION for ch in name) or not any(map(_look_char, name)):
         return None
-    if names_a_label(name) or _SORT_LABEL_OR_LINK.search(name):
+    if _names_a_label_any_case(name) or _SORT_LABEL_OR_LINK.search(name):
         return None
     return name
 
@@ -1729,18 +1790,30 @@ def enforce_sort(board: Mapping[str, Any], targets: Sequence[Target], proposal: 
     def usable(looks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen, kept = set(), []
         for look in looks:
-            name = " ".join(str(look.get("name") or "").split())
-            if not name or name.casefold() == "unsorted" or name.casefold() in seen:
+            name = normalize_look_name(str(look.get("name") or ""))
+            key = name.casefold()
+            if not name or key == "unsorted" or key in seen:
                 continue
-            seen.add(name.casefold())
-            frame = frames.get(name.casefold())
-            kept.append({"name": frame["name"] if frame else name, "fit": float(look.get("fit") or 0),
+            seen.add(key)
+            frame = frames.get(key)
+            # A new look is kept in its checked form; the check runs on the
+            # whole name, so a reading's over-long look in the fallback draft
+            # is refused, never cut until it fits.
+            checked = None if frame else check_look_name(name)
+            kept.append({"name": frame["name"] if frame else (checked or name), "fit": float(look.get("fit") or 0),
                          "frameId": frame.get("id") if frame else None,
-                         "refused": frame is None and check_look_name(name) is None})
+                         "refused": frame is None and checked is None})
         # Best means the highest fit, whatever order the model gave.
         return sorted(kept, key=lambda look: -look["fit"])
 
     candidates = {t.id: usable(list(proposal.get(t.id) or [])) for t in targets if t.id not in failed}
+    # One spelling per new look, the first given, so every image, line and
+    # suggestion names the frame it would make ("Women's Wear" is "Women's wear").
+    spelling: dict[str, str] = {}
+    for looks in candidates.values():
+        for look in looks:
+            if look["frameId"] is None and not look["refused"]:
+                look["name"] = spelling.setdefault(look["name"].casefold(), look["name"])
     counts: dict[str, int] = {}
     order: list[str] = []
     for looks in candidates.values():
