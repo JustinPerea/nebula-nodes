@@ -10,6 +10,7 @@ import type { Edge, Node } from '@xyflow/react';
 import type { NodeData } from '../types';
 import { JEV_BOX, JEV_DECIDE, JEV_PICK_BEST, type JevDecideResult, type JevReport, type JevVerdict } from './jev';
 import { formatUsd } from './pricing';
+import { edgesInto, nodeById } from './graphIndex';
 
 /** TypeSafe bills input tokens only, at $0.042 per million (output is free).
  * The same rate backs the jev-* entries in backend/data/model_pricing.json. */
@@ -157,13 +158,13 @@ function stringValues(value: unknown): string[] {
 export function upstreamPortValues(
   nodeId: string,
   port: string,
-  nodes: Node[],
-  edges: Edge[],
+  nodes: readonly Node[],
+  edges: readonly Edge[],
 ): string[] {
   const values: string[] = [];
-  for (const edge of edges) {
-    if (edge.target !== nodeId || edge.targetHandle !== port) continue;
-    const source = nodes.find((candidate) => candidate.id === edge.source);
+  for (const edge of edgesInto(edges, nodeId)) {
+    if (edge.targetHandle !== port) continue;
+    const source = nodeById(nodes, edge.source);
     if (!source) continue;
     const data = source.data as NodeData;
     const output = edge.sourceHandle ? data.outputs?.[edge.sourceHandle] : undefined;

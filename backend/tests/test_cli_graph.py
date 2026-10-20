@@ -36,6 +36,20 @@ def test_connect(graph):
     assert edge["targetHandle"] == "image"
 
 
+def test_a_new_edge_never_takes_the_id_of_one_still_on_the_canvas(graph):
+    for definition in ("node-a", "node-b", "node-c", "node-d"):
+        graph.add_node(definition, {})
+    graph.connect("n1", "image", "n2", "image")
+    graph.connect("n2", "image", "n3", "image")
+    graph.connect("n3", "image", "n4", "image")
+    assert graph.remove_edge("n1", "image", "n2", "image")
+    graph.remove_node("n4")  # takes e3 with it
+    graph.connect("n1", "image", "n3", "mask")
+    graph.connect("n1", "image", "n2", "image")
+    ids = [edge["id"] for edge in graph.edges]
+    assert len(ids) == len(set(ids)), ids
+
+
 def test_connect_unknown_node_raises(graph):
     graph.add_node("node-a", {})
     with pytest.raises(ValueError, match="not found"):

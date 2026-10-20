@@ -243,7 +243,7 @@ def test_sync_registry_contains_all_video_qc_handlers() -> None:
 
 def test_shared_frontend_renderer_is_wired() -> None:
     repo = Path(__file__).resolve().parents[2]
-    canvas = (repo / "frontend/src/components/Canvas.tsx").read_text()
+    canvas = (repo / "frontend/src/components/canvasTypes.ts").read_text()
     store = (repo / "frontend/src/store/graphStore.ts").read_text()
     backend = (repo / "backend/main.py").read_text()
     assert "videoQcNode: VideoQcNode" in canvas

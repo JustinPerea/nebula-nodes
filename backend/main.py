@@ -7531,13 +7531,6 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
                     dst,
                     connect_spec.get("targetHandle", ""),
                 )
-                # Deleting an earlier edge can leave the len+1 allocator at an
-                # existing id. The confirmed pair needs a unique edge identity.
-                used_edge_ids = {existing["id"] for existing in candidate.edges[:-1]}
-                edge_number = len(candidate.edges)
-                while edge["id"] in used_edge_ids:
-                    edge_number += 1
-                    edge["id"] = f"e{edge_number}"
             except ValueError as exc:
                 # Discard the persistence-free candidate on every connection
                 # failure; the caller requested a pair, not a standalone node.
@@ -7697,13 +7690,6 @@ async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
             target_id = candidate.add_node("veo-3", defaults, position={"x": position["x"] + 360.0, "y": position["y"]})
             _validate_connect_handles(node_id, port_id, target_id, "image", graph=candidate)
             edge = candidate.connect(node_id, port_id, target_id, "image")
-            # CLIGraph's sequential edge allocator can collide after deletion.
-            # Keep this new connection's identity valid before durable adoption.
-            used_edge_ids = {existing["id"] for existing in candidate.edges[:-1]}
-            edge_number = len(candidate.edges)
-            while edge["id"] in used_edge_ids:
-                edge_number += 1
-                edge["id"] = f"e{edge_number}"
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=f"Cannot connect this shot to motion: {exc}") from exc
         # This action adds only an ordinary Veo node/edge. Existing recovery
