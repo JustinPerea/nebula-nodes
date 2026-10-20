@@ -79,11 +79,11 @@ export interface SocketReconnectedEvent {
   type: 'socketReconnected';
 }
 
-/** A saved moodboard or character changed (backend main.py
- *  _broadcast_stored_asset), so a card that shows it fetches it again. */
+/** A saved moodboard, character or Style changed (backend main.py
+ *  _broadcast_stored_asset), so a card or list that shows it fetches it again. */
 export interface StoredAssetChangedEvent {
   type: 'storedAssetChanged';
-  kind: 'moodboard' | 'character';
+  kind: 'moodboard' | 'character' | 'style';
   id: string;
   deleted: boolean;
   /** Only after a move (POST .../move): where it lives now, null for Global. */

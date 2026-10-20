@@ -3,6 +3,7 @@ import { Search, Bookmark } from 'lucide-react';
 import { fetchPresets, type Preset } from '../../lib/createPresets';
 import { PresetCard } from './PresetCard';
 import { useCurrentProjectId } from '../../lib/currentProject';
+import { wsClient } from '../../lib/wsClient';
 
 export interface PresetLibraryProps {
   onApply: (preset: Preset) => void;
@@ -20,6 +21,14 @@ export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey, savi
   // This project's styles are the open canvas project's (lib/currentProject);
   // with none open, only the global ones show.
   const projectId = useCurrentProjectId();
+  // A Style saved, changed, deleted or restored elsewhere (an agent, the
+  // Assets panel, another tab) shows up without reopening Styles.
+  const [changed, setChanged] = useState(0);
+  useEffect(() => wsClient.subscribe((event) => {
+    if ((event.type === 'storedAssetChanged' && event.kind === 'style') || event.type === 'socketReconnected') {
+      setChanged((value) => value + 1);
+    }
+  }), []);
   useEffect(() => {
     let cancelled = false;
     Promise.all([
@@ -27,7 +36,7 @@ export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey, savi
       projectId ? fetchPresets('project', projectId).catch(() => [] as Preset[]) : Promise.resolve([] as Preset[]),
     ]).then(([g, p]) => { if (!cancelled) setPresets([...p, ...g]); });
     return () => { cancelled = true; };
-  }, [reloadKey, projectId]);
+  }, [reloadKey, projectId, changed]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };

@@ -139,8 +139,13 @@ The server exposes these tools for building and running (see
   "global", "current", or a project's id or exact name). See
   [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
-  characters, projects), and bring one back with the same id. See
+  characters, Styles, projects), and bring one back with the same id. See
   [Recently deleted](#recently-deleted).
+- `style_list`, `style_get`, `style_create`, `style_update`, `style_delete`:
+  the Styles in Create and the Assets panel (a prompt fragment, optionally a
+  model and its settings). `style_update` returns `previous`, which undoes it
+  as one checked write; `style_delete` moves one to Recently deleted. See
+  [Styles from the CLI and MCP](#styles-from-the-cli-and-mcp).
 
 And these canvas tools:
 
@@ -292,6 +297,7 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board: one event per write, its kind the first of these that applies (`grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
 | `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and wire events it made | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors), `undid` (for an undo of an undo), `counts`, `skipped` |
 | `note.posted` | an agent posted an update to the person (Updates, `post_note`) | `surface` (canvas or board), `noteId`, `about`, `refs` (up to 12), `text`; `boardId`, `boardName` on a board |
+| `style.created` / `style.updated` / `style.deleted` / `style.restored` / `style.purged` | a Style was saved, changed, moved to Recently deleted, restored from it, or deleted for good, by the person (Create, the Assets panel) or an agent (`style_*`, `nebula style`) | `styleId`, `styleName`, `scope` (`global` or the project id); `fields` (what an update changed: `name`, `category`, `prompt`, `params`, `modelId`, `refImages`, `thumbnail`); never a prompt or a setting's value |
 
 Events of a canvas edit carry `edit`: an agent's `edit_canvas`,
 `remove_from_canvas` or `nebula apply` gives each of its events `edit: {id}`
@@ -1042,22 +1048,23 @@ they are revoked and connected again.
 
 ### Recently deleted
 
-Deleting a moodboard, a character or a project doesn't remove it. It moves to
-Recently deleted with who deleted it (you, an agent by name, or an unnamed
-client) and when. Agents may delete boards and characters
-(`DELETE /api/moodboards/{id}`, `DELETE /api/characters/{id}`), because anyone
-can undo it:
+Deleting a moodboard, a character, a Style or a project doesn't remove it. It
+moves to Recently deleted with who deleted it (you, an agent by name, or an
+unnamed client) and when. Agents may delete boards, characters and Styles
+(`DELETE /api/moodboards/{id}`, `DELETE /api/characters/{id}`,
+`DELETE /api/presets/{id}`), because anyone can undo it:
 
 - `GET /api/trash` lists it, newest first. `kind` (`moodboard`, `character`,
-  `project`) narrows it; `scope` (`global`, or `project` with `projectId`)
-  narrows boards and characters the way their lists do.
+  `style`, `project`) narrows it; `scope` (`global`, or `project` with
+  `projectId`) narrows boards, characters and Styles the way their lists do.
 - `POST /api/trash/{kind}/{id}/restore` brings one back with the same id and
   contents, so a Moodboard or Character node that points at it runs again. A
   project comes back closed. Agents may restore. Restoring one that is already
   back is a no-op (200, `alreadyRestored: true`). MCP: `list_trash`,
   `restore_from_trash`. CLI: `nebula trash list`, `nebula trash restore [kind] <id>`.
 - Deleting for good is person-only (see the list above). The person does it
-  from Moodboard Studio, Character Studio or Projects. Emptying sends what the
+  from Moodboard Studio, Character Studio, the Assets panel's Styles tab or
+  Projects. Emptying sends what the
   person's list showed (`{"items": [{kind, id}]}` to `/api/trash/empty`,
   `{"ids": [...]}` to `/api/projects/trash/empty`) and only those go, so an
   agent's delete that lands after the list loaded stays restorable.
@@ -1068,14 +1075,17 @@ can undo it:
   stored NFKC-normalized, without control, format (zero-width, bidi),
   private-use or surrogate characters.
 
-A board or character in Recently deleted answers `GET` and `PUT` with 404 and
-`code: "in_trash"` plus its trash record. Its node card and the Inspector say
+A board, character or Style in Recently deleted answers `GET` and `PUT` with
+404 and `code: "in_trash"` plus its trash record. Its node card and the Inspector say
 it's in Recently deleted and offer Restore. Running the node fails with a
 message that says how to restore it, and `edit_canvas` refuses to point a node
 at it.
 
-Boards and characters stay until the person deletes them for good: there is
-no timer. Projects keep their 30-day expiry. Files live in
+No saved graph points at a Style (applying one copies its prompt and settings
+into Create), so deleting one breaks nothing: it only leaves the Styles lists.
+
+Boards, characters and Styles stay until the person deletes them for good:
+there is no timer. Projects keep their 30-day expiry. Files live in
 `<store>/.trash/<id>.json` with a `<id>.trash.json` record beside them
 (`backend/services/asset_trash.py`).
 
@@ -1424,6 +1434,62 @@ send it after the person confirms). It's a check of intent, not of who is
 asking. With the canvas open, a clear is one undo step: Undo (or Cmd-Z)
 brings back every node, wire, name and output. With no canvas open there is
 nothing to undo it from, so prefer `nebula project new`.
+
+### Styles from the CLI and MCP
+
+A Style (a preset; `/api/presets`, `backend/services/preset_store.py`) is what
+the person saves from Create with "Save current" and finds again in Create's
+Styles and the Assets panel's Styles tab: a `prompt` fragment Create adds to
+the prompt, and optionally a `modelId` with that model's `params`. Applying it
+copies those into Create; no saved graph points at one.
+
+- **CLI:** `nebula style list [--project ID|current] [--global] [--json]`,
+  `show <style>`, `new <name> [--prompt] [--category] [--model NODE]
+  [--params JSON] [--ref URL] [--project ID|current]`, `set <style> [--name]
+  [--prompt] [--category] [--model NODE|""] [--params JSON] [--ref URL]
+  [--base-version N] [--restore FILE]`, `delete <style>`. A Style is named by
+  id or exact name (any case).
+- **MCP:** `style_list(project_id)`, `style_get(style)`,
+  `style_create(name, prompt, category, params, model_id, ref_images,
+  project_id, thumbnail)`, `style_update(style, ..., base_version)`,
+  `style_delete(style)`. They share `backend/style_client.py` with the CLI and
+  go through the routes the app uses.
+- **New Styles** are Global unless a project is given; `current` is the
+  project open on the canvas. `nebula style new` and `style_create` send
+  `paramsVersion` (the version of the code they run), so their params are
+  never read as older ones. A `POST /api/presets` without it is still read as
+  a pre-marker bundle's, version 0.
+- **Updates are checked writes.** `PUT /api/presets/{id}` takes `baseVersion`
+  (the `version` read) and answers 409 `code: "version_conflict"` with the
+  Style as it is now when someone saved it since. `style_update` and
+  `nebula style set` always send it. `params` replaces the settings whole;
+  `modelId: ""` makes a Style style-only. They return `previous` (the fields
+  the call changed, as they were, with `base_version` the version it made):
+  `style_update(style, **previous)` or `nebula style set <style> --restore
+  <file>` undoes exactly that change, and is refused if someone changed the
+  Style again since.
+- **Who bills is the person's call.** Applying a Style puts its settings on
+  Create's draft, billing included, so Style writes follow the node routes'
+  rules: nobody but the person may save a Style whose `_provider` or
+  `_kreaAuth` differs from the model's default (or, for an update, from what
+  the Style had), 403 with a node edit's sentence, except that a Style
+  change can't be proposed, so it says to leave the key out or ask the person
+  to pick it in Create; an agent may not write an internal (`_`) param it
+  didn't read back unchanged (422), and leaving one out of `params` keeps
+  the Style's own, so `previous` still undoes the change; an agent's
+  `modelId` must be a node in the catalog (400).
+- **Delete** moves a Style to Recently deleted (kind `style`, with
+  `deletedBy`); `restore_from_trash(kind="style", id)` or
+  `nebula trash restore style <id>` brings it back with the same id. On a
+  Nebula without Recently deleted for Styles both refuse rather than delete
+  for good.
+- **Everyone sees it.** Every write journals one `style.*` event with its
+  actor (see [Watching for changes](#watching-for-changes)), broadcasts
+  `storedAssetChanged` with `kind: "style"` (the Assets panel and Create's
+  Styles list again), and an agent's write is a line in the Agent log
+  ("Changed the prompt of Style Dusk"). Starter Styles are seeded once
+  (`<preset root>/.seeded` marks it), so starters the person deleted, even
+  for good, don't come back on the next start.
 
 ### Moodboards from the CLI and MCP
 

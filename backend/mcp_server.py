@@ -54,6 +54,7 @@ The loop:
 Pins are the person's requests: act on one, then answer it with resolve_pin. wait_for_canvas_change waits for the next change instead of polling.
 When you start on a request, call point_at with a short say naming your own next step (under 8 words). What you noticed, a report or a suggestion goes in post_note: the person reads those in Updates, top right, not at your cursor.
 Moodboards: see moodboard_get; moodboard_update(cover=...) picks the image a board opens on, and moodboard_edit moves, resizes and groups its cards in one checked edit its `undo` takes back. New work goes in a new project (new_project), not over theirs.
+Styles (saved looks in Create): style_list, style_get, style_create, style_update (`previous` undoes it), style_delete.
 If you also use the `nebula` CLI, set NEBULA_AGENT_NAME so both share one name.
 """
 
@@ -985,25 +986,25 @@ def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
 
 @_tool(annotations=_READ)
 def list_trash(kind: str | None = None, ctx: Context | None = None) -> dict[str, Any]:
-    """List Recently deleted: moodboards, characters and projects, newest first.
+    """List Recently deleted: moodboards, characters, Styles and projects, newest first.
 
-    Deleted moodboards, characters and projects go to Recently deleted, and
-    restore_from_trash brings one back with the same id. Deleting for good
-    is the person's alone.
+    Deleted moodboards, characters, Styles and projects go to Recently
+    deleted, and restore_from_trash brings one back with the same id.
+    Deleting for good is the person's alone.
 
-    `kind` ("moodboard", "character" or "project") narrows the list. Each item
+    `kind` ("moodboard", "character", "style" or "project") narrows the list. Each item
     has its id, name, when it was deleted and who deleted it (`deletedBy`:
     `kind` is person, agent, system or anonymous; an agent's `name` is the
     one it gave itself, so only kind "person" means the person). Projects also have
-    `purgeAt`, when they are removed for good; boards and characters stay
-    until the person deletes them for good."""
+    `purgeAt`, when they are removed for good; boards, characters and Styles
+    stay until the person deletes them for good."""
     params = {"kind": kind} if kind else None
     return _canvas_call("GET", "/api/trash", ctx, params=params)
 
 
 @_tool(annotations=_EDIT)
 def restore_from_trash(kind: str, id: str, ctx: Context | None = None) -> dict[str, Any]:
-    """Bring a moodboard, character or project back from Recently deleted.
+    """Bring a moodboard, character, Style ("style") or project back from Recently deleted.
 
     It comes back with the same id and contents, so a Moodboard or Character
     node that points at it runs again. A project comes back closed. Any
@@ -1578,6 +1579,122 @@ def character_move(character: str, to: str, ctx: Context | None = None) -> dict[
     import character_client as characters
 
     return _board_call(characters.move_character, _api(), character, to, _board_headers(ctx))
+
+
+# -- Styles (presets) ------------------------------------------------------------
+# The work is in style_client.py, shared with `nebula style`; every call goes
+# through /api/presets, the routes Create and the Assets panel use.
+
+def _style_call(fn, *args: Any, **kwargs: Any) -> Any:
+    """Run a style_client call; its refusals (and a project lookup's) come
+    back as the tool's error, in their own words."""
+    import moodboard_client
+    import style_client
+
+    try:
+        return fn(*args, **kwargs)
+    except (style_client.StyleError, moodboard_client.MoodboardError) as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
+@_tool(annotations=_READ)
+def style_list(project_id: str | None = None, ctx: Context | None = None) -> list[dict[str, Any]]:
+    """List Styles: the Global ones (every project lists them), then one
+    project's own.
+
+    A Style is what the person saves from Create (and sees in the Assets
+    panel's Styles tab): `name`, `category`, `prompt` (a fragment Create adds
+    to the prompt), `modelId` (null for a style-only Style that styles any
+    model) and its `params`, `refImages`, `thumbnail`, `version` and `scope`.
+    `project_id` (a canvas project's id, or "current") defaults to the
+    project open on the canvas; "none" lists only the Global ones.
+
+    style_create, style_update and style_delete write them; who bills a
+    Style's model (`_provider`, `_kreaAuth`) is the person's call. Every
+    Style write is journaled as a `style.*` canvas event."""
+    import moodboard_client as boards
+    import style_client as styles
+
+    api, headers = _api(), _board_headers(ctx)
+    if project_id == "none":
+        project = None
+    elif project_id:
+        project = _style_call(boards.resolve_project, api, project_id, headers)
+    else:
+        project = boards.active_project(api, headers)
+    return _style_call(styles.list_styles, api, project=project, headers=headers)
+
+
+@_tool(annotations=_READ)
+def style_get(style: str, ctx: Context | None = None) -> dict[str, Any]:
+    """One Style by id or exact name (any case), as style_list gives it. One
+    in Recently deleted says so, with how to restore it."""
+    import style_client as styles
+
+    return _style_call(styles.find_style, _api(), style, _board_headers(ctx))
+
+
+@_tool(annotations=_EDIT)
+def style_create(name: str, prompt: str = "", category: str = "My Styles", params: dict | None = None,
+                 model_id: str | None = None, ref_images: list[str] | None = None,
+                 project_id: str | None = None, thumbnail: str = "",
+                 ctx: Context | None = None) -> dict[str, Any]:
+    """Save a new Style, as Create's "Save current" does.
+
+    `prompt` is the fragment Create adds to the person's prompt. `model_id`
+    (a node id from find_nodes) makes it a Style for that model, and `params`
+    are that model's settings (describe_node lists them); without a model it
+    styles whatever model Create has, and only its non-billing params apply.
+    Who bills a model's run (`_provider`, `_kreaAuth`) is the person's call:
+    leave them out (the model's default); a Style can't be proposed, so the
+    person picks them in Create. `ref_images` are Nebula output URLs;
+    `thumbnail` an output URL for its card. Without `project_id` it is Global;
+    "current" (or a project's id) keeps it in that canvas project.
+    Returns the Style. style_delete takes it back off (it goes to Recently
+    deleted)."""
+    import style_client as styles
+
+    return _style_call(styles.create_style, _api(), name, prompt=prompt, category=category, params=params,
+                       model_id=model_id, ref_images=ref_images, project=project_id, thumbnail=thumbnail,
+                       headers=_board_headers(ctx))
+
+
+@_tool(annotations=_EDIT)
+def style_update(style: str, name: str | None = None, category: str | None = None, prompt: str | None = None,
+                 params: dict | None = None, model_id: str | None = None, ref_images: list[str] | None = None,
+                 thumbnail: str | None = None, base_version: int | None = None,
+                 ctx: Context | None = None) -> dict[str, Any]:
+    """Change a Style (id or exact name). Leave out what stays; `params`
+    replaces its settings whole (read style_get first), except internal `_`
+    params, which you can't write and so can't take off: the Style keeps its
+    own, so who bills its model (`_provider`, `_kreaAuth`) stays the
+    person's call. `model_id=""` makes it style-only.
+
+    The write is checked: if someone saved the Style after it was read here
+    (or after `base_version`, a `version` you read), nothing is written and
+    the error says to read it again.
+
+    Returns `style` and `previous`: the fields this call changed, as they
+    were, plus `base_version`. Pass `previous` back as the arguments
+    (style_update(style, **previous)) to undo exactly this change; that undo
+    is refused if someone changed the Style again since."""
+    import style_client as styles
+
+    return _style_call(styles.update_style, _api(), style, base_version=base_version, headers=_board_headers(ctx),
+                       name=name, category=category, prompt=prompt, params=params, model_id=model_id,
+                       ref_images=ref_images, thumbnail=thumbnail)
+
+
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,
+                                      openWorldHint=False))
+def style_delete(style: str, ctx: Context | None = None) -> dict[str, Any]:
+    """Delete a Style (id or exact name): it goes to Recently deleted, and
+    restore_from_trash(kind="style", id=...) brings it back with the same id.
+    Only the person can delete one for good. On a Nebula without Recently
+    deleted for Styles a delete would be for good, so this refuses."""
+    import style_client as styles
+
+    return _style_call(styles.delete_style, _api(), style, _board_headers(ctx))
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
