@@ -155,6 +155,12 @@ class NebulaClient:
         headers = self._identity_headers({"X-Nebula-Agent": agent_name} if agent_name else None)
         return self.api.request("POST", "/api/graph/apply", json=body, headers=headers)
 
+    def undo_edit(self, token: str, agent_name: str | None = None) -> dict[str, Any]:
+        """Undo one of your applies by its undo token (POST /api/graph/apply/undo).
+        A refusal raises NebulaAPIError, so `nebula undo` can say which token stopped."""
+        headers = self._identity_headers({"X-Nebula-Agent": agent_name} if agent_name else None)
+        return self.api.request("POST", "/api/graph/apply/undo", json={"token": token}, headers=headers)
+
     def get_proposal(self, proposal_id: str, wait: float = 0.0, agent_name: str | None = None) -> dict[str, Any]:
         """GET one proposal; `wait` (≤25 s) blocks until the person decides."""
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None

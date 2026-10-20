@@ -45,11 +45,20 @@ The server exposes these tools for building and running (see
   it as a sentence in its message. `_provider` changes go through
   `propose_change`. See
   [Provider routes](PROVIDER-ROUTES.md#hidden-settings-paramvisiblewhen).
-- `edit_canvas`: adds nodes, wires, param changes, renames and moves in one
-  call, all or nothing. Same shape as `propose_change`, with no limit on how
+- `edit_canvas`: adds nodes, wires, param changes, renames, moves, removals
+  (`remove`) and unwires (`unwire`) in one call, all or nothing: everything
+  `nebula apply` does. Same shape as `propose_change`, with no limit on how
   much one call adds. `arrange: true` has the canvas lay out the new nodes by
-  their real size.
-- `remove_from_canvas`: deletes nodes or single wires, all or nothing.
+  their real size. `steps` sends a list of such plans one after another,
+  with the checks and stop-and-report of `nebula apply`'s steps. Its result
+  has `undo`, the token that takes the edit back (see
+  [Undoing your own edit](#undoing-your-own-edit)).
+- `remove_from_canvas`: deletes nodes or single wires, all or nothing. Its
+  result has `undo` too, which puts the nodes back with their params,
+  outputs, names and wires.
+- `undo_canvas_edit`: takes one of your own edits back with its `undo.token`
+  (or a steps plan's `undo.tokens`, newest first). A part someone changed
+  since stays as it is and is listed in `skipped`.
 - `run_nodes`: runs a node and what feeds it (or the whole canvas) under the
   person's spending limits. Returns outputs with small inline previews, or
   `running` and a run id. A run in which any node failed comes back
@@ -105,7 +114,9 @@ And these canvas tools:
   after `$NEBULA_AGENT_NAME`, or the MCP client's own name.
 - `wait_for_canvas_change`: blocks until the person (or another agent)
   changes the canvas, then returns what changed and who did it. It skips
-  your own edits. If you also use the `nebula` CLI, set `NEBULA_AGENT_NAME`
+  your own edits. When the person undoes your edit with Cmd+Z, the events
+  say so: each has `edit.undoes` (your `undo.editId`) and `edit.of` (you),
+  and an `edit.undone` event follows. If you also use the `nebula` CLI, set `NEBULA_AGENT_NAME`
   so both share one name; otherwise your CLI edits arrive as `anonymous`
   (the result then carries a `note`). Pass the returned `cursor` back as `since`; see
   [Watching for changes](#watching-for-changes). The wait holds only its own
@@ -227,6 +238,15 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
 | `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` | a moodboard edit or save changed the board: one event per write, its kind the first of these that applies (`grouped` is a card into or out of a frame, `moved` 8 px or more) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
+| `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and wire events it made | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors), `undid` (for an undo of an undo), `counts`, `skipped` |
+
+Events of a canvas edit carry `edit`: an agent's `edit_canvas`,
+`remove_from_canvas` or `nebula apply` gives each of its events `edit: {id}`
+(the reply's `undo.editId`). An undo's events carry `edit: {id, undoes, of}`:
+the edit id it reverted and whose edit that was (`redoes` for a redo). The
+person's Cmd+Z is linked only when the canvas's step came from that edit's
+graphSync (its `edit.id`); a step without one (the person's own edits, an
+older edit) is journaled as before, with "(undo)" and no `edit`.
 
 Expiry is attributed to "Nebula" (a `system` actor), not to anyone.
 
@@ -935,7 +955,7 @@ no timer. Projects keep their 30-day expiry. Files live in
 
 ### Building and running over MCP
 
-`edit_canvas` and `remove_from_canvas` send one body to `POST /api/graph/apply`
+`edit_canvas` (without `steps`) and `remove_from_canvas` send one body to `POST /api/graph/apply`
 (`backend/main.py`, parsed by `services/canvas_edits.py`). It takes the
 proposal shape (`nodes` with `+refs`, `edges`, `params`) plus `rename`,
 `move`, `remove` and `unwire`, stages all of it on a copy of the graph in that
@@ -950,7 +970,50 @@ state can't be removed. Krea nodes may name `_kreaAuth` only to keep the mode
 they have: a change is refused with 403 and must be proposed (see Spending
 limits). Other `_` params are refused. The route never runs anything and
 is for agents only (the canvas edits through its own routes). `nebula apply`
-is the CLI twin (see below).
+is the CLI twin (see below). `edit_canvas(steps=[...])` sends a plan of steps
+one step at a time, exactly as `nebula apply` does (both use
+`backend/apply_steps.py`): it returns `{status: "applied", steps, idMap,
+undo}`, or `{status: "stopped", failedStep, steps, error, applied, idMap,
+undo}` when a step is refused, and refuses a plan whose refs don't add up
+before anything is sent.
+
+#### Undoing your own edit
+
+Every apply that changes something replies with `undo: {token, editId,
+expiresInSeconds, summary}`. `undo_canvas_edit(token)` (`nebula undo
+TOKEN`, `POST /api/graph/apply/undo {token}`) takes the edit back:
+
+- A node it added is removed with its wires, unless it changed since (its
+  params or name), or the person wired it to something else since.
+- A param, name or position it changed goes back to the earlier value,
+  each param on its own: if the person changed the prompt since, the prompt
+  stays and the seed the agent changed goes back.
+- A node it removed comes back under its own id with its params (an
+  uploaded image's preview, a painted mask and a Paper source included),
+  outputs, name, position and wires. A wire whose other end is gone, or
+  whose input has taken another wire since, stays out.
+- A wire it added is unwired; one it took away is wired back.
+
+Each part someone changed since is left as it is and listed in `skipped`
+(`{nodeId, part, keys?, wire?, reason, message}`), as a moodboard restore
+does. A param only the person may change back (opening a Moodboard node's
+"send notes" again) is skipped too. The rest is one restore through the
+same staging as the canvas's Cmd+Z, so it lands whole or not at all, and
+the person can undo the undo. `status` is `undone`; `skipped` when nothing
+could go back (the token keeps working, for when the person puts a part
+back); or `already-undone`, with `undoneBy` (you, or the person with Cmd+Z,
+which the backend learns from the canvas's restore). Calling it twice
+changes nothing the second time.
+
+The backend keeps each inverse in memory (`services/canvas_undo.py`): for
+60 minutes, the last 100 edits, at most 16 MB each and 64 MB in all. A
+token works only for the agent that made the edit (403 otherwise), only
+while the project it was made in is open (409), and not after it expired,
+was pushed out, or the canvas was cleared or a graph loaded into the
+project (410: their node ids start again). A restart forgets them (404).
+Because the server wrote the inverse, the undo may put back `_` params and
+the person's billing choice on a node it brings back; agents still can't
+send `_` params themselves, through `restore` or anywhere else.
 
 #### Arrange: let the canvas lay out new nodes
 
@@ -1016,7 +1079,9 @@ applies the edit again. A run's results are never undo steps, so undoing a
 param change keeps the outputs a run made since.
 
 How it works: a graphSync caused by an edit request carries `edit` =
-`{actor, tab?}`. `actor` is the request's journal actor (a named agent, the
+`{actor, tab?, id?, undoes?}`. `id` names an agent's apply or undo (its
+`undo.editId`), and `undoes` says the sync is an agent undoing that edit
+(the notice then reads "Claude undid its edit"). `actor` is the request's journal actor (a named agent, the
 person, or anonymous). `tab` is the canvas tab that sent it (`X-Nebula-Tab`,
 set by the canvas on every write), so that tab skips the echo of its own
 edit. Only the person's canvas (this launch's person token) gets a `tab`:
@@ -1028,9 +1093,14 @@ a project is never an undo step. Loading a graph into the open project
 hands out ids from n1 again, the restore swaps any id that now holds a
 different model. Undo and redo then send what
 changed to `POST /api/graph/restore`, so the backend graph, the saved
-project and every other canvas match. The restore is journaled as whoever
+project and every other canvas match. A step that came with an `id` sends
+it as `edit`, and the person's restore is then linked to that edit (see the
+journal above): the agent's `wait_for_canvas_change` learns its edit was
+undone, and its undo token answers `already-undone` until the person redoes
+it. The restore is journaled as whoever
 the canvas is (`Person` when the tab is connected as you), with "(undo)" or
-"(redo)" on each line. Agents never need to call it.
+"(redo)" on each line. Agents never need to call it; they undo their own
+edits with `undo_canvas_edit`.
 
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
 it gets the same spending check and the same long-run handling. It also gets
@@ -1151,6 +1221,8 @@ nebula apply --note "Two takes" \
 #   +p → n8  Text Input
 #   +wide → n9  Wide
 #   +tight → n10  Nano Banana
+#   Undo: nebula undo 3f9c…  (for 60 minutes; parts changed since stay)
+nebula undo 3f9c…                   # take it back (see Undoing your own edit)
 nebula apply --file plan.json       # or --file - to read standard input
 nebula apply --file plan.json --arrange        # or --arrange down
 ```
@@ -1188,8 +1260,13 @@ checks every step's refs before it sends step 1. If a step is refused, the
 command stops there (exit 1), names the step and the reason, and lists what
 the earlier steps applied, with the ids their `+refs` became. Those steps
 stay on the canvas: fix the refused step and apply it and the rest on their
-own, using those ids in place of the refs. `--json` prints `{status, steps, idMap}`, or `{status: "stopped",
-failedStep, error, applied, idMap}`. `nebula propose` doesn't take steps.
+own, using those ids in place of the refs. `--json` prints `{status, steps, idMap, undo}`, or `{status: "stopped",
+failedStep, error, applied, idMap, undo}`; `undo.tokens` are the applied
+steps' undo tokens, newest first, and a plan that landed ends with the line
+`Undo these N steps: nebula undo <newest> … <oldest>`. `nebula undo` takes
+them in that order and stops at the first one refused. `nebula propose`
+doesn't take steps. The checks and the stop-and-report rule are
+`backend/apply_steps.py`, which MCP's `edit_canvas(steps=...)` uses too.
 
 Other graph commands:
 

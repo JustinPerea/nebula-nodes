@@ -358,3 +358,110 @@ def test_propose_change_warns_about_run_nodes_that_cannot_run(nebula, monkeypatc
     assert response["warning"].endswith("(find_nodes lists them).")
     assert "nebula context" not in response["warning"] and "/api/agent/nodes" not in response["warning"]
     mcp_server.withdraw_proposal(response["proposal"]["id"])
+
+
+# -- U1: edit_canvas at apply parity, and undo_canvas_edit ------------------------
+
+def test_edit_canvas_removes_and_unwires_like_apply(nebula):
+    http, _ = nebula
+    built = _build()
+    prompt, image = built["idMap"]["+p"], built["idMap"]["+img"]
+    spare = mcp_server.edit_canvas(nodes=[{"ref": "+s", "definitionId": "text-input"}])["idMap"]["+s"]
+    edited = mcp_server.edit_canvas(
+        note="Tidy up",
+        unwire=[{"source": prompt, "sourceHandle": "text", "target": image, "targetHandle": "prompt"}],
+        remove=[spare],
+        rename={image: "Hero"},
+    )
+    assert edited["removed"] == [spare] and edited["unwired"][0]["target"] == image
+    graph = http.get("/api/graph").json()
+    assert spare not in {node["id"] for node in graph["nodes"]} and graph["edges"] == []
+
+
+def test_edit_canvas_runs_steps_and_stops_and_reports_like_nebula_apply(nebula):
+    http, _ = nebula
+    result = mcp_server.edit_canvas(note="Board, then takes", steps=[
+        {"nodes": [{"ref": "+p", "definitionId": "text-input", "params": {"value": "a lighthouse"}}]},
+        {"nodes": [{"ref": "+img", "definitionId": "nano-banana"}],
+         "edges": [{"source": "+p", "sourceHandle": "text", "target": "+img", "targetHandle": "prompt"}]},
+    ])
+    assert result["status"] == "applied" and len(result["steps"]) == 2
+    assert set(result["idMap"]) == {"+p", "+img"}
+    assert result["undo"]["tokens"] == [step["undo"]["token"] for step in reversed(result["steps"])]
+
+    stopped = mcp_server.edit_canvas(steps=[
+        {"nodes": [{"ref": "+q", "definitionId": "text-input"}]},
+        {"edges": [{"source": "+q", "sourceHandle": "text", "target": result["idMap"]["+img"],
+                    "targetHandle": "nope"}]},
+    ])
+    assert (stopped["status"], stopped["failedStep"], stopped["steps"]) == ("stopped", 2, 2)
+    assert "nope" in stopped["error"] and len(stopped["applied"]) == 1
+    assert stopped["undo"]["tokens"] == [stopped["applied"][0]["undo"]["token"]]
+    # A plan that can't be sent is refused before step 1 lands.
+    before = http.get("/api/graph").json()
+    with pytest.raises(ValueError, match="step 2 uses \\+ghost"):
+        mcp_server.edit_canvas(steps=[{"nodes": [{"ref": "+a", "definitionId": "text-input"}]},
+                                      {"remove": ["+ghost"]}])
+    with pytest.raises(ValueError, match="run_nodes"):
+        mcp_server.edit_canvas(steps=[{"nodes": [{"ref": "+a", "definitionId": "text-input"}], "run": ["+a"]}])
+    with pytest.raises(ValueError, match="move 'nodes' into a step"):
+        mcp_server.edit_canvas(nodes=[{"ref": "+a", "definitionId": "text-input"}],
+                               steps=[{"remove": [result["idMap"]["+p"]]}])
+    assert http.get("/api/graph").json() == before
+
+
+def test_undo_canvas_edit_puts_back_what_edit_and_remove_did(nebula):
+    http, _ = nebula
+    built = _build()
+    image = built["idMap"]["+img"]
+    removed = mcp_server.remove_from_canvas(node_ids=[image])
+    assert removed["undo"]["token"] and image in removed["undo"]["summary"]
+    back = mcp_server.undo_canvas_edit(removed["undo"]["token"])
+    assert back["status"] == "undone" and back["added"] == [image]
+    graph = http.get("/api/graph").json()
+    assert {node["id"] for node in graph["nodes"]} == set(built["idMap"].values()) and len(graph["edges"]) == 1
+    gone = mcp_server.undo_canvas_edit(built["undo"]["token"])
+    assert sorted(gone["removed"]) == sorted(built["idMap"].values())
+    assert http.get("/api/graph").json()["nodes"] == []
+    # A token another agent holds is refused for this one.
+    with pytest.raises(NebulaAPIError) as refused:
+        mcp_server._canvas_call("POST", "/api/graph/apply/undo", None, json={"token": "0" * 40})
+    assert refused.value.status == 404
+
+
+def test_undo_canvas_edit_takes_a_steps_plans_tokens_newest_first(nebula):
+    http, _ = nebula
+    result = mcp_server.edit_canvas(steps=[
+        {"nodes": [{"ref": "+p", "definitionId": "text-input", "params": {"value": "a"}}]},
+        {"params": [{"nodeId": "+p", "params": {"value": "b"}}], "rename": {"+p": "Brief"}},
+    ])
+    undone = mcp_server.undo_canvas_edit(result["undo"]["tokens"])
+    assert undone["status"] == "undone" and len(undone["undone"]) == 2
+    assert http.get("/api/graph").json()["nodes"] == []
+    stopped = mcp_server.undo_canvas_edit(["f" * 40, result["undo"]["tokens"][0]])
+    assert stopped["status"] == "stopped" and stopped["failedToken"] == 1 and stopped["undone"] == []
+
+
+def test_wait_for_canvas_change_says_the_person_undid_your_edit(nebula, person):
+    http, _ = nebula
+    built = _build()
+    prompt = built["idMap"]["+p"]
+    cursor = mcp_server.look_at_canvas()["events"]["cursor"]
+    response = http.post("/api/graph/restore", headers=person.headers, json={
+        "action": "undo", "edit": built["undo"]["editId"], "remove": list(built["idMap"].values())})
+    assert response.status_code == 200, response.text
+    changed = mcp_server.wait_for_canvas_change(since=cursor, timeout_seconds=1)
+    undone = [event for event in changed["events"] if event["kind"] == "edit.undone"]
+    assert len(undone) == 1 and undone[0]["actor"] == {"kind": "person"}
+    assert undone[0]["data"]["editId"] == built["undo"]["editId"]
+    assert undone[0]["data"]["of"]["name"] == "MCP agent"
+    assert all(event["edit"]["undoes"] == built["undo"]["editId"] for event in changed["events"])
+    assert prompt not in {node["id"] for node in http.get("/api/graph").json()["nodes"]}
+
+
+def test_undo_canvas_edit_is_annotated_as_destructive_and_idempotent():
+    tools = {tool.name: tool for tool in asyncio.run(mcp_server.mcp.list_tools())}
+    hints = tools["undo_canvas_edit"].annotations
+    assert (hints.readOnlyHint, hints.destructiveHint, hints.idempotentHint, hints.openWorldHint) == (
+        False, True, True, False)
+    assert {"remove", "unwire", "steps"} <= set(tools["edit_canvas"].inputSchema["properties"])
