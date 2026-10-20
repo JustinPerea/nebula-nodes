@@ -150,11 +150,11 @@
     "id": "c47a9e21f05b",
     "kreaStyleReferences": [
       {
-        "strength": 0.6,
+        "strength": 0.4286,
         "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png"
       },
       {
-        "strength": 0.24,
+        "strength": 0.1714,
         "url": "/api/outputs/moodboard-golden/paper-studio-1x1.png"
       }
     ],
@@ -1232,19 +1232,19 @@
     "id": "8d2e6b0c4a17",
     "kreaStyleReferences": [
       {
-        "strength": 0.85,
+        "strength": 0.2656,
         "url": "/api/outputs/moodboard-golden/glacier-16x9.png"
       },
       {
-        "strength": 0.85,
+        "strength": 0.2656,
         "url": "/api/outputs/moodboard-golden/ink-wash-1x1.png"
       },
       {
-        "strength": 0.595,
+        "strength": 0.186,
         "url": "/api/outputs/moodboard-golden/teal-pool-9x16.png"
       },
       {
-        "strength": 0.425,
+        "strength": 0.1328,
         "url": "/api/outputs/moodboard-golden/olive-market-4x3.png"
       }
     ],
@@ -2434,23 +2434,23 @@
     "id": "3f9c1a7e2b40",
     "kreaStyleReferences": [
       {
-        "strength": 0.7,
+        "strength": 0.1892,
         "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png"
       },
       {
-        "strength": 0.7,
+        "strength": 0.1892,
         "url": "/api/outputs/moodboard-golden/paper-studio-1x1.png"
       },
       {
-        "strength": 0.5599999999999999,
+        "strength": 0.1513,
         "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png"
       },
       {
-        "strength": 0.42,
+        "strength": 0.1135,
         "url": "/api/outputs/moodboard-golden/moss-stone-4x3.png"
       },
       {
-        "strength": 0.21,
+        "strength": 0.0568,
         "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png"
       }
     ],
@@ -3676,19 +3676,19 @@
     "id": "5b80d3f6a9c2",
     "kreaStyleReferences": [
       {
-        "strength": 0.65,
+        "strength": 0.2364,
         "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png"
       },
       {
-        "strength": 0.65,
+        "strength": 0.2363,
         "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png"
       },
       {
-        "strength": 0.325,
+        "strength": 0.1182,
         "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png"
       },
       {
-        "strength": 0.1625,
+        "strength": 0.0591,
         "url": "/api/outputs/moodboard-golden/teal-pool-9x16.png"
       }
     ],
@@ -4844,19 +4844,19 @@
     "id": "e1d74b2a9f36",
     "kreaStyleReferences": [
       {
-        "strength": 0.7,
+        "strength": 0.2593,
         "url": "/api/outputs/moodboard-golden/olive-market-4x3.png"
       },
       {
-        "strength": 0.7,
+        "strength": 0.2593,
         "url": "/api/outputs/moodboard-golden/glacier-16x9.png"
       },
       {
-        "strength": 0.35,
+        "strength": 0.1296,
         "url": "/api/outputs/moodboard-golden/teal-pool-9x16.png"
       },
       {
-        "strength": 0.13999999999999999,
+        "strength": 0.0518,
         "url": "/api/outputs/moodboard-golden/ink-wash-1x1.png"
       }
     ],
@@ -6274,23 +6274,23 @@
     "id": "a92f5c08e3d1",
     "kreaStyleReferences": [
       {
-        "strength": 0.75,
+        "strength": 0.1923,
         "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png"
       },
       {
-        "strength": 0.75,
+        "strength": 0.1923,
         "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png"
       },
       {
-        "strength": 0.675,
+        "strength": 0.1731,
         "url": "/api/outputs/moodboard-golden/glacier-16x9.png"
       },
       {
-        "strength": 0.44999999999999996,
+        "strength": 0.1154,
         "url": "/api/outputs/moodboard-golden/neon-alley-9x16.png"
       },
       {
-        "strength": 0.30000000000000004,
+        "strength": 0.0769,
         "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png"
       }
     ],
@@ -7777,23 +7777,23 @@
     "id": "6c3b9e7d1a58",
     "kreaStyleReferences": [
       {
-        "strength": 0.8,
+        "strength": 0.2222,
         "url": "/api/outputs/moodboard-golden/teal-pool-9x16.png"
       },
       {
-        "strength": 0.8,
+        "strength": 0.2222,
         "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png"
       },
       {
-        "strength": 0.6400000000000001,
+        "strength": 0.1778,
         "url": "/api/outputs/moodboard-golden/ink-wash-1x1.png"
       },
       {
-        "strength": 0.4,
+        "strength": 0.1111,
         "url": "/api/outputs/moodboard-golden/olive-market-4x3.png"
       },
       {
-        "strength": 0.24,
+        "strength": 0.0667,
         "url": "/api/outputs/moodboard-golden/dusk-harbour-16x9.png"
       }
     ],

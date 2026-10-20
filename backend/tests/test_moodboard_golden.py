@@ -76,6 +76,18 @@ before it was replaced (the review lists every path that moved):
   hash is the same. Nothing else moved: the node's bundle (the fresh analysis
   of ``prebrief_unanalyzed`` included) still carries no excluded image, in
   ``images`` or in ``analysis.images``.
+- 2026-10-20, Q21 b: Krea 2 board refs scaled to add up to the board's
+  strength; unchanged: refs, order, every other key (moodboard canvas
+  PR13a, plan section 4.8 item 7; Justin: "They should normalize for however
+  any nodes need the information"). Each board's ``kreaStyleReferences``
+  strengths go from ``strength x weight`` to ``strength x weight / sum`` over
+  the references sent, at 4 decimals by largest remainder, adding up to the
+  board's strength (``prebrief_v2_plain``: 0.7, 0.7, 0.56, 0.42, 0.21 become
+  0.1892, 0.1892, 0.1513, 0.1135, 0.0568). The diff is 29 paths, every one a
+  ``kreaStyleReferences[i].strength`` on the 7 boards; the URLs, their order
+  and every other key are as before, which
+  ``test_q21b_changed_only_the_krea_style_references`` pins by a hash of the
+  file before the change less that key.
 - 2026-10-20, clash reason wording (demo dry run). ``LEXICON_VERSION`` 2 to 3,
   so every saved check runs again and no board keeps the old "allows Warm
   for the late" reasons. On the CLI's board only ``colorCheck.basis`` (it
@@ -299,3 +311,46 @@ def test_reading_an_old_board_leaves_its_file_unchanged(seeded) -> None:
     root = next(iter(seeded.values())).parent.parent
     assert not (root.parent / "moodboard-backups").exists()
     assert sorted(p.name for p in root.iterdir()) == sorted({p.parent.name for p in seeded.values()})
+
+
+# The file as it stood before PR13a's deliberate update (Q21 b), less its
+# ``kreaStyleReferences``: sha256 of the canonical JSON (sorted keys, no
+# spaces), taken on main at 26572670. PR13a may change only that key. The
+# clash-wording change (``LEXICON_VERSION`` 3, same day) moves only the
+# lexicon's own stamps, ``cli.colorCheck.basis`` (it hashes the version) and
+# ``cli.colorCheck.checks.words.version``, so those are left out of both sides.
+BEFORE_Q21B_WITHOUT_KREA_REFS = "c97b6c2d4b073e70115d52cd93ac09324090af592d33aea2fe9821aa966e0a80"
+
+
+def _without_krea_refs(expected: dict[str, Any]) -> str:
+    rest = {label: {key: value for key, value in outputs.items() if key != "kreaStyleReferences"}
+            for label, outputs in expected.items()}
+    rest = json.loads(json.dumps(rest))
+    for outputs in rest.values():
+        check = (outputs.get("cli") or {}).get("colorCheck")
+        if isinstance(check, dict):
+            check.pop("basis", None)
+            ((check.get("checks") or {}).get("words") or {}).pop("version", None)
+    canonical = json.dumps(rest, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def test_q21b_changed_only_the_krea_style_references() -> None:
+    expected = json.loads(EXPECTED.read_text(encoding="utf-8"))
+    assert _without_krea_refs(expected) == BEFORE_Q21B_WITHOUT_KREA_REFS
+    # Each board's references add up to its strength, at 4 decimals.
+    from decimal import Decimal
+
+    for label in labels():
+        board = json.loads((BOARDS / f"{label}.json").read_text(encoding="utf-8"))
+        refs = expected[label]["kreaStyleReferences"]
+        assert refs, label
+        total = sum((Decimal(str(ref["strength"])) for ref in refs), Decimal(0))
+        assert total == Decimal(str(board.get("strength", 0.7))), label
+
+
+def test_the_golden_docstring_records_the_q21b_change() -> None:
+    doc = __doc__ or ""
+    assert "Q21 b" in doc
+    assert ("Krea 2 board refs scaled to add up to the board's strength; unchanged: refs, order, "
+            "every other key") in " ".join(doc.split())

@@ -426,6 +426,56 @@ def place(board: dict[str, Any], sizes: list[tuple[int, int]]) -> list[tuple[int
     return out
 
 
+def bounds(rects: Iterable[Rect]) -> Rect | None:
+    """The smallest rectangle holding every one of ``rects``, or None for none."""
+    rects = list(rects)
+    if not rects:
+        return None
+    left, top = min(r[0] for r in rects), min(r[1] for r in rects)
+    right, bottom = max(r[0] + r[2] for r in rects), max(r[1] + r[3] for r in rects)
+    return left, top, right - left, bottom - top
+
+
+def contains(outer: Rect, inner: Rect) -> bool:
+    """Whether ``inner`` lies wholly inside ``outer`` (edges may touch)."""
+    return (outer[0] <= inner[0] and outer[1] <= inner[1]
+            and inner[0] + inner[2] <= outer[0] + outer[2] and inner[1] + inner[3] <= outer[1] + outer[3])
+
+
+def card_rect(p: Any) -> Rect | None:
+    """A placement's rectangle, or None when it has no usable x, y, w and h."""
+    return _rect(p)
+
+
+def place_in_frame(board: dict[str, Any], frame: dict[str, Any], size: tuple[int, int]) -> tuple[int, int, Rect]:
+    """A top-left corner for a new card of ``size`` inside ``frame``, and the
+    frame's rectangle after it (grown when the card didn't fit).
+
+    The first free spot, top to bottom then left to right, PLACE_GAP from
+    every card on the board and from the frame's edges: the frame's top-left
+    corner, or right of or under a card already in it. With none, the card
+    starts a row under the frame's lowest card and the frame grows to hold
+    it. Never on top of another card. (Placing next to the person's view
+    comes with the view report, plan section 5.5.)"""
+    frame_rect = _rect(frame) or (0.0, 0.0, float(FRAME_MIN_SIDE), float(FRAME_MIN_SIDE))
+    fx, fy, fw, fh = frame_rect
+    w, h = size
+    cards = _card_rects(board.get("images") or [])
+    near = [r for r in cards if _too_close(r, frame_rect, 0)]
+    spots = [(fx + PLACE_GAP, fy + PLACE_GAP)]
+    for r in near:
+        spots += [(r[0] + r[2] + PLACE_GAP, r[1]), (fx + PLACE_GAP, r[1] + r[3] + PLACE_GAP)]
+    for x, y in sorted(set(spots), key=lambda spot: (spot[1], spot[0])):
+        rect = (x, y, w, h)
+        if (x + w <= fx + fw - PLACE_GAP and y + h <= fy + fh - PLACE_GAP
+                and not any(_too_close(rect, r, PLACE_GAP) for r in cards)):
+            return round(x), round(y), frame_rect
+    lowest = max((r[1] + r[3] for r in near), default=fy)
+    x, y = fx + PLACE_GAP, lowest + PLACE_GAP
+    grown = (fx, fy, max(fw, w + 2 * PLACE_GAP), max(fh, y + h + PLACE_GAP - fy))
+    return round(x), round(y), grown
+
+
 # -- old boards ------------------------------------------------------------------
 
 def _legacy_id(board_id: Any, image_id: Any, index: int) -> str:
