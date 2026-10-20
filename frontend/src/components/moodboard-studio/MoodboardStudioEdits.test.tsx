@@ -146,6 +146,21 @@ describe('Moodboard Studio follows edits made elsewhere', () => {
     expect(server.edits).toEqual([]);
   });
 
+  it('a write made while the socket was down shows once it comes back, in the board and the list', async () => {
+    await openStudio();
+    await screen.findByText('1 image · look');
+    // The backend restarted and Claude edited the board before this tab's
+    // socket was back: no storedAssetChanged reached it (not replayed).
+    outsideWrite((board) => ({ ...board, images: [...board.images.map((img) => ({ ...img, excluded: true })), image('cli1')] }),
+      { announce: false });
+    act(() => { for (const handler of socket.handlers) handler({ type: 'socketReconnected' }); });
+    expect(await screen.findByText('Images (2)')).toBeTruthy();
+    expect(await screen.findByText('2 images · 1 set aside · look')).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(server.puts).toEqual([]);
+    expect(server.edits).toEqual([]);
+  });
+
   it("a CLI add racing the person's weight edit keeps both", async () => {
     await openStudio();
     fireEvent.change(weightSlider(), { target: { value: '0.5' } });

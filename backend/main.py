@@ -11160,6 +11160,17 @@ class MoodboardDryRunRequest(BaseModel):
     thresholds: MoodboardThresholdsModel | None = None
 
 
+class MoodboardReadRequest(BaseModel):
+    """The body of POST /api/moodboards/{id}/read/estimate and /read: the
+    reader (a key of data/moodboard_reader_models.json), the images to read
+    (all of them when left out) and the thinking level (the model's default)."""
+    model_config = ConfigDict(extra="forbid")
+
+    model: str
+    imageIds: list[str] | None = None
+    thinkingLevel: str | None = None
+
+
 class PresetCreate(BaseModel):
     name: str
     category: str = "Style"
@@ -11677,6 +11688,187 @@ async def dry_run_moodboard_analysis(moodboard_id: str, body: MoodboardDryRunReq
         raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
     # It reads every image file, so it runs off the event loop.
     return await asyncio.to_thread(dry_run, moodboard, thresholds)
+
+
+# ---------- Moodboards: reading references with a vision model (PR4, dry run) ----------
+# docs/moodboard-canvas-plan.md sections 5.6 and 5.6.1, contract 07 section 1.13.
+
+# Tests point the reader's requests at a mock transport (an httpx.AsyncBaseTransport);
+# None is the real network.
+_moodboard_reader_transport: Any = None
+
+
+def _reader_board(moodboard_id: str) -> dict:
+    try:
+        board = _moodboard_store().get(moodboard_id, laid_out=False)  # a read never writes the board
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    if board is None:
+        raise HTTPException(status_code=404, detail=f"Moodboard '{moodboard_id}' not found")
+    return board
+
+
+def _reader_plan(moodboard_id: str, body: MoodboardReadRequest) -> tuple[dict, dict, Any, list, dict]:
+    """The board, the reader's entry, its reading source (no key yet), the
+    targets and the estimate, or 404/422. A source Nebula doesn't pay for gets
+    no estimate maths (moodboard_reader.read_estimate)."""
+    from services import moodboard_reader as reader
+
+    board = _reader_board(moodboard_id)
+    try:
+        entry = reader.reader_entry(body.model)
+        targets = reader.select_targets(board, body.imageIds)
+        source = reader.model_source(entry, level=body.thinkingLevel)
+        estimate = reader.read_estimate(source, board, targets)
+    except reader.ReaderError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return board, entry, source, targets, estimate
+
+
+def _reader_spend_hold(source: Any, estimate: dict, settings: Mapping[str, Any], board_ref: str) -> _SpendHold | None:
+    """Refuse a read that isn't the person's when it breaks a spending limit,
+    and count it at its high estimate when it doesn't (Q11: as one Gemini
+    chat run, so the chat model's own limits in Settings apply). The hold is
+    split per request, so requests that never start are given back.
+    The person's reads pass: the Studio asks them itself (PR10). A source
+    Nebula doesn't pay for (``source.priced`` false) has nothing to gate or
+    hold; an Argon entry with no list price is still priced, and refused
+    under any USD limit."""
+    from services import moodboard_reader as reader
+
+    if _is_person_request():
+        return None
+    gate = reader.gate_items(source, estimate)
+    if gate is None:
+        return None
+    items, pricing = gate
+    name, key_id = source.identity["name"], reader.reader_key(source.identity)
+    ask = (f"To let agents read it, the person can raise the per-run limit for {name} "
+           f"(the Gemini chat node) in Settings > Agent spending. Price it first: "
+           f"`nebula moodboard analyze {board_ref} --read-with {key_id} --estimate` "
+           "(MCP: moodboard_analyze with estimate_only).")
+    key, label = _spend_session(current_request_headers())
+    decision = agent_spend.decide(items, [], settings=settings, pricing=pricing, definitions=node_registry.get_all(),
+                                  budgets=_spend_budgets(key, settings), how_to_ask=ask)
+    if decision.refusal:
+        raise HTTPException(status_code=403, detail=decision.refusal)
+    at = agent_spend_ledger.record(key, label, decision.charge, decision.plan_charge)
+    node = str(items[0]["definitionId"])
+    shares = {part: (node, amount) for part, amount in (estimate.get("shares") or {}).items()}
+    if not decision.charge or not shares:
+        return None
+    # The shares add up to the charge; any rounding left over rides on the first request.
+    left = round(sum(decision.charge.values()) - sum(amount for _, amount in shares.values()), 6)
+    first = next(iter(shares))
+    shares[first] = (shares[first][0], round(shares[first][1] + left, 6))
+    return _SpendHold(key, shares, {}, at)
+
+
+def _settle_reader_hold(hold: _SpendHold | None, sent: Iterable[str] | None) -> None:
+    """Give back the share of every request that never started. A request
+    that started stays charged at its high estimate, even if its stream was
+    closed: whether an aborted stream is billed is unconfirmed."""
+    if hold is None:
+        return
+    started = set(sent or [])
+    try:
+        hold.give_back(*hold.take([part for part in list(hold.per_node) if part not in started]))
+    except Exception:  # noqa: BLE001 - bookkeeping must not break a read
+        pass
+
+
+@app.post("/api/moodboards/{moodboard_id}/read/estimate")
+async def estimate_moodboard_read(moodboard_id: str, body: MoodboardReadRequest) -> dict:
+    """What reading these references would cost (C10, Q16), sending nothing:
+    ``{count, batches, low, high, unconfirmed, sources}`` and the parts behind
+    them. ``available`` says whether the reader's key is set."""
+    _, entry, _, _, estimate = _reader_plan(moodboard_id, body)
+    keys = node_readiness.configured_keys(load_settings())
+    return {**estimate, "available": str(entry["keyName"]) in keys}
+
+
+@app.post("/api/moodboards/{moodboard_id}/read")
+async def read_moodboard(moodboard_id: str, body: MoodboardReadRequest, dryRun: bool = False,
+                         stream: bool = False) -> Any:
+    """Read references with the vision model the caller names, and say how
+    Analyze would sort them. Only a dry run exists yet (``dryRun=1``): it
+    pays for the read, saves nothing and moves nothing; PR10 applies the sort.
+
+    Agents go through the spending limits first (the high estimate is held,
+    unstarted requests are given back). ``stream=1`` answers as NDJSON: one
+    ``moodboardReadTrace`` line per trace line as it is written, then one
+    ``moodboardReadResult``. Without it the result comes whole, with its trace."""
+    import httpx
+
+    from services import moodboard_reader as reader
+
+    if not dryRun:
+        raise HTTPException(status_code=422, detail=(
+            "Reading references can only be a dry run in this version of Nebula: send dryRun=1. "
+            "It reads and prices them and says how Analyze would sort them, and moves nothing."))
+    board, entry, source, targets, estimate = _reader_plan(moodboard_id, body)
+    if not estimate["count"]:
+        raise HTTPException(status_code=422, detail=(
+            "Nothing to read: none of these references is a file on this computer."
+            if targets else "Nothing to read: the board has no references."))
+    settings = load_settings()
+    hold = _reader_spend_hold(source, estimate, settings, str(board.get("id")))
+    requested_by = actor_record(actor_for_headers(current_request_headers()))
+    lines: asyncio.Queue | None = asyncio.Queue() if stream else None
+    client = httpx.AsyncClient(transport=_moodboard_reader_transport, timeout=httpx.Timeout(30.0, read=None)) \
+        if _moodboard_reader_transport is not None else None
+    try:
+        run_source = reader.model_source(entry, reader.check_key(entry, settings.get("apiKeys") or {}),
+                                         level=source.level, client=client)
+        run = reader.MoodboardRead(board, source=run_source, targets=targets, requested_by=requested_by,
+                                   sink=lines.put_nowait if lines is not None else None)
+    except reader.NoReaderKeyError as exc:
+        _settle_reader_hold(hold, [])
+        if client is not None:
+            await client.aclose()
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    async def finish() -> dict:
+        result: dict | None = None
+        try:
+            result = await run.run()
+            return {**result, "estimate": estimate}
+        finally:
+            # Cancelled mid-read (the caller left): what started stays charged.
+            _settle_reader_hold(hold, result["sent"] if result else run.sent_so_far())
+            if client is not None:
+                await client.aclose()
+
+    if lines is None:
+        return await finish()
+
+    async def ndjson():
+        task = asyncio.create_task(finish())
+        try:
+            while True:
+                getter = asyncio.ensure_future(lines.get())
+                done, _ = await asyncio.wait({getter, task}, return_when=asyncio.FIRST_COMPLETED)
+                if getter in done:
+                    yield json.dumps(getter.result(), ensure_ascii=False) + "\n"
+                    continue
+                getter.cancel()
+                while not lines.empty():
+                    yield json.dumps(lines.get_nowait(), ensure_ascii=False) + "\n"
+                try:
+                    result = task.result()
+                except Exception as exc:  # noqa: BLE001 - the stream has started, so say it in the stream
+                    logging.getLogger("nebula.moodboard_reader").exception("Moodboard read %s failed", run.run_id)
+                    yield json.dumps({"type": "moodboardReadError", "detail": f"The read stopped: {exc}"}) + "\n"
+                    return
+                yield json.dumps({"type": "moodboardReadResult", **{k: v for k, v in result.items() if k != "trace"}},
+                                 ensure_ascii=False) + "\n"
+                return
+        finally:
+            if not task.done():
+                task.cancel()
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(ndjson(), media_type="application/x-ndjson")
 
 
 @app.delete("/api/moodboards/{moodboard_id}")
