@@ -17,7 +17,7 @@ import anyio.lowlevel
 import anyio.to_thread
 import httpx  # noqa: F401 - tests patch httpx.request through this module
 from commons.client_paths import asset_path
-from nebula_api import NebulaAPI, NebulaAPIError
+from nebula_api import NebulaAPI, NebulaAPIError, error_detail, with_identity
 from services.file_access import require_allowed_path
 from services.canvas_proposals import READY_NODES_MCP, readiness_warning
 from mcp.server.fastmcp import Context, FastMCP, Image
@@ -142,21 +142,40 @@ def _stop_if_cancelled() -> None:
         pass
 
 
+# With --channel (serve_channel), the listener that pushes canvas changes
+# into the Claude Code session (mcp_channel.Listener); every tool call goes
+# through it. None otherwise, and then a call is exactly the tool.
+_channel: Any = None
+
+
+async def _through_channel(name: str, kwargs: dict[str, Any], start: Any) -> Any:
+    if _channel is None:
+        return await start()
+    return await _channel.call(name, kwargs, start)
+
+
 def _tool(*, annotations: ToolAnnotations, waits: bool = False):
     """Register a tool. A plain function is registered as an async wrapper that
     runs it on a worker thread; the module keeps the plain function, so direct
-    callers are unchanged. An `async def` tool is registered as it is, and must
-    send its own blocking work through _offload (tests/test_mcp_nonblocking.py
-    checks both)."""
+    callers are unchanged. An `async def` tool is wrapped only to pass the
+    channel listener (when there is one), and must send its own blocking work
+    through _offload (tests/test_mcp_nonblocking.py checks both). The wrappers
+    keep the function's name and signature, so tools/list is the same."""
     def register(fn: Any) -> Any:
+        name = fn.__name__
         if inspect.iscoroutinefunction(fn):
-            mcp.tool(annotations=annotations)(fn)
+            @functools.wraps(fn)
+            async def native(*args: Any, **kwargs: Any) -> Any:
+                return await _through_channel(name, kwargs, lambda: fn(*args, **kwargs))
+
+            mcp.tool(annotations=annotations)(native)
             return fn
 
         @functools.wraps(fn)
         async def offloaded(*args: Any, **kwargs: Any) -> Any:
             # A partial, so a tool argument can never collide with _offload's own names.
-            return await _offload(functools.partial(fn, *args, **kwargs), waits=waits)
+            return await _through_channel(
+                name, kwargs, lambda: _offload(functools.partial(fn, *args, **kwargs), waits=waits))
 
         offloaded._nebula_offloaded = True  # type: ignore[attr-defined]
         mcp.tool(annotations=annotations)(offloaded)
@@ -180,10 +199,13 @@ def get_selected_nodes(ctx: Context | None = None) -> dict[str, Any]:
 
 def _cursor_name(ctx: Context | None) -> str:
     """$NEBULA_AGENT_NAME, else the MCP client's own name ("claude-code" → "Claude Code")."""
+    return _agent_name(_client_name(ctx))
+
+
+def _agent_name(client: str) -> str:
     name = os.environ.get("NEBULA_AGENT_NAME")
     if name:
         return name
-    client = _client_name(ctx)
     return "MCP agent" if client == "unknown" else client.replace("-", " ").replace("_", " ").title()
 
 
@@ -812,7 +834,11 @@ def _client_name(ctx: Context | None) -> str:
         name = ctx.session.client_params.clientInfo.name  # type: ignore[union-attr]
     except Exception:  # noqa: BLE001 (no initialize params means an unknown client)
         return "unknown"
-    return _re.sub(r"[^A-Za-z0-9._-]", "-", str(name))[:64] or "unknown"
+    return _clean_client_name(name)
+
+
+def _clean_client_name(raw: Any) -> str:
+    return _re.sub(r"[^A-Za-z0-9._-]", "-", str(raw))[:64] or "unknown"
 
 
 def _commons_call(method: str, path: str, client_name: str | None, *, binary: bool = False, **kwargs: Any) -> Any:
@@ -1290,7 +1316,138 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help=f"Nebula backend URL (default: $NEBULA_URL, else the address in $NEBULA_URL_FILE, "
              f"else {DEFAULT_NEBULA_URL})",
     )
+    parser.add_argument(
+        "--channel",
+        action="store_true",
+        help="Experiment: push pins and canvas changes into a Claude Code session started with "
+             "--dangerously-load-development-channels server:<this server's name> (docs/MCP-SETUP.md, "
+             "'Claude Code channels'). Only in a session-only --mcp-config, never a saved server.",
+    )
     return parser.parse_args(argv)
+
+
+# -- --channel: Claude Code channels (an experiment) ------------------------------
+# docs/MCP-SETUP.md "Claude Code channels (experiment)"; the decisions are in
+# mcp_channel.py. Two things the SDK (mcp 1.27.0) doesn't offer, done here:
+# - FastMCP's own runner calls create_initialization_options() with no
+#   arguments (fastmcp/server.py run_stdio_async), so it can't declare the
+#   experimental capability; serve_channel runs the low-level server itself.
+# - ServerNotification is a closed union, so there is no typed way to send
+#   notifications/claude/channel. BaseSession.send_notification only dumps the
+#   model into a JSONRPCNotification and writes it to the transport, so the
+#   push writes that same message to the same write stream.
+# The ServerSession is internal to Server.run, so a tap on the read stream
+# learns the client's name (initialize) and when it is ready
+# (notifications/initialized): nothing is pushed before that.
+
+CHANNEL_CAPABILITY = "claude/channel"
+
+
+async def _channel_fetch(path: str, params: dict[str, Any], timeout: float, agent: str) -> dict[str, Any]:
+    """A GET as this agent, async on the event loop (cancellable mid long-poll, no thread held)."""
+    url = await _offload(_current_url)  # NEBULA_URL_FILE is re-verified each time, as for the tools
+    headers = with_identity({"X-Nebula-Agent": agent})
+    async with httpx.AsyncClient(trust_env=False, timeout=timeout) as client:
+        try:
+            response = await client.get(f"{url}{path}", params=params, headers=headers)
+        except httpx.HTTPError as exc:
+            raise NebulaAPIError(f"GET {path} failed: {exc.__class__.__name__}", kind="connect") from exc
+    if response.status_code >= 400:
+        raise NebulaAPIError(error_detail(response), status=response.status_code)
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise NebulaAPIError(f"Nebula sent an invalid answer for GET {path}")
+    return payload
+
+
+def _trace_initialize(params: Any) -> None:
+    """NEBULA_CHANNEL_TRACE=<file>: append the client's initialize params (for
+    the open question of whether a server can tell it was opted in)."""
+    path = os.environ.get("NEBULA_CHANNEL_TRACE")
+    if not path:
+        return
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as handle:
+            handle.write(_json.dumps({"at": _time.time(), "initialize": params}, default=str) + "\n")
+    except OSError:
+        pass
+
+
+async def serve_channel(read_stream: Any, write_stream: Any, *, clock: Any = _time.monotonic) -> None:
+    """Run the MCP server as mcp.run() does, plus the claude/channel capability,
+    the channel instructions and the listener."""
+    global _channel
+    import mcp_channel
+    from mcp.shared.message import SessionMessage
+    from mcp.types import JSONRPCMessage, JSONRPCNotification, JSONRPCRequest
+
+    server = mcp._mcp_server
+    options = server.create_initialization_options(experimental_capabilities={CHANNEL_CAPABILITY: {}})
+    options = options.model_copy(update={"instructions": mcp_channel.INSTRUCTIONS + "\n" + (options.instructions or "")})
+    ready = anyio.Event()
+    client: dict[str, Any] = {}
+    tap_send, tap_recv = anyio.create_memory_object_stream[Any](0)
+
+    async def tap() -> None:
+        async with tap_send:
+            async for message in read_stream:
+                root = message.message.root if isinstance(message, SessionMessage) else None
+                if isinstance(root, JSONRPCRequest) and root.method == "initialize":
+                    info = (root.params or {}).get("clientInfo")
+                    if isinstance(info, dict):
+                        client.update(info)
+                    _trace_initialize(root.params)
+                elif isinstance(root, JSONRPCNotification) and root.method == "notifications/initialized":
+                    ready.set()
+                await tap_send.send(message)
+
+    async def push(content: str, meta: dict[str, str]) -> None:
+        await write_stream.send(SessionMessage(JSONRPCMessage(JSONRPCNotification(
+            jsonrpc="2.0", method="notifications/claude/channel", params={"content": content, "meta": meta}))))
+
+    agent = {"name": "MCP agent"}
+
+    async def fetch_events(params: dict[str, Any]) -> dict[str, Any]:
+        return await _channel_fetch("/api/canvas/events", params, float(params.get("wait", 0)) + 10, agent["name"])
+
+    async def fetch_run(run_id: str) -> dict[str, Any]:
+        from urllib.parse import quote
+
+        return await _channel_fetch(f"/api/graph/runs/{quote(run_id, safe='')}", {"wait": 25}, 35, agent["name"])
+
+    state = mcp_channel.ChannelState(limits=mcp_channel.Limits.from_env(), now=clock())
+    listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push, clock=clock)
+
+    async def listen() -> None:
+        await ready.wait()
+        # The tools' own name, so Nebula leaves this agent's events out of the long-poll.
+        agent["name"] = _agent_name(_clean_client_name(client.get("name", "unknown")))
+        try:
+            await listener.run()
+        except Exception as exc:  # noqa: BLE001 - the experiment must never take the tools down with it
+            while isinstance(exc, BaseExceptionGroup) and exc.exceptions:  # the listener's task group wraps it
+                exc = exc.exceptions[0]
+            print(f"nebula mcp channel: stopped listening after an error ({exc.__class__.__name__}); "
+                  "the tools keep working", file=sys.stderr, flush=True)
+            state.stop(f"Nebula stopped listening after an error ({exc.__class__.__name__}).")
+
+    _channel = listener
+    try:
+        async with anyio.create_task_group() as group:
+            group.start_soon(tap)
+            group.start_soon(listen)
+            await server.run(tap_recv, write_stream, options)
+            group.cancel_scope.cancel()
+    finally:
+        _channel = None
+
+
+async def _run_channel_stdio() -> None:
+    from mcp.server.stdio import stdio_server
+
+    async with stdio_server() as (read_stream, write_stream):
+        await serve_channel(read_stream, write_stream)
 
 
 def load_agent_token_file(environ: Any = None) -> bool:
@@ -1381,4 +1538,11 @@ if __name__ == "__main__":
             # Fail closed: an agent whose token can't be checked gets no Nebula tools.
             print(f"nebula mcp: {exc}", file=sys.stderr)
             sys.exit(1)
-        mcp.run()
+        if args.channel:
+            print("nebula mcp: --channel (experiment). Pushes reach Claude only in a session started with "
+                  "--dangerously-load-development-channels server:<this server's name>; keep --channel in a "
+                  "session-only --mcp-config, never in your saved nebula server (docs/MCP-SETUP.md).",
+                  file=sys.stderr)
+            anyio.run(_run_channel_stdio)
+        else:
+            mcp.run()
