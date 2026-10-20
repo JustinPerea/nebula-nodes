@@ -682,22 +682,43 @@ def generator_analysis(board: dict[str, Any], analysis: dict[str, Any], brief: d
     to keep out, so an LLM node reading the bundle can't put a left-out
     colour back. The bundle's ``leftOut`` names what went, with why.
 
-    Set-aside images (``images[].setAside``, analysis version 5) are left
-    out, as the bundle's own ``images`` leaves them out: they never steer,
-    so a generator never sees them or their colours."""
-    from services.moodboard_analysis import _summary, _taste_profile, set_aside
+    Set-aside images are left out, as the bundle's own ``images`` leaves
+    them out: the switch (``images[].setAside``, analysis version 5) and
+    weight 0 (plan section 4.4). They never steer, so a generator never sees
+    them or their colours, and the summary counts only the images that
+    steer. The representative images keep only images that steer too: an
+    analysis from version 1 (before 2026-10-18) ranked weight-0 images
+    among them and stays current while the board is unchanged."""
+    from services.moodboard_analysis import _clamp_float, _summary, _taste_profile, steering_count, steers
 
     view = copy.deepcopy(analysis)
     if isinstance(view.get("images"), list):
-        view["images"] = [item for item in view["images"] if not (isinstance(item, dict) and item.get("setAside"))]
+        view["images"] = [item for item in view["images"] if not (isinstance(item, dict) and (
+            item.get("setAside") or _clamp_float(item.get("weight"), 1.0, 0.0, 1.0) <= 0))]
+    steering_urls = {str(img.get("url") or "").strip() for img in board.get("images") or []
+                     if isinstance(img, dict) and steers(img)}
+    # A URL no board image has is left as it was: only a set-aside one goes.
+    held_urls = {str(img.get("url") or "").strip() for img in board.get("images") or [] if isinstance(img, dict)}
+
+    def steering_only(urls: Any) -> Any:
+        if not isinstance(urls, list):
+            return urls
+        return [url for url in urls if not isinstance(url, str) or url.strip() not in held_urls
+                or url.strip() in steering_urls]
+
+    if "representativeImages" in view:
+        view["representativeImages"] = steering_only(view["representativeImages"])
+    krea_hint = (view.get("providerHints") or {}).get("krea") if isinstance(view.get("providerHints"), dict) else None
+    if isinstance(krea_hint, dict) and "representativeImages" in krea_hint:
+        krea_hint["representativeImages"] = steering_only(krea_hint["representativeImages"])
     notes_sent = bool(brief.get("notesSent"))
     notes = str(board.get("notes") or "").strip() if notes_sent else ""
     mode = str(analysis.get("mode") or board.get("mode") or "look")
     keywords = generator_keywords(analysis, notes_sent)
     palette, accents = list(brief.get("palette") or []), list(brief.get("accents") or [])
-    count = len([img for img in board.get("images") or [] if isinstance(img, dict) and not set_aside(img)])
+    count, has_images = steering_count(board)
     view["keywords"] = keywords
-    view["summary"] = _summary(mode, count, palette, accents, notes)
+    view["summary"] = _summary(mode, count, palette, accents, notes, has_images=has_images)
     view["tasteProfile"] = _taste_profile(mode, keywords, palette)
     if not notes_sent:
         view["subjectBias"] = []

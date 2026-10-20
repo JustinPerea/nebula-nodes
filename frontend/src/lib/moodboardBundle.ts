@@ -6,6 +6,8 @@
  * (kept-out colours already removed), never the raw analysis's.
  */
 
+import { isSetAside } from './moodboardCount';
+
 export interface MoodboardBundleImage {
   url: string;
   weight: number | null;
@@ -28,8 +30,10 @@ export interface MoodboardBundleView {
   mode: string | null;
   /** 0..1, or null when the bundle has none. */
   strength: number | null;
+  /** The images that steer: none set aside (switched aside or weight 0). */
   images: MoodboardBundleImage[];
-  /** URLs, representative ones first, then the rest of the board, no repeats. */
+  /** URLs, representative ones first, then the rest of the steering images,
+   *  no repeats. */
   thumbnails: string[];
   palette: string[];
   accents: string[];
@@ -125,16 +129,25 @@ export function isMoodboardBundle(type: string | undefined, value: unknown): boo
 export function parseMoodboardBundle(value: unknown): MoodboardBundleView | null {
   if (!isRecord(value)) return null;
   const images: MoodboardBundleImage[] = [];
+  // Set aside: switched aside (the handler already drops those) or weight 0,
+  // which the bundle still carries but no generator gets (Krea 2 skips it;
+  // moodboard_analysis.steers). Counted and drawn like the node card does.
+  const setAsideUrls = new Set<string>();
   if (Array.isArray(value.images)) {
     for (const item of value.images) {
-      if (!isRecord(item) || item.excluded === true) continue;
+      if (!isRecord(item)) continue;
       const url = str(item.url).trim();
       if (!url) continue;
+      if (isSetAside({ excluded: item.excluded === true, weight: typeof item.weight === 'number' ? item.weight : undefined })) {
+        setAsideUrls.add(url);
+        continue;
+      }
+      if (images.length >= LIST_LIMIT) continue;
       images.push({ url, weight: typeof item.weight === 'number' && Number.isFinite(item.weight) ? item.weight : null });
-      if (images.length >= LIST_LIMIT) break;
     }
   }
-  const representative = strList(value.representativeImages);
+  // A stale hint naming a set-aside image doesn't bring it back.
+  const representative = strList(value.representativeImages).filter((url) => !setAsideUrls.has(url));
   const thumbnails = [...new Set([...representative, ...images.map((image) => image.url)])];
   const strengthRaw = value.strength;
   const strength = typeof strengthRaw === 'number' && Number.isFinite(strengthRaw)
@@ -173,7 +186,9 @@ function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-/** The board's settings line: "look · 70% · 5 images". */
+/** The board's settings line: "look · 70% · 3 images", counting the images
+ *  that steer, so a board the node card reads as "5 images · 2 set aside"
+ *  shows 3 here. */
 export function moodboardMeta(bundle: MoodboardBundleView): string {
   const parts: string[] = [];
   if (bundle.mode) parts.push(bundle.mode);

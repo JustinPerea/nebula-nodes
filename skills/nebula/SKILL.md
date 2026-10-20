@@ -82,6 +82,12 @@ It prints each new node's id. It never runs anything. Other edits:
 `--set n4.prompt=...`, `--move n4=400,120`, `--remove n7`,
 `--unwire n1:text n2:prompt`, or a whole plan with `--file plan.json`.
 
+It also prints `Undo: nebula undo <token>`. Run that to take your edit back
+(for 60 minutes, while that project is open): what you added goes, what you
+changed or removed comes back, and anything the person changed since stays
+as it is (the output lists it). A plan of steps prints one line with every
+step's token, newest first. Only your own `nebula apply` edits have tokens.
+
 Single edits also exist: `nebula create`, `connect`, `set`, `rename`, `move`,
 `delete`, `disconnect`.
 
@@ -109,8 +115,9 @@ with a node that has no list price, is refused: send it as a proposal.
 A run where any node failed exits 1 and prints each node's error (a missing
 key refuses the whole run before anything is called or spent). The card on
 the canvas shows the same error. `nebula look` prints a failed node's error
-under it, and `nebula path` says why there is no file. Tell the person what
-to set up, or pick a node `nebula context` lists.
+under it, and `nebula path` says why there is no file. The error stays on the
+node, through reloads, project switches and restarts, until it runs again.
+Tell the person what to set up, or pick a node `nebula context` lists.
 
 ## Propose instead of doing
 
@@ -124,8 +131,10 @@ nebula propose --note "Upscale the wide take" \
 ```
 
 If a node the run needs can't run here, `nebula propose` prints a
-`warning:` line naming it and why; Accept would fail at that node. Say so to
-the person, or propose a node that runs here instead.
+`warning:` line naming it and why (`--json` gives it as `warning`, with
+`--wait` too); Accept would fail at that node. Say so to
+the person, or propose a node that runs here instead (`nebula context` lists
+them).
 
 `nebula proposals` lists open ones; `nebula proposal withdraw <id>` takes one
 back.
@@ -151,12 +160,15 @@ nebula moodboard set <board> --direction "quiet coastal mornings" --avoid "neon 
   --pin-color "#E8593C" --keep-out-color "#0000FF"
 nebula moodboard set <board> --unavoid "neon signage" --unpin-color "#0000FF"
 nebula moodboard set <board> --brief "My own brief..."   # or --clear-brief, --keep-brief
+nebula moodboard set <board> --cover 3                  # the image the board opens on; --clear-cover: #1 again
 nebula moodboard set <board> --keep-anyway "#a6392d"     # put a left-out colour back (not pinned)
 nebula moodboard set <board> --leave-out "#1c70f2"       # or --leave-out-flagged, --reset-color HEX
 nebula moodboard set <board> --clash-mode flag           # leave-out (default), flag, no-measured, keep-all
 nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
 nebula moodboard analyze <board>
 nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
+nebula moodboard analyze <board> --read-with gemini-4-argon --estimate          # the price; reads nothing
+nebula moodboard analyze <board> --read-with gemini-4-argon --dry-run --only 3,5  # paid read; moves nothing
 nebula moodboard list
 nebula moodboard move <board> --to global      # or --to current, or a project's id or exact name
 nebula character move <character> --to current
@@ -174,6 +186,25 @@ nebula moodboard delete <board>
   it, `--accent-min-chroma` (0-150, default 40), `--accent-separation`
   (0-100, default 10) and `--merge-delta-e` (0-50, default 5) try other
   colour thresholds for that run only. Nothing saves custom thresholds.
+- `analyze --read-with gemini-4-argon --dry-run` reads the references with
+  a vision model and prints each reading as it streams (`#21  clouds under
+  a halftone screen → Dither (0.82)`), then how Analyze would sort them into
+  looks (`#6 Unsorted: no look fits (0.41)`, "Make a Painterly × Dither look
+  for #3, #9, #14?") and what it spent. It is paid but moves and saves
+  nothing; only the dry run exists yet. Run `--estimate` first and tell the
+  person the price: a read counts as one Gemini chat run against the
+  spending limits, so one over the per-run limit is refused (the person can
+  raise the Gemini chat limit in Settings > Agent spending). `--only 3,5`
+  reads some images, `--thinking-level low|medium|high` (default medium),
+  `--quiet` prints only the done and spent lines, `--json` one JSON line
+  per trace line. The spent line is a minimum: a request that stopped
+  without a token count isn't in it, and the CLI says so. The reader never
+  sees board numbers, and its reasons never name another image; a look
+  name it makes up that isn't plain words (at most 4, letters, digits and
+  `&-'`) is refused and those images show as Unsorted;
+  board and image notes go to Google only when the board's `sendNotes` is on,
+  private notes never. A reference that isn't a file on this computer isn't
+  read.
 - Images can be files, folders (their images in name order), http(s) image
   links, or Nebula outputs (`/api/outputs/...`). Links are downloaded on your
   machine (PNG, JPEG, GIF or WebP, up to 20 MB), then uploaded to Nebula.
@@ -181,6 +212,15 @@ nebula moodboard delete <board>
   other than 80 and 443. For those, save the image and add the file.
 - Name a board by its id or exact name, and an image by its number or id
   from `show`.
+- `--cover` picks the image a board opens on: its card on the canvas, its
+  thumbnail in lists and Studio, `show` ("Cover: #3"). Without one it is #1,
+  as before. It is a pick, not a reorder: #n stays the same image, and the
+  cover never changes what generators get (images, weights, brief or
+  analysis). A set-aside image can be the cover. Taking the cover image off
+  the board opens it on #1 again, and undoing that brings both back.
+  `--clear-cover` goes back to #1. MCP: `moodboard_update(cover=3)`, or
+  `cover=""` to clear; `moodboard_get` lists `cover` (number, id) when one
+  is chosen.
 - `show --json` (and MCP `moodboard_get`) also lists where each image's
   card sits on the board: `placements` (x, y, w, h in board pixels, its
   weight, and `frameId`, the frame it is in or null) and the board's
@@ -212,10 +252,13 @@ nebula moodboard delete <board>
   it); `--use N` uses it again (`--exclude`/`--include` are the old names).
   Weight 0 shows as set aside too, and `--use` on a weight-0 image gives it
   the weight its card shows unless you pass `--weight`. `show` marks them
-  "set aside" and `list` counts them ("5 images, 1 set aside"); `--json`
+  "set aside" and `list` counts them ("5 images, 1 set aside"; a Preview
+  of the run counts only the 4 that steer); `--json`
   has `setAside` on each image. The analysis lists an
   image switched aside with `setAside: true` and its colours; a weight-0
-  image keeps its ordinary entry there. `--remove` takes
+  image keeps its ordinary entry there, but the summary counts neither, and
+  the Moodboard node's bundle (what an LLM node on an Any port reads) has
+  neither in `images`, `analysis.images` or `representativeImages`. `--remove` takes
   an image off the board (its file stays).
 - `--image-note` steers (the analysis reads it). `--private-note` is a label
   for whoever looks at the board, like "PAINTERLY (liked)": no analysis,
@@ -275,6 +318,12 @@ nebula moodboard delete <board>
   prints the command that moves it back. A board or Character in Recently
   deleted is refused: restore it first. MCP: `moodboard_move`,
   `character_move`.
+- An open Character Studio follows a Character you change with
+  `PUT /api/characters/{id}` (there is no MCP tool for its fields): send
+  only the fields you change, with `baseVersion` (the `version` you read)
+  so you never write over the person's edit; a 409 `version_conflict`
+  carries the Character as it is now. The person's unsaved edits stay, and
+  if you both changed one field the Studio tells them, naming you.
 - `set --json` returns `previous`: what your change changed, as it was
   before (only those settings, Direction, Avoid, pinned colours, your own
   hand-written brief, and only the image settings you changed), so undoing

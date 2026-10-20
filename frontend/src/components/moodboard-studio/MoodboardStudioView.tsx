@@ -36,6 +36,7 @@ import { moodboardImagesLabel, setAsideCount } from '../../lib/moodboardCount';
 import { BOARD_FIELD_KEYS, MoodboardVersionConflict, applyOps, imagePatchOps, queueOps, rebaseDraft,
   fieldChanges, type BoardFieldKey, type MoodboardOp } from '../../lib/moodboardEdits';
 import { TAB_ID } from '../../lib/tabId';
+import { boardCover } from '../../lib/moodboardCover';
 import '../../styles/moodboard-studio.css';
 
 interface MoodboardDraft {
@@ -59,6 +60,9 @@ interface MoodboardDraft {
   colorChoices?: { keep: string[]; leaveOut: string[] };
   sendNotes?: boolean;
   projectId?: string;
+  // The image the board opens on (lib/moodboardCover): the board's, with a
+  // queued `cover` op on top. Changed only through that op, never a PUT.
+  coverImageId?: string | null;
   // A saved board's checked edits (lib/moodboardEdits): its board fields as
   // last read, that board's version, and the image ops not yet confirmed.
   // Never sent as they are.
@@ -82,6 +86,7 @@ function emptyDraft(): MoodboardDraft {
     clashMode: 'leave-out',
     colorChoices: { keep: [], leaveOut: [] },
     sendNotes: false,
+    coverImageId: null,
   };
 }
 
@@ -104,6 +109,7 @@ function moodboardFields(m: Moodboard): Omit<MoodboardDraft, 'base' | 'version' 
     colorChoices: { keep: [...(m.colorChoices?.keep ?? [])], leaveOut: [...(m.colorChoices?.leaveOut ?? [])] },
     sendNotes: m.sendNotes === true,
     projectId: m.projectId,
+    coverImageId: m.coverImageId ?? null,
   };
 }
 
@@ -126,7 +132,11 @@ function moodboardToDraft(m: Moodboard): MoodboardDraft {
  *  overwrite) the next outside edit of that field. */
 function draftOnBoard(draft: MoodboardDraft, board: Moodboard, sent?: ReadonlySet<MoodboardOp>,
   asSent?: Partial<Record<BoardFieldKey, unknown>>): MoodboardDraft {
-  return rebaseDraft(draft, board, { ...boardFieldsOf(board), ...asSent }, sent);
+  // A field the PUT sent is the person's since only if the draft moved off
+  // what was sent: an edit made while the save was out, even one back to the
+  // value last read, must not read as untouched and take the sent value.
+  const since = asSent && draft.base ? { ...draft, base: { ...draft.base, ...asSent } } : draft;
+  return rebaseDraft(since, board, { ...boardFieldsOf(board), ...asSent }, sent);
 }
 
 /** A draft's board fields with the name as it is sent (trimmed). */
@@ -192,7 +202,7 @@ export function MoodboardStudioView() {
   const exitMoodboardEditor = useUIStore((s) => s.exitMoodboardEditor);
 
   const studio = useAssetStudioDraft('moodboard', moodboardEditorScope, moodboardEditorId, emptyDraft);
-  const { draft: storedDraft, savedId, thumbnail, saveState, saveError, loadError, loaded,
+  const { draft: storedDraft, savedId, saveState, saveError, loadError, loaded,
     dirty, pendingSaveId, pendingAnalysisId, key, revision, epoch, projectId, projectReady, verifyProject, setDraft, initialize, patch } = studio;
   const draft = withBriefFields(storedDraft);
   const loading = !loaded;
@@ -266,15 +276,6 @@ export function MoodboardStudioView() {
   }, [key, revision, loaded, projectReady, projectId, moodboardEditorId, moodboardEditorScope, initialize, patch, isDraftId, isCurrent,
     enterMoodboardEditor, rememberBrief]);
 
-  // A draft kept from an earlier visit loads without a fetch; read its brief.
-  const needsBrief = loaded && Boolean(savedId) && !brief;
-  useEffect(() => {
-    if (!needsBrief || !savedId) return;
-    let cancelled = false;
-    void fetchMoodboard(savedId).then((board) => { if (!cancelled && board) rememberBrief(board); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [needsBrief, savedId, rememberBrief]);
-
   useEffect(() => {
     if (isDraftId && loaded && savedId && isCurrent()) enterMoodboardEditor(savedId, moodboardEditorScope);
   }, [isDraftId, loaded, savedId, isCurrent, moodboardEditorScope, enterMoodboardEditor]);
@@ -300,11 +301,18 @@ export function MoodboardStudioView() {
     const board = await fetchMoodboard(entry.savedId).catch(() => null);
     const latest = useAssetStudioDraftStore.getState().entries[resolveAssetStudioDraftKey(useAssetStudioDraftStore.getState(), key)];
     if (!board || !mounted.current || !latest || latest.pendingSaveId || latest.savedId !== board.id) return;
-    if (board.version <= ((latest.draft as MoodboardDraft).version ?? 0)) return;
+    // Not newer: nothing to move, but the brief is read from it all the same.
+    if (board.version <= ((latest.draft as MoodboardDraft).version ?? 0)) { rememberBrief(board); return; }
     moveDraft(board);
-  }, [key, moveDraft]);
+  }, [key, moveDraft, rememberBrief]);
 
   useEffect(() => wsClient.subscribe((event) => {
+    // Back after the socket was down: what was said meanwhile isn't replayed,
+    // so read the board again (follow keeps it only if it's newer).
+    if (event.type === 'socketReconnected') {
+      void follow();
+      return;
+    }
     if (event.type !== 'storedAssetChanged' || event.kind !== 'moodboard' || event.deleted) return;
     // The echo of this tab's own write.
     if (event.edit?.tab && event.edit.tab === TAB_ID) return;
@@ -315,6 +323,18 @@ export function MoodboardStudioView() {
     announced.current = Math.max(announced.current, event.version ?? known + 1);
     void follow();
   }), [key, follow]);
+
+  // A draft kept from an earlier visit opens as it was left, without a fetch,
+  // and what was said while the Studio was closed isn't replayed: read the
+  // board once (follow keeps it only if it's newer, replays the draft's own
+  // edits, and reads the brief either way), so its cover, name, images and
+  // brief match the rail. A fresh load reads it anyway.
+  const followedKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (followedKey.current === key) return;
+    followedKey.current = key;
+    if (loaded && savedId) void follow();
+  }, [key, loaded, savedId, follow]);
 
   const persist = useCallback(async () => {
     if (!isCurrent() || !await verifyProject() || !isCurrent()) return null;
@@ -454,7 +474,21 @@ export function MoodboardStudioView() {
       ...current,
       analysis: null,
       images: applyOps(current.images, [remove]),
+      // The cover image taken off: the board opens on #1 again (the server
+      // clears it in the same write, and its undo brings both back).
+      coverImageId: current.coverImageId === id ? null : current.coverImageId,
       pendingOps: queueOps(current.pendingOps, [remove]),
+    }));
+  };
+
+  /** The image the board opens on, or null for #1: a pick, not a reorder,
+   *  so no image moves and the analysis stays. */
+  const setCover = (id: string | null) => {
+    const cover: MoodboardOp = { op: 'cover', image: id };
+    setDraft((current) => ({
+      ...current,
+      coverImageId: id,
+      pendingOps: queueOps(current.pendingOps, [cover]),
     }));
   };
 
@@ -588,7 +622,10 @@ export function MoodboardStudioView() {
   const boardHome: AssetHome | null = loaded && savedId ? assetHome(draft.projectId, projectId, boardProjectName) : null;
   const shownRailScope = boardHome?.scope ?? railScope;
 
-  const previewThumbnail = thumbnail || draft.images.find((img) => !img.excluded)?.url || '';
+  // What the board opens on, as the server's thumbnail reads it: the chosen
+  // cover, else #1, from the draft so a pick shows before it is saved.
+  const cover = boardCover(draft.images, draft.coverImageId);
+  const previewThumbnail = cover ? draft.images[cover.number - 1].url : '';
   const analysis = draft.analysis;
 
   return (
@@ -661,11 +698,19 @@ export function MoodboardStudioView() {
             )}
 
             <section className="moodboard-def">
-              <div className="moodboard-def__cover">
-                {previewThumbnail ? (
-                  <img src={backendAssetUrlSync(previewThumbnail)} alt="" draggable={false} />
-                ) : (
-                  <span>No images</span>
+              <div className="moodboard-def__cover-col">
+                <div className="moodboard-def__cover">
+                  {previewThumbnail ? (
+                    // Keyed by the image, so a new cover enters on the spring.
+                    <img key={previewThumbnail} src={backendAssetUrlSync(previewThumbnail)} alt="" draggable={false} />
+                  ) : (
+                    <span>No images</span>
+                  )}
+                </div>
+                {cover && (
+                  <p className="moodboard-def__cover-caption" aria-live="polite">
+                    {cover.chosen ? `Cover: #${cover.number}` : 'Cover: #1, the first image'}
+                  </p>
                 )}
               </div>
               <div className="moodboard-def__fields">
@@ -749,11 +794,19 @@ export function MoodboardStudioView() {
                 </label>
               </div>
               <div className="moodboard-grid">
-                {draft.images.map((img, index) => (
+                {draft.images.map((img, index) => {
+                  const isCover = cover?.id === img.id;
+                  return (
                   <div key={img.id} className={`moodboard-tile ${isSetAside(img) ? 'moodboard-tile--set-aside' : ''}`}>
                     <div className="moodboard-tile__image">
                       <img src={backendAssetUrlSync(img.url)} alt="" draggable={false} />
                       <span className="moodboard-tile__number" aria-label={`Image ${index + 1}`}>#{index + 1}</span>
+                      {isCover && (
+                        <span className={`moodboard-tile__cover${cover.chosen ? '' : ' moodboard-tile__cover--first'}`}
+                          title={cover.chosen ? 'The board opens on this image' : 'The board opens on #1 until you choose a cover'}>
+                          Cover
+                        </span>
+                      )}
                       <button type="button" className="moodboard-tile__remove" onClick={() => removeImage(img.id)}>
                         x
                       </button>
@@ -779,6 +832,22 @@ export function MoodboardStudioView() {
                         />
                         <span>Set aside</span>
                       </label>
+                      <div className="moodboard-tile__cover-row">
+                        {!isCover ? (
+                          <button type="button" className="moodboard-tile__cover-button" aria-label={`Use #${index + 1} as cover`}
+                            title="Open the board on this image. Nothing moves: no image changes number."
+                            onClick={() => setCover(img.id)}>
+                            Use as cover
+                          </button>
+                        ) : cover.chosen ? (
+                          <button type="button" className="moodboard-tile__cover-button" title="Open the board on #1 again"
+                            onClick={() => setCover(null)}>
+                            Back to #1
+                          </button>
+                        ) : (
+                          <span className="moodboard-tile__cover-hint">The board opens on this image</span>
+                        )}
+                      </div>
                       <label className="moodboard-tile__note">
                         <span>Image note</span>
                         <AutoGrowTextarea
@@ -808,7 +877,8 @@ export function MoodboardStudioView() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
 
@@ -907,7 +977,7 @@ function MoodboardRail({
 
   // A board saved or deleted elsewhere (an agent, the CLI) shows up here too.
   useEffect(() => wsClient.subscribe((event) => {
-    if (event.type === 'storedAssetChanged' && event.kind === 'moodboard') relist();
+    if ((event.type === 'storedAssetChanged' && event.kind === 'moodboard') || event.type === 'socketReconnected') relist();
   }), [relist]);
 
   const noProject = scope === 'project' && !projectId;

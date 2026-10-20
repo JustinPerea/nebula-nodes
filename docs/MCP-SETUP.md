@@ -45,11 +45,20 @@ The server exposes these tools for building and running (see
   it as a sentence in its message. `_provider` changes go through
   `propose_change`. See
   [Provider routes](PROVIDER-ROUTES.md#hidden-settings-paramvisiblewhen).
-- `edit_canvas`: adds nodes, wires, param changes, renames and moves in one
-  call, all or nothing. Same shape as `propose_change`, with no limit on how
+- `edit_canvas`: adds nodes, wires, param changes, renames, moves, removals
+  (`remove`) and unwires (`unwire`) in one call, all or nothing: everything
+  `nebula apply` does. Same shape as `propose_change`, with no limit on how
   much one call adds. `arrange: true` has the canvas lay out the new nodes by
-  their real size.
-- `remove_from_canvas`: deletes nodes or single wires, all or nothing.
+  their real size. `steps` sends a list of such plans one after another,
+  with the checks and stop-and-report of `nebula apply`'s steps. Its result
+  has `undo`, the token that takes the edit back (see
+  [Undoing your own edit](#undoing-your-own-edit)).
+- `remove_from_canvas`: deletes nodes or single wires, all or nothing. Its
+  result has `undo` too, which puts the nodes back with their params,
+  outputs, names and wires.
+- `undo_canvas_edit`: takes one of your own edits back with its `undo.token`
+  (or a steps plan's `undo.tokens`, newest first). A part someone changed
+  since stays as it is and is listed in `skipped`.
 - `run_nodes`: runs a node and what feeds it (or the whole canvas) under the
   person's spending limits. Returns outputs with small inline previews, or
   `running` and a run id. A run in which any node failed comes back
@@ -77,7 +86,9 @@ The server exposes these tools for building and running (see
   Moodboard Studio, with their brief (Direction, Avoid, pinned colours, a
   hand-written brief, and the brief generators get). `moodboard_analyze`
   with `dry_run` previews an analysis, optionally with other colour
-  thresholds, and saves nothing. `moodboard_move` and `character_move`
+  thresholds, and saves nothing; with `read_with="gemini-4-argon"` and
+  `dry_run` it reads the references with that vision model (paid, moves
+  nothing; `estimate_only` prices it first). `moodboard_move` and `character_move`
   move a board or a Character to Global or a canvas project (`to`:
   "global", "current", or a project's id or exact name). See
   [Moodboards from the CLI and MCP](#moodboards-from-the-cli-and-mcp).
@@ -109,7 +120,9 @@ And these canvas tools:
   with a board, with `board`). See [Updates](#updates).
 - `wait_for_canvas_change`: blocks until the person (or another agent)
   changes the canvas, then returns what changed and who did it. It skips
-  your own edits. If you also use the `nebula` CLI, set `NEBULA_AGENT_NAME`
+  your own edits. When the person undoes your edit with Cmd+Z, the events
+  say so: each has `edit.undoes` (your `undo.editId`) and `edit.of` (you),
+  and an `edit.undone` event follows. If you also use the `nebula` CLI, set `NEBULA_AGENT_NAME`
   so both share one name; otherwise your CLI edits arrive as `anonymous`
   (the result then carries a `note`). Pass the returned `cursor` back as `since`; see
   [Watching for changes](#watching-for-changes). The wait holds only its own
@@ -230,7 +243,16 @@ your own edits; `--as NAME` sets your name for that filtering.
 | `proposal.accepted` | the person accepted; the added nodes and wires follow as `node.added` / `edge.added` by the person | `proposalId`, `idMap`, `runNodeIds` |
 | `proposal.rejected` | the person rejected | `proposalId`, `reason` |
 | `proposal.withdrawn` / `proposal.expired` / `proposal.invalidated` | the agent took it back, 15 minutes passed, or the canvas changed under it | `proposalId`, `reason` |
-| `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` | a moodboard edit or save changed the board: one event per write, its kind the first of these that applies (`grouped` is a card into or out of a frame, `moved` 8 px or more) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
+| `board.added` / `board.removed` / `board.frame` / `board.grouped` / `board.setAside` / `board.resized` / `board.noted` / `board.moved` / `board.cover` | a moodboard edit or save changed the board: one event per write, its kind the first of these that applies (`grouped` is a card into or out of a frame, `moved` 8 px or more, `cover` the image the board opens on) | `kinds` (every kind in the write), `refs` (`{number, id}` per image), `boardId`, `boardName`, `scope`; never any note text ("private note changed") |
+| `edit.undone` / `edit.redone` | a whole edit was undone (an agent's `undo_canvas_edit`, or the person's Cmd+Z of a step the canvas knew the edit of) or redone; after the node and wire events it made | `editId` (the edit reverted), `of` (whose), `editKind`, `events` (that edit's event cursors), `undid` (for an undo of an undo), `counts`, `skipped` |
+
+Events of a canvas edit carry `edit`: an agent's `edit_canvas`,
+`remove_from_canvas` or `nebula apply` gives each of its events `edit: {id}`
+(the reply's `undo.editId`). An undo's events carry `edit: {id, undoes, of}`:
+the edit id it reverted and whose edit that was (`redoes` for a redo). The
+person's Cmd+Z is linked only when the canvas's step came from that edit's
+graphSync (its `edit.id`); a step without one (the person's own edits, an
+older edit) is journaled as before, with "(undo)" and no `edit`.
 
 Expiry is attributed to "Nebula" (a `system` actor), not to anyone.
 
@@ -506,7 +528,9 @@ and `describe_node` use (`node_readiness.instance_missing`, read at the
 values Accept would write: "needs OPENAI_API_KEY in Settings > Providers",
 a Krea sign-in, or why the chosen route can't take it), and the cost entry
 of such a node has the same `missing`. `propose_change` and `nebula propose`
-turn the list into a `warning` (`canvas_proposals.readiness_warning`). On
+turn the list into a `warning` (`canvas_proposals.readiness_warning`), each
+pointing at its own way to find a node that runs here: `find_nodes` for MCP,
+`nebula context` for the CLI, and `GET /api/agent/nodes` in the HTTP reply. On
 the canvas the ghost shows the ⚠ a real node shows, with the same title, and
 the bar lists the nodes under its summary (three, then the rest in its
 details). Both re-check keys as the person adds them, so a line goes away
@@ -666,9 +690,12 @@ How it works (`backend/services/agent_spend.py`):
   - project snapshots: `PUT /api/projects/{id}` and `/api/projects/recover`
     (opening a project loads its snapshot onto the canvas), compared with the
     live canvas and the project as saved;
-  - runs that take nodes in the request: `/api/execute`, `/api/execute-node`
-    and `/api/quick`. A node there may bill only the way the canvas node with
-    its id and definition does; any other node starts on the API token. A
+  - runs that take nodes in the request: `/api/execute`, `/api/execute-node`,
+    `/api/cinema/generate-shot` and `/api/quick`. A node there may bill only
+    the way the canvas node with its id and definition does (`_kreaAuth`, and
+    a multi-provider node's `_provider` too; a Moodboard node can't open
+    `send_notes` further), judged on its params after retired ones are
+    renamed; any other node starts on Auto and the API token. A
     run's params are written back to the canvas only onto a node of the same
     definition, and for a run that isn't the person's only what the run
     itself changed, never `_kreaAuth`.
@@ -997,7 +1024,7 @@ no timer. Projects keep their 30-day expiry. Files live in
 
 ### Building and running over MCP
 
-`edit_canvas` and `remove_from_canvas` send one body to `POST /api/graph/apply`
+`edit_canvas` (without `steps`) and `remove_from_canvas` send one body to `POST /api/graph/apply`
 (`backend/main.py`, parsed by `services/canvas_edits.py`). It takes the
 proposal shape (`nodes` with `+refs`, `edges`, `params`) plus `rename`,
 `move`, `remove` and `unwire`, stages all of it on a copy of the graph in that
@@ -1012,7 +1039,50 @@ state can't be removed. Krea nodes may name `_kreaAuth` only to keep the mode
 they have: a change is refused with 403 and must be proposed (see Spending
 limits). Other `_` params are refused. The route never runs anything and
 is for agents only (the canvas edits through its own routes). `nebula apply`
-is the CLI twin (see below).
+is the CLI twin (see below). `edit_canvas(steps=[...])` sends a plan of steps
+one step at a time, exactly as `nebula apply` does (both use
+`backend/apply_steps.py`): it returns `{status: "applied", steps, idMap,
+undo}`, or `{status: "stopped", failedStep, steps, error, applied, idMap,
+undo}` when a step is refused, and refuses a plan whose refs don't add up
+before anything is sent.
+
+#### Undoing your own edit
+
+Every apply that changes something replies with `undo: {token, editId,
+expiresInSeconds, summary}`. `undo_canvas_edit(token)` (`nebula undo
+TOKEN`, `POST /api/graph/apply/undo {token}`) takes the edit back:
+
+- A node it added is removed with its wires, unless it changed since (its
+  params or name), or the person wired it to something else since.
+- A param, name or position it changed goes back to the earlier value,
+  each param on its own: if the person changed the prompt since, the prompt
+  stays and the seed the agent changed goes back.
+- A node it removed comes back under its own id with its params (an
+  uploaded image's preview, a painted mask and a Paper source included),
+  outputs, name, position and wires. A wire whose other end is gone, or
+  whose input has taken another wire since, stays out.
+- A wire it added is unwired; one it took away is wired back.
+
+Each part someone changed since is left as it is and listed in `skipped`
+(`{nodeId, part, keys?, wire?, reason, message}`), as a moodboard restore
+does. A param only the person may change back (opening a Moodboard node's
+"send notes" again) is skipped too. The rest is one restore through the
+same staging as the canvas's Cmd+Z, so it lands whole or not at all, and
+the person can undo the undo. `status` is `undone`; `skipped` when nothing
+could go back (the token keeps working, for when the person puts a part
+back); or `already-undone`, with `undoneBy` (you, or the person with Cmd+Z,
+which the backend learns from the canvas's restore). Calling it twice
+changes nothing the second time.
+
+The backend keeps each inverse in memory (`services/canvas_undo.py`): for
+60 minutes, the last 100 edits, at most 16 MB each and 64 MB in all. A
+token works only for the agent that made the edit (403 otherwise), only
+while the project it was made in is open (409), and not after it expired,
+was pushed out, or the canvas was cleared or a graph loaded into the
+project (410: their node ids start again). A restart forgets them (404).
+Because the server wrote the inverse, the undo may put back `_` params and
+the person's billing choice on a node it brings back; agents still can't
+send `_` params themselves, through `restore` or anywhere else.
 
 #### Arrange: let the canvas lay out new nodes
 
@@ -1078,7 +1148,9 @@ applies the edit again. A run's results are never undo steps, so undoing a
 param change keeps the outputs a run made since.
 
 How it works: a graphSync caused by an edit request carries `edit` =
-`{actor, tab?}`. `actor` is the request's journal actor (a named agent, the
+`{actor, tab?, id?, undoes?}`. `id` names an agent's apply or undo (its
+`undo.editId`), and `undoes` says the sync is an agent undoing that edit
+(the notice then reads "Claude undid its edit"). `actor` is the request's journal actor (a named agent, the
 person, or anonymous). `tab` is the canvas tab that sent it (`X-Nebula-Tab`,
 set by the canvas on every write), so that tab skips the echo of its own
 edit. Only the person's canvas (this launch's person token) gets a `tab`:
@@ -1090,9 +1162,14 @@ a project is never an undo step. Loading a graph into the open project
 hands out ids from n1 again, the restore swaps any id that now holds a
 different model. Undo and redo then send what
 changed to `POST /api/graph/restore`, so the backend graph, the saved
-project and every other canvas match. The restore is journaled as whoever
+project and every other canvas match. A step that came with an `id` sends
+it as `edit`, and the person's restore is then linked to that edit (see the
+journal above): the agent's `wait_for_canvas_change` learns its edit was
+undone, and its undo token answers `already-undone` until the person redoes
+it. The restore is journaled as whoever
 the canvas is (`Person` when the tab is connected as you), with "(undo)" or
-"(redo)" on each line. Agents never need to call it.
+"(redo)" on each line. Agents never need to call it; they undo their own
+edits with `undo_canvas_edit`.
 
 A run from `run_nodes` is a CLI run (`POST /api/graph/run` with `wait`), so
 it gets the same spending check and the same long-run handling. It also gets
@@ -1108,7 +1185,16 @@ A run in which any node failed reports `status: "failed"` with `error`
 naming the node, `errors` with each message and `results` with what
 finished; `get_run` and `nebula result` say the same. The backend keeps each
 node's last error (`services/node_errors.py`) for `look_at_canvas`,
-`view_output`, `nebula look` and `nebula path` until the node runs again. It waits 45
+`view_output`, `nebula look` and `nebula path` until the node runs again,
+whoever ran it (the canvas Run button too). It is kept per project, in
+`node-errors.json` in the state dir, so it survives a page reload, a switch to
+another project and back, and a backend restart; every graph the canvas loads
+(graphSync, `GET /api/projects/{id}`) gives such a node `state: "error"` with
+the card's `error`, `errorFriendly` and `errorCategory`. Loading a graph over
+the project or clearing it forgets its errors, as does deleting the project
+for good. Deleting a node keeps its error, so undoing the delete
+(`POST /api/graph/restore`) puts the node back failed, as the canvas's undo
+shows it; an undo that swaps another node in under the id forgets it. It waits 45
 seconds by default because Codex gives each tool call 60 seconds unless
 configured otherwise (in-app Codex gets 150); `get_run` waits again (up to 300). Finished image and
 video outputs come back as small previews from
@@ -1204,6 +1290,8 @@ nebula apply --note "Two takes" \
 #   +p → n8  Text Input
 #   +wide → n9  Wide
 #   +tight → n10  Nano Banana
+#   Undo: nebula undo 3f9c…  (for 60 minutes; parts changed since stay)
+nebula undo 3f9c…                   # take it back (see Undoing your own edit)
 nebula apply --file plan.json       # or --file - to read standard input
 nebula apply --file plan.json --arrange        # or --arrange down
 ```
@@ -1241,8 +1329,13 @@ checks every step's refs before it sends step 1. If a step is refused, the
 command stops there (exit 1), names the step and the reason, and lists what
 the earlier steps applied, with the ids their `+refs` became. Those steps
 stay on the canvas: fix the refused step and apply it and the rest on their
-own, using those ids in place of the refs. `--json` prints `{status, steps, idMap}`, or `{status: "stopped",
-failedStep, error, applied, idMap}`. `nebula propose` doesn't take steps.
+own, using those ids in place of the refs. `--json` prints `{status, steps, idMap, undo}`, or `{status: "stopped",
+failedStep, error, applied, idMap, undo}`; `undo.tokens` are the applied
+steps' undo tokens, newest first, and a plan that landed ends with the line
+`Undo these N steps: nebula undo <newest> … <oldest>`. `nebula undo` takes
+them in that order and stops at the first one refused. `nebula propose`
+doesn't take steps. The checks and the stop-and-report rule are
+`backend/apply_steps.py`, which MCP's `edit_canvas(steps=...)` uses too.
 
 Other graph commands:
 
@@ -1294,6 +1387,8 @@ nebula moodboard set <board> --clash-mode flag           # leave-out (default), 
 nebula moodboard set <board> --restore set-output.json  # undo: the `set --json` output
 nebula moodboard analyze <board>
 nebula moodboard analyze <board> --dry-run --merge-delta-e 8   # preview; saves nothing
+nebula moodboard analyze <board> --read-with gemini-4-argon --estimate           # the price; reads nothing
+nebula moodboard analyze <board> --read-with gemini-4-argon --dry-run --only 3,5   # paid read; moves nothing
 nebula moodboard list                      # boards for every project, plus the open project's
 nebula moodboard move <board> --to global  # or current, or a project's id or exact name
 nebula character move <character> --to "Shoot B"
@@ -1318,7 +1413,14 @@ nebula moodboard delete <board>
   Anyone may move, agents included; the result's `from` says where to move
   it back, and `movedBy` who moved it. Already there is a no-op
   (`status: "unchanged"`); one in Recently deleted is refused until it's
-  restored.
+  restored. A Studio draft kept for it follows the move, also one made while
+  the tab's socket was closed (contract 07, section 1.12).
+- Editing a Character: `PUT /api/characters/{id}` with only the fields you
+  change and `baseVersion` (the `version` you read); a 409
+  `version_conflict` carries the Character as it is now. An open Character
+  Studio shows the change live, keeps the person's unsaved edits, and names
+  you when you both changed one field (contract 07, section 2.1). No MCP
+  tool edits a Character's fields.
 - A board is named by its id or exact name; an image by its number or id
   from `show`. `--json` prints the board as JSON (the MCP tools return the
   same shape).
@@ -1362,8 +1464,17 @@ nebula moodboard delete <board>
   unless the same change gives a weight. Set-aside images still count in a
   board's image count, named beside it: `nebula moodboard list` reads
   "(5 images, 1 set aside, look, ...)", and the Moodboard node card, the
-  Studio's board list and the Assets panel read "5 images · 1 set aside · look". When nothing steers, the analysis
-  warns "Every reference is set aside, so none of them shapes the board."
+  Studio's board list and the Assets panel read "5 images · 1 set aside · look"
+  (the card on one line, the whole of it on hover). An open Studio, the card and the
+  lists also catch up on a change made while their tab's socket was closed
+  (a backend restart), once it opens again. A Preview of the run
+  counts only the images that steer ("4 images"), weight 0 left out like
+  the switch, and so does the analysis's summary ("4 reference image(s)
+  analyzed"). The Moodboard node's bundle leaves weight-0 images out of
+  `images`, `analysis.images` and `representativeImages` as it does switched ones. When nothing
+  steers, the analysis warns "Every reference is set aside, so none of them
+  shapes the board." and its summary says "No reference image steers this
+  board: every one is set aside."
 - Each image has `notes`, which steer (the analysis reads them), and
   `privateNote`, the person's own label (`--private-note`, or
   `{"image": 2, "privateNote": "..."}` in `moodboard_update`). The private
@@ -1372,6 +1483,15 @@ nebula moodboard delete <board>
   not `brief`, not the negative prompt, not the Moodboard node's outputs.
   Changing it keeps the analysis, and `previous` puts it back like any other
   image setting.
+- `cover` in `moodboard_update` (a number, `#n` or an id; `""` for none)
+  picks the image the board opens on: its canvas card, its thumbnail in the
+  lists and Studio, `cover` ({number, id}) in `moodboard_get` and
+  `moodboard_list` when one is chosen (`nebula moodboard set --cover` /
+  `--clear-cover`). Without one it is #1. It moves no image, so #n stays the
+  same image, and generators get exactly what they got before: same images,
+  weights, brief and analysis. A set-aside image can be the cover; taking
+  the cover image off the board opens it on #1 again, and `previous` puts
+  the cover back like any other change.
 - Images can be files, folders (the images directly inside, in name order,
   so `2.png` comes before `10.png`), http(s) links or Nebula outputs
   (`/api/outputs/...`, used as they are).
@@ -1444,6 +1564,50 @@ nebula moodboard delete <board>
   `--merge-delta-e` / `merge_delta_e` (0-50, default 5) try other colour
   thresholds for that run only; without the dry run they are refused.
   On a Nebula without the dry run it says so and analyzes nothing.
+- `analyze --read-with gemini-4-argon --dry-run` (`moodboard_analyze` with
+  `read_with` and `dry_run`) reads the references with a vision model
+  (`POST /api/moodboards/{id}/read?dryRun=1`, contract 07, section 1.13):
+  batches of 6, two at a time, each image sent as a 1024 px JPEG. It prints
+  every line as it arrives, the readings first (`#21  clouds under a
+  halftone screen → Dither (0.82)`), then how Analyze would sort them
+  (`#6 Unsorted: no look fits (0.41)`, a suggestion such as "Make a
+  Painterly × Dither look for #3, #9, #14?"), a done line ("Dry run: would
+  sort 14 into 4 looks (1 new) · 2 Unsorted · nothing moved") and what it
+  spent. It is paid, and only the dry run exists: it saves nothing and moves
+  nothing, and the board's `version` stays. Without `--dry-run` it is
+  refused.
+  - `--estimate` / `estimate_only` (`POST .../read/estimate`) prices it and
+    sends nothing: "$0.37 to $1.02" for 14 images at medium, from Google's
+    list price on the day (Gemini 4 Argon is $2.00 input and $10.00 output
+    per million tokens through 2026-11-30, then $4.00 and $20.00; thinking
+    counts as output). The high end assumes one retry per batch.
+  - The spent line is a minimum: a request that stopped without a token
+    count (a 5xx, a time bound) isn't in it, and the CLI says how many
+    there were (`spent.requestsWithoutUsage` in the MCP answer).
+  - `--only 3,5` / `only=[3, 5]` reads some images (numbers or ids);
+    `--thinking-level low|medium|high` / `thinking_level` (default medium);
+    `--quiet` prints only the done and spent lines; `--json` prints each
+    trace line and then the result as JSON lines. `include_thoughts` adds
+    the reader's thought lines to the MCP answer (Argon's thought summaries
+    are unconfirmed, so it asks for none yet).
+  - Agents go through the spending limits: a read counts as one run of the
+    Gemini chat node, priced at its high estimate, so one above the per-run
+    limit (default $1) is refused with the price and how to ask. The person
+    can raise Gemini chat's limit in Settings > Agent spending. A request
+    that never started is given back. A read with no list price is refused
+    under any dollar limit.
+  - The reader sees the images as A to F, never board numbers; reasons that
+    name another image are cleaned before they are shown. A new look's name
+    must be 1 to 60 characters and at most 4 words, of letters, digits,
+    spaces and `&-'`, with no `#n`, image label, link or `@`; when the
+    reader names a look any other way, its images show as Unsorted ("its
+    look's name was refused") instead. Each reading in `--json` carries
+    `reader` and `readerName` ("Gemini 4 Argon"), and the answer's `reader`
+    says who read (`source: "model"`). Board and image
+    notes go only when the board's `sendNotes` is on; private notes never.
+    A reference that isn't a file on this computer is skipped and listed.
+  - It needs `GOOGLE_API_KEY` (400 without it, and nothing is charged).
+
 - Strength 0 turns the board off for every node it's wired into: no brief,
   Avoid, negatives or images, and each such node's run notes "Board
   strength is 0: board not sent". Any other board wired into the same node

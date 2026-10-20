@@ -51,6 +51,7 @@ import { apiFetch } from '../lib/backend';
 import { CANVAS_INTERACTION_PROPS } from '../lib/canvasNavigation';
 import { CANVAS_FIT_DURATION, CANVAS_ZOOM_DURATION, computeCanvasFitPadding } from '../lib/canvasFit';
 import { useFitCanvasView } from '../hooks/useFitCanvasView';
+import { cameraMoveIsCanvasOwn, cameraMoveStarted, claimCameraMove } from '../lib/canvasCameraOwner';
 import { CANVAS_LOD_ZOOM } from '../lib/canvasOverview';
 import { isCanvasShortcutTarget } from '../lib/canvasShortcutScope';
 import { boundingRect, UNMEASURED_NODE_SIZE, type NodeRect } from '../lib/nodePlacement';
@@ -319,10 +320,10 @@ export function Canvas() {
   // The fitView prop's fit waits for nodes: on a canvas that mounted empty it
   // runs when a followed project's graph arrives, and is still the canvas's own.
   const initialFit = useRef(initialCanvasState.fitEnabled);
-  const rememberViewport = useCallback((viewport: Viewport, initial?: boolean) => {
+  const rememberViewport = useCallback((viewport: Viewport, options?: { initial?: boolean; byCanvas?: boolean }) => {
     const ui = useUIStore.getState();
     const canvasActive = ui.viewMode === 'canvas' || (ui.viewMode === 'commons' && !ui.commonsEnabled);
-    if (canvasMounted.current && canvasActive) ui.setCanvasViewport(viewport, { initial });
+    if (canvasMounted.current && canvasActive) ui.setCanvasViewport(viewport, options);
   }, []);
   const onViewportInitialized = useCallback((instance: { getViewport: () => Viewport }) => {
     // React Flow schedules onInit. An import can replace the graph before that
@@ -332,11 +333,14 @@ export function Canvas() {
     // still be waiting for node measurements. A quick studio visit must not
     // turn that temporary origin camera into a restored, never-fitted viewport.
     if (initialCanvasState.fitEnabled && useGraphStore.getState().nodes.length > 0) return;
-    rememberViewport(instance.getViewport(), true);
+    rememberViewport(instance.getViewport(), { initial: true });
   }, [initialCanvasState.fitEnabled, initialCanvasState.viewportRevision, rememberViewport]);
   const onViewportMove = useCallback((event: MouseEvent | TouchEvent | null, viewport: Viewport) => {
     // The first fit has no input event; the person's pan or zoom ends it.
-    rememberViewport(viewport, !event && initialFit.current);
+    // Later, the moves the canvas claimed (its fit after an agent's nodes
+    // land, an arrange's reveal) are its own too; projectStore saves them
+    // with that edit instead of reading them as unsaved changes.
+    rememberViewport(viewport, { initial: !event && initialFit.current, byCanvas: cameraMoveIsCanvasOwn(event) });
     initialFit.current = false;
   }, [rememberViewport]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -454,6 +458,8 @@ export function Canvas() {
           event instanceof CustomEvent && typeof event.detail?.totalCount === 'number'
             ? event.detail.totalCount
             : useGraphStore.getState().nodes.length;
+        // The canvas's own move: it never restarts the autosave wait.
+        claimCameraMove();
         fitView({
           padding,
           duration: 400,
@@ -774,6 +780,7 @@ export function Canvas() {
         fitView={initialCanvasState.fitEnabled}
         defaultViewport={initialCanvasState.viewport ?? undefined}
         onInit={onViewportInitialized}
+        onMoveStart={cameraMoveStarted}
         onMove={onViewportMove}
         fitViewOptions={{ padding: computeCanvasFitPadding() }}
         minZoom={0.1}

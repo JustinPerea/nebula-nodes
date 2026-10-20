@@ -19,6 +19,7 @@ import httpx  # noqa: F401 - tests patch httpx.request through this module
 from commons.client_paths import asset_path
 from nebula_api import NebulaAPI, NebulaAPIError
 from services.file_access import require_allowed_path
+from services.canvas_proposals import READY_NODES_MCP, readiness_warning
 from mcp.server.fastmcp import Context, FastMCP, Image
 from mcp.types import ToolAnnotations
 
@@ -42,14 +43,14 @@ Nebula Nodes is a node-graph studio for AI images, video and audio. You work on 
 Workflow:
 1. look_at_canvas: nodes, wires, outputs, the person's selection and pins. Read get_selected_nodes before acting on "these" or "the selected".
 2. find_nodes / describe_node: pick a node type that can run here (runsWith) and learn its ports, params and price. A node with `routes` runs on one provider each: each route's `params` are what that provider offers (a setting it lacks is absent or has `onlyWhen`); `_provider` changes go through propose_change.
-3. edit_canvas: add nodes (refs like "+img"), wires, param changes, renames and moves in one call; all of it lands or none of it. Set arrange=true to have the canvas lay out the new nodes by their real size. remove_from_canvas deletes nodes or wires.
+3. edit_canvas: add nodes (refs like "+img"), wires, param changes, renames, moves, removals and unwires in one call; all of it lands or none of it (or send `steps`, each landing on its own). Set arrange=true to have the canvas lay out the new nodes by their real size. remove_from_canvas deletes nodes or wires. Each edit returns an undo token: undo_canvas_edit takes your edit back, leaving any part changed since as it is.
 4. run_nodes: runs a node and what feeds it. It returns outputs with small previews, or status "running" with a runId: then get_run(runId) or cancel_run(runId).
 5. view_output: look at any node's output again.
 
 Spending: the person sets limits (get_spend_limits). A run over a limit, or with a node that has no list price, is refused; send the same plan as propose_change. The person accepts or rejects it in Nebula; agents cannot accept, and get_proposal waits for the decision. Use propose_change too when the change is theirs to decide (reworking their graph, a costly run).
 
 Projects: list_projects, open_project, new_project. Start new work in a new project rather than emptying the person's canvas; they can switch back.
-Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators), Set aside (excluded: the image stays and its colours are still read, but it never steers; weight 0 shows as set aside too) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing). A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt, brief.palette); analysis.styleBrief is not. Only the person may change their own hand-written brief. Nebula checks the measured colours against the Direction and Avoid words: by default a clashing colour leaves the brief (brief.leftOut, each with its reason), brief.mayClash still goes, and pinned colours always go (brief.pinnedClashes). Tell the person what was left out; moodboard_update can keep one anyway. A board's notes are for the person, their team and you: generators get them only when the person turns that on (brief.notesSent).
+Moodboards (the boards in Moodboard Studio): moodboard_create makes one from files, folders and image links, moodboard_update sets weights, notes, private notes (the person's own labels, never sent to generators), Set aside (excluded: the image stays and its colours are still read, but it never steers; weight 0 shows as set aside too) and the brief fields (Direction, Avoid, pinned colours, a hand-written brief), moodboard_analyze reads its palette (each colour lists the images it comes from; it can also preview an analysis, optionally with other colour thresholds, saving nothing), and can also read the references with a vision model and say how it would sort them into looks: that is paid, a dry run for now, and held to the spending limits, so get its price first. A board's `brief` is what generators get (brief.styleBrief, brief.negativePrompt, brief.palette); analysis.styleBrief is not. Only the person may change their own hand-written brief. Nebula checks the measured colours against the Direction and Avoid words: by default a clashing colour leaves the brief (brief.leftOut, each with its reason), brief.mayClash still goes, and pinned colours always go (brief.pinnedClashes). Tell the person what was left out; moodboard_update can keep one anyway. A board's notes are for the person, their team and you: generators get them only when the person turns that on (brief.notesSent).
 A moodboard or Character is Global (every project lists it) or in one canvas project. moodboard_move and character_move move one between them ("global", "current" or a project); nodes that use it keep working everywhere, and moving it back undoes it.
 Deleted moodboards, characters and projects go to Recently deleted: list_trash shows them and restore_from_trash brings one back with the same id. Deleting for good is the person's alone.
 
@@ -352,8 +353,12 @@ def wait_for_canvas_change(
 
     Returns `events`, each with `kind` (node.added, node.params, node.moved,
     node.renamed, edge.added, selection.changed, run.finished,
-    run.skipped, canvas.replaced, ...), the `actor` who did it (`person`, an `agent`,
-    or `anonymous`), `nodeId`, `data` and a one-line `summary`. Your own
+    run.skipped, canvas.replaced, edit.undone, ...), the `actor` who did it (`person`, an `agent`,
+    or `anonymous`), `nodeId`, `data` and a one-line `summary`. An event
+    from a canvas edit has `edit`: your edit_canvas events carry its `id`
+    (your `undo.editId`); an undo's events carry `undoes` (the edit id it
+    reverted) and `of` (whose edit), and end with `edit.undone`, so you learn
+    when the person undoes your change with Cmd+Z. Your own
     edits are skipped unless `include_self`; that only covers your
     `nebula` CLI calls too when NEBULA_AGENT_NAME is set, because without
     it the CLI sends no name and its edits arrive as `anonymous` (the
@@ -448,7 +453,17 @@ def propose_change(
         body["params"] = params
     if run:
         body["run"] = run
-    return _canvas_call("POST", "/api/canvas/proposals", ctx, json=body)
+    response = _canvas_call("POST", "/api/canvas/proposals", ctx, json=body)
+    return _worded_for_mcp(response)
+
+
+def _worded_for_mcp(response: Any) -> Any:
+    """The readiness warning in this surface's words (find_nodes, not the HTTP route)."""
+    if isinstance(response, dict) and response.get("warning"):
+        warning = readiness_warning(((response.get("proposal") or {}).get("cost")) or {}, lister=READY_NODES_MCP)
+        if warning:
+            response = {**response, "warning": warning}
+    return response
 
 
 @_tool(annotations=_READ, waits=True)
@@ -558,6 +573,9 @@ def edit_canvas(
     rename: dict[str, str] | None = None,
     move: dict[str, dict] | None = None,
     arrange: bool | dict | None = None,
+    remove: list[str] | None = None,
+    unwire: list[dict] | None = None,
+    steps: list[dict] | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Change the canvas directly, all at once: every part applies, or none does.
@@ -575,20 +593,49 @@ def edit_canvas(
       the canvas lay out this call's new nodes by their real size once it has
       drawn them, starting where they were placed. Other nodes never move. With
       no canvas open, the first one to open does it; the result's `arrange` says which.
+    - `remove`: node ids to delete, with their wires. `unwire`: single wires,
+      [{"source", "sourceHandle", "target", "targetHandle"}].
     - `note`: one line on what this is for; shown beside your cursor. Your own
       edit only; what you noticed goes in post_note.
     No limit on how much one call adds; it all lands or none of it does.
+    Applied in this order: unwire, remove, add and change, rename, move.
+    - `steps`: a list of such plans (no `run`), sent one after another, each
+      all or nothing; a step may use the +refs earlier steps made. Give only
+      `note` beside it. If a step is refused, nothing after it is sent and the
+      result is `status: "stopped"` with `failedStep`, `error`, what the
+      earlier steps `applied` (and the ids their refs became), and their undo
+      tokens, so you can fix that step and send the rest, or undo what landed.
     Who bills a run is the person's call: Krea billing (`_kreaAuth`: API token
     or the Krea plan) and a multi-provider node's route (`_provider`: a route id
     or auto; describe_node lists them and the values each takes). Send a change
     to either with propose_change; edit_canvas refuses it.
-    Nothing runs; call run_nodes next. Returns `idMap` (ref → node id) and a summary.
+    Nothing runs; call run_nodes next. Returns `idMap` (ref → node id), a
+    summary and `undo` ({token, editId, expiresInSeconds, summary}): pass the
+    token to undo_canvas_edit to take this edit back (a steps plan returns
+    `undo.tokens`, newest first).
     """
     body: dict[str, Any] = {key: value for key, value in {
         "note": note, "nodes": nodes, "edges": edges, "params": params, "rename": rename, "move": move,
-        "arrange": arrange,
+        "arrange": arrange, "remove": remove, "unwire": unwire,
     }.items() if value}
+    if steps is not None:
+        return _edit_in_steps({**body, "steps": steps}, ctx)
     return _canvas_call("POST", "/api/graph/apply", ctx, json=body)
+
+
+def _edit_in_steps(plan: dict[str, Any], ctx: Context | None) -> dict[str, Any]:
+    """edit_canvas(steps=...): the checks and stop-and-report of `nebula apply`
+    (apply_steps.py, one implementation for both)."""
+    import apply_steps
+
+    try:
+        steps = apply_steps.check_steps(plan, run_hint="run_nodes")
+    except apply_steps.PlanError as exc:
+        raise ValueError(str(exc)) from exc
+    outcome = apply_steps.run_steps(
+        steps, lambda step: _canvas_call("POST", "/api/graph/apply", ctx, json=step),
+        reason=lambda exc: apply_steps.stop_reason(exc, _current_url()))
+    return outcome.as_json()
 
 
 # -- projects ---------------------------------------------------------------------
@@ -664,6 +711,39 @@ def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | No
     if wires:
         body["unwire"] = wires
     return _canvas_call("POST", "/api/graph/apply", ctx, json=body)
+
+
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False))
+def undo_canvas_edit(token: str | list[str], ctx: Context | None = None) -> dict[str, Any]:
+    """Undo one of your own canvas edits: the `undo.token` that edit_canvas or
+    remove_from_canvas returned (for a steps plan, its `undo.tokens` list,
+    newest first; they are undone in that order, stopping at the first refused).
+
+    Each part of the edit goes back only if the canvas still has it as your
+    edit left it: a node you added is removed, params, names and positions you
+    changed return to their earlier values, and nodes you removed come back
+    with their params, outputs, name and wires. A part the person (or anyone)
+    changed since stays as it is and is listed in `skipped` with the reason.
+    Returns `{status, added, removed, changed, renamed, moved, skipped}`;
+    `status` is "undone", "skipped" (nothing could go back; the token still
+    works) or "already-undone" (by you, or by the person with Cmd+Z, in
+    `undoneBy`). A token works for 60 minutes, only for you, only while the
+    project you edited is open. Calling it twice changes nothing the second
+    time. The person sees the undo as your edit and can undo it in turn.
+    """
+    tokens = [token] if isinstance(token, str) else list(token or [])
+    if not tokens:
+        raise ValueError("token must be an undo token, or a list of them")
+    if len(tokens) == 1:
+        return _canvas_call("POST", "/api/graph/apply/undo", ctx, json={"token": tokens[0]})
+    undone: list[dict[str, Any]] = []
+    for number, one in enumerate(tokens, start=1):
+        try:
+            undone.append(_canvas_call("POST", "/api/graph/apply/undo", ctx, json={"token": one}))
+        except NebulaAPIError as exc:
+            return {"status": "stopped", "failedToken": number, "tokens": len(tokens), "error": exc.detail,
+                    "undone": undone}
+    return {"status": "undone", "undone": undone}
 
 
 def _absolute(value: Any) -> Any:
@@ -1015,8 +1095,8 @@ def moodboard_list(project_id: str | None = None, ctx: Context | None = None) ->
     open on the canvas, as its Project tab in the app shows; pass "none" for
     only the boards that belong to no project (Global). Each board comes as
     moodboard_get gives it: the brief fields, `brief` (what generators get),
-    numbered images and its analysis (null when it changed since the last
-    moodboard_analyze).
+    numbered images, `cover` ({number, id}) when one is chosen, and its
+    analysis (null when it changed since the last moodboard_analyze).
     """
     import moodboard_client as boards
 
@@ -1039,12 +1119,15 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     `setAside` means the image doesn't steer (set aside, or weight 0). Both
     are still read for their colours and no generator gets either;
     analysis.images marks only the switched ones (`excluded`) with setAside,
-    and a weight-0 image keeps its ordinary entry there.
+    and a weight-0 image keeps its ordinary entry there; analysis.summary
+    counts neither.
     An image's `privateNote` is the person's own label for it: read it, but
     never put it in a prompt (nothing that generates gets it). `placements`
     are its cards on the board (x, y, w, h in board pixels, weight, and
     `frameId`: the frame it is in, null for none); `frames` lists the board's
-    frames. The layout never steers generation.
+    frames. The layout never steers generation. `cover` {number, id} is the
+    image chosen to open the board on (no `cover`: it opens on #1);
+    moodboard_update(cover=...) changes it.
 
     `brief` is what generators get, as Nebula composed it: `styleBrief` (the
     hand-written brief when there is one, else the generated one),
@@ -1128,7 +1211,8 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
                      leave_out: list[str] | None = None, leave_out_flagged: bool = False,
                      reset_colors: list[str] | None = None, color_choices: dict | None = None,
                      clash_mode: str | None = None, send_notes: bool | None = None,
-                     undo: dict | None = None, ctx: Context | None = None) -> dict[str, Any]:
+                     cover: str | int | None = None, undo: dict | None = None,
+                     ctx: Context | None = None) -> dict[str, Any]:
     """Change a moodboard. `images`: changes to single images, each
     {"image": its number or id, "weight": 0-1, "notes": "...", "privateNote": "...", "excluded": true}.
     `excluded` is the Set aside switch (`setAside` is the same key): a
@@ -1159,6 +1243,12 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
     no-measured or keep-all. `send_notes` false keeps the notes from
     generators; true is the person's call and is refused (propose it).
 
+    `cover` picks the image the board opens on (its picture on the canvas
+    card, in the Studio and in lists), by number or id; "" opens it on #1
+    again. The result's `cover` is {number, id} (none: it opens on #1). A pick, not a
+    reorder: no image changes number, nothing that generates gets it, and
+    it keeps the analysis. Removing the cover image opens the board on #1.
+
     `previous` holds what the change changed, as it was before; pass it back
     to moodboard_update (all of it, `undo` included) to undo it. Its `undo`
     puts back, in one checked write, only what this change changed, so
@@ -1186,7 +1276,7 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
             "name": name, "notes": notes, "mode": mode, "strength": strength, "images": images,
             "direction": direction, "avoid": avoid, "pinned_colors": pinned_colors,
             "brief_override": brief_override, "clash_mode": clash_mode, "color_choices": color_choices,
-            "send_notes": send_notes}.items() if value is not None}
+            "send_notes": send_notes, "cover": cover}.items() if value is not None}
         updated, removed, previous, skipped = _board_call(boards.undo_board, _api(), board, undo, fallback=fallback,
                                                           headers=_board_headers(ctx))
         return {**boards.brief(updated), "removed": removed, "previous": previous, "skipped": skipped}
@@ -1197,15 +1287,42 @@ def moodboard_update(board: str, images: list[dict] | None = None, remove: list[
         keep_out_colors=keep_out_colors, unpin_colors=unpin_colors, brief_override=brief_override,
         keep_brief=keep_brief, keep_anyway=keep_anyway, leave_out=leave_out,
         leave_out_flagged=leave_out_flagged, reset_colors=reset_colors, color_choices=color_choices,
-        clash_mode=clash_mode, send_notes=send_notes, headers=_board_headers(ctx))
+        clash_mode=clash_mode, send_notes=send_notes, cover=cover, headers=_board_headers(ctx))
     return {**boards.brief(updated), "removed": removed, "previous": previous}
 
 
-@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
-                                      openWorldHint=False))
+def _read_answer(result: dict[str, Any], *, include_thoughts: bool = False) -> dict[str, Any]:
+    """A read's result for an agent: the summary, each image's result and the
+    last 20 non-thought lines; not every reading's fields or the whole trace."""
+    trace = result.get("trace") or []
+    results = []
+    for item in result.get("results") or []:
+        entry = {key: item.get(key) for key in ("number", "id", "look", "fit", "reason", "status")}
+        if item.get("status") == "sorted":
+            entry["newLook"] = bool(item.get("newLook"))
+        if item.get("why"):
+            entry["why"] = item["why"]
+        results.append(entry)
+    answer: dict[str, Any] = {
+        key: result.get(key) for key in ("dryRun", "applied", "runId", "boardId", "reader", "model", "thinkingLevel",
+                                         "summary", "suggestions", "newLooks", "spent", "estimate", "sortError")
+    }
+    answer["results"] = results
+    answer["lines"] = [line for line in trace if line.get("kind") not in ("thought", "focus")][-20:]
+    if include_thoughts:
+        answer["thoughts"] = [line.get("text") for line in trace if line.get("kind") == "thought"]
+    return answer
+
+
+# Not idempotent and open-world: with read_with each call is a paid read on Google.
+# A read takes as long as the model does, so it runs in the waits pool (#107).
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False,
+                                   openWorldHint=True), waits=True)
 def moodboard_analyze(board: str, dry_run: bool = False, accent_min_chroma: float | None = None,
                       accent_separation: float | None = None, merge_delta_e: float | None = None,
-                      ctx: Context | None = None) -> dict[str, Any]:
+                      read_with: str | None = None, only: list[str | int] | None = None,
+                      thinking_level: str | None = None, estimate_only: bool = False,
+                      include_thoughts: bool = False, ctx: Context | None = None) -> dict[str, Any]:
     """Analyze a moodboard: palette, separate accent colours and keywords.
     Returns the board with its new analysis and the `brief` generators get
     now. Direction, Avoid, pinned colours and a hand-written brief stay.
@@ -1220,11 +1337,43 @@ def moodboard_analyze(board: str, dry_run: bool = False, accent_min_chroma: floa
     default 40), `accent_separation` (dE00 0-100, default 10) and
     `merge_delta_e` (dE00 0-50, default 5) try other colour thresholds for
     that run only; without `dry_run` they are refused, since nothing saves
-    custom thresholds."""
+    custom thresholds.
+
+    `read_with` (a reader model, "gemini-4-argon") reads the references with
+    that vision model and says how Analyze would sort them into looks. It is
+    paid and goes through the spending limits like a Gemini chat run; the
+    person can raise that model's per-run limit in Settings. Only
+    `dry_run=True` exists yet: nothing is saved and nothing moves, and the
+    call waits for the whole read. `estimate_only=True` returns the price
+    ({count, batches, low, high, unconfirmed, sources}) and reads nothing:
+    check it first. `only` limits the read to some images (numbers or ids);
+    `thinking_level` is low, medium or high. The answer has `summary`, each
+    image's result ({number, id, look, fit, reason, status, newLook}),
+    `suggestions` (alsoIn and hybrid), `spent`, and the last 20 trace
+    `lines` (thought summaries only with `include_thoughts`). `spent.usd`
+    is a minimum: it prices only requests that returned a token count, and
+    `spent.requestsWithoutUsage` counts the ones that didn't (cut off by a
+    time bound, say), which Google may still bill."""
     import moodboard_client as boards
 
     thresholds = {"accent_min_chroma": accent_min_chroma, "accent_separation": accent_separation,
                   "merge_delta_e": merge_delta_e}
+    if read_with:
+        if any(value is not None for value in thresholds.values()):
+            raise RuntimeError("the colour thresholds go with the free analysis, not with read_with")
+        headers = _board_headers(ctx)
+        if estimate_only:
+            return _board_call(boards.estimate_read, _api(), board, read_with, only=only,
+                               thinking_level=thinking_level, headers=headers)
+        if not dry_run:
+            raise RuntimeError("read_with needs dry_run=true in this version of Nebula: it reads and prices the "
+                               "references and says how Analyze would sort them, and moves nothing. Check the "
+                               "price first with estimate_only=true.")
+        result = _board_call(boards.dry_read, _api(), board, read_with, only=only, thinking_level=thinking_level,
+                             headers=headers)
+        return _read_answer(result, include_thoughts=include_thoughts)
+    if only or thinking_level or estimate_only or include_thoughts:
+        raise RuntimeError("only, thinking_level, estimate_only and include_thoughts go with read_with")
     if dry_run:
         return _board_call(boards.dry_run_board, _api(), board, thresholds=thresholds,
                            headers=_board_headers(ctx))

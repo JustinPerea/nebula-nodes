@@ -70,6 +70,15 @@ export interface Pin {
   } | null;
 }
 
+/** Said by this client, never the backend: a socket opened after an earlier
+ *  one closed. The backend doesn't replay what it sent while no socket was
+ *  open (main.py /ws; only the graph comes again, as graphSync), so whatever
+ *  shows a saved board or Character reads it again (storedAssetsStore, the
+ *  Moodboard Studio, the Assets panel). */
+export interface SocketReconnectedEvent {
+  type: 'socketReconnected';
+}
+
 /** A saved moodboard or character changed (backend main.py
  *  _broadcast_stored_asset), so a card that shows it fetches it again. */
 export interface StoredAssetChangedEvent {
@@ -283,6 +292,7 @@ export type ExecutionEvent = (
   | ProposalOpenedEvent
   | ProposalSyncEvent
   | ProposalClosedEvent
+  | SocketReconnectedEvent
 ) & { runId?: string };
 
 type EventHandler = (event: ExecutionEvent) => void;
@@ -297,6 +307,8 @@ class WebSocketClient {
   private connecting = false;
   private connectRun = 0;
   private forceDiscoveryOnReconnect = false;
+  /** A socket has opened before, so the next open is a reconnect. */
+  private everOpened = false;
 
   constructor(path: string) {
     this.path = path;
@@ -347,6 +359,15 @@ class WebSocketClient {
           // Say hello as the person on every (re)connect: only then does this
           // socket get proposal accept keys. No token, no hello.
           this.sayHello(socket, url);
+          const reconnected = this.everOpened;
+          this.everOpened = true;
+          if (reconnected) {
+            try {
+              this.dispatch({ type: 'socketReconnected' });
+            } catch (err) {
+              console.error('[ws] a reconnect handler failed:', err);
+            }
+          }
         };
 
         socket.onmessage = (event: MessageEvent) => {
@@ -356,9 +377,7 @@ class WebSocketClient {
               reportPersonRequired();
               return;
             }
-            for (const handler of [...this.firstHandlers, ...this.handlers]) {
-              handler(parsed);
-            }
+            this.dispatch(parsed);
           } catch (err) {
             console.error('[ws] failed to parse message:', err);
           }
@@ -407,6 +426,12 @@ class WebSocketClient {
     return () => {
       this.firstHandlers.delete(handler);
     };
+  }
+
+  private dispatch(event: ExecutionEvent): void {
+    for (const handler of [...this.firstHandlers, ...this.handlers]) {
+      handler(event);
+    }
   }
 
   subscribe(handler: EventHandler): () => void {

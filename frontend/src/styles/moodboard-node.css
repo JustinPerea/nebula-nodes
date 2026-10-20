@@ -59,6 +59,14 @@ body.app-slava-restraint .moodboard-node__meta {
   font-size: 11px;
 }
 
+/* The count: one line, cut with an ellipsis, the whole of it in the title
+   (MoodboardNode.tsx). A status message keeps wrapping. */
+body.app-slava-restraint .moodboard-node__meta--count {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 body.app-slava-restraint .moodboard-node__open {
   width: 100%;
   margin-top: 8px;

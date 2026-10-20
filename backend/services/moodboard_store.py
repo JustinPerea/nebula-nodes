@@ -24,6 +24,15 @@ The person's brief fields (``direction``, ``avoid``, ``pinnedColors``,
 never drops them; services/moodboard_brief.py describes them. A board saved
 before they existed is migrated once (``briefVersion``).
 
+The board's ``coverImageId`` is the id of the image it opens on (the
+picture its card, the Studio's rail and lists show): ``thumbnail`` is that
+image's url, else image #1's, as before covers. It is presentation only: it
+never reorders ``images`` (an image's number is its place there), and no
+generator, reader or node output reads it. A board saved before covers reads
+with ``coverImageId: None`` and its file is left alone; removing the cover
+image falls back to #1 (the store clears it), and a cover that names an
+image no longer on the board (a file an older Nebula edited) reads as none.
+
 Each image may carry a ``privateNote``: the person's own label ("PAINTERLY
 (liked)"). It is for whoever looks at the board, the person or an agent, and
 nothing else: it isn't an analysis input (``source_hash`` leaves it out), and
@@ -67,6 +76,10 @@ LAYOUT_BOARD_KEYS = ("frames", "suggestions", "readings", "layoutVersion", "last
 LAYOUT_REFUSED = ("can't be set with PUT or when making a board: a board's layout is written only by board "
                   "edits (POST /api/moodboards/{id}/edits), and new images are placed by Nebula (or where "
                   "their placements ask)")
+
+# The board's cover: the id of the image it opens on (``thumbnail``).
+COVER_REFUSED = ("coverImageId names no image on this board: use an image's id "
+                 "(GET /api/moodboards/{id} lists them), or null for no cover")
 
 # One lock per board: a write reads the file, changes it and writes it back
 # as one step, whichever thread it runs on.
@@ -299,6 +312,69 @@ def output_image(image: dict[str, Any]) -> dict[str, Any]:
     return {key: image[key] for key in OUTPUT_IMAGE_KEYS if key in image}
 
 
+def cover_image(board: dict[str, Any]) -> dict[str, Any] | None:
+    """The image the board opens on: its chosen cover (``coverImageId``)
+    when that image is on the board, else image #1; None with no images."""
+    images = [img for img in board.get("images") or [] if isinstance(img, dict)]
+    chosen = board.get("coverImageId")
+    if chosen:
+        found = next((img for img in images if str(img.get("id")) == str(chosen)), None)
+        if found is not None:
+            return found
+    return images[0] if images else None
+
+
+def board_thumbnail(board: dict[str, Any]) -> str:
+    """The board's ``thumbnail``: the cover image's url, else #1's, else ""."""
+    image = cover_image(board)
+    return str(image.get("url") or "") if image else ""
+
+
+def set_cover(board: dict[str, Any], value: Any) -> None:
+    """Set ``coverImageId`` in place (an image id on the board, or None or ""
+    for no cover) and the ``thumbnail`` that follows from it. ValueError
+    (COVER_REFUSED) for anything else."""
+    if value is None or value == "":
+        board["coverImageId"] = None
+    elif isinstance(value, str) and any(isinstance(img, dict) and str(img.get("id")) == value
+                                        for img in board.get("images") or []):
+        board["coverImageId"] = value
+    else:
+        raise ValueError(COVER_REFUSED)
+    board["thumbnail"] = board_thumbnail(board)
+
+
+def follow_cover(board: dict[str, Any]) -> None:
+    """After the board's images changed: a cover whose image left the board
+    goes (the board opens on #1 again), and ``thumbnail`` follows."""
+    chosen = board.get("coverImageId")
+    if chosen and not any(isinstance(img, dict) and str(img.get("id")) == str(chosen)
+                          for img in board.get("images") or []):
+        board["coverImageId"] = None
+    board["thumbnail"] = board_thumbnail(board)
+
+
+def _with_cover(board: dict[str, Any]) -> dict[str, Any]:
+    """A board read from disk with ``coverImageId`` (None when it has none, or
+    when it names an image no longer on the board) and, when it has a cover,
+    that image's ``thumbnail``. A board without a cover keeps its saved
+    thumbnail, exactly as before covers."""
+    chosen = board.get("coverImageId")
+    images = board.get("images") if isinstance(board.get("images"), list) else []
+    found = next((img for img in images if isinstance(img, dict) and chosen and str(img.get("id")) == str(chosen)),
+                 None)
+    if found is not None:
+        url = str(found.get("url") or "")
+        return board if board.get("thumbnail") == url else {**board, "thumbnail": url}
+    if chosen is None and "coverImageId" in board:
+        return board
+    fixed = {**board, "coverImageId": None}
+    if chosen:  # an image an older Nebula took off: the board opens on #1
+        first = next((img for img in images if isinstance(img, dict)), None)
+        fixed["thumbnail"] = str(first.get("url") or "") if first else ""
+    return fixed
+
+
 def _with_layout_fields(board: dict[str, Any]) -> dict[str, Any]:
     """A board read from disk with its layout fields: ``frames``,
     ``suggestions`` and ``readings`` read as empty when absent. Saved ones are
@@ -337,16 +413,23 @@ def _brief():
 
 def _migrated(board: dict[str, Any], *, layout_board: bool = False) -> dict[str, Any]:
     """A board read from disk, with its brief fields (migrated in memory if
-    the startup migration hasn't written them yet) and its layout fields.
+    the startup migration hasn't written them yet), its layout fields and its
+    saved summary counting only the images that steer.
     ``layout_board``: also lay it out in memory (an old board gets the grid;
     services/moodboard_layout.ensure_layout). Nothing is written here."""
-    board = _with_layout_fields(_with_image_defaults(board))
+    board = _with_cover(_with_layout_fields(_with_image_defaults(board)))
     try:
         result = _brief().migrate_board(board)
     except Exception:  # an odd old board still opens, without its migrated fields
         logging.getLogger(__name__).exception("Moodboard %s: brief fields not migrated", board.get("id"))
         result = None
     board = board if result is None else result[0]
+    try:
+        # A summary saved before weight 0 left the count reads with today's.
+        from services.moodboard_analysis import with_steering_count
+        board = with_steering_count(board)
+    except Exception:  # an odd old analysis still opens, as it was saved
+        logging.getLogger(__name__).exception("Moodboard %s: summary not recounted", board.get("id"))
     if layout_board:
         try:
             board = layout.ensure_layout(board)
@@ -479,6 +562,8 @@ def apply_fields(moodboard: dict[str, Any], fields: dict[str, Any], *, by: str) 
         _guard_send_notes(moodboard.get("sendNotes") is True, fields["sendNotes"], by)
     choices_sent = fields.get("colorChoices") is not None
     choices_value = fields.pop("colorChoices", None)
+    cover_sent = "coverImageId" in fields
+    cover_value = fields.pop("coverImageId", None)
     for key, value in fields.items():
         if key in immutable:
             if value is not None and value != moodboard.get(key):
@@ -489,7 +574,7 @@ def apply_fields(moodboard: dict[str, Any], fields: dict[str, Any], *, by: str) 
             continue
         if key == "images":
             moodboard[key] = _normalize_images(value, stored=moodboard.get("images"), board=moodboard, by=by)
-            moodboard["thumbnail"] = moodboard[key][0]["url"] if moodboard[key] else ""
+            follow_cover(moodboard)
         elif key == "mode":
             if value not in _VALID_MODES:
                 raise ValueError(f"invalid moodboard mode: {value!r}")
@@ -514,6 +599,9 @@ def apply_fields(moodboard: dict[str, Any], fields: dict[str, Any], *, by: str) 
             continue  # computed / owned by the store
         elif value is not None:
             moodboard[key] = value
+    # After the images, so a cover is checked against the board's new list.
+    if cover_sent:
+        set_cover(moodboard, cover_value)
     # After the pins, so a Keep anyway colour is checked against them.
     _set_color_choices(moodboard, choices_value, sent=choices_sent)
     # Last, so new override text is stamped with the board as updated.
@@ -563,13 +651,15 @@ class MoodboardStore:
         clashMode: str | None = None,
         colorChoices: dict[str, Any] | None = None,
         sendNotes: bool | None = None,
+        coverImageId: str | None = None,
         by: str = "agent",
         **extra: Any,
     ) -> dict[str, Any]:
         """A new board. Its images are laid out from the start (the cards
         they ask for, else placed by Nebula), so it is saved with
         ``layoutVersion``. ``by`` ("person" or "agent") stamps the cards and
-        any hand-written brief."""
+        any hand-written brief. ``coverImageId`` names one of ``images`` by
+        id (the board opens on it); left out, it opens on #1."""
         brief = _brief()
         _guard_send_notes(False, sendNotes, by)
         name = str(name or "").strip()
@@ -610,11 +700,13 @@ class MoodboardStore:
             "frames": [],
             "suggestions": [],
             "readings": {},
+            "coverImageId": None,
             "thumbnail": normalized_images[0]["url"] if normalized_images else "",
             "projectId": projectId,
             "createdAt": now,
             "updatedAt": now,
         }
+        set_cover(moodboard, coverImageId)
         _set_color_choices(moodboard, colorChoices, sent=True)
         _set_override(moodboard, briefOverride, previous=None, by=by)
         brief.refresh_colour_check(moodboard)

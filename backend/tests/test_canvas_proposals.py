@@ -303,7 +303,7 @@ def test_a_proposal_names_the_run_nodes_that_cannot_run_here(api, monkeypatch):
     assert response["warning"] == (
         "If the person accepts, the run fails: 1 node can't run here as set up. "
         f"+img (GPT Image 2) {need}. Tell the person what to set up, or propose a node that runs here "
-        "(find_nodes lists them).")
+        "(GET /api/agent/nodes lists them).")
     # The person's canvas gets the same cost, so the bar can say it too.
     opened = [m for m in api.browser if m["type"] == "proposalOpened"][-1]
     assert opened["proposal"]["cost"]["notReady"] == cost["notReady"]
@@ -1024,6 +1024,61 @@ def test_cli_propose_prints_the_readiness_warning():
     out = io.StringIO()
     proposals_cmd.run_propose(Warned([]), _propose_args(wait=False, json=True), out=out)
     assert json.loads(out.getvalue())["warning"].startswith("If the person accepts")
+
+
+def test_each_surface_names_its_own_way_to_find_a_node_that_runs_here():
+    """The HTTP answer names the HTTP route; MCP and the CLI say it their way."""
+    cost = {"notReady": [{"ref": "+img", "nodeId": None, "name": "GPT Image 2",
+                          "missing": "needs OPENAI_API_KEY in Settings > Providers"}]}
+    from services.canvas_proposals import READY_NODES_CLI, READY_NODES_HTTP, READY_NODES_MCP, readiness_warning
+
+    assert readiness_warning(cost).endswith("(GET /api/agent/nodes lists them).")
+    assert readiness_warning(cost, lister=READY_NODES_HTTP) == readiness_warning(cost)
+    assert readiness_warning(cost, lister=READY_NODES_MCP).endswith("(find_nodes lists them).")
+    assert readiness_warning(cost, lister=READY_NODES_CLI).endswith("(`nebula context` lists them).")
+    assert readiness_warning({"notReady": []}, lister=READY_NODES_CLI) is None
+
+
+def test_cli_propose_names_nebula_context_not_find_nodes():
+    need = "needs OPENAI_API_KEY in Settings > Providers"
+
+    class NotReady(FakeClient):
+        def propose(self, body, agent_name=None):
+            response = super().propose(body, agent_name)
+            response["proposal"]["cost"] = {"notReady": [{"ref": "+img", "nodeId": None, "name": "GPT Image 2",
+                                                          "missing": need}]}
+            # What the backend says over HTTP; the CLI words it for its own reader.
+            return {**response, "warning": "If the person accepts, the run fails: ... (GET /api/agent/nodes lists them)."}
+
+    for as_json in (False, True):
+        out = io.StringIO()
+        assert proposals_cmd.run_propose(NotReady([]), _propose_args(wait=False, json=as_json), out=out) == 0
+        text = out.getvalue()
+        warning = json.loads(text)["warning"] if as_json else text
+        assert "(`nebula context` lists them)." in warning
+        assert "find_nodes" not in warning and "/api/agent/nodes" not in warning
+        assert f"+img (GPT Image 2) {need}" in warning
+
+
+def test_cli_propose_json_wait_keeps_the_readiness_warning():
+    """`nebula propose --json --wait` printed only the outcome, so an agent
+    reading JSON never learned why its accepted run failed."""
+    need = "needs OPENAI_API_KEY in Settings > Providers"
+
+    class NotReady(FakeClient):
+        def propose(self, body, agent_name=None):
+            response = super().propose(body, agent_name)
+            response["proposal"]["cost"] = {"notReady": [{"ref": "+img", "nodeId": None, "name": "GPT Image 2",
+                                                          "missing": need}]}
+            return {**response, "warning": "If the person accepts, the run fails: ... (GET /api/agent/nodes lists them)."}
+
+    out = io.StringIO()
+    client = NotReady([{"id": "p_1", "status": "accepted", "idMap": {"+t": "n7"}, "runNodeIds": ["n7"]}])
+    assert proposals_cmd.run_propose(client, _propose_args(wait=True, json=True), out=out) == 0
+    answer = json.loads(out.getvalue())
+    assert answer["proposal"]["status"] == "accepted"
+    assert answer["warning"].endswith("(`nebula context` lists them).")
+    assert f"+img (GPT Image 2) {need}" in answer["warning"]
 
 
 def test_cli_proposal_json_and_formatting():
