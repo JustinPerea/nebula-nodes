@@ -83,6 +83,9 @@ jobs:
       - name: Check node contracts
         run: node scripts/check-node-contracts.mjs
 
+      - name: Check the canvas's agent surface
+        run: node frontend/scripts/check-agent-surface.mjs
+
       - name: Inventory provider contracts
         run: node scripts/contract-inventory.mjs
 

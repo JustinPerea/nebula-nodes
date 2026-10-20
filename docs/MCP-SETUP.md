@@ -86,6 +86,16 @@ The server exposes these tools for building and running (see
 - `list_trash` / `restore_from_trash`: what's in Recently deleted (moodboards,
   characters, projects), and bring one back with the same id. See
   [Recently deleted](#recently-deleted).
+- `commons_search`, `commons_get`, `commons_add`, `commons_comment`,
+  `commons_borrow`: the commons (analyzed design references). All but
+  `commons_add` take a `brand` to scope to. `commons_search` takes `query`,
+  `filters` (e.g. `{"role": "avoid"}`) and `limit`; `commons_get` returns one reference
+  (only the `fields` asked for, if any) with the image itself;
+  `commons_add` puts a `source` into a `collection`'s inbox with a `why` and
+  `made_by`; `commons_comment` comments on one, or on a `region_id`;
+  `commons_borrow` records the `attribute` and `value` an agent took, where
+  (`used_in`) and why. The rules agents follow come with the server's
+  instructions (backend/commons/skill.md).
 
 And these canvas tools:
 

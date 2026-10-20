@@ -1,0 +1,1546 @@
+{
+ "backendParams": [
+  "_kreaAuth",
+  "_kreaConnectionRevision",
+  "_maskData",
+  "_meshy_task",
+  "_output_image",
+  "_paperSource",
+  "_route",
+  "_sourceDuration",
+  "_sourceFps",
+  "_sourceIsVfr",
+  "_version_id"
+ ],
+ "exemptReasons": [
+  "browser-state",
+  "client-side",
+  "desktop-only",
+  "health",
+  "in-app-chat",
+  "maintenance",
+  "mcp-internal",
+  "presentation",
+  "server-computed",
+  "static",
+  "transport"
+ ],
+ "frontendActions": {
+  "graphStore.acknowledgeProviderStartAmbiguity": {
+   "issue": "Q2",
+   "kind": "Gap"
+  },
+  "graphStore.acknowledgeUncertainWorldLabsRun": {
+   "issue": "Q2",
+   "kind": "Gap"
+  },
+  "graphStore.activeRuns": {
+   "kind": "ReadOnly",
+   "name": "look_at_canvas"
+  },
+  "graphStore.addCharacterNode": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.addDynamicNode": {
+   "issue": "U10",
+   "kind": "Gap"
+  },
+  "graphStore.addLocalCinemaMotionNode": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.addMoodboardNode": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.addNode": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.addNodeAndConnect": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.addOrUpdateKeyframe": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.addShot": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.addTrackItemWithCanvasMirror": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.adoptAcceptedProposal": {
+   "kind": "Propose",
+   "name": "propose_change"
+  },
+  "graphStore.applyPaperSource": {
+   "issue": "U11",
+   "kind": "Gap"
+  },
+  "graphStore.authorGenerationCluster": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.autoLayout": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.autoLayoutSelected": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.backendFreshStartPending": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.beginUndoStep": {
+   "issue": "U1",
+   "kind": "Gap"
+  },
+  "graphStore.canSwitchProject": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.cancelCreateGeneration": {
+   "kind": "Tool",
+   "name": "cancel_run"
+  },
+  "graphStore.cancelExecution": {
+   "kind": "Tool",
+   "name": "cancel_run"
+  },
+  "graphStore.cancelRun": {
+   "kind": "Tool",
+   "name": "cancel_run"
+  },
+  "graphStore.cancelUndoStep": {
+   "issue": "U1",
+   "kind": "Gap"
+  },
+  "graphStore.clearGraph": {
+   "issue": "Q6",
+   "kind": "Gap"
+  },
+  "graphStore.clearRunHistory": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.clipboard": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.configureOpenRouterModel": {
+   "issue": "U10",
+   "kind": "Gap"
+  },
+  "graphStore.copySelected": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.createCancelledLaunchIds": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.createLaunchingIds": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.cutEditNodeAtSource": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.deleteGeneration": {
+   "kind": "Tool",
+   "name": "remove_from_canvas"
+  },
+  "graphStore.deleteKeyframe": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.deleteNode": {
+   "kind": "Tool",
+   "name": "remove_from_canvas"
+  },
+  "graphStore.deleteProviderRecovery": {
+   "issue": "Q2",
+   "kind": "Gap"
+  },
+  "graphStore.deleteSelected": {
+   "kind": "Tool",
+   "name": "remove_from_canvas"
+  },
+  "graphStore.deleteTrackItem": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.dismissProviderRecoveryWarning": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.dismissUndoNotice": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.duplicateNode": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.duplicateSelected": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.duplicateTrackItemAtPlayhead": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.edges": {
+   "kind": "ReadOnly",
+   "name": "look_at_canvas"
+  },
+  "graphStore.executeCluster": {
+   "issue": "U8",
+   "kind": "Gap"
+  },
+  "graphStore.executeClusterConcurrent": {
+   "issue": "U8",
+   "kind": "Gap"
+  },
+  "graphStore.executeGraph": {
+   "kind": "Tool",
+   "name": "run_nodes"
+  },
+  "graphStore.executeNode": {
+   "kind": "Tool",
+   "name": "run_nodes"
+  },
+  "graphStore.executeShot": {
+   "issue": "U8",
+   "kind": "Gap"
+  },
+  "graphStore.fetchReplicateSchemaAndConfigure": {
+   "issue": "U10",
+   "kind": "Gap"
+  },
+  "graphStore.getOrCreateEditNodeDownstream": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.handleExecutionEvent": {
+   "kind": "Exempt",
+   "reason": "transport"
+  },
+  "graphStore.hydrateExecutionStatuses": {
+   "kind": "Exempt",
+   "reason": "transport"
+  },
+  "graphStore.hydrateProviderRecoveries": {
+   "kind": "Exempt",
+   "reason": "transport"
+  },
+  "graphStore.hydrateProviderStartAmbiguities": {
+   "kind": "Exempt",
+   "reason": "transport"
+  },
+  "graphStore.isCancelling": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.isExecuting": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.isImportingGraph": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.isShotAdmissionBlocked": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.loadGraph": {
+   "issue": "Q7",
+   "kind": "Gap"
+  },
+  "graphStore.loadProjectGraph": {
+   "kind": "Tool",
+   "name": "open_project"
+  },
+  "graphStore.loadSampleGraph": {
+   "issue": "Q7",
+   "kind": "Gap"
+  },
+  "graphStore.nodes": {
+   "kind": "ReadOnly",
+   "name": "look_at_canvas"
+  },
+  "graphStore.onConnect": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.onEdgesChange": {
+   "kind": "Tool",
+   "name": "remove_from_canvas"
+  },
+  "graphStore.onNodesChange": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.pasteClipboard": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.promoteShotVariation": {
+   "issue": "U8",
+   "kind": "Gap"
+  },
+  "graphStore.providerRecoveries": {
+   "issue": "U6",
+   "kind": "Gap"
+  },
+  "graphStore.providerRecoveryWarning": {
+   "issue": "U6",
+   "kind": "Gap"
+  },
+  "graphStore.providerStartAmbiguities": {
+   "issue": "U6",
+   "kind": "Gap"
+  },
+  "graphStore.reconcilePersistedWorldLabsRun": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.redo": {
+   "issue": "U1",
+   "kind": "Gap"
+  },
+  "graphStore.redoStack": {
+   "issue": "U1",
+   "kind": "Gap"
+  },
+  "graphStore.releaseCreateGeneration": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.releaseGraphImport": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.removeEditNodeClip": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.removeEmptyEditNode": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.removeShot": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.renameNode": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.reorderTrackItem": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.rerunHistoryRecord": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.rerunHistoryWithLatestPaperSource": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.reserveCreateGeneration": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.reserveGraphImport": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.resetExecution": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.retryFailedRun": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.runHistory": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.selectAll": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.uncertainWorldLabsRunId": {
+   "issue": "U6",
+   "kind": "Gap"
+  },
+  "graphStore.undo": {
+   "issue": "U1",
+   "kind": "Gap"
+  },
+  "graphStore.undoNotice": {
+   "kind": "Exempt",
+   "reason": "browser-state"
+  },
+  "graphStore.undoStack": {
+   "issue": "U1",
+   "kind": "Gap"
+  },
+  "graphStore.updateEditNodeClip": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "graphStore.updateKeyframe": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.updateNodeData": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.updateRemotionManifest": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.updateScene": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.updateTrackItemProps": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.updateTrackItemSpatial": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  },
+  "graphStore.updateTrackItemTime": {
+   "kind": "Tool",
+   "name": "edit_canvas"
+  }
+ },
+ "frontendNotParams": {
+  "_blank": "window.open target",
+  "_createOrigin": "node.data tag for the Create view, never a param"
+ },
+ "gaps": [
+  "DELETE /api/characters/{char_id}",
+  "DELETE /api/graph",
+  "DELETE /api/presets/{preset_id}",
+  "DELETE /api/projects/{project_id}",
+  "DELETE /api/provider-recoveries/{run_id}/{node_id}",
+  "DELETE /api/provider-start-ambiguities/{kind}/{node_id}/{run_id}",
+  "DELETE /api/render-jobs/{job_id}",
+  "GET /api/canvas/events",
+  "GET /api/characters",
+  "GET /api/characters/{char_id}",
+  "GET /api/commons/borrowings",
+  "GET /api/commons/collections",
+  "GET /api/commons/concentration",
+  "GET /api/commons/status",
+  "GET /api/executions/{run_id}",
+  "GET /api/graph/export",
+  "GET /api/graph/node/{node_id}/path",
+  "GET /api/graph/runs/{run_id}",
+  "GET /api/health/providers",
+  "GET /api/krea/connection",
+  "GET /api/krea/plans",
+  "GET /api/krea/tools",
+  "GET /api/nous/models",
+  "GET /api/openrouter/models",
+  "GET /api/outputs/{rel:path}/meta",
+  "GET /api/paper/files",
+  "GET /api/paper/files/{file_id}",
+  "GET /api/paper/object",
+  "GET /api/paper/selection",
+  "GET /api/paper/snapshots/{snapshot_id}",
+  "GET /api/paper/sources/{source_id}",
+  "GET /api/presets",
+  "GET /api/presets/{preset_id}",
+  "GET /api/projects/{project_id}",
+  "GET /api/projects/{project_id}/covers",
+  "GET /api/quiver/models",
+  "GET /api/render-jobs/{job_id}",
+  "GET /api/replicate/schema/{owner}/{name}",
+  "GET /api/settings",
+  "GET /api/trash",
+  "POST /api/characters",
+  "POST /api/cinema/generate-shot",
+  "POST /api/cinema/promote-shot-variation",
+  "POST /api/cinema/send-to-motion",
+  "POST /api/commons/borrowings/{borrowing_id}/fidelity",
+  "POST /api/commons/comments",
+  "POST /api/execute",
+  "POST /api/execute-node",
+  "POST /api/export",
+  "POST /api/graph/apply",
+  "POST /api/graph/import",
+  "POST /api/graph/restore",
+  "POST /api/graph/run",
+  "POST /api/krea/tools/call",
+  "POST /api/moodboards/{moodboard_id}/edits",
+  "POST /api/outputs/restore",
+  "POST /api/paper/sources",
+  "POST /api/paper/sources/{source_id}/reconnect",
+  "POST /api/paper/sources/{source_id}/refresh",
+  "POST /api/presets",
+  "POST /api/quick",
+  "POST /api/remotion-render",
+  "POST /api/transcode-image",
+  "POST /api/uploads",
+  "POST /api/video-edit/export",
+  "POST /api/video-edit/preview-render",
+  "PUT /api/characters/{char_id}",
+  "PUT /api/graph/layout",
+  "PUT /api/presets/{preset_id}",
+  "PUT /api/projects/{project_id}",
+  "_maskData",
+  "_output_image",
+  "_paperSource",
+  "_previewUrl",
+  "_schema_fetched",
+  "_sourceDuration",
+  "_sourceFps",
+  "_sourceIsVfr",
+  "_variant",
+  "_version_id",
+  "graphStore.acknowledgeProviderStartAmbiguity",
+  "graphStore.acknowledgeUncertainWorldLabsRun",
+  "graphStore.addDynamicNode",
+  "graphStore.applyPaperSource",
+  "graphStore.autoLayout",
+  "graphStore.autoLayoutSelected",
+  "graphStore.beginUndoStep",
+  "graphStore.cancelUndoStep",
+  "graphStore.clearGraph",
+  "graphStore.clearRunHistory",
+  "graphStore.configureOpenRouterModel",
+  "graphStore.cutEditNodeAtSource",
+  "graphStore.deleteProviderRecovery",
+  "graphStore.duplicateNode",
+  "graphStore.duplicateSelected",
+  "graphStore.executeCluster",
+  "graphStore.executeClusterConcurrent",
+  "graphStore.executeShot",
+  "graphStore.fetchReplicateSchemaAndConfigure",
+  "graphStore.getOrCreateEditNodeDownstream",
+  "graphStore.loadGraph",
+  "graphStore.loadSampleGraph",
+  "graphStore.pasteClipboard",
+  "graphStore.promoteShotVariation",
+  "graphStore.providerRecoveries",
+  "graphStore.providerRecoveryWarning",
+  "graphStore.providerStartAmbiguities",
+  "graphStore.redo",
+  "graphStore.redoStack",
+  "graphStore.removeEditNodeClip",
+  "graphStore.removeEmptyEditNode",
+  "graphStore.rerunHistoryRecord",
+  "graphStore.rerunHistoryWithLatestPaperSource",
+  "graphStore.retryFailedRun",
+  "graphStore.runHistory",
+  "graphStore.uncertainWorldLabsRunId",
+  "graphStore.undo",
+  "graphStore.undoStack",
+  "graphStore.updateEditNodeClip",
+  "nebula apply --file",
+  "nebula apply --remove",
+  "nebula apply --unwire",
+  "nebula clear",
+  "nebula commons status",
+  "nebula keys",
+  "nebula load",
+  "nebula path",
+  "nebula quick",
+  "nebula watch --journal",
+  "ws executionStatus",
+  "ws progress",
+  "ws projectsChanged",
+  "ws provider_recovery",
+  "ws provider_start_ambiguous",
+  "ws storedAssetChanged",
+  "ws stream_delta",
+  "ws stream_partial_image",
+  "ws stream_partial_svg"
+ ],
+ "generatedBy": "cd backend && .venv/bin/python agent_surface_check.py --write",
+ "internalParams": {
+  "_characterId": {
+   "kind": "Exempt",
+   "note": "legacy id key; retired_nodes.migrate_params moves it",
+   "reason": "maintenance"
+  },
+  "_kreaAuth": {
+   "kind": "Propose",
+   "name": "propose_change"
+  },
+  "_kreaConnectionRevision": {
+   "kind": "Exempt",
+   "note": "a run's cache key, not a node param",
+   "reason": "server-computed"
+  },
+  "_maskData": {
+   "issue": "U12",
+   "kind": "Gap"
+  },
+  "_meshy_task": {
+   "kind": "Exempt",
+   "note": "the Meshy route adapter sets it for its own handler",
+   "reason": "server-computed"
+  },
+  "_moodboardId": {
+   "kind": "Exempt",
+   "note": "legacy id key; retired_nodes.migrate_params moves it",
+   "reason": "maintenance"
+  },
+  "_output_image": {
+   "issue": "U10",
+   "kind": "Gap"
+  },
+  "_paperSource": {
+   "issue": "U11",
+   "kind": "Gap"
+  },
+  "_previewUrl": {
+   "issue": "U4",
+   "kind": "Gap"
+  },
+  "_provider": {
+   "kind": "Propose",
+   "name": "propose_change"
+  },
+  "_route": {
+   "kind": "Exempt",
+   "note": "a run's cache key, not a node param",
+   "reason": "server-computed"
+  },
+  "_schema_fetched": {
+   "issue": "U10",
+   "kind": "Gap"
+  },
+  "_sourceDuration": {
+   "issue": "U4",
+   "kind": "Gap"
+  },
+  "_sourceFps": {
+   "issue": "U4",
+   "kind": "Gap"
+  },
+  "_sourceIsVfr": {
+   "issue": "U4",
+   "kind": "Gap"
+  },
+  "_variant": {
+   "issue": "U15",
+   "kind": "Gap"
+  },
+  "_version_id": {
+   "issue": "U10",
+   "kind": "Gap"
+  }
+ },
+ "routes": {
+  "DELETE /api/agent/spend/apps/{app_id}": {
+   "kind": "PersonOnly",
+   "reason": "app tokens and spending limits are the person's",
+   "view": "get_spend_limits"
+  },
+  "DELETE /api/canvas/approvals/{approval_id}": {
+   "kind": "PersonOnly",
+   "reason": "releases a paid run the person approved"
+  },
+  "DELETE /api/canvas/pins/{pin_id}": {
+   "kind": "PersonOnly",
+   "reason": "pins are the person's notes to agents",
+   "view": "look_at_canvas"
+  },
+  "DELETE /api/canvas/proposals/{proposal_id}": {
+   "kind": "Tool",
+   "name": "withdraw_proposal"
+  },
+  "DELETE /api/characters/{char_id}": {
+   "issue": "U2",
+   "kind": "Gap"
+  },
+  "DELETE /api/commons/assets/{asset_id}": {
+   "kind": "PersonOnly",
+   "reason": "deleting a reference for good"
+  },
+  "DELETE /api/execution-cancellations/{run_id}": {
+   "kind": "Exempt",
+   "note": "compacts Stop tombstones",
+   "reason": "maintenance"
+  },
+  "DELETE /api/executions/{run_id}": {
+   "kind": "Tool",
+   "name": "cancel_run"
+  },
+  "DELETE /api/graph": {
+   "issue": "Q6",
+   "kind": "Gap"
+  },
+  "DELETE /api/graph/edge": {
+   "kind": "Tool",
+   "name": "remove_from_canvas",
+   "via": "POST /api/graph/apply"
+  },
+  "DELETE /api/graph/node/{node_id}": {
+   "kind": "Tool",
+   "name": "remove_from_canvas",
+   "via": "POST /api/graph/apply"
+  },
+  "DELETE /api/krea/connection": {
+   "kind": "PersonOnly",
+   "reason": "the Krea account is the person's to connect or drop"
+  },
+  "DELETE /api/moodboards/{moodboard_id}": {
+   "kind": "Tool",
+   "name": "moodboard_delete"
+  },
+  "DELETE /api/personal-agents/{agent_id}": {
+   "kind": "PersonOnly",
+   "reason": "which agents run in the app is the person's"
+  },
+  "DELETE /api/presets/{preset_id}": {
+   "issue": "Q1",
+   "kind": "Gap"
+  },
+  "DELETE /api/projects/trash/{project_id}": {
+   "kind": "PersonOnly",
+   "reason": "deleting a project for good",
+   "view": "list_trash"
+  },
+  "DELETE /api/projects/{project_id}": {
+   "issue": "U3",
+   "kind": "Gap"
+  },
+  "DELETE /api/provider-recoveries/{run_id}/{node_id}": {
+   "issue": "Q2",
+   "kind": "Gap"
+  },
+  "DELETE /api/provider-start-ambiguities/{kind}/{node_id}/{run_id}": {
+   "issue": "Q2",
+   "kind": "Gap"
+  },
+  "DELETE /api/render-jobs/{job_id}": {
+   "issue": "U9",
+   "kind": "Gap"
+  },
+  "DELETE /api/settings/api-keys/{provider}": {
+   "kind": "PersonOnly",
+   "reason": "provider keys are the person's"
+  },
+  "DELETE /api/trash/{kind}/{item_id}": {
+   "kind": "PersonOnly",
+   "reason": "deleting for good",
+   "view": "list_trash"
+  },
+  "GET /api/agent/address-proof": {
+   "kind": "Exempt",
+   "note": "a client checks the backend before sending its token",
+   "reason": "mcp-internal"
+  },
+  "GET /api/agent/context": {
+   "kind": "Exempt",
+   "note": "the agent's workspace scope",
+   "reason": "mcp-internal"
+  },
+  "GET /api/agent/nodes": {
+   "kind": "ReadOnly",
+   "name": "find_nodes"
+  },
+  "GET /api/agent/nodes/{definition_id}": {
+   "kind": "ReadOnly",
+   "name": "describe_node"
+  },
+  "GET /api/agent/spend": {
+   "kind": "ReadOnly",
+   "name": "get_spend_limits"
+  },
+  "GET /api/agent/spend/apps": {
+   "kind": "PersonOnly",
+   "reason": "other apps' tokens and spend are the person's",
+   "view": "get_spend_limits"
+  },
+  "GET /api/agents/claude/status": {
+   "kind": "Exempt",
+   "reason": "in-app-chat"
+  },
+  "GET /api/agents/codex/login/chatgpt": {
+   "kind": "Exempt",
+   "reason": "in-app-chat"
+  },
+  "GET /api/agents/codex/status": {
+   "kind": "Exempt",
+   "reason": "in-app-chat"
+  },
+  "GET /api/agents/{agent}/models": {
+   "kind": "Exempt",
+   "note": "the chat picker's model list",
+   "reason": "in-app-chat"
+  },
+  "GET /api/canvas/events": {
+   "kind": "ReadOnly",
+   "name": "wait_for_canvas_change",
+   "partial": "U6"
+  },
+  "GET /api/canvas/pins": {
+   "kind": "ReadOnly",
+   "name": "look_at_canvas",
+   "via": "GET /api/canvas/snapshot"
+  },
+  "GET /api/canvas/proposals": {
+   "kind": "ReadOnly",
+   "name": "look_at_canvas",
+   "via": "GET /api/canvas/snapshot"
+  },
+  "GET /api/canvas/proposals/{proposal_id}": {
+   "kind": "ReadOnly",
+   "name": "get_proposal"
+  },
+  "GET /api/canvas/selection": {
+   "kind": "ReadOnly",
+   "name": "get_selected_nodes"
+  },
+  "GET /api/canvas/snapshot": {
+   "kind": "ReadOnly",
+   "name": "look_at_canvas"
+  },
+  "GET /api/capabilities/commons": {
+   "kind": "Tool",
+   "name": "commons_add"
+  },
+  "GET /api/capabilities/worldlabs": {
+   "kind": "Exempt",
+   "note": "World Labs support, no credentials",
+   "reason": "health"
+  },
+  "GET /api/characters": {
+   "issue": "U2",
+   "kind": "Gap"
+  },
+  "GET /api/characters/{char_id}": {
+   "issue": "U2",
+   "kind": "Gap"
+  },
+  "GET /api/commons/assets/{asset_id}": {
+   "kind": "ReadOnly",
+   "name": "commons_get"
+  },
+  "GET /api/commons/blobs/{blob_key}": {
+   "kind": "ReadOnly",
+   "name": "commons_get"
+  },
+  "GET /api/commons/borrowings": {
+   "issue": "U13",
+   "kind": "Gap"
+  },
+  "GET /api/commons/collections": {
+   "issue": "U13",
+   "kind": "Gap"
+  },
+  "GET /api/commons/concentration": {
+   "issue": "U13",
+   "kind": "Gap"
+  },
+  "GET /api/commons/evaluation": {
+   "kind": "PersonOnly",
+   "reason": "evaluation stays human-only"
+  },
+  "GET /api/commons/evaluation/items/{position}/image": {
+   "kind": "PersonOnly",
+   "reason": "evaluation stays human-only"
+  },
+  "GET /api/commons/export": {
+   "kind": "PersonOnly",
+   "reason": "the whole library leaves the app"
+  },
+  "GET /api/commons/folders": {
+   "kind": "PersonOnly",
+   "reason": "linked folders are the person's"
+  },
+  "GET /api/commons/review": {
+   "kind": "PersonOnly",
+   "reason": "review stays human-only"
+  },
+  "GET /api/commons/settings": {
+   "kind": "PersonOnly",
+   "reason": "commons settings are the person's"
+  },
+  "GET /api/commons/status": {
+   "issue": "U13",
+   "kind": "Gap"
+  },
+  "GET /api/commons/vocabulary/candidates": {
+   "kind": "PersonOnly",
+   "reason": "vocabulary curation is the person's (Q10)"
+  },
+  "GET /api/convert-to-glb": {
+   "kind": "Exempt",
+   "note": "converts a 3D output for the viewer",
+   "reason": "static"
+  },
+  "GET /api/execution-cancellations": {
+   "kind": "Exempt",
+   "note": "Stop tombstones",
+   "reason": "maintenance"
+  },
+  "GET /api/executions/{run_id}": {
+   "issue": "U6",
+   "kind": "Gap"
+  },
+  "GET /api/fal/health": {
+   "kind": "Exempt",
+   "reason": "health"
+  },
+  "GET /api/graph": {
+   "kind": "ReadOnly",
+   "name": "view_output"
+  },
+  "GET /api/graph/export": {
+   "issue": "U6",
+   "kind": "Gap"
+  },
+  "GET /api/graph/node/{node_id}/path": {
+   "issue": "U4",
+   "kind": "Gap"
+  },
+  "GET /api/graph/node/{node_id}/preview": {
+   "kind": "ReadOnly",
+   "name": "view_output"
+  },
+  "GET /api/graph/runs/{run_id}": {
+   "kind": "ReadOnly",
+   "name": "get_run",
+   "partial": "U6"
+  },
+  "GET /api/health": {
+   "kind": "Exempt",
+   "reason": "health"
+  },
+  "GET /api/health/providers": {
+   "issue": "U6",
+   "kind": "Gap"
+  },
+  "GET /api/krea/connection": {
+   "issue": "U6",
+   "kind": "Gap"
+  },
+  "GET /api/krea/plans": {
+   "issue": "U6",
+   "kind": "Gap"
+  },
+  "GET /api/krea/tools": {
+   "issue": "U14",
+   "kind": "Gap"
+  },
+  "GET /api/moodboards": {
+   "kind": "ReadOnly",
+   "name": "moodboard_list"
+  },
+  "GET /api/moodboards/{moodboard_id}": {
+   "kind": "ReadOnly",
+   "name": "moodboard_get"
+  },
+  "GET /api/nodes": {
+   "kind": "ReadOnly",
+   "name": "find_nodes",
+   "via": "GET /api/agent/nodes"
+  },
+  "GET /api/nodes/{node_id}": {
+   "kind": "ReadOnly",
+   "name": "describe_node",
+   "via": "GET /api/agent/nodes/{definition_id}"
+  },
+  "GET /api/nous/models": {
+   "issue": "U10",
+   "kind": "Gap"
+  },
+  "GET /api/openrouter/models": {
+   "issue": "U10",
+   "kind": "Gap"
+  },
+  "GET /api/outputs/{rel:path}": {
+   "kind": "Exempt",
+   "note": "agents see outputs through view_output",
+   "reason": "static"
+  },
+  "GET /api/outputs/{rel:path}/meta": {
+   "issue": "U4",
+   "kind": "Gap"
+  },
+  "GET /api/paper/files": {
+   "issue": "U11",
+   "kind": "Gap"
+  },
+  "GET /api/paper/files/{file_id}": {
+   "issue": "U11",
+   "kind": "Gap"
+  },
+  "GET /api/paper/object": {
+   "issue": "U11",
+   "kind": "Gap"
+  },
+  "GET /api/paper/selection": {
+   "issue": "U11",
+   "kind": "Gap"
+  },
+  "GET /api/paper/snapshots/{snapshot_id}": {
+   "issue": "U11",
+   "kind": "Gap"
+  },
+  "GET /api/paper/sources/{source_id}": {
+   "issue": "U11",
+   "kind": "Gap"
+  },
+  "GET /api/personal-agents": {
+   "kind": "PersonOnly",
+   "reason": "which agents run in the app is the person's"
+  },
+  "GET /api/presets": {
+   "issue": "U5",
+   "kind": "Gap"
+  },
+  "GET /api/presets/thumbnails/{slug}": {
+   "kind": "Exempt",
+   "reason": "static"
+  },
+  "GET /api/presets/{preset_id}": {
+   "issue": "U5",
+   "kind": "Gap"
+  },
+  "GET /api/pricing": {
+   "kind": "ReadOnly",
+   "name": "describe_node",
+   "via": "GET /api/agent/nodes/{definition_id}"
+  },
+  "GET /api/project": {
+   "kind": "ReadOnly",
+   "name": "list_projects",
+   "via": "GET /api/projects"
+  },
+  "GET /api/projects": {
+   "kind": "ReadOnly",
+   "name": "list_projects"
+  },
+  "GET /api/projects/{project_id}": {
+   "issue": "U3",
+   "kind": "Gap"
+  },
+  "GET /api/projects/{project_id}/covers": {
+   "issue": "Q8",
+   "kind": "Gap"
+  },
+  "GET /api/quiver/models": {
+   "issue": "U10",
+   "kind": "Gap"
+  },
+  "GET /api/render-jobs/{job_id}": {
+   "issue": "U9",
+   "kind": "Gap"
+  },
+  "GET /api/replicate/schema/{owner}/{name}": {
+   "issue": "U10",
+   "kind": "Gap"
+  },
+  "GET /api/settings": {
+   "issue": "U6+Q3",
+   "kind": "Gap"
+  },
+  "GET /api/trash": {
+   "kind": "ReadOnly",
+   "name": "list_trash",
+   "partial": "U6"
+  },
+  "PATCH /api/commons/collections/{collection_id}": {
+   "kind": "PersonOnly",
+   "reason": "collections are the person's"
+  },
+  "PATCH /api/commons/folders/{link_id}": {
+   "kind": "PersonOnly",
+   "reason": "linked folders are the person's"
+  },
+  "PATCH /api/commons/memberships/{membership_id}": {
+   "kind": "PersonOnly",
+   "reason": "membership curation is the person's (Q10)"
+  },
+  "PATCH /api/commons/regions/{region_id}": {
+   "kind": "PersonOnly",
+   "reason": "region curation is the person's (Q10)"
+  },
+  "PATCH /api/commons/settings": {
+   "kind": "PersonOnly",
+   "reason": "commons settings are the person's"
+  },
+  "POST /api/agent/spend/apps": {
+   "kind": "PersonOnly",
+   "reason": "app tokens and spending limits are the person's",
+   "view": "get_spend_limits"
+  },
+  "POST /api/agents/codex/login/chatgpt": {
+   "kind": "PersonOnly",
+   "reason": "signs Codex in with the person's account"
+  },
+  "POST /api/canvas/cursor": {
+   "kind": "Tool",
+   "name": "point_at"
+  },
+  "POST /api/canvas/pins": {
+   "kind": "PersonOnly",
+   "reason": "pins are the person's notes to agents",
+   "view": "look_at_canvas"
+  },
+  "POST /api/canvas/pins/{pin_id}/resolve": {
+   "kind": "Tool",
+   "name": "resolve_pin"
+  },
+  "POST /api/canvas/proposals": {
+   "kind": "Tool",
+   "name": "propose_change"
+  },
+  "POST /api/canvas/proposals/{proposal_id}/accept": {
+   "kind": "Propose",
+   "name": "propose_change"
+  },
+  "POST /api/canvas/proposals/{proposal_id}/reject": {
+   "kind": "Propose",
+   "name": "propose_change"
+  },
+  "POST /api/canvas/selection": {
+   "kind": "Exempt",
+   "note": "the tab publishes its selection; agents read it",
+   "reason": "browser-state"
+  },
+  "POST /api/canvas/view": {
+   "kind": "Exempt",
+   "note": "the tab reports its viewport",
+   "reason": "browser-state"
+  },
+  "POST /api/characters": {
+   "issue": "U2",
+   "kind": "Gap"
+  },
+  "POST /api/characters/{char_id}/move": {
+   "kind": "Tool",
+   "name": "character_move"
+  },
+  "POST /api/cinema/generate-shot": {
+   "issue": "U8",
+   "kind": "Gap"
+  },
+  "POST /api/cinema/promote-shot-variation": {
+   "issue": "U8",
+   "kind": "Gap"
+  },
+  "POST /api/cinema/send-to-motion": {
+   "issue": "U8",
+   "kind": "Gap"
+  },
+  "POST /api/commons/add": {
+   "kind": "Tool",
+   "name": "commons_add"
+  },
+  "POST /api/commons/add/upload": {
+   "kind": "Tool",
+   "name": "commons_add"
+  },
+  "POST /api/commons/assets/{asset_id}/corrections": {
+   "kind": "PersonOnly",
+   "reason": "corrections are the person's (Q10)"
+  },
+  "POST /api/commons/assets/{asset_id}/reanalyze": {
+   "kind": "PersonOnly",
+   "reason": "reanalysis is the person's"
+  },
+  "POST /api/commons/assets/{asset_id}/regions": {
+   "kind": "PersonOnly",
+   "reason": "region curation is the person's (Q10)"
+  },
+  "POST /api/commons/borrow": {
+   "kind": "Tool",
+   "name": "commons_borrow"
+  },
+  "POST /api/commons/borrowings/{borrowing_id}/fidelity": {
+   "issue": "U13",
+   "kind": "Gap"
+  },
+  "POST /api/commons/collections": {
+   "kind": "PersonOnly",
+   "reason": "collections are the person's"
+  },
+  "POST /api/commons/comments": {
+   "kind": "Tool",
+   "name": "commons_comment",
+   "partial": "U13"
+  },
+  "POST /api/commons/evaluation/close": {
+   "kind": "PersonOnly",
+   "reason": "evaluation stays human-only"
+  },
+  "POST /api/commons/evaluation/items/{position}/accents": {
+   "kind": "PersonOnly",
+   "reason": "evaluation stays human-only"
+  },
+  "POST /api/commons/evaluation/prepare": {
+   "kind": "PersonOnly",
+   "reason": "evaluation stays human-only"
+  },
+  "POST /api/commons/evaluation/seal": {
+   "kind": "PersonOnly",
+   "reason": "evaluation stays human-only"
+  },
+  "POST /api/commons/folders": {
+   "kind": "PersonOnly",
+   "reason": "linked folders are the person's"
+  },
+  "POST /api/commons/folders/{link_id}/rescan": {
+   "kind": "PersonOnly",
+   "reason": "linked folders are the person's"
+  },
+  "POST /api/commons/intake/files": {
+   "kind": "PersonOnly",
+   "reason": "intake is the person's"
+  },
+  "POST /api/commons/intake/moodboards": {
+   "kind": "PersonOnly",
+   "reason": "intake is the person's"
+  },
+  "POST /api/commons/intake/url": {
+   "kind": "PersonOnly",
+   "reason": "intake is the person's"
+  },
+  "POST /api/commons/memberships/{membership_id}/accept": {
+   "kind": "PersonOnly",
+   "reason": "membership curation is the person's (Q10)"
+  },
+  "POST /api/commons/reanalyze-stale": {
+   "kind": "PersonOnly",
+   "reason": "reanalysis is the person's"
+  },
+  "POST /api/commons/review/items/{position}/propose": {
+   "kind": "PersonOnly",
+   "reason": "review stays human-only"
+  },
+  "POST /api/commons/search": {
+   "kind": "ReadOnly",
+   "name": "commons_search"
+  },
+  "POST /api/commons/worker/start": {
+   "kind": "PersonOnly",
+   "reason": "the analysis worker is the person's"
+  },
+  "POST /api/commons/worker/stop": {
+   "kind": "PersonOnly",
+   "reason": "the analysis worker is the person's"
+  },
+  "POST /api/credentials/update": {
+   "kind": "PersonOnly",
+   "reason": "provider keys are the person's"
+  },
+  "POST /api/enhance-prompt": {
+   "kind": "PersonOnly",
+   "reason": "spends the person's keys with no list price; agents rewrite prompts themselves"
+  },
+  "POST /api/execute": {
+   "kind": "Tool",
+   "name": "run_nodes",
+   "partial": "U8",
+   "via": "POST /api/graph/run"
+  },
+  "POST /api/execute-node": {
+   "kind": "Tool",
+   "name": "run_nodes",
+   "partial": "U8",
+   "via": "POST /api/graph/run"
+  },
+  "POST /api/export": {
+   "issue": "U4",
+   "kind": "Gap"
+  },
+  "POST /api/graph/apply": {
+   "also": [
+    "remove_from_canvas"
+   ],
+   "kind": "Tool",
+   "name": "edit_canvas",
+   "partial": "U1"
+  },
+  "POST /api/graph/cluster": {
+   "kind": "Tool",
+   "name": "edit_canvas",
+   "via": "POST /api/graph/apply"
+  },
+  "POST /api/graph/connect": {
+   "kind": "Tool",
+   "name": "edit_canvas",
+   "via": "POST /api/graph/apply"
+  },
+  "POST /api/graph/import": {
+   "issue": "Q7",
+   "kind": "Gap"
+  },
+  "POST /api/graph/node": {
+   "kind": "Tool",
+   "name": "edit_canvas",
+   "via": "POST /api/graph/apply"
+  },
+  "POST /api/graph/node-and-connect": {
+   "kind": "Tool",
+   "name": "edit_canvas",
+   "via": "POST /api/graph/apply"
+  },
+  "POST /api/graph/restore": {
+   "issue": "U1",
+   "kind": "Gap"
+  },
+  "POST /api/graph/run": {
+   "kind": "Tool",
+   "name": "run_nodes",
+   "partial": "U8"
+  },
+  "POST /api/krea/connection/check": {
+   "kind": "PersonOnly",
+   "reason": "the Krea account is the person's to connect or drop"
+  },
+  "POST /api/krea/connection/connect": {
+   "kind": "PersonOnly",
+   "reason": "the Krea account is the person's to connect or drop"
+  },
+  "POST /api/krea/tools/call": {
+   "issue": "U14",
+   "kind": "Gap"
+  },
+  "POST /api/krea/trial": {
+   "kind": "PersonOnly",
+   "reason": "starts a payment checkout"
+  },
+  "POST /api/moodboards": {
+   "kind": "Tool",
+   "name": "moodboard_create"
+  },
+  "POST /api/moodboards/{moodboard_id}/analyze": {
+   "kind": "Tool",
+   "name": "moodboard_analyze"
+  },
+  "POST /api/moodboards/{moodboard_id}/analyze/dry-run": {
+   "kind": "Tool",
+   "name": "moodboard_analyze"
+  },
+  "POST /api/moodboards/{moodboard_id}/brief-override/keep": {
+   "kind": "Tool",
+   "name": "moodboard_update"
+  },
+  "POST /api/moodboards/{moodboard_id}/edits": {
+   "also": [
+    "moodboard_add"
+   ],
+   "kind": "Tool",
+   "name": "moodboard_update",
+   "partial": "U7"
+  },
+  "POST /api/moodboards/{moodboard_id}/move": {
+   "kind": "Tool",
+   "name": "moodboard_move"
+  },
+  "POST /api/moodboards/{moodboard_id}/read": {
+   "kind": "Tool",
+   "name": "moodboard_analyze"
+  },
+  "POST /api/moodboards/{moodboard_id}/read/estimate": {
+   "kind": "Tool",
+   "name": "moodboard_analyze"
+  },
+  "POST /api/outputs/archive": {
+   "kind": "Exempt",
+   "note": "moves old output folders aside",
+   "reason": "maintenance"
+  },
+  "POST /api/outputs/restore": {
+   "issue": "Q7",
+   "kind": "Gap"
+  },
+  "POST /api/paper/sources": {
+   "issue": "U11",
+   "kind": "Gap"
+  },
+  "POST /api/paper/sources/{source_id}/open": {
+   "kind": "Exempt",
+   "note": "brings Paper to the front",
+   "reason": "desktop-only"
+  },
+  "POST /api/paper/sources/{source_id}/reconnect": {
+   "issue": "U11",
+   "kind": "Gap"
+  },
+  "POST /api/paper/sources/{source_id}/refresh": {
+   "issue": "U11",
+   "kind": "Gap"
+  },
+  "POST /api/personal-agents": {
+   "kind": "PersonOnly",
+   "reason": "which agents run in the app is the person's"
+  },
+  "POST /api/personal-agents/acknowledge-warning": {
+   "kind": "PersonOnly",
+   "reason": "the person read the notice"
+  },
+  "POST /api/presets": {
+   "issue": "U5",
+   "kind": "Gap"
+  },
+  "POST /api/projects": {
+   "kind": "Tool",
+   "name": "new_project"
+  },
+  "POST /api/projects/recover": {
+   "kind": "Exempt",
+   "note": "a stale tab saves its copy",
+   "reason": "browser-state"
+  },
+  "POST /api/projects/trash/empty": {
+   "kind": "PersonOnly",
+   "reason": "deleting projects for good",
+   "view": "list_trash"
+  },
+  "POST /api/projects/{project_id}/open": {
+   "kind": "Tool",
+   "name": "open_project"
+  },
+  "POST /api/projects/{project_id}/restore": {
+   "kind": "Tool",
+   "name": "restore_from_trash",
+   "via": "POST /api/trash/{kind}/{item_id}/restore"
+  },
+  "POST /api/quick": {
+   "issue": "U8",
+   "kind": "Gap"
+  },
+  "POST /api/remotion-render": {
+   "issue": "U9",
+   "kind": "Gap"
+  },
+  "POST /api/reveal": {
+   "kind": "Exempt",
+   "note": "shows a file in Finder",
+   "reason": "desktop-only"
+  },
+  "POST /api/transcode-image": {
+   "issue": "U4",
+   "kind": "Gap"
+  },
+  "POST /api/trash/empty": {
+   "kind": "PersonOnly",
+   "reason": "deleting for good",
+   "view": "list_trash"
+  },
+  "POST /api/trash/{kind}/{item_id}/restore": {
+   "kind": "Tool",
+   "name": "restore_from_trash"
+  },
+  "POST /api/uploads": {
+   "also": [
+    "moodboard_add"
+   ],
+   "kind": "Tool",
+   "name": "moodboard_create",
+   "partial": "U4"
+  },
+  "POST /api/video-edit/export": {
+   "issue": "U9",
+   "kind": "Gap"
+  },
+  "POST /api/video-edit/preview-render": {
+   "issue": "U9",
+   "kind": "Gap"
+  },
+  "POST /api/zoom-manifest/entry": {
+   "kind": "Exempt",
+   "note": "demo-video telemetry from the tab",
+   "reason": "browser-state"
+  },
+  "POST /api/zoom-manifest/init": {
+   "kind": "Exempt",
+   "note": "demo-video telemetry from the tab",
+   "reason": "browser-state"
+  },
+  "PUT /api/agent/spend/apps/{app_id}": {
+   "kind": "PersonOnly",
+   "reason": "app tokens and spending limits are the person's",
+   "view": "get_spend_limits"
+  },
+  "PUT /api/characters/{char_id}": {
+   "issue": "U2",
+   "kind": "Gap"
+  },
+  "PUT /api/commons/evaluation/items/{position}/labels": {
+   "kind": "PersonOnly",
+   "reason": "evaluation stays human-only"
+  },
+  "PUT /api/commons/review/items/{position}": {
+   "kind": "PersonOnly",
+   "reason": "review stays human-only"
+  },
+  "PUT /api/graph/layout": {
+   "kind": "Tool",
+   "name": "edit_canvas",
+   "partial": "U15",
+   "via": "POST /api/graph/apply"
+  },
+  "PUT /api/graph/node/{node_id}": {
+   "kind": "Tool",
+   "name": "edit_canvas",
+   "via": "POST /api/graph/apply"
+  },
+  "PUT /api/graph/node/{node_id}/label": {
+   "kind": "Tool",
+   "name": "edit_canvas",
+   "via": "POST /api/graph/apply"
+  },
+  "PUT /api/moodboards/{moodboard_id}": {
+   "kind": "Tool",
+   "name": "moodboard_update"
+  },
+  "PUT /api/personal-agents/{agent_id}": {
+   "kind": "PersonOnly",
+   "reason": "which agents run in the app is the person's"
+  },
+  "PUT /api/presets/{preset_id}": {
+   "issue": "U5",
+   "kind": "Gap"
+  },
+  "PUT /api/projects/{project_id}": {
+   "issue": "U3",
+   "kind": "Gap"
+  },
+  "PUT /api/projects/{project_id}/cover": {
+   "kind": "PersonOnly",
+   "reason": "the person's pin (Q8 open)"
+  },
+  "PUT /api/settings": {
+   "kind": "PersonOnly",
+   "reason": "Settings are the person's"
+  },
+  "WS /ws": {
+   "kind": "Exempt",
+   "note": "the canvas socket; agents read the same changes from the journal",
+   "reason": "transport"
+  },
+  "WS /ws/chat": {
+   "kind": "Exempt",
+   "note": "the in-app chat's own channel",
+   "reason": "transport"
+  }
+ }
+}
