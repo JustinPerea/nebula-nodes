@@ -36,10 +36,14 @@ export interface EditActor {
   color?: string;
 }
 
-/** `edit` on a graphSync: who made the edit and, for a canvas, which tab. */
+/** `edit` on a graphSync: who made the edit and, for a canvas, which tab.
+ * `id` names an agent's edit (or undo) on the backend, `undoes` the edit an
+ * agent's undo reverted (backend services/canvas_undo.py). */
 export interface EditOrigin {
   actor?: EditActor;
   tab?: string;
+  id?: string;
+  undoes?: string;
 }
 
 export interface GraphSlice {
@@ -54,6 +58,11 @@ export interface ForeignEdit {
   agentColor?: string;
   /** Where it came from, for the notice when it is undone. */
   source: 'agent' | 'window' | 'outside';
+  /** The backend's id for this edit: Undo and Redo send it, so the journal
+   * tells the agent its edit was undone, and by whom. */
+  editId?: string;
+  /** Set when the edit is an agent undoing its own earlier edit. */
+  undoes?: string;
   at: number;
   before: GraphSlice;
   after: GraphSlice;
@@ -82,7 +91,8 @@ export function foreignSource(origin: EditOrigin): ForeignEdit['source'] {
 
 /** "Claude changed the canvas": shown when an agent's edit lands, with Undo. */
 export function editArrivedText(edit: ForeignEdit): string | null {
-  return edit.source === 'agent' && edit.agentName ? `${edit.agentName} changed the canvas` : null;
+  if (edit.source !== 'agent' || !edit.agentName) return null;
+  return edit.undoes ? `${edit.agentName} undid its edit` : `${edit.agentName} changed the canvas`;
 }
 
 /** "Undid Claude's edit", "Redid an edit from another window". */
@@ -279,6 +289,8 @@ export interface RestoreBody {
   remove: string[];
   wire: WireBody[];
   unwire: WireBody[];
+  /** The edit this step undoes or redoes (ForeignEdit.editId). */
+  edit?: string;
 }
 
 function wire(edge: Edge): WireBody {

@@ -341,48 +341,6 @@
               },
               {
                 "accents": [
-                  "#3c1ea0"
-                ],
-                "colors": [
-                  {
-                    "accent": false,
-                    "hex": "#e5b49c",
-                    "share": 0.426
-                  },
-                  {
-                    "accent": false,
-                    "hex": "#d39d87",
-                    "share": 0.3535
-                  },
-                  {
-                    "accent": false,
-                    "hex": "#c38a75",
-                    "share": 0.1933
-                  },
-                  {
-                    "accent": true,
-                    "hex": "#3c1ea0",
-                    "share": 0.0271
-                  }
-                ],
-                "height": 80,
-                "id": "f3c2a7e4b022",
-                "lightness": 175.865,
-                "notes": "",
-                "number": 2,
-                "palette": [
-                  "#e5b49c",
-                  "#d39d87",
-                  "#c38a75"
-                ],
-                "saturation": 91.926,
-                "status": "analyzed",
-                "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
-                "weight": 0.0,
-                "width": 60
-              },
-              {
-                "accents": [
                   "#145ae6"
                 ],
                 "colors": [
@@ -474,7 +432,7 @@
             "strength": 0.6,
             "styleBrief": "Use the Nebula moodboard 'Portrait studies' as subject direction at strength 0.60. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #6a311b, #4e2516, #cfc4b1, #2f1a13, #e2d9c8, #813c21. Accent colors, used sparingly: #28c8be, #145ae6. Visual cues: palette-led, subject continuity, silhouette consistency, high color energy.",
             "subjectBias": [],
-            "summary": "3 reference image(s) analyzed as subject. Palette: #6a311b, #4e2516, #cfc4b1, #2f1a13, #e2d9c8. Accents: #28c8be, #145ae6.",
+            "summary": "2 reference image(s) analyzed as subject. Palette: #6a311b, #4e2516, #cfc4b1, #2f1a13, #e2d9c8. Accents: #28c8be, #145ae6.",
             "tasteProfile": "subject, silhouette, costume, and identity-adjacent visual cues; cues: palette-led, subject continuity, silhouette consistency, high color energy; colors: #6a311b, #4e2516, #cfc4b1, #2f1a13.",
             "textures": [],
             "warnings": []
@@ -494,13 +452,6 @@
               "notes": "",
               "url": "/api/outputs/moodboard-golden/rust-portrait-3x4.png",
               "weight": 1.0
-            },
-            {
-              "excluded": false,
-              "id": "f3c2a7e4b022",
-              "notes": "",
-              "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
-              "weight": 0.0
             },
             {
               "excluded": false,
@@ -1016,7 +967,7 @@
         "strength": 0.85,
         "styleBrief": "Raw board-formed concrete under a flat overcast sky. Cold blue-grey light, wet surfaces, no sun. Keep the architecture monumental and empty.",
         "subjectBias": [],
-        "summary": "6 reference image(s) analyzed as world. Palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1. Accents: #ff7800, #e61e1e, #ffe600, #c8003c. Notes emphasize: brutalist concrete, overcast",
+        "summary": "5 reference image(s) analyzed as world. Palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1. Accents: #ff7800, #e61e1e, #ffe600, #c8003c. Notes emphasize: brutalist concrete, overcast",
         "tasteProfile": "world, materials, environment, and production design; cues: palette-led, worldbuilding, environmental continuity, high color energy, brutalist, concrete; colors: #404045, #5a5a60, #88adcb, #075a68.",
         "textures": [],
         "version": 2,
@@ -1506,47 +1457,6 @@
               },
               {
                 "accents": [
-                  "#3c1ea0"
-                ],
-                "colors": [
-                  {
-                    "accent": false,
-                    "hex": "#e5b49c",
-                    "share": 0.426
-                  },
-                  {
-                    "accent": false,
-                    "hex": "#d39d87",
-                    "share": 0.3535
-                  },
-                  {
-                    "accent": false,
-                    "hex": "#c38a75",
-                    "share": 0.1933
-                  },
-                  {
-                    "accent": true,
-                    "hex": "#3c1ea0",
-                    "share": 0.0271
-                  }
-                ],
-                "height": 80,
-                "id": "e2b1f6d3a015",
-                "lightness": 175.865,
-                "notes": "",
-                "palette": [
-                  "#e5b49c",
-                  "#d39d87",
-                  "#c38a75"
-                ],
-                "saturation": 91.926,
-                "status": "analyzed",
-                "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
-                "weight": 0.0,
-                "width": 60
-              },
-              {
-                "accents": [
                   "#ffe600"
                 ],
                 "colors": [
@@ -1665,7 +1575,7 @@
             "strength": 0.85,
             "styleBrief": "Use the Nebula moodboard 'Overcast concrete' as world direction at strength 0.85. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1, #28282c, #7198b9, #94853e. Accent colors, used sparingly: #ff7800, #e61e1e, #ffe600, #c8003c. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy.",
             "subjectBias": [],
-            "summary": "6 reference image(s) analyzed as world. Palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1. Accents: #ff7800, #e61e1e, #ffe600, #c8003c.",
+            "summary": "5 reference image(s) analyzed as world. Palette: #404045, #5a5a60, #88adcb, #075a68, #a5c8e1. Accents: #ff7800, #e61e1e, #ffe600, #c8003c.",
             "tasteProfile": "world, materials, environment, and production design; cues: palette-led, worldbuilding, environmental continuity, high color energy; colors: #404045, #5a5a60, #88adcb, #075a68.",
             "textures": [],
             "version": 2,
@@ -1712,13 +1622,6 @@
               "notes": "",
               "url": "https://images.example.com/refs/brutalist-stair.jpg",
               "weight": 1.0
-            },
-            {
-              "excluded": false,
-              "id": "e2b1f6d3a015",
-              "notes": "",
-              "url": "/api/outputs/moodboard-golden/peach-skin-3x4.png",
-              "weight": 0.0
             },
             {
               "excluded": false,
@@ -3458,7 +3361,7 @@
           "figure",
           "raincoat"
         ],
-        "summary": "6 reference image(s) analyzed as subject. Palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447. Accents: #ff285a, #00ffa0, #28c8be, #ffe600. Notes emphasize: a lone figure in a raincoat",
+        "summary": "5 reference image(s) analyzed as subject. Palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447. Accents: #ff285a, #00ffa0, #28c8be, #ffe600. Notes emphasize: a lone figure in a raincoat",
         "tasteProfile": "subject, silhouette, costume, and identity-adjacent visual cues; cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy, lone; colors: #2c1046, #190e2e, #6a311b, #6a4849.",
         "textures": [],
         "version": 3,
@@ -3864,59 +3767,6 @@
               },
               {
                 "accents": [
-                  "#fad214"
-                ],
-                "colors": [
-                  {
-                    "accent": false,
-                    "hex": "#576846",
-                    "share": 0.3131
-                  },
-                  {
-                    "accent": false,
-                    "hex": "#7c856a",
-                    "share": 0.2921
-                  },
-                  {
-                    "accent": false,
-                    "hex": "#697758",
-                    "share": 0.1787
-                  },
-                  {
-                    "accent": false,
-                    "hex": "#435833",
-                    "share": 0.1196
-                  },
-                  {
-                    "accent": false,
-                    "hex": "#91967f",
-                    "share": 0.0694
-                  },
-                  {
-                    "accent": true,
-                    "hex": "#fad214",
-                    "share": 0.0271
-                  }
-                ],
-                "height": 60,
-                "id": "a4d3b8f5c033",
-                "lightness": 102.089,
-                "notes": "",
-                "palette": [
-                  "#576846",
-                  "#7c856a",
-                  "#697758",
-                  "#435833",
-                  "#91967f"
-                ],
-                "saturation": 75.946,
-                "status": "analyzed",
-                "url": "/api/outputs/moodboard-golden/moss-stone-4x3.png",
-                "weight": 0.0,
-                "width": 80
-              },
-              {
-                "accents": [
                   "#28c8be"
                 ],
                 "colors": [
@@ -4124,7 +3974,7 @@
             "strength": 0.65,
             "styleBrief": "Use the Nebula moodboard 'Rain street' as subject direction at strength 0.65. Keep the subject consistent: the same silhouette, costume and identifying features, changing wardrobe only when the prompt asks. Color palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447, #503c4b, #4e2516, #37304b. Accent colors, used sparingly: #ff285a, #00ffa0, #28c8be, #ffe600. Visual cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy.",
             "subjectBias": [],
-            "summary": "6 reference image(s) analyzed as subject. Palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447. Accents: #ff285a, #00ffa0, #28c8be, #ffe600.",
+            "summary": "5 reference image(s) analyzed as subject. Palette: #2c1046, #190e2e, #6a311b, #6a4849, #845447. Accents: #ff285a, #00ffa0, #28c8be, #ffe600.",
             "tasteProfile": "subject, silhouette, costume, and identity-adjacent visual cues; cues: palette-led, subject continuity, silhouette consistency, deep shadows, high color energy; colors: #2c1046, #190e2e, #6a311b, #6a4849.",
             "textures": [],
             "version": 3,
@@ -4156,13 +4006,6 @@
               "notes": "",
               "url": "https://cdn.example.org/moodboards/ref-0042.webp",
               "weight": 0.8
-            },
-            {
-              "excluded": false,
-              "id": "a4d3b8f5c033",
-              "notes": "",
-              "url": "/api/outputs/moodboard-golden/moss-stone-4x3.png",
-              "weight": 0.0
             },
             {
               "excluded": false,
@@ -6052,7 +5895,7 @@
         "strength": 0.75,
         "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town. Notes: rain-soaked harbour town.",
         "subjectBias": [],
-        "summary": "7 reference image(s) analyzed as world. Palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1. Accents: #ff285a, #3c1ea0, #ff7800, #00ffa0. Notes emphasize: rain-soaked harbour town",
+        "summary": "6 reference image(s) analyzed as world. Palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1. Accents: #ff285a, #3c1ea0, #ff7800, #00ffa0. Notes emphasize: rain-soaked harbour town",
         "tasteProfile": "world, materials, environment, and production design; cues: palette-led, worldbuilding, environmental continuity, high color energy, harbour, town; colors: #e5b49c, #d39d87, #2c1046, #88adcb.",
         "textures": [],
         "version": 4,
@@ -6608,60 +6451,6 @@
                 "width": 96
               },
               {
-                "accents": [
-                  "#fad214"
-                ],
-                "colors": [
-                  {
-                    "accent": false,
-                    "hex": "#576846",
-                    "share": 0.3131
-                  },
-                  {
-                    "accent": false,
-                    "hex": "#7c856a",
-                    "share": 0.2921
-                  },
-                  {
-                    "accent": false,
-                    "hex": "#697758",
-                    "share": 0.1787
-                  },
-                  {
-                    "accent": false,
-                    "hex": "#435833",
-                    "share": 0.1196
-                  },
-                  {
-                    "accent": false,
-                    "hex": "#91967f",
-                    "share": 0.0694
-                  },
-                  {
-                    "accent": true,
-                    "hex": "#fad214",
-                    "share": 0.0271
-                  }
-                ],
-                "height": 60,
-                "id": "c6f5daa7e053",
-                "lightness": 102.089,
-                "notes": "",
-                "number": 3,
-                "palette": [
-                  "#576846",
-                  "#7c856a",
-                  "#697758",
-                  "#435833",
-                  "#91967f"
-                ],
-                "saturation": 75.946,
-                "status": "analyzed",
-                "url": "/api/outputs/moodboard-golden/moss-stone-4x3.png",
-                "weight": 0.0,
-                "width": 80
-              },
-              {
                 "id": "c6f5daa7e055",
                 "notes": "",
                 "number": 5,
@@ -6871,7 +6660,7 @@
             "strength": 0.75,
             "styleBrief": "Use the Nebula moodboard 'Harbour town' as world direction at strength 0.75. Carry the world: its materials, environment and production design, kept to one era and one consistent material language, in specific places. Color palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1, #c38a75, #190e2e, #6a4849. Accent colors, used sparingly: #ff285a, #3c1ea0, #ff7800, #00ffa0. Visual cues: palette-led, worldbuilding, environmental continuity, high color energy.",
             "subjectBias": [],
-            "summary": "7 reference image(s) analyzed as world. Palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1. Accents: #ff285a, #3c1ea0, #ff7800, #00ffa0.",
+            "summary": "6 reference image(s) analyzed as world. Palette: #e5b49c, #d39d87, #2c1046, #88adcb, #a5c8e1. Accents: #ff285a, #3c1ea0, #ff7800, #00ffa0.",
             "tasteProfile": "world, materials, environment, and production design; cues: palette-led, worldbuilding, environmental continuity, high color energy; colors: #e5b49c, #d39d87, #2c1046, #88adcb.",
             "textures": [],
             "version": 4,
@@ -6901,13 +6690,6 @@
               "notes": "",
               "url": "/api/outputs/moodboard-golden/glacier-16x9.png",
               "weight": 0.9
-            },
-            {
-              "excluded": false,
-              "id": "c6f5daa7e053",
-              "notes": "",
-              "url": "/api/outputs/moodboard-golden/moss-stone-4x3.png",
-              "weight": 0.0
             },
             {
               "excluded": false,

@@ -125,8 +125,13 @@ class CLIGraph:
         if dst_id not in self.nodes:
             raise ValueError(f"Target node '{dst_id}' not found")
 
+        # len+1 alone can land on a live edge's id after a removal.
+        taken = {str(e.get("id")) for e in self.edges}
+        number = len(self.edges) + 1
+        while f"e{number}" in taken:
+            number += 1
         edge: dict[str, str] = {
-            "id": f"e{len(self.edges) + 1}",
+            "id": f"e{number}",
             "source": src_id,
             "sourceHandle": src_port,
             "target": dst_id,

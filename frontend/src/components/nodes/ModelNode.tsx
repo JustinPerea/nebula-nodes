@@ -1,9 +1,9 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { useShallow } from 'zustand/react/shallow';
 import { Download, Repeat2, Sparkles, Plus, SlidersHorizontal } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { NodeData } from '../../types';
-import type { PaperSourceRecord } from '../../lib/paperSource';
 import { NODE_DEFINITIONS } from '../../constants/nodeDefinitions';
 import { currentMediaSource } from '../../lib/canvasNextSteps';
 import '../../styles/canvas-next-steps.css';
@@ -19,6 +19,9 @@ import { useProviderNoteStore } from '../../store/providerNoteStore';
 import { ProviderSwitcher } from './ProviderSwitcher';
 import { missingKeyTitle } from '../../lib/nodeKeys';
 import { useGraphStore } from '../../store/graphStore';
+import { edgesInto, edgesOutOf } from '../../lib/graphIndex';
+import { maskSourcePreview as wiredMaskSource, paperSourcesReady, portWired } from '../../lib/cardSelectors';
+import { useCardSelection } from '../../hooks/useCardSelection';
 import { useSlavaNodeEntranceClass } from '../../hooks/useSlavaNodeEntrance';
 import { useBatchPreview } from '../../hooks/useBatchPreview';
 import { BatchCarousel } from './BatchCarousel';
@@ -67,6 +70,8 @@ function filenameFor(nodeLabel: string, nodeId: string, url: string, fallbackExt
   return `${slug}-${shortId}.${urlExt}`;
 }
 
+const NO_CANDIDATES: readonly string[] = Object.freeze([]);
+
 /** Each output's label, for a card that shows several structured values. */
 function portLabels(definition: { outputPorts: Array<{ id: string; label: string }>; displayOutputs?: Array<{ id: string; label: string }> }): Record<string, string> {
   return Object.fromEntries([...(definition.displayOutputs ?? []), ...definition.outputPorts].map((port) => [port.id, port.label]));
@@ -79,20 +84,24 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const previewOutputs = batchPreview.outputs;
   const previewComplete = nodeData.state === 'complete' || batchPreview.browsing;
   const definition = NODE_DEFINITIONS[nodeData.definitionId];
+  // This card subscribes only to what it draws: its own node comes in as
+  // props (React Flow re-renders it when that node changes), and each value
+  // it shows from elsewhere (selection, a wired source's image, its wires) is
+  // its own selector returning a primitive. Subscribing to the whole `nodes`
+  // or `edges` array re-rendered every card on every change anywhere: about
+  // 1 s per Accept on a 100-node canvas (tests/canvasRenderScope.test.tsx).
   const selectNode = useUIStore((s) => s.selectNode);
-  const selectedNodeId = useUIStore((s) => s.selectedNodeId);
-  const inspectorVisible = useUIStore((s) => s.panels.inspector.visible);
+  const { selectedInUi, inspectorOpen } = useCardSelection(id);
   const setInspectorVisible = useUIStore((s) => s.setInspectorVisible);
   const isSlavaSkin = useUIStore((s) => s.skin === 'slava-restraint');
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
-  const isExecuting = useGraphStore((s) => s.isExecuting);
   const entranceClass = useSlavaNodeEntranceClass();
   // A route-table node's provider chip (ProviderSwitcher): it counts the
   // edges into each port, as the preflight does. The selector returns a
   // string so other nodes' edges don't re-render this card.
   const switchable = routeSwitch(definition);
   const wiredKey = useGraphStore((s) => (switchable
-    ? [...nodeWiredCounts(id, s.edges)].map(([port, count]) => `${port}=${count}`).join('&') : ''));
+    ? [...nodeWiredCounts(id, edgesInto(s.edges, id))].map(([port, count]) => `${port}=${count}`).join('&') : ''));
   const wiredCounts = useMemo(() => new Map(wiredKey ? wiredKey.split('&').map((part) => {
     const [port, count] = part.split('=');
     return [port, Number(count)] as const;
@@ -180,40 +189,19 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const handleInspectorButtonClick = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
-      const shouldOpen = selectedNodeId !== id || !inspectorVisible;
       selectNode(id);
-      setInspectorVisible(shouldOpen);
+      setInspectorVisible(!inspectorOpen);
     },
-    [id, inspectorVisible, selectNode, selectedNodeId, setInspectorVisible],
+    [id, inspectorOpen, selectNode, setInspectorVisible],
   );
 
   // Hooks must run unconditionally — keep them above the `!definition` early
-  // return (React rules-of-hooks). These were previously declared below it.
-  const edges = useGraphStore((s) => s.edges);
-  const nodes = useGraphStore((s) => s.nodes);
-  const maskSourcePreview = useMemo(() => {
-    // A retained mask result belongs to its own captured source. Live graph
-    // inputs may already point at the last item, so show the produced artifact
-    // while browsing instead of reconstructing a composite from those inputs.
-    if (batchPreview.browsing) return null;
-    if (nodeData.definitionId !== 'mask-painter') return null;
-    const inEdge = edges.find(
-      (edge) => edge.target === id && (edge.targetHandle ?? 'image') === 'image',
-    );
-    if (!inEdge) return null;
-    const src = nodes.find((node) => node.id === inEdge.source);
-    if (!src) return null;
-    const sd = src.data as NodeData;
-    if (sd.definitionId === 'image-input' && sd.params._previewUrl) {
-      return String(sd.params._previewUrl);
-    }
-    const imgOut = Object.values(sd.outputs ?? {}).find(
-      (output) => output.type === 'Image' && typeof output.value === 'string' && output.value,
-    );
-    if (imgOut) return String(imgOut.value);
-    if (sd.params._previewUrl) return String(sd.params._previewUrl);
-    return null;
-  }, [batchPreview.browsing, nodeData.definitionId, id, edges, nodes]);
+  // return (React rules-of-hooks).
+  // A retained mask result belongs to its own captured source. Live graph
+  // inputs may already point at the last item, so show the produced artifact
+  // while browsing instead of reconstructing a composite from those inputs.
+  const drawsMaskSource = !batchPreview.browsing && nodeData.definitionId === 'mask-painter';
+  const maskSourcePreview = useGraphStore((s) => (drawsMaskSource ? wiredMaskSource(s.nodes, s.edges, id) : null));
 
   // A Jev node with a readable result shows it as a verdict card in place of
   // the generic Text/Image previews. A malformed result parses to null and
@@ -223,15 +211,39 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
       ? parseJevOutputs(nodeData.definitionId, previewOutputs) : null),
     [previewComplete, nodeData.definitionId, previewOutputs],
   );
+  const jevKind = jevResult ? nodeData.definitionId : null;
+  const jevCandidates = useGraphStore(useShallow((s) => (jevKind === JEV_PICK_BEST
+    ? upstreamPortValues(id, 'candidates', s.nodes, s.edges) : NO_CANDIDATES)));
+  const jevBoxImage = useGraphStore((s) => (jevKind === JEV_BOX
+    ? upstreamPortValues(id, 'image', s.nodes, s.edges)[0] ?? null : null));
+  const jevGated = useGraphStore((s) => jevKind === JEV_DECIDE && edgesOutOf(s.edges, id)
+    .some((edge) => edge.sourceHandle === 'on_pass' || edge.sourceHandle === 'on_fail'));
   const jevInputs = useMemo<JevResultInputs | undefined>(() => {
-    if (!jevResult) return undefined;
-    if (nodeData.definitionId === JEV_PICK_BEST) return { candidates: upstreamPortValues(id, 'candidates', nodes, edges) };
-    if (nodeData.definitionId === JEV_BOX) return { image: upstreamPortValues(id, 'image', nodes, edges)[0] ?? null };
-    if (nodeData.definitionId === JEV_DECIDE) {
-      return { gated: edges.some((edge) => edge.source === id && (edge.sourceHandle === 'on_pass' || edge.sourceHandle === 'on_fail')) };
-    }
+    if (jevKind === JEV_PICK_BEST) return { candidates: [...jevCandidates] };
+    if (jevKind === JEV_BOX) return { image: jevBoxImage };
+    if (jevKind === JEV_DECIDE) return { gated: jevGated };
     return undefined;
-  }, [jevResult, nodeData.definitionId, id, nodes, edges]);
+  }, [jevKind, jevCandidates, jevBoxImage, jevGated]);
+  // Jev cards carry their main setting (question / target) as an editable
+  // field on the face; Box's target also has an input port, and wired text
+  // wins over the typed value.
+  const jevField = JEV_CARD_FIELDS[nodeData.definitionId] ?? null;
+  const jevFieldPort = jevField ? definition?.inputPorts.find((port) => port.id === jevField.key) : undefined;
+  const jevFieldPortId = jevFieldPort?.id ?? null;
+  const jevFieldPortWired = useGraphStore((s) => jevFieldPortId !== null && portWired(s.edges, id, jevFieldPortId));
+  // "Rerun with latest source" needs every Paper source it was made from to
+  // have a current export.
+  const paperInputs = nodeData.outputFreshness?.paperInputs;
+  const latestPaperSourceReady = useGraphStore((s) => (paperInputs ? paperSourcesReady(s.nodes, paperInputs) : false));
+  // Only buttons that are on screen read whether a run is going: Add next
+  // step on a selected card with media, and Rerun with latest source. Other
+  // cards don't re-render when a run starts or ends.
+  // (An image, a mask drawn like one, or a video: the previews below.)
+  const hasMediaPreview = Object.values(previewOutputs)
+    .some((o) => (o.type === 'Image' || o.type === 'Mask' || o.type === 'Video') && Boolean(o.value));
+  const showsRerun = Boolean(nodeData.outputFreshness?.runId && nodeData.outputFreshness.outOfDateReasons.length > 0);
+  const drawsRunLock = ((selected || selectedInUi || actionSlot !== null) && hasMediaPreview) || showsRerun;
+  const isExecuting = useGraphStore((s) => drawsRunLock && s.isExecuting);
 
   if (!definition) return <div className="model-node model-node--error">Unknown node type</div>;
 
@@ -342,23 +354,12 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
     : null;
   const inlineTextValue = inlineTextParamKey ? String(nodeData.params[inlineTextParamKey] ?? '') : '';
   const inlineTextPlaceholder = inlineTextParam?.placeholder ?? 'Enter text...';
-  const isNodeSelected = selected || selectedNodeId === id;
+  const isNodeSelected = selected || selectedInUi;
   const nextStepSource = currentMediaSource(definition, nodeData, previewOutputs);
-  // Jev cards carry their main setting (question / target) as an editable
-  // field on the face; the result below hides its echo of the same text.
-  const jevField = JEV_CARD_FIELDS[nodeData.definitionId] ?? null;
+  // The Jev result below hides its echo of the field's text.
   const jevFieldText = jevField
     ? jevCardText(nodeData.params, jevField.key, definition.params.find((p) => p.key === jevField.key)?.default)
     : null;
-  // Box's target also has an input port; wired text wins over the typed value.
-  const jevFieldPort = jevField ? definition.inputPorts.find((port) => port.id === jevField.key) : undefined;
-  const jevFieldPortWired = Boolean(jevFieldPort)
-    && edges.some((edge) => edge.target === id && edge.targetHandle === jevFieldPort?.id);
-  const hasMediaPreview = Boolean(imageOutput || videoOutput);
-  const latestPaperSourceReady = nodeData.outputFreshness?.paperInputs.every((input) => {
-    const source = nodes.find((node) => node.id === input.nodeId)?.data.params._paperSource as PaperSourceRecord | undefined;
-    return source?.state === 'current' && Boolean(source.snapshot);
-  });
 
   const nextStepTitle = !/^n\d+$/.test(id) ? 'Wait for this result to sync with the backend'
     : nextStepSource ? 'Prepare a connected next step using this result' : 'Show the current completed result to add a next step';
@@ -388,7 +389,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           type="button"
           className={inToolbar ? 'selection-toolbar__button nodrag' : 'model-node__settings-edit nodrag'}
           aria-haspopup="dialog"
-          aria-expanded={inspectorVisible && selectedNodeId === id}
+          aria-expanded={inspectorOpen}
           aria-label="Show node settings"
           onClick={handleInspectorButtonClick}
           onMouseDown={(e) => e.stopPropagation()}
