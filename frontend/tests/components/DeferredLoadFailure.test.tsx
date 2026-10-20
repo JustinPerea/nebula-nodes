@@ -54,7 +54,11 @@ describe('a deferred chunk that fails to load', () => {
     await flush();
     expect(screen.getByText('Inspector')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(/could not load the mask painter/i);
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    // The header's close and the footer's Close next to Try again both close it.
+    const closes = screen.getAllByRole('button', { name: 'Close' });
+    expect(closes).toHaveLength(2);
+    for (const close of closes) fireEvent.click(close);
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import functools
+import inspect
 import json as _json
 import os
 import re as _re
@@ -10,6 +12,9 @@ from pathlib import Path as _Path
 from typing import Any
 
 import anyio
+import anyio.from_thread
+import anyio.lowlevel
+import anyio.to_thread
 import httpx  # noqa: F401 - tests patch httpx.request through this module
 from commons.client_paths import asset_path
 from nebula_api import NebulaAPI, NebulaAPIError
@@ -80,7 +85,86 @@ def _api() -> NebulaAPI:
     return NebulaAPI(_current_url())
 
 
-@mcp.tool(annotations=_READ)
+# -- tools run off the event loop --------------------------------------------------
+# One server process serves all of a client's calls (Claude Code's subagents
+# share the parent's connection), and the MCP server handles them
+# concurrently, but FastMCP runs a plain `def` tool inline on its event loop.
+# One blocking tool (a wait_for_canvas_change long-poll) then froze every
+# other call: on 2026-10-20 a main agent's look_at_canvas waited 82.6 s behind
+# a subagent's wait. So every tool runs its blocking HTTP and file work on a
+# worker thread: plain tools through @_tool, the async ones through _offload.
+#
+# Worker threads come from two pools of our own, never anyio's default one
+# (40 threads), because the stdio transport reads stdin and writes stdout
+# through that default pool (anyio.wrap_file): tools that filled it would
+# stall the server's own I/O. Calls that can hold a thread for minutes (the
+# long-polls, runs, link downloads) take the wait pool, so however many of
+# them are in flight, the short calls keep 16 threads. 32 waits is far more
+# than a main agent and its subagents hold at once; one past that queues
+# until a wait returns (events are cursor-based, so it misses nothing).
+#
+# Thread safety: each call builds its own NebulaAPI and sends one-shot
+# httpx requests (no shared session or connection pool); the backend URL is
+# set once before mcp.run() and NEBULA_URL_FILE is re-read and re-verified
+# per call, with no cache; the cursor name and token come from os.environ,
+# which nothing changes after startup; `ctx` is only read. The agent workspace
+# (a ContextVar) reaches the threads because anyio copies the context.
+#
+# Cancelled calls (Claude Code sends notifications/cancelled on an interrupt):
+# the SDK answers "Request cancelled" at once and cancels the call's scope,
+# but a worker thread can't be stopped, so the call waits for it. Then the
+# call must end as cancelled: if it returned normally, the SDK would respond a
+# second time, fail an assertion and take the whole server down. _offload
+# checks for that as the thread returns, and the long-poll loops stop at their
+# next poll (_stop_if_cancelled) instead of polling on to their own deadline.
+# A single long request (run_nodes, get_run, a link download) holds its
+# thread until Nebula answers.
+_CALL_LIMITER = anyio.CapacityLimiter(16)
+_WAIT_LIMITER = anyio.CapacityLimiter(32)
+
+
+async def _offload(fn: Any, /, *args: Any, waits: bool = False, **kwargs: Any) -> Any:
+    """Run `fn(*args, **kwargs)` on a worker thread; `waits` for calls that can take minutes."""
+    result = await anyio.to_thread.run_sync(functools.partial(fn, *args, **kwargs),
+                                            limiter=_WAIT_LIMITER if waits else _CALL_LIMITER)
+    # Raises if the call was cancelled while its thread ran (see above).
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    return result
+
+
+def _stop_if_cancelled() -> None:
+    """Between polls: end a wait whose MCP call was cancelled. Called
+    directly (the CLI, tests), not on an AnyIO worker thread, it does nothing."""
+    try:
+        anyio.from_thread.check_cancelled()
+    except RuntimeError:  # anyio.NoEventLoopError in newer anyio; mcp only needs anyio>=4.5
+        pass
+
+
+def _tool(*, annotations: ToolAnnotations, waits: bool = False):
+    """Register a tool. A plain function is registered as an async wrapper that
+    runs it on a worker thread; the module keeps the plain function, so direct
+    callers are unchanged. An `async def` tool is registered as it is, and must
+    send its own blocking work through _offload (tests/test_mcp_nonblocking.py
+    checks both)."""
+    def register(fn: Any) -> Any:
+        if inspect.iscoroutinefunction(fn):
+            mcp.tool(annotations=annotations)(fn)
+            return fn
+
+        @functools.wraps(fn)
+        async def offloaded(*args: Any, **kwargs: Any) -> Any:
+            # A partial, so a tool argument can never collide with _offload's own names.
+            return await _offload(functools.partial(fn, *args, **kwargs), waits=waits)
+
+        offloaded._nebula_offloaded = True  # type: ignore[attr-defined]
+        mcp.tool(annotations=annotations)(offloaded)
+        return fn
+
+    return register
+
+
+@_tool(annotations=_READ)
 def get_selected_nodes(ctx: Context | None = None) -> dict[str, Any]:
     """Return the nodes currently selected in Nebula's active canvas.
 
@@ -111,7 +195,7 @@ def _canvas_call(method: str, path: str, ctx: Context | None, timeout: float = 1
     return payload
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ)
 def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     """Read the Nebula canvas as data instead of taking a screenshot.
 
@@ -130,7 +214,7 @@ def look_at_canvas(ctx: Context | None = None) -> dict[str, Any]:
     return _canvas_call("GET", "/api/canvas/snapshot", ctx)
 
 
-@mcp.tool(annotations=_EDIT)
+@_tool(annotations=_EDIT)
 def resolve_pin(pin_id: str, reply: str, ctx: Context | None = None) -> dict[str, Any]:
     """Answer one of the person's pinned notes in one line and mark it done.
 
@@ -145,7 +229,7 @@ def resolve_pin(pin_id: str, reply: str, ctx: Context | None = None) -> dict[str
                         json={"reply": reply})
 
 
-@mcp.tool(annotations=_EDIT)
+@_tool(annotations=_EDIT)
 def point_at(
     node_id: str | None = None,
     port: str | None = None,
@@ -183,7 +267,7 @@ MAX_WAIT_SECONDS = 300.0
 _POLL_SECONDS = 25.0
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ, waits=True)
 def wait_for_canvas_change(
     since: int | None = None,
     timeout_seconds: float = 60,
@@ -212,6 +296,7 @@ def wait_for_canvas_change(
     cursor = since
     journal: str | None = None
     while True:
+        _stop_if_cancelled()
         remaining = max(0.0, deadline - _time.monotonic())
         wait = min(_POLL_SECONDS, remaining)
         params: dict[str, Any] = {"wait": round(wait, 1), "limit": 50}
@@ -246,7 +331,7 @@ def _with_identity_note(response: dict[str, Any]) -> dict[str, Any]:
     return response
 
 
-@mcp.tool(annotations=_EDIT)
+@_tool(annotations=_EDIT)
 def propose_change(
     note: str,
     nodes: list[dict] | None = None,
@@ -292,7 +377,7 @@ def propose_change(
     return _canvas_call("POST", "/api/canvas/proposals", ctx, json=body)
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ, waits=True)
 def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None = None) -> dict[str, Any]:
     """Read one of your proposals; with `wait_seconds` (max 300) wait for the person's decision.
 
@@ -309,6 +394,7 @@ def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None 
     budget = max(0.0, min(float(wait_seconds), MAX_WAIT_SECONDS))
     deadline = _time.monotonic() + budget
     while True:
+        _stop_if_cancelled()
         remaining = max(0.0, deadline - _time.monotonic())
         wait = min(_POLL_SECONDS, remaining)
         response = _canvas_call("GET", path, ctx, timeout=wait + 10,
@@ -320,7 +406,7 @@ def get_proposal(proposal_id: str, wait_seconds: float = 0, ctx: Context | None 
             return {**response, "timedOut": budget > 0}
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False))
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False))
 def withdraw_proposal(proposal_id: str, ctx: Context | None = None) -> dict[str, Any]:
     """Take back one of your open proposals (only the agent that proposed it can)."""
     from urllib.parse import quote
@@ -336,7 +422,7 @@ MAX_RUN_PREVIEWS = 4
 _TEXT_LIMIT = 4000
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ)
 def find_nodes(query: str = "", category: str = "", ready_only: bool = True, limit: int = 20,
                ctx: Context | None = None) -> dict[str, Any]:
     """Find node types to build with, best matches first.
@@ -356,7 +442,7 @@ def find_nodes(query: str = "", category: str = "", ready_only: bool = True, lim
     return _canvas_call("GET", "/api/agent/nodes", ctx, params=params)
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ)
 def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, Any]:
     """One node type in detail: input and output ports (ids to wire), params
     (type, default, options, ranges, `onlyWhen` another param has a value,
@@ -389,7 +475,7 @@ def describe_node(definition_id: str, ctx: Context | None = None) -> dict[str, A
     return _canvas_call("GET", f"/api/agent/nodes/{quote(definition_id, safe='')}", ctx)
 
 
-@mcp.tool(annotations=_EDIT)
+@_tool(annotations=_EDIT)
 def edit_canvas(
     note: str = "",
     nodes: list[dict] | None = None,
@@ -437,7 +523,7 @@ def _project_line(project: dict[str, Any], active: str | None) -> dict[str, Any]
             "nodes": project.get("nodeCount", 0), "updatedAt": project.get("updatedAt")}
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ)
 def list_projects(ctx: Context | None = None) -> dict[str, Any]:
     """The person's saved projects, most recently edited first. `open` marks
     the one on the canvas now."""
@@ -465,7 +551,7 @@ def _switch(path: str, body: dict[str, Any], ctx: Context | None) -> dict[str, A
     return reply
 
 
-@mcp.tool(annotations=_EDIT)
+@_tool(annotations=_EDIT)
 def new_project(name: str, ctx: Context | None = None) -> dict[str, Any]:
     """Start a new, empty project and open it on the canvas.
 
@@ -476,7 +562,7 @@ def new_project(name: str, ctx: Context | None = None) -> dict[str, Any]:
     return _switch("/api/projects", {"name": name}, ctx)
 
 
-@mcp.tool(annotations=_EDIT)
+@_tool(annotations=_EDIT)
 def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     """Switch the canvas to a saved project (ids from list_projects).
 
@@ -488,7 +574,7 @@ def open_project(project_id: str, ctx: Context | None = None) -> dict[str, Any]:
     return _switch(f"/api/projects/{quote(project_id, safe='')}/open", {}, ctx)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False))
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False))
 def remove_from_canvas(node_ids: list[str] | None = None, wires: list[dict] | None = None,
                        ctx: Context | None = None) -> dict[str, Any]:
     """Delete nodes (with their wires) and/or single wires, all or nothing.
@@ -581,7 +667,7 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
     return parts
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
 async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RUN_WAIT,
                     ctx: Context | None = None) -> list:
     """Run a node and everything that feeds it (or, without `node_id`, the
@@ -603,12 +689,12 @@ async def run_nodes(node_id: str | None = None, wait_seconds: float = DEFAULT_RU
     """
     wait = max(0.0, min(float(wait_seconds), MAX_RUN_WAIT))
     body: dict[str, Any] = {"wait": wait, **({"targetNodeId": node_id} if node_id else {})}
-    payload = await anyio.to_thread.run_sync(
-        lambda: _canvas_call("POST", "/api/graph/run", ctx, timeout=wait + 30, json=body))
-    return await anyio.to_thread.run_sync(lambda: _run_result(payload, ctx))
+    payload = await _offload(
+        lambda: _canvas_call("POST", "/api/graph/run", ctx, timeout=wait + 30, json=body), waits=True)
+    return await _offload(lambda: _run_result(payload, ctx))
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ)
 async def get_run(run_id: str, wait_seconds: float = DEFAULT_RUN_WAIT, ctx: Context | None = None) -> list:
     """Collect a run that run_nodes reported as still running; waits up to
     `wait_seconds` (max 300) for it to finish. Same result shape as run_nodes.
@@ -616,13 +702,13 @@ async def get_run(run_id: str, wait_seconds: float = DEFAULT_RUN_WAIT, ctx: Cont
     from urllib.parse import quote
 
     wait = max(0.0, min(float(wait_seconds), MAX_RUN_WAIT))
-    payload = await anyio.to_thread.run_sync(
+    payload = await _offload(
         lambda: _canvas_call("GET", f"/api/graph/runs/{quote(run_id, safe='')}", ctx,
-                             timeout=wait + 30, params={"wait": wait}))
-    return await anyio.to_thread.run_sync(lambda: _run_result(payload, ctx))
+                             timeout=wait + 30, params={"wait": wait}), waits=True)
+    return await _offload(lambda: _run_result(payload, ctx))
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
                                       openWorldHint=False))
 def cancel_run(run_id: str, ctx: Context | None = None) -> dict[str, Any]:
     """Stop a run. Outputs that already finished stay; get_run reports them."""
@@ -631,7 +717,7 @@ def cancel_run(run_id: str, ctx: Context | None = None) -> dict[str, Any]:
     return _canvas_call("DELETE", f"/api/executions/{quote(run_id, safe='')}", ctx)
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ)
 def view_output(node_id: str, port: str | None = None, size: str = "medium", ctx: Context | None = None) -> list:
     """Look at a node's output. Images come back as an image (`size` small
     512 px, medium 1024, large 1568), videos as three frames side by side,
@@ -666,7 +752,7 @@ def view_output(node_id: str, port: str | None = None, size: str = "medium", ctx
     return [_json.dumps({"nodeId": node_id, **note, "outputs": whole})]
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ)
 def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
     """What you may spend without asking: the per-run limit, the session and
     per-model budgets the person set, and what this session has used.
@@ -682,7 +768,7 @@ def get_spend_limits(ctx: Context | None = None) -> dict[str, Any]:
 
 # -- Recently deleted -----------------------------------------------------------
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ)
 def list_trash(kind: str | None = None, ctx: Context | None = None) -> dict[str, Any]:
     """List Recently deleted: moodboards, characters and projects, newest first.
 
@@ -696,7 +782,7 @@ def list_trash(kind: str | None = None, ctx: Context | None = None) -> dict[str,
     return _canvas_call("GET", "/api/trash", ctx, params=params)
 
 
-@mcp.tool(annotations=_EDIT)
+@_tool(annotations=_EDIT)
 def restore_from_trash(kind: str, id: str, ctx: Context | None = None) -> dict[str, Any]:
     """Bring a moodboard, character or project back from Recently deleted.
 
@@ -728,7 +814,7 @@ def _commons_call(method: str, path: str, client_name: str | None, *, binary: bo
         raise NebulaAPIError(f"commons {exc.status}: {exc.detail}", status=exc.status) from exc
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ)
 def commons_search(query: str = "", filters: dict | None = None, brand: str | None = None, limit: int = 10,
                    ctx: Context | None = None) -> dict:
     """Search the commons (analyzed design references). Brand-scoped: pass the brand you are
@@ -742,7 +828,7 @@ _IMAGE_FORMATS = {".png": "png", ".jpg": "jpeg", ".jpeg": "jpeg", ".webp": "webp
 _BLOB_KEY = _re.compile(r"^[0-9a-f]{64}\.[a-z0-9]{2,5}$")
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ)
 def commons_get(id: str, fields: list[str] | None = None, brand: str | None = None,
                 ctx: Context | None = None) -> list:
     """Get one reference: effective analysis (with Justin's corrections applied), regions, the comment
@@ -799,14 +885,14 @@ def _commons_add_impl(source: str, collection: str, why: str, made_by: str, *, c
                          files={"file": (path.name, path.read_bytes())})
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
 def commons_add(source: str, collection: str, why: str, made_by: str = "unknown",
                 ctx: Context | None = None) -> dict:
     """Add a reference (URL or local file) to a collection's inbox. `why` is required."""
     return _commons_add_impl(source, collection, why, made_by, client_name=_client_name(ctx))
 
 
-@mcp.tool(annotations=_EDIT)
+@_tool(annotations=_EDIT)
 def commons_comment(id: str, text: str, region_id: str | None = None, brand: str | None = None,
                     ctx: Context | None = None) -> dict:
     """Comment on a reference (only with substance)."""
@@ -814,7 +900,7 @@ def commons_comment(id: str, text: str, region_id: str | None = None, brand: str
                          json={"asset_id": id, "text": text, "region_id": region_id, "brand": brand})
 
 
-@mcp.tool(annotations=_EDIT)
+@_tool(annotations=_EDIT)
 def commons_borrow(id: str, attribute: str, value: Any, used_in: dict, why: str, region_id: str | None = None,
                    brand: str | None = None, ctx: Context | None = None) -> dict:
     """Record that you took one attribute from a reference. Checked in code: the value must match the
@@ -846,7 +932,7 @@ def _board_call(fn, *args: Any, **kwargs: Any) -> Any:
         raise RuntimeError(str(exc)) from exc
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ)
 def moodboard_list(project_id: str | None = None, ctx: Context | None = None) -> list[dict[str, Any]]:
     """List moodboards: those for every project, plus one project's own.
 
@@ -869,7 +955,7 @@ def moodboard_list(project_id: str | None = None, ctx: Context | None = None) ->
     return [boards.brief(board) for board in boards.list_boards(api, project=project, headers=headers)]
 
 
-@mcp.tool(annotations=_READ)
+@_tool(annotations=_READ)
 def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     """One moodboard by id or exact name: settings, the brief fields
     (direction, avoid, pinnedColors, briefOverride with who wrote it and
@@ -909,7 +995,7 @@ def moodboard_get(board: str, ctx: Context | None = None) -> dict[str, Any]:
     return boards.brief(_board_call(boards.get_board, _api(), board, _board_headers(ctx)), layout=True)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
 async def moodboard_create(name: str, sources: list[str] | None = None, project_id: str | None = None,
                            mode: str = "look", strength: float = 0.7, notes: str = "",
                            ctx: Context | None = None) -> dict[str, Any]:
@@ -928,14 +1014,14 @@ async def moodboard_create(name: str, sources: list[str] | None = None, project_
     import moodboard_client as boards
 
     headers = _board_headers(ctx)
-    # Off the event loop: downloads can take a while.
-    board, skipped = await anyio.to_thread.run_sync(lambda: _board_call(
+    # Downloads can take a while, so these use the wait pool.
+    board, skipped = await _offload(lambda: _board_call(
         boards.create_board, _api(), name, sources or [], project=project_id, mode=mode,
-        strength=strength, notes=notes, headers=headers))
+        strength=strength, notes=notes, headers=headers), waits=True)
     return {**boards.brief(board), "duplicatesSkipped": skipped}
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True))
 async def moodboard_add(board: str, sources: list[str], ctx: Context | None = None) -> dict[str, Any]:
     """Add images to a moodboard: files, folders, http(s) image links or Nebula
     outputs, as in moodboard_create. Images already on the board are skipped.
@@ -949,13 +1035,13 @@ async def moodboard_add(board: str, sources: list[str], ctx: Context | None = No
     import moodboard_client as boards
 
     headers = _board_headers(ctx)
-    updated, added, skipped, undo = await anyio.to_thread.run_sync(lambda: _board_call(
-        boards.add_to_board, _api(), board, sources, headers=headers))
+    updated, added, skipped, undo = await _offload(lambda: _board_call(
+        boards.add_to_board, _api(), board, sources, headers=headers), waits=True)
     return {**boards.brief(updated), "added": added, "duplicatesSkipped": skipped,
             "addedIds": boards.added_ids(updated, undo), "undo": undo}
 
 
-@mcp.tool(annotations=_EDIT)
+@_tool(annotations=_EDIT)
 def moodboard_update(board: str, images: list[dict] | None = None, remove: list[str] | None = None,
                      name: str | None = None, notes: str | None = None, mode: str | None = None,
                      strength: float | None = None, direction: str | None = None,
@@ -1064,8 +1150,9 @@ def _read_answer(result: dict[str, Any], *, include_thoughts: bool = False) -> d
 
 
 # Not idempotent and open-world: with read_with each call is a paid read on Google.
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False,
-                                      openWorldHint=True))
+# A read takes as long as the model does, so it runs in the waits pool (#107).
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False,
+                                   openWorldHint=True), waits=True)
 def moodboard_analyze(board: str, dry_run: bool = False, accent_min_chroma: float | None = None,
                       accent_separation: float | None = None, merge_delta_e: float | None = None,
                       read_with: str | None = None, only: list[str | int] | None = None,
@@ -1131,7 +1218,7 @@ def moodboard_analyze(board: str, dry_run: bool = False, accent_min_chroma: floa
     return boards.brief(_board_call(boards.analyze_board, _api(), board, _board_headers(ctx)))
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,
+@_tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False,
                                       openWorldHint=False))
 def moodboard_delete(board: str, ctx: Context | None = None) -> dict[str, Any]:
     """Delete a moodboard by id or exact name. Its image files stay in Nebula.
@@ -1149,7 +1236,7 @@ def moodboard_delete(board: str, ctx: Context | None = None) -> dict[str, Any]:
 _MOVE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 
 
-@mcp.tool(annotations=_MOVE)
+@_tool(annotations=_MOVE)
 def moodboard_move(board: str, to: str, ctx: Context | None = None) -> dict[str, Any]:
     """Move a moodboard (id or exact name) to Global or to a canvas project.
 
@@ -1172,7 +1259,7 @@ def moodboard_move(board: str, to: str, ctx: Context | None = None) -> dict[str,
     return {**result, "asset": boards.brief(asset) if isinstance(asset, dict) else asset}
 
 
-@mcp.tool(annotations=_MOVE)
+@_tool(annotations=_MOVE)
 def character_move(character: str, to: str, ctx: Context | None = None) -> dict[str, Any]:
     """Move a Character (id or exact name) to Global or to a canvas project,
     as moodboard_move does for a board: `to` is "global", "current" or a

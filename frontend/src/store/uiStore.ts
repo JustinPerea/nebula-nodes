@@ -198,6 +198,10 @@ interface UIState {
   selectedNodeId: string | null;
   /** Session camera, kept outside React Flow's store so unmount cannot reset it. */
   canvasViewport: Viewport | null;
+  /** canvasViewport is the camera the canvas placed itself on mount (React
+   * Flow's start, or its first fit), not one the person moved: opening a
+   * project doesn't make it an unsaved change (projectStore). */
+  canvasViewportInitial?: boolean;
   /** Invalidates delayed initialization after an authoritative graph replacement. */
   canvasViewportRevision: number;
   /** Counts fresh-canvas panel resets (a project opened, created or deleted). */
@@ -300,7 +304,7 @@ interface UIState {
   inspectorPinned: boolean;
 
   enterEditor: (sourceNodeId: string) => void;
-  setCanvasViewport: (viewport: Viewport) => void;
+  setCanvasViewport: (viewport: Viewport, options?: { initial?: boolean }) => void;
   clearCanvasViewport: () => void;
   setCinemaSelectedShot: (nodeId: string, shotId: string | null) => void;
   clearCinemaSelectedShots: () => void;
@@ -442,11 +446,11 @@ export const useUIStore = create<UIState>((set, get) => ({
   pendingPreset: null,
   inspectorPinned: false,
 
-  setCanvasViewport: (viewport) => {
+  setCanvasViewport: (viewport, options) => {
     if (![viewport.x, viewport.y, viewport.zoom].every(Number.isFinite) || viewport.zoom <= 0) return;
     const previous = get().canvasViewport;
     if (previous?.x === viewport.x && previous.y === viewport.y && previous.zoom === viewport.zoom) return;
-    set({ canvasViewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom } });
+    set({ canvasViewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom }, canvasViewportInitial: options?.initial });
   },
 
   clearCanvasViewport: () => set((state) => ({
